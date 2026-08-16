@@ -17,8 +17,8 @@ import {
     atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
-    listarAvaliacoes, clienteDaConversa, Atendente, ImportPreview, AvaliacaoAtendimento,
-    ClienteDaConversa,
+    listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
+    Atendente, ImportPreview, AvaliacaoAtendimento, ClienteDaConversa,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -286,6 +286,64 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         const r = await salvarFilasAtendente(a.uid, novas);
         if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar.'); return; }
         setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, filasAtendimento: r.filas } : x)));
+    };
+
+    // ── 📎 Anexos: abrir o recebido e enviar o novo ─────────────────────────
+    // Object URLs abertos ficam guardados por mensagem (a mesma foto não
+    // baixa duas vezes) e são REVOGADOS ao trocar de conversa — sem isso o
+    // navegador segura os blobs até o F5.
+    const [midias, setMidias] = useState<Record<string, { url: string; mime: string }>>({});
+    const [midiaErro, setMidiaErro] = useState<Record<string, string>>({});
+    const [midiaCarregando, setMidiaCarregando] = useState<string | null>(null);
+    const midiasRef = useRef<Record<string, { url: string; mime: string }>>({});
+    midiasRef.current = midias;
+    useEffect(() => () => { Object.values(midiasRef.current).forEach((m) => URL.revokeObjectURL(m.url)); }, []);
+
+    const verMidia = async (m: MensagemInbox) => {
+        if (!sel || midias[m.id] || midiaCarregando) return;
+        setMidiaCarregando(m.id);
+        setMidiaErro((e) => ({ ...e, [m.id]: '' }));
+        try {
+            const r = await abrirMidia(sel.numero, m.id);
+            if (!r.ok) { setMidiaErro((e) => ({ ...e, [m.id]: `${r.error}${r.acao ? ` ${r.acao}` : ''}` })); return; }
+            setMidias((x) => ({ ...x, [m.id]: { url: r.url, mime: r.mime } }));
+        } finally { setMidiaCarregando(null); }
+    };
+
+    const [anexando, setAnexando] = useState(false);
+    const inputAnexo = useRef<HTMLInputElement>(null);
+    const mandarAnexo = async (arquivo: File | null) => {
+        if (!arquivo || !sel || anexando) return;
+        setAnexando(true);
+        setErroEnvio(null);
+        try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const leitor = new FileReader();
+                leitor.onload = () => resolve(String(leitor.result || '').split(',')[1] || '');
+                leitor.onerror = () => reject(new Error('não deu pra ler o arquivo'));
+                leitor.readAsDataURL(arquivo);
+            });
+            const r = await enviarAnexo(sel.numero, {
+                base64, nomeArquivo: arquivo.name,
+                mime: arquivo.type || 'application/octet-stream',
+                legenda: texto.trim() || undefined,
+            });
+            if (!r.ok) {
+                if ((r as any).emConducaoPor) patchSel({ atribuidoA: (r as any).emConducaoPor });
+                setErroEnvio(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`);
+                return;
+            }
+            setMensagens((m) => [...m, r.mensagem]);
+            setTexto('');
+            if (r.legendaIgnorada) setErroEnvio('Anexo enviado — mas a legenda NÃO foi junto: áudio não aceita legenda no WhatsApp.');
+            if (r.copiaGuardada === false) setErroEnvio('Anexo enviado ao cliente, mas a cópia no histórico falhou — ele pode não abrir aqui depois.');
+            if (!sel.atribuidoA) patchSel({ atribuidoA: meuEmail });
+        } catch (e) {
+            setErroEnvio((e as Error).message);
+        } finally {
+            setAnexando(false);
+            if (inputAnexo.current) inputAnexo.current.value = '';
+        }
     };
 
     // ── Cliente 360 (pós-vínculo): responsável da carteira + guias do rito.
@@ -1059,7 +1117,37 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <div key={m.id} className={`max-w-[78%] w-fit rounded-xl px-3 py-1.5 text-[13px] shadow-sm ${saida
                                                 ? 'ml-auto bg-[#e2e9ff] dark:bg-[#24335e] text-slate-800 dark:text-slate-100 rounded-br-sm'
                                                 : 'mr-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-sm'}`}>
-                                                {midia && <p className="text-[11px] font-semibold mb-0.5">{midia}</p>}
+                                                {midia && (
+                                                    <div className="mb-1">
+                                                        {midias[m.id] ? (
+                                                            midias[m.id].mime.startsWith('image/') ? (
+                                                                <a href={midias[m.id].url} target="_blank" rel="noreferrer">
+                                                                    <img src={midias[m.id].url} alt={m.midia?.nomeArquivo || 'imagem'}
+                                                                        className="rounded-lg max-h-64 w-auto" />
+                                                                </a>
+                                                            ) : midias[m.id].mime.startsWith('audio/') ? (
+                                                                <audio controls src={midias[m.id].url} className="max-w-full" />
+                                                            ) : midias[m.id].mime.startsWith('video/') ? (
+                                                                <video controls src={midias[m.id].url} className="rounded-lg max-h-64" />
+                                                            ) : (
+                                                                <a href={midias[m.id].url} target="_blank" rel="noreferrer"
+                                                                    download={m.midia?.nomeArquivo || 'anexo'}
+                                                                    className="text-[11px] font-semibold underline">
+                                                                    {midia} — abrir
+                                                                </a>
+                                                            )
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => verMidia(m)}
+                                                                disabled={m.midia?.baixada === false || midiaCarregando === m.id}
+                                                                title={m.midia?.baixada === false ? 'ainda não baixado da Meta' : 'abrir anexo'}
+                                                                className="text-[11px] font-semibold underline disabled:no-underline disabled:opacity-60">
+                                                                {midiaCarregando === m.id ? '⏳ abrindo…' : midia}
+                                                            </button>
+                                                        )}
+                                                        {midiaErro[m.id] && <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{midiaErro[m.id]}</p>}
+                                                    </div>
+                                                )}
                                                 {m.texto && <p className="whitespace-pre-wrap break-words">{m.texto}</p>}
                                                 {!m.texto && !midia && (
                                                     <p className="italic text-slate-400 text-[11px]">
@@ -1112,6 +1200,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 )}
                                 {conduzidaPorOutro ? null : janela?.aberta ? (
                                     <div className="flex items-end gap-2">
+                                        <input ref={inputAnexo} type="file" className="hidden"
+                                            onChange={(e) => mandarAnexo(e.target.files?.[0] || null)} />
+                                        <button
+                                            onClick={() => inputAnexo.current?.click()}
+                                            disabled={anexando}
+                                            title="Anexar arquivo, foto ou documento (o texto escrito vira legenda)"
+                                            className="shrink-0 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40">
+                                            {anexando ? '⏳' : '📎'}
+                                        </button>
                                         <textarea
                                             value={texto}
                                             onChange={(e) => setTexto(e.target.value)}

@@ -20,6 +20,8 @@
 // - Recusa da Meta sai TRADUZIDA com a ação (padrão interpretarCstat).
 // ============================================================================
 
+import { montarMensagemMidia } from './whatsapp-midia.js';
+
 // Exportada: o webhook baixa mídia recebida pela MESMA base (segunda cópia
 // da URL divergiria de versão em silêncio).
 export const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
@@ -302,14 +304,20 @@ export function interpretarAppsAssinados(corpo) {
  * Sobe o PDF pro media endpoint e devolve o media id. O PDF nunca vai por
  * link público — sobe direto pra Meta, mesmo desenho do anexo do Graph.
  */
-export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
+/**
+ * Sobe QUALQUER arquivo à Meta e devolve o media id. É a régua ÚNICA de
+ * upload — o `subirPdf` da guia chama esta função (segunda cópia de upload
+ * divergiria no dia em que a Meta mudasse o endpoint).
+ */
+export async function subirMidiaWhatsapp({ base64, nomeArquivo, mime }, deps = {}) {
     const cfg = deps.cfg || configWhatsapp(deps.env);
     const doFetch = deps.fetchImpl || fetch;
-    const bin = Buffer.from(pdfBase64, 'base64');
+    const tipoMime = String(mime || 'application/octet-stream').split(';')[0].trim();
+    const bin = Buffer.from(base64, 'base64');
     const form = new FormData();
     form.append('messaging_product', 'whatsapp');
-    form.append('type', 'application/pdf');
-    form.append('file', new Blob([bin], { type: 'application/pdf' }), nomeArquivo || 'guia.pdf');
+    form.append('type', tipoMime);
+    form.append('file', new Blob([bin], { type: tipoMime }), nomeArquivo || 'arquivo');
     const resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/media`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${cfg.token}` },
@@ -318,9 +326,49 @@ export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
     const corpo = await resp.json().catch(() => ({}));
     if (!resp.ok || !corpo.id) {
         const det = corpo?.error?.message || `HTTP ${resp.status}`;
-        throw new Error(`Upload do PDF ao WhatsApp falhou: ${det}`);
+        throw new Error(`Upload do arquivo ao WhatsApp falhou: ${det}`);
     }
     return corpo.id;
+}
+
+export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
+    return subirMidiaWhatsapp(
+        { base64: pdfBase64, nomeArquivo: nomeArquivo || 'guia.pdf', mime: 'application/pdf' },
+        deps,
+    );
+}
+
+/**
+ * Envia MÍDIA já subida (media id) dentro da janela de 24h. Mesma régua do
+ * `enviarTextoLivre`: falha de REDE é indeterminado (a mensagem pode ter
+ * saído) e NUNCA se repete sozinho — duplicar anexo no cliente é pior.
+ */
+export async function enviarMidiaWhatsapp({ para, tipo, mediaId, nomeArquivo, legenda }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const faltas = faltasDaConfig(cfg);
+    if (faltas.length) {
+        return { ok: false, configuracaoIncompleta: true, erro: `Canal do WhatsApp não configurado: ${faltas.join('; ')}.`, acao: 'Configure as credenciais no Cloud Run.' };
+    }
+    const numero = normalizarNumeroBr(para);
+    if (!numero) return { ok: false, erro: `Número inválido: ${para}`, acao: 'Confira DDD e número.' };
+    const doFetch = deps.fetchImpl || fetch;
+    const corpoMsg = montarMensagemMidia({ para: numero, tipo, mediaId, nomeArquivo, legenda });
+    try {
+        const resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(corpoMsg),
+        });
+        const corpo = await resp.json().catch(() => ({}));
+        const r = interpretarRespostaWhatsapp(resp.status, corpo);
+        return r.ok ? { ...r, numeroEnviado: numero } : r;
+    } catch (e) {
+        return {
+            ok: false, indeterminado: true,
+            erro: `Falha de rede ao enviar o anexo: ${e.message}`,
+            acao: 'NÃO reenvie por reflexo — confira na conversa se o arquivo chegou antes de tentar de novo.',
+        };
+    }
 }
 
 /**

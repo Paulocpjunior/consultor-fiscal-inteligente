@@ -37,9 +37,9 @@ Linha marcada **[?]** não conta como coberta nem como faltante: conta como
 | Caixa de entrada com lista de conversas | ✔ **[print]** | inbox de 3 colunas (lista · thread · cliente), busca por nome/número/mensagem | ✅ |
 | Responder o cliente por texto | ✔ **[produção]** | `/responder` — texto livre dentro da janela de 24h | ✅ |
 | Fora da janela de 24h | ✔ (bot próprio responde) **[produção]** | template aprovado (✚ Nova), com a trava no backend e o caminho dito na tela | ✅ — a janela é regra da **Meta**, vale para as duas |
-| **Receber foto/documento/áudio e ABRIR** | ✔ **[produção]** | o webhook baixa e guarda no Storage, mas **não há rota que sirva o arquivo**: a thread mostra `📎 comprovante.pdf` e o atendente **não consegue abrir** | 🔴 **BLOQUEANTE** — o cliente manda o comprovante e o atendimento para |
-| **Enviar anexo (PDF, foto) na conversa** | ✔ **[produção]** | não existe rota de envio de mídia (só texto e template) | 🔴 **BLOQUEANTE** — guia e documento hoje saem pelas telas de guia, mas atendimento manda arquivo o tempo todo |
-| Enviar áudio | ✔ **[?]** | — | 🔴 depende do §7 |
+| **Receber foto/documento/áudio e ABRIR** | ✔ **[produção]** | imagem, áudio e vídeo abrem NO balão; documento abre em aba nova. **Stream autenticado**, não link assinado: quem não vê a conversa não abre o anexo dela | ✅ **16/08** |
+| **Enviar anexo (PDF, foto) na conversa** | ✔ **[produção]** | 📎 no composer (o texto escrito vira legenda), dentro da janela de 24h e com a mesma guarda de condução do texto | ✅ **16/08** — cópia do enviado fica no Storage, senão o histórico mostraria anexo que não abre depois |
+| Enviar áudio | ✔ **[?]** | sai como anexo de áudio se o arquivo for de áudio; **gravar** áudio no navegador não existe | 🟡 — depende do §7.1 |
 | Status de entrega (✓ ✓✓ lido) | ✔ **[print]** | carimbo real vindo do webhook, por mensagem | ✅ |
 | Marcar conversa como lida | ✔ **[print]** | abrir É ler (zera o contador) | ✅ |
 | Respostas rápidas | ✔ **[?]** | 4 frases fixas no código (⚡), **não configuráveis** | 🟡 |
@@ -117,8 +117,9 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 Não vou preencher nenhuma destas por dedução. Cada resposta vira linha
 neste documento (e, quando faltar, vira fila de construção):
 
-1. **Áudio**: a equipe manda e recebe áudio pelo atendimento hoje? (recebido
-   já chega no SP Connect; enviar não existe)
+1. **Áudio** (§7.1): a equipe GRAVA áudio no atendimento hoje? Receber e
+   enviar arquivo de áudio já funciona; o que não existe é o botão de
+   gravar pelo navegador. Se ninguém grava, isto vira ⚫ e não construo.
 2. **Respostas rápidas**: existem frases salvas na Ultra Fox que a equipe
    usa direto? Se sim, quero a lista — vira cadastro editável.
 3. **Etiquetas/tags**: alguém marca conversa com etiqueta ("aguardando
@@ -137,12 +138,15 @@ neste documento (e, quando faltar, vira fila de construção):
 
 **Bloqueia derrubar a Ultra Fox hoje** (🔴 nas linhas de uso diário):
 
-1. **Abrir a mídia recebida** — o cliente manda foto do comprovante e o
-   atendente vê um rótulo que não abre. Sem isso o atendimento trava no
-   caso mais comum do escritório.
-2. **Enviar anexo na conversa** — atendimento manda documento o tempo todo.
-3. **Notificação de mensagem nova** — sem som/push, a mensagem só é vista
-   se alguém estiver olhando a tela. Depende da resposta 5 do §7.
+1. ✅ ~~Abrir a mídia recebida~~ — **RESOLVIDO 16/08**: imagem, áudio e
+   vídeo abrem no balão, documento em aba nova. Stream autenticado (quem
+   não vê a conversa não abre o anexo dela), nunca link assinado.
+2. ✅ ~~Enviar anexo na conversa~~ — **RESOLVIDO 16/08**: 📎 no composer,
+   texto vira legenda, janela de 24h e guarda de condução iguais às do
+   texto livre; cópia do enviado guardada pro histórico.
+3. 🔴 **Notificação de mensagem nova** — sem som/push, a mensagem só é vista
+   se alguém estiver olhando a tela. **É a ÚLTIMA bloqueante** e depende da
+   resposta 5 do §7 (como a equipe percebe mensagem nova hoje).
 
 **Não bloqueia** (pode entrar depois do corte, sem prejuízo): etiquetas,
 relatórios de volume/tempo, presença, respostas rápidas configuráveis,
