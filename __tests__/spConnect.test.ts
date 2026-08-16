@@ -5,7 +5,7 @@
 // ============================================================================
 import {
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr,
-    horaCurta, rotuloMidia, dataHoraSp,
+    horaCurta, rotuloMidia, dataHoraSp, filtrarConversas, iniciais,
 } from '../services/spConnect';
 
 // Offsets EXPLÍCITOS (-03:00): a tela formata em America/Sao_Paulo por regra
@@ -70,5 +70,27 @@ describe('horaCurta e mídia', () => {
         expect(rotuloMidia({ nomeArquivo: 'comprovante.pdf', mime: 'application/pdf', baixada: true }, 'document')).toBe('📎 comprovante.pdf');
         expect(rotuloMidia({ nomeArquivo: null, mime: 'audio/ogg', baixada: false }, 'audio')).toContain('não baixado');
         expect(rotuloMidia(null, 'text')).toBeNull();
+    });
+});
+
+describe('filtrarConversas e iniciais', () => {
+    const lista = [
+        { numero: '5511997377599', nome: 'Paulocpjr', empresaId: null, fila: null, situacao: 'aberta', janela24hAte: null, ultimaMensagem: { resumo: 'teste', direcao: 'entrada', em: '' }, naoLidas: 1, atualizadoEm: null },
+        { numero: '5511964440000', nome: 'Padaria Bela Massa', empresaId: 'e1', fila: 'fiscal', situacao: 'aberta', janela24hAte: null, ultimaMensagem: { resumo: 'guia recebida', direcao: 'entrada', em: '' }, naoLidas: 0, atualizadoEm: null },
+    ] as any[];
+
+    it('busca casa nome, número e resumo — e as abas filtram sem esconder o resto', () => {
+        expect(filtrarConversas(lista, { busca: 'padaria', aba: 'todas' })).toHaveLength(1);
+        expect(filtrarConversas(lista, { busca: '96444', aba: 'todas' })[0].nome).toBe('Padaria Bela Massa');
+        expect(filtrarConversas(lista, { busca: 'guia', aba: 'todas' })).toHaveLength(1);
+        expect(filtrarConversas(lista, { busca: '', aba: 'nao-lidas' })).toHaveLength(1);
+        expect(filtrarConversas(lista, { busca: '', aba: 'recepcao' })[0].nome).toBe('Paulocpjr');
+        expect(filtrarConversas(lista, { busca: '', aba: 'todas' })).toHaveLength(2);
+    });
+
+    it('iniciais: nome vira 2 letras; sem nome, fim do número — nunca vazio', () => {
+        expect(iniciais({ nome: 'Padaria Bela Massa', numero: 'x' })).toBe('PB');
+        expect(iniciais({ nome: 'Paulocpjr', numero: 'x' })).toBe('P');
+        expect(iniciais({ nome: null, numero: '5511997377599' })).toBe('99');
     });
 });

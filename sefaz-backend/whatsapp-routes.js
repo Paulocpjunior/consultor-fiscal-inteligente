@@ -28,7 +28,7 @@ import {
 } from './whatsapp-templates.js';
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
-    listarAppsAssinadosNaWaba, assinarWaba,
+    listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre,
 } from './whatsapp-cloud.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
@@ -399,8 +399,62 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
     }
 });
 
+// ─── RESPONDER (PR 2) — texto livre DENTRO da janela de 24h ────────────────
+// A trava da janela é AQUI, antes da rede: fora dela a Meta recusaria
+// (131047) e a resposta certa é o template — a tela diz isso. Quem enviou
+// fica gravado na mensagem (auditoria de atendimento).
+router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const texto = String(req.body?.texto ?? '').trim();
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        if (!texto) return res.status(400).json({ ok: false, error: 'Escreva a mensagem antes de enviar.' });
+        if (texto.length > 4096) return res.status(400).json({ ok: false, error: 'Mensagem longa demais (máx. 4096 caracteres).' });
+
+        const db = getDb();
+        const conv = await db.collection('whatsapp_conversas').doc(numero).get();
+        const ate = Date.parse(conv.data()?.janela24hAte || '');
+        if (!Number.isFinite(ate) || ate <= Date.now()) {
+            return res.status(422).json({
+                ok: false,
+                error: 'A janela de 24h desta conversa está fechada — texto livre não sai.',
+                acao: 'Envie por template aprovado (ou aguarde o cliente escrever, o que reabre a janela).',
+                janelaFechada: true,
+            });
+        }
+
+        const envio = await enviarTextoLivre({ para: numero, texto });
+        if (!envio.ok) {
+            const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
+            return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
+        }
+
+        const agora = new Date().toISOString();
+        const msg = {
+            conversaId: numero,
+            direcao: 'saida',
+            tipo: 'text',
+            texto,
+            midia: null,
+            timestamp: agora,
+            statusEntrega: 'enviado',   // o webhook promove pra entregue/lido
+            enviadoPor: req.user?.email || null,
+        };
+        await db.collection('whatsapp_mensagens').doc(envio.messageId).set(msg, { merge: true });
+        await db.collection('whatsapp_conversas').doc(numero).set({
+            ultimaMensagem: { resumo: texto.slice(0, 140), direcao: 'saida', em: agora },
+            atualizadoEm: agora,
+        }, { merge: true });
+
+        return res.json({ ok: true, mensagem: { id: envio.messageId, ...msg, erroEntrega: null } });
+    } catch (e) {
+        console.error('[whatsapp/responder]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // Abrir a conversa zera o contador de não lidas — sem isso o selo mente
-// pra sempre. É a ÚNICA escrita do PR 1 (responder é o PR 2).
+// pra sempre.
 router.post('/conversas/:numero/lida', requireAuth, async (req, res) => {
     try {
         const numero = String(req.params.numero || '').replace(/\D/g, '');
