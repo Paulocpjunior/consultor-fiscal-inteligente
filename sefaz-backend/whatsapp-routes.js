@@ -30,6 +30,10 @@ import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre,
 } from './whatsapp-cloud.js';
+import {
+    FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
+    resolverConfig,
+} from './whatsapp-atendimento.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
@@ -340,11 +344,25 @@ router.post('/webhook-assinar-waba', requireAdmin, async (_req, res) => {
 // fila nascer, o filtro por departamento entra AQUI, no backend (o front
 // nunca é o filtro de dados — regra da Carteira).
 
+// Filas que o usuário logado enxerga (null = todas). O escopo é do BACKEND —
+// o front nunca é o filtro de dados (regra da Carteira).
+async function filasDoUsuario(db, user) {
+    if (user?.role === 'admin') return null;
+    let departamentos = []; let filasAtendimento = [];
+    try {
+        const u = await db.collection('users').doc(user.uid).get();
+        departamentos = u.data()?.departamentos || [];
+        filasAtendimento = u.data()?.filasAtendimento || [];
+    } catch { /* sem doc = só Recepção */ }
+    return filasVisiveis({ role: user?.role, departamentos, filasAtendimento });
+}
+
 // Uma leitura, todas as conversas + o contato de cada uma (getAll em lote —
 // nada de N consultas).
-router.get('/conversas', requireAuth, async (_req, res) => {
+router.get('/conversas', requireAuth, async (req, res) => {
     try {
         const db = getDb();
+        const minhasFilas = await filasDoUsuario(db, req.user);
         const snap = await db.collection('whatsapp_conversas')
             .orderBy('atualizadoEm', 'desc').limit(100).get();
         const numeros = snap.docs.map((d) => d.id);
@@ -358,10 +376,12 @@ router.get('/conversas', requireAuth, async (_req, res) => {
             const c = contatos.get(d.id) || {};
             return {
                 numero: d.id,
-                nome: c.nomePerfil || null,
+                nome: c.nomeExibicao || c.nomePerfil || null,
                 empresaId: c.empresaId || null,   // null = pendência "vincular ao cliente"
+                empresaNome: c.empresaNome || null,
                 origemContato: c.origem || null,
                 fila: x.fila || null,             // null = Recepção
+                protocolo: x.protocolo || null,
                 atribuidoA: x.atribuidoA || null,
                 situacao: x.status || 'aberta',
                 janela24hAte: x.janela24hAte || null,
@@ -369,8 +389,8 @@ router.get('/conversas', requireAuth, async (_req, res) => {
                 naoLidas: x.naoLidas || 0,
                 atualizadoEm: x.atualizadoEm || null,
             };
-        });
-        return res.json({ ok: true, conversas });
+        }).filter((cv) => conversaVisivel(minhasFilas, cv.fila));
+        return res.json({ ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas });
     } catch (e) {
         console.error('[whatsapp/conversas]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -470,7 +490,10 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
         const db = getDb();
         const agora = new Date().toISOString();
         const numero = envio.numeroEnviado;
-        const resumo = `📋 ${template.nome}: ${mv.variaveis.join(' · ')}`.slice(0, 300);
+        // ⚠️ usar nomeTemplate/variaveisPosicionais (existem nos DOIS ramos);
+        // `template`/`mv` só existem no ramo do cadastro — referenciá-los aqui
+        // estourava ReferenceError no caminho templateDireto.
+        const resumo = `📋 ${nomeTemplate}: ${variaveisPosicionais.join(' · ')}`.slice(0, 300);
         await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
             conversaId: numero, direcao: 'saida', tipo: 'template',
             texto: resumo, midia: null, timestamp: agora,
@@ -495,7 +518,7 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
         try {
             await db.collection('whatsapp_envios').add({
                 em: admin.firestore.FieldValue.serverTimestamp(),
-                departamento, template: template.nome,
+                departamento, template: nomeTemplate,
                 numeroEnviado: numero, messageId: envio.messageId,
                 por: req.user?.email || null, projetoOrigem: 'sp-connect',
                 referencia: 'conversa-iniciada', temDocumento: false,
@@ -575,6 +598,133 @@ router.post('/conversas/:numero/lida', requireAuth, async (req, res) => {
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }
+});
+
+// ═══ F3 — CONFIG DO ATENDIMENTO E AÇÕES DE CONVERSA ═════════════════════════
+
+// Config: leitura de qualquer logado (o inbox precisa das filas/menu);
+// gravação SÓ admin. O bot NASCE desligado — resolverConfig garante.
+router.get('/atendimento-config', requireAuth, async (_req, res) => {
+    try {
+        const doc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+        return res.json({ ok: true, config: resolverConfig(doc.data()), filas: FILAS_ATENDIMENTO });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/atendimento-config', requireAdmin, async (req, res) => {
+    try {
+        const limpa = resolverConfig(req.body?.config);
+        await getDb().collection('whatsapp_config').doc('atendimento').set({
+            ...limpa,
+            atualizadoEm: new Date().toISOString(),
+            atualizadoPor: req.user?.email || null,
+        });
+        return res.json({ ok: true, config: limpa });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/** Helper das ações: atualiza a conversa e responde o novo estado. */
+async function acaoConversa(req, res, patch, extra = {}) {
+    const numero = String(req.params.numero || '').replace(/\D/g, '');
+    if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+    const agora = new Date().toISOString();
+    await getDb().collection('whatsapp_conversas').doc(numero).set(
+        { ...patch, atualizadoEm: agora }, { merge: true },
+    );
+    return res.json({ ok: true, numero, ...extra });
+}
+
+// Transferir de fila (a triagem manual da Recepção).
+router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
+    try {
+        const fila = String(req.body?.fila || '').trim().toLowerCase();
+        if (!filaValida(fila)) return res.status(400).json({ ok: false, error: `Fila inválida. Válidas: ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}` });
+        return acaoConversa(req, res, { fila, transferidaPor: req.user?.email || null });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Assumir / liberar a conversa (um responsável por vez).
+router.post('/conversas/:numero/assumir', requireAuth, async (req, res) => {
+    try {
+        const liberar = Boolean(req.body?.liberar);
+        return acaoConversa(req, res, { atribuidoA: liberar ? null : (req.user?.email || null) });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Resolver / reabrir.
+router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
+    try {
+        const s = String(req.body?.situacao || '').trim();
+        if (!['aberta', 'resolvida'].includes(s)) return res.status(400).json({ ok: false, error: 'situação deve ser aberta ou resolvida' });
+        return acaoConversa(req, res, { status: s, resolvidaPor: s === 'resolvida' ? (req.user?.email || null) : null });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Nota interna: vive na thread mas NUNCA sai pro cliente (direcao 'interna').
+router.post('/conversas/:numero/nota', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const texto = String(req.body?.texto ?? '').trim();
+        if (!numero || !texto) return res.status(400).json({ ok: false, error: 'Escreva a nota.' });
+        const agora = new Date().toISOString();
+        const ref = await getDb().collection('whatsapp_mensagens').add({
+            conversaId: numero, direcao: 'interna', tipo: 'nota',
+            texto, midia: null, timestamp: agora, enviadoPor: req.user?.email || null,
+        });
+        return res.json({ ok: true, mensagem: { id: ref.id, conversaId: numero, direcao: 'interna', tipo: 'nota', texto, midia: null, timestamp: agora, statusEntrega: null, erroEntrega: null, enviadoPor: req.user?.email || null } });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Vincular contato ↔ cliente do cadastro (grava QUEM vinculou — é afirmação).
+router.post('/conversas/:numero/vincular', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const empresaId = String(req.body?.empresaId || '').trim();
+        const empresaNome = String(req.body?.empresaNome || '').trim() || null;
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        await getDb().collection('whatsapp_contatos').doc(numero).set({
+            numero,
+            empresaId: empresaId || null,   // vazio DESVINCULA
+            empresaNome: empresaId ? empresaNome : null,
+            vinculadoPor: req.user?.email || null,
+            vinculadoEm: new Date().toISOString(),
+        }, { merge: true });
+        return res.json({ ok: true });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Busca de clientes pro vínculo (nome/CNPJ, nas DUAS coleções — CNPJ tem duas
+// formas no banco, então a comparação é por dígitos, nunca por igualdade).
+router.get('/clientes-busca', requireAuth, async (req, res) => {
+    try {
+        const q = String(req.query.q || '').trim().toLowerCase();
+        if (q.length < 3) return res.json({ ok: true, clientes: [] });
+        const qDigitos = q.replace(/\D/g, '');
+        const db = getDb();
+        const [simples, lucro] = await Promise.all([
+            db.collection('simples_empresas').get(),
+            db.collection('lucro_empresas').get(),
+        ]);
+        const clientes = [];
+        for (const [snap, origem] of [[simples, 'simples'], [lucro, 'lucro']]) {
+            for (const d of snap.docs) {
+                const x = d.data();
+                if (x._deleted || x._merged_into) continue;
+                const nome = String(x.nome || x.razaoSocial || '');
+                const cnpj = String(x.cnpj || '').replace(/\D/g, '');
+                if (nome.toLowerCase().includes(q) || (qDigitos.length >= 4 && cnpj.includes(qDigitos))) {
+                    clientes.push({ id: d.id, nome, cnpj, origem });
+                    if (clientes.length >= 10) break;
+                }
+            }
+            if (clientes.length >= 10) break;
+        }
+        return res.json({ ok: true, clientes });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
 export default router;

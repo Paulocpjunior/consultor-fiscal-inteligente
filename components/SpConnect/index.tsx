@@ -12,12 +12,16 @@
 // A lista se atualiza sozinha a cada 30s — atendimento não vive de F5.
 // ============================================================================
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa } from '../../services/spConnectService';
+import {
+    listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
+    atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
+    mudarSituacao, criarNota, vincularCliente, buscarClientes,
+} from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
-    ConversaResumo, MensagemInbox, estadoJanela, carimboStatus,
-    nomeExibicao, formatarNumeroBr, horaCurta, rotuloMidia,
-    filtrarConversas, iniciais,
+    ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
+    estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
+    rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
 } from '../../services/spConnect';
 
 const TOM_TICK: Record<string, string> = {
@@ -27,14 +31,17 @@ const TOM_TICK: Record<string, string> = {
     neutro: 'text-slate-400',
 };
 
-type Aba = 'todas' | 'nao-lidas' | 'recepcao';
+const CAMPO = 'w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
 
-const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = () => {
+/** aba = 'todas' | 'nao-lidas' | id de fila. */
+const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = ({ currentUser }) => {
     const [conversas, setConversas] = useState<ConversaResumo[]>([]);
+    const [filas, setFilas] = useState<FilaAtendimento[]>([]);
+    const [minhasFilas, setMinhasFilas] = useState<string[] | null>(null);
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
-    const [aba, setAba] = useState<Aba>('todas');
+    const [aba, setAba] = useState<string>('todas');
     const [sel, setSel] = useState<ConversaResumo | null>(null);
     const [mensagens, setMensagens] = useState<MensagemInbox[]>([]);
     const [carregandoMsgs, setCarregandoMsgs] = useState(false);
@@ -52,6 +59,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return; }
             setErro(null);
             setConversas(r.conversas || []);
+            setFilas(r.filas || []);
+            setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
         } finally {
             if (!silencioso) setCarregando(false);
         }
@@ -108,6 +117,105 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setEnviando(false);
         }
     };
+
+    // ── F3: ações da conversa (transferir · assumir · nota · resolver · vincular)
+    const [acaoErro, setAcaoErro] = useState<string | null>(null);
+    const [notaTexto, setNotaTexto] = useState('');
+    const [notaAberta, setNotaAberta] = useState(false);
+    const meuEmail = currentUser?.email || '';
+
+    /** Aplica o patch na conversa selecionada E na lista — a tela responde na hora. */
+    const patchSel = (patch: Partial<ConversaResumo>) => {
+        setSel((s) => (s ? { ...s, ...patch } : s));
+        setConversas((lst) => lst.map((c) => (c.numero === selRef.current?.numero ? { ...c, ...patch } : c)));
+    };
+
+    const rodarAcao = async (fn: () => Promise<{ ok: boolean; error?: string }>, patch: Partial<ConversaResumo>) => {
+        setAcaoErro(null);
+        const r = await fn();
+        if (!r.ok) { setAcaoErro(r.error || 'A ação falhou.'); return false; }
+        patchSel(patch);
+        return true;
+    };
+
+    const acaoTransferir = (fila: string) => {
+        if (!sel || !fila || fila === (sel.fila || 'recepcao')) return;
+        rodarAcao(() => transferirFila(sel.numero, fila), { fila });
+    };
+    const acaoAssumir = () => {
+        if (!sel) return;
+        const liberar = sel.atribuidoA === meuEmail;
+        rodarAcao(() => assumirConversa(sel.numero, liberar), { atribuidoA: liberar ? null : meuEmail });
+    };
+    const acaoSituacao = () => {
+        if (!sel) return;
+        const nova = sel.situacao === 'resolvida' ? 'aberta' : 'resolvida';
+        rodarAcao(() => mudarSituacao(sel.numero, nova), { situacao: nova });
+    };
+    const acaoNota = async () => {
+        if (!sel || !notaTexto.trim()) return;
+        setAcaoErro(null);
+        const r = await criarNota(sel.numero, notaTexto.trim());
+        if (!r.ok) { setAcaoErro(r.error || 'A nota não foi gravada.'); return; }
+        setMensagens((m) => [...m, r.mensagem]);
+        setNotaTexto('');
+        setNotaAberta(false);
+    };
+
+    // ── F3: vincular contato ↔ cliente (busca nas duas coleções, via backend)
+    const [vincAberto, setVincAberto] = useState(false);
+    const [vincBusca, setVincBusca] = useState('');
+    const [vincResultados, setVincResultados] = useState<{ id: string; nome: string; cnpj: string; origem: string }[]>([]);
+    const [vincBuscando, setVincBuscando] = useState(false);
+    useEffect(() => {
+        if (!vincAberto || vincBusca.trim().length < 3) { setVincResultados([]); return; }
+        const t = setTimeout(async () => {
+            setVincBuscando(true);
+            try {
+                const r = await buscarClientes(vincBusca.trim());
+                if (r.ok) setVincResultados(r.clientes || []);
+            } finally { setVincBuscando(false); }
+        }, 350);
+        return () => clearTimeout(t);
+    }, [vincAberto, vincBusca]);
+
+    const acaoVincular = async (empresaId: string, empresaNome: string) => {
+        if (!sel) return;
+        const ok = await rodarAcao(() => vincularCliente(sel.numero, empresaId, empresaNome),
+            { empresaId: empresaId || null, empresaNome: empresaId ? empresaNome : null });
+        if (ok) { setVincAberto(false); setVincBusca(''); setVincResultados([]); }
+    };
+
+    // ── F3: ⚙️ config do atendimento (admin — bot, horário, mensagens, menu)
+    const ehAdmin = currentUser?.role === 'admin';
+    const [cfgAberta, setCfgAberta] = useState(false);
+    const [cfg, setCfg] = useState<ConfigAtendimento | null>(null);
+    const [cfgSalvando, setCfgSalvando] = useState(false);
+    const [cfgErro, setCfgErro] = useState<string | null>(null);
+    const [cfgOk, setCfgOk] = useState(false);
+
+    const abrirCfg = async () => {
+        setCfgAberta(true);
+        setCfgErro(null);
+        setCfgOk(false);
+        const r = await atendimentoConfig();
+        if (r.ok) setCfg(r.config);
+        else setCfgErro(r.error || 'Falha ao carregar a configuração.');
+    };
+    const salvarCfg = async () => {
+        if (!cfg || cfgSalvando) return;
+        setCfgSalvando(true);
+        setCfgErro(null);
+        setCfgOk(false);
+        try {
+            const r = await salvarAtendimentoConfig(cfg);
+            if (!r.ok) { setCfgErro(r.error || 'Falha ao salvar.'); return; }
+            setCfg(r.config);
+            setCfgOk(true);
+        } finally { setCfgSalvando(false); }
+    };
+    const setMsgCfg = (chave: string, valor: string) =>
+        setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
 
     // ── ✚ Nova conversa (template aprovado — a porta de fora da janela) ─────
     // DUAS fontes de template: o cadastro da ⚙️ (variáveis nomeadas) e os
@@ -185,8 +293,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
     const visiveis = filtrarConversas(conversas, { busca, aba });
     const naoLidasTotal = conversas.reduce((s, c) => s + (c.naoLidas || 0), 0);
+    // Chips por fila: só as que o usuário ENXERGA (o backend já filtrou as
+    // conversas; os chips seguem o MESMO recorte, senão é leitura dupla).
+    const filasChip = filas.filter((f) => minhasFilas === null || minhasFilas.includes(f.id));
+    const contagemFila = (id: string) => conversas.filter((c) => (c.fila || 'recepcao') === id).length;
 
-    const chip = (a: Aba, rotulo: string) => (
+    const chip = (a: string, rotulo: string) => (
         <button
             key={a}
             onClick={() => setAba(a)}
@@ -301,6 +413,151 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                     </div>
                 </div>
             )}
+            {/* ── Modal 🔗 Vincular ao cliente (busca no cadastro central) ──── */}
+            {vincAberto && sel && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setVincAberto(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md my-auto p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">🔗 Vincular {nomeExibicao(sel)} a um cliente</h3>
+                            <button onClick={() => setVincAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                        </div>
+                        <input autoFocus value={vincBusca} onChange={(e) => setVincBusca(e.target.value)}
+                            placeholder="🔎 Nome ou CNPJ (mín. 3 caracteres)" className={CAMPO} />
+                        {vincBuscando && <p className="text-[11px] text-slate-400">Buscando…</p>}
+                        {!vincBuscando && vincBusca.trim().length >= 3 && vincResultados.length === 0 && (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">Nenhum cliente casa com essa busca.</p>
+                        )}
+                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                            {vincResultados.map((cl) => (
+                                <button key={`${cl.origem}:${cl.id}`} onClick={() => acaoVincular(cl.id, cl.nome)}
+                                    className="w-full text-left px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                    <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">{cl.nome}</p>
+                                    <p className="text-[10px] text-slate-400">{cl.cnpj || 'sem CNPJ'} · {cl.origem === 'simples' ? 'Simples' : 'Lucro'}</p>
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-slate-400">O vínculo fica gravado com quem vinculou — é uma afirmação sobre quem o contato é.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal ⚙️ Config do atendimento (admin) ─────────────────────── */}
+            {cfgAberta && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setCfgAberta(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl my-8 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">⚙️ Atendimento — bot, horário, mensagens e menu</h3>
+                            <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                        </div>
+                        {!cfg ? (
+                            <p className="text-[11px] text-slate-400">{cfgErro || 'Carregando…'}</p>
+                        ) : (
+                            <>
+                                <div className={`rounded-lg border p-2.5 ${cfg.botAtivo
+                                    ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+                                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40'}`}>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={cfg.botAtivo}
+                                            onChange={(e) => setCfg((c) => (c ? { ...c, botAtivo: e.target.checked } : c))} />
+                                        <span className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                            🤖 Bot de triagem {cfg.botAtivo ? 'LIGADO' : 'desligado'}
+                                        </span>
+                                    </label>
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
+                                        ⚠️ Enquanto a Ultra Fox estiver de pé respondendo, ligar o bot aqui = DOIS bots
+                                        no mesmo cliente (menu em dobro). Ligue só no dia do corte.
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🕐 Horário de funcionamento (fuso de São Paulo)</p>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                        {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d, i) => (
+                                            <label key={d} className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer ${cfg.horario.dias.includes(i)
+                                                ? 'bg-[#0e3bfa] text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
+                                                <input type="checkbox" className="hidden" checked={cfg.horario.dias.includes(i)}
+                                                    onChange={() => setCfg((c) => c ? {
+                                                        ...c,
+                                                        horario: {
+                                                            ...c.horario,
+                                                            dias: c.horario.dias.includes(i)
+                                                                ? c.horario.dias.filter((x) => x !== i)
+                                                                : [...c.horario.dias, i].sort(),
+                                                        },
+                                                    } : c)} />
+                                                {d}
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-3 flex-wrap">
+                                        {cfg.horario.turnos.map((t, i) => (
+                                            <div key={i} className="flex items-center gap-1 text-[11px] text-slate-500">
+                                                <span>{i === 0 ? 'Manhã' : 'Tarde'}:</span>
+                                                <input value={t.inicio} onChange={(e) => setCfg((c) => c ? {
+                                                    ...c, horario: { ...c.horario, turnos: c.horario.turnos.map((x, j) => (j === i ? { ...x, inicio: e.target.value } : x)) },
+                                                } : c)} className={`${CAMPO} !w-16 text-center`} />
+                                                <span>às</span>
+                                                <input value={t.fim} onChange={(e) => setCfg((c) => c ? {
+                                                    ...c, horario: { ...c.horario, turnos: c.horario.turnos.map((x, j) => (j === i ? { ...x, fim: e.target.value } : x)) },
+                                                } : c)} className={`${CAMPO} !w-16 text-center`} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">💬 Mensagens automáticas</p>
+                                    {([
+                                        ['saudacao', 'Saudação (1º contato) — aceita {nome} e {protocolo}'],
+                                        ['menuCabecalho', 'Cabeçalho do menu'],
+                                        ['confirmacaoFila', 'Confirmação de fila — aceita {fila}'],
+                                        ['foraDeHorario', 'Fora do horário'],
+                                        ['sair', 'Resposta ao #sair'],
+                                    ] as [string, string][]).map(([chave, rotulo]) => (
+                                        <label key={chave} className="block text-[10px] text-slate-400">
+                                            {rotulo}
+                                            <textarea value={cfg.mensagens[chave] || ''} onChange={(e) => setMsgCfg(chave, e.target.value)}
+                                                rows={chave === 'menuCabecalho' ? 1 : 2} className={CAMPO} />
+                                        </label>
+                                    ))}
+                                </div>
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🔢 Menu de triagem (opção → fila)</p>
+                                    {cfg.menu.map((m, i) => (
+                                        <div key={i} className="flex items-center gap-1.5">
+                                            <input value={m.opcao} onChange={(e) => setCfg((c) => c ? {
+                                                ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, opcao: e.target.value } : x)),
+                                            } : c)} className={`${CAMPO} !w-10 text-center`} />
+                                            <input value={m.rotulo} onChange={(e) => setCfg((c) => c ? {
+                                                ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, rotulo: e.target.value } : x)),
+                                            } : c)} className={CAMPO} placeholder="O que o cliente lê" />
+                                            <select value={m.fila} onChange={(e) => setCfg((c) => c ? {
+                                                ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, fila: e.target.value } : x)),
+                                            } : c)} className={`${CAMPO} !w-32`}>
+                                                {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
+                                            </select>
+                                            <button onClick={() => setCfg((c) => c ? { ...c, menu: c.menu.filter((_, j) => j !== i) } : c)}
+                                                className="text-slate-400 hover:text-red-600 px-1">✕</button>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => setCfg((c) => c ? {
+                                        ...c, menu: [...c.menu, { opcao: String(c.menu.length + 1), fila: 'recepcao', rotulo: '' }],
+                                    } : c)} className="text-[11px] text-[#0e3bfa] font-bold">＋ opção</button>
+                                    <p className="text-[10px] text-slate-400">Menu vazio ou só com fila inválida volta ao padrão na gravação — triagem morta em silêncio não passa.</p>
+                                </div>
+                                {cfgErro && <p className="text-[11px] text-red-600 dark:text-red-400">{cfgErro}</p>}
+                                {cfgOk && <p className="text-[11px] text-emerald-600 dark:text-emerald-400">✓ Configuração salva.</p>}
+                                <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => setCfgAberta(false)} className="text-[12px] px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Fechar</button>
+                                    <button onClick={salvarCfg} disabled={cfgSalvando}
+                                        className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {cfgSalvando ? 'Salvando…' : 'Salvar configuração'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden md:grid md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px]" style={{ height: 'calc(100vh - 140px)', minHeight: '480px' }}>
 
                 {/* ═══ COLUNA 1 — CONVERSAS ═══════════════════════════════════ */}
@@ -313,6 +570,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ✚ Nova
                                 </button>
+                                {ehAdmin && (
+                                    <button onClick={abrirCfg} title="Configurar atendimento (bot, horário, mensagens, menu)"
+                                        className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
+                                        ⚙️
+                                    </button>
+                                )}
                                 <button onClick={() => recarregar()} disabled={carregando} title="Atualizar agora (a lista também se atualiza sozinha a cada 30s)"
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
                                     {carregando ? '…' : '🔄'}
@@ -328,7 +591,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         <div className="flex gap-1.5 flex-wrap">
                             {chip('todas', `Todas · ${conversas.length}`)}
                             {chip('nao-lidas', `Não lidas · ${naoLidasTotal}`)}
-                            {chip('recepcao', 'Recepção')}
+                            {filasChip.map((f) => chip(f.id, `${rotuloCurtoFila(f.id)} · ${contagemFila(f.id)}`))}
                         </div>
                     </div>
 
@@ -372,7 +635,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                                                <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">{c.fila || 'Recepção'}</span>
+                                                <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">{rotuloCurtoFila(c.fila)}</span>
+                                                {c.situacao === 'resolvida' && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">✅ resolvida</span>}
                                                 {j.aberta && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">janela aberta</span>}
                                                 {!c.empresaId && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">vincular</span>}
                                             </div>
@@ -401,7 +665,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-white grid place-items-center text-[11px] font-bold shrink-0">{iniciais(sel)}</div>
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[13px] font-bold text-slate-800 dark:text-slate-100 truncate">{nomeExibicao(sel)}</p>
-                                    <p className="text-[10px] text-slate-400 truncate">{formatarNumeroBr(sel.numero)} · {sel.fila || 'Recepção'}</p>
+                                    <p className="text-[10px] text-slate-400 truncate">
+                                        {formatarNumeroBr(sel.numero)} · {rotuloCurtoFila(sel.fila)}
+                                        {sel.protocolo ? ` · protocolo ${sel.protocolo}` : ''}
+                                    </p>
                                 </div>
                             </div>
 
@@ -424,6 +691,19 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         const tick = carimboStatus(m.statusEntrega);
                                         const midia = rotuloMidia(m.midia, m.tipo);
                                         const saida = m.direcao === 'saida';
+                                        // Nota interna: vive na thread e o cliente NUNCA vê — a cara
+                                        // tem que dizer isso, senão alguém confia que "foi enviado".
+                                        if (m.direcao === 'interna') {
+                                            return (
+                                                <div key={m.id} className="max-w-[85%] w-fit mx-auto rounded-lg border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 text-[12px] text-amber-800 dark:text-amber-200">
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide">📝 nota interna — o cliente não vê</p>
+                                                    <p className="whitespace-pre-wrap break-words">{m.texto}</p>
+                                                    <p className="text-[9px] text-amber-600/80 dark:text-amber-400/80 text-right mt-0.5 leading-none">
+                                                        {(m as any).enviadoPor ? `${String((m as any).enviadoPor).split('@')[0]} · ` : ''}{horaCurta(m.timestamp, agora)}
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
                                         return (
                                             <div key={m.id} className={`max-w-[78%] w-fit rounded-xl px-3 py-1.5 text-[13px] shadow-sm ${saida
                                                 ? 'ml-auto bg-[#e2e9ff] dark:bg-[#24335e] text-slate-800 dark:text-slate-100 rounded-br-sm'
@@ -510,29 +790,66 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cliente · cadastro central</p>
                                 {sel.empresaId ? (
-                                    <p className="text-[11px] text-slate-600 dark:text-slate-300">Vinculado (empresa {sel.empresaId}).</p>
+                                    <>
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">{sel.empresaNome || sel.empresaId}</p>
+                                        <button onClick={() => acaoVincular('', '')} className="text-[10px] text-slate-400 hover:text-red-600 mt-1">✕ desvincular</button>
+                                    </>
                                 ) : (
-                                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                                        Sem vínculo com o cadastro — o botão de vincular chega na próxima etapa,
-                                        junto da importação de contatos.
-                                    </p>
+                                    <>
+                                        <p className="text-[11px] text-amber-700 dark:text-amber-400 mb-1">Sem vínculo com o cadastro.</p>
+                                        <button onClick={() => setVincAberto(true)}
+                                            className="w-full text-[11px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                            🔗 Vincular ao cliente
+                                        </button>
+                                    </>
                                 )}
                             </div>
                             <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conversa</p>
-                                <p className="text-[11px] text-slate-600 dark:text-slate-300">Fila: <strong>{sel.fila || 'Recepção'}</strong></p>
-                                <p className="text-[11px] text-slate-600 dark:text-slate-300">Atribuída a: <strong>{sel.atribuidoA || 'ninguém ainda'}</strong></p>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300">Fila: <strong>{rotuloCurtoFila(sel.fila)}</strong></p>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300">Atribuída a: <strong>{sel.atribuidoA ? sel.atribuidoA.split('@')[0] : 'ninguém ainda'}</strong></p>
                                 <p className="text-[11px] text-slate-600 dark:text-slate-300">Situação: <strong>{sel.situacao}</strong></p>
+                                {sel.protocolo && <p className="text-[11px] text-slate-600 dark:text-slate-300">Protocolo: <strong>{sel.protocolo}</strong></p>}
                             </div>
                             <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Ações</p>
-                                <div className="space-y-1">
-                                    {['↪️ Transferir de fila', '📝 Nota interna', '✅ Resolver conversa'].map((a) => (
-                                        <button key={a} disabled title="Chega na próxima etapa"
-                                            className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed">
-                                            {a} <span className="text-[9px]">· em breve</span>
+                                {acaoErro && <p className="text-[10px] text-red-600 dark:text-red-400 mb-1.5">{acaoErro}</p>}
+                                <div className="space-y-1.5">
+                                    <button onClick={acaoAssumir}
+                                        className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                        {sel.atribuidoA === meuEmail ? '↩️ Liberar a conversa' : '🙋 Assumir pra mim'}
+                                    </button>
+                                    <label className="block text-[10px] text-slate-400">
+                                        ↪️ Transferir de fila
+                                        <select value={sel.fila || 'recepcao'} onChange={(e) => acaoTransferir(e.target.value)} className={CAMPO}>
+                                            {(filas.length ? filas : [{ id: 'recepcao', rotulo: 'Recepção / Front Desk' }]).map((f) => (
+                                                <option key={f.id} value={f.id}>{f.rotulo}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    {notaAberta ? (
+                                        <div className="space-y-1">
+                                            <textarea value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} rows={2}
+                                                placeholder="Nota interna — o cliente NÃO vê" className={CAMPO} />
+                                            <div className="flex gap-1.5">
+                                                <button onClick={acaoNota} disabled={!notaTexto.trim()}
+                                                    className="flex-1 text-[11px] font-bold px-2 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-40">📝 Gravar nota</button>
+                                                <button onClick={() => { setNotaAberta(false); setNotaTexto(''); }}
+                                                    className="text-[11px] px-2 py-1 rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">✕</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => setNotaAberta(true)}
+                                            className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                            📝 Nota interna
                                         </button>
-                                    ))}
+                                    )}
+                                    <button onClick={acaoSituacao}
+                                        className={`w-full text-left text-[11px] px-2 py-1 rounded border ${sel.situacao === 'resolvida'
+                                            ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                            : 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white font-bold'}`}>
+                                        {sel.situacao === 'resolvida' ? '↺ Reabrir conversa' : '✅ Resolver conversa'}
+                                    </button>
                                 </div>
                             </div>
                             <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 text-[10px] text-slate-400">

@@ -4,7 +4,7 @@
 // aqui é só a chamada, no padrão canônico do rotinaFiscalService.
 // ============================================================================
 import { getAuth } from 'firebase/auth';
-import { ConversaResumo, MensagemInbox } from './spConnect';
+import { ConfigAtendimento, ConversaResumo, FilaAtendimento, MensagemInbox } from './spConnect';
 
 async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolean; error?: string }> {
     const u = getAuth().currentUser;
@@ -20,7 +20,8 @@ async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolea
 }
 
 export const listarConversas = () =>
-    req<{ conversas: ConversaResumo[] }>('/api/admin/whatsapp/conversas');
+    req<{ conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null }>(
+        '/api/admin/whatsapp/conversas');
 
 export const listarMensagens = (numero: string) =>
     req<{ mensagens: MensagemInbox[] }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens`);
@@ -52,3 +53,46 @@ export const responderConversa = (numero: string, texto: string) =>
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ texto }),
         });
+
+// ─── F3: config do atendimento + ações de conversa ──────────────────────────
+// O escopo (quem vê o quê, quem grava) é do BACKEND; aqui é só a chamada.
+
+const post = <T>(url: string, body?: unknown) =>
+    req<T>(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+    });
+
+const urlConversa = (numero: string, acao: string) =>
+    `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/${acao}`;
+
+/** Config do atendimento (bot, horário, mensagens, menu) — leitura de qualquer logado. */
+export const atendimentoConfig = () =>
+    req<{ config: ConfigAtendimento; filas: FilaAtendimento[] }>('/api/admin/whatsapp/atendimento-config');
+
+/** Gravação SÓ admin (o backend recusa o resto). */
+export const salvarAtendimentoConfig = (config: ConfigAtendimento) =>
+    post<{ config: ConfigAtendimento }>('/api/admin/whatsapp/atendimento-config', { config });
+
+export const transferirFila = (numero: string, fila: string) =>
+    post<{ numero: string }>(urlConversa(numero, 'fila'), { fila });
+
+/** Assumir a conversa (liberar=true devolve pra fila). */
+export const assumirConversa = (numero: string, liberar = false) =>
+    post<{ numero: string }>(urlConversa(numero, 'assumir'), { liberar });
+
+export const mudarSituacao = (numero: string, situacao: 'aberta' | 'resolvida') =>
+    post<{ numero: string }>(urlConversa(numero, 'situacao'), { situacao });
+
+/** Nota interna: entra na thread mas NUNCA sai pro cliente. */
+export const criarNota = (numero: string, texto: string) =>
+    post<{ mensagem: MensagemInbox }>(urlConversa(numero, 'nota'), { texto });
+
+/** Vincular contato ↔ cliente do cadastro (empresaId vazio DESVINCULA). */
+export const vincularCliente = (numero: string, empresaId: string, empresaNome?: string) =>
+    post<{}>(urlConversa(numero, 'vincular'), { empresaId, empresaNome });
+
+export const buscarClientes = (q: string) =>
+    req<{ clientes: { id: string; nome: string; cnpj: string; origem: string }[] }>(
+        `/api/admin/whatsapp/clientes-busca?q=${encodeURIComponent(q)}`);
