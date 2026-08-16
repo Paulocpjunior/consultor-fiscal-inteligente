@@ -1,7 +1,16 @@
 # 💬 SP CONNECT — Módulo de Comunicação (WhatsApp) — Documento de Desenho
 
 > **NOME OFICIAL: SP Connect** (Paulo, 14/08) — identidade da casa, sem nome
-> de ferramenta. É o nome do card, da aba no Teams e do PWA no celular.
+> de ferramenta.
+>
+> 🚨 **SP CONNECT É APP PRÓPRIO, NÃO CARD DO CFI** (Paulo, 16/08: *"vem pra
+> substituir a Ultra Fox, um app totalmente novo que irá rodar dentro do
+> Teams — não faz sentido algum ter um card dentro do CFI"*). O CFI é o app
+> do FISCAL; o atendimento é de TODOS os departamentos. A casa do SP Connect
+> é **`/connect`** (mesma SPA, tela cheia, sem menu do CFI e sem portão de
+> empresa ativa) — é essa URL que vira a aba/app do Teams e o PWA. O MOTOR
+> (webhook, credencial, banco, rotas) continua no serviço do CFI: a chave
+> não trafega; o que é próprio é a CASA do produto, não o backend.
 
 > Estado: **DESENHO** (nada aqui está implementado além do que a seção
 > "O que já existe" lista). Aprovação do Paulo pendente nas "Decisões em

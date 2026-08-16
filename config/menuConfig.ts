@@ -161,7 +161,9 @@ export const MENU_GRUPOS: MenuGrupo[] = [
             { type: SearchType.DASHBOARD_CEO, Icon: RocketIcon },
             { type: SearchType.RELATORIOS, Icon: DocumentTextIcon },
             { type: SearchType.CARTEIRA, Icon: UserGroupIcon },
-            { type: SearchType.SP_CONNECT, Icon: ChatBubbleIcon },
+            // SP Connect NÃO tem card aqui de propósito (Paulo, 16/08): é APP
+            // próprio (substitui a Ultra Fox, vive no Teams) e atende TODOS os
+            // departamentos — a casa dele é /connect, não o menu do fiscal.
             { type: SearchType.AGENTES_A3, Icon: BriefcaseIcon },
         ],
     },

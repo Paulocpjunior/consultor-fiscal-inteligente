@@ -78,6 +78,10 @@ const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHu
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const RelatoriosHub = lazy(() => import('./components/Relatorios'));
 const SpConnect = lazy(() => import('./components/SpConnect'));
+
+// /connect é o app SP CONNECT (substituto da Ultra Fox, vive no Teams) — a
+// mesma SPA, outra casa. Decidido no load: trocar de app é trocar de URL.
+const MODO_SP_CONNECT = typeof window !== 'undefined' && window.location.pathname.startsWith('/connect');
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalHub = lazy(() => import('./components/NfseNacional/NfseNacionalHub'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
@@ -711,6 +715,42 @@ const App: React.FC = () => {
         );
     }
 
+    // ─── 💬 SP CONNECT É APP PRÓPRIO, NÃO CARD (Paulo, 16/08) ───────────────
+    //
+    // O SP Connect substitui a Ultra Fox e vive no TEAMS — atendente do DP,
+    // da Legalização e do RH nunca abre o CFI. Em /connect a MESMA SPA vira o
+    // app SP Connect: login unificado, tela cheia, SEM menu do CFI e SEM o
+    // portão de empresa ativa (conversa é da carteira toda, não de um
+    // cliente). O motor continua neste serviço (credencial não trafega); o
+    // que muda é a CASA do produto. A aba do Teams aponta pra <url>/connect.
+    if (MODO_SP_CONNECT) {
+        return (
+            <ErrorBoundary modulo="SP Connect">
+                <div className="min-h-screen" style={{ background: 'var(--bg-page)' }}>
+                    <header className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-lg">💬</span>
+                            <div className="min-w-0">
+                                <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">SP Connect</p>
+                                <p className="text-[10px] text-slate-400 leading-tight">SP Assessoria Contábil</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="hidden sm:block text-[11px] text-slate-400 truncate max-w-[220px]">{currentUser.email}</span>
+                            <button onClick={handleLogout} className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Sair</button>
+                        </div>
+                    </header>
+                    <main className="p-3 sm:p-4">
+                        <Suspense fallback={<LoadingSpinner />}>
+                            <SpConnect currentUser={currentUser} />
+                        </Suspense>
+                    </main>
+                    <UpdateBanner />
+                </div>
+            </ErrorBoundary>
+        );
+    }
+
     // ─── O PORTÃO DA SEQUÊNCIA ──────────────────────────────────────────────
     //
     // login → ATIVAR EMPRESA → módulos. Sem empresa ativa a tela não é o menu:
@@ -1313,14 +1353,6 @@ const App: React.FC = () => {
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
                                 />
-                            </Suspense>
-                            </ErrorBoundary>
-                        )}
-
-                        {searchType === SearchType.SP_CONNECT && (
-                            <ErrorBoundary modulo="SP Connect">
-                            <Suspense fallback={<LoadingSpinner />}>
-                                <SpConnect currentUser={currentUser} />
                             </Suspense>
                             </ErrorBoundary>
                         )}
