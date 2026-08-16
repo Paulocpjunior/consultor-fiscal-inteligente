@@ -162,11 +162,19 @@ describe('o cadastro do município transforma pendência em obrigação com DATA
             uf: 'SP', codMunIBGE, prazosMunicipais,
         }, '06/2026');
 
-    it('sem calendário, o ISS continua PENDÊNCIA nomeada (estado de hoje)', () => {
+    it('🚨 sem calendário, o ISS NASCE mesmo assim — sem data, nunca com a de outra cidade', () => {
+        // Paulo, 16/08: "eu não vou fazer nada manual (...) assim eliminamos
+        // esta pendência". Antes, cidade sem calendário fazia a obrigação NÃO
+        // EXISTIR e o mês do cliente saía sem ISS. Sumir da tela é pior que
+        // aparecer com ressalva.
         const m = lucroEm(JUNDIAI);
-        expect(m.propostas.some((r: any) => r.obrigacao === 'ISS')).toBe(true);
-        expect(m.obrigacoes.some((r: any) => r.obrigacao === 'ISS')).toBe(false);
-        expect(m.coberturaIncompleta).toBe(true);
+        const iss = m.obrigacoes.find((r: any) => r.obrigacao === 'ISS');
+        expect(iss).toBeTruthy();
+        expect(iss.vencimentoAInformar).toBe(true);
+        // A data NÃO é chutada: sem calendário não há vencimento.
+        expect(iss.vencimento).toBeNull();
+        // E ela deixou de ser pendência bloqueante.
+        expect(m.propostas.some((r: any) => r.obrigacao === 'ISS')).toBe(false);
     });
 
     it('🚨 com calendário cadastrado, o ISS vira obrigação COM VENCIMENTO', () => {
@@ -181,12 +189,15 @@ describe('o cadastro do município transforma pendência em obrigação com DATA
         expect(m.propostas.some((r: any) => r.obrigacao === 'ISS')).toBe(false);
     });
 
-    it('o calendário de UM município não resolve o de outro', () => {
-        // Cadastrar SP não pode fazer o cliente de Jundiaí ficar "coberto" —
-        // seria o prazo errado entregue com confiança, de novo.
+    it('🚨 o calendário de UM município NUNCA vira a data de outro', () => {
+        // A invariante que não muda com o desenho novo: cadastrar SP não pode
+        // dar data ao cliente de Jundiaí. O ISS dele aparece — mas sem data.
         const m = lucroEm(JUNDIAI, [cad()]);
-        expect(m.obrigacoes.some((r: any) => r.obrigacao === 'ISS')).toBe(false);
-        expect(m.propostas.some((r: any) => r.obrigacao === 'ISS')).toBe(true);
+        const iss = m.obrigacoes.find((r: any) => r.obrigacao === 'ISS');
+        expect(iss.vencimentoAInformar).toBe(true);
+        expect(iss.vencimento).toBeNull();
+        // O dia 10 de São Paulo não vazou para Jundiaí.
+        expect(iss.diaVencimento).not.toBe(cad().diaVencimento);
     });
 
     it('o INSS patronal continua pendente — ele depende da FOLHA, não do município', () => {
@@ -468,5 +479,100 @@ describe('a esfera estadual tem TELA e ROTA — não repito o código morto', ()
         const rota = readFileSync(join(RAIZ, 'sefaz-backend/prazos-municipais-routes.js'), 'utf8');
         expect(rota).toMatch(/esfera: String\(p\.esfera/);
         expect(rota).toMatch(/uf: String\(p\.uf/);
+    });
+});
+
+// ═══ O CADASTRO SE PREENCHE PELO USO (Paulo, 16/08) ═════════════════════════
+//
+// *"Eu não vou fazer nada manual. Você deve, como nos demais impostos, se
+// atualizar automaticamente; no caso de ISS de outra cidade, deve abrir o modal
+// de data de vencimento para que o colaborador insira a data na hora do cálculo
+// e geração da guia — assim eliminamos esta pendência e seguimos para o
+// próximo."*
+//
+// A inversão: o calendário deixa de ser uma FILA DE ADMIN (57 cidades para
+// alguém preencher antes que o mês funcione) e passa a se preencher pelo
+// trabalho que já acontece.
+describe('a data informada no FLUXO vira o calendário da cidade', () => {
+    const { montarPrazoInformadoNoFluxo, prazosAConfirmar, resolverPrazoMunicipal: resolver } =
+        require('../sefaz-backend/prazos-municipais.js');
+
+    const informar = (over: any = {}) => montarPrazoInformadoNoFluxo({
+        codMunIBGE: JUNDIAI, municipioNome: 'Jundiaí', obrigacao: 'ISS',
+        diaVencimento: 15, competencia: '2026-07',
+        informadoPorEmail: 'colab@spassessoriacontabil.com.br', ...over,
+    });
+
+    it('informar uma vez resolve a cidade INTEIRA nos meses seguintes', () => {
+        const r = informar();
+        expect(r.ok).toBe(true);
+        const achado = resolver([r.prazo], { codMunIBGE: JUNDIAI, obrigacao: 'ISS', competencia: '2026-09' });
+        expect(achado.achou).toBe(true);
+        expect(achado.prazo!.diaVencimento).toBe(15);
+    });
+
+    it('🚨 a vigência começa na competência informada e NÃO retroage', () => {
+        // A pessoa está dizendo o prazo de HOJE, não afirmando que ele valia há
+        // dois anos. Carimbar o passado reescreveria competências já entregues.
+        const r = informar();
+        expect(resolver([r.prazo], { codMunIBGE: JUNDIAI, obrigacao: 'ISS', competencia: '2026-06' }).achou)
+            .toBe(false);
+    });
+
+    it('sem base legal PASSA no fluxo — mas fica carimbado como a confirmar', () => {
+        // Exigir a lei de quem está gerando a guia é exigir julgamento fiscal
+        // que a pessoa não tem, e trava sem caminho é trava que se contorna.
+        // A alternativa real não é "com norma" × "sem norma": é ter data ×
+        // não ter data nenhuma.
+        const r = informar();
+        expect(r.prazo.baseLegal).toBe('');
+        expect(r.prazo.origem).toBe('fluxo');
+        const achado = resolver([r.prazo], { codMunIBGE: JUNDIAI, obrigacao: 'ISS', competencia: '2026-07' });
+        expect(achado.prazo!.aConfirmar).toBe(true);
+        // E o admin vê a lista do que vale mas não foi conferido.
+        expect(prazosAConfirmar([r.prazo])).toHaveLength(1);
+    });
+
+    it('cadastro do ADMIN continua exigindo a norma — a régua não afrouxou', () => {
+        const { validarPrazoMunicipal: validar } = require('../sefaz-backend/prazos-municipais.js');
+        expect(validar({ codMunIBGE: JUNDIAI, obrigacao: 'ISS', diaVencimento: 15, baseLegal: '' }).ok).toBe(false);
+        // Só o caminho do fluxo dispensa.
+        expect(validar({ codMunIBGE: JUNDIAI, obrigacao: 'ISS', diaVencimento: 15, baseLegal: '', origem: 'fluxo' }).ok)
+            .toBe(true);
+    });
+
+    it('🚨 dia ilegível continua recusado — campo de prazo não recebe chute', () => {
+        expect(informar({ diaVencimento: 0 }).ok).toBe(false);
+        expect(informar({ diaVencimento: 40 }).ok).toBe(false);
+        expect(informar({ diaVencimento: null }).ok).toBe(false);
+    });
+
+    it('sem município (nem UF) não há onde guardar', () => {
+        expect(informar({ codMunIBGE: '' }).ok).toBe(false);
+    });
+});
+
+describe('o modal existe e NÃO sugere dia por conta própria', () => {
+    const RAIZ = join(__dirname, '..');
+    it('a tela de Tarefas abre o modal na linha SEM data', () => {
+        const t = readFileSync(join(RAIZ, 'components/Tarefas.tsx'), 'utf8');
+        expect(t).toMatch(/informar vencimento/);
+        expect(t).toMatch(/<PrazoIssModal/);
+        // Competência da tarefa é MM/AAAA e a vigência usa AAAA-MM.
+        expect(t).toMatch(/function isoDaCompetencia/);
+    });
+
+    it('🚨 o modal só pré-preenche o que veio COM FONTE', () => {
+        const m = readFileSync(join(RAIZ, 'components/PrazoIssModal.tsx'), 'utf8');
+        // Pré-preenche apenas dentro do ramo `j.ok` da consulta com grounding.
+        expect(m).toMatch(/if \(j\?\.ok && j\.proposta\?\.diaVencimento\)/);
+        // E não inventa nada quando a consulta é recusada.
+        expect(m).toMatch(/Informe o dia que\s*\n?\s*você usa para pagar/);
+    });
+
+    it('a rota /informar é do COLABORADOR e não sobrescreve o confirmado', () => {
+        const r = readFileSync(join(RAIZ, 'sefaz-backend/prazos-municipais-routes.js'), 'utf8');
+        expect(r).toMatch(/router\.post\('\/informar', requireAuth/);
+        expect(r).toMatch(/Já existe calendário CONFIRMADO/);
     });
 });

@@ -103,10 +103,18 @@ export function validarPrazoMunicipal(p) {
         erros.push('“Meses após a competência” deve ser um inteiro de 0 a 12.');
     }
 
-    // 🚨 SEM BASE LEGAL NÃO ENTRA. É a mesma recusa do IVA-ST sem Portaria:
-    // número guardado sem a norma de origem é número que ninguém consegue
-    // conferir depois — e prazo é o que decide se há multa.
-    if (String(p?.baseLegal || '').trim().length < 5) {
+    // BASE LEGAL: obrigatória no cadastro do ADMIN (é a mesma recusa do IVA-ST
+    // sem Portaria — número sem a norma não se confere depois).
+    //
+    // ⚠️ MAS NÃO NO FLUXO. Paulo, 16/08: *"eu não vou fazer nada manual (...) no
+    // caso de ISS de outra cidade deve abrir o modal de data de vencimento para
+    // que o colaborador insira a data na hora do cálculo e geração da guia"*.
+    // Exigir a lei de quem está gerando a guia é exigir julgamento fiscal que a
+    // pessoa não tem — e trava sem caminho é trava que a equipe contorna. A
+    // alternativa real não é "com norma" × "sem norma": é ter data × não ter
+    // data nenhuma. Então o fluxo entra CARIMBADO com a origem, e a diferença
+    // entre informado e confirmado continua visível.
+    if (String(p?.origem || '') !== 'fluxo' && String(p?.baseLegal || '').trim().length < 5) {
         erros.push('Informe a base legal (lei/decreto municipal ou o link do calendário oficial). '
             + 'Prazo sem a norma de origem não se confere depois.');
     }
@@ -218,6 +226,11 @@ export function resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, compe
             // desconfiar do número certo.
             cadastradoPorEmail: escolhido.cadastradoPorEmail || null,
             cadastradoEm: escolhido.cadastradoEm || null,
+            // 'admin' = confirmado com base legal · 'fluxo' = informado por
+            // quem gerou a guia · 'consulta' = proposta aceita da busca.
+            origem: escolhido.origem || 'admin',
+            /** Ainda sem a norma de origem — vale, mas não foi conferido. */
+            aConfirmar: (escolhido.origem === 'fluxo') && String(escolhido.baseLegal || '').trim().length < 5,
         },
         situacao: 'cadastrado',
         motivo: `Calendário de ${obr} de ${escolhido.municipioNome || mun} — ${escolhido.baseLegal}.`,
@@ -353,4 +366,79 @@ export function municipiosSemCalendario(clientes, cadastros, { obrigacao = 'ISS'
         /** Cliente sem município cadastrado — a ação é OUTRA (é no cadastro). */
         clientesSemMunicipio: semMunicipio,
     };
+}
+
+
+/**
+ * O cadastro que nasce do USO — o desenho que o Paulo pediu em 16/08.
+ *
+ * *"Eu não vou fazer nada manual. Você deve, como nos demais impostos, se
+ * atualizar automaticamente; no caso de ISS de outra cidade, deve abrir o modal
+ * de data de vencimento para que o colaborador insira a data na hora do cálculo
+ * e geração da guia — assim eliminamos esta pendência."*
+ *
+ * A inversão que isso representa: o calendário deixa de ser uma FILA DE ADMIN
+ * (57 cidades para alguém preencher antes que o mês funcione) e passa a se
+ * preencher SOZINHO, pelo trabalho que já acontece. Quem informa a data de
+ * Jundiaí é quem gera a guia de Jundiaí — uma vez. No mês seguinte ninguém
+ * pergunta de novo, porque virou o calendário da cidade.
+ *
+ * ⚠️ VIGÊNCIA COMEÇA NA COMPETÊNCIA INFORMADA, nunca retroage: a pessoa está
+ * dizendo o prazo de HOJE, não afirmando que ele valia há dois anos. Carimbar
+ * o passado com o que ela disse do presente reescreveria competências que já
+ * saíram — o erro que a régua de vigência existe para impedir.
+ */
+export function montarPrazoInformadoNoFluxo({
+    codMunIBGE, municipioNome, uf, esfera = 'municipal',
+    obrigacao = 'ISS', diaVencimento, mesesApos = 1,
+    competencia, informadoPorEmail, agoraIso = new Date().toISOString(),
+}) {
+    const dia = Number(diaVencimento);
+    // Campo de prazo não recebe chute nem zero — a mesma recusa de sempre.
+    if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+        return { ok: false, erro: 'Informe o dia do vencimento (1 a 31).' };
+    }
+    const comp = String(competencia || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(comp)) {
+        return { ok: false, erro: 'Competência inválida.' };
+    }
+    const prazo = {
+        esfera,
+        codMunIBGE: soDigitos(codMunIBGE) || null,
+        uf: String(uf || '').trim().toUpperCase() || null,
+        municipioNome: String(municipioNome || '').trim() || null,
+        obrigacao: String(obrigacao).trim().toUpperCase(),
+        diaVencimento: dia,
+        mesesApos: Number.isInteger(Number(mesesApos)) ? Number(mesesApos) : 1,
+        ajusteDiaNaoUtil: 'antecipa',
+        // SEM NORMA, e isso vai DITO — não escondido atrás de um texto genérico.
+        baseLegal: '',
+        origem: 'fluxo',
+        vigenciaInicio: `${comp}-01`,
+        vigenciaFim: null,
+        ativo: true,
+        cadastradoPorEmail: informadoPorEmail || null,
+        cadastradoEm: agoraIso,
+    };
+    if (!escopoDoPrazo(prazo)) {
+        return { ok: false, erro: 'Sem município (ou UF) não dá para guardar o prazo.' };
+    }
+    return { ok: true, prazo };
+}
+
+/** Prazos que valem mas ainda não têm norma — trabalho OPCIONAL do admin. */
+export function prazosAConfirmar(cadastros) {
+    return (cadastros || [])
+        .filter((c) => c?.ativo !== false
+            && String(c?.origem || '') === 'fluxo'
+            && String(c?.baseLegal || '').trim().length < 5)
+        .map((c) => ({
+            id: c.id || null,
+            escopo: escopoDoPrazo(c),
+            municipioNome: c.municipioNome || null,
+            obrigacao: c.obrigacao,
+            diaVencimento: c.diaVencimento,
+            informadoPorEmail: c.cadastradoPorEmail || null,
+            informadoEm: c.cadastradoEm || null,
+        }));
 }

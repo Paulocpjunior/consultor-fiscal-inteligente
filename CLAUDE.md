@@ -110,6 +110,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **🚨 O CALENDÁRIO SE PREENCHE PELO USO, NÃO POR FILA DE ADMIN** (Paulo,
+  16/08: *"eu não vou fazer nada manual, você deve — como nos demais impostos —
+  se atualizar automaticamente; no caso de ISS de outra cidade deve abrir o
+  modal de data de vencimento para que o colaborador insira a data na hora do
+  cálculo e geração da guia, assim eliminamos esta pendência e seguimos para o
+  próximo"*). Eu tinha entregue o cadastro municipal como **fila de admin**: 57
+  cidades para alguém preencher ANTES que o mês funcionasse. Ele recusou o
+  desenho, não o número — e está certo: fila que depende de trabalho manual do
+  dono não é solução, é a pendência com outro nome.
+  **A INVERSÃO**: o ISS de cidade sem calendário deixa de ser pendência
+  bloqueante e **NASCE como obrigação**, sem data, marcada `vencimentoAInformar`
+  (sumir da tela é pior que aparecer com ressalva). Na linha da tarefa, o botão
+  **📅 informar vencimento** abre o modal, que **consulta sozinho com fonte** e
+  pré-preenche só o que vier COM link. O que a pessoa confirma vira o calendário
+  da cidade a partir daquela competência — **ninguém pergunta de novo**, nem
+  para os outros clientes de lá.
+  TRÊS RÉGUAS QUE SOBREVIVEM À INVERSÃO: (1) **a data nunca é chutada** — sem
+  calendário o vencimento é NULO, e o `diaVencimento: 10` que a entrada do ISS
+  carregava como placeholder foi ZERADO (agora que a obrigação circula, aquele
+  10 seria lido como dia de verdade — e é justamente o de SP, o que faria o
+  número certo aparecer na cidade errada por coincidência); (2) **a vigência
+  começa na competência informada e NÃO retroage** (a pessoa diz o prazo de
+  HOJE); (3) **base legal continua obrigatória no cadastro do ADMIN** — só o
+  fluxo dispensa, porque exigir a lei de quem está gerando a guia é exigir
+  julgamento fiscal que ela não tem, e a alternativa real não é "com norma × sem
+  norma", é **ter data × não ter data nenhuma**. O informado fica carimbado
+  (`origem: 'fluxo'`, `aConfirmar`) e o admin promove quando quiser.
+  ⚠️ E o informado **NÃO sobrescreve** calendário já confirmado com norma.
+  🐛 A trava de layout do próprio projeto pegou meu modal (`items-center` sem
+  `overflow-y-auto`: com várias fontes, os botões sumiam) — antes de subir.
 - **DENUNCIAR SEM DAR SAÍDA É MEIA CORREÇÃO — a esfera ESTADUAL virou cadastro**
   (15/08, fim do dia). De manhã o app passou a acusar que o prazo do SPED
   (`UF:SP`, CAT 147/2009) era entregue a cliente de qualquer estado, e eu deixei

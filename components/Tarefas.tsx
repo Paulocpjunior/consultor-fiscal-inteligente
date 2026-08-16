@@ -17,6 +17,7 @@ import { autoGerarTarefasParaCompetencia } from '../services/tarefasAutoGerar';
 import { STATUS_LABEL, STATUS_COR, OBRIGACAO_LABEL } from './Tarefas/_common';
 import ModalCriarTarefa from './Tarefas/ModalCriarTarefa';
 import ModalReatribuir from './Tarefas/ModalReatribuir';
+import PrazoIssModal, { type AlvoPrazoIss } from './PrazoIssModal';
 import ModalMover from './Tarefas/ModalMover';
 import KanbanColuna from './Tarefas/KanbanColuna';
 import type { User } from '../types';
@@ -71,6 +72,9 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     const [arrastando, setArrastando] = useState<Tarefa | null>(null);
     // Modal "Mover para" — fallback mobile quando drag-and-drop nao funciona.
     const [tarefaParaMover, setTarefaParaMover] = useState<Tarefa | null>(null);
+    // ISS de cidade sem calendário: a data é informada NO FLUXO (Paulo, 16/08).
+    const [prazoAInformar, setPrazoAInformar] = useState<AlvoPrazoIss | null>(null);
+
     // Atualizando status (loading state pra evitar double-click)
     const [atualizandoStatus, setAtualizandoStatus] = useState<string | null>(null);
 
@@ -403,7 +407,24 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                                                 <div className="text-[11px] text-gray-400 font-mono">{t.empresaCnpj}</div>
                                             </td>
                                             <td className={`px-3 py-2 ${atrasada ? 'text-red-600 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>
-                                                {formataData(t.vencimento)}
+                                                {/* ISS de cidade sem calendário nasce SEM data (16/08).
+                                                    A data é pedida AQUI, na hora de trabalhar a
+                                                    obrigação — e o que a pessoa informa vira o
+                                                    calendário da cidade, então ninguém pergunta de
+                                                    novo no mês seguinte. */}
+                                                {t.vencimento ? formataData(t.vencimento) : (
+                                                    <button
+                                                        onClick={() => setPrazoAInformar({
+                                                            empresaNome: t.empresaNome,
+                                                            codMunIBGE: (t as any).codMunIBGE || '',
+                                                            municipioNome: (t as any).municipioNome || null,
+                                                            uf: (t as any).uf || null,
+                                                            competencia: isoDaCompetencia(t.competencia),
+                                                        })}
+                                                        className="btn-press text-[11px] px-2 py-0.5 rounded-lg border border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-400 whitespace-nowrap">
+                                                        📅 informar vencimento
+                                                    </button>
+                                                )}
                                             </td>
                                             <td className="px-3 py-2">
                                                 {t.responsavelNome ? (
@@ -501,9 +522,32 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                     onAtribuir={handleReatribuir}
                 />
             )}
+
+            {/* Modal: informar o vencimento do ISS da cidade (16/08).
+                Depois de informado, RECARREGA — a tarefa passa a ter data e a
+                cidade inteira sai da situação, não só este cliente. */}
+            {prazoAInformar && (
+                <PrazoIssModal
+                    alvo={prazoAInformar}
+                    onClose={() => setPrazoAInformar(null)}
+                    onInformado={() => { setPrazoAInformar(null); setVersao(v => v + 1); }}
+                />
+            )}
         </div>
     );
 };
+
+/**
+ * 'MM/AAAA' (competência da tarefa) → 'AAAA-MM' (o que a vigência usa).
+ *
+ * ⚠️ Este descasamento mordeu TRÊS vezes em 15/08, uma delas em silêncio. Aqui
+ * a conversão é explícita e o formato de origem está dito no nome.
+ */
+function isoDaCompetencia(comp: string): string {
+    const m = String(comp || '').match(/^(\d{2})\/(\d{4})$/);
+    if (m) return `${m[2]}-${m[1]}`;
+    return String(comp || '').slice(0, 7);
+}
 
 // ════════════════════════════════════════════════════════════════════
 // Modal: criar tarefa manual

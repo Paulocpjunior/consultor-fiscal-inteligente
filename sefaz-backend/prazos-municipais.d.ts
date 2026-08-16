@@ -76,3 +76,21 @@ export function resolverPrazoEstadual(
     motivo: string;
     situacao: 'cadastrado' | 'uf-sem-cadastro' | 'uf-ausente' | 'fora-de-vigencia';
 };
+
+/** O cadastro que nasce do USO — a data informada na hora de gerar a guia. */
+export function montarPrazoInformadoNoFluxo(p: {
+    codMunIBGE?: string; municipioNome?: string | null; uf?: string | null;
+    esfera?: string; obrigacao?: string;
+    diaVencimento: number | null; mesesApos?: number;
+    /** 'AAAA-MM' — a vigência começa AQUI e nunca retroage. */
+    competencia: string;
+    informadoPorEmail?: string | null;
+    agoraIso?: string;
+}): { ok: boolean; erro?: string; prazo?: any };
+
+/** Prazos que já VALEM mas não têm norma — trabalho opcional do admin. */
+export function prazosAConfirmar(cadastros: any[]): Array<{
+    id: string | null; escopo: string; municipioNome: string | null;
+    obrigacao: string; diaVencimento: number;
+    informadoPorEmail: string | null; informadoEm: string | null;
+}>;

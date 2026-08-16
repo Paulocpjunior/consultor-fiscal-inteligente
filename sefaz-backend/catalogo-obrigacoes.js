@@ -542,8 +542,48 @@ export function mesDoCliente(empresa, competencia) {
         });
     }
     const resolvidasPorCodigo = new Set(municipaisResolvidas.map((r) => r.obrigacao));
-    // O que continua pendente é só o que NÃO foi resolvido pelo cadastro.
-    const propostasPendentes = propostas.filter((r) => !resolvidasPorCodigo.has(r.obrigacao));
+
+    // ═══ O ISS DEIXA DE SER PENDÊNCIA BLOQUEANTE (Paulo, 16/08) ═════════════
+    //
+    // *"Eu não vou fazer nada manual. (...) No caso de ISS de outra cidade,
+    // deve abrir o modal de data de vencimento para que o colaborador insira a
+    // data na hora do cálculo e geração da guia — assim eliminamos esta
+    // pendência e seguimos para o próximo."*
+    //
+    // Antes, cidade sem calendário fazia a obrigação NÃO EXISTIR: ela ficava
+    // numa fila de admin e o mês do cliente saía sem ISS. Agora ela NASCE, sem
+    // data, marcada `vencimentoAInformar` — some da fila e aparece onde o
+    // trabalho acontece. É a régua de sempre: **sumir da tela é pior que
+    // aparecer com ressalva**.
+    //
+    // A data continua NÃO SENDO CHUTADA: sem calendário não há vencimento, e o
+    // app diz isso em vez de carimbar o dia de outra cidade.
+    const municipaisSemPrazo = propostas
+        .filter((r) => r.esfera === 'municipal' && !resolvidasPorCodigo.has(r.obrigacao) && !!empresa?.codMunIBGE)
+        .map((r) => ({
+            ...r,
+            status: 'ativa',
+            dependeDe: null,
+            /** A tarefa nasce SEM data — quem informa é quem gera a guia. */
+            vencimentoAInformar: true,
+            // 🚨 O PLACEHOLDER SAI. A entrada do ISS no catálogo carrega
+            // `diaVencimento: 10` desde que ela era só pendência (não circulava
+            // e ninguém lia). Agora que a obrigação VIAJA, esse 10 seria lido
+            // como dia de verdade — e é justamente o dia de São Paulo, o que
+            // faria o número certo aparecer na cidade errada por coincidência.
+            // Campo de prazo não recebe default: sem calendário, é NULO.
+            diaVencimento: null,
+            mesesApos: null,
+            motivoSemPrazo: 'O calendário de ISS deste município ainda não foi informado. '
+                + 'A data é pedida na hora de trabalhar a obrigação, e depois disso vale para todos os clientes da cidade.',
+        }));
+    const semPrazoPorCodigo = new Set(municipaisSemPrazo.map((r) => r.obrigacao));
+
+    // O que continua pendente é só o que NÃO foi resolvido pelo cadastro NEM
+    // virou obrigação com data a informar (hoje sobra o INSS patronal, que
+    // depende da folha — informação que ninguém no fiscal tem para dar).
+    const propostasPendentes = propostas.filter((r) =>
+        !resolvidasPorCodigo.has(r.obrigacao) && !semPrazoPorCodigo.has(r.obrigacao));
 
     const alertas = [];
     if (prazoDeOutraUf.length) {
@@ -583,8 +623,15 @@ export function mesDoCliente(empresa, competencia) {
         regime,
         regimeLabel: REGIME_LABEL[regime],
         competencia,
-        obrigacoes: [...ativas.map((r) => estaduaisResolvidas.get(r.obrigacao) || r), ...municipaisResolvidas]
-            .map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) })),
+        obrigacoes: [
+            ...ativas.map((r) => estaduaisResolvidas.get(r.obrigacao) || r),
+            ...municipaisResolvidas,
+        ].map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) }))
+            // Sem calendário não há data: `vencimento` fica NULO em vez de
+            // receber o dia de outra cidade. Ausente ≠ chutado.
+            .concat(municipaisSemPrazo.map((r) => ({ ...r, vencimento: null }))),
+        /** Municipais que existem mas ainda não têm data — pedida no fluxo. */
+        municipaisSemPrazo,
         /** Estaduais que ganharam o prazo do estado do cliente. */
         estaduaisResolvidas: [...estaduaisResolvidas.values()],
         propostas: propostasPendentes,
