@@ -78,7 +78,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Etiquetas/tags na conversa | **[?]** | — | 🔴 depende do §7 |
 | Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
 | Notificação sonora / pop-up de mensagem nova | ✔ **[Paulo, 16/08]** | **som** (sintetizado, sem arquivo externo), **pop-up do navegador** (clique abre a conversa) e **contador no título da aba** — a mesma mensagem nunca apita duas vezes, a conversa aberta não apita e a 1ª carga aprende sem apitar | ✅ **16/08** |
-| Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | falta — exige a chave Web Push do Firebase | 🔴 **última bloqueante** |
+| Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | **pronto** — service worker, cadastro do aparelho, escolha de quem recebe (a MESMA régua de fila do inbox) e envio pelo FCM; fora do expediente só quem pediu | 🟡 **falta UMA chave**: `VITE_FIREBASE_VAPID_KEY` (Firebase Console → Cloud Messaging → certificados push da Web). Sem ela o app **diz** que o push está pendente — não finge |
 | Presença (online/ausente) do atendente | **[?]** | — | 🟡 |
 
 ## 4. Contatos e cliente
@@ -98,7 +98,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 |---|---|---|---|
 | Número do escritório | mesmo (+55 11 3337-1554) **[produção]** | mesmo — **as duas estão no MESMO número hoje** | ⚠️ é isso que torna o corte um evento, não uma transição suave |
 | API oficial da Meta | ✔ **[Paulo]** | ✔ (WABA própria, cartão do Paulo na Meta) | ✅ |
-| App de celular / tablet | ✔ app próprio **[Paulo]** | **PWA** — instala na tela inicial pelo navegador | 🟡 **cobre o uso, não é loja**: sem push, o app instalado ainda depende de abrir (ver §3) |
+| App de celular / tablet | ✔ app próprio **[Paulo]** | **PWA** — instala na tela inicial pelo navegador, e com a chave VAPID publicada avisa com o app fechado (ver §3) | 🟡 **cobre o uso, não é loja** |
 | Rodar dentro do Teams | ✕ | app do tenant pronto (`teams-app/`, zip em `/sp-connect-teams.zip`) | 🆕 |
 | Vários NÚMEROS de WhatsApp | **[?]** | **apto desde 16/08**: catálogo de canais (o de hoje segue vindo do env e é o padrão), entrada roteada pelo `phone_number_id` da Meta e cadastro na ⚙️ — o token do 2º número vive no Cloud Run, nunca no banco. Falta só o número existir | ✅ apto |
 | Outros canais (Instagram, Facebook, site) | **[?]** | só WhatsApp | 🟡 depende do §7.7 |
@@ -147,9 +147,14 @@ neste documento (e, quando faltar, vira fila de construção):
 2. ✅ ~~Enviar anexo na conversa~~ — **RESOLVIDO 16/08**: 📎 no composer,
    texto vira legenda, janela de 24h e guarda de condução iguais às do
    texto livre; cópia do enviado guardada pro histórico.
-3. 🔴 **Notificação de mensagem nova** — sem som/push, a mensagem só é vista
-   se alguém estiver olhando a tela. **É a ÚLTIMA bloqueante** e depende da
-   resposta 5 do §7 (como a equipe percebe mensagem nova hoje).
+3. ✅ ~~**Notificação de mensagem nova**~~ — **RESOLVIDO 16/08**, nas TRÊS
+   camadas que o Paulo pediu: **som** e **pop-up** com o app aberto (no ar),
+   e **push no celular com o app fechado** (código no ar, esperando UMA
+   chave). ⚠️ **A 3ª camada só liga quando o Paulo publicar a
+   `VITE_FIREBASE_VAPID_KEY`** — enquanto isso o app **avisa** que o push
+   está pendente dessa chave, em vez de fingir que avisa: colaborador que
+   confia num aviso que nunca chega é pior do que colaborador que sabe que
+   precisa deixar a aba aberta.
 
 **Não bloqueia** (pode entrar depois do corte, sem prejuízo): etiquetas,
 relatórios de volume/tempo, presença, respostas rápidas configuráveis,
