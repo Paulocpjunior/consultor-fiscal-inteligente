@@ -16,7 +16,7 @@ import { requireAuth, requireAdmin } from './require-admin.js';
 import express from 'express';
 import {
     validarPrazoMunicipal, idPrazoMunicipal, municipiosSemCalendario,
-    resolverPrazoMunicipal,
+    resolverPrazoMunicipal, montarPrazoInformadoNoFluxo, prazosAConfirmar,
 } from './prazos-municipais.js';
 import {
     montarPromptPrazoMunicipal, interpretarPropostaPrazo,
@@ -70,6 +70,9 @@ router.get('/', requireAuth, async (req, res) => {
         const fila = municipiosSemCalendario(clientes, cadastros, { obrigacao: 'ISS', competencia });
         return res.json({
             ok: true, competencia, cadastros, ...fila,
+            // Prazos que já VALEM mas ainda não têm norma — trabalho OPCIONAL
+            // do admin. Não é pendência: a obrigação já sai com data.
+            aConfirmar: prazosAConfirmar(cadastros),
             // O QUE ESTA FILA NÃO COBRA: optante do Simples não recolhe ISS
             // próprio (LC 123 art. 13, já está no DAS).
             escopo: 'Só clientes que recolhem ISS próprio em guia do município. '
@@ -114,6 +117,55 @@ router.post('/', requireAdmin, express.json(), async (req, res) => {
         return res.json({ ok: true, id, prazo: doc });
     } catch (e) {
         console.error('[prazos-municipais/post]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ============================================================================
+// POST /informar — A DATA VEM DO FLUXO, não de uma fila de admin.
+//
+// Paulo, 16/08: *"eu não vou fazer nada manual (...) no caso de ISS de outra
+// cidade, deve abrir o modal de data de vencimento para que o colaborador
+// insira a data na hora do cálculo e geração da guia — assim eliminamos esta
+// pendência e seguimos para o próximo"*.
+//
+// `requireAuth`, não `requireAdmin`: quem informa é quem trabalha a obrigação.
+// Exigir admin aqui devolveria a pendência para a fila que este desenho existe
+// para acabar.
+//
+// O que ele informa VIRA o calendário da cidade a partir daquela competência —
+// então ninguém pergunta de novo no mês seguinte. É isso que faz o cadastro se
+// preencher sozinho pelo uso.
+// ============================================================================
+router.post('/informar', requireAuth, express.json(), async (req, res) => {
+    try {
+        const r = montarPrazoInformadoNoFluxo({
+            ...(req.body || {}),
+            informadoPorEmail: req.user?.email || null,
+        });
+        if (!r.ok) return res.status(400).json({ ok: false, error: r.erro });
+
+        const db = getDb();
+        const id = idPrazoMunicipal(r.prazo);
+        // NÃO sobrescreve calendário já confirmado com base legal: o informado
+        // no fluxo é o que falta, não o que corrige quem já conferiu a norma.
+        const atual = await db.collection(COL).doc(id).get();
+        if (atual.exists && String(atual.data()?.origem || 'admin') !== 'fluxo') {
+            return res.status(409).json({
+                ok: false,
+                error: 'Já existe calendário CONFIRMADO para esta cidade nesta vigência. '
+                    + 'Se o prazo mudou, cadastre uma vigência nova em ⚙️ Config Admin.',
+            });
+        }
+        await db.collection(COL).doc(id).set(r.prazo, { merge: true });
+        return res.json({
+            ok: true, id, prazo: r.prazo,
+            aviso: 'Guardado como calendário desta cidade a partir desta competência — '
+                + 'ninguém precisa informar de novo. Ficou marcado como informado no fluxo (sem a norma): '
+                + 'o admin pode confirmar a base legal depois, sem pressa.',
+        });
+    } catch (e) {
+        console.error('[prazos-municipais/informar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
