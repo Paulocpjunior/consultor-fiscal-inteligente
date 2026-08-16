@@ -5,24 +5,26 @@
 // ============================================================================
 import {
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr,
-    horaCurta, rotuloMidia,
+    horaCurta, rotuloMidia, dataHoraSp,
 } from '../services/spConnect';
 
-const AGORA = new Date('2026-08-16T15:00:00');
+// Offsets EXPLÍCITOS (-03:00): a tela formata em America/Sao_Paulo por regra
+// (a mesma do horario-acesso) — o teste não pode depender do fuso do runner.
+const AGORA = new Date('2026-08-16T15:00:00-03:00');
 
 describe('estadoJanela (24h)', () => {
     it('aberta mostra até quando; no dia seguinte diz "amanhã"', () => {
-        const hoje = estadoJanela(new Date('2026-08-16T18:30:00').toISOString(), AGORA);
+        const hoje = estadoJanela(new Date('2026-08-16T18:30:00-03:00').toISOString(), AGORA);
         expect(hoje.aberta).toBe(true);
         expect(hoje.rotulo).toContain('18:30');
         expect(hoje.rotulo).not.toContain('amanhã');
 
-        const amanha = estadoJanela(new Date('2026-08-17T10:00:00').toISOString(), AGORA);
+        const amanha = estadoJanela(new Date('2026-08-17T10:00:00-03:00').toISOString(), AGORA);
         expect(amanha.aberta).toBe(true);
         expect(amanha.rotulo).toContain('amanhã');
     });
     it('fechada e inexistente são estados DIFERENTES — os dois com o porquê', () => {
-        const fechada = estadoJanela(new Date('2026-08-16T14:59:00').toISOString(), AGORA);
+        const fechada = estadoJanela(new Date('2026-08-16T14:59:00-03:00').toISOString(), AGORA);
         expect(fechada.aberta).toBe(false);
         expect(fechada.rotulo).toContain('FECHADA');
         const nunca = estadoJanela(null, AGORA);
@@ -53,10 +55,16 @@ describe('nome e número', () => {
 });
 
 describe('horaCurta e mídia', () => {
-    it('hoje só hora; outro dia leva a data junto', () => {
-        expect(horaCurta(new Date('2026-08-16T09:05:00').toISOString(), AGORA)).toBe('09:05');
-        expect(horaCurta(new Date('2026-08-14T09:05:00').toISOString(), AGORA)).toBe('14/08 09:05');
+    it('hoje só hora; outro dia leva a data junto — SEMPRE no fuso de SP', () => {
+        expect(horaCurta(new Date('2026-08-16T09:05:00-03:00').toISOString(), AGORA)).toBe('09:05');
+        expect(horaCurta(new Date('2026-08-14T09:05:00-03:00').toISOString(), AGORA)).toBe('14/08 09:05');
         expect(horaCurta('torto', AGORA)).toBe('');
+    });
+    it('dataHoraSp converte UTC → SP (o caso do painel 📡: 12:37Z é 09:37 em SP)', () => {
+        // Regressão do defeito real de 16/08: o painel mostrava a hora do
+        // navegador; o webhook grava UTC e a tela DEVE dizer a hora de SP.
+        expect(dataHoraSp('2026-08-16T12:37:21.000Z')).toContain('09:37:21');
+        expect(dataHoraSp(null)).toBe('');
     });
     it('mídia não baixada DIZ que ainda está na Meta — sumir com o anexo é o pior', () => {
         expect(rotuloMidia({ nomeArquivo: 'comprovante.pdf', mime: 'application/pdf', baixada: true }, 'document')).toBe('📎 comprovante.pdf');

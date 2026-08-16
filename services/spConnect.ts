@@ -30,6 +30,25 @@ export interface MensagemInbox {
     erroEntrega: { codigo: number | null; detalhe: string | null; acao: string } | null;
 }
 
+// ── TODA HORA DESTA TELA SAI EM AMERICA/SAO_PAULO, EXPLÍCITO ────────────────
+// Formatar pelo relógio do NAVEGADOR (o padrão do toLocaleString) mostraria
+// horas diferentes pra quem estiver fora de SP — o expediente do escritório é
+// UM só. Mesma decisão do horario-acesso.js (momentoEmSaoPaulo).
+const FUSO_SP = 'America/Sao_Paulo';
+
+function pedacosSp(t: number): { dia: string; data: string; hora: string } {
+    const fmt = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: FUSO_SP, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    const p = Object.fromEntries(fmt.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+    return {
+        dia: `${p.year}-${p.month}-${p.day}`,          // chave de comparação "mesmo dia em SP"
+        data: `${p.day}/${p.month}`,
+        hora: `${p.hour === '24' ? '00' : p.hour}:${p.minute}`,
+    };
+}
+
 /**
  * Estado da janela de 24h para a tela. `agora` entra por parâmetro (função
  * pura — e o teste não depende do relógio).
@@ -44,11 +63,9 @@ export function estadoJanela(janela24hAte: string | null | undefined, agora: Dat
     if (ate <= agora.getTime()) {
         return { aberta: false, rotulo: 'Janela de 24h FECHADA — envio só por template aprovado.' };
     }
-    const fim = new Date(ate);
-    const hh = String(fim.getHours()).padStart(2, '0');
-    const mm = String(fim.getMinutes()).padStart(2, '0');
-    const mesmoDia = fim.toDateString() === agora.toDateString();
-    return { aberta: true, rotulo: `Janela de 24h ABERTA — livre até ${mesmoDia ? '' : 'amanhã, '}${hh}:${mm}.` };
+    const fim = pedacosSp(ate);
+    const mesmoDia = fim.dia === pedacosSp(agora.getTime()).dia;
+    return { aberta: true, rotulo: `Janela de 24h ABERTA — livre até ${mesmoDia ? '' : 'amanhã, '}${fim.hora}.` };
 }
 
 /** Carimbo visual do status de entrega (✓ ✓✓ ✓✓azul ✗). */
@@ -78,14 +95,20 @@ export function formatarNumeroBr(numero: string): string {
     return `+55 ${m[1]} ${m[2]}-${m[3]}`;
 }
 
-/** Hora curta pro balão (dia+hora quando não é hoje). */
+/** Hora curta pro balão, SEMPRE no fuso de SP (dia+hora quando não é hoje). */
 export function horaCurta(iso: string | null | undefined, agora: Date): string {
     const t = Date.parse(iso || '');
     if (!Number.isFinite(t)) return '';
-    const d = new Date(t);
-    const hh = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    if (d.toDateString() === agora.toDateString()) return hh;
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${hh}`;
+    const d = pedacosSp(t);
+    if (d.dia === pedacosSp(agora.getTime()).dia) return d.hora;
+    return `${d.data} ${d.hora}`;
+}
+
+/** Data+hora completas no fuso de SP (o painel 📡 usa; o webhook grava UTC). */
+export function dataHoraSp(iso: string | null | undefined): string {
+    const t = Date.parse(iso || '');
+    if (!Number.isFinite(t)) return '';
+    return new Date(t).toLocaleString('pt-BR', { timeZone: FUSO_SP });
 }
 
 /** Rótulo da mídia no balão (a mídia em si abre na F2-PR3, com URL assinada). */

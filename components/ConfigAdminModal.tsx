@@ -14,6 +14,7 @@ import {
     listarTemplatesDaMeta, statusWebhook,
     WhatsappTemplate, TemplateVariavel, TemplateDaMeta, WebhookStatus,
 } from '../services/whatsappTemplatesService';
+import { dataHoraSp } from '../services/spConnect';
 import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
 
 interface Props {
@@ -394,7 +395,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                         <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold">webhook configurado</span>
                                         <span className="ml-2 text-slate-500 dark:text-slate-400">
                                             {webhook.ultimoEventoEm
-                                                ? `último evento recebido em ${new Date(webhook.ultimoEventoEm).toLocaleString('pt-BR')}`
+                                                ? `último evento recebido em ${dataHoraSp(webhook.ultimoEventoEm)}`
                                                 : 'nenhum evento recebido ainda — confira a assinatura do campo "messages" no painel da Meta'}
                                         </span>
                                     </p>
@@ -413,7 +414,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                             {s.status === 'lido' ? '✓✓ lido' : s.status === 'entregue' ? '✓✓ entregue' : s.status === 'enviado' ? '✓ enviado' : `✗ ${s.status}`}
                                                         </span>
                                                         <span className="ml-1 text-slate-500 dark:text-slate-400">
-                                                            {s.numero || 'sem número'}{s.em ? ` · ${new Date(s.em).toLocaleString('pt-BR')}` : ''}
+                                                            {s.numero || 'sem número'}{s.em ? ` · ${dataHoraSp(s.em)}` : ''}
                                                         </span>
                                                         {s.erro && (
                                                             <p className="text-red-600 dark:text-red-400 mt-0.5">
@@ -435,7 +436,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                     <div key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px]">
                                                         <span className="font-semibold text-slate-600 dark:text-slate-300">{m.numero || 'sem número'}</span>
                                                         <span className="ml-1 text-slate-500 dark:text-slate-400">
-                                                            {m.em ? new Date(m.em).toLocaleString('pt-BR') : ''}{m.temMidia ? ' · 📎' : ''}
+                                                            {m.em ? dataHoraSp(m.em) : ''}{m.temMidia ? ' · 📎' : ''}
                                                         </span>
                                                         <p className="text-slate-500 dark:text-slate-400 truncate">{m.texto || `(${m.tipo})`}</p>
                                                     </div>
