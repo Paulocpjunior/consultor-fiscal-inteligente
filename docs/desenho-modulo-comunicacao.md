@@ -221,7 +221,37 @@ dentro é ferramenta na mão de quem já está com o Teams aberto o dia todo.
   dentro de iframe não existe aqui. SSO com a conta Microsoft do tenant é
   melhoria futura, não pré-requisito.
 
-## 11. Decisões em aberto (Paulo)
+## 11. CRM em camadas — e o Jotform é a fonte do relacionamento
+
+Paulo, 14/08: *"hoje nosso CRM é o Jotform — ali estão todos os detalhes de
+cada cliente, separado por departamentos: se tem folha, se vai impresso, por
+e-mail ou WhatsApp, o que gosta"*. Isso define a incorporação:
+
+- **Inbox ≠ CRM**: o inbox é a conversa de AGORA; o CRM é a memória do
+  relacionamento. A vantagem estrutural da casa é que metade do "cliente
+  360" já existe espalhada (cadastro central, carteira, Rotina do Mês,
+  auditoria de envios, Legalização, Financeiro) — falta a linha do tempo
+  unificada e o dado de RELACIONAMENTO, que mora no Jotform.
+- **O Jotform NÃO se substitui — se LÊ** (trilho provado: Legalização e
+  Financeiro já leem por API, parser casando campo pelo TEXTO da pergunta,
+  `PARSER_VERSAO` + re-sync no boot; a chave já está no Secret Manager).
+  A equipe continua preenchendo lá; o ecossistema espelha por CNPJ num
+  bloco `relacionamento` com **origem carimbada `jotform`**. Regras de
+  06/08 valem inteiras: divergência entre Jotform e cadastro central é
+  ALERTA (nunca escolha silenciosa), espelho não sobrescreve digitação, e
+  campo ausente não vira default.
+- **O OURO imediato: a preferência de envio é ROTEAMENTO.** "Vai impresso /
+  por e-mail / por WhatsApp" decide qual botão o rito #293 sugere na hora de
+  enviar guia, e o SP Conecta (F2) nasce sabendo o canal que o cliente
+  escolheu. "Tem folha de pagamentos" liga o cliente à fila do DP.
+- **Fases (segundo plano, sem atrapalhar a F2)**: (a) mapear os campos
+  reais dos formulários (de-para escrito, como o da Legalização); (b) sync
+  diário → bloco `relacionamento` no espelho central + painel de
+  divergências; (c) ligar a preferência no rito de envio e no inbox;
+  (d) só DEPOIS discutir migrar a digitação pra dentro do app — hoje o
+  Jotform é a UI de entrada e trocá-la sem necessidade é retrabalho.
+
+## 12. Decisões em aberto (Paulo)
 
 1. **Retenção de conversas**: guardar para sempre ou expurgo após N anos?
 2. **Recepção**: quem enxerga a fila Recepção — todos os atendentes (proposta)
