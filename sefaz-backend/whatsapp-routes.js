@@ -33,6 +33,7 @@ import {
     subirMidiaWhatsapp, enviarMidiaWhatsapp,
 } from './whatsapp-cloud.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
+import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar,
@@ -1192,7 +1193,13 @@ router.post('/atendentes/:uid/filas', requireAdmin, async (req, res) => {
         const ref = getDb().collection('users').doc(uid);
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        const antes = snap.data()?.filasAtendimento || [];
         await ref.set({ filasAtendimento: filas }, { merge: true });
+        // Mudança de PODER deixa rastro (quem vê quais conversas).
+        await registrarMudancaPermissao({
+            alvoUid: uid, alvoEmail: snap.data()?.email || null,
+            campo: 'filasAtendimento', de: antes, para: filas, por: req.user?.email || null,
+        });
         console.log(`[whatsapp/atendentes] filas de ${uid} → [${filas.join(', ')}] por ${req.user?.email}`);
         return res.json({ ok: true, uid, filas });
     } catch (e) {
@@ -1213,7 +1220,12 @@ router.post('/atendentes/:uid/papel', requireAdmin, async (req, res) => {
         const ref = getDb().collection('users').doc(uid);
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        const antes = snap.data()?.papelAtendimento || 'colaborador';
         await ref.set({ papelAtendimento: papel }, { merge: true });
+        await registrarMudancaPermissao({
+            alvoUid: uid, alvoEmail: snap.data()?.email || null,
+            campo: 'papelAtendimento', de: antes, para: papel, por: req.user?.email || null,
+        });
         console.log(`[whatsapp/atendentes] papel de ${uid} → ${papel} por ${req.user?.email}`);
         return res.json({ ok: true, uid, papel });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

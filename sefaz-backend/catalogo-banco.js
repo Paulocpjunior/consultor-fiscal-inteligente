@@ -120,6 +120,8 @@ export const CATALOGO_BANCO = [
     { colecao: 'whatsapp_config', grupo: 'Comunicação', funcionalidade: 'Config do atendimento (doc "atendimento"): bot de triagem (nasce DESLIGADO), horário de funcionamento, mensagens automáticas e menu → fila (⚙️ do SP Connect, só admin grava)' },
     { colecao: 'whatsapp_avaliacoes', grupo: 'Comunicação', funcionalidade: 'Notas 1-5 da pesquisa de satisfação pós-encerramento (número, nota, atendente, fila, protocolo) — admin/gestor veem todas, colaborador as próprias' },
 
+    { colecao: 'auditoria_permissoes', grupo: 'Sistema', funcionalidade: 'Trilha de mudança de PODER (role, departamentos, filas, papel do atendimento): quem mudou, de quê para quê e quando — lida pelo relatório 🔐 de auditoria do dono' },
+
     // ── Sistema / observabilidade ──────────────────────────────────────────
     { colecao: 'cron_health_alerta_state', grupo: 'Sistema', funcionalidade: 'Anti-spam do alerta de saúde dos crons' },
     { colecao: 'sistema_banco_snapshots', grupo: 'Sistema', funcionalidade: 'Snapshots diários deste painel (tendência de crescimento)' },
