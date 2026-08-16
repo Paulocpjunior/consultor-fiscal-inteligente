@@ -783,9 +783,13 @@ const App: React.FC = () => {
             <ErrorBoundary modulo="SP Connect">
                 <div className="min-h-screen" style={{ background: 'var(--bg-page)' }}>
                     <header className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-lg">💬</span>
-                            <div className="min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Identidade é da CASA: o MESMO componente Logo do
+                                CFI, dos guias e do e-mail ao cliente — o
+                                atendente do RH/DP tem que reconhecer o app como
+                                da SP, não como "mais uma ferramenta". */}
+                            <Logo className="h-8 w-auto shrink-0" />
+                            <div className="min-w-0 border-l border-slate-200 dark:border-slate-700 pl-2.5">
                                 <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">SP Connect</p>
                                 <p className="text-[10px] text-slate-400 leading-tight">WhatsApp API Oficial · +55 11 3337-1554</p>
                             </div>

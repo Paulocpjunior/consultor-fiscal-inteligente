@@ -39,7 +39,7 @@ Linha marcada **[?]** não conta como coberta nem como faltante: conta como
 | Fora da janela de 24h | ✔ (bot próprio responde) **[produção]** | template aprovado (✚ Nova), com a trava no backend e o caminho dito na tela | ✅ — a janela é regra da **Meta**, vale para as duas |
 | **Receber foto/documento/áudio e ABRIR** | ✔ **[produção]** | imagem, áudio e vídeo abrem NO balão; documento abre em aba nova. **Stream autenticado**, não link assinado: quem não vê a conversa não abre o anexo dela | ✅ **16/08** |
 | **Enviar anexo (PDF, foto) na conversa** | ✔ **[produção]** | 📎 no composer (o texto escrito vira legenda), dentro da janela de 24h e com a mesma guarda de condução do texto | ✅ **16/08** — cópia do enviado fica no Storage, senão o histórico mostraria anexo que não abre depois |
-| Enviar áudio | ✔ **[?]** | sai como anexo de áudio se o arquivo for de áudio; **gravar** áudio no navegador não existe | 🟡 — depende do §7.1 |
+| Enviar áudio | ✔ **[?]** | 🎤 no composer: grava, mostra o tempo, deixa OUVIR antes de enviar e para sozinho no teto. Formato escolhido entre os que a Meta aceita (ogg/opus → mp4 no Safari) | ✅ **16/08** |
 | Status de entrega (✓ ✓✓ lido) | ✔ **[print]** | carimbo real vindo do webhook, por mensagem | ✅ |
 | Marcar conversa como lida | ✔ **[print]** | abrir É ler (zera o contador) | ✅ |
 | Respostas rápidas | ✔ **[?]** | 4 frases fixas no código (⚡), **não configuráveis** | 🟡 |
@@ -77,7 +77,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | **Avaliação do atendimento (nota 1-5)** | **[?]** | pesquisa pós-encerramento + painel 📊 (média, distribuição, últimas) | 🆕 (chave nasce desligada) |
 | Etiquetas/tags na conversa | **[?]** | — | 🔴 depende do §7 |
 | Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
-| Notificação sonora / push de mensagem nova | ✔ **[?]** | lista atualiza sozinha a cada 30s, **sem som e sem push** | 🔴 **provável bloqueante** — atendente não pode depender de olhar a tela |
+| Notificação sonora / push de mensagem nova | ✔ **som + pop-up + notificação no celular instalado** **[Paulo, 16/08]** | lista atualiza sozinha a cada 30s, **sem som e sem push** | 🔴 **BLOQUEANTE CONFIRMADA** — Paulo: *"quanto mais notificação melhor, evita desculpa que o colaborador não viu"*. Em construção |
 | Presença (online/ausente) do atendente | **[?]** | — | 🟡 |
 
 ## 4. Contatos e cliente
@@ -118,17 +118,18 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 Não vou preencher nenhuma destas por dedução. Cada resposta vira linha
 neste documento (e, quando faltar, vira fila de construção):
 
-1. **Áudio** (§7.1): a equipe GRAVA áudio no atendimento hoje? Receber e
-   enviar arquivo de áudio já funciona; o que não existe é o botão de
-   gravar pelo navegador. Se ninguém grava, isto vira ⚫ e não construo.
+1. ✅ ~~**Áudio**~~ — **RESPONDIDO/FEITO 16/08**: gravar e enviar áudio sai
+   por nós (🎤 no composer).
 2. **Respostas rápidas**: existem frases salvas na Ultra Fox que a equipe
    usa direto? Se sim, quero a lista — vira cadastro editável.
 3. **Etiquetas/tags**: alguém marca conversa com etiqueta ("aguardando
    documento", "urgente")? Se ninguém usa, é ⚫ e não construo.
 4. **Relatórios**: qual relatório da Ultra Fox alguém realmente abre? (não
    quero reproduzir tela que nunca foi lida — a lição do e-Fiscal)
-5. **Notificação**: como o atendente percebe mensagem nova hoje — som,
-   pop-up, notificação do celular? **Esta é a que mais me preocupa.**
+5. ✅ ~~**Notificação**~~ — **RESPONDIDO 16/08**: a Ultra Fox faz **som,
+   pop-up e notificação no celular** (quando instalado), e a decisão do
+   Paulo é fazer os TRÊS: *"quanto mais notificação melhor, evita desculpa
+   que o colaborador não viu, não recebeu, e o cliente reclama"*.
 6. **Bot**: o menu tem sub-níveis (opção que abre outro menu) ou é só o de
    8 opções que vi no print?
 7. **Outros canais**: a Ultra Fox atende só WhatsApp, ou também Instagram/

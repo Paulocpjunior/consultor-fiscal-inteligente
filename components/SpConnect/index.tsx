@@ -23,6 +23,10 @@ import {
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
+    suporteDeGravacao, nomeDoAudio, duracaoLegivel, traduzirErroDeMicrofone,
+    atingiuLimite, LIMITE_SEGUNDOS,
+} from '../../services/gravacaoAudio';
+import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
@@ -345,6 +349,102 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setAnexando(false);
             if (inputAnexo.current) inputAnexo.current.value = '';
         }
+    };
+
+    // ── 🎤 Gravar áudio e mandar (a Ultra Fox faz; agora sai por nós) ───────
+    // O arquivo gravado entra pela MESMA rota /anexo — nada de segundo
+    // caminho de envio (que divergiria da trava de janela e de condução).
+    const [gravando, setGravando] = useState(false);
+    const [segundos, setSegundos] = useState(0);
+    const [previa, setPrevia] = useState<{ url: string; blob: Blob; nome: string } | null>(null);
+    const recorderRef = useRef<MediaRecorder | null>(null);
+    const pedacosRef = useRef<BlobPart[]>([]);
+    const timerRef = useRef<number | null>(null);
+    const suporte = suporteDeGravacao();
+
+    const pararCronometro = () => {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+    // Solta o microfone SEMPRE que o componente sai — luz de gravação acesa
+    // depois de fechar a tela é o tipo de coisa que destrói confiança.
+    useEffect(() => () => {
+        pararCronometro();
+        recorderRef.current?.stream?.getTracks().forEach((t) => t.stop());
+        if (previa) URL.revokeObjectURL(previa.url);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const comecarGravacao = async () => {
+        if (!suporte.suportado || gravando) return;
+        setErroEnvio(null);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const rec = new MediaRecorder(stream, { mimeType: suporte.mime });
+            pedacosRef.current = [];
+            rec.ondataavailable = (e) => { if (e.data.size) pedacosRef.current.push(e.data); };
+            rec.onstop = () => {
+                stream.getTracks().forEach((t) => t.stop());   // solta o microfone
+                pararCronometro();
+                const blob = new Blob(pedacosRef.current, { type: suporte.mime });
+                // Gravação vazia (clique sem falar) NÃO vira arquivo de 0 byte.
+                if (!blob.size) { setGravando(false); setSegundos(0); return; }
+                setPrevia({ url: URL.createObjectURL(blob), blob, nome: nomeDoAudio(new Date(), suporte.extensao) });
+                setGravando(false);
+            };
+            recorderRef.current = rec;
+            rec.start();
+            setGravando(true);
+            setSegundos(0);
+            timerRef.current = window.setInterval(() => {
+                setSegundos((s) => {
+                    const novo = s + 1;
+                    // Para sozinho no teto — estourar depois de 5 minutos de
+                    // fala jogaria o áudio inteiro fora.
+                    if (atingiuLimite(novo)) {
+                        try { recorderRef.current?.stop(); } catch { /* já parado */ }
+                        setErroEnvio(`Gravação encerrada no limite de ${LIMITE_SEGUNDOS / 60} minutos.`);
+                    }
+                    return novo;
+                });
+            }, 1000);
+        } catch (e) {
+            const t = traduzirErroDeMicrofone(e as { name?: string; message?: string });
+            setErroEnvio(`${t.erro} ${t.acao}`);
+            setGravando(false);
+        }
+    };
+
+    const pararGravacao = () => { try { recorderRef.current?.stop(); } catch { /* já parado */ } };
+
+    const descartarPrevia = () => {
+        if (previa) URL.revokeObjectURL(previa.url);
+        setPrevia(null);
+        setSegundos(0);
+    };
+
+    const enviarAudioGravado = async () => {
+        if (!previa || !sel || anexando) return;
+        setAnexando(true);
+        setErroEnvio(null);
+        try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const leitor = new FileReader();
+                leitor.onload = () => resolve(String(leitor.result || '').split(',')[1] || '');
+                leitor.onerror = () => reject(new Error('não deu pra ler o áudio gravado'));
+                leitor.readAsDataURL(previa.blob);
+            });
+            const r = await enviarAnexo(sel.numero, { base64, nomeArquivo: previa.nome, mime: previa.blob.type });
+            if (!r.ok) {
+                if ((r as any).emConducaoPor) patchSel({ atribuidoA: (r as any).emConducaoPor });
+                setErroEnvio(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`);
+                return;
+            }
+            setMensagens((m) => [...m, r.mensagem]);
+            descartarPrevia();
+            if (!sel.atribuidoA) patchSel({ atribuidoA: meuEmail });
+        } catch (e) {
+            setErroEnvio((e as Error).message);
+        } finally { setAnexando(false); }
     };
 
     // ── Cliente 360 (pós-vínculo): responsável da carteira + guias do rito.
@@ -1280,10 +1380,46 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         ))}
                                     </div>
                                 )}
-                                {conduzidaPorOutro ? null : janela?.aberta ? (
+                                {/* 🎤 Gravando / prévia — ocupa o lugar do composer:
+                                    mandar áudio é uma ação só, não um campo a mais. */}
+                                {!conduzidaPorOutro && janela?.aberta && gravando && (
+                                    <div className="flex items-center gap-2 rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-3 py-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse shrink-0" />
+                                        <p className="text-[12px] font-bold text-red-700 dark:text-red-300 flex-1">
+                                            Gravando… {duracaoLegivel(segundos)}
+                                            <span className="font-normal text-[10px] block">máx. {LIMITE_SEGUNDOS / 60} min · o áudio só sai depois que você ouvir e confirmar</span>
+                                        </p>
+                                        <button onClick={pararGravacao}
+                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white">
+                                            ⏹ Parar
+                                        </button>
+                                    </div>
+                                )}
+                                {!conduzidaPorOutro && janela?.aberta && previa && (
+                                    <div className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 px-3 py-2">
+                                        <audio controls src={previa.url} className="h-8 flex-1 min-w-0" />
+                                        <button onClick={descartarPrevia} disabled={anexando}
+                                            className="text-[11px] px-2 py-1 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40">
+                                            ✕ descartar
+                                        </button>
+                                        <button onClick={enviarAudioGravado} disabled={anexando}
+                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                            {anexando ? 'Enviando…' : 'Enviar áudio ➤'}
+                                        </button>
+                                    </div>
+                                )}
+                                {conduzidaPorOutro || gravando || previa ? null : janela?.aberta ? (
                                     <div className="flex items-end gap-2">
                                         <input ref={inputAnexo} type="file" className="hidden"
                                             onChange={(e) => mandarAnexo(e.target.files?.[0] || null)} />
+                                        <button
+                                            onClick={suporte.suportado ? comecarGravacao : () => setErroEnvio(`${suporte.motivo} ${suporte.acao}`)}
+                                            title={suporte.suportado ? 'Gravar áudio' : suporte.motivo}
+                                            className={`shrink-0 px-3 py-2 rounded-xl border ${suporte.suportado
+                                                ? 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                : 'border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600'}`}>
+                                            🎤
+                                        </button>
                                         <button
                                             onClick={() => inputAnexo.current?.click()}
                                             disabled={anexando}
