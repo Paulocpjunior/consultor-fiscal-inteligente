@@ -50,6 +50,17 @@ async function autorizar(req, res, next) {
     return doIrmao(req, res, next);
 }
 
+// LEITURA do cadastro de templates: qualquer usuário logado (o atendente do
+// SP Connect escolhe template pra iniciar conversa) OU app irmão pelo túnel.
+// Gravação continua requireAdmin — atendente usa, não define.
+async function autorizarLeitura(req, res, next) {
+    let passou = false;
+    const engolir = { status() { return engolir; }, json() { return engolir; } };
+    await requireAuth(req, engolir, () => { passou = true; });
+    if (passou) return next();
+    return doIrmao(req, res, next);
+}
+
 async function lerCadastro(departamento) {
     const db = getDb();
     let q = db.collection(COLECAO);
@@ -59,7 +70,7 @@ async function lerCadastro(departamento) {
 }
 
 // ─── Lista de templates ─────────────────────────────────────────────────────
-router.get('/templates', autorizar, async (req, res) => {
+router.get('/templates', autorizarLeitura, async (req, res) => {
     try {
         const templates = await lerCadastro(req.query.departamento);
         return res.json({ ok: true, departamentos: [...DEPARTAMENTOS_WHATSAPP], templates });
@@ -395,6 +406,88 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
         return res.json({ ok: true, mensagens });
     } catch (e) {
         console.error('[whatsapp/mensagens]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ─── INICIAR CONVERSA (PR 3) — template aprovado, a porta de fora da janela ─
+// Regra da Meta: conversa iniciada pela empresa SÓ sai por template. Template
+// COM documento fica de fora aqui de propósito: guia viaja pelas telas de
+// guia (rito #293) — o SP Connect inicia CONVERSA, não entrega imposto.
+router.post('/conversas/iniciar', requireAuth, async (req, res) => {
+    try {
+        const p = req.body || {};
+        const departamento = String(p.departamento || '').trim().toLowerCase();
+        if (!DEPARTAMENTOS_WHATSAPP.has(departamento)) {
+            return res.status(400).json({ ok: false, error: `Departamento inválido (use ${[...DEPARTAMENTOS_WHATSAPP].join(', ')}).` });
+        }
+        if (!p.para) return res.status(400).json({ ok: false, error: 'Informe o número do WhatsApp do destinatário.' });
+
+        const cadastro = await lerCadastro(departamento);
+        const resol = resolverTemplate(cadastro, { departamento, templateNome: p.template });
+        if (!resol.ok) return res.status(400).json({ ok: false, error: resol.erro, opcoes: resol.opcoes });
+        const template = resol.template;
+        if (template.temDocumento) {
+            return res.status(400).json({
+                ok: false,
+                error: `O template "${template.nome}" tem cabeçalho de DOCUMENTO — ele serve pra enviar guia, e guia sai pelas telas de guia (com o PDF e o rito completo).`,
+                acao: 'Escolha um template de conversa (sem documento) ou cadastre um na ⚙️ Config Admin.',
+            });
+        }
+        const mv = montarVariaveisPorSchema(template, p.variaveis);
+        if (!mv.ok) {
+            return res.status(400).json({ ok: false, error: `Faltam variáveis do template "${template.nome}": ${mv.faltando.join(', ')}`, faltando: mv.faltando });
+        }
+
+        const envio = await enviarTemplateWhatsapp({
+            para: p.para, template: template.nome, idioma: template.idioma,
+            variaveis: mv.variaveis, pdfBase64: null, nomeArquivo: null,
+        });
+        if (!envio.ok) {
+            const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
+            return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
+        }
+
+        // A conversa nasce na lista — o balão diz O QUE foi mandado (template +
+        // variáveis preenchidas), porque o corpo aprovado mora na Meta.
+        const db = getDb();
+        const agora = new Date().toISOString();
+        const numero = envio.numeroEnviado;
+        const resumo = `📋 ${template.nome}: ${mv.variaveis.join(' · ')}`.slice(0, 300);
+        await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+            conversaId: numero, direcao: 'saida', tipo: 'template',
+            texto: resumo, midia: null, timestamp: agora,
+            statusEntrega: 'enviado', enviadoPor: req.user?.email || null,
+        }, { merge: true });
+        const contatoRef = db.collection('whatsapp_contatos').doc(numero);
+        const contato = await contatoRef.get();
+        await contatoRef.set({
+            numero,
+            ...(p.nomeContato ? { nomePerfil: String(p.nomeContato).slice(0, 80) } : {}),
+            ...(contato.exists ? {} : { origem: 'atendimento', criadoEm: agora, empresaId: null }),
+            atualizadoEm: agora,
+        }, { merge: true });
+        await db.collection('whatsapp_conversas').doc(numero).set({
+            numero,
+            ultimaMensagem: { resumo, direcao: 'saida', em: agora },
+            atualizadoEm: agora,
+            // Janela NÃO abre aqui — só a resposta do cliente abre (regra da Meta).
+        }, { merge: true });
+
+        // Auditoria compartilhada com o /enviar (mesma coleção).
+        try {
+            await db.collection('whatsapp_envios').add({
+                em: admin.firestore.FieldValue.serverTimestamp(),
+                departamento, template: template.nome,
+                numeroEnviado: numero, messageId: envio.messageId,
+                por: req.user?.email || null, projetoOrigem: 'sp-connect',
+                referencia: 'conversa-iniciada', temDocumento: false,
+            });
+        } catch (e) { console.warn('[whatsapp/iniciar] auditoria falhou:', e.message); }
+
+        return res.json({ ok: true, numero, messageId: envio.messageId });
+    } catch (e) {
+        console.error('[whatsapp/conversas/iniciar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

@@ -732,7 +732,7 @@ const App: React.FC = () => {
                             <span className="text-lg">💬</span>
                             <div className="min-w-0">
                                 <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">SP Connect</p>
-                                <p className="text-[10px] text-slate-400 leading-tight">SP Assessoria Contábil</p>
+                                <p className="text-[10px] text-slate-400 leading-tight">WhatsApp API Oficial · +55 11 3337-1554</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

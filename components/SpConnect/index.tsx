@@ -12,7 +12,8 @@
 // A lista se atualiza sozinha a cada 30s — atendimento não vive de F5.
 // ============================================================================
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { listarConversas, listarMensagens, marcarLida, responderConversa } from '../../services/spConnectService';
+import { listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa } from '../../services/spConnectService';
+import { listarTemplates, WhatsappTemplate } from '../../services/whatsappTemplatesService';
 import {
     ConversaResumo, MensagemInbox, estadoJanela, carimboStatus,
     nomeExibicao, formatarNumeroBr, horaCurta, rotuloMidia,
@@ -108,6 +109,45 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         }
     };
 
+    // ── ✚ Nova conversa (template aprovado — a porta de fora da janela) ─────
+    const [novaAberta, setNovaAberta] = useState(false);
+    const [templates, setTemplates] = useState<WhatsappTemplate[]>([]);
+    const [nc, setNc] = useState({ para: '', nomeContato: '', departamento: 'fiscal', template: '', variaveis: {} as Record<string, string> });
+    const [enviandoNova, setEnviandoNova] = useState(false);
+    const [erroNova, setErroNova] = useState<string | null>(null);
+
+    const abrirNova = async () => {
+        setNovaAberta(true);
+        setErroNova(null);
+        if (templates.length === 0) {
+            const r = await listarTemplates();
+            if (r.ok) setTemplates((r.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
+            else setErroNova(r.error || 'Falha ao carregar os templates.');
+        }
+    };
+    const templatesDoDep = templates.filter((t) => t.departamento === nc.departamento);
+    const templateSel = templatesDoDep.find((t) => t.nome === nc.template) || (templatesDoDep.length === 1 ? templatesDoDep[0] : undefined);
+
+    const enviarNova = async () => {
+        if (!templateSel || enviandoNova) return;
+        setEnviandoNova(true);
+        setErroNova(null);
+        try {
+            const r = await iniciarConversa({
+                para: nc.para, nomeContato: nc.nomeContato || undefined,
+                departamento: nc.departamento, template: templateSel.nome, variaveis: nc.variaveis,
+            });
+            if (!r.ok) { setErroNova(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
+            setNovaAberta(false);
+            setNc({ para: '', nomeContato: '', departamento: nc.departamento, template: '', variaveis: {} });
+            await recarregar(true);
+            const nova = { numero: r.numero, nome: nc.nomeContato || null, empresaId: null, fila: null, atribuidoA: null, situacao: 'aberta', janela24hAte: null, ultimaMensagem: null, naoLidas: 0, atualizadoEm: null } as ConversaResumo;
+            abrir(nova);
+        } finally {
+            setEnviandoNova(false);
+        }
+    };
+
     const agora = new Date();
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
     const visiveis = filtrarConversas(conversas, { busca, aba });
@@ -127,6 +167,75 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
 
     return (
         <div className="max-w-[1400px] mx-auto animate-fade-in">
+            {/* ── Modal ✚ Nova conversa (template aprovado) ─────────────────── */}
+            {novaAberta && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setNovaAberta(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md my-auto p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">✚ Nova conversa</h3>
+                            <button onClick={() => setNovaAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Conversa nova sai por <strong>template aprovado</strong> (regra da Meta). Quando o cliente
+                            responder, a janela de 24h abre e o papo vira texto livre.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <label className="text-[11px] text-slate-500 col-span-2 sm:col-span-1">
+                                WhatsApp (DDD + número)
+                                <input value={nc.para} onChange={(e) => setNc((f) => ({ ...f, para: e.target.value }))} placeholder="(11) 99999-9999"
+                                    className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100" />
+                            </label>
+                            <label className="text-[11px] text-slate-500 col-span-2 sm:col-span-1">
+                                Nome do contato (opcional)
+                                <input value={nc.nomeContato} onChange={(e) => setNc((f) => ({ ...f, nomeContato: e.target.value }))} placeholder="Ricardo (ACME)"
+                                    className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100" />
+                            </label>
+                            <label className="text-[11px] text-slate-500">
+                                Departamento
+                                <select value={nc.departamento} onChange={(e) => setNc((f) => ({ ...f, departamento: e.target.value, template: '', variaveis: {} }))}
+                                    className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                                    <option value="fiscal">🧾 Fiscal</option>
+                                    <option value="contabil">📊 Contábil</option>
+                                    <option value="dp-folha">👥 DP / Folha</option>
+                                    <option value="legalizacao">📋 Legalização</option>
+                                    <option value="financeiro">💰 Financeiro</option>
+                                </select>
+                            </label>
+                            <label className="text-[11px] text-slate-500">
+                                Template
+                                <select value={templateSel?.nome || ''} onChange={(e) => setNc((f) => ({ ...f, template: e.target.value, variaveis: {} }))}
+                                    className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                                    <option value="">{templatesDoDep.length ? 'Escolha…' : 'nenhum sem documento neste depto'}</option>
+                                    {templatesDoDep.map((t) => <option key={t.id} value={t.nome}>{t.nome}</option>)}
+                                </select>
+                            </label>
+                        </div>
+                        {templateSel && (templateSel.variaveis || []).length > 0 && (
+                            <div className="space-y-1.5">
+                                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Variáveis do template</p>
+                                {(templateSel.variaveis || []).map((v) => (
+                                    <label key={v.chave} className="block text-[11px] text-slate-500">
+                                        {v.rotulo || v.chave}
+                                        <input
+                                            value={nc.variaveis[v.chave] || ''}
+                                            onChange={(e) => setNc((f) => ({ ...f, variaveis: { ...f.variaveis, [v.chave]: e.target.value } }))}
+                                            className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                        {erroNova && <p className="text-[11px] text-red-600 dark:text-red-400">{erroNova}</p>}
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button onClick={() => setNovaAberta(false)} className="text-[12px] px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
+                            <button onClick={enviarNova} disabled={enviandoNova || !templateSel || !nc.para.trim()}
+                                className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
+                                {enviandoNova ? 'Enviando…' : 'Enviar template ➤'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden md:grid md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px]" style={{ height: 'calc(100vh - 140px)', minHeight: '480px' }}>
 
                 {/* ═══ COLUNA 1 — CONVERSAS ═══════════════════════════════════ */}
@@ -134,10 +243,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                     <div className="p-2.5 space-y-2 border-b border-slate-200 dark:border-slate-700">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Conversas</p>
-                            <button onClick={() => recarregar()} disabled={carregando} title="Atualizar agora (a lista também se atualiza sozinha a cada 30s)"
-                                className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
-                                {carregando ? '…' : '🔄'}
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                                <button onClick={abrirNova} title="Iniciar conversa por template aprovado"
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white">
+                                    ✚ Nova
+                                </button>
+                                <button onClick={() => recarregar()} disabled={carregando} title="Atualizar agora (a lista também se atualiza sozinha a cada 30s)"
+                                    className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
+                                    {carregando ? '…' : '🔄'}
+                                </button>
+                            </div>
                         </div>
                         <input
                             value={busca}
@@ -250,7 +365,13 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 : 'mr-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-sm'}`}>
                                                 {midia && <p className="text-[11px] font-semibold mb-0.5">{midia}</p>}
                                                 {m.texto && <p className="whitespace-pre-wrap break-words">{m.texto}</p>}
-                                                {!m.texto && !midia && <p className="italic text-slate-400">({m.tipo || 'mensagem'})</p>}
+                                                {!m.texto && !midia && (
+                                                    <p className="italic text-slate-400 text-[11px]">
+                                                        {saida
+                                                            ? 'mensagem enviada por outra plataforma (a Meta não compartilha o texto)'
+                                                            : `(${m.tipo || 'mensagem'})`}
+                                                    </p>
+                                                )}
                                                 <p className="text-[9px] text-slate-400 text-right mt-0.5 leading-none">
                                                     {(m as any).enviadoPor ? `${(m as any).enviadoPor.split('@')[0]} · ` : ''}
                                                     {horaCurta(m.timestamp, agora)}
