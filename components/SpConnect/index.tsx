@@ -171,6 +171,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         }
     };
 
+    // Build visível na tela: print sem versão não é evidência (regra da casa)
+    // — foi a falta disto que fez o tema "não subir" virar debate às cegas.
+    const [buildInfo, setBuildInfo] = useState<string>('');
+    useEffect(() => {
+        fetch('/version.json', { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((v) => setBuildInfo(String(v?.version || v?.v || '')))
+            .catch(() => setBuildInfo(''));
+    }, []);
+
     const agora = new Date();
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
     const visiveis = filtrarConversas(conversas, { busca, aba });
@@ -533,6 +543,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                     )}
                 </div>
             </div>
+            <p className="text-right text-[9px] text-slate-400 mt-1 pr-1">
+                SP Connect{buildInfo ? ` · build ${buildInfo}` : ''} — o build no print diz qual versão você está vendo.
+            </p>
         </div>
     );
 };

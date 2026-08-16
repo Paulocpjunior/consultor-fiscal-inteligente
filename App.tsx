@@ -102,6 +102,16 @@ const App: React.FC = () => {
             // claro. Memória de tema PRÓPRIA ('spconnect-theme') — o escuro do
             // CFI não contamina o Connect, nem o contrário.
             if (MODO_SP_CONNECT) {
+                // ?tema=claro|escuro FORÇA e grava — é o destravador quando o
+                // cache do navegador segura bundle velho e ninguém sabe qual
+                // versão está rodando (print sem versão não é evidência).
+                const forcado = new URLSearchParams(window.location.search).get('tema');
+                if (forcado === 'claro' || forcado === 'escuro') {
+                    const t = forcado === 'escuro' ? 'dark' : 'light';
+                    safeStorage.setItem('spconnect-theme', t);
+                    document.documentElement.classList.toggle('dark', t === 'dark');
+                    return t;
+                }
                 const proprio = safeStorage.getItem('spconnect-theme');
                 if (proprio === 'dark') {
                     document.documentElement.classList.add('dark');
