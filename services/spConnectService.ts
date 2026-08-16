@@ -166,6 +166,24 @@ export const salvarCanal = (p: {
     numeroExibicao?: string; wabaId?: string; ativo?: boolean;
 }) => post<{ id: string; canais: CanalWhatsapp[] }>('/api/admin/whatsapp/canais', p);
 
+// ─── ☎️ Chamada de voz/vídeo — SONDA, não interruptor ───────────────────────
+// Ela pergunta à Meta e relata. Ligar a chamada abre um botão no WhatsApp de
+// TODOS os clientes: é decisão do Paulo, com destino de atendimento definido
+// antes — não efeito colateral de um clique de diagnóstico.
+
+export interface SondaChamada {
+    candidato: string; rotulo: string; hipotese: string;
+    situacao: 'ligado' | 'desligado' | 'nao-declarado' | 'nao-reconhecido' | 'sem-permissao' | 'indeterminado';
+    motivo: string; acao?: string; campo?: string; bruto?: unknown;
+}
+
+export const sondarChamadas = () =>
+    req<{
+        conclusao: { veredito: SondaChamada['situacao']; motivo: string; acao?: string; respondeuPor?: string | null };
+        sondas: SondaChamada[];
+        antesDeLigar: { titulo: string; texto: string }[];
+    }>('/api/admin/whatsapp/chamadas/sondar');
+
 // ─── Atendentes ↔ filas (admin) ─────────────────────────────────────────────
 
 export interface Atendente {

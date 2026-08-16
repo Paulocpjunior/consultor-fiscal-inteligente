@@ -232,6 +232,7 @@ export const REVISOES: Revisao[] = [
             '🎤 Gravar e enviar áudio pelo próprio painel.',
             '📎 Abrir o anexo recebido (imagem, áudio, vídeo e documento) e enviar anexo na conversa.',
             '📞 Preparado para um segundo número / segunda conta da Meta, com o roteamento de entrada por canal.',
+            '☎️ Sonda de voz/vídeo na ⚙️: pergunta à Meta como está a chamada para o nosso número (ela não liga nada — ligar é decisão do escritório).',
             '✅ Encerramento de atendimento com pesquisa de avaliação (1 a 5) e painel 📊.',
             '👥 Papéis de atendimento: colaborador, gestor e admin, com as permissões aplicadas na tela e no servidor.',
             '↪️ Transferência entre departamentos, com nota automática e aviso opcional ao cliente.',
