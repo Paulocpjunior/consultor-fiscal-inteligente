@@ -67,6 +67,10 @@ export function conversaVisivel(filasDoUsuario, filaDaConversa) {
 export function configPadraoAtendimento() {
     return {
         botAtivo: false,   // NASCE DESLIGADO — dois bots no mesmo cliente é menu em dobro
+        // Aviso ao CLIENTE quando um atendente transfere a conversa de fila.
+        // Também nasce desligado: é o admin que decide quando a casa quer
+        // falar isso — e só sai com a janela de 24h aberta (regra da Meta).
+        avisarClienteTransferencia: false,
         horario: {
             dias: [1, 2, 3, 4, 5],
             turnos: [{ inicio: '08:00', fim: '12:00' }, { inicio: '13:00', fim: '17:30' }],
@@ -77,6 +81,7 @@ export function configPadraoAtendimento() {
             confirmacaoFila: 'Perfeito! Você foi direcionado para {fila}. Aguarde que logo um atendente responderá.',
             foraDeHorario: 'Obrigado por entrar em contato! Nosso horário de atendimento é de Seg. a Sex das 8:00h às 12:00h e 13:00 às 17:30h.\nVisite nosso site: www.spassessoriacontabil.com.br\n\nPode deixar sua mensagem que retornaremos o mais breve possível!',
             sair: 'Atendimento encerrado. Quando precisar, é só chamar!',
+            transferencia: 'Você foi direcionado para {fila}. Um atendente do time já vai continuar seu atendimento.',
         },
         // Menu numérico → fila. Espelha o menu de 8 opções em uso hoje.
         menu: FILAS_ATENDIMENTO.map((f, i) => ({ opcao: String(i + 1), fila: f.id, rotulo: f.rotulo })),
@@ -92,6 +97,8 @@ export function resolverConfig(gravada) {
     const menuGravado = Array.isArray(gravada.menu) ? gravada.menu.filter((m) => filaValida(m.fila)) : [];
     return {
         botAtivo: typeof gravada.botAtivo === 'boolean' ? gravada.botAtivo : p.botAtivo,
+        avisarClienteTransferencia: typeof gravada.avisarClienteTransferencia === 'boolean'
+            ? gravada.avisarClienteTransferencia : p.avisarClienteTransferencia,
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,
@@ -166,6 +173,16 @@ export function decidirAutomacao({ conversa = {}, textoMensagem, nomeContato, co
     if (/^#?sair$/i.test(texto)) {
         acoes.push({ tipo: 'resetarTriagem' });
         acoes.push({ tipo: 'responder', texto: config.mensagens.sair });
+        return acoes;
+    }
+
+    // #menu reapresenta o menu em QUALQUER estado — é assim que o CLIENTE pede
+    // outro departamento sozinho: a triagem reseta e a escolha seguinte
+    // re-roteia. Comando EXPLÍCITO de propósito: numa conversa já triada, um
+    // "2" solto é resposta ao atendente ("quantas parcelas? 2"), nunca menu.
+    if (/^#?menu$/i.test(texto)) {
+        acoes.push({ tipo: 'resetarTriagem' });
+        acoes.push({ tipo: 'responder', texto: montarTextoMenu(config) });
         return acoes;
     }
 

@@ -103,10 +103,41 @@ Regras de tela que não se afrouxam:
 
 ## 5. Departamentos = filas
 
-As filas são exatamente `DEPARTAMENTOS_WHATSAPP` (fiscal, contabil, dp-folha,
-legalizacao, financeiro) + **Recepção** (conversa nova sem triagem). Não
-existe cadastro de fila separado — fila nova só existe se nascer departamento
-novo no catálogo (régua única).
+~~As filas são exatamente `DEPARTAMENTOS_WHATSAPP`~~ **SUPERADO 16/08 pela
+decisão do Paulo** (*"Recepção podem atender todos departamentos, RH é um
+departamento separado como todos os outros"*): **FILA ≠ DEPARTAMENTO do
+SaaS**. O catálogo próprio de 8 filas mora em `whatsapp-atendimento.js`
+(Recepção, Financeiro, DP, Fiscal, Contábil, Legalização, RH, Jurídico);
+o catálogo dos 5 módulos não incha. Visibilidade: Recepção vê TUDO; os
+demais veem a(s) própria(s) fila(s) + Recepção; admin vê tudo. A atribuição
+é `users.filasAtendimento` (aba 👥 da ⚙️ do Connect; sem atribuição valem os
+departamentos de módulo; rules com anti-autoconcessão).
+
+### 5.1 Transferência entre departamentos (16/08)
+
+A conversa de um número é **UMA só** (o cliente tem um chat no celular) —
+transferir é trocar o DONO, nunca abrir uma segunda conversa:
+
+- **↪️ Transferir de fila** (qualquer atendente): a atribuição é **LIMPA**
+  (chega SEM dono na fila destino — presa no atendente de origem, o destino
+  veria uma conversa "ocupada" que ninguém de lá conduz), fica **nota
+  automática na thread** (de onde veio, quem mandou, recado opcional — sem
+  rastro o destino pergunta tudo de novo ao cliente) e a conversa ganha o
+  selo "↪ de X" até alguém assumir.
+- **Aviso ao cliente** na transferência é OPCIONAL (chave na ⚙️, nasce
+  DESLIGADA) e só sai com a janela de 24h aberta; falha no aviso não desfaz
+  a transferência, mas é dita.
+- **Guarda de condução**: responder conversa em condução por OUTRO atendente
+  é recusado (409) — assumir é UM clique, auditado (mata-burro com caminho,
+  não parede). Responder conversa SEM dono te torna o condutor
+  (auto-assumir). Duas vozes na mesma conversa confundem o cliente.
+- **✚ Nova conversa** para número JÁ em condução é recusada dizendo quem
+  conduz e em qual fila — a saída é nota interna pra quem conduz ou pedir a
+  transferência.
+- **O cliente pede outro departamento**: com o bot ligado, `#menu`
+  reapresenta o menu em qualquer estado e a escolha re-roteia (comando
+  EXPLÍCITO de propósito — numa conversa triada, um "2" solto é resposta ao
+  atendente, nunca menu). Com o bot desligado, é o atendente que transfere.
 
 ## 6. Regras de horário e auto-resposta
 

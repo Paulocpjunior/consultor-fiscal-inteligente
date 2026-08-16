@@ -44,9 +44,10 @@ export const iniciarConversa = (p: {
         '/api/admin/whatsapp/conversas/iniciar',
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
 
-/** Responde com texto livre (só com a janela de 24h aberta — o backend trava). */
+/** Responde com texto livre (janela de 24h aberta E conversa não conduzida
+ *  por OUTRO — o backend trava as duas; responder sem dono auto-assume). */
 export const responderConversa = (numero: string, texto: string) =>
-    req<{ mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean }>(
+    req<{ mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean; autoAssumida?: boolean; emConducaoPor?: string }>(
         `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/responder`,
         {
             method: 'POST',
@@ -75,8 +76,11 @@ export const atendimentoConfig = () =>
 export const salvarAtendimentoConfig = (config: ConfigAtendimento) =>
     post<{ config: ConfigAtendimento }>('/api/admin/whatsapp/atendimento-config', { config });
 
-export const transferirFila = (numero: string, fila: string) =>
-    post<{ numero: string }>(urlConversa(numero, 'fila'), { fila });
+/** Transferir de fila: limpa o dono, grava nota automática (recado opcional)
+ *  e — se a chave estiver ligada — avisa o cliente (só com janela aberta). */
+export const transferirFila = (numero: string, fila: string, recado?: string) =>
+    post<{ numero: string; fila: string; transferidaDe: string; avisoCliente: string; nota: MensagemInbox }>(
+        urlConversa(numero, 'fila'), { fila, recado });
 
 /** Assumir a conversa (liberar=true devolve pra fila). */
 export const assumirConversa = (numero: string, liberar = false) =>

@@ -37,6 +37,11 @@ describe('config: padrão honesto e merge que não engole campo', () => {
     it('o bot NASCE DESLIGADO — dois bots no mesmo cliente é menu em dobro', () => {
         expect(configPadraoAtendimento().botAtivo).toBe(false);
     });
+    it('o aviso de transferência ao cliente também NASCE DESLIGADO (admin liga)', () => {
+        expect(configPadraoAtendimento().avisarClienteTransferencia).toBe(false);
+        expect(configPadraoAtendimento().mensagens.transferencia).toContain('{fila}');
+        expect(resolverConfig({ avisarClienteTransferencia: true }).avisarClienteTransferencia).toBe(true);
+    });
     it('resolverConfig preserva o gravado e completa o que faltar', () => {
         const r = resolverConfig({ botAtivo: true, mensagens: { sair: 'Tchau!' } });
         expect(r.botAtivo).toBe(true);
@@ -123,6 +128,14 @@ describe('decidirAutomacao — o cérebro, puro', () => {
         const acoes = decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '#sair', config: cfg, agora: dentroDoExpediente });
         expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
         expect(acoes[1].texto).toContain('encerrado');
+    });
+
+    it('#menu reapresenta o menu em qualquer estado — é o cliente pedindo outro depto', () => {
+        const acoes = decidirAutomacao({ conversa: { fila: 'fiscal', protocolo: '2077' }, textoMensagem: '#menu', config: cfg, agora: dentroDoExpediente });
+        expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
+        expect(acoes[1].texto).toContain('1 - Recepção / Front Desk');
+        // "2" solto em conversa TRIADA continua sendo resposta ao atendente, nunca menu
+        expect(decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '2', config: cfg, agora: dentroDoExpediente })).toEqual([]);
     });
 
     it('fora do horário avisa UMA vez por dia por conversa (anti-metralhadora)', () => {
