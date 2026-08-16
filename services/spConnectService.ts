@@ -96,3 +96,33 @@ export const vincularCliente = (numero: string, empresaId: string, empresaNome?:
 export const buscarClientes = (q: string) =>
     req<{ clientes: { id: string; nome: string; cnpj: string; origem: string }[] }>(
         `/api/admin/whatsapp/clientes-busca?q=${encodeURIComponent(q)}`);
+
+// ─── Atendentes ↔ filas (admin) ─────────────────────────────────────────────
+
+export interface Atendente {
+    uid: string; email: string | null; nome: string | null; role: string;
+    departamentos: string[]; filasAtendimento: string[];
+}
+
+export const listarAtendentes = () =>
+    req<{ atendentes: Atendente[]; filas: FilaAtendimento[] }>('/api/admin/whatsapp/atendentes');
+
+export const salvarFilasAtendente = (uid: string, filas: string[]) =>
+    post<{ uid: string; filas: string[] }>(`/api/admin/whatsapp/atendentes/${encodeURIComponent(uid)}/filas`, { filas });
+
+// ─── 📥 Importar backup da Ultra Fox (admin; preview antes de gravar) ───────
+
+export interface ImportPreview {
+    preview?: boolean; tipo: string; total: number;
+    amostra?: unknown[]; autores?: string[]; avisos?: string[];
+    descartados?: { linha?: number; valor?: string; motivo: string }[];
+    descartadas?: { linha?: number; trecho?: string; motivo: string }[];
+    totalDescartados?: number; totalDescartadas?: number;
+    criados?: number; jaExistiam?: number; gravadas?: number; conversas?: number;
+}
+
+export const importarUltrafox = (p: {
+    tipo: 'contatos' | 'mensagens-txt' | 'mensagens-csv';
+    conteudo: string; confirmar: boolean;
+    numero?: string; autoresEscritorio?: string[];
+}) => post<ImportPreview>('/api/admin/whatsapp/importar-ultrafox', p);

@@ -16,6 +16,8 @@ import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
     atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
+    listarAtendentes, salvarFilasAtendente, importarUltrafox,
+    Atendente, ImportPreview,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -216,6 +218,61 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
     const setMsgCfg = (chave: string, valor: string) =>
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
+
+    // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
+    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar'>('bot');
+    const [atendentes, setAtendentes] = useState<Atendente[]>([]);
+    const [atdErro, setAtdErro] = useState<string | null>(null);
+    const [atdCarregado, setAtdCarregado] = useState(false);
+    useEffect(() => {
+        if (!cfgAberta || cfgAba !== 'atendentes' || atdCarregado) return;
+        (async () => {
+            const r = await listarAtendentes();
+            if (r.ok) { setAtendentes(r.atendentes || []); setAtdCarregado(true); setAtdErro(null); }
+            else setAtdErro(r.error || 'Falha ao listar os usuários.');
+        })();
+    }, [cfgAberta, cfgAba, atdCarregado]);
+
+    const alternarFilaAtendente = async (a: Atendente, fila: string) => {
+        const novas = a.filasAtendimento.includes(fila)
+            ? a.filasAtendimento.filter((f) => f !== fila)
+            : [...a.filasAtendimento, fila];
+        setAtdErro(null);
+        const r = await salvarFilasAtendente(a.uid, novas);
+        if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar.'); return; }
+        setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, filasAtendimento: r.filas } : x)));
+    };
+
+    // ── ⚙️ aba 📥 Importar backup da Ultra Fox (preview antes de gravar)
+    const [impTipo, setImpTipo] = useState<'contatos' | 'mensagens-txt' | 'mensagens-csv'>('contatos');
+    const [impConteudo, setImpConteudo] = useState('');
+    const [impNumero, setImpNumero] = useState('');
+    const [impAutores, setImpAutores] = useState<string[]>([]);
+    const [impPreview, setImpPreview] = useState<ImportPreview | null>(null);
+    const [impResultado, setImpResultado] = useState<ImportPreview | null>(null);
+    const [impErro, setImpErro] = useState<string | null>(null);
+    const [impRodando, setImpRodando] = useState(false);
+
+    const lerArquivoImport = (f: File | null) => {
+        if (!f) return;
+        const leitor = new FileReader();
+        leitor.onload = () => { setImpConteudo(String(leitor.result || '')); setImpPreview(null); setImpResultado(null); };
+        leitor.readAsText(f);
+    };
+    const rodarImport = async (confirmar: boolean) => {
+        if (!impConteudo.trim() || impRodando) return;
+        setImpRodando(true);
+        setImpErro(null);
+        try {
+            const r = await importarUltrafox({
+                tipo: impTipo, conteudo: impConteudo, confirmar,
+                ...(impTipo === 'mensagens-txt' ? { numero: impNumero, autoresEscritorio: impAutores } : {}),
+            });
+            if (!r.ok) { setImpErro(r.error || 'A importação falhou.'); return; }
+            if (confirmar) { setImpResultado(r); setImpPreview(null); }
+            else { setImpPreview(r); setImpResultado(null); setImpAutores([]); }
+        } finally { setImpRodando(false); }
+    };
 
     // ── ✚ Nova conversa (template aprovado — a porta de fora da janela) ─────
     // DUAS fontes de template: o cadastro da ⚙️ (variáveis nomeadas) e os
@@ -446,10 +503,135 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setCfgAberta(false)}>
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl my-8 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">⚙️ Atendimento — bot, horário, mensagens e menu</h3>
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">⚙️ SP Connect — configurações</h3>
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
-                        {!cfg ? (
+                        <div className="flex gap-1.5 flex-wrap">
+                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                                <button key={id} onClick={() => setCfgAba(id)}
+                                    className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
+                                        ? 'bg-[#0e3bfa] text-white'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                    {rotulo}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* ── aba 👥 Atendentes ↔ filas ─────────────────────── */}
+                        {cfgAba === 'atendentes' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Clique nas filas de cada pessoa — salva na hora. Quem tem <strong>Recepção</strong> vê
+                                    TODAS as conversas; sem atribuição, valem os departamentos de módulo; os demais veem
+                                    a própria fila + Recepção.
+                                </p>
+                                {atdErro && <p className="text-[11px] text-red-600 dark:text-red-400">{atdErro}</p>}
+                                {!atdCarregado && !atdErro && <p className="text-[11px] text-slate-400">Carregando usuários…</p>}
+                                <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+                                    {atendentes.map((a) => (
+                                        <div key={a.uid} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                                            <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
+                                                {a.nome || a.email || a.uid}
+                                                {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600">admin · vê tudo</span>}
+                                            </p>
+                                            {a.email && a.nome && <p className="text-[10px] text-slate-400">{a.email}</p>}
+                                            <div className="flex gap-1 flex-wrap mt-1">
+                                                {filas.map((f) => (
+                                                    <button key={f.id} onClick={() => alternarFilaAtendente(a, f.id)}
+                                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.filasAtendimento.includes(f.id)
+                                                            ? 'bg-[#0e3bfa] text-white'
+                                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                        {rotuloCurtoFila(f.id)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {a.filasAtendimento.length === 0 && a.departamentos.length > 0 && (
+                                                <p className="text-[9px] text-slate-400 mt-1">sem atribuição — hoje vale o departamento: {a.departamentos.join(', ')}</p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── aba 📥 Importar backup da Ultra Fox ───────────── */}
+                        {cfgAba === 'importar' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Restaura o backup da Ultra Fox. <strong>Nada é gravado sem o preview</strong>: primeiro
+                                    a leitura, depois a confirmação. Contato que já existe no SP Connect
+                                    <strong> não é sobrescrito</strong>, e reimportar o mesmo arquivo não duplica mensagem.
+                                </p>
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {([['contatos', '👥 Contatos (CSV)'], ['mensagens-csv', '💬 Mensagens (CSV)'], ['mensagens-txt', '📄 Conversa (.txt do WhatsApp)']] as const).map(([id, rotulo]) => (
+                                        <button key={id} onClick={() => { setImpTipo(id); setImpPreview(null); setImpResultado(null); }}
+                                            className={`text-[10px] font-bold px-2 py-1 rounded-full ${impTipo === id
+                                                ? 'bg-[#0e3bfa] text-white'
+                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
+                                            {rotulo}
+                                        </button>
+                                    ))}
+                                </div>
+                                <input type="file" accept=".csv,.txt,.tsv" onChange={(e) => lerArquivoImport(e.target.files?.[0] || null)}
+                                    className="text-[11px] text-slate-500" />
+                                <textarea value={impConteudo} onChange={(e) => { setImpConteudo(e.target.value); setImpPreview(null); setImpResultado(null); }}
+                                    rows={5} placeholder="…ou cole aqui o conteúdo do arquivo exportado da Ultra Fox"
+                                    className={`${CAMPO} font-mono !text-[10px]`} />
+                                {impTipo === 'mensagens-txt' && (
+                                    <label className="block text-[11px] text-slate-500">
+                                        Número do WhatsApp do CONTATO desta conversa
+                                        <input value={impNumero} onChange={(e) => setImpNumero(e.target.value)} placeholder="(11) 96444-0000" className={CAMPO} />
+                                    </label>
+                                )}
+                                {impErro && <p className="text-[11px] text-red-600 dark:text-red-400">{impErro}</p>}
+                                {impPreview && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2.5 space-y-1.5">
+                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                            Preview: {impPreview.total} {impTipo === 'contatos' ? 'contatos' : 'mensagens'} legíveis
+                                            {(impPreview.totalDescartados || impPreview.totalDescartadas) ? ` · ${impPreview.totalDescartados || impPreview.totalDescartadas} descartadas (motivo abaixo)` : ''}
+                                        </p>
+                                        {(impPreview.avisos || []).map((a, i) => <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ {a}</p>)}
+                                        {[...(impPreview.descartados || []), ...(impPreview.descartadas || [])].slice(0, 8).map((d, i) => (
+                                            <p key={i} className="text-[10px] text-slate-500">• {d.motivo}{'linha' in d && d.linha ? ` (linha ${d.linha})` : ''}</p>
+                                        ))}
+                                        {impTipo === 'mensagens-txt' && (impPreview.autores || []).length > 0 && (
+                                            <div>
+                                                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Quais autores são do ESCRITÓRIO? (viram mensagens enviadas)</p>
+                                                <div className="flex gap-1.5 flex-wrap mt-1">
+                                                    {(impPreview.autores || []).map((a) => (
+                                                        <button key={a} onClick={() => setImpAutores((l) => (l.includes(a) ? l.filter((x) => x !== a) : [...l, a]))}
+                                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${impAutores.includes(a)
+                                                                ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
+                                                            {impAutores.includes(a) ? '🏢 ' : ''}{a}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        <pre className="text-[9px] text-slate-500 overflow-x-auto max-h-32 overflow-y-auto">{JSON.stringify(impPreview.amostra, null, 1)}</pre>
+                                    </div>
+                                )}
+                                {impResultado && (
+                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                                        ✓ Importado: {impResultado.criados != null
+                                            ? `${impResultado.criados} contatos novos · ${impResultado.jaExistiam} já existiam (não sobrescritos)`
+                                            : `${impResultado.gravadas} mensagens em ${impResultado.conversas} conversa(s)`}
+                                    </p>
+                                )}
+                                <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => rodarImport(false)} disabled={impRodando || !impConteudo.trim()}
+                                        className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-40">
+                                        {impRodando ? '…' : '🔎 Ler (preview)'}
+                                    </button>
+                                    <button onClick={() => rodarImport(true)} disabled={impRodando || !impPreview || impPreview.total === 0}
+                                        className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        Confirmar e gravar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {cfgAba === 'bot' && (!cfg ? (
                             <p className="text-[11px] text-slate-400">{cfgErro || 'Carregando…'}</p>
                         ) : (
                             <>
@@ -553,7 +735,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </button>
                                 </div>
                             </>
-                        )}
+                        ))}
                     </div>
                 </div>
             )}
