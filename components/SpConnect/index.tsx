@@ -181,7 +181,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             key={a}
             onClick={() => setAba(a)}
             className={`text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap ${aba === a
-                ? 'bg-sky-600 text-white'
+                ? 'bg-[#0e3bfa] text-white'
                 : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}
         >
             {rotulo}
@@ -284,7 +284,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         <div className="flex items-center justify-end gap-2 pt-1">
                             <button onClick={() => setNovaAberta(false)} className="text-[12px] px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
                             <button onClick={enviarNova} disabled={enviandoNova || !prontoPraEnviar}
-                                className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
+                                className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
                                 {enviandoNova ? 'Enviando…' : 'Enviar template ➤'}
                             </button>
                         </div>
@@ -300,7 +300,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Conversas</p>
                             <div className="flex items-center gap-1.5">
                                 <button onClick={abrirNova} title="Iniciar conversa por template aprovado"
-                                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white">
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ✚ Nova
                                 </button>
                                 <button onClick={() => recarregar()} disabled={carregando} title="Atualizar agora (a lista também se atualiza sozinha a cada 30s)"
@@ -343,7 +343,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <button
                                         key={c.numero}
                                         onClick={() => abrir(c)}
-                                        className={`w-full text-left px-3 py-2.5 border-b border-slate-100 dark:border-slate-700/60 flex gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 ${ativa ? 'bg-sky-50 dark:bg-sky-900/20 border-l-[3px] border-l-sky-500' : 'border-l-[3px] border-l-transparent'}`}
+                                        className={`w-full text-left px-3 py-2.5 border-b border-slate-100 dark:border-slate-700/60 flex gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 ${ativa ? 'bg-[#e7ecff] dark:bg-sky-900/20 border-l-[3px] border-l-[#0e3bfa]' : 'border-l-[3px] border-l-transparent'}`}
                                     >
                                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-white grid place-items-center text-[12px] font-bold shrink-0 mt-0.5">
                                             {iniciais(c)}
@@ -358,7 +358,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {c.ultimaMensagem?.direcao === 'saida' ? '↩ ' : ''}{c.ultimaMensagem?.resumo || '—'}
                                                 </span>
                                                 {c.naoLidas > 0 && (
-                                                    <span className="shrink-0 text-[10px] font-bold bg-emerald-500 text-white rounded-full min-w-[18px] text-center px-1 py-0.5">{c.naoLidas}</span>
+                                                    <span className="shrink-0 text-[10px] font-bold bg-[#0e3bfa] text-white rounded-full min-w-[18px] text-center px-1 py-0.5">{c.naoLidas}</span>
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
@@ -416,7 +416,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         const saida = m.direcao === 'saida';
                                         return (
                                             <div key={m.id} className={`max-w-[78%] w-fit rounded-xl px-3 py-1.5 text-[13px] shadow-sm ${saida
-                                                ? 'ml-auto bg-emerald-100 dark:bg-emerald-900/50 text-slate-800 dark:text-slate-100 rounded-br-sm'
+                                                ? 'ml-auto bg-[#e2e9ff] dark:bg-[#24335e] text-slate-800 dark:text-slate-100 rounded-br-sm'
                                                 : 'mr-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-sm'}`}>
                                                 {midia && <p className="text-[11px] font-semibold mb-0.5">{midia}</p>}
                                                 {m.texto && <p className="whitespace-pre-wrap break-words">{m.texto}</p>}
@@ -470,7 +470,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         <button
                                             onClick={enviar}
                                             disabled={enviando || !texto.trim()}
-                                            className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-bold disabled:opacity-40"
+                                            className="shrink-0 px-4 py-2 rounded-xl bg-[#0e3bfa] hover:bg-[#091d8d] text-white text-[13px] font-bold disabled:opacity-40"
                                         >
                                             {enviando ? '…' : 'Enviar ➤'}
                                         </button>
