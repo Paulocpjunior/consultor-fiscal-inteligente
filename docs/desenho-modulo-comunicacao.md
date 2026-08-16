@@ -1,4 +1,7 @@
-# 💬 Módulo Comunicação (WhatsApp) — Documento de Desenho
+# 💬 SP CONNECT — Módulo de Comunicação (WhatsApp) — Documento de Desenho
+
+> **NOME OFICIAL: SP Connect** (Paulo, 14/08) — identidade da casa, sem nome
+> de ferramenta. É o nome do card, da aba no Teams e do PWA no celular.
 
 > Estado: **DESENHO** (nada aqui está implementado além do que a seção
 > "O que já existe" lista). Aprovação do Paulo pendente nas "Decisões em
@@ -242,7 +245,7 @@ e-mail ou WhatsApp, o que gosta"*. Isso define a incorporação:
   campo ausente não vira default.
 - **O OURO imediato: a preferência de envio é ROTEAMENTO.** "Vai impresso /
   por e-mail / por WhatsApp" decide qual botão o rito #293 sugere na hora de
-  enviar guia, e o SP Conecta (F2) nasce sabendo o canal que o cliente
+  enviar guia, e o SP Connect (F2) nasce sabendo o canal que o cliente
   escolheu. "Tem folha de pagamentos" liga o cliente à fila do DP.
 - **Fases (segundo plano, sem atrapalhar a F2)**: (a) mapear os campos
   reais dos formulários (de-para escrito, como o da Legalização); (b) sync
