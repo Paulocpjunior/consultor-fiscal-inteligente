@@ -879,6 +879,71 @@ router.post('/conversas/:numero/vincular', requireAuth, async (req, res) => {
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ─── CLIENTE 360 da conversa (pós-vínculo) ──────────────────────────────────
+// A vantagem do SP Connect sobre a plataforma antiga: o atendente vê QUEM é
+// o cliente sem trocar de tela. NENHUMA conta nova — responsável vem da
+// carteira, guias vêm da auditoria do rito #293 (impostos_enviados). Sort em
+// memória de propósito: where(empresaId)+orderBy(enviadoEm) exigiria índice
+// composto — entra se o volume provar precisar.
+router.get('/conversas/:numero/cliente', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const contato = (await db.collection('whatsapp_contatos').doc(numero).get()).data() || {};
+        if (!contato.empresaId) return res.json({ ok: true, vinculado: false });
+
+        const empresaId = contato.empresaId;
+        const [simples, lucro, cartSnap, enviosSnap] = await Promise.all([
+            db.collection('simples_empresas').doc(empresaId).get(),
+            db.collection('lucro_empresas').doc(empresaId).get(),
+            db.collection('carteiras').where('empresaId', '==', empresaId).get(),
+            db.collection('impostos_enviados').where('empresaId', '==', empresaId).limit(100).get(),
+        ]);
+        const emp = simples.exists ? { ...simples.data(), _origem: 'simples' }
+            : lucro.exists ? { ...lucro.data(), _origem: 'lucro' } : null;
+
+        const responsaveis = cartSnap.docs.map((d) => {
+            const x = d.data();
+            return { nome: x.colaboradorNome || null, papel: x.papel || 'principal' };
+        }).filter((r) => r.nome);
+
+        const paraIso = (v) => {
+            if (!v) return null;
+            if (typeof v.toDate === 'function') return v.toDate().toISOString();
+            const t = Date.parse(v);
+            return Number.isFinite(t) ? new Date(t).toISOString() : null;
+        };
+        const guias = enviosSnap.docs.map((d) => {
+            const x = d.data();
+            return {
+                tipo: x.tipo || null, competencia: x.competencia || null,
+                valor: Number.isFinite(Number(x.valor)) ? Number(x.valor) : null,
+                canal: x.canal || null, enviadoPor: x.enviadoPor || null,
+                enviadoEm: paraIso(x.enviadoEm),
+            };
+        }).sort((a, b) => String(b.enviadoEm || '').localeCompare(String(a.enviadoEm || ''))).slice(0, 6);
+
+        return res.json({
+            ok: true,
+            vinculado: true,
+            empresa: emp ? {
+                id: empresaId,
+                nome: emp.nome || emp.razaoSocial || contato.empresaNome || empresaId,
+                cnpj: String(emp.cnpj || '').replace(/\D/g, '') || null,
+                regime: emp._origem === 'simples' ? 'Simples Nacional' : (emp.regimePadrao || 'Lucro'),
+                excluida: Boolean(emp._deleted || emp._merged_into),
+            } : { id: empresaId, nome: contato.empresaNome || empresaId, cnpj: null, regime: null, naoEncontrada: true },
+            responsaveis,
+            // total vai junto: lista de 6 com total maior avisa que há mais.
+            guias, totalGuias: enviosSnap.size,
+        });
+    } catch (e) {
+        console.error('[whatsapp/cliente]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // Busca de clientes pro vínculo (nome/CNPJ, nas DUAS coleções — CNPJ tem duas
 // formas no banco, então a comparação é por dígitos, nunca por igualdade).
 router.get('/clientes-busca', requireAuth, async (req, res) => {

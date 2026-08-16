@@ -3084,10 +3084,15 @@ app.use(express.static(join(__dirname, 'dist'), {
         // segurava a versão VELHA depois de cada atualização (caso do Paulo,
         // 02/08: seção corrigida no ar e a antiga na tela). Sem hash no nome,
         // HTML não pode ser immutable.
-        if (filePath.endsWith('.html') || filePath.endsWith('version.json')) {
+        // .webmanifest entra na MESMA regra e pela MESMA razão: não tem hash
+        // no nome, então "immutable 1 ano" prenderia o manifest velho no
+        // celular de quem já instalou o SP Connect (start_url/ícone antigos,
+        // sem jeito de atualizar a não ser reinstalando).
+        if (filePath.endsWith('.html') || filePath.endsWith('version.json') || filePath.endsWith('.webmanifest')) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');
+            if (filePath.endsWith('.webmanifest')) res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
         } else {
             // Assets versionados (com hash no filename) podem cachear 1 ano
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

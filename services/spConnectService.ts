@@ -99,6 +99,19 @@ export const criarNota = (numero: string, texto: string) =>
 export const vincularCliente = (numero: string, empresaId: string, empresaNome?: string) =>
     post<{}>(urlConversa(numero, 'vincular'), { empresaId, empresaNome });
 
+/** Cliente 360 da conversa (pós-vínculo): empresa, responsáveis da carteira
+ *  e últimas guias do rito #293 — nenhuma conta nova, só leitura. */
+export interface ClienteDaConversa {
+    vinculado: boolean;
+    empresa?: { id: string; nome: string; cnpj: string | null; regime: string | null; excluida?: boolean; naoEncontrada?: boolean };
+    responsaveis?: { nome: string; papel: string }[];
+    guias?: { tipo: string | null; competencia: string | null; valor: number | null; canal: string | null; enviadoPor: string | null; enviadoEm: string | null }[];
+    totalGuias?: number;
+}
+
+export const clienteDaConversa = (numero: string) =>
+    req<ClienteDaConversa>(urlConversa(numero, 'cliente'));
+
 export const buscarClientes = (q: string) =>
     req<{ clientes: { id: string; nome: string; cnpj: string; origem: string }[] }>(
         `/api/admin/whatsapp/clientes-busca?q=${encodeURIComponent(q)}`);

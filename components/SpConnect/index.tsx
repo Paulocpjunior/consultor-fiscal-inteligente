@@ -17,7 +17,8 @@ import {
     atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
-    listarAvaliacoes, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarAvaliacoes, clienteDaConversa, Atendente, ImportPreview, AvaliacaoAtendimento,
+    ClienteDaConversa,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -286,6 +287,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar.'); return; }
         setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, filasAtendimento: r.filas } : x)));
     };
+
+    // ── Cliente 360 (pós-vínculo): responsável da carteira + guias do rito.
+    // NENHUMA conta nova — a rota só lê carteiras e impostos_enviados.
+    const [cliente360, setCliente360] = useState<ClienteDaConversa | null>(null);
+    useEffect(() => {
+        setCliente360(null);
+        const numero = sel?.numero;
+        if (!numero || !sel?.empresaId) return;
+        let vivo = true;
+        clienteDaConversa(numero).then((r) => { if (vivo && r.ok) setCliente360(r); });
+        return () => { vivo = false; };
+    }, [sel?.numero, sel?.empresaId]);
 
     // ── 📊 Avaliações (admin/gestor: todas · colaborador: as próprias — o
     // recorte é do backend; a tela só DIZ qual escopo está vendo)
@@ -1141,7 +1154,25 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cliente · cadastro central</p>
                                 {sel.empresaId ? (
                                     <>
-                                        <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">{sel.empresaNome || sel.empresaId}</p>
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
+                                            {cliente360?.empresa?.nome || sel.empresaNome || sel.empresaId}
+                                        </p>
+                                        {cliente360?.empresa && (
+                                            <p className="text-[10px] text-slate-400">
+                                                {cliente360.empresa.cnpj || 'CNPJ não gravado'}{cliente360.empresa.regime ? ` · ${cliente360.empresa.regime}` : ''}
+                                            </p>
+                                        )}
+                                        {cliente360?.empresa?.naoEncontrada && (
+                                            <p className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ Empresa não achada no cadastro — o vínculo pode apontar pra cadastro excluído.</p>
+                                        )}
+                                        {cliente360?.vinculado && (cliente360.responsaveis || []).length > 0 && (
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                                                👤 Carteira: {(cliente360.responsaveis || []).map((r) => `${r.nome}${r.papel !== 'principal' ? ` (${r.papel})` : ''}`).join(' · ')}
+                                            </p>
+                                        )}
+                                        {cliente360?.vinculado && (cliente360.responsaveis || []).length === 0 && (
+                                            <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">Sem responsável de carteira atribuído.</p>
+                                        )}
                                         <button onClick={() => acaoVincular('', '')} className="text-[10px] text-slate-400 hover:text-red-600 mt-1">✕ desvincular</button>
                                     </>
                                 ) : (
@@ -1219,10 +1250,36 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     {situacaoAviso && <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{situacaoAviso}</p>}
                                 </div>
                             </div>
-                            <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 text-[10px] text-slate-400">
-                                Em breve nesta coluna: guias enviadas ao cliente (rito #293) quando o contato
-                                estiver vinculado, e o responsável da carteira.
-                            </div>
+                            {sel.empresaId && cliente360?.vinculado && (
+                                <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                                        Guias enviadas · rito #293
+                                    </p>
+                                    {(cliente360.guias || []).length === 0 ? (
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            Nenhum envio registrado pra esta empresa — a lista nasce dos envios
+                                            feitos pelo app (DAS/DARF/DARE), não prova ausência de guia.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {(cliente360.guias || []).map((g, i) => (
+                                                <div key={i} className="flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 pb-1">
+                                                    <span className="font-semibold">
+                                                        {g.tipo || 'guia'}{g.competencia ? ` ${g.competencia}` : ''}
+                                                        {g.valor != null && (
+                                                            <span className="font-normal text-slate-400"> · {g.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                                                        )}
+                                                    </span>
+                                                    <span className="text-slate-400 shrink-0">{horaCurta(g.enviadoEm, agora)}</span>
+                                                </div>
+                                            ))}
+                                            {(cliente360.totalGuias || 0) > (cliente360.guias || []).length && (
+                                                <p className="text-[9px] text-slate-400">mostrando {(cliente360.guias || []).length} de {cliente360.totalGuias} — o histórico completo fica no módulo Fiscal</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
