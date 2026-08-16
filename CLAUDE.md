@@ -26,7 +26,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `/sp-connect-teams.zip`; GUID do manifest NUNCA muda entre versões);
   (8) backup da Ultra Fox entra pela ⚙️ → 📥 (preview antes de gravar,
   contato existente não é sobrescrito, reimportar não duplica, direção do
-  .txt é escolha humana).
+  .txt é escolha humana); (9) **quem responde "dá pra derrubar a Ultra Fox?"
+  é `docs/de-para-ultrafox-spconnect.md`** — documento VIVO, atualizado no
+  MESMO PR que fecha ou abre lacuna, com trava por comportamento
+  (`__tests__/deParaUltrafox.test.ts` pergunta ao CÓDIGO e exige que o
+  documento concorde). Nele, o que sei da Ultra Fox vem CARIMBADO com a
+  origem ([print] · [Paulo] · [produção] · [?] = não conferido), porque
+  de-para que finge conhecer a ferramenta antiga faz o corte acontecer com
+  buraco escondido. **Hoje 3 linhas BLOQUEIAM o corte**: abrir mídia
+  recebida, enviar anexo e notificação de mensagem nova.
 - **A RAZÃO SOCIAL JÁ RESPONDE: LTDA/S.A./EIRELI É PESSOA JURÍDICA** (13/08,
   fila da NOVA ERA). Metade das pendências de *"consulte o CADESP"* era de
   fornecedor cujo nome DIZ o que ele é — MIXTER … LTDA, PONTUAL COMERCIAL
