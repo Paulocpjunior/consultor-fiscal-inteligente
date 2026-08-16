@@ -85,6 +85,9 @@ describe('filtrarConversas e iniciais', () => {
         expect(filtrarConversas(lista, { busca: 'guia', aba: 'todas' })).toHaveLength(1);
         expect(filtrarConversas(lista, { busca: '', aba: 'nao-lidas' })).toHaveLength(1);
         expect(filtrarConversas(lista, { busca: '', aba: 'recepcao' })[0].nome).toBe('Paulocpjr');
+        // aba pode ser QUALQUER id de fila (F3) — 'recepcao' segue casando fila null (não triada)
+        expect(filtrarConversas(lista, { busca: '', aba: 'fiscal' })[0].nome).toBe('Padaria Bela Massa');
+        expect(filtrarConversas(lista, { busca: '', aba: 'juridico' })).toHaveLength(0);
         expect(filtrarConversas(lista, { busca: '', aba: 'todas' })).toHaveLength(2);
     });
 

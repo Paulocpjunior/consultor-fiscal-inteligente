@@ -7,11 +7,32 @@
 // aqui só se LÊ o campo; recalcular seria a segunda régua.
 // ============================================================================
 
+export interface FilaAtendimento { id: string; rotulo: string }
+
+export interface ConfigAtendimento {
+    botAtivo: boolean;
+    horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
+    mensagens: Record<string, string>;
+    menu: { opcao: string; fila: string; rotulo: string }[];
+}
+
+/** Rótulo curto pras fichas/chips (o rótulo cheio é o que o CLIENTE vê no menu). */
+export function rotuloCurtoFila(id: string | null): string {
+    const m: Record<string, string> = {
+        recepcao: 'Recepção', financeiro: 'Financeiro', 'dp-folha': 'DP',
+        fiscal: 'Fiscal', contabil: 'Contábil', legalizacao: 'Legalização',
+        rh: 'RH', juridico: 'Jurídico',
+    };
+    return m[id || 'recepcao'] || (id || 'Recepção');
+}
+
 export interface ConversaResumo {
     numero: string;
     nome: string | null;
     empresaId: string | null;
+    empresaNome?: string | null;
     fila: string | null;
+    protocolo?: string | null;
     atribuidoA: string | null;
     situacao: string;
     janela24hAte: string | null;
@@ -22,7 +43,8 @@ export interface ConversaResumo {
 
 export interface MensagemInbox {
     id: string;
-    direcao: 'entrada' | 'saida' | null;
+    /** 'interna' = nota do atendente — vive na thread e NUNCA sai pro cliente. */
+    direcao: 'entrada' | 'saida' | 'interna' | null;
     tipo: string | null;
     texto: string | null;
     midia: { nomeArquivo: string | null; mime: string | null; baixada: boolean } | null;
@@ -112,15 +134,19 @@ export function dataHoraSp(iso: string | null | undefined): string {
     return new Date(t).toLocaleString('pt-BR', { timeZone: FUSO_SP });
 }
 
-/** Filtro da lista de conversas (busca + aba), puro pra teste. */
+/**
+ * Filtro da lista (busca + aba), puro pra teste. `aba` pode ser 'todas',
+ * 'nao-lidas' ou o ID de uma fila — 'recepcao' casa fila null (não triada)
+ * E fila 'recepcao' explícita.
+ */
 export function filtrarConversas(
     lista: ConversaResumo[],
-    { busca, aba }: { busca: string; aba: 'todas' | 'nao-lidas' | 'recepcao' },
+    { busca, aba }: { busca: string; aba: string },
 ): ConversaResumo[] {
     const b = busca.trim().toLowerCase();
     return lista.filter((c) => {
         if (aba === 'nao-lidas' && !(c.naoLidas > 0)) return false;
-        if (aba === 'recepcao' && c.fila) return false;
+        if (aba !== 'todas' && aba !== 'nao-lidas' && (c.fila || 'recepcao') !== aba) return false;
         if (!b) return true;
         return (c.nome || '').toLowerCase().includes(b)
             || c.numero.includes(b.replace(/\D/g, '') || '§')

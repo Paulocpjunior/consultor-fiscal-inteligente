@@ -34,7 +34,8 @@ import {
     interpretarErroEntrega, janela24hAte, resumoParaConversa,
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
-import { configWhatsapp, GRAPH_BASE } from './whatsapp-cloud.js';
+import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
+import { resolverConfig, decidirAutomacao, gerarProtocolo } from './whatsapp-atendimento.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -179,6 +180,58 @@ async function gravarStatus(db, st) {
     }
 }
 
+/**
+ * F3 — executa o bot pra UMA mensagem recebida. O cérebro (decidirAutomacao)
+ * é puro e testado; aqui é só I/O: ler estado, executar ações, gravar o que
+ * o bot respondeu (a resposta do bot entra na thread como mensagem 'saida'
+ * com enviadoPor 'bot', senão o atendente não vê o que o cliente recebeu).
+ * Best-effort: falha aqui NUNCA derruba o webhook.
+ */
+async function rodarBot(db, msg) {
+    try {
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+        const config = resolverConfig(cfgDoc.data());
+        if (!config.botAtivo) return;
+
+        const convRef = db.collection('whatsapp_conversas').doc(msg.de);
+        const conversa = (await convRef.get()).data() || {};
+        const acoes = decidirAutomacao({
+            conversa, textoMensagem: msg.texto, nomeContato: msg.nomePerfil,
+            config, agora: new Date(), protocoloNovo: gerarProtocolo(),
+        });
+
+        for (const acao of acoes) {
+            const agora = new Date().toISOString();
+            if (acao.tipo === 'definirFila') {
+                await convRef.set({ fila: acao.fila, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'gravarProtocolo') {
+                await convRef.set({ protocolo: acao.protocolo, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'marcarAusenciaEnviada') {
+                await convRef.set({ ausenciaAvisadaEm: acao.dia }, { merge: true });
+            } else if (acao.tipo === 'resetarTriagem') {
+                await convRef.set({ fila: null, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'responder') {
+                const envio = await enviarTextoLivre({ para: msg.de, texto: acao.texto });
+                if (envio.ok) {
+                    await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                        conversaId: msg.de, direcao: 'saida', tipo: 'text',
+                        texto: acao.texto, midia: null, timestamp: agora,
+                        statusEntrega: 'enviado', enviadoPor: 'bot',
+                    }, { merge: true });
+                    await convRef.set({
+                        ultimaMensagem: { resumo: acao.texto.slice(0, 140), direcao: 'saida', em: agora },
+                        atualizadoEm: agora,
+                    }, { merge: true });
+                } else {
+                    console.warn('[whatsapp/bot] resposta não saiu:', envio.erro);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[whatsapp/bot] falhou (webhook segue intacto):', e.message);
+    }
+}
+
 // ─── POST: eventos da Meta (mensagens + statuses) ───────────────────────────
 router.post('/webhook', async (req, res) => {
     const cfg = configWebhook();
@@ -218,6 +271,15 @@ router.post('/webhook', async (req, res) => {
         if (comMidia.length) {
             setImmediate(async () => {
                 for (const m of comMidia) await baixarMidiaRecebida(db, m);
+            });
+        }
+
+        // ── F3: o BOT (triagem/saudação/ausência) — também pós-200 ─────────
+        // decidirAutomacao é puro; aqui só se executa. Com botAtivo=false
+        // (o padrão) NADA responde — a plataforma atual segue sozinha.
+        if (ev.mensagens.length) {
+            setImmediate(async () => {
+                for (const msg of ev.mensagens) await rodarBot(db, msg);
             });
         }
 
