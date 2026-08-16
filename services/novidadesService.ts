@@ -40,20 +40,37 @@ export function temNovidadeNaoLida(
     return String(versaoVista || '').trim() !== versaoAtual.trim();
 }
 
-/** Última versão que ESTE navegador abriu (null quando nunca abriu). */
-export function versaoVistaLocal(): string | null {
+/**
+ * Leitura/gravação da versão vista, com a CHAVE por parâmetro.
+ *
+ * Existem dois comunicados hoje — o 📣 Novidades do CFI e o ℹ️ SOBRE do SP
+ * Connect — e cada um tem a própria chave. O que NÃO se duplica é a régua de
+ * comparação (`temNovidadeNaoLida`): selo com duas réguas acaba divergindo, e
+ * aí um dos dois some sem ninguém perceber (foi assim que o do CFI passou onze
+ * dias apagado).
+ */
+export function versaoVistaEm(chave: string): string | null {
     try {
-        return localStorage.getItem(CHAVE_LOCAL);
+        return localStorage.getItem(chave);
     } catch {
         return null;
     }
 }
 
-/** Carimba a versão atual como lida. Chamado quando o colaborador ABRE a página. */
-export function marcarNovidadesComoLidas(versao: string = NOVIDADES_VERSAO): void {
+export function marcarVistaEm(chave: string, versao: string): void {
     try {
-        localStorage.setItem(CHAVE_LOCAL, versao);
+        localStorage.setItem(chave, versao);
     } catch {
         /* navegador sem storage (aba anônima): o selo fica aceso, e tudo bem */
     }
+}
+
+/** Última versão que ESTE navegador abriu (null quando nunca abriu). */
+export function versaoVistaLocal(): string | null {
+    return versaoVistaEm(CHAVE_LOCAL);
+}
+
+/** Carimba a versão atual como lida. Chamado quando o colaborador ABRE a página. */
+export function marcarNovidadesComoLidas(versao: string = NOVIDADES_VERSAO): void {
+    marcarVistaEm(CHAVE_LOCAL, versao);
 }

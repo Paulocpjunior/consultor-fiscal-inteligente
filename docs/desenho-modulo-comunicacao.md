@@ -209,6 +209,60 @@ Paulo pediu o app "apto para inclusão de segundo número e/ou segunda API".
   `.webmanifest` da linha de Content-Type logo abaixo em vez da CONDIÇÃO do
   `if`: sentinela tem que responder a pergunta certa).
 
+### 5.5 Aviso de mensagem nova — as três camadas (Paulo, 16/08)
+
+Ordem dele: *"quanto mais notificação melhor, evita desculpa que o
+colaborador não viu, não recebeu, e o cliente reclama"*.
+
+- **Som + pop-up + contador no título** (app aberto): `notificacaoConnect.ts`
+  com idempotência por `${numero}|${em}` — a mesma mensagem nunca apita duas
+  vezes, a **primeira carga aprende sem apitar** (senão abrir o app de manhã
+  dispararia 40 avisos de mensagens velhas), conversa ABERTA não apita e
+  mensagem de SAÍDA não apita. O som é **sintetizado no WebAudio**: a CSP
+  bloqueia mídia externa, e arquivo no bundle envelheceria no cache.
+- **Push no celular com o app fechado**: `whatsapp-push.js` decide QUEM
+  recebe pela **MESMA régua de fila do inbox** (`filasVisiveis`/
+  `conversaVisivel`) — push que alcançasse quem não pode ABRIR a conversa
+  seria vazamento por aviso, já que o corpo leva nome e trecho da mensagem.
+  Quem ficou de fora volta NOMEADO com o motivo. **Fora do expediente é
+  opt-in** (`pushForaDoExpediente` nasce desligado): acordar a equipe de
+  madrugada por padrão é o alarme que ensina a desligar o alarme. Envio é
+  **best-effort** (aviso é aviso, mensagem é dado) e token que o FCM disser
+  que morreu sai do cadastro — aparelho trocado vira entulho que FINGE
+  alcance.
+  ⚠️ **Falta UMA chave**: `VITE_FIREBASE_VAPID_KEY` (Firebase Console →
+  Cloud Messaging → certificados push da Web). Sem ela o app **DIZ** que o
+  push está pendente, em vez de fingir — colaborador que confia num aviso
+  que nunca chega é pior que colaborador que sabe que precisa deixar a aba
+  aberta.
+
+### 5.6 ℹ️ SOBRE — manual, novidades e identidade do app (Paulo, 16/08)
+
+Pedido dele: *"criar um modal chamado SOBRE, nele deve conter um manual de
+uso para os colaboradores, um resumo das atualizações sempre que houver, um
+resumo do que nosso app é capaz, o que ele faz, conta um pouco sobre o porquê
+da sua criação, seus diferenciais em relação aos apps do mercado"*.
+
+- **O conteúdo é DADO, não JSX** (`services/sobreConnect.ts`): texto dentro
+  de componente não se testa, e é justamente a comparação entre o manual e o
+  que o app FAZ que precisa de trava.
+- **Selo vermelho no ℹ️**, com a régua **importada** do `novidadesService`
+  (`temNovidadeNaoLida`) e chave própria. Segunda cópia da régua divergiria,
+  e foi assim que o 📣 Novidades do CFI passou **onze dias apagado**.
+  O selo **só apaga quando alguém ABRE** — apagar sozinho seria mentira.
+- **DUAS travas provadas quebrando de propósito** (`sobreConnect.test.ts`):
+  (1) `SOBRE_VERSAO` tem que ser a data da revisão mais nova — nem selo sem
+  texto (promete leitura que não está lá), nem texto sem selo (a equipe nunca
+  fica sabendo); (2) **todo comando que o BOT reconhece está ensinado no
+  manual** — a varredura lê os comandos de quem DECIDE (`decidirAutomacao`
+  em `whatsapp-atendimento.js`), nunca de uma lista copiada no teste: lista
+  envelhece no primeiro comando novo, e envelhece calada.
+- **A lista de filas do manual sai do catálogo CARREGADO**, não de uma cópia
+  escrita no texto — fila nova apareceria só num dos dois lugares.
+- **Manual errado é pior que manual nenhum**: quem não sabe segue o que está
+  escrito. Por isso o topo da aba diz que, divergindo da tela, **o errado é o
+  manual**.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

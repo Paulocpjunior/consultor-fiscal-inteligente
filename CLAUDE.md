@@ -33,8 +33,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   documento concorde). Nele, o que sei da Ultra Fox vem CARIMBADO com a
   origem ([print] · [Paulo] · [produção] · [?] = não conferido), porque
   de-para que finge conhecer a ferramenta antiga faz o corte acontecer com
-  buraco escondido. **Hoje 3 linhas BLOQUEIAM o corte**: abrir mídia
-  recebida, enviar anexo e notificação de mensagem nova.
+  buraco escondido. ✅ **AS 3 BLOQUEANTES FECHARAM EM 16/08** (mídia
+  recebida, envio de anexo e aviso de mensagem nova) — a última só depende
+  de o Paulo publicar a `VITE_FIREBASE_VAPID_KEY`, e enquanto isso o app
+  DIZ que o push está pendente em vez de fingir; (10) **o ℹ️ SOBRE é a casa
+  do manual, do histórico e da identidade do app** (`services/
+  sobreConnect.ts` — conteúdo é DADO, não JSX, senão não se testa). Selo
+  vermelho com a régua IMPORTADA do `novidadesService` (segunda cópia foi o
+  que deixou o 📣 do CFI onze dias apagado) e DUAS travas provadas
+  quebrando de propósito: versão tem que ser a data da revisão mais nova, e
+  **comando novo do bot obriga manual novo NO MESMO PR** (a varredura lê
+  `decidirAutomacao`, nunca uma lista copiada). Regra que fica: **manual
+  errado é pior que manual nenhum** — quem não sabe segue o que está
+  escrito, então o manual se trava contra o COMPORTAMENTO do app.
 - **A RAZÃO SOCIAL JÁ RESPONDE: LTDA/S.A./EIRELI É PESSOA JURÍDICA** (13/08,
   fila da NOVA ERA). Metade das pendências de *"consulte o CADESP"* era de
   fornecedor cujo nome DIZ o que ele é — MIXTER … LTDA, PONTUAL COMERCIAL
