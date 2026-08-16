@@ -1945,8 +1945,8 @@ estiverem abertos, **não tratar o número da tela como fechado** — vale a reg
 de 12/08: print sem versão não é evidência, e pendência aberta não vira fato.
 Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
 
-0. **CLOUD RUN — três envs, e a primeira é a única que muda imposto hoje**
-   (16/08, confirmadas ABERTAS pelo print do ⚙️ Config Admin dele).
+0. **CLOUD RUN — sobraram DUAS, e nenhuma muda imposto** (16/08; a terceira,
+   que era a única urgente, virou decisão e saiu da fila).
    a) ✅ **RESOLVIDO 16/08, e não por comando: por DECISÃO.** O
       `GEMINI_MODEL_PRO` aponta para o alias do Flash, e Paulo respondeu *"não
       vejo problema em continuar no Gemini Flash desde que seja a última
