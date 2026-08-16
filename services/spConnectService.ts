@@ -55,6 +55,38 @@ export const responderConversa = (numero: string, texto: string) =>
             body: JSON.stringify({ texto }),
         });
 
+// ─── 📎 Mídia: abrir a recebida e enviar anexo ──────────────────────────────
+
+/**
+ * Baixa o anexo COM o token (o backend valida a visibilidade da fila) e
+ * devolve um object URL pra tela. `<img src>` não manda header, então o
+ * caminho é fetch → blob — e é isso que permite exigir login pra abrir
+ * anexo de cliente, em vez de link assinado que qualquer um repassa.
+ */
+export async function abrirMidia(numero: string, mensagemId: string): Promise<
+    { ok: true; url: string; mime: string } | { ok: false; error: string; acao?: string }
+> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch(
+        `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/midia/${encodeURIComponent(mensagemId)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({} as any));
+        return { ok: false, error: data.error || `HTTP ${res.status}`, acao: data.acao };
+    }
+    const blob = await res.blob();
+    return { ok: true, url: URL.createObjectURL(blob), mime: blob.type };
+}
+
+/** Envia anexo (dentro da janela de 24h; o backend trava tamanho e tipo). */
+export const enviarAnexo = (numero: string, p: { base64: string; nomeArquivo: string; mime: string; legenda?: string }) =>
+    req<{ mensagem: MensagemInbox; legendaIgnorada?: boolean; copiaGuardada?: boolean; acao?: string; janelaFechada?: boolean; emConducaoPor?: string }>(
+        `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/anexo`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
+
 // ─── F3: config do atendimento + ações de conversa ──────────────────────────
 // O escopo (quem vê o quê, quem grava) é do BACKEND; aqui é só a chamada.
 

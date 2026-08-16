@@ -20,6 +20,7 @@
 
 import { Router } from 'express';
 import admin from 'firebase-admin';
+import { Storage } from '@google-cloud/storage';
 import { requireAdmin, requireAuth } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import {
@@ -29,7 +30,9 @@ import {
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
+    subirMidiaWhatsapp, enviarMidiaWhatsapp,
 } from './whatsapp-cloud.js';
+import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar,
@@ -42,6 +45,11 @@ import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
+// Mesmo bucket do webhook (que baixa a mídia recebida) — segunda régua de
+// caminho divergiria e o anexo sumiria de um dos lados.
+const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
+const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
+const storage = new Storage();
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -877,6 +885,171 @@ router.post('/conversas/:numero/vincular', requireAuth, async (req, res) => {
         }, { merge: true });
         return res.json({ ok: true });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── 📎 MÍDIA: abrir a recebida e enviar anexo ──────────────────────────────
+// Era a lacuna 🔴 BLOQUEANTE do de-para com a Ultra Fox: o cliente manda o
+// comprovante e o atendente via um rótulo que não abria.
+//
+// POR QUE STREAM E NÃO URL ASSINADA: o arquivo é conversa de cliente. Link
+// assinado é compartilhável POR QUEM PEGAR — sai do controle do app. Aqui o
+// acesso passa pela MESMA régua de visibilidade de fila da conversa (quem
+// não vê a conversa não abre o anexo dela), e o custo é banda, não risco.
+
+/** A conversa é visível pra este usuário? Régua única (a mesma do GET). */
+async function podeVerConversa(db, user, numero) {
+    const { filas } = await perfilAtendimento(db, user);
+    const conv = await db.collection('whatsapp_conversas').doc(numero).get();
+    return { ok: conversaVisivel(filas, conv.data()?.fila || null), conversa: conv.data() || {} };
+}
+
+router.get('/conversas/:numero/midia/:mensagemId', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const mensagemId = String(req.params.mensagemId || '').trim();
+        if (!numero || !mensagemId) return res.status(400).json({ ok: false, error: 'conversa ou mensagem inválida' });
+
+        const db = getDb();
+        const { ok: visivel } = await podeVerConversa(db, req.user, numero);
+        if (!visivel) return res.status(403).json({ ok: false, error: 'Esta conversa é de uma fila que você não atende.' });
+
+        const msg = (await db.collection('whatsapp_mensagens').doc(mensagemId).get()).data();
+        // O anexo é da conversa que o caminho diz — id de outra conversa não
+        // vira porta lateral pro anexo de um cliente que este atendente não vê.
+        if (!msg || msg.conversaId !== numero) return res.status(404).json({ ok: false, error: 'anexo não encontrado nesta conversa' });
+        if (!msg.midia) return res.status(404).json({ ok: false, error: 'esta mensagem não tem anexo' });
+        if (!msg.midia.storagePath) {
+            // Ausência com CAUSA: "não baixado" e "falhou ao baixar" são
+            // problemas diferentes, com ações diferentes.
+            return res.status(409).json({
+                ok: false,
+                error: msg.midia.downloadErro
+                    ? `O anexo não foi baixado da Meta: ${msg.midia.downloadErro}`
+                    : 'O anexo ainda não foi baixado da Meta.',
+                acao: msg.midia.downloadErro
+                    ? 'A mídia expira na Meta em alguns dias — se o erro persistir, peça o arquivo de novo ao cliente.'
+                    : 'Aguarde alguns segundos e recarregue a conversa.',
+            });
+        }
+
+        const arquivo = storage.bucket(STORAGE_BUCKET).file(msg.midia.storagePath);
+        const [existe] = await arquivo.exists();
+        if (!existe) return res.status(410).json({ ok: false, error: 'O arquivo não está mais no armazenamento.' });
+
+        const nome = msg.midia.nomeArquivo || 'anexo';
+        res.setHeader('Content-Type', msg.midia.mime || 'application/octet-stream');
+        // inline: imagem e PDF abrem na tela; o navegador ainda deixa baixar.
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nome)}"`);
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        arquivo.createReadStream()
+            .on('error', (e) => {
+                console.error('[whatsapp/midia] stream falhou:', e.message);
+                if (!res.headersSent) res.status(500).json({ ok: false, error: 'falha ao ler o anexo' });
+                else res.end();
+            })
+            .pipe(res);
+        return undefined;
+    } catch (e) {
+        console.error('[whatsapp/midia]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Enviar ANEXO na conversa (dentro da janela de 24h, como o texto livre).
+router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const p = req.body || {};
+        const base64 = String(p.base64 || '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        if (!base64) return res.status(400).json({ ok: false, error: 'Escolha o arquivo antes de enviar.' });
+
+        const db = getDb();
+        const { ok: visivel, conversa } = await podeVerConversa(db, req.user, numero);
+        if (!visivel) return res.status(403).json({ ok: false, error: 'Esta conversa é de uma fila que você não atende.' });
+
+        // Janela de 24h: anexo é mensagem livre — fora dela a Meta recusa.
+        const ate = Date.parse(conversa.janela24hAte || '');
+        if (!Number.isFinite(ate) || ate <= Date.now()) {
+            return res.status(422).json({
+                ok: false,
+                error: 'A janela de 24h desta conversa está fechada — anexo não sai.',
+                acao: 'Aguarde o cliente escrever (isso reabre a janela) ou envie por template aprovado.',
+                janelaFechada: true,
+            });
+        }
+        // Guarda de condução: a MESMA do texto livre (duas vozes confundem).
+        const dono = conversa.atribuidoA || null;
+        const eu = req.user?.email || null;
+        if (dono && dono !== eu) {
+            return res.status(409).json({
+                ok: false,
+                error: `Esta conversa está em condução por ${dono}.`,
+                acao: 'Assuma a conversa (🙋) antes de enviar o anexo.',
+                emConducaoPor: dono,
+            });
+        }
+
+        const tamanhoBytes = Buffer.byteLength(base64, 'base64');
+        const v = validarAnexo({ mime: p.mime, tamanhoBytes, nomeArquivo: p.nomeArquivo });
+        if (!v.ok) return res.status(422).json({ ok: false, error: v.erro, acao: v.acao });
+        const legenda = String(p.legenda || '').trim();
+
+        let mediaId;
+        try {
+            mediaId = await subirMidiaWhatsapp({ base64, nomeArquivo: v.nome, mime: p.mime });
+        } catch (e) {
+            return res.status(422).json({ ok: false, error: e.message, acao: 'Confira o arquivo e tente de novo.' });
+        }
+        const envio = await enviarMidiaWhatsapp({ para: numero, tipo: v.tipo, mediaId, nomeArquivo: v.nome, legenda });
+        if (!envio.ok) {
+            const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
+            return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
+        }
+
+        // Cópia do ENVIADO no Storage: sem ela o histórico mostraria um anexo
+        // que ninguém abre depois (a mídia expira na Meta) — a mesma falta
+        // que este PR veio consertar, só que do lado da saída.
+        const agora = new Date().toISOString();
+        const caminho = `whatsapp/${numero}/${envio.messageId}_${v.nome}`;
+        let storagePath = null;
+        try {
+            await storage.bucket(STORAGE_BUCKET).file(caminho).save(Buffer.from(base64, 'base64'), {
+                contentType: p.mime || 'application/octet-stream', resumable: false,
+            });
+            storagePath = caminho;
+        } catch (e) {
+            console.warn('[whatsapp/anexo] enviado, mas a cópia no Storage falhou:', e.message);
+        }
+
+        const midia = {
+            nomeArquivo: v.nome, mime: p.mime || null, tipo: v.tipo,
+            tamanhoBytes, storagePath, metaMediaId: mediaId,
+        };
+        const msg = {
+            conversaId: numero, direcao: 'saida', tipo: v.tipo,
+            texto: legenda || null, midia, timestamp: agora,
+            statusEntrega: 'enviado', enviadoPor: eu,
+        };
+        await db.collection('whatsapp_mensagens').doc(envio.messageId).set(msg, { merge: true });
+        await db.collection('whatsapp_conversas').doc(numero).set({
+            ultimaMensagem: { resumo: resumoDoAnexo(v.tipo, v.nome, legenda), direcao: 'saida', em: agora },
+            atualizadoEm: agora,
+            ...(dono ? {} : { atribuidoA: eu }),   // enviar anexo também é assumir
+        }, { merge: true });
+
+        return res.json({
+            ok: true,
+            // A legenda descartada é DITA — texto que some sem aviso faz a
+            // pessoa achar que o cliente leu o recado.
+            legendaIgnorada: legendaSeraIgnorada(v.tipo, legenda),
+            copiaGuardada: Boolean(storagePath),
+            mensagem: { id: envio.messageId, ...msg, midia: { ...midia, baixada: Boolean(storagePath) }, erroEntrega: null },
+        });
+    } catch (e) {
+        console.error('[whatsapp/anexo]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 // ─── CLIENTE 360 da conversa (pós-vínculo) ──────────────────────────────────
