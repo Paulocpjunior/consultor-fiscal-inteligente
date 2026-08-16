@@ -53,3 +53,14 @@ export function subirPdf(
     p: { pdfBase64: string; nomeArquivo?: string | null },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<string>;
+
+// ─── Assinatura da WABA (a 2ª amarração do webhook) ─────────────────────────
+export function listarAppsAssinadosNaWaba(deps?: Record<string, unknown>): Promise<{
+    ok: boolean; wabaId?: string; erro?: string;
+    apps?: { id: string | null; nome: string | null }[];
+}>;
+export function assinarWaba(deps?: Record<string, unknown>): Promise<{
+    ok: boolean; wabaId?: string; erro?: string; acao?: string;
+}>;
+export function interpretarAppsAssinados(corpo: unknown): { id: string | null; nome: string | null }[];
+export const GRAPH_BASE: string;

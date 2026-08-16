@@ -202,6 +202,68 @@ export function lerTemplateDaMeta(t) {
     };
 }
 
+/** Deriva a WABA a partir do número (mesma lógica do listarTemplatesAprovados). */
+async function descobrirWabaId(cfg, doFetch) {
+    if (cfg.wabaId) return { ok: true, wabaId: cfg.wabaId };
+    const r = await doFetch(
+        `${GRAPH_BASE}/${cfg.phoneNumberId}?fields=whatsapp_business_account`,
+        { headers: { Authorization: `Bearer ${cfg.token}` } },
+    );
+    const c = await r.json().catch(() => ({}));
+    const wabaId = c?.whatsapp_business_account?.id || '';
+    if (!wabaId) return { ok: false, erro: c?.error?.message || `HTTP ${r.status}` };
+    return { ok: true, wabaId };
+}
+
+/**
+ * ═══ ASSINATURA DA WABA — a segunda amarração do webhook ════════════════════
+ *
+ * Configurar Callback URL + verify token no APP resolve o canal; mas evento
+ * REAL só chega se o app estiver ASSINADO na WABA (subscribed_apps). O teste
+ * do painel da Meta NÃO passa por essa amarração — foi exatamente assim que o
+ * teste chegou e a mensagem real não (16/08). WABA conectada por plataforma
+ * de atendimento costuma ter SÓ o app dela assinado.
+ */
+export async function listarAppsAssinadosNaWaba(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) return { ok: false, erro: 'Canal não configurado.' };
+    const w = await descobrirWabaId(cfg, doFetch);
+    if (!w.ok) return { ok: false, erro: `Não achei a WABA: ${w.erro}` };
+    const r = await doFetch(`${GRAPH_BASE}/${w.wabaId}/subscribed_apps`, {
+        headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}` };
+    return { ok: true, wabaId: w.wabaId, apps: interpretarAppsAssinados(corpo) };
+}
+
+/** Assina O NOSSO app (o dono do token) na WABA — é isto que liga o fluxo real. */
+export async function assinarWaba(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) return { ok: false, erro: 'Canal não configurado.' };
+    const w = await descobrirWabaId(cfg, doFetch);
+    if (!w.ok) return { ok: false, erro: `Não achei a WABA: ${w.erro}` };
+    const r = await doFetch(`${GRAPH_BASE}/${w.wabaId}/subscribed_apps`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok || corpo?.success !== true) {
+        return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}`, acao: 'O token precisa ter a permissão whatsapp_business_management.' };
+    }
+    return { ok: true, wabaId: w.wabaId };
+}
+
+/** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */
+export function interpretarAppsAssinados(corpo) {
+    return (Array.isArray(corpo?.data) ? corpo.data : []).map((d) => ({
+        id: d?.whatsapp_business_api_data?.id || null,
+        nome: d?.whatsapp_business_api_data?.name || null,
+    }));
+}
+
 /**
  * Sobe o PDF pro media endpoint e devolve o media id. O PDF nunca vai por
  * link público — sobe direto pra Meta, mesmo desenho do anexo do Graph.
