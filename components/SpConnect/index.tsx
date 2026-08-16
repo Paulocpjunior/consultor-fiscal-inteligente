@@ -27,6 +27,10 @@ import {
     atingiuLimite, LIMITE_SEGUNDOS,
 } from '../../services/gravacaoAudio';
 import {
+    avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, textoDaPermissao,
+} from '../../services/notificacaoConnect';
+import { destravarSom, somDestravado, tocarAviso } from '../../services/somAviso';
+import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
@@ -602,6 +606,78 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             .catch(() => setBuildInfo(''));
     }, []);
 
+    // ── 🔔 AVISO DE MENSAGEM NOVA (a última bloqueante do corte) ────────────
+    // Paulo, 16/08: "quanto mais notificação melhor, evita desculpa que o
+    // colaborador não viu". São TRÊS camadas: som, pop-up do navegador e o
+    // título da aba com contador (o pop-up some, o título fica).
+    const [permissaoAviso, setPermissaoAviso] = useState(() => estadoDaPermissao());
+    const [somOk, setSomOk] = useState(false);
+    const avisadosRef = useRef<Record<string, string>>({});
+    const primeiraCargaRef = useRef(true);
+
+    // O navegador só deixa tocar som depois de um GESTO. Destrava no
+    // primeiro clique/tecla — sem isso o som seria engolido em silêncio e o
+    // atendente acharia que o app avisa quando não avisa.
+    useEffect(() => {
+        const destravar = async () => { setSomOk(await destravarSom()); };
+        window.addEventListener('pointerdown', destravar, { once: true });
+        window.addEventListener('keydown', destravar, { once: true });
+        return () => {
+            window.removeEventListener('pointerdown', destravar);
+            window.removeEventListener('keydown', destravar);
+        };
+    }, []);
+
+    const pedirPermissaoAviso = async () => {
+        if (!('Notification' in window)) { setPermissaoAviso('sem-suporte'); return; }
+        setSomOk(await destravarSom());        // o clique daqui também destrava o som
+        try {
+            await Notification.requestPermission();
+        } finally {
+            setPermissaoAviso(estadoDaPermissao());
+        }
+    };
+
+    // Dispara os avisos quando a lista muda (a lista já vem filtrada pelas
+    // filas da pessoa — o recorte é do backend).
+    useEffect(() => {
+        const { avisos, novoEstado } = avisosDeNovasMensagens({
+            conversas: conversas.map((c) => ({ numero: c.numero, nome: c.nome, naoLidas: c.naoLidas, ultimaMensagem: c.ultimaMensagem })),
+            jaAvisados: avisadosRef.current,
+            abertaNumero: selRef.current?.numero || null,
+            primeiraCarga: primeiraCargaRef.current,
+            nomeExibicao: (c) => nomeExibicao({ nome: c.nome, numero: c.numero }),
+        });
+        avisadosRef.current = novoEstado;
+        if (primeiraCargaRef.current) { primeiraCargaRef.current = false; return; }
+        if (!avisos.length) return;
+
+        tocarAviso();
+        if (permissaoAviso === 'concedida') {
+            for (const a of avisos.slice(0, 3)) {   // 3 pop-ups bastam; o resto está na lista
+                try {
+                    const n = new Notification(a.titulo, {
+                        body: a.corpo, icon: '/connect-icon-192.png',
+                        tag: `spconnect-${a.numero}`,   // mesma conversa ATUALIZA, não empilha
+                    });
+                    n.onclick = () => {
+                        window.focus();
+                        const alvo = conversas.find((c) => c.numero === a.numero);
+                        if (alvo) abrir(alvo);
+                        n.close();
+                    };
+                } catch { /* o pop-up é conforto; o som e o título já avisaram */ }
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [conversas]);
+
+    // Título da aba com o contador — sobrevive ao pop-up que some.
+    const naoLidasTotalAviso = conversas.reduce((s, c) => s + (c.naoLidas || 0), 0);
+    useEffect(() => {
+        document.title = tituloComContador(naoLidasTotalAviso, 'SP Connect — Atendimento WhatsApp');
+    }, [naoLidasTotalAviso]);
+
     const agora = new Date();
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
     const conduzidaPorOutro = Boolean(sel?.atribuidoA && sel.atribuidoA !== meuEmail);
@@ -1173,6 +1249,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             placeholder="🔎 Nome, número ou mensagem…"
                             className="w-full px-2.5 py-1.5 text-[12px] rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
                         />
+                        {/* 🔔 Avisos: a barra só aparece quando FALTA alguma
+                            camada — com tudo ligado, nada de ruído fixo. */}
+                        {(permissaoAviso !== 'concedida' || !somOk) && (
+                            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5">
+                                <p className="text-[10px] text-amber-800 dark:text-amber-300 leading-snug">
+                                    {textoDaPermissao(permissaoAviso).texto}
+                                    {!somOk && permissaoAviso === 'concedida' && ' O som liga no primeiro clique nesta aba.'}
+                                </p>
+                                {textoDaPermissao(permissaoAviso).acao && (
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                                        {textoDaPermissao(permissaoAviso).acao}
+                                    </p>
+                                )}
+                                {permissaoAviso === 'nao-pedida' && (
+                                    <button onClick={pedirPermissaoAviso}
+                                        className="mt-1 text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                        🔔 Ligar avisos
+                                    </button>
+                                )}
+                            </div>
+                        )}
                         <div className="flex gap-1.5 flex-wrap">
                             {chip('todas', `Todas · ${conversas.length}`)}
                             {chip('nao-lidas', `Não lidas · ${naoLidasTotal}`)}

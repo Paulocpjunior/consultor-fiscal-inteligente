@@ -77,7 +77,8 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | **Avaliação do atendimento (nota 1-5)** | **[?]** | pesquisa pós-encerramento + painel 📊 (média, distribuição, últimas) | 🆕 (chave nasce desligada) |
 | Etiquetas/tags na conversa | **[?]** | — | 🔴 depende do §7 |
 | Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
-| Notificação sonora / push de mensagem nova | ✔ **som + pop-up + notificação no celular instalado** **[Paulo, 16/08]** | lista atualiza sozinha a cada 30s, **sem som e sem push** | 🔴 **BLOQUEANTE CONFIRMADA** — Paulo: *"quanto mais notificação melhor, evita desculpa que o colaborador não viu"*. Em construção |
+| Notificação sonora / pop-up de mensagem nova | ✔ **[Paulo, 16/08]** | **som** (sintetizado, sem arquivo externo), **pop-up do navegador** (clique abre a conversa) e **contador no título da aba** — a mesma mensagem nunca apita duas vezes, a conversa aberta não apita e a 1ª carga aprende sem apitar | ✅ **16/08** |
+| Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | falta — exige a chave Web Push do Firebase | 🔴 **última bloqueante** |
 | Presença (online/ausente) do atendente | **[?]** | — | 🟡 |
 
 ## 4. Contatos e cliente
