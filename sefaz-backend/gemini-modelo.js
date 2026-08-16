@@ -273,24 +273,130 @@ export function vereditoDaFamilia(sondas, listada, familia = FAMILIA_ALVO_GEMINI
 }
 
 /**
- * 🚨 O ROTEADOR Pro×Flash está fazendo alguma coisa?
+ * O ROTEADOR Pro×Flash está fazendo alguma coisa?
  *
- * O print de produção mostrou **`gemini-flash-latest` nas DUAS linhas**: o env
- * `GEMINI_MODEL_PRO` do Cloud Run está apontando para o alias do FLASH. Com os
- * dois iguais, o roteador vira ENFEITE — anexo, prompt longo e parecer jurídico
- * (o caso mais analítico do app) caem no modelo barato, e nada na tela dizia
- * isso. O código já trazia esse risco escrito num comentário desde sempre; o
- * que faltava era o app CONFERIR.
+ * O print de produção mostrou **`gemini-flash-latest` nas DUAS linhas**: com os
+ * dois iguais, o roteador vira ENFEITE e tudo — anexo, prompt longo, parecer
+ * jurídico — sai no mesmo degrau.
+ *
+ * ⚠️ **ISTO DEIXOU DE SER ALARME EM 16/08, POR DECISÃO DO PAULO**: *"não vejo
+ * problema em continuar no Gemini Flash desde que seja a última versão"*. O
+ * fato continua na tela (o roteador sem efeito é informação que quem opera
+ * precisa ter), mas em NEUTRO — pintar de vermelho uma escolha que o dono fez
+ * é o alarme sem ação que ensina a equipe a ignorar os alarmes que importam.
+ *
+ * A vigilância migrou para a condição que ELE pôs: `conferirAtualizacao` acusa
+ * quando o modelo que está respondendo ficou atrás do mais novo da conta.
  */
 export function conferirRoteador({ pro, flash }) {
     const p = normalizarNomeModelo(pro?.modelo || pro);
     const f = normalizarNomeModelo(flash?.modelo || flash);
-    if (!p || !f) return { ok: true, colidiu: false, aviso: null };
-    if (p !== f) return { ok: true, colidiu: false, aviso: null };
+    if (!p || !f) return { ok: true, colidiu: false, cor: 'neutro', aviso: null };
+    if (p !== f) return { ok: true, colidiu: false, cor: 'ok', aviso: null };
     return {
-        ok: false, colidiu: true,
-        aviso: `PRO e FLASH apontam para o MESMO modelo (${p}) — o roteador Pro×Flash está sem efeito. `
-            + 'Anexo, prompt longo e parecer jurídico caem no modelo barato. '
-            + 'Corrija o env GEMINI_MODEL_PRO no Cloud Run (ou remova os dois envs para o app resolver sozinho).',
+        // `ok: true` de propósito — não é defeito, é a configuração escolhida.
+        ok: true, colidiu: true, cor: 'neutro',
+        aviso: `Os dois degraus usam o mesmo modelo (${p}) — o roteador Pro×Flash está sem efeito, `
+            + 'e tudo (inclusive anexo, prompt longo e parecer jurídico) sai por ele. '
+            + 'Decisão registrada em 16/08: seguir no Flash, desde que na última versão — '
+            + 'é isso que o app vigia agora. Para voltar a ter dois degraus, remova os envs '
+            + 'GEMINI_MODEL_PRO / GEMINI_MODEL_FLASH no Cloud Run e o app resolve sozinho.',
+    };
+}
+
+/** 'flash' · 'pro' · null quando o nome não diz a linha. */
+export function linhaDoModelo(nome) {
+    const n = normalizarNomeModelo(nome).toLowerCase();
+    if (!n) return null;
+    if (n.includes('flash')) return 'flash';
+    if (n.includes('pro')) return 'pro';
+    return null;
+}
+
+/**
+ * 🚨 A CONDIÇÃO DO PAULO VIROU A RÉGUA: *"desde que seja a última versão"*.
+ *
+ * Enquanto o alarme era "PRO e FLASH colidiram", ele acusava uma ESCOLHA. O que
+ * de fato pode envelhecer sem ninguém ver é outra coisa: o modelo que está
+ * respondendo ficar para trás do que a conta já oferece — e isso acontece
+ * SOZINHO, no dia em que a Google publica a versão seguinte.
+ *
+ * Compara pelo que a SONDA respondeu (`modelVersion`), nunca pelo nome que o
+ * app pediu: alias não tem versão no nome, e é justamente o alias que promove
+ * sozinho. Quem responde é o resultado.
+ *
+ * TRÊS RECUSAS:
+ * - Sem a listagem da conta ⇒ `indeterminado`, NUNCA "atrasado". Rede que
+ *   piscou não é veredito, e "você está atrasado" faria alguém pinar à mão um
+ *   modelo que já estava certo.
+ * - Sonda que não respondeu ⇒ fora da conta, nomeada.
+ * - Modelo cuja linha não dá para ler pelo nome ⇒ fora, nomeado. Julgar sem
+ *   saber a linha compararia Flash com Pro.
+ */
+export function conferirAtualizacao(sondas, modelos, familia = FAMILIA_ALVO_GEMINI) {
+    const temLista = Array.isArray(modelos) && modelos.length > 0;
+    if (!temLista) {
+        return {
+            situacao: 'indeterminado', cor: 'neutro', linhas: [],
+            texto: 'Não foi possível listar os modelos da conta — não dá para afirmar se estamos na última versão. '
+                + 'Reabra o painel para conferir de novo.',
+        };
+    }
+
+    const vistos = new Map();
+    for (const s of sondas || []) {
+        const versaoQueRespondeu = s?.modelVersion;
+        if (!versaoQueRespondeu) continue;
+        const linha = linhaDoModelo(versaoQueRespondeu) || linhaDoModelo(s?.modelo);
+        if (!linha || vistos.has(linha)) continue;
+
+        const maisNovo = escolherModeloDaFamilia(modelos, { familia, tipo: linha });
+        const vAtual = versaoDoModelo(versaoQueRespondeu);
+        const vNovo = maisNovo.versao;
+        // `== null` PRIMEIRO: `Number(null)` é 0 e passaria por versão válida —
+        // é o mesmo tropeço que mordeu três vezes num só dia em 16/08.
+        if (vAtual == null || vNovo == null) {
+            vistos.set(linha, { linha, situacao: 'indeterminado', atual: versaoQueRespondeu, maisNovo: maisNovo.modelo });
+            continue;
+        }
+        vistos.set(linha, {
+            linha,
+            situacao: vAtual >= vNovo ? 'atual' : 'atrasado',
+            atual: versaoQueRespondeu,
+            maisNovo: maisNovo.modelo,
+        });
+    }
+
+    const linhas = [...vistos.values()];
+    if (linhas.length === 0) {
+        return {
+            situacao: 'indeterminado', cor: 'neutro', linhas,
+            texto: 'Nenhuma sonda respondeu — não dá para afirmar em que versão a conta está.',
+        };
+    }
+
+    const atrasadas = linhas.filter((l) => l.situacao === 'atrasado');
+    if (atrasadas.length > 0) {
+        return {
+            situacao: 'atrasado', cor: 'erro', linhas,
+            texto: atrasadas
+                .map((l) => `A linha ${l.linha.toUpperCase()} está ATRÁS: responde em ${l.atual}, `
+                    + `e a conta já lista ${l.maisNovo}.`)
+                .join(' ')
+                + ' Remova o env correspondente no Cloud Run (GEMINI_MODEL_PRO / GEMINI_MODEL_FLASH) '
+                + 'para o app pinar sozinho no mais novo.',
+        };
+    }
+    if (linhas.every((l) => l.situacao === 'atual')) {
+        return {
+            situacao: 'atual', cor: 'ok', linhas,
+            texto: `Na última versão: ${linhas.map((l) => `${l.linha.toUpperCase()} em ${l.atual}`).join(' · ')} — `
+                + 'nada mais novo na conta.',
+        };
+    }
+    return {
+        situacao: 'indeterminado', cor: 'neutro', linhas,
+        texto: 'Não deu para comparar todas as linhas com a listagem da conta: '
+            + linhas.map((l) => `${l.linha.toUpperCase()} responde em ${l.atual}`).join(' · ') + '.',
     };
 }

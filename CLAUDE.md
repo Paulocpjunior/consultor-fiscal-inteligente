@@ -396,9 +396,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   apontando para o alias do FLASH**. Anexo, prompt longo e **parecer jurídico**
   — o caso mais analítico do app — caem no modelo barato. O risco estava escrito
   num comentário do `server.js` desde sempre e **nada CONFERIA**; agora
-  `conferirRoteador` acusa em vermelho e diz qual env corrigir. **AÇÃO DO
-  PAULO**: corrigir `GEMINI_MODEL_PRO` no Cloud Run (ou remover os dois envs e
-  deixar o app resolver sozinho).
+  `conferirRoteador` diz qual env corrigir.
+  ✅ **DECIDIDO EM 16/08 — E A DECISÃO TROCOU O ALARME DE LUGAR** (Paulo: *"não
+  vejo problema em continuar no Gemini Flash desde que seja a última versão"*).
+  Fica no Flash nos dois degraus: **não é defeito, é escolha**, e pintar de
+  vermelho uma configuração que o dono escolheu é o alarme sem ação que ensina a
+  equipe a ignorar os alarmes que importam. `conferirRoteador` virou NEUTRO e
+  segue DIZENDO o fato (quem opera precisa saber que tudo — anexo, prompt longo,
+  parecer jurídico — sai pelo mesmo degrau) com o caminho de volta na frase.
+  ⚠️ **UM FATO QUE ELE PODE ESTAR JUNTANDO E SÃO DOIS EIXOS**: Pro e Flash não
+  são versões um do outro, são **degraus de preço/capacidade** — a Flash 3.7 é
+  mais NOVA que a Pro 3.1 em número e ainda assim é a mais barata. Dito uma vez
+  e a decisão mantida; não relitigar.
+  🚨 **A VIGILÂNCIA MIGROU PARA A CONDIÇÃO DELE**: `conferirAtualizacao(sondas,
+  modelos)` acusa **em vermelho** quando o modelo que está RESPONDENDO ficou
+  atrás do mais novo que a conta lista — que é a única coisa aqui que acontece
+  SOZINHA, no dia em que a Google publicar a versão seguinte. Compara pelo
+  `modelVersion` da sonda (alias não tem versão no nome, e é justo o alias que
+  promove sozinho), julga **cada linha separada** (senão o Pro 3.1 apareceria
+  atrasado por causa do Flash) e **sem a listagem devolve `indeterminado`,
+  nunca "atrasado"** — afirmar atraso por rede que piscou faria alguém pinar à
+  mão um modelo que já estava certo. `-lite` continua fora da vaga do Flash:
+  um lite mais novo mandaria trocar para um modelo mais FRACO.
 - **O GEMINI SE PINA PERGUNTANDO, NUNCA CRAVANDO O ID** (Paulo, 15/08: *"nosso
   motor de busca é o Gemini, usando minha conta paga; ele teve sua versão
   atualizada para 3.7, nós devemos nos atualizar também"* → e, quando respondi
@@ -1928,13 +1947,14 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
 
 0. **CLOUD RUN — três envs, e a primeira é a única que muda imposto hoje**
    (16/08, confirmadas ABERTAS pelo print do ⚙️ Config Admin dele).
-   a) 🔴 **`GEMINI_MODEL_PRO` apontando para o alias do FLASH** — o painel acusa
-      em vermelho (`conferirRoteador`) e a linha continua acesa, ou seja o env
-      **não foi mexido**. Enquanto isso, anexo, prompt longo e **parecer
-      jurídico** caem no modelo barato. Correção recomendada é REMOVER OS DOIS
-      (`--remove-env-vars GEMINI_MODEL_PRO,GEMINI_MODEL_FLASH`) e deixar o app
-      resolver pela conta — pinar à mão devolve o nome cravado que a resolução
-      automática existe para evitar.
+   a) ✅ **RESOLVIDO 16/08, e não por comando: por DECISÃO.** O
+      `GEMINI_MODEL_PRO` aponta para o alias do Flash, e Paulo respondeu *"não
+      vejo problema em continuar no Gemini Flash desde que seja a última
+      versão"*. **SAIU DA FILA DELE** — não há nada a fazer no Cloud Run por
+      causa disto. O app parou de acusar em vermelho e passou a vigiar a
+      condição DELE (ver `conferirAtualizacao` acima). Se um dia quiser os dois
+      degraus de volta, o caminho é remover os dois envs
+      (`--remove-env-vars GEMINI_MODEL_PRO,GEMINI_MODEL_FLASH`).
    b) `SISTEMA_DEV_EMAILS=p.c.pereira@me.com` (aberta desde 31/07) — restringe
       o painel Sistema→Banco além de admin.
    c) Rotação do `sefaz-cron-secret` (higiene: o valor vazou 2× em colas de

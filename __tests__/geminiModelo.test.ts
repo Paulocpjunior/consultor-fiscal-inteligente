@@ -226,18 +226,23 @@ describe('🚨 quem responde "estamos no 3.7?" é a SONDA, não a listagem', () 
     });
 });
 
-describe('🚨 o roteador Pro×Flash vira ENFEITE quando os dois são iguais', () => {
+describe('o roteador Pro×Flash vira ENFEITE quando os dois são iguais', () => {
     const { conferirRoteador } = require('../sefaz-backend/gemini-modelo.js');
 
-    it('o caso REAL do print: GEMINI_MODEL_PRO apontando pro alias do FLASH', () => {
-        // Com os dois iguais, anexo, prompt longo e parecer jurídico — o caso
-        // mais analítico do app — caem no modelo barato, e nada dizia isso.
+    it('🚨 o fato aparece, mas NÃO é alarme — é a escolha do dono', () => {
+        // Paulo, 16/08: *"não vejo problema em continuar no Gemini Flash desde
+        // que seja a última versão"*. Pintar de vermelho uma configuração que
+        // ele escolheu é alarme sem ação — e alarme sem ação é o que ensina a
+        // equipe a ignorar os alarmes que importam.
         const r = conferirRoteador({ pro: { modelo: 'gemini-flash-latest' }, flash: { modelo: 'gemini-flash-latest' } });
         expect(r.colidiu).toBe(true);
+        expect(r.ok).toBe(true);            // não é defeito
+        expect(r.cor).toBe('neutro');       // e não é vermelho
         expect(r.aviso).toMatch(/roteador Pro×Flash está sem efeito/);
-        expect(r.aviso).toMatch(/parecer jurídico caem no modelo barato/);
-        // E diz ONDE se corrige.
-        expect(r.aviso).toMatch(/GEMINI_MODEL_PRO no Cloud Run/);
+        // O fato continua DITO: quem opera precisa saber que tudo sai por ele.
+        expect(r.aviso).toMatch(/parecer jurídico/);
+        // E o caminho de volta continua na frase.
+        expect(r.aviso).toMatch(/GEMINI_MODEL_PRO/);
     });
 
     it('modelos diferentes não acusam nada', () => {
@@ -250,6 +255,94 @@ describe('🚨 o roteador Pro×Flash vira ENFEITE quando os dois são iguais', (
     });
 });
 
+describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a última versão"', () => {
+    const { conferirAtualizacao, linhaDoModelo } = require('../sefaz-backend/gemini-modelo.js');
+    const LISTA = [
+        { name: 'models/gemini-3.7-flash' },
+        { name: 'models/gemini-3.5-flash-lite' },
+        { name: 'models/gemini-3.1-pro' },
+    ];
+
+    it('Flash na 3.7 com a conta listando 3.7 = ATUAL, mesmo com o Pro atrás', () => {
+        // É o caso do Paulo hoje: os dois degraus no Flash 3.7. A condição dele
+        // está cumprida, e a tela tem que DIZER isso — não acusar.
+        const r = conferirAtualizacao(
+            [{ modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash' },
+             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash' }],
+            LISTA,
+        );
+        expect(r.situacao).toBe('atual');
+        expect(r.cor).toBe('ok');
+        expect(r.linhas).toHaveLength(1); // as duas sondas são a MESMA linha
+    });
+
+    it('🚨 ficar para trás é que é VERMELHO — e acontece sozinho', () => {
+        // No dia em que a Google publicar a 3.9, a conta lista e o env pinado
+        // continua no 3.7. Ninguém mexeu em nada e o app envelheceu.
+        const r = conferirAtualizacao(
+            [{ modelo: 'gemini-3.7-flash', modelVersion: 'gemini-3.7-flash' }],
+            [...LISTA, { name: 'models/gemini-3.9-flash' }],
+        );
+        expect(r.situacao).toBe('atrasado');
+        expect(r.cor).toBe('erro');
+        expect(r.texto).toMatch(/FLASH está ATRÁS/);
+        expect(r.texto).toMatch(/gemini-3\.9-flash/);
+        expect(r.texto).toMatch(/GEMINI_MODEL_PRO \/ GEMINI_MODEL_FLASH/);
+    });
+
+    it('as linhas são julgadas SEPARADAS — Pro 3.1 não é "atrasado" por causa do Flash', () => {
+        // As linhas não andam no mesmo número (print da conta dele, 16/08).
+        const r = conferirAtualizacao(
+            [{ modelo: 'gemini-pro-latest', modelVersion: 'gemini-3.1-pro' },
+             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash' }],
+            LISTA,
+        );
+        expect(r.situacao).toBe('atual');
+        expect(r.linhas.map((l: any) => l.linha).sort()).toEqual(['flash', 'pro']);
+    });
+
+    it('🚨 sem a listagem NÃO diz "atrasado" — rede que piscou não é veredito', () => {
+        // Afirmar atraso por falha de rede faria alguém pinar à mão um modelo
+        // que já estava certo.
+        for (const lista of [null, [], undefined]) {
+            const r = conferirAtualizacao([{ modelVersion: 'gemini-3.7-flash' }], lista as any);
+            expect(r.situacao).toBe('indeterminado');
+            expect(r.cor).toBe('neutro');
+        }
+    });
+
+    it('sonda que não respondeu fica de fora, e sem sonda nenhuma é indeterminado', () => {
+        const r = conferirAtualizacao([{ modelo: 'gemini-flash-latest', modelVersion: null }], LISTA);
+        expect(r.situacao).toBe('indeterminado');
+        expect(r.linhas).toHaveLength(0);
+    });
+
+    it('🐛 `-lite` não ocupa a vaga do Flash — senão o piso seria o degrau errado', () => {
+        // Se o lite entrasse na comparação, um lite 4.0 faria o Flash 3.7
+        // aparecer como atrasado e mandaria trocar para um modelo mais fraco.
+        const r = conferirAtualizacao(
+            [{ modelVersion: 'gemini-3.7-flash' }],
+            [...LISTA, { name: 'models/gemini-4.0-flash-lite' }],
+        );
+        expect(r.situacao).toBe('atual');
+    });
+
+    it('modelo que não gera conteúdo não vira o "mais novo"', () => {
+        const r = conferirAtualizacao(
+            [{ modelVersion: 'gemini-3.7-flash' }],
+            [...LISTA, { name: 'models/gemini-9.9-flash', supportedActions: ['embedContent'] }],
+        );
+        expect(r.situacao).toBe('atual');
+    });
+
+    it('a linha sai do nome, e nome sem linha não é julgado', () => {
+        expect(linhaDoModelo('gemini-3.7-flash')).toBe('flash');
+        expect(linhaDoModelo('models/gemini-3.1-pro')).toBe('pro');
+        expect(linhaDoModelo('text-embedding-004')).toBeNull();
+        expect(linhaDoModelo(null)).toBeNull();
+    });
+});
+
 describe('a rota e a tela levam o veredito da sonda', () => {
     const { readFileSync: rf } = require('fs');
     const { join: jn } = require('path');
@@ -259,10 +352,27 @@ describe('a rota e a tela levam o veredito da sonda', () => {
         expect(s).toMatch(/conferirRoteador\(/);
         expect(s).toMatch(/listadaNaConta/);
     });
+    it('🚨 a rota leva a conferência de ATRASO — régua sem leitor não é entrega', () => {
+        // Foi o defeito mais repetido desta semana: núcleo pronto, testado e
+        // sem ninguém chamando (a trava T1, o `abrangencia`, o farol de lastro).
+        const s = rf(jn(__dirname, '..', 'server.js'), 'utf8');
+        expect(s).toMatch(/conferirAtualizacao\(\[pro, flash\]/);
+        // E a lista da conta precisa CHEGAR lá — sem ela é indeterminado eterno.
+        expect(s).toMatch(/modelos: nomesModelos/);
+    });
     it('o painel lê o veredito, não a flag da listagem', () => {
         const s = rf(jn(__dirname, '..', 'components/ConfigAdminModal.tsx'), 'utf8');
         expect(s).toMatch(/geminiVersao\.veredito\?\.texto/);
         expect(s).toMatch(/geminiVersao\.roteador\?\.colidiu/);
         expect(s).not.toMatch(/geminiVersao\.alvoEncontrado/);
+    });
+    it('🚨 o painel mostra o atraso, e a colisão NÃO é mais vermelha', () => {
+        const s = rf(jn(__dirname, '..', 'components/ConfigAdminModal.tsx'), 'utf8');
+        expect(s).toMatch(/geminiVersao\.atualizacao\.texto/);
+        // A linha da colisão não pode voltar a ser vermelha por um refactor:
+        // ela agora descreve uma decisão do dono, não um defeito.
+        const bloco = s.slice(s.indexOf('geminiVersao.roteador?.colidiu'));
+        const linhaDaColisao = bloco.slice(0, bloco.indexOf('</p>'));
+        expect(linhaDaColisao).not.toMatch(/text-red-/);
     });
 });
