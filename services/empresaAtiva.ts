@@ -68,6 +68,7 @@ export const DISPENSAM_EMPRESA_ATIVA: SearchType[] = [
     // Visões da CARTEIRA — respondem sobre o conjunto de clientes.
     SearchType.ROTINA_FISCAL,
     SearchType.CARTEIRA,
+    SearchType.SP_CONNECT,   // inbox do WhatsApp — as conversas são da carteira toda
     SearchType.DASHBOARD_CEO,
     SearchType.SAUDE_GERAL,
     SearchType.OBRIGACOES_FISCAIS,
