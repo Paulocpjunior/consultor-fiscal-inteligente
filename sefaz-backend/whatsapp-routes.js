@@ -30,8 +30,11 @@ import {
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
-    subirMidiaWhatsapp, enviarMidiaWhatsapp,
+    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE,
 } from './whatsapp-cloud.js';
+import {
+    CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
+} from './whatsapp-chamadas.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
@@ -1523,6 +1526,55 @@ router.post('/importar-ultrafox', requireAdmin, async (req, res) => {
         return res.status(400).json({ ok: false, error: 'tipo deve ser contatos, mensagens-txt ou mensagens-csv.' });
     } catch (e) {
         console.error('[whatsapp/importar-ultrafox]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🔎 SONDA da chamada de voz/vídeo — READ-ONLY, de propósito.
+ *
+ * Ela pergunta à Meta e RELATA; não liga nem desliga nada. Ligar a chamada
+ * abre um botão no WhatsApp de TODOS os clientes, e essa é decisão do Paulo
+ * com destino de atendimento definido antes — não efeito colateral de um
+ * clique de diagnóstico. `whatsappChamadas.test.ts` prova que o núcleo não
+ * escreve (nem na Meta, nem no banco).
+ */
+router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token || !cfg.phoneNumberId) {
+            return res.json({
+                ok: true,
+                conclusao: {
+                    veredito: 'indeterminado',
+                    motivo: 'O canal do WhatsApp não está configurado neste ambiente.',
+                    acao: 'Sem token/phone number id não dá pra perguntar à Meta — e não perguntar não é resposta.',
+                },
+                sondas: [], antesDeLigar: ANTES_DE_LIGAR,
+            });
+        }
+
+        const sondas = [];
+        for (const c of CANDIDATOS_SONDA) {
+            let status = null; let corpo = null;
+            try {
+                const r = await fetch(`${GRAPH_BASE}/${c.caminho(cfg.phoneNumberId)}`, {
+                    headers: { Authorization: `Bearer ${cfg.token}` },
+                });
+                status = r.status;
+                corpo = await r.json().catch(() => ({}));
+            } catch (e) {
+                corpo = { error: { message: e.message } };
+            }
+            sondas.push({
+                candidato: c.id, rotulo: c.rotulo, hipotese: c.hipotese,
+                ...interpretarSondaChamadas(status, corpo),
+            });
+        }
+
+        return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/sondar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

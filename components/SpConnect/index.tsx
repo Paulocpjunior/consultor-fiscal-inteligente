@@ -19,7 +19,7 @@ import {
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
-    ClienteDaConversa, CanalWhatsapp,
+    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -279,7 +279,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais'>('bot');
+    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas'>('bot');
+
+    // ── ☎️ Sonda de voz/vídeo: PERGUNTA à Meta, não liga nada.
+    const [sonda, setSonda] = useState<{
+        conclusao: { veredito: string; motivo: string; acao?: string; respondeuPor?: string | null };
+        sondas: SondaChamada[]; antesDeLigar: { titulo: string; texto: string }[];
+    } | null>(null);
+    const [sondando, setSondando] = useState(false);
+    const [sondaErro, setSondaErro] = useState<string | null>(null);
+    const rodarSonda = async () => {
+        setSondando(true); setSondaErro(null);
+        const r = await sondarChamadas();
+        setSondando(false);
+        if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar });
+        else setSondaErro(r.error || 'A sonda não respondeu.');
+    };
     const [atendentes, setAtendentes] = useState<Atendente[]>([]);
     const [atdErro, setAtdErro] = useState<string | null>(null);
     const [atdCarregado, setAtdCarregado] = useState(false);
@@ -1077,7 +1092,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -1142,6 +1157,80 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         )}
 
                         {/* ── aba 📥 Importar backup da Ultra Fox ───────────── */}
+                        {/* ── aba ☎️ Voz e vídeo (SONDA — não liga nada) ──── */}
+                        {cfgAba === 'chamadas' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Esta aba <strong>pergunta à Meta</strong> como está a chamada de voz/vídeo
+                                    para o nosso número — e <strong>não liga nem desliga nada</strong>. Ligar a
+                                    chamada faz aparecer o botão de ligar no WhatsApp de <strong>todos os
+                                    clientes</strong>: é decisão sua, com o destino de atendimento definido antes,
+                                    não efeito de um clique de diagnóstico.
+                                </p>
+
+                                <button onClick={rodarSonda} disabled={sondando}
+                                    className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                    {sondando ? 'Perguntando à Meta…' : '🔎 Sondar o estado na Meta'}
+                                </button>
+                                {sondaErro && <p className="text-[11px] text-red-600 dark:text-red-400">{sondaErro}</p>}
+
+                                {sonda && (
+                                    <>
+                                        {/* O veredito nunca diz "desligado" por omissão: sem resposta
+                                            conclusiva ele fica INDETERMINADO, com a ação do lado. */}
+                                        <div className={`rounded-lg border px-3 py-2 ${sonda.conclusao.veredito === 'ligado'
+                                            ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+                                            : sonda.conclusao.veredito === 'desligado'
+                                                ? 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40'
+                                                : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'}`}>
+                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                                {sonda.conclusao.veredito === 'ligado' ? '✅ A chamada está LIGADA para este número'
+                                                    : sonda.conclusao.veredito === 'desligado' ? '⚪ A chamada está DESLIGADA'
+                                                        : `⚠️ ${sonda.conclusao.veredito}`}
+                                            </p>
+                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">{sonda.conclusao.motivo}</p>
+                                            {sonda.conclusao.acao && (
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{sonda.conclusao.acao}</p>
+                                            )}
+                                        </div>
+
+                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
+                                            Antes de ligar — o que muda para o cliente
+                                        </p>
+                                        {sonda.antesDeLigar.map((a) => (
+                                            <div key={a.titulo} className="rounded-lg border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5">
+                                                <p className="text-[11px] font-bold text-amber-900 dark:text-amber-200">{a.titulo}</p>
+                                                <p className="text-[10.5px] text-amber-800 dark:text-amber-300 leading-snug">{a.texto}</p>
+                                            </div>
+                                        ))}
+
+                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
+                                            O que cada caminho respondeu
+                                        </p>
+                                        {sonda.sondas.map((s) => (
+                                            <details key={s.candidato} className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                                                <summary className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                    {s.rotulo} — <span className="font-normal">{s.situacao}</span>
+                                                </summary>
+                                                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-1">
+                                                    <strong>Hipótese:</strong> {s.hipotese}
+                                                </p>
+                                                <p className="text-[10.5px] text-slate-600 dark:text-slate-300 mt-0.5">{s.motivo}</p>
+                                                {s.acao && <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{s.acao}</p>}
+                                                {/* A resposta CRUA vai junto: é dela que sai a régua no dia em
+                                                    que a Meta mudar o formato — nunca de suposição. */}
+                                                {s.bruto != null && (
+                                                    <pre className="mt-1 text-[9px] bg-slate-900 text-slate-200 rounded p-2 overflow-x-auto max-h-40">
+                                                        {JSON.stringify(s.bruto, null, 2)}
+                                                    </pre>
+                                                )}
+                                            </details>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
                         {/* ── aba 📞 Números (2º número / 2ª WABA) ────────── */}
                         {cfgAba === 'canais' && (
                             <div className="space-y-2">

@@ -102,6 +102,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Rodar dentro do Teams | ✕ | app do tenant pronto (`teams-app/`, zip em `/sp-connect-teams.zip`) | 🆕 |
 | Vários NÚMEROS de WhatsApp | **[?]** | **apto desde 16/08**: catálogo de canais (o de hoje segue vindo do env e é o padrão), entrada roteada pelo `phone_number_id` da Meta e cadastro na ⚙️ — o token do 2º número vive no Cloud Run, nunca no banco. Falta só o número existir | ✅ apto |
 | Outros canais (Instagram, Facebook, site) | **[?]** | só WhatsApp | 🟡 depende do §7.7 |
+| **Chamada de voz/vídeo** (liberada pela Meta Brasil) | **[?]** | ⚙️ → ☎️ **SONDA** o estado real na Meta e relata, com o cru da resposta. **Não liga nada de propósito** | 🟡 **decisão do Paulo, não construção**: ligar abre o botão de ligar no WhatsApp de TODOS os clientes, e sem destino que atenda (HitPhone/ramal) é telefone tocando no vazio — o cliente lê como "a SP não me atende", não como recurso desligado |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
 
 ## 6. Operação e administração

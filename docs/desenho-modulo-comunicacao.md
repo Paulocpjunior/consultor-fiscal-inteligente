@@ -263,6 +263,31 @@ da sua criação, seus diferenciais em relação aos apps do mercado"*.
   escrito. Por isso o topo da aba diz que, divergindo da tela, **o errado é o
   manual**.
 
+### 5.7 ☎️ Chamada de voz/vídeo — SONDA, não interruptor (Paulo, 16/08)
+
+Pergunta dele: *"como habilitar ou não a opção de ligação de voz/vídeo, já
+liberado pela Meta Brasil"*.
+
+O que entrou é a aba **⚙️ → ☎️ Voz e vídeo**, que **pergunta à Meta e
+relata** — e não liga nada. Duas razões, as duas de peso:
+
+1. **Payload de API externa não se deduz.** É a lição que o MSG_ISN_023 (PGDAS-D
+   sem movimento) e o MS0030 (R-2055) cobraram caro. `CANDIDATOS_SONDA` leva a
+   **hipótese escrita** de cada caminho, a resposta **CRUA** vai na tela, e o
+   que o app não souber nomear vira `nao-reconhecido` em vez de chute.
+2. **Ligar muda o WhatsApp DO CLIENTE.** Habilitada, aparece o botão de ligar na
+   conversa dele. Sem destino que ATENDA (HitPhone, ramal, plantão), o cliente
+   liga e chama no vazio — e a leitura dele não é "o recurso está desligado", é
+   **"a SP não me atende"**. Isso é pior que não ter o botão. `ANTES_DE_LIGAR`
+   põe esse efeito na tela, junto do veredito, porque ele não aparece em lugar
+   nenhum do painel da Meta.
+
+RÉGUAS: **indeterminado nunca vira "desligado"** (rede que piscou faria alguém
+ligar à mão o que já estava ligado, ou concluir que a conta não tem o recurso);
+token sem permissão é `sem-permissao` e a resposta **diz que isso não fala da
+chamada**; e um teste recorta o núcleo e prova que ele **não escreve** — nem na
+Meta, nem no banco (mesma prova do `/prazos-municipais/consultar`).
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente
