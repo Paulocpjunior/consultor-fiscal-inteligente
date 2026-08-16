@@ -387,6 +387,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 fila: x.fila || null,             // null = Recepção
                 protocolo: x.protocolo || null,
                 atribuidoA: x.atribuidoA || null,
+                transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
                 situacao: x.status || 'aberta',
                 janela24hAte: x.janela24hAte || null,
                 ultimaMensagem: x.ultimaMensagem || null,
@@ -446,6 +447,25 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
             return res.status(400).json({ ok: false, error: `Departamento inválido (use ${[...DEPARTAMENTOS_WHATSAPP].join(', ')}).` });
         }
         if (!p.para) return res.status(400).json({ ok: false, error: 'Informe o número do WhatsApp do destinatário.' });
+
+        // A conversa de um número é UMA só. Se ela já está ABERTA e EM
+        // CONDUÇÃO por alguém, um template no meio seria uma segunda voz na
+        // mesma thread do cliente — a saída certa é falar com quem conduz
+        // (nota interna) ou pedir a transferência. Recusa DIZ o estado.
+        const numeroAlvo = normalizarNumeroBr(p.para);
+        if (numeroAlvo) {
+            const convExistente = await getDb().collection('whatsapp_conversas').doc(numeroAlvo).get();
+            const cx = convExistente.data() || {};
+            if (convExistente.exists && (cx.status || 'aberta') === 'aberta' && cx.atribuidoA) {
+                return res.status(409).json({
+                    ok: false,
+                    error: `Este número já está em atendimento na fila ${(FILAS_ATENDIMENTO.find((f) => f.id === (cx.fila || 'recepcao')) || {}).rotulo || 'Recepção'}, em condução por ${cx.atribuidoA}.`,
+                    acao: 'Abra a conversa e deixe uma nota interna pra quem conduz, ou peça a transferência de fila — iniciar outro template criaria duas vozes na mesma conversa do cliente.',
+                    emConducaoPor: cx.atribuidoA,
+                    fila: cx.fila || 'recepcao',
+                });
+            }
+        }
 
         // DUAS portas: template do CADASTRO (variáveis nomeadas) OU template
         // APROVADO direto da Meta (o atendente vê o corpo e preenche {{1}},
@@ -560,6 +580,21 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
             });
         }
 
+        // GUARDA DE CONDUÇÃO: conversa em condução por OUTRO atendente não
+        // recebe resposta de terceiro sem assumir antes — dois departamentos
+        // escrevendo ao mesmo tempo é o cliente recebendo duas vozes. Assumir
+        // é UM clique (mata-burro com caminho, não parede) e fica auditado.
+        const dono = conv.data()?.atribuidoA || null;
+        const eu = req.user?.email || null;
+        if (dono && dono !== eu) {
+            return res.status(409).json({
+                ok: false,
+                error: `Esta conversa está em condução por ${dono}.`,
+                acao: 'Assuma a conversa (🙋) antes de responder — ou combine por nota interna / transfira de fila.',
+                emConducaoPor: dono,
+            });
+        }
+
         const envio = await enviarTextoLivre({ para: numero, texto });
         if (!envio.ok) {
             const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
@@ -581,9 +616,12 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
         await db.collection('whatsapp_conversas').doc(numero).set({
             ultimaMensagem: { resumo: texto.slice(0, 140), direcao: 'saida', em: agora },
             atualizadoEm: agora,
+            // Responder conversa SEM dono te torna o condutor (auto-assumir):
+            // a primeira resposta é exatamente o ato de assumir.
+            ...(dono ? {} : { atribuidoA: eu }),
         }, { merge: true });
 
-        return res.json({ ok: true, mensagem: { id: envio.messageId, ...msg, erroEntrega: null } });
+        return res.json({ ok: true, autoAssumida: !dono, mensagem: { id: envio.messageId, ...msg, erroEntrega: null } });
     } catch (e) {
         console.error('[whatsapp/responder]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -642,12 +680,83 @@ async function acaoConversa(req, res, patch, extra = {}) {
     return res.json({ ok: true, numero, ...extra });
 }
 
-// Transferir de fila (a triagem manual da Recepção).
+// Transferir de fila — a transferência entre DEPARTAMENTOS (Paulo, 16/08).
+// A conversa de um número é UMA só, então transferir é trocar o DONO:
+// (1) a atribuição é LIMPA — a conversa chega SEM dono na fila destino
+//     (mantê-la presa no atendente de origem deixaria o destino vendo uma
+//     conversa "ocupada" que ninguém de lá pode conduzir);
+// (2) fica uma nota AUTOMÁTICA na thread (de onde veio, quem mandou, recado
+//     opcional) — transferência sem rastro é a conversa que chega crua e o
+//     destino pergunta tudo de novo ao cliente;
+// (3) aviso ao CLIENTE é opcional (chave na ⚙️, nasce desligada) e só sai com
+//     a janela de 24h aberta — falha no aviso NÃO desfaz a transferência,
+//     mas é DITA na resposta.
 router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
     try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
         const fila = String(req.body?.fila || '').trim().toLowerCase();
+        const recado = String(req.body?.recado || '').trim();
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         if (!filaValida(fila)) return res.status(400).json({ ok: false, error: `Fila inválida. Válidas: ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}` });
-        return acaoConversa(req, res, { fila, transferidaPor: req.user?.email || null });
+
+        const db = getDb();
+        const convRef = db.collection('whatsapp_conversas').doc(numero);
+        const conv = await convRef.get();
+        const filaDe = conv.data()?.fila || 'recepcao';
+        if (filaDe === fila) return res.status(400).json({ ok: false, error: 'A conversa já está nessa fila.' });
+        const agora = new Date().toISOString();
+        const quem = req.user?.email || null;
+
+        await convRef.set({
+            fila,
+            atribuidoA: null,            // chega SEM dono na fila destino
+            transferidaPor: quem,
+            transferidaDe: filaDe,
+            transferidaEm: agora,
+            atualizadoEm: agora,
+        }, { merge: true });
+
+        const rotuloDe = (FILAS_ATENDIMENTO.find((f) => f.id === filaDe) || {}).rotulo || filaDe;
+        const rotuloPara = (FILAS_ATENDIMENTO.find((f) => f.id === fila) || {}).rotulo || fila;
+        const textoNota = `↪ Transferida de ${rotuloDe} para ${rotuloPara} por ${quem || 'alguém'}${recado ? `\nRecado: ${recado}` : ''}`;
+        const notaRef = await db.collection('whatsapp_mensagens').add({
+            conversaId: numero, direcao: 'interna', tipo: 'transferencia',
+            texto: textoNota, midia: null, timestamp: agora, enviadoPor: quem,
+        });
+
+        // Aviso ao cliente: melhor esforço, com o desfecho NOMEADO.
+        let avisoCliente = 'desligado';
+        try {
+            const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+            const cfg = resolverConfig(cfgDoc.data());
+            if (cfg.avisarClienteTransferencia) {
+                const ate = Date.parse(conv.data()?.janela24hAte || '');
+                if (!Number.isFinite(ate) || ate <= Date.now()) {
+                    avisoCliente = 'janela-fechada';
+                } else {
+                    const texto = String(cfg.mensagens.transferencia || '').replace('{fila}', rotuloPara);
+                    const envio = await enviarTextoLivre({ para: numero, texto });
+                    if (envio.ok) {
+                        avisoCliente = 'enviado';
+                        await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                            conversaId: numero, direcao: 'saida', tipo: 'text', texto,
+                            midia: null, timestamp: new Date().toISOString(),
+                            statusEntrega: 'enviado', enviadoPor: 'bot',
+                        }, { merge: true });
+                    } else {
+                        avisoCliente = 'falhou';
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[whatsapp/fila] aviso ao cliente falhou:', e.message);
+            avisoCliente = 'falhou';
+        }
+
+        return res.json({
+            ok: true, numero, fila, transferidaDe: filaDe, avisoCliente,
+            nota: { id: notaRef.id, conversaId: numero, direcao: 'interna', tipo: 'transferencia', texto: textoNota, midia: null, timestamp: agora, statusEntrega: null, erroEntrega: null, enviadoPor: quem },
+        });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 

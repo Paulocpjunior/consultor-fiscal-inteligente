@@ -11,6 +11,7 @@ export interface FilaAtendimento { id: string; rotulo: string }
 
 export interface ConfigAtendimento {
     botAtivo: boolean;
+    avisarClienteTransferencia: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
     menu: { opcao: string; fila: string; rotulo: string }[];
@@ -34,6 +35,8 @@ export interface ConversaResumo {
     fila: string | null;
     protocolo?: string | null;
     atribuidoA: string | null;
+    /** Fila de ORIGEM da última transferência — selo "↪ veio de X" até assumirem. */
+    transferidaDe?: string | null;
     situacao: string;
     janela24hAte: string | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;

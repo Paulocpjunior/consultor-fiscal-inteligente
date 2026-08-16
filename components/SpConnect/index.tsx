@@ -110,10 +110,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         try {
             const r = await responderConversa(sel.numero, texto.trim());
             if (!r.ok) {
+                // Conversa em condução por outro: o backend recusa (409) — a
+                // tela atualiza o dono pra guarda aparecer no composer.
+                if ((r as any).emConducaoPor) patchSel({ atribuidoA: (r as any).emConducaoPor });
                 setErroEnvio(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`);
                 return;
             }
             setMensagens((m) => [...m, r.mensagem]);
+            if (r.autoAssumida) patchSel({ atribuidoA: meuEmail, transferidaDe: null });
             setTexto('');
         } finally {
             setEnviando(false);
@@ -140,14 +144,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         return true;
     };
 
-    const acaoTransferir = (fila: string) => {
-        if (!sel || !fila || fila === (sel.fila || 'recepcao')) return;
-        rodarAcao(() => transferirFila(sel.numero, fila), { fila });
+    // Transferência entre departamentos: escolhe a fila, recado opcional, e o
+    // resultado volta com a nota automática (entra na thread na hora).
+    const [transFila, setTransFila] = useState('');
+    const [transRecado, setTransRecado] = useState('');
+    const [transAviso, setTransAviso] = useState<string | null>(null);
+    const acaoTransferir = async () => {
+        if (!sel || !transFila || transFila === (sel.fila || 'recepcao')) return;
+        setAcaoErro(null);
+        setTransAviso(null);
+        const r = await transferirFila(sel.numero, transFila, transRecado.trim() || undefined);
+        if (!r.ok) { setAcaoErro(r.error || 'A transferência falhou.'); return; }
+        patchSel({ fila: r.fila, atribuidoA: null, transferidaDe: r.transferidaDe });
+        if (r.nota) setMensagens((m) => [...m, r.nota]);
+        setTransFila('');
+        setTransRecado('');
+        setTransAviso({
+            enviado: '✓ Transferida — o cliente foi avisado.',
+            'janela-fechada': '✓ Transferida. O aviso ao cliente NÃO saiu (janela de 24h fechada).',
+            falhou: '✓ Transferida. O aviso ao cliente falhou — a transferência valeu mesmo assim.',
+            desligado: '✓ Transferida (aviso ao cliente desligado na ⚙️).',
+        }[r.avisoCliente] || '✓ Transferida.');
     };
     const acaoAssumir = () => {
         if (!sel) return;
         const liberar = sel.atribuidoA === meuEmail;
-        rodarAcao(() => assumirConversa(sel.numero, liberar), { atribuidoA: liberar ? null : meuEmail });
+        rodarAcao(() => assumirConversa(sel.numero, liberar),
+            liberar ? { atribuidoA: null } : { atribuidoA: meuEmail, transferidaDe: null });
     };
     const acaoSituacao = () => {
         if (!sel) return;
@@ -348,6 +371,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
 
     const agora = new Date();
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
+    const conduzidaPorOutro = Boolean(sel?.atribuidoA && sel.atribuidoA !== meuEmail);
     const visiveis = filtrarConversas(conversas, { busca, aba });
     const naoLidasTotal = conversas.reduce((s, c) => s + (c.naoLidas || 0), 0);
     // Chips por fila: só as que o usuário ENXERGA (o backend já filtrou as
@@ -649,6 +673,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         ⚠️ Enquanto a Ultra Fox estiver de pé respondendo, ligar o bot aqui = DOIS bots
                                         no mesmo cliente (menu em dobro). Ligue só no dia do corte.
                                     </p>
+                                    <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                        <input type="checkbox" checked={cfg.avisarClienteTransferencia}
+                                            onChange={(e) => setCfg((c) => (c ? { ...c, avisarClienteTransferencia: e.target.checked } : c))} />
+                                        <span className="text-[11px] text-slate-700 dark:text-slate-200">
+                                            ↪️ Avisar o CLIENTE quando a conversa for transferida de fila
+                                            <span className="block text-[9px] text-slate-400">só sai com a janela de 24h aberta; independente do bot</span>
+                                        </span>
+                                    </label>
                                 </div>
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🕐 Horário de funcionamento (fuso de São Paulo)</p>
@@ -819,6 +851,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                                                 <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">{rotuloCurtoFila(c.fila)}</span>
                                                 {c.situacao === 'resolvida' && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">✅ resolvida</span>}
+                                                {c.transferidaDe && !c.atribuidoA && c.situacao !== 'resolvida' && (
+                                                    <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">↪ de {rotuloCurtoFila(c.transferidaDe)}</span>
+                                                )}
                                                 {j.aberta && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">janela aberta</span>}
                                                 {!c.empresaId && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">vincular</span>}
                                             </div>
@@ -878,7 +913,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         if (m.direcao === 'interna') {
                                             return (
                                                 <div key={m.id} className="max-w-[85%] w-fit mx-auto rounded-lg border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 text-[12px] text-amber-800 dark:text-amber-200">
-                                                    <p className="text-[9px] font-bold uppercase tracking-wide">📝 nota interna — o cliente não vê</p>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide">
+                                                        {m.tipo === 'transferencia' ? '↪ transferência — o cliente não vê esta nota' : '📝 nota interna — o cliente não vê'}
+                                                    </p>
                                                     <p className="whitespace-pre-wrap break-words">{m.texto}</p>
                                                     <p className="text-[9px] text-amber-600/80 dark:text-amber-400/80 text-right mt-0.5 leading-none">
                                                         {(m as any).enviadoPor ? `${String((m as any).enviadoPor).split('@')[0]} · ` : ''}{horaCurta(m.timestamp, agora)}
@@ -919,7 +956,19 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {/* Composer: livre com a janela aberta; fora dela, o caminho é dito. */}
                             <div className="border-t border-slate-200 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800">
                                 {erroEnvio && <p className="text-[11px] text-red-600 dark:text-red-400 mb-1.5">{erroEnvio}</p>}
-                                {janela?.aberta && (
+                                {conduzidaPorOutro && (
+                                    <div className="rounded-xl border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/20 px-3 py-2 mb-1.5 flex items-center justify-between gap-2">
+                                        <p className="text-[11px] text-sky-800 dark:text-sky-300">
+                                            🙋 Em condução por <strong>{sel.atribuidoA!.split('@')[0]}</strong> — duas vozes na
+                                            mesma conversa confundem o cliente. Assuma pra responder, ou deixe uma nota interna.
+                                        </p>
+                                        <button onClick={acaoAssumir}
+                                            className="shrink-0 text-[11px] font-bold px-3 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                            Assumir
+                                        </button>
+                                    </div>
+                                )}
+                                {janela?.aberta && !conduzidaPorOutro && (
                                     <div className="flex gap-1.5 flex-wrap mb-1.5">
                                         {['Bom dia! Tudo bem?', 'Recebido, já estamos verificando.', 'Pode nos enviar o comprovante, por favor?', 'Ficamos à disposição!'].map((q) => (
                                             <button key={q} onClick={() => setTexto((t) => (t ? `${t} ${q}` : q))}
@@ -929,7 +978,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         ))}
                                     </div>
                                 )}
-                                {janela?.aberta ? (
+                                {conduzidaPorOutro ? null : janela?.aberta ? (
                                     <div className="flex items-end gap-2">
                                         <textarea
                                             value={texto}
@@ -1003,12 +1052,24 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </button>
                                     <label className="block text-[10px] text-slate-400">
                                         ↪️ Transferir de fila
-                                        <select value={sel.fila || 'recepcao'} onChange={(e) => acaoTransferir(e.target.value)} className={CAMPO}>
-                                            {(filas.length ? filas : [{ id: 'recepcao', rotulo: 'Recepção / Front Desk' }]).map((f) => (
-                                                <option key={f.id} value={f.id}>{f.rotulo}</option>
-                                            ))}
+                                        <select value={transFila} onChange={(e) => { setTransFila(e.target.value); setTransAviso(null); }} className={CAMPO}>
+                                            <option value="">Transferir para…</option>
+                                            {(filas.length ? filas : [{ id: 'recepcao', rotulo: 'Recepção / Front Desk' }])
+                                                .filter((f) => f.id !== (sel.fila || 'recepcao'))
+                                                .map((f) => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
                                         </select>
                                     </label>
+                                    {transFila && (
+                                        <div className="space-y-1">
+                                            <input value={transRecado} onChange={(e) => setTransRecado(e.target.value)}
+                                                placeholder="Recado pra fila destino (opcional — vira nota interna)" className={CAMPO} />
+                                            <button onClick={acaoTransferir}
+                                                className="w-full text-[11px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                                ↪️ Transferir pra {rotuloCurtoFila(transFila)} (sai da sua condução)
+                                            </button>
+                                        </div>
+                                    )}
+                                    {transAviso && <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{transAviso}</p>}
                                     {notaAberta ? (
                                         <div className="space-y-1">
                                             <textarea value={notaTexto} onChange={(e) => setNotaTexto(e.target.value)} rows={2}
