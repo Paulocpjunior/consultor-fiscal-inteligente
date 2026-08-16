@@ -13,7 +13,7 @@
 // ============================================================================
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa } from '../../services/spConnectService';
-import { listarTemplates, WhatsappTemplate } from '../../services/whatsappTemplatesService';
+import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
     ConversaResumo, MensagemInbox, estadoJanela, carimboStatus,
     nomeExibicao, formatarNumeroBr, horaCurta, rotuloMidia,
@@ -110,36 +110,59 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ✚ Nova conversa (template aprovado — a porta de fora da janela) ─────
+    // DUAS fontes de template: o cadastro da ⚙️ (variáveis nomeadas) e os
+    // APROVADOS direto da Meta (o corpo aparece e preenche-se {{1}},{{2}}…) —
+    // linkar na ⚙️ é opção, não pré-requisito (lição de 16/08: os templates
+    // existiam na Meta e o dropdown vazio culpava a pessoa errada).
     const [novaAberta, setNovaAberta] = useState(false);
     const [templates, setTemplates] = useState<WhatsappTemplate[]>([]);
-    const [nc, setNc] = useState({ para: '', nomeContato: '', departamento: 'fiscal', template: '', variaveis: {} as Record<string, string> });
+    const [daMeta, setDaMeta] = useState<TemplateDaMeta[]>([]);
+    const [carregandoTpl, setCarregandoTpl] = useState(false);
+    const [nc, setNc] = useState({
+        para: '', nomeContato: '', departamento: 'fiscal', escolha: '',
+        variaveis: {} as Record<string, string>, posicionais: [] as string[],
+    });
     const [enviandoNova, setEnviandoNova] = useState(false);
     const [erroNova, setErroNova] = useState<string | null>(null);
 
     const abrirNova = async () => {
         setNovaAberta(true);
         setErroNova(null);
-        if (templates.length === 0) {
-            const r = await listarTemplates();
-            if (r.ok) setTemplates((r.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
-            else setErroNova(r.error || 'Falha ao carregar os templates.');
+        if (templates.length === 0 && daMeta.length === 0) {
+            setCarregandoTpl(true);
+            try {
+                const [cad, meta] = await Promise.all([listarTemplates(), listarTemplatesDaMeta()]);
+                if (cad.ok) setTemplates((cad.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
+                if (meta.ok) setDaMeta((meta.templates || []).filter((t) => t.status === 'APPROVED' && !t.temDocumento));
+                if (!cad.ok && !meta.ok) setErroNova(cad.error || 'Falha ao carregar os templates.');
+            } finally {
+                setCarregandoTpl(false);
+            }
         }
     };
+
     const templatesDoDep = templates.filter((t) => t.departamento === nc.departamento);
-    const templateSel = templatesDoDep.find((t) => t.nome === nc.template) || (templatesDoDep.length === 1 ? templatesDoDep[0] : undefined);
+    const cadastroSel = nc.escolha.startsWith('c:') ? templatesDoDep.find((t) => t.id === nc.escolha.slice(2)) : undefined;
+    const metaSel = nc.escolha.startsWith('m:') ? daMeta.find((t) => `${t.nome}|${t.idioma}` === nc.escolha.slice(2)) : undefined;
+    const prontoPraEnviar = Boolean(nc.para.trim()) && (
+        (cadastroSel && (cadastroSel.variaveis || []).every((v) => (nc.variaveis[v.chave] || '').trim()))
+        || (metaSel && Array.from({ length: metaSel.variaveis }, (_, i) => nc.posicionais[i] || '').every((v) => v.trim()))
+    );
 
     const enviarNova = async () => {
-        if (!templateSel || enviandoNova) return;
+        if (!prontoPraEnviar || enviandoNova) return;
         setEnviandoNova(true);
         setErroNova(null);
         try {
             const r = await iniciarConversa({
-                para: nc.para, nomeContato: nc.nomeContato || undefined,
-                departamento: nc.departamento, template: templateSel.nome, variaveis: nc.variaveis,
+                para: nc.para, nomeContato: nc.nomeContato || undefined, departamento: nc.departamento,
+                ...(cadastroSel
+                    ? { template: cadastroSel.nome, variaveis: nc.variaveis }
+                    : { templateDireto: { nome: metaSel!.nome, idioma: metaSel!.idioma }, variaveisPosicionais: nc.posicionais.slice(0, metaSel!.variaveis) }),
             });
             if (!r.ok) { setErroNova(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
             setNovaAberta(false);
-            setNc({ para: '', nomeContato: '', departamento: nc.departamento, template: '', variaveis: {} });
+            setNc({ para: '', nomeContato: '', departamento: nc.departamento, escolha: '', variaveis: {}, posicionais: [] });
             await recarregar(true);
             const nova = { numero: r.numero, nome: nc.nomeContato || null, empresaId: null, fila: null, atribuidoA: null, situacao: 'aberta', janela24hAte: null, ultimaMensagem: null, naoLidas: 0, atualizadoEm: null } as ConversaResumo;
             abrir(nova);
@@ -192,7 +215,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </label>
                             <label className="text-[11px] text-slate-500">
                                 Departamento
-                                <select value={nc.departamento} onChange={(e) => setNc((f) => ({ ...f, departamento: e.target.value, template: '', variaveis: {} }))}
+                                <select value={nc.departamento} onChange={(e) => setNc((f) => ({ ...f, departamento: e.target.value, escolha: f.escolha.startsWith('c:') ? '' : f.escolha, variaveis: {} }))}
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
                                     <option value="fiscal">🧾 Fiscal</option>
                                     <option value="contabil">📊 Contábil</option>
@@ -203,17 +226,31 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </label>
                             <label className="text-[11px] text-slate-500">
                                 Template
-                                <select value={templateSel?.nome || ''} onChange={(e) => setNc((f) => ({ ...f, template: e.target.value, variaveis: {} }))}
+                                <select value={nc.escolha} onChange={(e) => setNc((f) => ({ ...f, escolha: e.target.value, variaveis: {}, posicionais: [] }))}
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
-                                    <option value="">{templatesDoDep.length ? 'Escolha…' : 'nenhum sem documento neste depto'}</option>
-                                    {templatesDoDep.map((t) => <option key={t.id} value={t.nome}>{t.nome}</option>)}
+                                    <option value="">{carregandoTpl ? 'Carregando…' : 'Escolha…'}</option>
+                                    {templatesDoDep.length > 0 && (
+                                        <optgroup label="Do cadastro (variáveis nomeadas)">
+                                            {templatesDoDep.map((t) => <option key={t.id} value={`c:${t.id}`}>{t.nome}</option>)}
+                                        </optgroup>
+                                    )}
+                                    {daMeta.length > 0 && (
+                                        <optgroup label="Aprovados na Meta">
+                                            {daMeta.map((t) => <option key={`${t.nome}|${t.idioma}`} value={`m:${t.nome}|${t.idioma}`}>{t.nome} ({t.idioma})</option>)}
+                                        </optgroup>
+                                    )}
                                 </select>
                             </label>
                         </div>
-                        {templateSel && (templateSel.variaveis || []).length > 0 && (
+                        {metaSel && metaSel.corpo && (
+                            <div className="rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 px-2.5 py-2 text-[11px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+                                {metaSel.corpo}
+                            </div>
+                        )}
+                        {cadastroSel && (cadastroSel.variaveis || []).length > 0 && (
                             <div className="space-y-1.5">
                                 <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Variáveis do template</p>
-                                {(templateSel.variaveis || []).map((v) => (
+                                {(cadastroSel.variaveis || []).map((v) => (
                                     <label key={v.chave} className="block text-[11px] text-slate-500">
                                         {v.rotulo || v.chave}
                                         <input
@@ -225,10 +262,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 ))}
                             </div>
                         )}
+                        {metaSel && metaSel.variaveis > 0 && (
+                            <div className="space-y-1.5">
+                                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Preencha as variáveis (na ordem do texto acima)</p>
+                                {Array.from({ length: metaSel.variaveis }, (_, i) => (
+                                    <label key={i} className="block text-[11px] text-slate-500">
+                                        {`{{${i + 1}}}`}
+                                        <input
+                                            value={nc.posicionais[i] || ''}
+                                            onChange={(e) => setNc((f) => {
+                                                const pos = [...f.posicionais]; pos[i] = e.target.value;
+                                                return { ...f, posicionais: pos };
+                                            })}
+                                            className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                        )}
                         {erroNova && <p className="text-[11px] text-red-600 dark:text-red-400">{erroNova}</p>}
                         <div className="flex items-center justify-end gap-2 pt-1">
                             <button onClick={() => setNovaAberta(false)} className="text-[12px] px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
-                            <button onClick={enviarNova} disabled={enviandoNova || !templateSel || !nc.para.trim()}
+                            <button onClick={enviarNova} disabled={enviandoNova || !prontoPraEnviar}
                                 className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
                                 {enviandoNova ? 'Enviando…' : 'Enviar template ➤'}
                             </button>
@@ -392,6 +447,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {/* Composer: livre com a janela aberta; fora dela, o caminho é dito. */}
                             <div className="border-t border-slate-200 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-800">
                                 {erroEnvio && <p className="text-[11px] text-red-600 dark:text-red-400 mb-1.5">{erroEnvio}</p>}
+                                {janela?.aberta && (
+                                    <div className="flex gap-1.5 flex-wrap mb-1.5">
+                                        {['Bom dia! Tudo bem?', 'Recebido, já estamos verificando.', 'Pode nos enviar o comprovante, por favor?', 'Ficamos à disposição!'].map((q) => (
+                                            <button key={q} onClick={() => setTexto((t) => (t ? `${t} ${q}` : q))}
+                                                className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600">
+                                                ⚡ {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 {janela?.aberta ? (
                                     <div className="flex items-end gap-2">
                                         <textarea
@@ -449,9 +514,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <p className="text-[11px] text-slate-600 dark:text-slate-300">Atribuída a: <strong>{sel.atribuidoA || 'ninguém ainda'}</strong></p>
                                 <p className="text-[11px] text-slate-600 dark:text-slate-300">Situação: <strong>{sel.situacao}</strong></p>
                             </div>
+                            <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Ações</p>
+                                <div className="space-y-1">
+                                    {['↪️ Transferir de fila', '📝 Nota interna', '✅ Resolver conversa'].map((a) => (
+                                        <button key={a} disabled title="Chega na próxima etapa"
+                                            className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed">
+                                            {a} <span className="text-[9px]">· em breve</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 text-[10px] text-slate-400">
-                                Próximas etapas nesta coluna: guias enviadas ao cliente (rito #293), transferir de fila,
-                                notas internas e resolver conversa.
+                                Em breve nesta coluna: guias enviadas ao cliente (rito #293) quando o contato
+                                estiver vinculado, e o responsável da carteira.
                             </div>
                         </>
                     )}

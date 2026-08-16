@@ -34,7 +34,10 @@ export const marcarLida = (numero: string) =>
  */
 export const iniciarConversa = (p: {
     para: string; nomeContato?: string; departamento: string;
-    template?: string; variaveis: Record<string, string>;
+    template?: string; variaveis?: Record<string, string>;
+    /** Template APROVADO direto da Meta (sem cadastro na ⚙️) + valores posicionais {{1}},{{2}}… */
+    templateDireto?: { nome: string; idioma: string };
+    variaveisPosicionais?: string[];
 }) =>
     req<{ numero: string; messageId: string; opcoes?: string[]; faltando?: string[]; acao?: string }>(
         '/api/admin/whatsapp/conversas/iniciar',
