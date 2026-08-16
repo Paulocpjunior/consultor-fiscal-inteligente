@@ -110,6 +110,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E A BUSCA NÃO PASSOU A FILTRAR NO SERVIDOR**, de propósito: daria a mesma
   lista e destruiria a CONTAGEM do que ficou de fora — esconder sem dizer é o
   que faz alguém ler "0 pendentes" como resposta da carteira.
+- **🐛 AÇÃO SEM EFEITO VISÍVEL É BECO — informar a data não atualizava a tarefa**
+  (16/08, terceira ponta do mesmo PR, achada por varredura minha). O colaborador
+  informava o vencimento, o calendário era gravado, e **a tarefa na frente dele
+  continuava dizendo "📅 informar vencimento"** — porque `criarTarefaSeFalta`
+  faz dedup e nunca ATUALIZA. Ele clicaria de novo, e de novo. É a família do
+  "Já importado" sem estado (14/08): a única saída que sobra para quem não vê
+  efeito é repetir o clique.
+  O `/informar` passou a datar as tarefas **da CIDADE** que estavam sem
+  vencimento — é a cidade que ganhou calendário, não aquele cliente. Cada
+  competência recebe a data DELA. TRÊS TRAVAS: vigência **não retroage** no
+  backfill; tarefa que já tem data **não é sobrescrita**; e falha no backfill
+  **não desfaz o calendário** (a gravação já aconteceu) mas é **DITA** — esconder
+  faria a pessoa esperar uma atualização que não vem.
 - **🐛 DATA ERRADA É PIOR QUE DATA QUE EXPLODE** (16/08, ponta solta do meu
   próprio PR, achada antes do Paulo). Com o ISS passando a circular sem dia,
   `calcularVencimento` devolvia uma data **VÁLIDA E ERRADA**: 29/05/2026 para a

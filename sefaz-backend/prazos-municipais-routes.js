@@ -18,6 +18,7 @@ import {
     validarPrazoMunicipal, idPrazoMunicipal, municipiosSemCalendario,
     resolverPrazoMunicipal, montarPrazoInformadoNoFluxo, prazosAConfirmar,
 } from './prazos-municipais.js';
+import { calcularVencimento } from './catalogo-obrigacoes.js';
 import {
     montarPromptPrazoMunicipal, interpretarPropostaPrazo,
 } from './prazo-municipal-consulta.js';
@@ -158,11 +159,62 @@ router.post('/informar', requireAuth, express.json(), async (req, res) => {
             });
         }
         await db.collection(COL).doc(id).set(r.prazo, { merge: true });
+
+        // 🚨 A TAREFA QUE ELE ESTÁ OLHANDO TAMBÉM PRECISA DA DATA.
+        //
+        // Sem isto, informar o vencimento gravava o calendário e a tarefa
+        // continuava dizendo "📅 informar vencimento" — a pessoa clicaria de
+        // novo, e de novo, sem entender por quê. Ação sem efeito visível é
+        // beco, e beco na mão de quem está com prazo vira meia hora perdida
+        // (a lição do "Já importado" de 14/08).
+        //
+        // Alcança TODAS as tarefas daquela cidade sem data — é a cidade que
+        // ganhou calendário, não este cliente. Cada competência recebe a data
+        // DELA (o dia é o mesmo, o mês não).
+        let tarefasDatadas = 0;
+        let erroBackfill = null;
+        try {
+            const alvo = await db.collection('tarefas')
+                .where('codMunIBGE', '==', r.prazo.codMunIBGE)
+                .where('obrigacao', '==', r.prazo.obrigacao)
+                .get();
+            const lote = db.batch();
+            alvo.forEach((doc) => {
+                const t = doc.data() || {};
+                if (t.vencimento) return;                       // já tem data
+                if (t.status === 'cancelada') return;
+                const compIso = String(t.competencia || '').match(/^(\d{2})\/(\d{4})$/);
+                if (!compIso) return;
+                const iso = `${compIso[2]}-${compIso[1]}`;
+                // Vigência não retroage: competência anterior à informada
+                // continua sem data, com a regra que valia nela.
+                if (iso < String(r.prazo.vigenciaInicio || '').slice(0, 7)) return;
+                const venc = calcularVencimento(t.competencia, r.prazo);
+                if (!venc) return;
+                lote.update(doc.ref, {
+                    vencimento: admin.firestore.Timestamp.fromDate(venc),
+                    vencimentoAInformar: false,
+                    vencimentoInformadoPorEmail: req.user?.email || null,
+                });
+                tarefasDatadas++;
+            });
+            if (tarefasDatadas > 0) await lote.commit();
+        } catch (e) {
+            // A gravação do calendário JÁ ACONTECEU — não se desfaz por causa
+            // do backfill. Mas o resultado DIZ, senão o colaborador acha que a
+            // tarefa vai atualizar e ela não atualiza.
+            erroBackfill = e.message;
+            console.warn('[prazos-municipais/informar] backfill das tarefas falhou:', e.message);
+        }
+
         return res.json({
-            ok: true, id, prazo: r.prazo,
+            ok: true, id, prazo: r.prazo, tarefasDatadas, erroBackfill,
             aviso: 'Guardado como calendário desta cidade a partir desta competência — '
                 + 'ninguém precisa informar de novo. Ficou marcado como informado no fluxo (sem a norma): '
-                + 'o admin pode confirmar a base legal depois, sem pressa.',
+                + 'o admin pode confirmar a base legal depois, sem pressa.'
+                + (erroBackfill
+                    ? ' ⚠ As tarefas já criadas NÃO receberam a data agora (falha ao atualizar) — recarregue a tela.'
+                    : tarefasDatadas > 0 ? ` ${tarefasDatadas} tarefa(s) desta cidade já receberam a data.` : ''),
         });
     } catch (e) {
         console.error('[prazos-municipais/informar]', e);
