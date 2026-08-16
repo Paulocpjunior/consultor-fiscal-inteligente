@@ -27,3 +27,13 @@ export const listarMensagens = (numero: string) =>
 
 export const marcarLida = (numero: string) =>
     req<{}>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/lida`, { method: 'POST' });
+
+/** Responde com texto livre (só com a janela de 24h aberta — o backend trava). */
+export const responderConversa = (numero: string, texto: string) =>
+    req<{ mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean }>(
+        `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/responder`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ texto }),
+        });

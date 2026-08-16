@@ -256,6 +256,40 @@ export async function assinarWaba(deps = {}) {
     return { ok: true, wabaId: w.wabaId };
 }
 
+/**
+ * ═══ TEXTO LIVRE — a resposta DENTRO da janela de 24h ══════════════════════
+ * Fora da janela a Meta recusa (131047) e o SP Connect nem tenta: a trava é
+ * no backend, antes da rede. Texto livre é a alma do atendimento — é o que a
+ * plataforma substituída faz o dia todo.
+ */
+export async function enviarTextoLivre({ para, texto }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const numero = normalizarNumeroBr(para);
+    if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".` };
+    const corpo = String(texto ?? '').trim();
+    if (!corpo) return { ok: false, erro: 'Mensagem vazia não sai.' };
+    const doFetch = deps.fetchImpl || fetch;
+    let resp;
+    try {
+        resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp', to: numero, type: 'text',
+                text: { body: corpo.slice(0, 4096), preview_url: false },
+            }),
+        });
+    } catch (e) {
+        return { ok: false, indeterminado: true, erro: `Rede caiu durante o envio (${e.message}) — a mensagem PODE ter saído.`, acao: 'Confira a conversa antes de reenviar: reenviar duplica.' };
+    }
+    const json = await resp.json().catch(() => ({}));
+    const r = interpretarRespostaWhatsapp(resp.status, json);
+    return { ...r, numeroEnviado: numero };
+}
+
 /** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */
 export function interpretarAppsAssinados(corpo) {
     return (Array.isArray(corpo?.data) ? corpo.data : []).map((d) => ({

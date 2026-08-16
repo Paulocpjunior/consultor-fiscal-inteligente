@@ -12,6 +12,7 @@ export interface ConversaResumo {
     nome: string | null;
     empresaId: string | null;
     fila: string | null;
+    atribuidoA: string | null;
     situacao: string;
     janela24hAte: string | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;
@@ -109,6 +110,32 @@ export function dataHoraSp(iso: string | null | undefined): string {
     const t = Date.parse(iso || '');
     if (!Number.isFinite(t)) return '';
     return new Date(t).toLocaleString('pt-BR', { timeZone: FUSO_SP });
+}
+
+/** Filtro da lista de conversas (busca + aba), puro pra teste. */
+export function filtrarConversas(
+    lista: ConversaResumo[],
+    { busca, aba }: { busca: string; aba: 'todas' | 'nao-lidas' | 'recepcao' },
+): ConversaResumo[] {
+    const b = busca.trim().toLowerCase();
+    return lista.filter((c) => {
+        if (aba === 'nao-lidas' && !(c.naoLidas > 0)) return false;
+        if (aba === 'recepcao' && c.fila) return false;
+        if (!b) return true;
+        return (c.nome || '').toLowerCase().includes(b)
+            || c.numero.includes(b.replace(/\D/g, '') || '§')
+            || (c.ultimaMensagem?.resumo || '').toLowerCase().includes(b);
+    });
+}
+
+/** Iniciais pro avatar (nome > número). Nunca vazio. */
+export function iniciais(c: Pick<ConversaResumo, 'nome' | 'numero'>): string {
+    const n = (c.nome || '').trim();
+    if (n) {
+        const partes = n.split(/\s+/);
+        return (partes[0][0] + (partes[1]?.[0] || '')).toUpperCase();
+    }
+    return c.numero.slice(-2);
 }
 
 /** Rótulo da mídia no balão (a mídia em si abre na F2-PR3, com URL assinada). */
