@@ -236,6 +236,13 @@ MESMO PR que a cria.**
 
 ## 9. Fases e critérios de aceite
 
+> 📋 **Quem responde "dá pra derrubar a Ultra Fox?" é o
+> `de-para-ultrafox-spconnect.md`** (16/08) — função a função, com a ORIGEM
+> da evidência de cada linha da ferramenta antiga e as lacunas que BLOQUEIAM
+> o corte separadas das que podem esperar. Fases dizem o que foi construído;
+> o de-para diz o que ainda falta pra desligar. Atualizar no MESMO PR que
+> fecha ou abre lacuna (travado por `__tests__/deParaUltrafox.test.ts`).
+
 **F1 — Webhook + status + gravação** (paralelo com a Ultra Fox, risco zero)
 - Rota de verificação (GET) + recebimento (POST) com validação de assinatura
   (`X-Hub-Signature-256`, secret do app Meta).
