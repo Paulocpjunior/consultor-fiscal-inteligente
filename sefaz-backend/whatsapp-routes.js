@@ -28,12 +28,16 @@ import {
 } from './whatsapp-templates.js';
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
-    listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre,
+    listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
 } from './whatsapp-cloud.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig,
 } from './whatsapp-atendimento.js';
+import {
+    interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
+    prepararMensagensDoTxt, idMensagemImportada,
+} from './whatsapp-import-ultrafox.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
@@ -725,6 +729,211 @@ router.get('/clientes-busca', requireAuth, async (req, res) => {
         }
         return res.json({ ok: true, clientes });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── ATENDENTES ↔ FILAS (a atribuição que a visibilidade lê) ────────────────
+// `users.filasAtendimento` decide quem VÊ o quê no inbox (filasVisiveis).
+// Gravação SÓ admin — mesma regra dos departamentos do SaaS (auto-conceder
+// 'recepcao' abriria todas as conversas), e as rules têm a anti-autoconcessão.
+
+router.get('/atendentes', requireAdmin, async (_req, res) => {
+    try {
+        const snap = await getDb().collection('users').limit(500).get();
+        const atendentes = snap.docs.map((d) => {
+            const x = d.data() || {};
+            return {
+                uid: d.id,
+                email: x.email || null,
+                nome: x.displayName || x.nome || null,
+                role: x.role || 'colaborador',
+                departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
+                filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
+            };
+        }).sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+        return res.json({ ok: true, atendentes, filas: FILAS_ATENDIMENTO });
+    } catch (e) {
+        console.error('[whatsapp/atendentes]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/atendentes/:uid/filas', requireAdmin, async (req, res) => {
+    try {
+        const uid = String(req.params.uid || '').trim();
+        if (!uid) return res.status(400).json({ ok: false, error: 'Informe o uid do usuário.' });
+        const brutas = Array.isArray(req.body?.filas) ? req.body.filas : null;
+        if (!brutas) return res.status(400).json({ ok: false, error: 'Envie filas: [] (lista, vazia limpa a atribuição).' });
+        const filas = [...new Set(brutas.map((f) => String(f || '').trim().toLowerCase()).filter(Boolean))];
+        // Fila desconhecida é RECUSA, nunca descarte em silêncio (lição da #382).
+        const invalidas = filas.filter((f) => !filaValida(f));
+        if (invalidas.length) {
+            return res.status(400).json({
+                ok: false,
+                error: `Fila(s) desconhecida(s): ${invalidas.join(', ')}. Válidas: ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}.`,
+            });
+        }
+        const ref = getDb().collection('users').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        await ref.set({ filasAtendimento: filas }, { merge: true });
+        console.log(`[whatsapp/atendentes] filas de ${uid} → [${filas.join(', ')}] por ${req.user?.email}`);
+        return res.json({ ok: true, uid, filas });
+    } catch (e) {
+        console.error('[whatsapp/atendentes/filas]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ─── 📥 IMPORTAR BACKUP DA ULTRA FOX (contatos e mensagens) ─────────────────
+// NADA é gravado sem preview: confirmar:false devolve a leitura; só
+// confirmar:true grava. Contato que JÁ existe NÃO é sobrescrito (backfill não
+// sobrescreve, 13/08) e o id determinístico faz reimportar não duplicar.
+
+const LIMITE_MENSAGENS_IMPORT = 20000;
+
+async function gravarContatosImportados(db, contatos) {
+    const agora = new Date().toISOString();
+    let criados = 0;
+    let jaExistiam = 0;
+    for (let i = 0; i < contatos.length; i += 300) {
+        const fatia = contatos.slice(i, i + 300);
+        const refs = fatia.map((c) => db.collection('whatsapp_contatos').doc(c.numero));
+        const snaps = await db.getAll(...refs);
+        const batch = db.batch();
+        snaps.forEach((s, j) => {
+            if (s.exists) { jaExistiam += 1; return; }   // NUNCA sobrescreve o que já está lá
+            const c = fatia[j];
+            batch.set(refs[j], {
+                numero: c.numero,
+                ...(c.nome ? { nomePerfil: c.nome } : {}),
+                ...(c.empresaNome ? { empresaNomeSugerido: c.empresaNome } : {}), // sugestão, não vínculo
+                empresaId: null,
+                origem: 'ultrafox-import',
+                criadoEm: agora,
+                atualizadoEm: agora,
+            });
+            criados += 1;
+        });
+        await batch.commit();
+    }
+    return { criados, jaExistiam };
+}
+
+async function gravarMensagensImportadas(db, mensagens, quem) {
+    const agora = new Date().toISOString();
+    let gravadas = 0;
+    const porConversa = new Map();
+    for (const m of mensagens) {
+        const atual = porConversa.get(m.numero);
+        if (!atual || m.em > atual.em) porConversa.set(m.numero, m);
+    }
+    for (let i = 0; i < mensagens.length; i += 400) {
+        const batch = db.batch();
+        for (const m of mensagens.slice(i, i + 400)) {
+            batch.set(db.collection('whatsapp_mensagens').doc(idMensagemImportada(m)), {
+                conversaId: m.numero, direcao: m.direcao, tipo: 'text',
+                texto: m.texto, midia: null, timestamp: m.em,
+                statusEntrega: null, origem: 'ultrafox-import',
+                ...(m.autor ? { autorImportado: m.autor } : {}),
+                importadoPor: quem, importadoEm: agora,
+            }, { merge: true });
+            gravadas += 1;
+        }
+        await batch.commit();
+    }
+    // Conversa/contato nascem se faltarem; conversa EXISTENTE não é tocada —
+    // histórico importado não sobrescreve o presente (nem a janela de 24h).
+    for (const [numero, ultima] of porConversa) {
+        const convRef = db.collection('whatsapp_conversas').doc(numero);
+        const conv = await convRef.get();
+        if (!conv.exists) {
+            await convRef.set({
+                numero, fila: null, naoLidas: 0, status: 'aberta', janela24hAte: null,
+                ultimaMensagem: { resumo: String(ultima.texto || '').slice(0, 140), direcao: ultima.direcao, em: ultima.em },
+                atualizadoEm: ultima.em,
+            });
+        }
+        const contRef = db.collection('whatsapp_contatos').doc(numero);
+        const cont = await contRef.get();
+        if (!cont.exists) {
+            await contRef.set({ numero, empresaId: null, origem: 'ultrafox-import', criadoEm: agora, atualizadoEm: agora });
+        }
+    }
+    return { gravadas, conversas: porConversa.size };
+}
+
+router.post('/importar-ultrafox', requireAdmin, async (req, res) => {
+    try {
+        const p = req.body || {};
+        const tipo = String(p.tipo || '').trim();
+        const conteudo = String(p.conteudo || '');
+        const confirmar = Boolean(p.confirmar);
+        if (!conteudo.trim()) return res.status(400).json({ ok: false, error: 'Cole ou envie o conteúdo do arquivo exportado.' });
+
+        if (tipo === 'contatos') {
+            const r = interpretarContatosCsv(conteudo);
+            if (!confirmar) {
+                return res.json({
+                    ok: true, preview: true, tipo,
+                    total: r.contatos.length, amostra: r.contatos.slice(0, 10),
+                    descartados: r.descartados.slice(0, 20), totalDescartados: r.descartados.length,
+                    avisos: r.avisos,
+                });
+            }
+            if (!r.contatos.length) return res.status(422).json({ ok: false, error: 'Nenhum contato legível — nada foi gravado.', avisos: r.avisos });
+            const g = await gravarContatosImportados(getDb(), r.contatos);
+            return res.json({ ok: true, tipo, ...g, totalDescartados: r.descartados.length, avisos: r.avisos });
+        }
+
+        if (tipo === 'mensagens-txt') {
+            const numero = normalizarNumeroBr(p.numero || '');
+            const r = interpretarConversaTxt(conteudo);
+            if (!confirmar) {
+                return res.json({
+                    ok: true, preview: true, tipo,
+                    total: r.mensagens.length, autores: r.autores,
+                    amostra: r.mensagens.slice(0, 6),
+                    descartadas: r.descartadas.slice(0, 10), totalDescartadas: r.descartadas.length,
+                    ...(numero ? {} : { avisos: ['Informe o NÚMERO do contato desta conversa antes de confirmar.'] }),
+                });
+            }
+            if (!numero) return res.status(400).json({ ok: false, error: 'Informe o número do WhatsApp do contato desta conversa.' });
+            const autoresEscritorio = Array.isArray(p.autoresEscritorio) ? p.autoresEscritorio : [];
+            if (!autoresEscritorio.length) {
+                return res.status(400).json({ ok: false, error: 'Marque qual(is) autor(es) são do ESCRITÓRIO — a direção das mensagens não se adivinha.' });
+            }
+            const docs = prepararMensagensDoTxt({ mensagens: r.mensagens, numero, autoresEscritorio });
+            if (!docs.length) return res.status(422).json({ ok: false, error: 'Nenhuma mensagem legível — nada foi gravado.' });
+            if (docs.length > LIMITE_MENSAGENS_IMPORT) {
+                return res.status(422).json({ ok: false, error: `Arquivo com ${docs.length} mensagens — o limite por importação é ${LIMITE_MENSAGENS_IMPORT}. Divida o export.` });
+            }
+            const g = await gravarMensagensImportadas(getDb(), docs, req.user?.email || null);
+            return res.json({ ok: true, tipo, ...g, totalDescartadas: r.descartadas.length });
+        }
+
+        if (tipo === 'mensagens-csv') {
+            const r = interpretarMensagensCsv(conteudo);
+            if (!confirmar) {
+                return res.json({
+                    ok: true, preview: true, tipo,
+                    total: r.mensagens.length, amostra: r.mensagens.slice(0, 6),
+                    descartadas: r.descartadas.slice(0, 10), totalDescartadas: r.descartadas.length,
+                    avisos: r.avisos,
+                });
+            }
+            if (!r.mensagens.length) return res.status(422).json({ ok: false, error: 'Nenhuma mensagem legível — nada foi gravado.', avisos: r.avisos });
+            if (r.mensagens.length > LIMITE_MENSAGENS_IMPORT) {
+                return res.status(422).json({ ok: false, error: `Arquivo com ${r.mensagens.length} mensagens — o limite por importação é ${LIMITE_MENSAGENS_IMPORT}. Divida o export.` });
+            }
+            const g = await gravarMensagensImportadas(getDb(), r.mensagens, req.user?.email || null);
+            return res.json({ ok: true, tipo, ...g, totalDescartadas: r.descartadas.length, avisos: r.avisos });
+        }
+
+        return res.status(400).json({ ok: false, error: 'tipo deve ser contatos, mensagens-txt ou mensagens-csv.' });
+    } catch (e) {
+        console.error('[whatsapp/importar-ultrafox]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 export default router;

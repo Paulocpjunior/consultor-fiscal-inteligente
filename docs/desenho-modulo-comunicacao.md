@@ -254,8 +254,17 @@ dentro é ferramenta na mão de quem já está com o Teams aberto o dia todo.
   `X-Frame-Options` do helmet desligado (dois cabeçalhos com regras
   diferentes = navegador antigo obedece o errado e a aba abre em branco).
   `__tests__/teamsFrameAncestors.test.ts` trava a lista NOS DOIS sentidos.
-  A aba de canal já pode ser criada; o app do tenant (manifest) fica pra
-  quando o Paulo quiser dar esse passo.
+  A aba de canal já pode ser criada.
+- **App do tenant**: ✅ **PACOTE PRONTO 16/08** — `teams-app/` (manifest
+  v1.16 com aba estática pessoal → `/connect`, ícones gerados por
+  `scripts/gerar-icones-teams.py`, zip por `scripts/gerar-pacote-teams.sh`).
+  O zip também é servido pelo app em **`/sp-connect-teams.zip`**. Upload e
+  liberação são no Admin Center do Teams (passo a passo no
+  `teams-app/README.md`). O `contentUrl` aponta pra URL do Cloud Run
+  (funciona hoje); quando o domínio `app.spassessoriacontabil.com.br`
+  entrar no ar, troca-se a URL no manifest e reenviam-se (o domínio já está
+  em `validDomains`). ⚠️ O `id` (GUID) do manifest NUNCA muda entre versões
+  — mudar cria OUTRO app e a equipe perde o fixado.
 - **Login funciona embutido**: o CFI autentica por e-mail/senha do Firebase
   (`signInWithEmailAndPassword`), sem popup de terceiro — o caso que quebra
   dentro de iframe não existe aqui. SSO com a conta Microsoft do tenant é
