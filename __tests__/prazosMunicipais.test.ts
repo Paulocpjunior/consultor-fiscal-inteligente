@@ -623,3 +623,35 @@ describe('🚨 sem calendário, a tarefa nasce SEM data — nunca com uma errada
         expect(readFileSync(join(RAIZ, 'services/tarefasAutoGerar.ts'), 'utf8')).toMatch(/municipio: \{/);
     });
 });
+
+describe('🚨 informar a data ATUALIZA a tarefa que está na tela', () => {
+    const RAIZ = join(__dirname, '..');
+    const rota = readFileSync(join(RAIZ, 'sefaz-backend/prazos-municipais-routes.js'), 'utf8');
+
+    it('a rota data as tarefas da CIDADE que estavam sem vencimento', () => {
+        // Sem isto, informar gravava o calendário e a tarefa continuava dizendo
+        // "informar vencimento" — a pessoa clicaria de novo sem entender. Ação
+        // sem efeito visível é beco (lição do "Já importado", 14/08).
+        expect(rota).toMatch(/collection\('tarefas'\)/);
+        expect(rota).toMatch(/where\('codMunIBGE', '==', r\.prazo\.codMunIBGE\)/);
+        expect(rota).toMatch(/vencimentoAInformar: false/);
+        // É a CIDADE que ganhou calendário, não só este cliente.
+        expect(rota).not.toMatch(/where\('empresaId'/);
+    });
+
+    it('a vigência NÃO retroage no backfill — competência anterior fica sem data', () => {
+        expect(rota).toMatch(/if \(iso < String\(r\.prazo\.vigenciaInicio/);
+    });
+
+    it('tarefa que JÁ tem data não é sobrescrita, cancelada fica fora', () => {
+        expect(rota).toMatch(/if \(t\.vencimento\) return;/);
+        expect(rota).toMatch(/t\.status === 'cancelada'/);
+    });
+
+    it('🚨 falha no backfill NÃO desfaz o calendário — mas é DITA', () => {
+        // A gravação já aconteceu; esconder a falha faria o colaborador esperar
+        // uma atualização que não vem.
+        expect(rota).toMatch(/erroBackfill/);
+        expect(rota).toMatch(/NÃO receberam a data agora/);
+    });
+});
