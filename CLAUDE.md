@@ -1926,6 +1926,20 @@ estiverem abertos, **não tratar o número da tela como fechado** — vale a reg
 de 12/08: print sem versão não é evidência, e pendência aberta não vira fato.
 Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
 
+0. **CLOUD RUN — três envs, e a primeira é a única que muda imposto hoje**
+   (16/08, confirmadas ABERTAS pelo print do ⚙️ Config Admin dele).
+   a) 🔴 **`GEMINI_MODEL_PRO` apontando para o alias do FLASH** — o painel acusa
+      em vermelho (`conferirRoteador`) e a linha continua acesa, ou seja o env
+      **não foi mexido**. Enquanto isso, anexo, prompt longo e **parecer
+      jurídico** caem no modelo barato. Correção recomendada é REMOVER OS DOIS
+      (`--remove-env-vars GEMINI_MODEL_PRO,GEMINI_MODEL_FLASH`) e deixar o app
+      resolver pela conta — pinar à mão devolve o nome cravado que a resolução
+      automática existe para evitar.
+   b) `SISTEMA_DEV_EMAILS=p.c.pereira@me.com` (aberta desde 31/07) — restringe
+      o painel Sistema→Banco além de admin.
+   c) Rotação do `sefaz-cron-secret` (higiene: o valor vazou 2× em colas de
+      terminal no chat). Exige rodar de novo os DOIS scripts de scheduler.
+
 1. **NOVA ERA — os seis produtores tirados do FUNRURAL por engano** (14/08). Ele
    clicou ✕ para limpar a lista quando a tela ainda não dizia qual nota era
    qual; as excluídas eram justamente as notas PRÓPRIAS de entrada, que DEVEM
@@ -2454,8 +2468,13 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
   caso novo**: o DAS é o MESMO com e sem a qualificação, então gerar a guia não
   prova nada — só o extrato denuncia ("Imunidade tributária de: ICMS, IPI."). É
   literalmente a armadilha do ISS fixo (SUP), que passou meses despercebida pela
-  mesma razão. PENDENTE: a marcação de ISENÇÃO por tributo (id 4) ainda não tem
-  campo na tela — o caso Jaguarexport segue esperando isso, não o número.
+  mesma razão. ✅ **ISENÇÃO FECHADA no mesmo desenho (#646)**: marcação "Isenção
+  de ICMS" na tela, EXCLUDENTE com Imunidade (naturezas diferentes — a imunidade
+  é constitucional e alcança ICMS **e** IPI; a isenção é lei estadual e o
+  `<select>` do IPI nem oferece o campo), viajando como
+  `{codigoTributo: 1007, id: 4}` e chegando no extrato como *"Isenção de ICMS:
+  R$ ..."* COM VALOR — enquanto a imunidade sai sem valor, listando os tributos.
+  Vale a MESMA conferência obrigatória: o DAS é igual com e sem a qualificação.
   ❌ **O 🔎 NÃO DEVOLVE O ID — premissa minha derrubada por resposta real
   (12/08)**: eu supunha que o `CONSULTIMADECREC14` trouxesse a declaração
   ESTRUTURADA, e o botão foi construído nessa aposta. A resposta de uma
