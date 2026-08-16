@@ -18,7 +18,8 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    Atendente, ImportPreview, AvaliacaoAtendimento, ClienteDaConversa,
+    listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
+    ClienteDaConversa, CanalWhatsapp,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -265,7 +266,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar'>('bot');
+    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais'>('bot');
     const [atendentes, setAtendentes] = useState<Atendente[]>([]);
     const [atdErro, setAtdErro] = useState<string | null>(null);
     const [atdCarregado, setAtdCarregado] = useState(false);
@@ -372,6 +373,30 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         const r = await listarAvaliacoes();
         if (r.ok) setAvDados({ escopo: r.escopo, total: r.total, media: r.media, porNota: r.porNota, avaliacoes: r.avaliacoes });
         else setAvErro(r.error || 'Falha ao carregar as avaliações.');
+    };
+
+    // ── 📞 Canais (2º número): o seletor/selo só aparece com mais de um.
+    const [canais, setCanais] = useState<CanalWhatsapp[]>([]);
+    const [multiCanal, setMultiCanal] = useState(false);
+    const [canalErro, setCanalErro] = useState<string | null>(null);
+    const [canalForm, setCanalForm] = useState({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+    const [salvandoCanal, setSalvandoCanal] = useState(false);
+    const carregarCanais = useCallback(async () => {
+        const r = await listarCanais();
+        if (r.ok) { setCanais(r.canais || []); setMultiCanal(Boolean(r.multiCanal)); }
+    }, []);
+    useEffect(() => { carregarCanais(); }, [carregarCanais]);
+    const rotuloCanal = (id: string | null | undefined) =>
+        canais.find((c) => c.id === (id || 'principal'))?.rotulo || 'Número principal';
+    const cadastrarCanal = async () => {
+        setSalvandoCanal(true);
+        setCanalErro(null);
+        try {
+            const r = await salvarCanal(canalForm);
+            if (!r.ok) { setCanalErro(r.error || 'Falha ao salvar o canal.'); return; }
+            setCanalForm({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+            await carregarCanais();
+        } finally { setSalvandoCanal(false); }
     };
 
     // ── ⚙️ aba 📥 Importar backup da Ultra Fox (preview antes de gravar)
@@ -689,7 +714,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -754,6 +779,62 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         )}
 
                         {/* ── aba 📥 Importar backup da Ultra Fox ───────────── */}
+                        {/* ── aba 📞 Números (2º número / 2ª WABA) ────────── */}
+                        {cfgAba === 'canais' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    O número de hoje vem do Cloud Run e é o <strong>padrão</strong> — nada a fazer aqui
+                                    enquanto for um só. Para ligar um segundo número, cadastre-o abaixo e coloque o
+                                    token dele no Cloud Run com o NOME que você informar.
+                                    <strong> O token nunca é digitado aqui</strong> (ele não pode ficar no banco).
+                                </p>
+                                <div className="space-y-1.5">
+                                    {canais.map((c) => (
+                                        <div key={c.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
+                                                    {c.rotulo}
+                                                    {c.origem === 'env' && <span className="ml-1.5 text-[9px] font-bold text-slate-400">padrão · Cloud Run</span>}
+                                                </p>
+                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${c.pronto
+                                                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                                    : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
+                                                    {c.pronto ? 'pronto' : 'incompleto'}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400">
+                                                {c.numeroExibicao || 'número não informado'} · id {c.phoneNumberId || '—'}
+                                                {c.envToken ? ` · token em ${c.envToken}` : ''}
+                                            </p>
+                                            {!c.pronto && (c.faltas || []).length > 0 && (
+                                                <p className="text-[10px] text-red-600 dark:text-red-400">falta: {(c.faltas || []).join(' · ')}</p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">➕ Novo número</p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <input value={canalForm.id} onChange={(e) => setCanalForm((f) => ({ ...f, id: e.target.value }))} placeholder="id (ex.: rh)" className={CAMPO} />
+                                        <input value={canalForm.rotulo} onChange={(e) => setCanalForm((f) => ({ ...f, rotulo: e.target.value }))} placeholder="Rótulo (ex.: RH)" className={CAMPO} />
+                                        <input value={canalForm.phoneNumberId} onChange={(e) => setCanalForm((f) => ({ ...f, phoneNumberId: e.target.value }))} placeholder="phone number ID (painel da Meta)" className={CAMPO} />
+                                        <input value={canalForm.numeroExibicao} onChange={(e) => setCanalForm((f) => ({ ...f, numeroExibicao: e.target.value }))} placeholder="+55 11 ..." className={CAMPO} />
+                                        <input value={canalForm.envToken} onChange={(e) => setCanalForm((f) => ({ ...f, envToken: e.target.value }))} placeholder="NOME da env do token (ex.: WHATSAPP_CLOUD_TOKEN_RH)" className={`${CAMPO} col-span-2`} />
+                                        <input value={canalForm.wabaId} onChange={(e) => setCanalForm((f) => ({ ...f, wabaId: e.target.value }))} placeholder="WABA id (opcional)" className={`${CAMPO} col-span-2`} />
+                                    </div>
+                                    {canalErro && <p className="text-[11px] text-red-600 dark:text-red-400">{canalErro}</p>}
+                                    <button onClick={cadastrarCanal} disabled={salvandoCanal}
+                                        className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {salvandoCanal ? 'Salvando…' : 'Cadastrar número'}
+                                    </button>
+                                    <p className="text-[10px] text-slate-400">
+                                        Depois de cadastrar: no Cloud Run, crie a variável com esse NOME e o token do número.
+                                        A entrada é roteada pelo próprio aviso da Meta — nada de adivinhar de quem é a mensagem.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         {cfgAba === 'importar' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -1075,6 +1156,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <p className="text-[10px] text-slate-400 truncate">
                                         {formatarNumeroBr(sel.numero)} · {rotuloCurtoFila(sel.fila)}
                                         {sel.protocolo ? ` · protocolo ${sel.protocolo}` : ''}
+                                        {multiCanal ? ` · 📞 ${rotuloCanal(sel.canalId)}` : ''}
                                     </p>
                                 </div>
                             </div>

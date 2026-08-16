@@ -36,6 +36,7 @@ import {
 } from './whatsapp-webhook.js';
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
 import { resolverConfig, decidirAutomacao, gerarProtocolo, interpretarNota } from './whatsapp-atendimento.js';
+import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -60,8 +61,27 @@ router.get('/webhook', (req, res) => {
 });
 
 /** Grava UMA mensagem recebida + contato + conversa. Idempotente pelo wamid. */
-async function gravarMensagemRecebida(db, msg) {
+/**
+ * Catálogo de canais (padrão do env + cadastrados). Leitura BEST-EFFORT: se
+ * a coleção falhar, vale só o canal do env — um cadastro que piscou não pode
+ * derrubar a captura de mensagem, que é o que não se recupera.
+ */
+async function catalogoDeCanais(db) {
+    let cadastrados = [];
+    try {
+        const snap = await db.collection('whatsapp_canais').get();
+        cadastrados = snap.docs.map((d) => ({ id: d.id, dados: d.data() }));
+    } catch (e) {
+        console.warn('[whatsapp/canais] catálogo não lido, valendo só o canal do env:', e.message);
+    }
+    return montarCatalogoCanais({ cadastrados });
+}
+
+async function gravarMensagemRecebida(db, msg, catalogo = null) {
     const agora = new Date().toISOString();
+    // De qual número esta mensagem veio? A Meta diz no payload — é fonte.
+    const canal = catalogo ? canalDoEvento(catalogo, msg.phoneNumberId) : { canalId: null, conhecido: true, motivo: null };
+    if (catalogo && !canal.conhecido) console.warn('[whatsapp/canais]', canal.motivo);
     await db.collection('whatsapp_mensagens').doc(msg.metaMessageId).set({
         conversaId: msg.de,
         direcao: 'entrada',
@@ -71,6 +91,7 @@ async function gravarMensagemRecebida(db, msg) {
         respostaA: msg.respostaA,
         timestamp: msg.timestamp,
         phoneNumberId: msg.phoneNumberId,
+        canalId: canal.canalId,          // null = número fora do catálogo (nomeado no log)
         recebidoEm: agora,
     }, { merge: true });
 
@@ -87,6 +108,10 @@ async function gravarMensagemRecebida(db, msg) {
 
     await db.collection('whatsapp_conversas').doc(msg.de).set({
         numero: msg.de,
+        // O canal da conversa é o do PRIMEIRO contato e não muda sozinho: se
+        // o cliente escrever pro outro número, a linha do canal desta
+        // conversa continua sendo a que o atendente já está usando.
+        ...(canal.canalId ? { canalId: canal.canalId } : {}),
         ultimaMensagem: { resumo: resumoParaConversa(msg), direcao: 'entrada', em: msg.timestamp || agora },
         // Mensagem do cliente ABRE/renova a janela de 24h — é ela que a F2 mostra.
         janela24hAte: janela24hAte(msg.timestamp || agora),
@@ -319,7 +344,8 @@ router.post('/webhook', async (req, res) => {
             console.warn('[whatsapp/webhook POST] payload fora do esperado:', ev.motivo);
             return res.sendStatus(200); // assinado pela Meta, mas não é da WABA — nada a fazer
         }
-        for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg);
+        const catalogo = await catalogoDeCanais(db);
+        for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg, catalogo);
         for (const st of ev.statuses) await gravarStatus(db, st);
 
         // Mídia DEPOIS da resposta (setImmediate, padrão da casa): a Meta quer
