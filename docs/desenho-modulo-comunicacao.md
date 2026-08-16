@@ -199,9 +199,16 @@ funcionamento e todas as outras utilidades"*)
   atribuição de conversa; cadastro novo de atendente seria a segunda cópia
   do Gerenciar Usuários.
 - **Filas/menu de triagem**: "Digite uma das opções: 1 - Recepção · 2 -
-  Financeiro · …" roteando pra fila. ⚠️ o menu da Ultra Fox tem 8 opções,
-  incluindo **RH e Jurídico**, que NÃO são departamentos do catálogo —
-  decisão do Paulo se viram fila própria ou caem na Recepção.
+  Financeiro · …" roteando pra fila.
+  ✅ **DECIDIDO (Paulo, 16/08)**: **RH é departamento separado como todos os
+  outros** — entra no catálogo de departamentos de ATENDIMENTO (`rh`, e
+  `juridico` idem, espelhando o menu atual; nenhum dos dois abre app irmão,
+  são filas). E **a Recepção atende TODOS os departamentos**: a régua de
+  visibilidade é *atendente vê a fila do(s) seu(s) departamento(s) +
+  Recepção; atendente da Recepção vê TODAS as filas*.
+  O menu de triagem (número → fila) é CONFIGURÁVEL na ⚙️ do Connect, com o
+  default espelhando o menu de 8 opções em uso hoje — mudar item de menu é
+  config, nunca deploy.
 - **Mensagens automáticas**: saudação com Nº DE PROTOCOLO ("Ju, aguarde um
   momento… Protocolo: 576695860"), instrução #sair, mensagem de fora de
   horário ("não temos atendentes online, deixe sua mensagem"), rodapé com
