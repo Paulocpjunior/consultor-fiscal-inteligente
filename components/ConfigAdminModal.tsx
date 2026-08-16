@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
     listarTemplates, salvarTemplate, desativarTemplate, statusWhatsapp,
-    listarTemplatesDaMeta, statusWebhook,
+    listarTemplatesDaMeta, statusWebhook, assinarWabaWebhook,
     WhatsappTemplate, TemplateVariavel, TemplateDaMeta, WebhookStatus,
 } from '../services/whatsappTemplatesService';
 import { dataHoraSp } from '../services/spConnect';
@@ -127,6 +127,17 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
         } finally {
             setBuscandoWebhook(false);
         }
+    };
+
+    const assinarWaba = async () => {
+        setMsg(null);
+        const r = await assinarWabaWebhook();
+        if (!r.ok) {
+            setMsg({ texto: `${r.error}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`, tipo: 'erro' });
+            return;
+        }
+        setMsg({ texto: 'App do CFI assinado na WABA — mande uma mensagem de teste e consulte de novo.', tipo: 'ok' });
+        await buscarWebhook();
     };
 
     const buscarNaMeta = async () => {
@@ -399,6 +410,34 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                 : 'nenhum evento recebido ainda — confira a assinatura do campo "messages" no painel da Meta'}
                                         </span>
                                     </p>
+                                )}
+
+                                {/* A 2ª amarração: URL+token configurados NÃO bastam — o app
+                                    precisa estar ASSINADO na WABA, senão o teste do painel chega
+                                    e a mensagem real não (caso de 16/08). */}
+                                {webhook.assinaturaWaba && (
+                                    <div className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-[11px]">
+                                        {webhook.assinaturaWaba.ok ? (
+                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                <span className="text-slate-600 dark:text-slate-300">
+                                                    <strong>Apps assinados na WABA:</strong>{' '}
+                                                    {(webhook.assinaturaWaba.apps || []).length
+                                                        ? (webhook.assinaturaWaba.apps || []).map((a) => a.nome || a.id).join(' · ')
+                                                        : 'NENHUM — é por isso que mensagem real não chega'}
+                                                </span>
+                                                <button
+                                                    onClick={assinarWaba}
+                                                    className="text-[10px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold whitespace-nowrap"
+                                                >
+                                                    📡 Assinar o app do CFI na WABA
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span className="text-amber-700 dark:text-amber-400">
+                                                Não consegui ler a assinatura da WABA: {webhook.assinaturaWaba.erro}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

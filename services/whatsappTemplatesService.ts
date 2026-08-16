@@ -107,6 +107,8 @@ export interface WebhookStatus {
     configurado: boolean;
     faltas: string[];
     caminhoWebhook: string;
+    /** Apps assinados na WABA — a 2ª amarração: sem o nosso app aqui, evento real não chega. */
+    assinaturaWaba: { ok: boolean; wabaId?: string; apps?: { id: string | null; nome: string | null }[]; erro?: string } | null;
     ultimoEventoEm: string | null;
     ultimosStatus: WebhookStatusEntrega[];
     ultimasMensagens: WebhookMensagemRecebida[];
@@ -115,3 +117,7 @@ export interface WebhookStatus {
 /** Painel do webhook: config, últimos status de entrega e mensagens recebidas. */
 export const statusWebhook = () =>
     req<WebhookStatus>('/api/admin/whatsapp/webhook-status');
+
+/** Assina o app do CFI na WABA (subscribed_apps) — liga o fluxo real de eventos. */
+export const assinarWabaWebhook = () =>
+    req<{ wabaId: string }>('/api/admin/whatsapp/webhook-assinar-waba', { method: 'POST' });

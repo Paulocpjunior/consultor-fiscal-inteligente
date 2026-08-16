@@ -26,7 +26,10 @@ import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema,
     DEPARTAMENTOS_WHATSAPP,
 } from './whatsapp-templates.js';
-import { enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados } from './whatsapp-cloud.js';
+import {
+    enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
+    listarAppsAssinadosNaWaba, assinarWaba,
+} from './whatsapp-cloud.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
@@ -277,18 +280,43 @@ router.get('/webhook-status', requireAdmin, async (_req, res) => {
             });
         const ultimoEventoEm = evSnap.empty ? null : (evSnap.docs[0].data().recebidoEm || null);
 
+        // A SEGUNDA amarração: o app precisa estar ASSINADO na WABA, senão o
+        // teste do painel chega e a mensagem real não (caso de 16/08). Falha
+        // aqui não derruba o painel — vira aviso nomeado.
+        let assinaturaWaba = null;
+        try {
+            const a = await listarAppsAssinadosNaWaba();
+            assinaturaWaba = a.ok
+                ? { ok: true, wabaId: a.wabaId, apps: a.apps }
+                : { ok: false, erro: a.erro };
+        } catch (e) { assinaturaWaba = { ok: false, erro: e.message }; }
+
         return res.json({
             ok: true,
             configurado: faltas.length === 0,
             faltas,
             // O caminho que o Paulo cola no painel da Meta (campo Callback URL).
             caminhoWebhook: '/api/whatsapp/webhook',
+            assinaturaWaba,
             ultimoEventoEm,
             ultimosStatus,
             ultimasMensagens,
         });
     } catch (e) {
         console.error('[whatsapp/webhook-status]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Assina o NOSSO app na WABA (subscribed_apps) — é o que liga o fluxo REAL de
+// eventos. Idempotente: assinar de novo não duplica nada.
+router.post('/webhook-assinar-waba', requireAdmin, async (_req, res) => {
+    try {
+        const r = await assinarWaba();
+        if (!r.ok) return res.status(502).json({ ok: false, error: r.erro, acao: r.acao });
+        return res.json({ ok: true, wabaId: r.wabaId });
+    } catch (e) {
+        console.error('[whatsapp/webhook-assinar-waba]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
