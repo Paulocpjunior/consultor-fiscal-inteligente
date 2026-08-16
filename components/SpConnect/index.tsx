@@ -951,6 +951,19 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         Passo a passo do dia a dia. Se algo na tela não bater com o que está escrito
                                         aqui, o errado é o manual — avise o Paulo.
                                     </p>
+                                    {/* Guia de instalação: quem atende todo dia tem que INSTALAR
+                                        (aba fechada não toca som nem pop-up). Guia sem caminho na
+                                        tela é guia que ninguém acha. */}
+                                    <a href="/guia-instalar-sp-connect.html" target="_blank" rel="noreferrer"
+                                        className="block rounded-lg border border-[#0e3bfa]/30 bg-[#0e3bfa]/5 px-3 py-2 hover:bg-[#0e3bfa]/10">
+                                        <p className="text-[11px] font-bold text-[#0e3bfa] dark:text-sky-300">
+                                            📲 Instalar o SP Connect no Teams, no celular, no tablet e no computador →
+                                        </p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Guia com o passo a passo de cada um. Quem atende todo dia deve instalar:
+                                            com a aba fechada, som e pop-up não tocam.
+                                        </p>
+                                    </a>
                                     {MANUAL.map((s) => (
                                         <div key={s.titulo} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
                                             <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">{s.titulo}</p>

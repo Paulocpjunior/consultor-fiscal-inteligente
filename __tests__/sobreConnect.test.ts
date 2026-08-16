@@ -18,7 +18,7 @@
  * do bot —, nunca por lista de comandos copiada aqui: lista envelhece no
  * primeiro comando novo, e envelhece calada.
  */
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import {
     SOBRE_VERSAO, REVISOES, MANUAL, O_QUE_FAZ, DIFERENCIAIS, POR_QUE,
@@ -143,5 +143,12 @@ describe('🚨 conteúdo sem BOTÃO não é entrega', () => {
 
     it('abrir o SOBRE é o que carimba a leitura — selo que apaga sozinho seria mentira', () => {
         expect(tela).toMatch(/marcarSobreComoLido/);
+    });
+
+    it('o guia de instalação tem caminho NA TELA — guia que ninguém acha é texto órfão', () => {
+        // Ele responde "como coloco isso no Teams / no celular?", e a resposta
+        // não pode viver só num arquivo do repositório.
+        expect(tela).toContain('/guia-instalar-sp-connect.html');
+        expect(existsSync(join(raiz, 'public/guia-instalar-sp-connect.html'))).toBe(true);
     });
 });
