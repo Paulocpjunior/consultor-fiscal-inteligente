@@ -32,6 +32,10 @@ import {
 import { destravarSom, somDestravado, tocarAviso } from '../../services/somAviso';
 import { pushConfigurado, registrarDispositivo } from '../../services/pushConnect';
 import {
+    SOBRE_VERSAO, POR_QUE, O_QUE_FAZ, DIFERENCIAIS, MANUAL, REVISOES,
+    temSobreNaoLido, marcarSobreComoLido, dataBr,
+} from '../../services/sobreConnect';
+import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
@@ -480,6 +484,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         else setAvErro(r.error || 'Falha ao carregar as avaliações.');
     };
 
+    // ── ℹ️ SOBRE: manual, o que o app faz, por que existe e o que mudou.
+    // O selo vermelho é a única coisa que diz à equipe que há o que ler — e
+    // ele só apaga quando ALGUÉM ABRE (apagar sozinho seria mentira).
+    const [sobreAberto, setSobreAberto] = useState(false);
+    const [sobreAba, setSobreAba] = useState<'manual' | 'novidades' | 'sobre'>('manual');
+    const [sobreNovo, setSobreNovo] = useState(false);
+    useEffect(() => { setSobreNovo(temSobreNaoLido()); }, []);
+    const abrirSobre = (aba: 'manual' | 'novidades' | 'sobre' = 'manual') => {
+        setSobreAba(aba);
+        setSobreAberto(true);
+        marcarSobreComoLido();
+        setSobreNovo(false);
+    };
+
     // ── 📞 Canais (2º número): o seletor/selo só aparece com mais de um.
     const [canais, setCanais] = useState<CanalWhatsapp[]>([]);
     const [multiCanal, setMultiCanal] = useState(false);
@@ -895,6 +913,148 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 </div>
             )}
 
+            {/* ── Modal ℹ️ SOBRE (manual · novidades · o app) ────────────────── */}
+            {sobreAberto && (
+                // items-start + overflow-y-auto: com o manual inteiro, `items-center`
+                // esconderia o fim da lista (a trava de layout do projeto).
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setSobreAberto(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl my-8" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+                            <div className="min-w-0">
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">ℹ️ Sobre o SP Connect</h3>
+                                <p className="text-[10px] text-slate-400">
+                                    O atendimento por WhatsApp da SP Assessoria Contábil · última atualização {dataBr(SOBRE_VERSAO)}
+                                </p>
+                            </div>
+                            <button onClick={() => setSobreAberto(false)} className="text-slate-400 hover:text-slate-600 px-1 shrink-0">✕</button>
+                        </div>
+
+                        <div className="flex gap-1.5 px-4 pt-3 flex-wrap">
+                            {([
+                                ['manual', '📖 Manual de uso'],
+                                ['novidades', '✨ O que mudou'],
+                                ['sobre', '💡 O que é e por quê'],
+                            ] as const).map(([id, rotulo]) => (
+                                <button key={id} onClick={() => setSobreAba(id)}
+                                    className={`text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${sobreAba === id
+                                        ? 'bg-[#0e3bfa] text-white'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                    {rotulo}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+                            {sobreAba === 'manual' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        Passo a passo do dia a dia. Se algo na tela não bater com o que está escrito
+                                        aqui, o errado é o manual — avise o Paulo.
+                                    </p>
+                                    {MANUAL.map((s) => (
+                                        <div key={s.titulo} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">{s.titulo}</p>
+                                            <ul className="mt-1.5 space-y-1">
+                                                {s.passos.map((p, i) => (
+                                                    <li key={i} className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug flex gap-1.5">
+                                                        <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
+                                                        <span>{p}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            {s.atencao && (
+                                                <p className="mt-2 text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1 leading-snug">
+                                                    ⚠️ {s.atencao}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">As filas que existem hoje</p>
+                                        {/* A lista sai do catálogo CARREGADO, nunca de uma cópia
+                                            escrita aqui: fila nova apareceria só num dos dois. */}
+                                        {filas.length === 0 ? (
+                                            <p className="text-[11px] text-slate-400 mt-1">Carregando as filas…</p>
+                                        ) : (
+                                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                {filas.map((f) => (
+                                                    <span key={f.id} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                        {f.rotulo}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+                                            Você atende {minhasFilas === null ? '—' : minhasFilas.length === 0 ? 'nenhuma fila ainda' : `${minhasFilas.length} fila(s)`}
+                                            {papel !== 'colaborador' ? ` · seu perfil é ${papel} (vê e atende tudo)` : ''}.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+
+                            {sobreAba === 'novidades' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        O ponto vermelho no ℹ️ acende quando entra revisão nova e some quando você abre aqui.
+                                    </p>
+                                    {REVISOES.map((r) => (
+                                        <div key={r.data} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                                {dataBr(r.data)}
+                                                {r.data === SOBRE_VERSAO && (
+                                                    <span className="ml-2 text-[9px] font-bold px-1.5 py-px rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">
+                                                        mais recente
+                                                    </span>
+                                                )}
+                                            </p>
+                                            <ul className="mt-1.5 space-y-1">
+                                                {r.itens.map((i, k) => (
+                                                    <li key={k} className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug flex gap-1.5">
+                                                        <span className="text-slate-300 dark:text-slate-600 shrink-0">•</span>
+                                                        <span>{i}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+
+                            {sobreAba === 'sobre' && (
+                                <>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">Por que ele foi criado</p>
+                                        <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">{POR_QUE}</p>
+                                    </div>
+
+                                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">O que ele faz</p>
+                                    <div className="grid sm:grid-cols-2 gap-2">
+                                        {O_QUE_FAZ.map((b) => (
+                                            <div key={b.titulo} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5">
+                                                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{b.titulo}</p>
+                                                <p className="mt-1 text-[10.5px] text-slate-600 dark:text-slate-300 leading-snug">{b.texto}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
+                                        O que ele tem que os apps de mercado não têm
+                                    </p>
+                                    <div className="space-y-2">
+                                        {DIFERENCIAIS.map((b) => (
+                                            <div key={b.titulo} className="rounded-lg border-l-4 border-[#0e3bfa] bg-slate-50 dark:bg-slate-900/40 px-3 py-2">
+                                                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{b.titulo}</p>
+                                                <p className="mt-0.5 text-[10.5px] text-slate-600 dark:text-slate-300 leading-snug">{b.texto}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ── Modal ⚙️ Config do atendimento (admin) ─────────────────────── */}
             {cfgAberta && (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setCfgAberta(false)}>
@@ -1244,6 +1404,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <button onClick={abrirAvaliacoes} title="Avaliações dos atendimentos (nota 1-5 do cliente)"
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
                                     📊
+                                </button>
+                                <button onClick={() => abrirSobre(sobreNovo ? 'novidades' : 'manual')}
+                                    title="Sobre o SP Connect: manual de uso, o que mudou e por que ele existe"
+                                    className="relative text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
+                                    ℹ️
+                                    {/* O ponto vermelho é o que faz a equipe SABER que houve
+                                        entrega. Sem ele, atualizar é quase não atualizar. */}
+                                    {sobreNovo && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800" />
+                                    )}
                                 </button>
                                 {ehAdmin && (
                                     <button onClick={abrirCfg} title="Configurar atendimento (bot, horário, mensagens, menu)"
