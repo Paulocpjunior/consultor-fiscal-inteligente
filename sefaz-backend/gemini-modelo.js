@@ -30,8 +30,28 @@
 //  (3) lista vazia/falha ⇒ ALIAS, nunca ID inventado — e o motivo vai escrito.
 // ============================================================================
 
-/** A família que o Paulo mandou usar. Mudar aqui = mudar o alvo do app. */
+/**
+ * A família que o Paulo mandou usar — o PISO, não um casamento exato.
+ *
+ * 🚨 CORREÇÃO DE PREMISSA (16/08, print do seletor da conta dele): **as linhas
+ * Pro e Flash NÃO andam no mesmo número**. O seletor do Gemini mostra, na mesma
+ * lista: `3.5 Flash Lite`, **`3.7 Flash`** e **`3.1 Pro`**. Eu tinha escrito o
+ * resolvedor casando a família EXATA nos dois degraus, então ele procurava um
+ * "3.7 Pro" que simplesmente não existe — e, não achando, dizia que *"a família
+ * 3.7 não aparece para esta conta"*, o que era falso e contradizia a sonda.
+ *
+ * O alvo certo é: **o mais novo de CADA linha**, com a família como piso.
+ * "Atualizar para a 3.7" quer dizer não ficar para trás — não quer dizer que
+ * exista um 3.7 em todo degrau.
+ */
 export const FAMILIA_ALVO_GEMINI = '3.7';
+
+/** `gemini-3.7-flash` → 3.7 · `gemini-2.5-pro` → 2.5 · sem versão → null. */
+export function versaoDoModelo(nome) {
+    const m = normalizarNomeModelo(nome).match(/^gemini-(\d+)\.(\d+)/i);
+    if (!m) return null;
+    return Number(m[1]) + Number(m[2]) / 1000;
+}
 
 /** Aliases oficiais do Google — a rede de baixo, que sempre responde. */
 export const ALIAS_PRO = 'gemini-pro-latest';
@@ -65,16 +85,16 @@ function geraConteudo(m) {
  */
 export function escolherModeloDaFamilia(modelos, { familia, tipo }) {
     const lista = Array.isArray(modelos) ? modelos : [];
-    // FRONTEIRA na família: sem ela, '3.7' casaria com 'gemini-3.70-pro' e com
-    // 'gemini-13.7-pro'. Nome parecido é o defeito que ninguém desconfia.
-    const escapada = String(familia || '').replace(/\./g, '\\.');
-    const daFamilia = new RegExp(`^gemini-${escapada}(?=[-.]|$)`, 'i');
+    // A FAMÍLIA É PISO, não casamento exato: o Pro pode estar no 3.1 enquanto
+    // o Flash está no 3.7 (print da conta do Paulo, 16/08). Exigir o número
+    // igual nos dois degraus fazia o app procurar um "3.7 Pro" inexistente.
+    const piso = versaoDoModelo(`gemini-${familia}-x`) ?? 0;
 
     const candidatos = lista
         .map(m => (typeof m === 'string' ? { name: m } : (m || {})))
         .filter(geraConteudo)
         .map(m => normalizarNomeModelo(m.name))
-        .filter(nome => !!nome && daFamilia.test(nome))
+        .filter(nome => !!nome && versaoDoModelo(nome) !== null)
         .filter(nome => {
             const n = nome.toLowerCase();
             if (tipo === 'flash') {
@@ -89,22 +109,32 @@ export function escolherModeloDaFamilia(modelos, { familia, tipo }) {
 
     if (candidatos.length === 0) {
         return {
-            modelo: null, candidatos: [],
-            motivo: `A conta não lista nenhum modelo ${tipo.toUpperCase()} da família ${familia}.`,
+            modelo: null, candidatos: [], versao: null, atingiuPiso: false,
+            motivo: `A conta não lista nenhum modelo ${tipo.toUpperCase()} com versão reconhecível.`,
         };
     }
 
     const ordenados = [...candidatos].sort((a, b) => {
+        // MAIS NOVO PRIMEIRO — é isso que "não ficar para trás" significa.
+        const va = versaoDoModelo(a) ?? 0;
+        const vb = versaoDoModelo(b) ?? 0;
+        if (va !== vb) return vb - va;
         const ia = INSTAVEL.test(a) ? 1 : 0;
         const ib = INSTAVEL.test(b) ? 1 : 0;
-        if (ia !== ib) return ia - ib;               // estável primeiro
+        if (ia !== ib) return ia - ib;               // estável antes de preview
         if (a.length !== b.length) return a.length - b.length; // nome base antes de datado
-        return b.localeCompare(a);                   // empate: sufixo maior (mais novo)
+        return b.localeCompare(a);
     });
 
+    const escolhido = ordenados[0];
+    const versao = versaoDoModelo(escolhido);
+    const atingiuPiso = (versao ?? 0) >= piso;
     return {
-        modelo: ordenados[0], candidatos: ordenados,
-        motivo: `Pinado em ${ordenados[0]} — a própria API listou este modelo para a conta.`,
+        modelo: escolhido, candidatos: ordenados, versao, atingiuPiso,
+        motivo: atingiuPiso
+            ? `Pinado em ${escolhido} — o mais novo ${tipo.toUpperCase()} que a conta lista.`
+            : `Pinado em ${escolhido}: é o mais novo ${tipo.toUpperCase()} da conta, e a linha ${tipo.toUpperCase()} `
+              + `ainda não chegou na ${familia} (as linhas Pro e Flash não andam no mesmo número).`,
     };
 }
 
@@ -143,7 +173,10 @@ export function resolverModelosGemini({ modelos, envPro, envFlash, familia = FAM
         }
         const achado = escolherModeloDaFamilia(modelos, { familia, tipo });
         if (achado.modelo) {
-            return { modelo: achado.modelo, origem: 'familia-alvo', motivo: achado.motivo, candidatos: achado.candidatos };
+            return {
+                modelo: achado.modelo, origem: 'familia-alvo', motivo: achado.motivo,
+                candidatos: achado.candidatos, versao: achado.versao, atingiuPiso: achado.atingiuPiso,
+            };
         }
         return {
             modelo: alias, origem: 'alias-fallback',

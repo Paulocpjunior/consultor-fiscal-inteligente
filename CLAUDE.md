@@ -330,6 +330,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   com o **"atualizado em" da própria página** e a exigir que o texto da revisão
   exista (versão nova sem texto novo é selo mentiroso — acende prometendo
   leitura que não está lá). É a mesma família do guia órfão de 12/08.
+- **🐛 PRO E FLASH NÃO ANDAM NO MESMO NÚMERO — premissa minha, derrubada pelo
+  print da conta** (16/08). Paulo mandou o seletor do Gemini dele mostrando, na
+  MESMA lista: `3.5 Flash Lite`, **`3.7 Flash`** e **`3.1 Pro`**. Eu tinha
+  escrito o resolvedor casando a família EXATA nos dois degraus, então ele
+  procurava um **"3.7 Pro" que não existe** — e, não achando, concluía que *"a
+  família 3.7 não aparece para esta conta"*. Era falso, e contradizia a sonda na
+  mesma tela.
+  A família virou **PISO, não casamento exato**: o app pina no **mais novo de
+  CADA linha** e DIZ quando uma delas está atrás. "Atualizar para a 3.7" quer
+  dizer não ficar para trás — não que exista um 3.7 em todo degrau.
+  ⚠️ E conta atrás do piso **não volta mais para o alias**: ficar no alias
+  existindo um modelo mais novo listado é abrir mão de escolher. Modelo sem
+  versão no nome fica FORA (não dá para dizer se é novo).
+  📌 A distinção que continua valendo: o app usa a **API** (`GEMINI_API_KEY`),
+  não o app de consumo `gemini.google.com` — assinatura do consumidor não muda
+  o que a API lista. Quem responde sobre a API é a sonda, e ela já mostrou
+  `gemini-3.7-flash` atendendo.
 - **🚨 O PRINT DO PAINEL DE GEMINI DERRUBOU O PRÓPRIO PAINEL — e revelou um
   defeito EM PRODUÇÃO** (15/08, print do Paulo). A tela mostrou, LADO A LADO:
   *"⚠ A família 3.7 ainda não aparece para esta conta"* e, duas linhas abaixo,

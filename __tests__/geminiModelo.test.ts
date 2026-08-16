@@ -52,9 +52,34 @@ describe('o alvo é a família 3.7', () => {
         expect(escolherModeloDaFamilia(emb, { familia: '3.7', tipo: 'pro' }).modelo).toBeNull();
     });
 
-    it('a família casa com FRONTEIRA — 3.7 não é 3.70 nem 13.7', () => {
-        const parecidos = [m('models/gemini-3.70-pro'), m('models/gemini-13.7-pro')];
-        expect(escolherModeloDaFamilia(parecidos, { familia: '3.7', tipo: 'pro' }).modelo).toBeNull();
+    it('🚨 O CASO REAL DA CONTA (print 16/08): Flash no 3.7, Pro no 3.1', () => {
+        // O seletor do Gemini do Paulo mostra, na MESMA lista: "3.5 Flash Lite",
+        // "3.7 Flash" e "3.1 Pro". As linhas NÃO andam no mesmo número — e era
+        // isso que fazia o app procurar um "3.7 Pro" inexistente e concluir,
+        // errado, que "a família 3.7 não aparece para esta conta".
+        const contaReal = [
+            m('models/gemini-3.5-flash-lite'),
+            m('models/gemini-3.7-flash'),
+            m('models/gemini-3.1-pro'),
+        ];
+        const r = resolverModelosGemini({ modelos: contaReal });
+        expect(r.flash.modelo).toBe('gemini-3.7-flash');
+        expect(r.flash.atingiuPiso).toBe(true);
+        // O Pro pina no mais novo DELE, e o app DIZ que a linha está atrás —
+        // em vez de fingir que não achou nada.
+        expect(r.pro.modelo).toBe('gemini-3.1-pro');
+        expect(r.pro.atingiuPiso).toBe(false);
+        // E o roteador volta a ter efeito: dois modelos DIFERENTES.
+        expect(r.pro.modelo).not.toBe(r.flash.modelo);
+    });
+
+    it('dentro da mesma linha, o mais novo vence', () => {
+        const versoes = [m('models/gemini-2.5-pro'), m('models/gemini-3.1-pro'), m('models/gemini-1.5-pro')];
+        expect(escolherModeloDaFamilia(versoes, { familia: '3.7', tipo: 'pro' }).modelo).toBe('gemini-3.1-pro');
+    });
+
+    it('modelo sem versão no nome não entra — não dá para dizer se é novo', () => {
+        expect(escolherModeloDaFamilia([m('models/gemini-pro')], { familia: '3.7', tipo: 'pro' }).modelo).toBeNull();
     });
 });
 
@@ -69,13 +94,15 @@ describe('🚨 sem a lista, NÃO se inventa o ID', () => {
         expect(r.pro.modelo).not.toMatch(/3\.7/);
     });
 
-    it('conta sem a 3.7 continua funcionando no alias, com o motivo nomeado', () => {
+    it('🚨 conta atrás do piso PINA NO MAIS NOVO — não volta pro alias', () => {
+        // Premissa corrigida em 16/08: ficar no alias quando existe um modelo
+        // mais novo listado é abrir mão de escolher. O piso serve para DIZER
+        // que a linha está atrás, não para desistir dela.
         const r = resolverModelosGemini({ modelos: [m('models/gemini-2.5-pro'), m('models/gemini-2.5-flash')] });
-        expect(r.pro.modelo).toBe(ALIAS_PRO);
-        expect(r.pro.origem).toBe('alias-fallback');
-        expect(r.pro.motivo).toMatch(/não lista nenhum modelo PRO da família 3\.7/i);
-        expect(r.pro.motivo).toMatch(/sem deploy/);
-        expect(r.alvoEncontrado).toBe(false);
+        expect(r.pro.modelo).toBe('gemini-2.5-pro');
+        expect(r.pro.origem).toBe('familia-alvo');
+        expect(r.pro.atingiuPiso).toBe(false);
+        expect(r.pro.motivo).toMatch(/não andam no mesmo número/);
     });
 });
 

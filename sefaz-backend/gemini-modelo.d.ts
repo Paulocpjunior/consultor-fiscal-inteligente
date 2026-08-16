@@ -8,10 +8,18 @@ export const ALIAS_FLASH: string;
 
 export function normalizarNomeModelo(nome: string | null | undefined): string;
 
+/** `gemini-3.7-flash` → 3.7 · sem versão no nome → null. */
+export function versaoDoModelo(nome: string | null | undefined): number | null;
+
 export function escolherModeloDaFamilia(
     modelos: Array<any> | null | undefined,
     alvo: { familia: string; tipo: 'pro' | 'flash' },
-): { modelo: string | null; candidatos: string[]; motivo: string };
+): {
+    modelo: string | null; candidatos: string[]; motivo: string;
+    versao: number | null;
+    /** A linha chegou na família alvo? Pro e Flash não andam no mesmo número. */
+    atingiuPiso: boolean;
+};
 
 export interface ModeloResolvido {
     modelo: string;
@@ -19,6 +27,8 @@ export interface ModeloResolvido {
     origem: 'env' | 'familia-alvo' | 'alias-fallback' | 'alias-sem-lista' | 'inicial';
     motivo: string;
     candidatos?: string[];
+    versao?: number | null;
+    atingiuPiso?: boolean;
 }
 
 export function resolverModelosGemini(p?: {
