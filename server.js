@@ -95,6 +95,7 @@ import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes
 import prazosMunicipaisRouter from './sefaz-backend/prazos-municipais-routes.js';
 import {
     resolverModelosGemini, versaoAtendeAlvo, vereditoDaFamilia, conferirRoteador, conferirAtualizacao,
+    conferirEstabilidade,
     FAMILIA_ALVO_GEMINI, ALIAS_PRO, ALIAS_FLASH,
 } from './sefaz-backend/gemini-modelo.js';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -2329,7 +2330,15 @@ app.get('/api/admin/gemini/versao', requireAdmin, async (req, res) => {
     // mostrava "a família não aparece para esta conta" com as duas sondas
     // devolvendo gemini-3.7-flash logo abaixo — duas leituras do mesmo fato
     // discordando na mesma tela.
-    const veredito = vereditoDaFamilia([pro, flash], resolucao.alvoEncontrado, resolucao.familiaAlvo);
+    // 🚨 O VEREDITO PRECISA CONHECER O TETO DA CONTA. Sem isso ele acusava
+    // "so parte esta na 3.7" ao lado de "na ultima versao, nada mais novo" —
+    // duas verdades discordando na mesma tela, e a de cima sem acao possivel
+    // (ninguem poe o Pro na 3.7 porque a linha Pro nao chegou la).
+    const atualizacao = conferirAtualizacao([pro, flash], resolucao.modelos, resolucao.familiaAlvo);
+    const veredito = vereditoDaFamilia([pro, flash], resolucao.alvoEncontrado, resolucao.familiaAlvo, atualizacao);
+    // E DIZ qual build esta atendendo: preview a Google retira sem aviso, e e
+    // nele que sai o parecer juridico. Nomeia, nao decide.
+    const estabilidade = conferirEstabilidade([pro, flash]);
     // E o roteador Pro×Flash vira ENFEITE quando os dois apontam pro mesmo
     // modelo — foi o que o print de produção mostrou.
     const roteador = conferirRoteador({ pro: { modelo: GEMINI_MODEL_PRO }, flash: { modelo: GEMINI_MODEL_FLASH } });
@@ -2337,11 +2346,10 @@ app.get('/api/admin/gemini/versao', requireAdmin, async (req, res) => {
     // continuar no Flash desde que seja a ultima versao". Colisao Pro×Flash e
     // escolha dele (informacao); ficar para tras da conta e que e alarme, e
     // acontece SOZINHO no dia em que a Google publica a versao seguinte.
-    const atualizacao = conferirAtualizacao([pro, flash], resolucao.modelos, resolucao.familiaAlvo);
     return res.json({
         ok: true,
         familiaAlvo: resolucao.familiaAlvo,
-        veredito, roteador, atualizacao,
+        veredito, roteador, atualizacao, estabilidade,
         /** Sobre a LISTAGEM (`models.list`), não sobre a versão que atendeu. */
         listadaNaConta: resolucao.alvoEncontrado,
         resolucao: { pro: resolucao.pro, flash: resolucao.flash, erroDaLista: resolucao.erroDaLista },

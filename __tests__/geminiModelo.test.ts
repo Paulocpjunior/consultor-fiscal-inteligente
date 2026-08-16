@@ -255,6 +255,51 @@ describe('o roteador Pro×Flash vira ENFEITE quando os dois são iguais', () => 
     });
 });
 
+describe('🚨 o ⚠ da família NÃO pode brigar com o ✓ da versão na mesma tela', () => {
+    const { vereditoDaFamilia, conferirEstabilidade } = require('../sefaz-backend/gemini-modelo.js');
+    // Print real do Paulo, 16/08: as duas linhas coladas, ambas verdadeiras e
+    // lendo como contradição — e a de cima SEM AÇÃO POSSÍVEL, porque não existe
+    // Pro 3.7 para ninguém pinar.
+    const SONDAS = [
+        { modelo: 'gemini-3.1-pro-preview', modelVersion: 'gemini-3.1-pro-preview', naFamiliaAlvo: false },
+        { modelo: 'gemini-3.7-flash', modelVersion: 'gemini-3.7-flash', naFamiliaAlvo: true },
+    ];
+
+    it('cada linha no teto da conta ⇒ VERDE, e a frase diz que não há o que fazer', () => {
+        const v = vereditoDaFamilia(SONDAS, false, '3.7', { situacao: 'atual' });
+        expect(v.situacao).toBe('no-teto-da-conta');
+        expect(v.cor).toBe('ok');
+        expect(v.texto).toMatch(/mais novo que a conta oferece/);
+        expect(v.texto).toMatch(/Não há nada a fazer aqui/);
+    });
+
+    it('🚨 mas se a conta TEM algo mais novo, o ⚠ volta — aí existe ação', () => {
+        const v = vereditoDaFamilia(SONDAS, false, '3.7', { situacao: 'atrasado' });
+        expect(v.cor).toBe('atencao');
+        expect(v.situacao).toBe('parcial');
+    });
+
+    it('sem saber do teto, o comportamento antigo continua (nada quebra)', () => {
+        expect(vereditoDaFamilia(SONDAS, false, '3.7').situacao).toBe('parcial');
+    });
+
+    it('🚨 o build -preview é NOMEADO — a Google retira sem aviso', () => {
+        const e = conferirEstabilidade(SONDAS);
+        expect(e.instavel).toBe(true);
+        expect(e.modelos).toEqual(['gemini-3.1-pro-preview']);
+        // NEUTRO: vermelho aqui seria alarme sobre a única opção que existe.
+        expect(e.cor).toBe('neutro');
+        expect(e.texto).toMatch(/mais novo da linha/);
+        expect(e.texto).toMatch(/GEMINI_MODEL_PRO/);
+    });
+
+    it('só estáveis ⇒ nada a dizer', () => {
+        const e = conferirEstabilidade([{ modelVersion: 'gemini-3.7-flash' }, { modelVersion: 'gemini-3.1-pro' }]);
+        expect(e.instavel).toBe(false);
+        expect(e.texto).toBeNull();
+    });
+});
+
 describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a última versão"', () => {
     const { conferirAtualizacao, linhaDoModelo } = require('../sefaz-backend/gemini-modelo.js');
     const LISTA = [
@@ -351,6 +396,13 @@ describe('a rota e a tela levam o veredito da sonda', () => {
         expect(s).toMatch(/vereditoDaFamilia\(\[pro, flash\]/);
         expect(s).toMatch(/conferirRoteador\(/);
         expect(s).toMatch(/listadaNaConta/);
+    });
+    it('🚨 o veredito recebe o TETO e a rota leva a estabilidade', () => {
+        const s = rf(jn(__dirname, '..', 'server.js'), 'utf8');
+        // Sem o 4º argumento o ⚠ volta a brigar com o ✓ na mesma tela.
+        expect(s).toMatch(/vereditoDaFamilia\(\[pro, flash\][^)]*atualizacao\)/);
+        expect(s).toMatch(/conferirEstabilidade\(\[pro, flash\]\)/);
+        expect(s).toMatch(/atualizacao, estabilidade/);
     });
     it('🚨 a rota leva a conferência de ATRASO — régua sem leitor não é entrega', () => {
         // Foi o defeito mais repetido desta semana: núcleo pronto, testado e

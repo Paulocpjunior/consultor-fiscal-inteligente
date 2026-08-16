@@ -286,6 +286,16 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                 {geminiVersao.atualizacao.texto}
                                             </p>
                                         )}
+                                        {/* Build `-preview` atendendo: a escolha
+                                            está certa (é o mais novo da linha),
+                                            mas a Google retira sem aviso e é
+                                            nele que sai o parecer jurídico.
+                                            NOMEIA, não decide. */}
+                                        {geminiVersao.estabilidade?.instavel && (
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                · {geminiVersao.estabilidade.texto}
+                                            </p>
+                                        )}
                                         {/* Roteador sem efeito é INFORMAÇÃO, não
                                             alarme: pintar de vermelho a escolha
                                             do dono é o alarme sem ação que ensina
