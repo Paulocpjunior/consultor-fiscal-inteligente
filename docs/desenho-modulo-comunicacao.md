@@ -190,9 +190,30 @@ MESMO PR que a cria.**
   CFI (receber → responder na janela → template fora dela → resolver), com
   atribuição e auditoria. Só DEPOIS disso se discute cancelar a Ultra Fox.
 
-**F3 — Triagem e automação**
-- Bot de primeira linha ("1 Fiscal · 2 Contábil · …") roteando pra fila;
-  relatórios de atendimento (volume, tempo de resposta, por fila/atendente).
+**F3 — Triagem e automação** (escopo detalhado em 16/08, com os prints do
+bot da Ultra Fox como RÉGUA DE PARIDADE — Paulo: *"temos que criar os
+atendentes, departamentos, mensagens automáticas, definição de horário de
+funcionamento e todas as outras utilidades"*)
+- **Atendentes**: são os usuários que JÁ existem (login unificado +
+  `users.departamentos[]`) — o que nasce é PRESENÇA (online/ausente) e
+  atribuição de conversa; cadastro novo de atendente seria a segunda cópia
+  do Gerenciar Usuários.
+- **Filas/menu de triagem**: "Digite uma das opções: 1 - Recepção · 2 -
+  Financeiro · …" roteando pra fila. ⚠️ o menu da Ultra Fox tem 8 opções,
+  incluindo **RH e Jurídico**, que NÃO são departamentos do catálogo —
+  decisão do Paulo se viram fila própria ou caem na Recepção.
+- **Mensagens automáticas**: saudação com Nº DE PROTOCOLO ("Ju, aguarde um
+  momento… Protocolo: 576695860"), instrução #sair, mensagem de fora de
+  horário ("não temos atendentes online, deixe sua mensagem"), rodapé com
+  site/redes. Textos CONFIGURÁVEIS na ⚙️ do Connect, nunca cravados no
+  código.
+- **Horário de FUNCIONAMENTO do atendimento**: cadastro PRÓPRIO — o print
+  do bot prova que o horário do atendimento (Seg–Sex 8:00–12:00/13:00–17:30)
+  é DIFERENTE do horário de acesso da casa (07:00–20:00), então reusar o
+  `horario-acesso` aqui estaria ERRADO (revisão da §6 deste doc: a régua de
+  acesso continua valendo pro LOGIN; o funcionamento do atendimento é outro
+  cadastro, com almoço).
+- Relatórios de atendimento (volume, tempo de resposta, por fila/atendente).
 
 **F4 — Voz (Calling API da Meta) — DESENHADA, NÃO HABILITADA**
 - Decisão de 13/08: NÃO habilitar agora. Habilitar acende o botão de ligar no
