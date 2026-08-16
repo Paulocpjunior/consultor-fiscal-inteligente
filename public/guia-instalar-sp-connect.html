@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: este guia e a fonte em docs/ se atualizam JUNTOS.
+     `guiaParDuplo` barra o build se as revisões divergirem. -->
+<meta name="guia-id" content="instalar-sp-connect">
+<meta name="guia-revisao" content="2026-08-16">
+<title>Guia — Instalar o SP Connect (Teams, celular, tablet e computador) · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .admin {
+        border-left: 4px solid var(--vermelho); background: #fef2f2;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Instalar o SP Connect</h1>
+            <p>No Teams, no celular, no tablet e no computador · SP Assessoria Contábil</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<section>
+    <h2>📌 A resposta curta</h2>
+    <div class="quando">O SP Connect roda em <strong>quatro lugares</strong>, e em
+    <strong>nenhum deles alguém baixa um instalador</strong>. É o mesmo desenho do
+    <strong>HitPhone</strong>: um app do <em>nosso</em> tenant Microsoft, apontando
+    para uma URL — mais a instalação pelo próprio navegador no celular e no
+    computador.</div>
+
+    <div class="tabela-rolagem">
+    <table>
+        <tr>
+            <th>Onde</th><th>Como se instala</th><th>Fica com ícone próprio?</th><th>Quem faz</th>
+        </tr>
+        <tr>
+            <td><strong>Microsoft Teams</strong></td>
+            <td>App do tenant, enviado uma vez no Centro de Administração (igual ao HitPhone)</td>
+            <td>Sim — na barra lateral do Teams</td>
+            <td>Admin uma vez · colaborador adiciona</td>
+        </tr>
+        <tr>
+            <td><strong>Celular / tablet</strong></td>
+            <td>Abrir a URL e usar <em>Adicionar à Tela de Início</em> / <em>Instalar</em></td>
+            <td>Sim — ícone na tela inicial, abre sem barra de navegador</td>
+            <td>Cada colaborador, em 20 segundos</td>
+        </tr>
+        <tr>
+            <td><strong>Computador</strong></td>
+            <td>Abrir no Edge ou Chrome e clicar em <em>Instalar</em></td>
+            <td>Sim — janela própria, ícone na barra de tarefas</td>
+            <td>Cada colaborador</td>
+        </tr>
+        <tr>
+            <td><strong>Navegador</strong></td>
+            <td>Só a URL, nada a instalar</td>
+            <td>Não</td>
+            <td>—</td>
+        </tr>
+    </table>
+    </div>
+
+    <p><strong>O endereço é sempre o mesmo:</strong> o CFI de sempre, com
+    <code>/connect</code> no fim. Quando o domínio próprio entrar no ar, vira
+    <code>app.spassessoriacontabil.com.br</code> — e quem já instalou não precisa
+    reinstalar.</p>
+</section>
+
+<section>
+    <h2>💼 1. Microsoft Teams — do lado do HitPhone</h2>
+
+    <div class="admin"><strong>Parte do admin — uma vez só para a casa inteira.</strong>
+    O pacote já está pronto e se baixa do próprio app:
+    <code>/sp-connect-teams.zip</code>.</div>
+
+    <ol>
+        <li>Baixar o <strong>sp-connect-teams.zip</strong> (link no rodapé do CFI ou
+            direto em <code>/sp-connect-teams.zip</code>).</li>
+        <li>Abrir <strong>admin.teams.microsoft.com</strong> → <strong>Aplicativos do
+            Teams</strong> → <strong>Gerenciar aplicativos</strong> →
+            <strong>Ações</strong> → <strong>Carregar novo aplicativo</strong> →
+            enviar o zip.
+            <br><em>Atalho, se a política do tenant permitir:</em> no próprio Teams →
+            Aplicativos → Gerenciar seus aplicativos → Carregar um aplicativo →
+            Carregar um aplicativo personalizado.</li>
+        <li>Em <strong>Políticas de permissão de aplicativos</strong>, liberar o
+            SP Connect para a equipe.</li>
+        <li>Em <strong>Políticas de configuração</strong>, <strong>fixar</strong> o app
+            (assim ele aparece na barra lateral de todo mundo, sem ninguém procurar).</li>
+    </ol>
+
+    <div class="quando"><strong>Parte do colaborador:</strong> Teams → Aplicativos →
+    procurar <strong>SP Connect</strong> → <strong>Adicionar</strong>. Depois, botão
+    direito no ícone da barra lateral → <strong>Fixar</strong>.</div>
+
+    <div class="alerta">Se o app <strong>não aparece</strong> na busca do Teams: ou o
+    admin ainda não enviou o pacote, ou a política do tenant bloqueia aplicativos
+    personalizados. Não é problema do seu computador — fale com o Paulo.</div>
+
+    <p>O login dentro da aba é o <strong>mesmo do CFI</strong>. Não existe usuário
+    separado do Teams.</p>
+</section>
+
+<section>
+    <h2>📱 2. Celular e tablet</h2>
+
+    <h3>iPhone e iPad</h3>
+    <ol>
+        <li>Abrir o endereço do SP Connect <strong>no Safari</strong> (precisa ser o
+            Safari — no iPhone, só ele instala).</li>
+        <li>Tocar no botão <strong>Compartilhar</strong> (o quadrado com a seta para
+            cima, na barra de baixo).</li>
+        <li>Rolar e tocar em <strong>Adicionar à Tela de Início</strong>.</li>
+        <li>Confirmar o nome <strong>SP Connect</strong> → <strong>Adicionar</strong>.</li>
+    </ol>
+
+    <h3>Android</h3>
+    <ol>
+        <li>Abrir o endereço no <strong>Chrome</strong>.</li>
+        <li>Aceitar o convite <strong>Instalar aplicativo</strong> que aparece sozinho —
+            ou tocar nos três pontinhos (⋮) → <strong>Instalar aplicativo</strong>
+            (em alguns aparelhos: <em>Adicionar à tela inicial</em>).</li>
+        <li>Confirmar.</li>
+    </ol>
+
+    <div class="quando">Instalado, ele abre <strong>em tela cheia, sem a barra do
+    navegador</strong>, com o ícone azul da SP na tela inicial — igual a qualquer
+    outro aplicativo do aparelho.</div>
+
+    <div class="alerta"><strong>Depois de instalar, abra e ligue os avisos</strong>
+    (a barra amarela pede a permissão). Sem isso o aplicativo está instalado e
+    <em>mudo</em> — que é o pior dos dois mundos: parece que vai avisar, e não avisa.</div>
+</section>
+
+<section>
+    <h2>💻 3. Computador (Windows e Mac)</h2>
+    <ol>
+        <li>Abrir o SP Connect no <strong>Edge</strong> ou no <strong>Chrome</strong>.</li>
+        <li>Clicar no ícone de <strong>instalar</strong> que aparece na barra de
+            endereço (uma telinha com uma seta), ou no menu <strong>…</strong> →
+            <strong>Aplicativos → Instalar este site como um aplicativo</strong>.</li>
+        <li>Confirmar. Ele passa a abrir em <strong>janela própria</strong>, com ícone
+            na barra de tarefas / no Dock.</li>
+    </ol>
+    <p>Serve para quem prefere o Connect separado das outras abas — e evita fechar o
+    atendimento sem querer junto com o navegador.</p>
+</section>
+
+<section>
+    <h2>🌐 4. Navegador, sem instalar nada</h2>
+    <p>Abrir o endereço e usar. É o caminho de quem só entra de vez em quando, e
+    funciona igual em qualquer navegador atual.</p>
+    <div class="alerta">Só aqui vale a ressalva: com a aba <strong>fechada</strong>,
+    som e pop-up não tocam. Quem atende todo dia deve instalar (Teams, celular ou
+    computador) — e ligar os avisos.</div>
+</section>
+
+<section>
+    <h2>🤔 E um app "de verdade", na App Store e no Google Play?</h2>
+
+    <p>Dá para fazer — e a resposta honesta é que <strong>não compensa hoje</strong>.
+    O que se ganharia já temos; o que se pagaria é recorrente.</p>
+
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Caminho</th><th>Dá?</th><th>O que custa de verdade</th><th>O que acrescenta</th></tr>
+        <tr>
+            <td><strong>Instalar pela URL</strong> (o que fazemos)</td>
+            <td><span class="selo selo-verde">no ar</span></td>
+            <td>Zero. Publicar uma versão nova chega na equipe na hora</td>
+            <td>Ícone, tela cheia, aviso no celular</td>
+        </tr>
+        <tr>
+            <td><strong>App na App Store / Google Play</strong></td>
+            <td><span class="selo selo-ambar">tecnicamente sim</span></td>
+            <td>Conta de desenvolvedor <strong>anual</strong> da Apple + conta do
+                Google; cada atualização passa por <strong>revisão</strong> (dias);
+                e a Apple recusa app que é "só um site empacotado" — a regra 4.2 dela
+                exige que o app faça algo que o site não faz</td>
+            <td>Estar na busca da loja. Mais nada que a equipe use</td>
+        </tr>
+        <tr>
+            <td><strong>Extensão (plugin) de navegador</strong></td>
+            <td><span class="selo selo-vermelho">ferramenta errada</span></td>
+            <td>Publicação na loja do Chrome com revisão, e um segundo código
+                para manter</td>
+            <td>Nada. Extensão serve para <em>modificar outras páginas</em>, não para
+                hospedar um sistema</td>
+        </tr>
+    </table>
+    </div>
+
+    <div class="quando"><strong>O ponto que decide:</strong> a loja não entrega nada
+    que a equipe use. O ícone na tela inicial, a tela cheia e o aviso no celular já
+    funcionam sem ela — e o app é <strong>interno</strong>, ninguém de fora vai
+    procurar "SP Connect" na App Store. O que a loja adicionaria é fila de revisão
+    entre nós e uma correção urgente.</div>
+
+    <p>Se um dia isso mudar — por exemplo, se precisarmos de algo que só um app
+    nativo faz —, o caminho existe e o PWA de hoje é justamente a base dele. Não é
+    porta fechada; é ordem de prioridade.</p>
+</section>
+
+<section>
+    <h2>🔑 O que só o admin resolve</h2>
+    <ul>
+        <li><strong>Enviar o pacote do Teams</strong> (uma vez) e liberar/fixar por
+            política.</li>
+        <li><strong>Publicar a chave de aviso no celular</strong> — enquanto ela não
+            estiver publicada, o app <em>diz na tela</em> que o push está pendente.
+            Som e pop-up funcionam do mesmo jeito.</li>
+        <li><strong>Ligar o colaborador nas filas</strong> (⚙️ → 👥 Atendentes). Sem
+            isso a pessoa entra e não vê conversa nenhuma — o que parece defeito e é
+            cadastro.</li>
+    </ul>
+</section>
+
+<section>
+    <h2>🆘 Não deu certo?</h2>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Sintoma</th><th>Causa mais provável</th><th>O que fazer</th></tr>
+        <tr>
+            <td>No iPhone não aparece "Adicionar à Tela de Início"</td>
+            <td>Está no Chrome ou no Edge do iPhone</td>
+            <td>Abrir o endereço no <strong>Safari</strong></td>
+        </tr>
+        <tr>
+            <td>Instalou, mas abre com a barra do navegador</td>
+            <td>Abriu pelo atalho antigo, não pelo ícone instalado</td>
+            <td>Abrir pelo ícone da tela inicial</td>
+        </tr>
+        <tr>
+            <td>Não recebe aviso de mensagem nova</td>
+            <td>Permissão de notificação negada, ou avisos não ligados</td>
+            <td>Abrir o app: a barra amarela mostra o que falta e o botão de ligar</td>
+        </tr>
+        <tr>
+            <td>Entra e não vê nenhuma conversa</td>
+            <td>Você não está ligado a nenhuma fila</td>
+            <td>Pedir ao admin (⚙️ → 👥 Atendentes) — não é erro do aplicativo</td>
+        </tr>
+        <tr>
+            <td>SP Connect não aparece no Teams</td>
+            <td>Pacote ainda não enviado, ou política do tenant bloqueia</td>
+            <td>Falar com o Paulo</td>
+        </tr>
+    </table>
+    </div>
+    <p>Ao reportar qualquer problema, mande <strong>print da tela inteira</strong>
+    com a versão que aparece no rodapé. Print sem versão não diz em que build o
+    problema aconteceu.</p>
+</section>
+
+</main>
+<footer>SP Assessoria Contábil · guia atualizado em 16/08/2026</footer>
+</body>
+</html>

@@ -226,6 +226,7 @@ export const REVISOES: Revisao[] = [
         data: '2026-08-16',
         itens: [
             'ℹ️ SOBRE: este manual, com o histórico de atualizações e o selo vermelho quando houver novidade.',
+            '📲 Guia de instalação no Teams, celular, tablet e computador (link no topo do manual).',
             '🔔 Aviso de mensagem nova em três camadas: som, pop-up do navegador e contador no título da aba.',
             '📱 Push no celular com o app fechado — pronto, aguardando o admin publicar a chave Web Push.',
             '🎤 Gravar e enviar áudio pelo próprio painel.',
