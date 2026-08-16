@@ -333,9 +333,19 @@ export function municipiosSemCalendario(clientes, cadastros, { obrigacao = 'ISS'
 
         const mun = soDigitos(c?.codMunIBGE);
         if (!faltando.has(mun)) {
-            faltando.set(mun, { codMunIBGE: mun, municipioNome: c?.municipioNome || null, situacao: r.situacao, clientes: [] });
+            faltando.set(mun, { codMunIBGE: mun, municipioNome: null, situacao: r.situacao, clientes: [] });
         }
-        faltando.get(mun).clientes.push({ id: c?.id || null, nome: c?.nome || '—', cnpj: soDigitos(c?.cnpj) });
+        const linha = faltando.get(mun);
+        // O NOME VEM DE QUALQUER CLIENTE DA CIDADE, não do primeiro.
+        //
+        // Pegar `clientes[0].municipioNome` fazia a linha inteira ficar SEM NOME
+        // quando o primeiro cliente tinha só o código gravado — foi o caso do
+        // `IBGE 5300108 · 17 clientes` no print de 16/08, que é Brasília e não
+        // dizia. Fila que manda cadastrar o calendário de uma cidade sem saber
+        // dizer QUAL cidade é manda o colaborador procurar o que o cadastro já
+        // tem — e o dado está ali, no cliente seguinte.
+        if (!linha.municipioNome) linha.municipioNome = String(c?.municipioNome || '').trim() || null;
+        linha.clientes.push({ id: c?.id || null, nome: c?.nome || '—', cnpj: soDigitos(c?.cnpj) });
     }
 
     const lista = [...faltando.values()]

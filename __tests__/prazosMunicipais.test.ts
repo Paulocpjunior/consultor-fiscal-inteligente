@@ -126,6 +126,28 @@ describe('a fila de cadastro é POR MUNICÍPIO — não 157 linhas de cliente', 
         expect(r.totalClientes).toBe(3);
     });
 
+    it('🐛 o NOME da cidade vem de qualquer cliente dela, não do primeiro', () => {
+        // Print de 16/08: `IBGE 5300108 · 17 clientes` sem nome nenhum — é
+        // Brasília, e o cadastro sabia disso; só o PRIMEIRO cliente da linha
+        // é que tinha apenas o código. Fila que manda cadastrar o calendário
+        // de uma cidade sem dizer QUAL cidade manda procurar o que já está lá.
+        const r = municipiosSemCalendario([
+            { id: 'a', nome: 'A', cnpj: '1', codMunIBGE: '5300108', regime: 'lucro' },
+            { id: 'b', nome: 'B', cnpj: '2', codMunIBGE: '5300108', regime: 'lucro', municipioNome: 'BRASILIA' },
+        ], [], { competencia: '2026-07' });
+        expect(r.municipios[0].municipioNome).toBe('BRASILIA');
+    });
+
+    it('cidade que NENHUM cliente nomeia continua sem nome — não se inventa', () => {
+        // Sem o dado em lugar nenhum, a linha fica com o código. Deduzir o nome
+        // a partir do IBGE seria uma tabela no código para envelhecer sozinha.
+        const r = municipiosSemCalendario(
+            [{ id: 'a', nome: 'A', cnpj: '1', codMunIBGE: '5300108', regime: 'lucro' }],
+            [], { competencia: '2026-07' },
+        );
+        expect(r.municipios[0].municipioNome).toBeNull();
+    });
+
     it('cliente sem município é CONTADO à parte — a ação é outra', () => {
         const r = municipiosSemCalendario(clientes, [cad()], { competencia: '2026-07' });
         expect(r.clientesSemMunicipio).toBe(1);
