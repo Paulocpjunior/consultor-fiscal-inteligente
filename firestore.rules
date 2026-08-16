@@ -44,6 +44,9 @@ service cloud.firestore {
         // 'recepcao' abriria TODAS as conversas de clientes)
         && (!('filasAtendimento' in request.resource.data)
             || request.resource.data.filasAtendimento.size() == 0)
+        // ...nem nascer GESTOR do atendimento (gestor ve e encerra tudo)
+        && (!('papelAtendimento' in request.resource.data)
+            || request.resource.data.papelAtendimento == 'colaborador')
         && (
           // Perfil comum criado pelo proprio usuario nunca pode nascer admin.
           !('role' in request.resource.data)
@@ -74,6 +77,9 @@ service cloud.firestore {
         // nem a propria fila de atendimento do SP Connect
         && (!('filasAtendimento' in request.resource.data)
             || request.resource.data.filasAtendimento == resource.data.get('filasAtendimento', []))
+        // nem o proprio papel do atendimento (gestor ve e encerra tudo)
+        && (!('papelAtendimento' in request.resource.data)
+            || request.resource.data.papelAtendimento == resource.data.get('papelAtendimento', 'colaborador'))
       );
 
       // Apenas admin pode deletar usuarios

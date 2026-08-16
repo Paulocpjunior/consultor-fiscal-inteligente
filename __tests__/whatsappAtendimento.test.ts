@@ -6,7 +6,7 @@ import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     configPadraoAtendimento, resolverConfig, dentroDoHorario,
     gerarProtocolo, renderMensagem, montarTextoMenu, interpretarEscolha,
-    decidirAutomacao,
+    decidirAutomacao, papelValido, podeEncerrar, interpretarNota,
 } from '../sefaz-backend/whatsapp-atendimento.js';
 
 describe('filas de atendimento (≠ departamentos do SaaS)', () => {
@@ -30,6 +30,37 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
         expect(conversaVisivel(['fiscal', 'recepcao'], null)).toBe(true);
         expect(conversaVisivel(['fiscal', 'recepcao'], 'juridico')).toBe(false);
         expect(conversaVisivel(null, 'juridico')).toBe(true);
+    });
+});
+
+describe('papéis do atendimento (Paulo, 16/08): admin tudo · gestor vê/atende/encerra tudo · colaborador só o seu', () => {
+    it('gestor vê TODAS as filas; papel desconhecido é recusado', () => {
+        expect(filasVisiveis({ role: 'colaborador', papelAtendimento: 'gestor', departamentos: ['fiscal'] })).toBeNull();
+        expect(papelValido('gestor')).toBe(true);
+        expect(papelValido('colaborador')).toBe(true);
+        expect(papelValido('supervisor')).toBe(false);
+    });
+    it('encerrar: admin e gestor qualquer atendimento; colaborador SÓ o que conduz', () => {
+        expect(podeEncerrar({ role: 'admin', email: 'a@sp', atribuidoA: 'x@sp' })).toBe(true);
+        expect(podeEncerrar({ role: 'colaborador', papelAtendimento: 'gestor', email: 'g@sp', atribuidoA: 'x@sp' })).toBe(true);
+        expect(podeEncerrar({ role: 'colaborador', email: 'x@sp', atribuidoA: 'x@sp' })).toBe(true);
+        expect(podeEncerrar({ role: 'colaborador', email: 'x@sp', atribuidoA: 'y@sp' })).toBe(false);
+        expect(podeEncerrar({ role: 'colaborador', email: 'x@sp', atribuidoA: null })).toBe(false);
+    });
+});
+
+describe('interpretarNota — a nota nunca é deduzida de texto livre', () => {
+    it('aceita "5", " 5 ", "5.", "nota 4", "3 estrelas"; recusa o resto', () => {
+        expect(interpretarNota('5')).toBe(5);
+        expect(interpretarNota(' 5 ')).toBe(5);
+        expect(interpretarNota('5.')).toBe(5);
+        expect(interpretarNota('nota 4')).toBe(4);
+        expect(interpretarNota('3 estrelas')).toBe(3);
+        expect(interpretarNota('0')).toBeNull();
+        expect(interpretarNota('6')).toBeNull();
+        expect(interpretarNota('10')).toBeNull();
+        expect(interpretarNota('obrigado!')).toBeNull();
+        expect(interpretarNota('nota 5 pelo carinho')).toBeNull();
     });
 });
 
@@ -124,10 +155,18 @@ describe('decidirAutomacao — o cérebro, puro', () => {
         expect(acoes).toEqual([]);
     });
 
-    it('#sair encerra a triagem em qualquer estado', () => {
+    it('#sair encerra: reseta a triagem, RESOLVE (por cliente) e — com a pesquisa ligada — pede a nota', () => {
         const acoes = decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '#sair', config: cfg, agora: dentroDoExpediente });
         expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
-        expect(acoes[1].texto).toContain('encerrado');
+        expect(acoes[1]).toEqual({ tipo: 'resolverConversa', por: 'cliente' });
+        expect(acoes[2].texto).toContain('encerrado');
+        expect(acoes.some((a: any) => a.tipo === 'marcarAguardandoAvaliacao')).toBe(false); // pesquisa desligada
+        const comPesquisa = decidirAutomacao({
+            conversa: { fila: 'fiscal' }, textoMensagem: '#sair',
+            config: { ...cfg, avaliacaoAtiva: true }, agora: dentroDoExpediente,
+        });
+        expect(comPesquisa.some((a: any) => a.texto?.includes('1 a 5'))).toBe(true);
+        expect(comPesquisa[comPesquisa.length - 1]).toEqual({ tipo: 'marcarAguardandoAvaliacao' });
     });
 
     it('#menu reapresenta o menu em qualquer estado — é o cliente pedindo outro depto', () => {

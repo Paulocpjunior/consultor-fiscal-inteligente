@@ -139,6 +139,32 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   EXPLÍCITO de propósito — numa conversa triada, um "2" solto é resposta ao
   atendente, nunca menu). Com o bot desligado, é o atendente que transfere.
 
+### 5.2 Papéis, encerramento e avaliação (Paulo, 16/08)
+
+**Papéis do ATENDIMENTO** (`users.papelAtendimento`, ≠ role do CFI; a
+atribuição é na aba 👥 da ⚙️, SÓ admin; rules com anti-autoconcessão):
+
+| papel | vê | atende | encerra | ⚙️ (config) |
+| --- | --- | --- | --- | --- |
+| admin (role do CFI) | tudo | tudo | tudo | SIM |
+| gestor | tudo | tudo | **qualquer atendimento** | não |
+| colaborador (padrão) | filas linkadas + Recepção | as que vê (transfere) | **só o que ELE conduz** | não |
+
+**Quem encerra**: admin e gestor, qualquer um; colaborador, só o atendimento
+atribuído a ele (encerrar o próprio atendimento é parte do atendimento —
+exigir gestor pra tudo viraria gargalo); o CLIENTE encerra pelo `#sair`
+(bot), que resolve a conversa com `resolvidaPor: 'cliente'`.
+
+**Avaliação (nota 1-5 pelo WhatsApp)**: no encerramento, com a chave
+`avaliacaoAtiva` LIGADA (nasce DESLIGADA) e a janela de 24h aberta, o
+convite sai; **só a PRIMEIRA resposta do cliente vale** — se for 1-5 vira
+nota (gravada em `whatsapp_avaliacoes` com atendente/fila/protocolo) e
+recebe agradecimento; qualquer outra coisa limpa a espera (insistir em
+avaliação é spam, e nota nunca se deduz de texto livre). A captura roda
+ANTES do bot no webhook (a nota não pode virar gatilho de triagem) e é
+independente do `botAtivo`. Painel **📊** no cabeçalho do inbox: admin e
+gestor veem todas; colaborador vê as próprias — o recorte é do backend.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

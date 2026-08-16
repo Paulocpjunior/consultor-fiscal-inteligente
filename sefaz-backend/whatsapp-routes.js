@@ -32,7 +32,7 @@ import {
 } from './whatsapp-cloud.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
-    resolverConfig,
+    resolverConfig, papelValido, podeEncerrar,
 } from './whatsapp-atendimento.js';
 import {
     interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
@@ -348,17 +348,24 @@ router.post('/webhook-assinar-waba', requireAdmin, async (_req, res) => {
 // fila nascer, o filtro por departamento entra AQUI, no backend (o front
 // nunca é o filtro de dados — regra da Carteira).
 
-// Filas que o usuário logado enxerga (null = todas). O escopo é do BACKEND —
-// o front nunca é o filtro de dados (regra da Carteira).
-async function filasDoUsuario(db, user) {
-    if (user?.role === 'admin') return null;
-    let departamentos = []; let filasAtendimento = [];
+// Perfil de atendimento do usuário logado: filas que enxerga (null = todas)
+// e o PAPEL (admin/gestor/colaborador). O escopo é do BACKEND — o front
+// nunca é o filtro de dados (regra da Carteira).
+async function perfilAtendimento(db, user) {
+    if (user?.role === 'admin') return { filas: null, papel: 'admin', papelAtendimento: null };
+    let departamentos = []; let filasAtendimento = []; let papelAtendimento = null;
     try {
         const u = await db.collection('users').doc(user.uid).get();
         departamentos = u.data()?.departamentos || [];
         filasAtendimento = u.data()?.filasAtendimento || [];
+        papelAtendimento = u.data()?.papelAtendimento || null;
     } catch { /* sem doc = só Recepção */ }
-    return filasVisiveis({ role: user?.role, departamentos, filasAtendimento });
+    const papel = String(papelAtendimento || '').toLowerCase() === 'gestor' ? 'gestor' : 'colaborador';
+    return {
+        filas: filasVisiveis({ role: user?.role, papelAtendimento, departamentos, filasAtendimento }),
+        papel,
+        papelAtendimento,
+    };
 }
 
 // Uma leitura, todas as conversas + o contato de cada uma (getAll em lote —
@@ -366,7 +373,7 @@ async function filasDoUsuario(db, user) {
 router.get('/conversas', requireAuth, async (req, res) => {
     try {
         const db = getDb();
-        const minhasFilas = await filasDoUsuario(db, req.user);
+        const { filas: minhasFilas, papel } = await perfilAtendimento(db, req.user);
         const snap = await db.collection('whatsapp_conversas')
             .orderBy('atualizadoEm', 'desc').limit(100).get();
         const numeros = snap.docs.map((d) => d.id);
@@ -395,7 +402,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 atualizadoEm: x.atualizadoEm || null,
             };
         }).filter((cv) => conversaVisivel(minhasFilas, cv.fila));
-        return res.json({ ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas });
+        return res.json({ ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel });
     } catch (e) {
         console.error('[whatsapp/conversas]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -768,12 +775,74 @@ router.post('/conversas/:numero/assumir', requireAuth, async (req, res) => {
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// Resolver / reabrir.
+// Encerrar / reabrir o atendimento. QUEM PODE (Paulo, 16/08): admin e gestor,
+// qualquer atendimento; colaborador, SÓ o que ele conduz (encerrar o próprio
+// atendimento é parte do atendimento; encerrar o dos outros é gestão). O
+// cliente encerra pelo #sair (bot). Encerrando com a pesquisa LIGADA e a
+// janela de 24h aberta, a nota 1-5 é pedida ao cliente — o desfecho do
+// convite vai NOMEADO na resposta (enviada · janela-fechada · desligada).
 router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
     try {
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
         const s = String(req.body?.situacao || '').trim();
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         if (!['aberta', 'resolvida'].includes(s)) return res.status(400).json({ ok: false, error: 'situação deve ser aberta ou resolvida' });
-        return acaoConversa(req, res, { status: s, resolvidaPor: s === 'resolvida' ? (req.user?.email || null) : null });
+
+        const db = getDb();
+        const convRef = db.collection('whatsapp_conversas').doc(numero);
+        const conv = (await convRef.get()).data() || {};
+        const { papelAtendimento } = await perfilAtendimento(db, req.user);
+        const eu = req.user?.email || null;
+        if (!podeEncerrar({ role: req.user?.role, papelAtendimento, email: eu, atribuidoA: conv.atribuidoA || null })) {
+            return res.status(403).json({
+                ok: false,
+                error: conv.atribuidoA
+                    ? `Este atendimento está em condução por ${conv.atribuidoA} — só quem conduz (ou gestor/admin) encerra ou reabre.`
+                    : 'Este atendimento está sem condutor — assuma-o (🙋) antes de encerrar, ou peça a um gestor/admin.',
+                acao: 'Assuma a conversa, ou peça a um gestor.',
+            });
+        }
+
+        const agora = new Date().toISOString();
+        await convRef.set({
+            status: s,
+            resolvidaPor: s === 'resolvida' ? eu : null,
+            ...(s === 'aberta' ? { aguardandoAvaliacao: false } : {}),
+            atualizadoEm: agora,
+        }, { merge: true });
+
+        // Pesquisa de satisfação no encerramento (chave nasce desligada).
+        let avaliacao = 'desligada';
+        if (s === 'resolvida') {
+            try {
+                const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+                const cfg = resolverConfig(cfgDoc.data());
+                if (cfg.avaliacaoAtiva) {
+                    const ate = Date.parse(conv.janela24hAte || '');
+                    if (!Number.isFinite(ate) || ate <= Date.now()) {
+                        avaliacao = 'janela-fechada';
+                    } else {
+                        const envio = await enviarTextoLivre({ para: numero, texto: cfg.mensagens.avaliacao });
+                        if (envio.ok) {
+                            avaliacao = 'enviada';
+                            await convRef.set({ aguardandoAvaliacao: true }, { merge: true });
+                            await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                                conversaId: numero, direcao: 'saida', tipo: 'text',
+                                texto: cfg.mensagens.avaliacao, midia: null, timestamp: new Date().toISOString(),
+                                statusEntrega: 'enviado', enviadoPor: 'bot',
+                            }, { merge: true });
+                        } else {
+                            avaliacao = 'falhou';
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[whatsapp/situacao] pesquisa não saiu:', e.message);
+                avaliacao = 'falhou';
+            }
+        }
+
+        return res.json({ ok: true, numero, situacao: s, avaliacao });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -855,6 +924,7 @@ router.get('/atendentes', requireAdmin, async (_req, res) => {
                 email: x.email || null,
                 nome: x.displayName || x.nome || null,
                 role: x.role || 'colaborador',
+                papelAtendimento: x.papelAtendimento || 'colaborador',
                 departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
                 filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
             };
@@ -891,6 +961,49 @@ router.post('/atendentes/:uid/filas', requireAdmin, async (req, res) => {
         console.error('[whatsapp/atendentes/filas]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
+});
+
+// Papel do atendimento (gestor/colaborador) — SÓ admin grava ("alteração
+// sistêmica" é do admin; gestor visualiza e atende, não configura). Papel
+// desconhecido é RECUSADO, e as rules têm a anti-autoconcessão.
+router.post('/atendentes/:uid/papel', requireAdmin, async (req, res) => {
+    try {
+        const uid = String(req.params.uid || '').trim();
+        const papel = String(req.body?.papel || '').trim().toLowerCase();
+        if (!uid) return res.status(400).json({ ok: false, error: 'Informe o uid do usuário.' });
+        if (!papelValido(papel)) return res.status(400).json({ ok: false, error: 'papel deve ser colaborador ou gestor.' });
+        const ref = getDb().collection('users').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        await ref.set({ papelAtendimento: papel }, { merge: true });
+        console.log(`[whatsapp/atendentes] papel de ${uid} → ${papel} por ${req.user?.email}`);
+        return res.json({ ok: true, uid, papel });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── 📊 AVALIAÇÕES do atendimento ───────────────────────────────────────────
+// admin e gestor veem TODAS; colaborador vê as DELE (atendente = seu e-mail).
+// O recorte é do backend. Filtro em memória de propósito: where(atendente)+
+// orderBy(em) exigiria índice composto — entra se o volume provar precisar.
+router.get('/avaliacoes', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const { papel } = await perfilAtendimento(db, req.user);
+        const veTudo = papel === 'admin' || papel === 'gestor';
+        const eu = req.user?.email || null;
+        const snap = await db.collection('whatsapp_avaliacoes').orderBy('em', 'desc').limit(500).get();
+        const todas = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const visiveis = veTudo ? todas : todas.filter((a) => a.atendente === eu);
+        const soma = visiveis.reduce((s, a) => s + (Number(a.nota) || 0), 0);
+        return res.json({
+            ok: true,
+            escopo: veTudo ? 'todas' : 'minhas',
+            total: visiveis.length,
+            media: visiveis.length ? Math.round((soma / visiveis.length) * 100) / 100 : null,
+            porNota: [1, 2, 3, 4, 5].map((n) => ({ nota: n, quantidade: visiveis.filter((a) => a.nota === n).length })),
+            avaliacoes: visiveis.slice(0, 50),
+        });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ─── 📥 IMPORTAR BACKUP DA ULTRA FOX (contatos e mensagens) ─────────────────

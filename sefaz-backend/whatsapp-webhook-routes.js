@@ -35,7 +35,7 @@ import {
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
-import { resolverConfig, decidirAutomacao, gerarProtocolo } from './whatsapp-atendimento.js';
+import { resolverConfig, decidirAutomacao, gerarProtocolo, interpretarNota } from './whatsapp-atendimento.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -181,6 +181,59 @@ async function gravarStatus(db, st) {
 }
 
 /**
+ * AVALIAÇÃO DO ATENDIMENTO — captura a nota 1-5 depois do encerramento.
+ * Independente do botAtivo (a pesquisa é disparada pelo ENCERRAMENTO, não
+ * pela triagem). SÓ a primeira mensagem após a pesquisa vale: se vier uma
+ * nota, grava e agradece; se vier qualquer outra coisa, a espera é limpa —
+ * insistir em avaliação é spam, e nota nunca se deduz de texto livre.
+ * Devolve true quando a mensagem FOI a nota (o bot não roda em cima dela).
+ */
+async function capturarAvaliacao(db, msg) {
+    try {
+        const convRef = db.collection('whatsapp_conversas').doc(msg.de);
+        const conversa = (await convRef.get()).data() || {};
+        if (!conversa.aguardandoAvaliacao) return false;
+
+        const nota = interpretarNota(msg.texto);
+        const agora = new Date().toISOString();
+        if (nota == null) {
+            await convRef.set({ aguardandoAvaliacao: false }, { merge: true });
+            return false; // a mensagem é outra coisa — segue o fluxo normal
+        }
+
+        await convRef.set({
+            aguardandoAvaliacao: false,
+            avaliacao: { nota, em: agora },
+            atualizadoEm: agora,
+        }, { merge: true });
+        await db.collection('whatsapp_avaliacoes').add({
+            numero: msg.de,
+            nota,
+            em: agora,
+            atendente: conversa.resolvidaPor && conversa.resolvidaPor !== 'cliente' ? conversa.resolvidaPor : null,
+            encerradaPor: conversa.resolvidaPor || null,
+            fila: conversa.fila || conversa.transferidaDe || 'recepcao',
+            protocolo: conversa.protocolo || null,
+        });
+
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+        const config = resolverConfig(cfgDoc.data());
+        const envio = await enviarTextoLivre({ para: msg.de, texto: config.mensagens.avaliacaoObrigado });
+        if (envio.ok) {
+            await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                conversaId: msg.de, direcao: 'saida', tipo: 'text',
+                texto: config.mensagens.avaliacaoObrigado, midia: null, timestamp: agora,
+                statusEntrega: 'enviado', enviadoPor: 'bot',
+            }, { merge: true });
+        }
+        return true;
+    } catch (e) {
+        console.warn('[whatsapp/avaliacao] falhou (webhook segue intacto):', e.message);
+        return false;
+    }
+}
+
+/**
  * F3 — executa o bot pra UMA mensagem recebida. O cérebro (decidirAutomacao)
  * é puro e testado; aqui é só I/O: ler estado, executar ações, gravar o que
  * o bot respondeu (a resposta do bot entra na thread como mensagem 'saida'
@@ -210,6 +263,10 @@ async function rodarBot(db, msg) {
                 await convRef.set({ ausenciaAvisadaEm: acao.dia }, { merge: true });
             } else if (acao.tipo === 'resetarTriagem') {
                 await convRef.set({ fila: null, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'resolverConversa') {
+                await convRef.set({ status: 'resolvida', resolvidaPor: acao.por || 'cliente', atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'marcarAguardandoAvaliacao') {
+                await convRef.set({ aguardandoAvaliacao: true }, { merge: true });
             } else if (acao.tipo === 'responder') {
                 const envio = await enviarTextoLivre({ para: msg.de, texto: acao.texto });
                 if (envio.ok) {
@@ -279,7 +336,12 @@ router.post('/webhook', async (req, res) => {
         // (o padrão) NADA responde — a plataforma atual segue sozinha.
         if (ev.mensagens.length) {
             setImmediate(async () => {
-                for (const msg of ev.mensagens) await rodarBot(db, msg);
+                for (const msg of ev.mensagens) {
+                    // A avaliação vem ANTES do bot: se a mensagem for a nota
+                    // da pesquisa, ela não pode virar gatilho de triagem.
+                    const foiNota = await capturarAvaliacao(db, msg);
+                    if (!foiNota) await rodarBot(db, msg);
+                }
             });
         }
 
