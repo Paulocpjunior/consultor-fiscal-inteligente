@@ -4,22 +4,30 @@ export interface FilaAtendimento { id: string; rotulo: string }
 export interface ConfigAtendimento {
     botAtivo: boolean;
     avisarClienteTransferencia: boolean;
+    avaliacaoAtiva: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
     menu: { opcao: string; fila: string; rotulo: string }[];
 }
 
 export interface AcaoBot {
-    tipo: 'responder' | 'definirFila' | 'gravarProtocolo' | 'marcarAusenciaEnviada' | 'resetarTriagem';
+    tipo: 'responder' | 'definirFila' | 'gravarProtocolo' | 'marcarAusenciaEnviada' | 'resetarTriagem'
+        | 'resolverConversa' | 'marcarAguardandoAvaliacao';
     texto?: string;
     fila?: string;
     protocolo?: string;
     dia?: string;
+    por?: string;
 }
+
+export const PAPEIS_ATENDIMENTO: string[];
+export function papelValido(p: unknown): boolean;
+export function podeEncerrar(p: { role?: string; papelAtendimento?: string | null; email?: string | null; atribuidoA?: string | null }): boolean;
+export function interpretarNota(texto: unknown): number | null;
 
 export const FILAS_ATENDIMENTO: FilaAtendimento[];
 export function filaValida(id: unknown): boolean;
-export function filasVisiveis(p: { role?: string; departamentos?: string[]; filasAtendimento?: string[] }): string[] | null;
+export function filasVisiveis(p: { role?: string; papelAtendimento?: string | null; departamentos?: string[]; filasAtendimento?: string[] }): string[] | null;
 export function conversaVisivel(filasDoUsuario: string[] | null, filaDaConversa: string | null | undefined): boolean;
 export function configPadraoAtendimento(): ConfigAtendimento;
 export function resolverConfig(gravada: unknown): ConfigAtendimento;

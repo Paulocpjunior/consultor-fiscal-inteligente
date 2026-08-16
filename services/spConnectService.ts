@@ -20,7 +20,7 @@ async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolea
 }
 
 export const listarConversas = () =>
-    req<{ conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null }>(
+    req<{ conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null; papel: 'admin' | 'gestor' | 'colaborador' }>(
         '/api/admin/whatsapp/conversas');
 
 export const listarMensagens = (numero: string) =>
@@ -86,8 +86,10 @@ export const transferirFila = (numero: string, fila: string, recado?: string) =>
 export const assumirConversa = (numero: string, liberar = false) =>
     post<{ numero: string }>(urlConversa(numero, 'assumir'), { liberar });
 
+/** Encerrar/reabrir: admin e gestor qualquer; colaborador só o que conduz.
+ *  Encerrando com a pesquisa ligada, a resposta diz se o convite saiu. */
 export const mudarSituacao = (numero: string, situacao: 'aberta' | 'resolvida') =>
-    post<{ numero: string }>(urlConversa(numero, 'situacao'), { situacao });
+    post<{ numero: string; situacao: string; avaliacao?: string }>(urlConversa(numero, 'situacao'), { situacao });
 
 /** Nota interna: entra na thread mas NUNCA sai pro cliente. */
 export const criarNota = (numero: string, texto: string) =>
@@ -105,6 +107,7 @@ export const buscarClientes = (q: string) =>
 
 export interface Atendente {
     uid: string; email: string | null; nome: string | null; role: string;
+    papelAtendimento: string;
     departamentos: string[]; filasAtendimento: string[];
 }
 
@@ -113,6 +116,24 @@ export const listarAtendentes = () =>
 
 export const salvarFilasAtendente = (uid: string, filas: string[]) =>
     post<{ uid: string; filas: string[] }>(`/api/admin/whatsapp/atendentes/${encodeURIComponent(uid)}/filas`, { filas });
+
+/** Papel do atendimento (colaborador/gestor) — só admin grava. */
+export const salvarPapelAtendente = (uid: string, papel: 'colaborador' | 'gestor') =>
+    post<{ uid: string; papel: string }>(`/api/admin/whatsapp/atendentes/${encodeURIComponent(uid)}/papel`, { papel });
+
+// ─── 📊 Avaliações (admin/gestor: todas · colaborador: as próprias) ─────────
+
+export interface AvaliacaoAtendimento {
+    id: string; numero: string; nota: number; em: string;
+    atendente: string | null; encerradaPor: string | null; fila: string; protocolo: string | null;
+}
+
+export const listarAvaliacoes = () =>
+    req<{
+        escopo: 'todas' | 'minhas'; total: number; media: number | null;
+        porNota: { nota: number; quantidade: number }[];
+        avaliacoes: AvaliacaoAtendimento[];
+    }>('/api/admin/whatsapp/avaliacoes');
 
 // ─── 📥 Importar backup da Ultra Fox (admin; preview antes de gravar) ───────
 

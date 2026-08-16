@@ -12,6 +12,7 @@ export interface FilaAtendimento { id: string; rotulo: string }
 export interface ConfigAtendimento {
     botAtivo: boolean;
     avisarClienteTransferencia: boolean;
+    avaliacaoAtiva: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
     menu: { opcao: string; fila: string; rotulo: string }[];

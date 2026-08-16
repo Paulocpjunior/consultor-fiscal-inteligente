@@ -16,8 +16,8 @@ import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
     atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
-    listarAtendentes, salvarFilasAtendente, importarUltrafox,
-    Atendente, ImportPreview,
+    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
+    listarAvaliacoes, Atendente, ImportPreview, AvaliacaoAtendimento,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -40,6 +40,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [conversas, setConversas] = useState<ConversaResumo[]>([]);
     const [filas, setFilas] = useState<FilaAtendimento[]>([]);
     const [minhasFilas, setMinhasFilas] = useState<string[] | null>(null);
+    const [papel, setPapel] = useState<'admin' | 'gestor' | 'colaborador'>('colaborador');
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
@@ -63,6 +64,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setConversas(r.conversas || []);
             setFilas(r.filas || []);
             setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
+            if (r.papel) setPapel(r.papel);
         } finally {
             if (!silencioso) setCarregando(false);
         }
@@ -96,6 +98,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setSel(c);
         setMensagens([]);
         setErroEnvio(null);
+        setAcaoErro(null);
+        setSituacaoAviso(null);
+        setTransAviso(null);
+        setTransFila('');
         carregarThread(c.numero);
         if (c.naoLidas > 0) {
             marcarLida(c.numero); // abrir É ler
@@ -172,10 +178,25 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         rodarAcao(() => assumirConversa(sel.numero, liberar),
             liberar ? { atribuidoA: null } : { atribuidoA: meuEmail, transferidaDe: null });
     };
-    const acaoSituacao = () => {
+    // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
+    const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
+    const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
+    const acaoSituacao = async () => {
         if (!sel) return;
         const nova = sel.situacao === 'resolvida' ? 'aberta' : 'resolvida';
-        rodarAcao(() => mudarSituacao(sel.numero, nova), { situacao: nova });
+        setAcaoErro(null);
+        setSituacaoAviso(null);
+        const r = await mudarSituacao(sel.numero, nova);
+        if (!r.ok) { setAcaoErro(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
+        patchSel({ situacao: nova });
+        if (nova === 'resolvida') {
+            setSituacaoAviso({
+                enviada: '✓ Encerrado — pesquisa de avaliação enviada ao cliente.',
+                'janela-fechada': '✓ Encerrado. A pesquisa NÃO saiu (janela de 24h fechada).',
+                falhou: '✓ Encerrado. A pesquisa falhou ao enviar.',
+                desligada: '✓ Encerrado (pesquisa de avaliação desligada na ⚙️).',
+            }[r.avaliacao || 'desligada'] || '✓ Encerrado.');
+        }
     };
     const acaoNota = async () => {
         if (!sel || !notaTexto.trim()) return;
@@ -264,6 +285,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         const r = await salvarFilasAtendente(a.uid, novas);
         if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar.'); return; }
         setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, filasAtendimento: r.filas } : x)));
+    };
+
+    // ── 📊 Avaliações (admin/gestor: todas · colaborador: as próprias — o
+    // recorte é do backend; a tela só DIZ qual escopo está vendo)
+    const [avAberto, setAvAberto] = useState(false);
+    const [avDados, setAvDados] = useState<{
+        escopo: string; total: number; media: number | null;
+        porNota: { nota: number; quantidade: number }[]; avaliacoes: AvaliacaoAtendimento[];
+    } | null>(null);
+    const [avErro, setAvErro] = useState<string | null>(null);
+    const abrirAvaliacoes = async () => {
+        setAvAberto(true);
+        setAvErro(null);
+        const r = await listarAvaliacoes();
+        if (r.ok) setAvDados({ escopo: r.escopo, total: r.total, media: r.media, porNota: r.porNota, avaliacoes: r.avaliacoes });
+        else setAvErro(r.error || 'Falha ao carregar as avaliações.');
     };
 
     // ── ⚙️ aba 📥 Importar backup da Ultra Fox (preview antes de gravar)
@@ -522,6 +559,56 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 </div>
             )}
 
+            {/* ── Modal 📊 Avaliações dos atendimentos ──────────────────────── */}
+            {avAberto && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setAvAberto(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md my-8 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">📊 Avaliações dos atendimentos</h3>
+                            <button onClick={() => setAvAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                        </div>
+                        {avErro && <p className="text-[11px] text-red-600 dark:text-red-400">{avErro}</p>}
+                        {!avDados && !avErro && <p className="text-[11px] text-slate-400">Carregando…</p>}
+                        {avDados && (
+                            <>
+                                <p className="text-[10px] text-slate-400">
+                                    {avDados.escopo === 'todas' ? 'Todas as avaliações da casa (você é gestor/admin).' : 'Só as SUAS avaliações — gestor e admin veem todas.'}
+                                </p>
+                                <div className="flex items-baseline gap-3">
+                                    <span className="text-3xl font-black text-slate-800 dark:text-slate-100">{avDados.media != null ? avDados.media.toFixed(2) : '—'}</span>
+                                    <span className="text-[11px] text-slate-500">média · {avDados.total} avaliação(ões)</span>
+                                </div>
+                                <div className="space-y-1">
+                                    {[...avDados.porNota].reverse().map((p) => (
+                                        <div key={p.nota} className="flex items-center gap-2">
+                                            <span className="text-[10px] w-8 text-slate-500">{p.nota} ⭐</span>
+                                            <div className="flex-1 h-2 rounded bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                                                <div className="h-full bg-[#0e3bfa]" style={{ width: avDados.total ? `${(p.quantidade / avDados.total) * 100}%` : '0%' }} />
+                                            </div>
+                                            <span className="text-[10px] w-6 text-right text-slate-500">{p.quantidade}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {avDados.total === 0 && (
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        Nenhuma avaliação ainda. A pesquisa é enviada no ENCERRAMENTO do atendimento —
+                                        e a chave dela nasce desligada (⚙️ → 🤖).
+                                    </p>
+                                )}
+                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                                    {avDados.avaliacoes.map((a) => (
+                                        <div key={a.id} className="flex items-center justify-between text-[10px] text-slate-500 border-b border-slate-100 dark:border-slate-700/50 py-1">
+                                            <span>{'⭐'.repeat(a.nota)} · {formatarNumeroBr(a.numero)}{a.atendente ? ` · ${a.atendente.split('@')[0]}` : ''}</span>
+                                            <span>{horaCurta(a.em, agora)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* ── Modal ⚙️ Config do atendimento (admin) ─────────────────────── */}
             {cfgAberta && (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setCfgAberta(false)}>
@@ -554,10 +641,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
                                     {atendentes.map((a) => (
                                         <div key={a.uid} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
-                                            <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
-                                                {a.nome || a.email || a.uid}
-                                                {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600">admin · vê tudo</span>}
-                                            </p>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
+                                                    {a.nome || a.email || a.uid}
+                                                    {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600">admin · tudo</span>}
+                                                </p>
+                                                {a.role !== 'admin' && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            const novo = a.papelAtendimento === 'gestor' ? 'colaborador' : 'gestor';
+                                                            const r = await salvarPapelAtendente(a.uid, novo);
+                                                            if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar o papel.'); return; }
+                                                            setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, papelAtendimento: r.papel } : x)));
+                                                        }}
+                                                        title="Gestor: vê e atende tudo, encerra qualquer atendimento — só não altera a ⚙️"
+                                                        className={`shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-full ${a.papelAtendimento === 'gestor'
+                                                            ? 'bg-amber-500 text-white'
+                                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                        ⭐ {a.papelAtendimento === 'gestor' ? 'Gestor' : 'tornar gestor'}
+                                                    </button>
+                                                )}
+                                            </div>
                                             {a.email && a.nome && <p className="text-[10px] text-slate-400">{a.email}</p>}
                                             <div className="flex gap-1 flex-wrap mt-1">
                                                 {filas.map((f) => (
@@ -681,6 +785,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <span className="block text-[9px] text-slate-400">só sai com a janela de 24h aberta; independente do bot</span>
                                         </span>
                                     </label>
+                                    <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                        <input type="checkbox" checked={cfg.avaliacaoAtiva}
+                                            onChange={(e) => setCfg((c) => (c ? { ...c, avaliacaoAtiva: e.target.checked } : c))} />
+                                        <span className="text-[11px] text-slate-700 dark:text-slate-200">
+                                            📊 Pedir AVALIAÇÃO (nota 1-5) ao encerrar o atendimento
+                                            <span className="block text-[9px] text-slate-400">só sai com a janela aberta; só a PRIMEIRA resposta vale como nota — não insiste</span>
+                                        </span>
+                                    </label>
                                 </div>
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🕐 Horário de funcionamento (fuso de São Paulo)</p>
@@ -725,6 +837,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         ['confirmacaoFila', 'Confirmação de fila — aceita {fila}'],
                                         ['foraDeHorario', 'Fora do horário'],
                                         ['sair', 'Resposta ao #sair'],
+                                        ['transferencia', 'Aviso de transferência — aceita {fila}'],
+                                        ['avaliacao', 'Convite de avaliação (pós-encerramento)'],
+                                        ['avaliacaoObrigado', 'Agradecimento da avaliação'],
                                     ] as [string, string][]).map(([chave, rotulo]) => (
                                         <label key={chave} className="block text-[10px] text-slate-400">
                                             {rotulo}
@@ -783,6 +898,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <button onClick={abrirNova} title="Iniciar conversa por template aprovado"
                                     className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ✚ Nova
+                                </button>
+                                <button onClick={abrirAvaliacoes} title="Avaliações dos atendimentos (nota 1-5 do cliente)"
+                                    className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
+                                    📊
                                 </button>
                                 {ehAdmin && (
                                     <button onClick={abrirCfg} title="Configurar atendimento (bot, horário, mensagens, menu)"
@@ -1087,12 +1206,17 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             📝 Nota interna
                                         </button>
                                     )}
-                                    <button onClick={acaoSituacao}
-                                        className={`w-full text-left text-[11px] px-2 py-1 rounded border ${sel.situacao === 'resolvida'
+                                    <button onClick={acaoSituacao} disabled={!podeEncerrarSel}
+                                        title={podeEncerrarSel ? '' : 'Só quem conduz (ou gestor/admin) encerra — assuma a conversa primeiro'}
+                                        className={`w-full text-left text-[11px] px-2 py-1 rounded border disabled:opacity-40 disabled:cursor-not-allowed ${sel.situacao === 'resolvida'
                                             ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                                             : 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white font-bold'}`}>
-                                        {sel.situacao === 'resolvida' ? '↺ Reabrir conversa' : '✅ Resolver conversa'}
+                                        {sel.situacao === 'resolvida' ? '↺ Reabrir atendimento' : '✅ Encerrar atendimento'}
                                     </button>
+                                    {!podeEncerrarSel && (
+                                        <p className="text-[9px] text-slate-400">Encerrar: quem conduz, gestor ou admin. Assuma (🙋) pra encerrar.</p>
+                                    )}
+                                    {situacaoAviso && <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{situacaoAviso}</p>}
                                 </div>
                             </div>
                             <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 text-[10px] text-slate-400">
