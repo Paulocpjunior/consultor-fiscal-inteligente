@@ -7,7 +7,7 @@
 //   · Horários dos colaboradores — a EXCEÇÃO de horário mora por usuário no
 //     "Gerenciar Usuários"; aqui só o atalho, pra não duplicar a régua.
 // ============================================================================
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
     listarTemplates, salvarTemplate, desativarTemplate, statusWhatsapp,
@@ -16,6 +16,10 @@ import {
 } from '../services/whatsappTemplatesService';
 import { dataHoraSp } from '../services/spConnect';
 import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
+import { tenhoAcessoAuditoria } from '../services/auditoriaDonoService';
+
+// Lazy: quem não é dono nunca baixa o painel.
+const AuditoriaDono = lazy(() => import('./AuditoriaDono'));
 
 interface Props {
     isOpen: boolean;
@@ -68,6 +72,9 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     const [form, setForm] = useState({ ...FORM_VAZIO });
     const [editando, setEditando] = useState(false);
     const [msg, setMsg] = useState<{ texto: string; tipo: 'ok' | 'erro' } | null>(null);
+    // Quem vê o painel de auditoria é o BACKEND que diz (nem todo admin vê).
+    const [donoDaAuditoria, setDonoDaAuditoria] = useState(false);
+    const [auditoriaAberta, setAuditoriaAberta] = useState(false);
     const [salvando, setSalvando] = useState(false);
     // O id do doc é `departamento__nome`, então renomear CRIA outro template.
     // Guardar o id de origem é o que permite ao backend desativar o antigo em
@@ -98,6 +105,13 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     }, []);
 
     useEffect(() => { if (isOpen) { setMsg(null); recarregar(); } }, [isOpen, recarregar]);
+
+    // Pergunta ao BACKEND se esta pessoa é dona (a resposta não revela quem
+    // são os donos). Hook ANTES do early return — a lição do erro #310.
+    useEffect(() => {
+        if (!isOpen) return;
+        tenhoAcessoAuditoria().then((r) => setDonoDaAuditoria(Boolean(r.ok && r.tenho))).catch(() => setDonoDaAuditoria(false));
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -236,6 +250,36 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                 </div>
 
                 <div className="overflow-y-auto p-4 space-y-5">
+                    {/* 🔐 AUDITORIA DO DONO — só aparece pra quem o BACKEND
+                        confirmar como dono (outros admins não veem nem o
+                        botão). Esconder aqui é cortesia; a trava é a rota. */}
+                    {donoDaAuditoria && (
+                        <div className="rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-900 dark:bg-slate-900/70 p-3 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-sm font-bold text-white">🔐 Auditoria — ações sensíveis</p>
+                                <p className="text-[11px] text-slate-300">
+                                    Quem enviou guia, quem transmitiu declaração, quem mudou permissão. Restrito a você.
+                                </p>
+                            </div>
+                            <button onClick={() => setAuditoriaAberta(true)}
+                                className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-slate-200">
+                                Abrir
+                            </button>
+                        </div>
+                    )}
+                    {auditoriaAberta && (
+                        <div className="fixed inset-0 bg-black/70 z-[90] p-3 overflow-y-auto" onClick={() => setAuditoriaAberta(false)}>
+                            <div className="bg-slate-50 dark:bg-slate-900 rounded-xl max-w-[1400px] mx-auto my-4 p-3" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-end">
+                                    <button onClick={() => setAuditoriaAberta(false)}
+                                        className="text-slate-400 hover:text-slate-600 px-2 py-1 text-sm">✕ fechar</button>
+                                </div>
+                                <Suspense fallback={<p className="text-xs text-slate-400 p-4">Carregando…</p>}>
+                                    <AuditoriaDono />
+                                </Suspense>
+                            </div>
+                        </div>
+                    )}
                     {msg && (
                         <p className={`text-xs px-3 py-2 rounded ${msg.tipo === 'ok'
                             ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'

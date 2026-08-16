@@ -31,6 +31,7 @@ import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horario-acesso.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
+import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
 import { montarCertificados, aptidaoDeAssinatura } from './cadastro-central-certificados.js';
 import {
@@ -291,7 +292,14 @@ router.post('/usuarios/:uid/departamentos', requireAdmin, async (req, res) => {
         if (!snap.exists) {
             return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
         }
+        const antes = snap.data()?.departamentos || [];
         await ref.set({ departamentos: v.departamentos }, { merge: true });
+        // Departamento é o gate dos MÓDULOS do SaaS — mudança de poder deixa
+        // rastro (a trilha que o relatório do dono lê).
+        await registrarMudancaPermissao({
+            alvoUid: uid, alvoEmail: snap.data()?.email || null,
+            campo: 'departamentos', de: antes, para: v.departamentos, por: req.user?.email || null,
+        });
         console.log(`[cadastro-central] departamentos de ${uid} → [${v.departamentos.join(', ')}] por ${req.user?.email}`);
         return res.json({ ok: true, uid, departamentos: v.departamentos });
     } catch (e) {
