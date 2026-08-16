@@ -236,7 +236,7 @@ export function versaoAtendeAlvo(modelVersion, familia = FAMILIA_ALVO_GEMINI) {
  * @param {Array<{modelVersion: string|null, naFamiliaAlvo: boolean|null}>} sondas
  * @param {boolean} listada  a família apareceu em `models.list`
  */
-export function vereditoDaFamilia(sondas, listada, familia = FAMILIA_ALVO_GEMINI) {
+export function vereditoDaFamilia(sondas, listada, familia = FAMILIA_ALVO_GEMINI, atualizacao = null) {
     const responderam = (sondas || []).filter((s) => s && s.modelVersion);
 
     // Sonda que não respondeu NÃO vira "não estamos" — é a mesma régua do
@@ -248,7 +248,30 @@ export function vereditoDaFamilia(sondas, listada, familia = FAMILIA_ALVO_GEMINI
         };
     }
 
+    // 🚨 FAMÍLIA É PISO — e o veredito precisa SABER DISSO.
+    //
+    // O print de 16/08 mostrou, uma linha colada na outra: *"⚠ só parte das
+    // chamadas está na família 3.7"* e *"✓ na última versão, nada mais novo na
+    // conta"*. As duas verdadeiras, e discordando aos olhos de quem lê — a
+    // armadilha que este projeto mais pagou.
+    //
+    // O ⚠ era ALARME SEM AÇÃO: ninguém consegue pôr o Pro na 3.7, porque a
+    // linha Pro não chegou lá. Quando cada linha já está no mais novo que a
+    // conta oferece, não há o que fazer, e o que não tem ação não é aviso — é
+    // informação. Sem `atualizacao`, o comportamento antigo continua valendo.
+    const noTeto = atualizacao?.situacao === 'atual';
     const naFamilia = responderam.filter((s) => s.naFamiliaAlvo === true);
+    if (noTeto && naFamilia.length < responderam.length) {
+        const atrasadas = responderam.filter((s) => s.naFamiliaAlvo !== true);
+        return {
+            situacao: 'no-teto-da-conta', cor: 'ok',
+            texto: `Cada linha está no mais novo que a conta oferece: `
+                + responderam.map((s) => `${s.modelVersion}`).join(' · ') + '. '
+                + `${atrasadas.length === 1 ? 'Uma delas' : 'Algumas'} ainda não chegou na família `
+                + `${familia} — as linhas Pro e Flash não andam no mesmo número, e "estar na ${familia}" `
+                + 'vale por linha. Não há nada a fazer aqui.',
+        };
+    }
     if (naFamilia.length === responderam.length) {
         return {
             situacao: 'atendida', cor: 'ok',
@@ -398,5 +421,38 @@ export function conferirAtualizacao(sondas, modelos, familia = FAMILIA_ALVO_GEMI
         situacao: 'indeterminado', cor: 'neutro', linhas,
         texto: 'Não deu para comparar todas as linhas com a listagem da conta: '
             + linhas.map((l) => `${l.linha.toUpperCase()} responde em ${l.atual}`).join(' · ') + '.',
+    };
+}
+
+/**
+ * QUAL BUILD ESTÁ ATENDENDO — estável ou preview?
+ *
+ * O print de 16/08 mostrou o Pro pinado em `gemini-3.1-pro-preview`, e a
+ * ESCOLHA está certa: é o mais novo Pro que a conta lista, e o desempate por
+ * estabilidade só vale entre modelos da MESMA versão (preferir um 3.0 estável
+ * ao 3.1 preview seria ficar para trás de propósito).
+ *
+ * O que faltava era DIZER. Build `-preview` a Google retira ou muda sem aviso,
+ * e é nele que sai o parecer jurídico — quem opera precisa saber disso para
+ * decidir se pina um estável à mão. É a regra da casa: o app ACENDE e diz onde
+ * se resolve, não escolhe sozinho por quem tem a informação.
+ *
+ * NEUTRO de propósito: não é defeito nem pendência. Vermelho aqui seria alarme
+ * sobre a única opção que existe.
+ */
+export function conferirEstabilidade(sondas) {
+    const instaveis = [];
+    for (const s of sondas || []) {
+        const nome = normalizarNomeModelo(s?.modelVersion || s?.modelo);
+        if (!nome) continue;
+        if (INSTAVEL.test(nome) && !instaveis.includes(nome)) instaveis.push(nome);
+    }
+    if (instaveis.length === 0) return { instavel: false, modelos: [], cor: 'ok', texto: null };
+    return {
+        instavel: true, modelos: instaveis, cor: 'neutro',
+        texto: `${instaveis.join(' e ')} ${instaveis.length === 1 ? 'é um build' : 'são builds'} `
+            + '-preview: a Google pode retirar ou mudar sem aviso. Foi escolhido por ser o mais novo '
+            + 'da linha (um estável de versão ANTERIOR seria ficar para trás de propósito). '
+            + 'Para fixar um estável, env GEMINI_MODEL_PRO / GEMINI_MODEL_FLASH no Cloud Run.',
     };
 }

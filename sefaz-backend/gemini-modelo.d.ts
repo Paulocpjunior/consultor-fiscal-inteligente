@@ -55,7 +55,17 @@ export function vereditoDaFamilia(
     sondas: Array<{ modelo?: string; modelVersion: string | null; naFamiliaAlvo: boolean | null }>,
     listada: boolean,
     familia?: string,
-): { situacao: 'atendida' | 'fora' | 'parcial' | 'indeterminado'; cor: 'ok' | 'atencao' | 'neutro'; texto: string };
+    /** Sem isto, linha abaixo da família vira ⚠ mesmo sem ação possível. */
+    atualizacao?: { situacao: 'atual' | 'atrasado' | 'indeterminado' } | null,
+): {
+    situacao: 'atendida' | 'fora' | 'parcial' | 'no-teto-da-conta' | 'indeterminado';
+    cor: 'ok' | 'atencao' | 'neutro'; texto: string;
+};
+
+/** Qual BUILD está atendendo — `-preview` aparece nomeado, nunca escondido. */
+export function conferirEstabilidade(
+    sondas: Array<{ modelo?: string; modelVersion?: string | null }>,
+): { instavel: boolean; modelos: string[]; cor: 'ok' | 'neutro'; texto: string | null };
 
 /**
  * PRO e FLASH apontando pro mesmo modelo = roteador sem efeito.
