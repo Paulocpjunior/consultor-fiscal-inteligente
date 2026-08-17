@@ -132,6 +132,41 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **🚨 O DARF DA DCTFWEB NÃO É DE UM DEPARTAMENTO SÓ — e o app deixava enviar
+  sem dizer** (Paulo, 17/08, HYPE CAFE 07/2026: *"ERRO GRAVÍSSIMO, ia enviar os
+  impostos PIS/COFINS da HYPE, está vindo os impostos de outro depto junto… por
+  desencargo eu abri o PDF para conferir… senão vai acabar indo em duplicidade
+  os impostos"*). O DARF unificado trazia **1082 CONTR PREV DESCONTA SEGURADO
+  R$ 201,71** (DP/Folha) junto com **2172 COFINS 591,68 + 8109 PIS 128,20**
+  (Fiscal), total 921,59. Se o DP mandasse a guia dele, o cliente pagaria o 1082
+  **duas vezes** — e só o olho do dono pegou, abrindo o PDF por desconfiança.
+  ⚠️ **A OPÇÃO QUE ELE PEDIU NÃO EXISTE, E A QUE RESOLVE JÁ EXISTIA**: não se
+  escolhe imposto num DARF — a **Receita consolida por VENCIMENTO** (um
+  vencimento, uma cobrança, todos os códigos daquela data). A saída real é a
+  guia POR VENCIMENTO, que a aba DARF já emite; na HYPE ela resolve inteiro
+  (1082 vence 20/08, PIS/COFINS 25/08). O defeito não era falta de recorte, era
+  o app **não DIZER** que o unificado mistura departamentos. Prometer "escolha
+  os impostos" seria promessa que a tela não cumpre — a lição do ✕ de 14/08.
+  **E quando dois departamentos caem no MESMO vencimento a guia É uma só por
+  determinação da Receita**: aí o app diz isso em vez de inventar recorte, e a
+  combinação passa a ser humana (um envia, o outro sabe que não deve).
+  `darf-departamentos.js` (na `REGUAS_VIGIADAS`) classifica pela **DESCRIÇÃO**,
+  com o código de receita CORROBORANDO — de-para de código não é tabela oficial,
+  então cada entrada carrega a FONTE (as três da HYPE vêm do DARF real).
+  TRÊS TRAVAS: (1) **`misturado` é TRUE também com débito não classificado** —
+  não saber de quem é não é o mesmo que saber que é meu, e o silêncio aqui é
+  justamente o que dobra a cobrança; (2) **a trava CARREGA a composição sozinha**
+  (os débitos são sob demanda, e depender de a pessoa ter clicado "Ver débitos"
+  protegeria só quem já sabia do problema, que é ninguém) e **falha ao conferir
+  PEDE confirmação dizendo que não conferiu** — indeterminado PARA aqui, ao
+  contrário do gate de departamento, porque é guia indo ao cliente;
+  (3) a régua é por **VARREDURA das rotas de envio**, não por lista — botão de
+  envio novo sem a trava é guia dobrada, e envelheceria em silêncio (lição de
+  13/08). ⚠️ **ORDEM DA CLASSIFICAÇÃO É REGRA, não detalhe**: "RETIDA/RETENÇÃO"
+  é testado ANTES de "contribuição previdenciária", senão a CP retida de serviço
+  tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
+  direção contrária. A composição aparece na TELA antes dos botões: descobrir
+  "por desencargo" não pode ser o processo.
 - **🚨 PDF GIRADO (`/Rotate 90`) FAZIA O PARSER LER O EIXO ERRADO — e ele acusava
   a COLABORADORA de um erro que era DELE** (Paulo, 17/08, urgente: *"a
   colaboradora reporta este erro do CFI, porém ela analisa está correto"*, caso
