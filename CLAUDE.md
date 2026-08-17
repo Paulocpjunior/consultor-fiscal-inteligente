@@ -2204,10 +2204,34 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
       condição DELE (ver `conferirAtualizacao` acima). Se um dia quiser os dois
       degraus de volta, o caminho é remover os dois envs
       (`--remove-env-vars GEMINI_MODEL_PRO,GEMINI_MODEL_FLASH`).
-   b) `SISTEMA_DEV_EMAILS=p.c.pereira@me.com` (aberta desde 31/07) — restringe
-      o painel Sistema→Banco além de admin.
+   b) ✅ **RESOLVIDO 17/08** — `SISTEMA_DEV_EMAILS=p.c.pereira@me.com` gravado e
+      **em vigor** (100% do tráfego na revisão `-01034-4r8`). Aberta desde 31/07.
+      ⚠️ Confirmação por RESULTADO ainda pendente: abrir Sistema→Banco com um
+      admin que NÃO seja esse e-mail e ver se é barrado.
    c) Rotação do `sefaz-cron-secret` (higiene: o valor vazou 2× em colas de
       terminal no chat). Exige rodar de novo os DOIS scripts de scheduler.
+      🚨 **E ELA CAI NA ARMADILHA DO ITEM ABAIXO, com consequência pior**: env
+      trocado por `services update` cria revisão a **0% de tráfego**, então os
+      crons continuariam batendo com o segredo VELHO e falhariam **calados** até
+      o próximo deploy. Trocar o secret exige conferir o tráfego depois.
+
+🚨 **`gcloud run services update` CRIA REVISÃO A 0% DE TRÁFEGO NESTE SERVIÇO —
+   env "gravado" não é env "em vigor"** (17/08, ao aplicar o `SISTEMA_DEV_EMAILS`).
+   A causa: o `deploy-app.yml` roteia com `update-traffic --to-revisions REV=100`,
+   ou seja o tráfego fica **PINADO** numa revisão; qualquer revisão criada depois
+   nasce sem tráfego, e o gcloud diz isso na última linha (*"is serving 0 percent
+   of traffic"*) — que é fácil de não ler depois de três "✓ Done".
+   O env FICA salvo na configuração do serviço, então o **próximo deploy o leva
+   sozinho** (o `gcloud run deploy` do workflow passa só a imagem e preserva env).
+   Para valer NA HORA: testar pela URL com tag da revisão nova e só então
+   `update-traffic --to-latest`.
+   ⚠️ **Rotear para LATEST tem efeito colateral**: o serviço sai de "revisão
+   fixa" e passa a promover automaticamente a mais nova. O próximo deploy re-fixa
+   (sobe com `--no-traffic`, faz health check, então roteia), mas até lá revisão
+   criada à mão assume tráfego SEM passar pelo health check.
+   ⚠️ E **`--to-latest` às cegas é aposta**: neste serviço o workflow deixa
+   revisão sem tráfego justamente quando o health check FALHA, então "latest" nem
+   sempre é a boa. Conferir a imagem antes.
 
 1. **NOVA ERA — os seis produtores tirados do FUNRURAL por engano** (14/08). Ele
    clicou ✕ para limpar a lista quando a tela ainda não dizia qual nota era
