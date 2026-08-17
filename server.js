@@ -85,6 +85,7 @@ import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.j
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
 import saeNfceRouter from './sefaz-backend/sefaz-sp-nfce-routes.js';
+import cadastroContabilRouter from './sefaz-backend/cadastro-contabil-routes.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
@@ -409,6 +410,7 @@ app.use('/api/admin/diagnostico-config', diagnosticoConfigRouter);
 app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
 app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
 app.use('/api/admin/prazos-municipais', prazosMunicipaisRouter);
+app.use('/api/admin/cadastro-contabil', cadastroContabilRouter);
 // O cron e chamado pelo Cloud Scheduler com header X-Cron-Secret — fica fora
 // do prefixo /api/admin pra preservar o padrao dos outros crons.
 app.use('/api/internal/cron', healthAlertaCronRouter);

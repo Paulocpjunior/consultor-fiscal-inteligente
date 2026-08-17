@@ -25,6 +25,9 @@ function fa() {
 const PROJETOS_PERMITIDOS = new Set([
     'consultorfiscalapp',
     'consultor-dp-folha',
+    // Consultor Contabil Inteligente (CCI). A integracao usa o token do
+    // colaborador logado e expoe somente dados cadastrais minimos por CNPJ.
+    'projetos-app-sp',
 ]);
 
 /**
