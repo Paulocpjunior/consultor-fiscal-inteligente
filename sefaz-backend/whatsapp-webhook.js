@@ -188,14 +188,34 @@ export function traduzirStatusEntrega(status) {
  * protagonista: é o filtro que hoje faz o escritório LIGAR pro cliente sem
  * saber por quê.
  */
-export function interpretarErroEntrega(codigo, detalhe = '') {
+export function interpretarErroEntrega(codigo, detalhe = '', midia = null) {
     const c = Number(codigo);
     if (c === 131049 || c === 130472) {
         return 'A Meta NÃO entregou para preservar o engajamento (filtro de marketing). Ação: template na categoria UTILITY e/ou pedir ao cliente que inicie a conversa (a resposta dele abre a janela de 24h).';
     }
     if (c === 131047) return 'Fora da janela de 24h — reenvie por template aprovado.';
     if (c === 131026) return 'O número não tem WhatsApp ou não pode receber — confira o número no cadastro do cliente.';
-    if (c === 131053) return 'Falha no upload/download da mídia — tente reenviar o anexo.';
+    if (c === 131053) {
+        // 🚨 "TENTE REENVIAR" NÃO SERVE QUANDO JÁ FALHOU TRÊS VEZES (caso real
+        // de 17/08, no painel do Paulo: três 131053 seguidos para o mesmo
+        // número). Este erro chega no webhook DEPOIS de a Meta ter aceitado o
+        // envio — o upload deu certo e o processamento da mídia é que falhou.
+        // Logo, repetir o MESMO arquivo tende a falhar de novo, e a ação útil
+        // é sobre o ARQUIVO. Por isso ele vai DESCRITO na frase: sem dizer o
+        // que foi tentado, quem lê não tem por onde começar.
+        if (!midia) return 'Falha no processamento da mídia pela Meta. Reenviar o MESMO arquivo tende a falhar de novo — converta (PDF → imagem, áudio → mp3) ou reduza o tamanho.';
+        const mb = midia.tamanhoBytes ? (midia.tamanhoBytes / (1024 * 1024)).toFixed(1).replace('.', ',') : null;
+        const oque = [midia.nomeArquivo, midia.mime, mb ? `${mb} MB` : null].filter(Boolean).join(' · ');
+        const porTipo = {
+            document: 'Converta para PDF simples (sem senha, sem formulário) ou reduza o tamanho.',
+            image: 'Salve de novo como JPG ou PNG comum — imagem com perfil de cor incomum costuma falhar aqui.',
+            audio: 'Converta para mp3 ou ogg/opus.',
+            video: 'Converta para mp4 (H.264) e reduza a duração.',
+        };
+        return `Falha no processamento da mídia pela Meta: ${oque}. `
+            + `Reenviar o MESMO arquivo tende a falhar de novo. ${porTipo[midia.tipo] || 'Converta o arquivo ou reduza o tamanho.'} `
+            + 'A cópia continua guardada no histórico da conversa.';
+    }
     return detalhe ? `Falha na entrega: ${detalhe}` : 'Falha na entrega — confira o número e tente novamente.';
 }
 
