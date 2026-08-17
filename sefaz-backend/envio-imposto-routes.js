@@ -22,6 +22,7 @@ import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from 
 import { enviarTemplateWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
 import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates.js';
 import { nomeArquivoGuia } from './nome-arquivo-guia.js';
+import { conferirDebitosJaEnviados, avisoDeRepeticao } from './debito-ja-enviado.js';
 
 const router = Router();
 
@@ -65,6 +66,11 @@ router.post('/registrar', requireAuth, async (req, res) => {
             para: para || null,
             pdfBase64, pdfFileName,
             valor,
+            // Campo novo => whitelist da rota NO MESMO PR (lição do #382): sem
+            // isto a composição é descartada em silêncio e a trava do próximo
+            // envio nunca teria o que comparar.
+            debitos: req.body?.debitos,
+            reenvioMotivo: req.body?.reenvioMotivo,
             enviadoPor: req.user?.email || req.user?.uid || null,
         });
         console.log(`[envio-imposto] ${tipo} ${empresaCnpj} ${competencia} via ${canal || 'email-app'} por ${req.user?.email} — sp=${r.sharePoint.status} baixa=${r.baixa.status}`);
@@ -158,6 +164,8 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             pdfBase64: pdfLimpo || undefined,
             pdfFileName,
             valor,
+            debitos: req.body?.debitos,
+            reenvioMotivo: req.body?.reenvioMotivo,
             enviadoPor: req.user?.email || req.user?.uid || null,
             copiaPara: bcc,
         });
@@ -288,6 +296,8 @@ router.post('/enviar-whatsapp', requireAuth, async (req, res) => {
             pdfBase64: pdfLimpo || undefined,
             pdfFileName: nomeArquivo,
             valor,
+            debitos: req.body?.debitos,
+            reenvioMotivo: req.body?.reenvioMotivo,
             enviadoPor: req.user?.email || req.user?.uid || null,
             whatsappMessageId: envio.messageId,
         });
@@ -341,6 +351,63 @@ router.get('/historico', requireAuth, async (req, res) => {
         return res.json({ ok: true, envios });
     } catch (e) {
         console.error('[envio-imposto/historico]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🚨 ESTE DÉBITO JÁ FOI ENVIADO NESTA COMPETÊNCIA?
+ *
+ * Paulo, 17/08, autorizando depois do caso HYPE: *"pode fazer, barrar o segundo
+ * envio do mesmo débito"*. O aviso de mistura de departamentos dependia de o
+ * outro departamento LEMBRAR — e memória não é trava.
+ *
+ * O cliente manda a composição da guia que está PRESTES a sair; a rota devolve
+ * o que já saiu nesta competência para os MESMOS códigos, com quem enviou,
+ * quando e se o canal prova o envio. Quem decide continua sendo a pessoa.
+ *
+ * ⚠️ CNPJ por igualdade É seguro AQUI (contra a regra geral do projeto): esta
+ * coleção é escrita só pelo `envio-imposto.js`, que grava `empresaCnpj` já
+ * normalizado em dígitos. A régua de "nunca consultar CNPJ por igualdade" vale
+ * para `empresas`, onde o dado tem duas formas.
+ */
+router.post('/debitos-ja-enviados', requireAuth, async (req, res) => {
+    try {
+        const cnpj = String(req.body?.cnpj || '').replace(/\D/g, '');
+        const competencia = String(req.body?.competencia || '').trim();
+        const debitos = Array.isArray(req.body?.debitos) ? req.body.debitos : [];
+        if (!cnpj || !competencia) {
+            return res.status(400).json({ ok: false, error: 'Informe cnpj e competencia.' });
+        }
+        if (!(await podeAcessarCnpj(req.user, cnpj))) {
+            return res.status(403).json({ ok: false, error: 'Empresa fora da sua carteira.' });
+        }
+        const db = fa().firestore();
+        const snap = await db.collection('impostos_enviados')
+            .where('empresaCnpj', '==', cnpj)
+            .where('competencia', '==', competencia)
+            .limit(300)
+            .get();
+        const enviosAnteriores = snap.docs.map((d) => {
+            const x = d.data();
+            return {
+                id: d.id,
+                tipo: x.tipo || null,
+                canal: x.canal || null,
+                enviadoPor: x.enviadoPor || null,
+                enviadoEm: x.enviadoEm?.toDate?.()?.toISOString?.() || null,
+                debitos: Array.isArray(x.debitos) ? x.debitos : null,
+            };
+        });
+        const conferencia = conferirDebitosJaEnviados({ debitosDaGuia: debitos, enviosAnteriores });
+        return res.json({
+            ok: true,
+            conferencia,
+            aviso: avisoDeRepeticao(conferencia),
+            enviosNaCompetencia: enviosAnteriores.length,
+        });
+    } catch (e) {
+        console.error('[envio-imposto/debitos-ja-enviados]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

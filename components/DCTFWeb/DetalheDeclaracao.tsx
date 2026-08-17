@@ -26,7 +26,7 @@ import {
     type DctfwebDebitosResult,
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
-import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, perguntarDebitosJaEnviados, type ModoComposicao } from '../../services/envioImpostoService';
 import InsumosDepartamentos from './InsumosDepartamentos';
 import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
 // DE QUEM É CADA DÉBITO — núcleo puro. A régua mora num lugar só; a tela não
@@ -172,6 +172,19 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
      * Falha aqui não derruba nada e não libera nada: a trava do envio tenta de
      * novo e, sem conseguir, pede confirmação DIZENDO que não conferiu.
      */
+    // Motivo do reenvio proposital — viaja com a gravação (quem/quando/por quê).
+    const [reenvioMotivo, setReenvioMotivo] = useState<string | null>(null);
+    /**
+     * Os débitos que esta guia cobra, já com o departamento de cada um — é o que
+     * vai para a auditoria. Sem composição gravada, o envio de amanhã não tem
+     * como saber o que o de hoje cobrou.
+     */
+    const debitosParaAuditoria = () => {
+        if (!composicaoDarf) return undefined;
+        return composicaoDarf.grupos.flatMap((g: any) => g.linhas.map((l: any) => ({
+            codigo: l.codigo, descricao: l.descricao, valor: l.valor, departamento: g.departamento,
+        })));
+    };
     const darfConferido = useRef<string | null>(null);
     useEffect(() => {
         if (!darfResult?.pdfBase64 || !user) return;
@@ -222,11 +235,55 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
         }
         const sep = separarDarfPorDepartamento(comp.debitos);
         const aviso = avisoDeMistura(sep);
-        if (!aviso) return true;
-        return confirm(
+        if (aviso && !confirm(
             `${aviso.titulo.toUpperCase()}\n\n${aviso.texto}\n\n${aviso.acao}\n\n`
             + 'Enviar o DARF unificado assim mesmo?',
-        );
+        )) return false;
+
+        // 🚨 SEGUNDA PORTA: ESTE DÉBITO JÁ FOI ENVIADO NESTA COMPETÊNCIA?
+        //
+        // Paulo, 17/08: *"pode fazer, barrar o segundo envio do mesmo débito"*.
+        // O aviso de mistura dependia de o outro departamento LEMBRAR — e memória
+        // não é trava. Quem responde é a auditoria, porque o outro envio foi de
+        // outra pessoa, de outro departamento, em outra máquina.
+        const competenciaIso = `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`;
+        const r = await perguntarDebitosJaEnviados({
+            cnpj: declaracao.empresaCnpj,
+            competencia: competenciaIso,
+            debitos: comp.debitos,
+        });
+        if (!r.ok) {
+            // Rede que piscou NÃO vira "nunca foi enviado" — afirmar isso é o
+            // que dobra a cobrança. Pede confirmação dizendo que não conferiu.
+            return confirm(
+                'NÃO FOI POSSÍVEL CONFERIR se estes débitos já foram enviados nesta competência '
+                + `(${r.error || 'falha na consulta'}).\n\n`
+                + 'Se outro departamento já mandou, o cliente paga duas vezes. Enviar assim mesmo?',
+            );
+        }
+        if (r.aviso) {
+            const bloqueia = r.conferencia?.bloqueia;
+            if (!bloqueia) {
+                // Só ressalva (envio antigo sem composição gravada): avisa e segue.
+                onShowToast?.(`${r.aviso.titulo} — ${r.aviso.acao}`);
+                return true;
+            }
+            const motivo = prompt(
+                `${r.aviso.titulo.toUpperCase()}\n\n${r.aviso.texto}\n\n${r.aviso.acao}\n\n`
+                + 'Para reenviar, escreva o MOTIVO (mínimo 15 caracteres). Ele fica gravado com o seu nome.\n'
+                + 'Deixe em branco para NÃO enviar.',
+                '',
+            );
+            const limpo = String(motivo || '').trim();
+            if (limpo.length < 15) {
+                onShowToast?.(limpo
+                    ? 'Motivo curto demais — o reenvio foi cancelado. Descreva por que a guia precisa sair de novo.'
+                    : 'Envio cancelado — o débito já tinha saído nesta competência.');
+                return false;
+            }
+            setReenvioMotivo(limpo);
+        }
+        return true;
     };
 
     const enviarDarfPeloServidor = async (pdfBase64: string, filename: string) => {
@@ -268,6 +325,10 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 pdfFileName: filename,
                 valor: darfResult?.valor ?? undefined,
                 vencimento: darfResult?.vencimento ?? null,
+                // A COMPOSIÇÃO viaja com o envio: é ela que faz a próxima
+                // tentativa (de qualquer departamento) saber o que já saiu.
+                debitos: debitosParaAuditoria(),
+                reenvioMotivo,
             });
             if (r.ok) onShowToast?.(mensagemEnvioServidor(r));
             else onShowToast?.(`Falha no envio: ${r.error}`);
@@ -305,6 +366,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 pdfFileName: filename,
                 valor: darfResult?.valor ?? undefined,
                 vencimento: darfResult?.vencimento ?? null,
+                debitos: debitosParaAuditoria(),
+                reenvioMotivo,
             });
             if (r.ok) onShowToast?.(mensagemEnvioWhatsapp(r));
             else onShowToast?.(`Falha no envio por WhatsApp: ${r.error}`);
@@ -357,6 +420,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 pdfBase64,
                 pdfFileName: filename,
                 valor: darfResult?.valor ?? undefined,
+                debitos: debitosParaAuditoria(),
+                reenvioMotivo,
             });
             if (r.ok) {
                 const sp = r.sharePoint?.status === 'arquivado'
