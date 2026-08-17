@@ -60,9 +60,10 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | `#sair` encerra o atendimento | ✔ **[print]** | encerra, resolve a conversa (`por: cliente`) e — com a pesquisa ligada — pede a nota | ✅ |
 | Aviso fora do horário | ✔ **[print]** | `foraDeHorario`, 1×/dia por conversa (anti-metralhadora) | ✅ |
 | Horário de funcionamento configurável | ✔ **[?]** | dias + 2 turnos (8-12 / 13-17:30), fuso de SP explícito | ✅ |
-| Cliente pedir outro departamento no meio | **[?]** | `#menu` reapresenta o menu em qualquer estado | ✅ |
+| Cliente pedir outro departamento no meio | **[?]** | `#menu` reapresenta o menu em qualquer estado **e libera a condução** (volta pra triagem sem dono — pedir outro depto e ficar com o atendente do anterior é conversa torta) | ✅ |
+| **O bot não fala por cima de atendimento em andamento** | **[?]** — o bot dela roda no mesmo número e não foi observado invadindo | conversa com atendente (`atribuidoA`) não recebe saudação nem menu; `#sair`/`#menu` do CLIENTE seguem valendo, e o aviso de fora de horário também | 🆕 **17/08** — sem isso, o dia do corte mandaria menu por cima de toda conversa em andamento |
 | Fluxo de bot além do menu (sub-menus, perguntas encadeadas) | **[?]** | só a triagem de um nível | 🟡 depende do §7 |
-| **O bot do SP Connect nasce DESLIGADO** | — | chave na ⚙️ | ⚠️ **de propósito**: com a Ultra Fox de pé são DOIS bots no mesmo número — menu em dobro pro cliente. Liga no dia do corte |
+| **O bot do SP Connect nasce DESLIGADO** | — | chave na ⚙️, com **alcance**: 🧪 só os números de teste × 🌐 todos | ⚠️ **de propósito**: os dois apps ficam assinados na WABA (decisão do Paulo) e recebem a MESMA mensagem, então o alcance é quem evita menu em dobro. **No teste real de 17/08 o bot da Ultra Fox NÃO respondeu** [produção] — observado num número, não é garantia |
 
 ## 3. Gestão do atendimento
 
@@ -74,7 +75,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Assumir / liberar conversa | **[?]** | 🙋 assumir, com guarda: responder conversa conduzida por outro é recusado (assumir é 1 clique, auditado) | ✅ |
 | Encerrar atendimento | ✔ **[print]** (o `#sair` prova que existe encerramento) | ✅ Encerrar — admin e gestor qualquer um; colaborador só o que conduz; cliente pelo `#sair` | ✅ |
 | Perfis de acesso (admin/gestor/colaborador) | **[?]** | 3 papéis com a régua do Paulo (16/08): gestor vê/atende/encerra tudo e não configura | ✅ |
-| **Avaliação do atendimento (nota 1-5)** | **[?]** | pesquisa pós-encerramento + painel 📊 (média, distribuição, últimas) | 🆕 (chave nasce desligada) |
+| **Avaliação do atendimento (nota)** | **[?]** | pesquisa pós-encerramento + painel 📊 (média, distribuição, últimas) | 🆕 (chave nasce desligada) |
 | Etiquetas/tags | **[?]** | **📇 → 🏷 (17/08)**: catálogo Lead · Cliente · Marketing · Colaborador · Candidato · Fornecedor · Parceiro · Ex-cliente, editável pelo admin. Filtro por etiqueta com a contagem de cada uma, e "sem etiqueta" como fila de trabalho | ✅ **respondeu a pergunta 3 do §7** — o Paulo pediu, então alguém usa |
 | Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
 | Notificação sonora / pop-up de mensagem nova | ✔ **[Paulo, 16/08]** | **som** (sintetizado, sem arquivo externo), **pop-up do navegador** (clique abre a conversa) e **contador no título da aba** — a mesma mensagem nunca apita duas vezes, a conversa aberta não apita e a 1ª carga aprende sem apitar | ✅ **16/08** |
@@ -168,11 +169,20 @@ neste documento (e, quando faltar, vira fila de construção):
 relatórios de volume/tempo, presença, respostas rápidas configuráveis,
 busca dentro da thread, CRM/Jotform.
 
-**Sequência recomendada**: fechar os 3 bloqueantes → ligar o bot na ⚙️ (com
-a Ultra Fox ainda de pé, um dia de convivência para comparar) → **ensaio com
+**Sequência recomendada**: ~~fechar os 3 bloqueantes~~ ✅ 16/08 →
+~~ligar o bot no PILOTO, com a Ultra Fox de pé~~ ✅ 17/08 → **ensaio com
 atendente real resolvendo conversa ponta a ponta** (o aceite que o Paulo
-pediu) → só então cancelar a Ultra Fox. E o backup dela entra ANTES do
-cancelamento — plataforma cancelada não devolve export.
+pediu) → **virar o alcance para 🌐 todos** → só então cancelar a Ultra Fox.
+E o backup dela entra ANTES do cancelamento —
+plataforma cancelada não devolve export.
+
+⚠️ **O que fica ENTRE o piloto e o 🌐 todos**: o piloto prova o bot na
+conversa de UMA pessoa que começa do zero; o 🌐 solta o bot sobre as
+conversas **que já existem**, e essas têm estado (dono, histórico, sem
+fila). Foi ao olhar exatamente isso que apareceu o defeito de 17/08 — o bot
+triando por cima de atendimento em andamento (§2). Quem for virar a chave
+olha primeiro se há conversa em condução: agora ela não é invadida, mas
+continua sendo o estado em que o dia do corte é mais barulhento.
 
 ## 9. Prova de que o SP Connect funciona (o que já rodou em produção)
 
@@ -180,3 +190,11 @@ Não é promessa: em 16/08 o ciclo fechou ponta a ponta no número real —
 mensagem do cliente chegando pelo webhook, resposta saindo pelo SP Connect
 e chegando no celular, status ✓✓ ao vivo, e um atendimento real conduzido
 por uma colaboradora. A Ultra Fox seguiu de pé ao lado o tempo todo.
+
+**17/08 — o bot rodou ponta a ponta em produção, no piloto.** Paulo pôs o
+próprio número na lista e conduziu o ciclo inteiro: saudação com protocolo,
+menu, escolha de departamento, atendente assumindo, encerramento e pesquisa
+de avaliação. Nota dele: **10**. Dois fatos importam junto com o resultado:
+a Ultra Fox continuava assinada na WABA e **o bot dela não respondeu** (não
+houve menu em dobro), e a nota 10 só foi capturada porque a escala virou
+DADO no mesmo dia — na régua antiga ela teria sido descartada em silêncio.

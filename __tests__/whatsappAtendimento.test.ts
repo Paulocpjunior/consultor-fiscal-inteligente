@@ -7,7 +7,7 @@ import {
     configPadraoAtendimento, resolverConfig, dentroDoHorario,
     gerarProtocolo, renderMensagem, montarTextoMenu, interpretarEscolha,
     decidirAutomacao, papelValido, podeEncerrar, interpretarNota,
-    botAlcancaNumero, soDigitos,
+    botAlcancaNumero, soDigitos, emConducaoHumana,
 } from '../sefaz-backend/whatsapp-atendimento.js';
 
 describe('filas de atendimento (≠ departamentos do SaaS)', () => {
@@ -177,7 +177,10 @@ describe('decidirAutomacao — o cérebro, puro', () => {
     it('#menu reapresenta o menu em qualquer estado — é o cliente pedindo outro depto', () => {
         const acoes = decidirAutomacao({ conversa: { fila: 'fiscal', protocolo: '2077' }, textoMensagem: '#menu', config: cfg, agora: dentroDoExpediente });
         expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
-        expect(acoes[1].texto).toContain('1 - Recepção / Front Desk');
+        // Volta pra triagem SEM dono — senão a conversa cairia na fila nova
+        // com o atendente da fila velha (o estado que a transferência evita).
+        expect(acoes[1]).toEqual({ tipo: 'liberarConducao' });
+        expect(acoes[2].texto).toContain('1 - Recepção / Front Desk');
         // "2" solto em conversa TRIADA continua sendo resposta ao atendente, nunca menu
         expect(decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '2', config: cfg, agora: dentroDoExpediente })).toEqual([]);
     });
@@ -384,5 +387,107 @@ describe('🚨 conferirEscalaNaMensagem — a trava que teria pego o defeito', (
         const r = conferirEscalaNaMensagem('Que nota você dá para este atendimento?', 10);
         expect(r.ok).toBe(true);
         if (r.ok) expect(r.semFaixaNoTexto).toBe(true);
+    });
+});
+
+// ============================================================================
+// 🚨 O BOT NÃO TRIAGA POR CIMA DE QUEM ESTÁ ATENDENDO
+//
+// Achado ao ler o que aconteceria quando o alcance virar 'todos' — não veio de
+// defeito reportado, e é justamente esse o ponto: ele só apareceria NO DIA DO
+// CORTE, na frente do cliente, em série.
+//
+// A causa: o bot só age quando `!conversa.fila`, e "sem fila" foi lido como
+// "está na triagem". Não é. Assumir (🙋), responder texto e mandar anexo
+// gravam `atribuidoA` e NÃO gravam `fila` — fila só nasce da triagem do bot ou
+// da transferência. Ou seja: toda conversa conduzida por gente hoje está, para
+// o bot, na triagem.
+//
+// O que o cliente veria: por cima da resposta da colaboradora, *"aguarde um
+// momento, logo te atenderemos"* + o menu de 8 opções + um protocolo NOVO numa
+// conversa em andamento. E as conversas que já existem no app (as de antes do
+// bot e as que vierem do backup da Ultra Fox) são exatamente as de `fila:
+// null` — então isso seria o padrão do primeiro dia, não o caso raro.
+// ============================================================================
+
+describe('🚨 emConducaoHumana — a régua é o DONO, não a fila', () => {
+    it('conversa ABERTA com dono está em condução', () => {
+        expect(emConducaoHumana({ atribuidoA: 'ju@sp.com.br' })).toBe(true);
+        expect(emConducaoHumana({ atribuidoA: 'ju@sp.com.br', status: 'aberta' })).toBe(true);
+    });
+
+    it('sem dono não está em condução — é triagem de verdade', () => {
+        expect(emConducaoHumana({})).toBe(false);
+        expect(emConducaoHumana({ atribuidoA: null })).toBe(false);
+        expect(emConducaoHumana(null)).toBe(false);
+    });
+
+    it('RESOLVIDA solta a trava: cliente que volta depois do encerramento é atendimento NOVO', () => {
+        expect(emConducaoHumana({ atribuidoA: 'ju@sp.com.br', status: 'resolvida' })).toBe(false);
+    });
+});
+
+describe('🚨 decidirAutomacao com atendente conduzindo', () => {
+    const cfg = { ...configPadraoAtendimento(), botAtivo: true, botAlcance: 'todos' as const };
+    const dia = new Date('2026-08-17T09:00:00-03:00');
+
+    it('conversa SEM fila mas COM dono: nada de saudação, menu ou protocolo', () => {
+        const acoes = decidirAutomacao({
+            // Exatamente o estado que 🙋/responder deixam: dono gravado, fila não.
+            conversa: { atribuidoA: 'ju@sp.com.br' }, textoMensagem: 'segue o documento',
+            nomeContato: 'Cliente', config: cfg, agora: dia, protocoloNovo: '2077',
+        });
+        expect(acoes).toEqual([]);
+    });
+
+    it('a MESMA conversa sem dono recebe a triagem — a diferença é só quem conduz', () => {
+        const acoes = decidirAutomacao({
+            conversa: {}, textoMensagem: 'segue o documento',
+            nomeContato: 'Cliente', config: cfg, agora: dia, protocoloNovo: '2077',
+        });
+        expect(acoes.some((a: any) => a.tipo === 'gravarProtocolo')).toBe(true);
+        expect(acoes.some((a: any) => a.texto?.includes('1 - Recepção / Front Desk'))).toBe(true);
+    });
+
+    it('número solto do cliente NÃO é escolha de menu quando alguém conduz', () => {
+        // "quantas parcelas?" → "3". Sem a trava, o 3 viraria fila 'dp-folha'
+        // e o cliente levaria "Você foi direcionado para..." no meio da conversa.
+        const acoes = decidirAutomacao({
+            conversa: { atribuidoA: 'ju@sp.com.br' }, textoMensagem: '3', config: cfg, agora: dia,
+        });
+        expect(acoes).toEqual([]);
+    });
+
+    it('#sair continua funcionando — é o CLIENTE encerrando, não o bot invadindo', () => {
+        const acoes = decidirAutomacao({
+            conversa: { atribuidoA: 'ju@sp.com.br' }, textoMensagem: '#sair', config: cfg, agora: dia,
+        });
+        expect(acoes.some((a: any) => a.tipo === 'resolverConversa')).toBe(true);
+    });
+
+    it('#menu continua funcionando e LIBERA a condução — o cliente pediu outro depto', () => {
+        const acoes = decidirAutomacao({
+            conversa: { atribuidoA: 'ju@sp.com.br' }, textoMensagem: '#menu', config: cfg, agora: dia,
+        });
+        expect(acoes.some((a: any) => a.tipo === 'liberarConducao')).toBe(true);
+        expect(acoes.some((a: any) => a.texto?.includes('1 - Recepção'))).toBe(true);
+    });
+
+    it('fora de horário AVISA mesmo com atendente conduzindo — o cliente precisa saber que ninguém responde às 22h', () => {
+        const noite = new Date('2026-08-17T22:00:00-03:00');
+        const acoes = decidirAutomacao({
+            conversa: { atribuidoA: 'ju@sp.com.br' }, textoMensagem: 'alguém aí?', config: cfg, agora: noite,
+        });
+        expect(acoes.some((a: any) => a.texto?.includes('horário de atendimento'))).toBe(true);
+        // …e SÓ isso: nem menu, nem saudação por cima do atendimento.
+        expect(acoes.some((a: any) => a.texto?.includes('1 - Recepção'))).toBe(false);
+    });
+
+    it('depois de ENCERRADA, o cliente que volta é triado normalmente', () => {
+        const acoes = decidirAutomacao({
+            conversa: { atribuidoA: 'ju@sp.com.br', status: 'resolvida', protocolo: '2077' },
+            textoMensagem: 'oi, tenho outra dúvida', config: cfg, agora: dia,
+        });
+        expect(acoes.some((a: any) => a.texto?.includes('1 - Recepção'))).toBe(true);
     });
 });

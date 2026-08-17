@@ -104,6 +104,21 @@ describe('🚨 o manual acompanha o que o app REALMENTE faz', () => {
         expect(textoManual).toMatch(/[Aa]ssuma|[Aa]ssumir/);
     });
 
+    // 🚨 A ESCALA DA AVALIAÇÃO É CONFIGURÁVEL — e o manual dizia "1 a 5"
+    // depois de ela virar 10. O texto que ensina o colaborador não pode cravar
+    // um número que mora na ⚙️: quando o Paulo mudar a escala de novo, ninguém
+    // vai lembrar de caçar a frase, e manual errado é pior que manual nenhum.
+    // A frase certa manda para a ⚙️, que é onde a resposta de verdade está.
+    it('o manual NÃO crava a escala da nota — ela é dado da ⚙️, não texto', () => {
+        const cravado = /(nota|avalia\w*)[^.]{0,60}\b1\s*(?:a|-|até)\s*(?:5|10)\b/i;
+        // A revisão do histórico PODE citar a mudança de escala (é o registro
+        // do que aconteceu naquele dia); o que não pode é o manual ENSINAR
+        // um número que a ⚙️ pode desmentir amanhã.
+        expect(cravado.test(textoManual)).toBe(false);
+        expect(JSON.stringify(O_QUE_FAZ)).not.toMatch(cravado);
+        expect(textoManual).toMatch(/⚙️/);
+    });
+
     it('todo passo tem título e pelo menos um passo de verdade', () => {
         expect(MANUAL.length).toBeGreaterThanOrEqual(5);
         MANUAL.forEach((s) => {

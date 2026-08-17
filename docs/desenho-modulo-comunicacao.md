@@ -138,6 +138,33 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   reapresenta o menu em qualquer estado e a escolha re-roteia (comando
   EXPLÍCITO de propósito — numa conversa triada, um "2" solto é resposta ao
   atendente, nunca menu). Com o bot desligado, é o atendente que transfere.
+  ⚠️ `#menu` também **LIBERA a condução** (`atribuidoA: null`): o cliente
+  está pedindo outro departamento, e manter o dono anterior deixaria a
+  conversa na fila nova com atendente da fila velha — o mesmo estado torto
+  que a transferência evita limpando a atribuição.
+- 🚨 **O BOT NÃO TRIAGA POR CIMA DE QUEM ESTÁ ATENDENDO** (17/08, achado ao
+  ler o que aconteceria no dia em que o alcance virasse `'todos'` — não veio
+  de defeito reportado, e é esse o ponto: ele só apareceria **no dia do
+  corte**, na frente do cliente, em série). O bot só agia quando
+  `!conversa.fila`, e "sem fila" foi lido como "está na triagem". **Não é**:
+  assumir (🙋), responder texto e mandar anexo gravam `atribuidoA` e **não**
+  gravam `fila` — fila só nasce da triagem do bot ou da transferência. Ou
+  seja, **toda conversa conduzida por gente hoje está, para o bot, na
+  triagem**, e o cliente receberia por cima da resposta da colaboradora
+  *"aguarde um momento, logo te atenderemos"* + o menu de 8 opções + um
+  protocolo NOVO numa conversa em andamento. E como as conversas que já
+  existem no app — as de antes do bot e as que vierem do backup da Ultra
+  Fox — são exatamente as de `fila: null`, isso seria o **padrão** do
+  primeiro dia, não o caso raro.
+  A régua virou `emConducaoHumana`: **o DONO, não a fila**. Existe alguém
+  conduzindo ⇒ a triagem já acabou, tenha passado pelo menu ou não.
+  TRÊS EXCEÇÕES DELIBERADAS: (1) **`#sair` e `#menu` continuam valendo** —
+  são o CLIENTE agindo, não o bot invadindo, e calar aqui tiraria dele a
+  única saída que ele tem; (2) **conversa RESOLVIDA solta a trava** —
+  cliente que volta depois do encerramento é atendimento novo, e aí a
+  triagem é o certo; (3) **o aviso de fora de horário continua saindo** —
+  não é o bot tomando a conversa, é o cliente sabendo que ninguém responde
+  às 22h. Travado por teste e **provado revertendo a guarda de propósito**.
 
 ### 5.2 Papéis, encerramento e avaliação (Paulo, 16/08)
 
@@ -155,9 +182,10 @@ atribuído a ele (encerrar o próprio atendimento é parte do atendimento —
 exigir gestor pra tudo viraria gargalo); o CLIENTE encerra pelo `#sair`
 (bot), que resolve a conversa com `resolvidaPor: 'cliente'`.
 
-**Avaliação (nota 1-5 pelo WhatsApp)**: no encerramento, com a chave
+**Avaliação (nota pelo WhatsApp)**: no encerramento, com a chave
 `avaliacaoAtiva` LIGADA (nasce DESLIGADA) e a janela de 24h aberta, o
-convite sai; **só a PRIMEIRA resposta do cliente vale** — se for 1-5 vira
+convite sai; **só a PRIMEIRA resposta do cliente vale** — se estiver dentro
+da escala configurada (`avaliacaoEscala`, hoje 10) vira
 nota (gravada em `whatsapp_avaliacoes` com atendente/fila/protocolo) e
 recebe agradecimento; qualquer outra coisa limpa a espera (insistir em
 avaliação é spam, e nota nunca se deduz de texto livre). A captura roda

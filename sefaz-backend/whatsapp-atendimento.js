@@ -313,6 +313,38 @@ export function conferirEscalaNaMensagem(mensagem, escala) {
     };
 }
 
+/**
+ * 🚨 A CONVERSA ESTÁ SENDO CONDUZIDA POR UMA PESSOA?
+ *
+ * Esta é a trava que faltava para o dia do corte, e ela nasceu de ler o que
+ * aconteceria quando o alcance virar 'todos' — não de um defeito reportado.
+ *
+ * O bot só age quando a conversa NÃO tem fila (`!conversa.fila`), e "sem
+ * fila" foi lido, até aqui, como "está na triagem". **Não é.** Assumir a
+ * conversa (🙋), responder um texto ou mandar um anexo gravam `atribuidoA`
+ * e NÃO gravam `fila` — quem grava fila é a triagem do bot ou a
+ * transferência. Ou seja: toda conversa que uma pessoa está conduzindo hoje
+ * está, para o bot, "na triagem".
+ *
+ * O efeito no dia em que o alcance virar 'todos' seria este: o cliente
+ * responde à colaboradora e recebe, por cima da resposta dela, *"aguarde um
+ * momento, logo te atenderemos"* + o menu de 8 opções — e ainda ganharia um
+ * protocolo NOVO numa conversa que já estava em andamento. As conversas que
+ * já existem no app (as de antes do bot, e as que vierem do backup da Ultra
+ * Fox) são exatamente as que têm `fila: null`, então isso não seria caso
+ * raro: seria o comportamento padrão do primeiro dia.
+ *
+ * A régua é o DONO, não a fila: existe alguém conduzindo ⇒ a triagem já
+ * acabou, tenha ela passado pelo menu ou não. Conversa **resolvida** solta a
+ * trava de propósito — cliente que volta depois de encerrado é atendimento
+ * novo, e aí a triagem é o certo.
+ */
+export function emConducaoHumana(conversa) {
+    if (!conversa || typeof conversa !== 'object') return false;
+    if ((conversa.status || 'aberta') !== 'aberta') return false;
+    return Boolean(conversa.atribuidoA);
+}
+
 /** Resposta do cliente casa com uma opção do menu? Aceita "1", "1.", " 1 ". */
 export function interpretarEscolha(texto, config) {
     const t = String(texto || '').trim().replace(/[.)]$/, '');
@@ -356,6 +388,11 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
     // "2" solto é resposta ao atendente ("quantas parcelas? 2"), nunca menu.
     if (/^#?menu$/i.test(texto)) {
         acoes.push({ tipo: 'resetarTriagem' });
+        // Pedir o menu no meio de um atendimento é o cliente dizendo que quer
+        // OUTRO departamento. Manter o dono anterior deixaria a conversa na
+        // fila nova com atendente da fila velha — o mesmo estado torto que a
+        // transferência evita limpando a atribuição.
+        acoes.push({ tipo: 'liberarConducao' });
         acoes.push({ tipo: 'responder', texto: montarTextoMenu(config) });
         return acoes;
     }
@@ -363,8 +400,9 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
     const dentro = dentroDoHorario(config.horario, agora);
     const hojeSp = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO }).format(agora);
 
-    // Conversa ainda SEM fila = está na triagem.
-    if (!conversa.fila) {
+    // Conversa SEM fila E SEM dono = está na triagem. Com dono, quem conduz é
+    // gente: o bot não saúda, não mostra menu e não define fila por cima.
+    if (!conversa.fila && !emConducaoHumana(conversa)) {
         const escolha = interpretarEscolha(texto, config);
         if (escolha) {
             acoes.push({ tipo: 'definirFila', fila: escolha.fila });
@@ -383,6 +421,9 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
     }
 
     // Fora do horário: avisa UMA vez por dia por conversa (anti-metralhadora).
+    // Este SEGUE valendo com a conversa em condução humana, de propósito: não
+    // é o bot tomando a conversa, é o cliente sabendo que ninguém vai
+    // responder às 22h — calar aqui faria ele esperar resposta a noite toda.
     if (!dentro && conversa.ausenciaAvisadaEm !== hojeSp) {
         acoes.push({ tipo: 'responder', texto: config.mensagens.foraDeHorario });
         acoes.push({ tipo: 'marcarAusenciaEnviada', dia: hojeSp });

@@ -1781,11 +1781,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     )}
                                                 </>
                                             ) : (
-                                                <p className="text-[10px] text-red-700 dark:text-red-400 leading-snug">
-                                                    🚨 <strong>O bot vai responder a TODOS os clientes.</strong> Com a Ultra Fox
-                                                    ainda assinada na WABA, quem escrever recebe <strong>dois menus</strong> —
-                                                    o nosso e o dela. Use isto no dia do corte, depois de remover o app dela.
-                                                </p>
+                                                <>
+                                                    <p className="text-[10px] text-red-700 dark:text-red-400 leading-snug">
+                                                        🚨 <strong>O bot vai responder a TODOS os clientes.</strong> É o dia do corte.
+                                                    </p>
+                                                    {/* Este texto dizia "quem escrever recebe DOIS menus". O teste
+                                                        real de 17/08 desmentiu: a Ultra Fox segue assinada na WABA e
+                                                        o bot dela NÃO respondeu. Manter o aviso velho mandaria remover
+                                                        o app dela antes da hora — o contrário da decisão do Paulo de
+                                                        ficar com os dois de pé. Fica o FATO, com a origem e o limite. */}
+                                                    <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
+                                                        No teste de 17/08 a Ultra Fox continuava assinada na WABA e o bot dela
+                                                        <strong> não respondeu</strong> — então não houve menu em dobro. Isso foi
+                                                        <strong> observado num número</strong>, não é garantia: se aparecer resposta
+                                                        dela na carteira, volte para 🧪 e avise.
+                                                    </p>
+                                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400 leading-snug">
+                                                        ✓ Conversa que já tem <strong>atendente conduzindo</strong> não recebe
+                                                        saudação nem menu por cima — o bot só faz a triagem de quem ainda
+                                                        não tem dono.
+                                                    </p>
+                                                </>
                                             )}
                                         </div>
                                     )}
@@ -1952,7 +1968,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
                                     📇
                                 </button>
-                                <button onClick={abrirAvaliacoes} title="Avaliações dos atendimentos (nota 1-5 do cliente)"
+                                <button onClick={abrirAvaliacoes} title="Avaliações dos atendimentos (nota do cliente)"
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
                                     📊
                                 </button>
