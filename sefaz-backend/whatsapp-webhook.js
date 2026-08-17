@@ -184,16 +184,53 @@ export function traduzirStatusEntrega(status) {
 }
 
 /**
+ * 🚨 ESTA MENSAGEM SAIU DAQUI OU DE OUTRA PLATAFORMA?
+ *
+ * Pergunta que só existe por causa da CONVIVÊNCIA (decisão do Paulo: os dois
+ * apps ficam assinados na WABA). A Meta entrega o **status** de TODA mensagem
+ * do número para TODOS os apps assinados — inclusive das que a Ultra Fox
+ * mandou. Dessas nós recebemos só o status: sem texto (a Meta não compartilha
+ * o conteúdo de mensagem de outro app) e sem mídia.
+ *
+ * A régua é o REGISTRO PRÓPRIO: tudo que sai daqui grava `enviadoPor` (o
+ * e-mail de quem clicou, ou `'bot'`) e grava texto ou mídia. Documento que só
+ * nasceu do status não tem nada disso.
+ *
+ * ⚠️ **NA DÚVIDA, NÃO AFIRMA QUE É DE OUTRO.** Sem o documento em mãos a
+ * resposta é `false`: dizer "saiu por outra plataforma" sobre um envio NOSSO
+ * faria o colaborador ignorar uma falha que é dele — erro na direção cara. O
+ * contrário só custa uma frase inútil.
+ */
+export function saiuPorOutraPlataforma(mensagem) {
+    if (!mensagem || typeof mensagem !== 'object') return false;
+    if ((mensagem.direcao || 'saida') !== 'saida') return false;
+    if (mensagem.enviadoPor) return false;
+    return !mensagem.texto && !mensagem.midia;
+}
+
+/**
  * Falha de entrega → frase COM AÇÃO (padrão interpretarCstat). O 131049 é o
  * protagonista: é o filtro que hoje faz o escritório LIGAR pro cliente sem
  * saber por quê.
+ *
+ * `mensagem` é o DOCUMENTO da mensagem que falhou (o mesmo que a rota já leu):
+ * dele saem a mídia enviada e a resposta de quem mandou.
  */
-export function interpretarErroEntrega(codigo, detalhe = '', midia = null) {
+export function interpretarErroEntrega(codigo, detalhe = '', mensagem = null) {
     const c = Number(codigo);
+    const midia = mensagem?.midia || null;
+    const deOutro = saiuPorOutraPlataforma(mensagem);
+    // Toda frase abaixo prescreve algo a QUEM MANDOU. Quando a mensagem não é
+    // nossa, isso é ação impossível: o colaborador não tem o arquivo, não tem
+    // o texto e não mandou nada. O aviso continua aparecendo — o cliente não
+    // recebeu, e a Recepção precisa saber —, mas dizendo DE QUEM é a ação.
+    const deOutroSufixo = ' ⚠️ Esta mensagem saiu pela OUTRA plataforma, não pelo SP Connect: '
+        + 'aqui só chega o status dela, e quem reenvia é quem mandou.';
+    const comDono = (frase) => (deOutro ? frase + deOutroSufixo : frase);
     if (c === 131049 || c === 130472) {
-        return 'A Meta NÃO entregou para preservar o engajamento (filtro de marketing). Ação: template na categoria UTILITY e/ou pedir ao cliente que inicie a conversa (a resposta dele abre a janela de 24h).';
+        return comDono('A Meta NÃO entregou para preservar o engajamento (filtro de marketing). Ação: template na categoria UTILITY e/ou pedir ao cliente que inicie a conversa (a resposta dele abre a janela de 24h).');
     }
-    if (c === 131047) return 'Fora da janela de 24h — reenvie por template aprovado.';
+    if (c === 131047) return comDono('Fora da janela de 24h — reenvie por template aprovado.');
     if (c === 131026) return 'O número não tem WhatsApp ou não pode receber — confira o número no cadastro do cliente.';
     if (c === 131053) {
         // 🚨 "TENTE REENVIAR" NÃO SERVE QUANDO JÁ FALHOU TRÊS VEZES (caso real
@@ -203,6 +240,18 @@ export function interpretarErroEntrega(codigo, detalhe = '', midia = null) {
         // Logo, repetir o MESMO arquivo tende a falhar de novo, e a ação útil
         // é sobre o ARQUIVO. Por isso ele vai DESCRITO na frase: sem dizer o
         // que foi tentado, quem lê não tem por onde começar.
+        // 🚨 E A AÇÃO TEM QUE SER DE QUEM PODE AGIR (print do Paulo, 17/08,
+        // conversa da Agatha): a falha apareceu numa mensagem que a OUTRA
+        // plataforma mandou, e a frase pedia ao nosso colaborador que
+        // convertesse um arquivo que ele nunca enviou — e que este app nem
+        // tem. Mandar alguém consertar o que não é dele é a mesma família do
+        // "tente reenviar": ação impossível ocupando o lugar da útil.
+        if (deOutro) {
+            return 'Esta mensagem NÃO saiu pelo SP Connect — foi enviada pela outra plataforma, '
+                + 'e a Meta só nos manda o status dela (não o arquivo nem o texto). '
+                + 'A mídia falhou no processamento, então o cliente NÃO recebeu: quem reenvia é quem mandou, '
+                + 'convertendo o arquivo (o mesmo tende a falhar de novo). Reenviando por aqui, o anexo fica guardado no histórico.';
+        }
         if (!midia) return 'Falha no processamento da mídia pela Meta. Reenviar o MESMO arquivo tende a falhar de novo — converta (PDF → imagem, áudio → mp3) ou reduza o tamanho.';
         const mb = midia.tamanhoBytes ? (midia.tamanhoBytes / (1024 * 1024)).toFixed(1).replace('.', ',') : null;
         const oque = [midia.nomeArquivo, midia.mime, mb ? `${mb} MB` : null].filter(Boolean).join(' · ');
@@ -216,7 +265,7 @@ export function interpretarErroEntrega(codigo, detalhe = '', midia = null) {
             + `Reenviar o MESMO arquivo tende a falhar de novo. ${porTipo[midia.tipo] || 'Converta o arquivo ou reduza o tamanho.'} `
             + 'A cópia continua guardada no histórico da conversa.';
     }
-    return detalhe ? `Falha na entrega: ${detalhe}` : 'Falha na entrega — confira o número e tente novamente.';
+    return comDono(detalhe ? `Falha na entrega: ${detalhe}` : 'Falha na entrega — confira o número e tente novamente.');
 }
 
 // Extensão por mime quando o WhatsApp não manda nome de arquivo (áudio e

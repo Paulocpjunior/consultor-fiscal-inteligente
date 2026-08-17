@@ -55,9 +55,26 @@ export interface MidiaDaMensagem {
     tipo?: string | null;
     tamanhoBytes?: number | null;
 }
-/** `midia` faz o 131053 descrever o ARQUIVO — sem ela a frase vira beco. */
+/** Documento de mensagem, na forma que a frase do erro precisa dele. */
+export interface MensagemParaErro {
+    direcao?: string | null;
+    texto?: string | null;
+    midia?: MidiaDaMensagem | null;
+    enviadoPor?: string | null;
+}
+/**
+ * Saiu por OUTRA plataforma? (sem `enviadoPor`, sem texto e sem mídia). Na
+ * dúvida — documento ausente — devolve false: afirmar que um envio NOSSO é de
+ * outro faria o colaborador ignorar a falha dele.
+ */
+export function saiuPorOutraPlataforma(mensagem: MensagemParaErro | null | undefined): boolean;
+/**
+ * `mensagem` é o DOCUMENTO da mensagem que falhou: dele saem o ARQUIVO (o
+ * 131053 sem isso é beco) e a resposta de QUEM mandou — prescrever conversão
+ * de arquivo a quem não enviou nada é ação impossível.
+ */
 export function interpretarErroEntrega(
-    codigo: number | null | undefined, detalhe?: string, midia?: MidiaDaMensagem | null): string;
+    codigo: number | null | undefined, detalhe?: string, mensagem?: MensagemParaErro | null): string;
 export function janela24hAte(timestampIso: string | null | undefined): string | null;
 export function resumoParaConversa(msg: Pick<MensagemRecebida, 'tipo' | 'texto' | 'midia'>): string;
 export function caminhoStorageMidia(msg: Pick<MensagemRecebida, 'metaMessageId' | 'de' | 'midia'>): string;
