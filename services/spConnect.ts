@@ -11,6 +11,9 @@ export interface FilaAtendimento { id: string; rotulo: string }
 
 export interface ConfigAtendimento {
     botAtivo: boolean;
+    /** 'piloto' = só os números da lista · 'todos' = o dia do corte. */
+    botAlcance: 'piloto' | 'todos';
+    botNumerosPiloto: string[];
     avisarClienteTransferencia: boolean;
     avaliacaoAtiva: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };

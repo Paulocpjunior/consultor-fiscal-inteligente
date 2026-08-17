@@ -92,6 +92,23 @@ export function conversaVisivel(filasDoUsuario, filaDaConversa) {
 export function configPadraoAtendimento() {
     return {
         botAtivo: false,   // NASCE DESLIGADO — dois bots no mesmo cliente é menu em dobro
+        // 🚨 ALCANCE DO BOT — o que torna a CONVIVÊNCIA possível (Paulo, 17/08:
+        // *"temos que permanecer com os 2 apps ativos, não faz sentido criar uma
+        // opção pra migrar o bot se os 2 não estiverem ativos"*).
+        //
+        // Os DOIS apps continuam assinados na WABA de propósito: a Ultra Fox é a
+        // rede de segurança enquanto o SP Connect é validado. Só que os dois
+        // recebem a MESMA mensagem, e se os dois bots responderem o cliente vê
+        // menu em dobro. A saída não é desligar a Ultra Fox antes da hora — é
+        // limitar QUEM o NOSSO bot atende.
+        //
+        // 'piloto' = responde só aos números da lista (o teste roda em produção,
+        // com os dois de pé, sem que nenhum cliente veja dois menus).
+        // 'todos'  = o dia do corte.
+        botAlcance: 'piloto',
+        // Lista vazia com alcance 'piloto' = bot LIGADO e mudo. É o estado
+        // seguro: quem apagar a lista sem querer não solta o bot na carteira.
+        botNumerosPiloto: [],
         // Aviso ao CLIENTE quando um atendente transfere a conversa de fila.
         // Também nasce desligado: é o admin que decide quando a casa quer
         // falar isso — e só sai com a janela de 24h aberta (regra da Meta).
@@ -120,6 +137,38 @@ export function configPadraoAtendimento() {
     };
 }
 
+/** Número só em dígitos — máscara é enfeite de tela, chave é dígito. */
+export function soDigitos(v) {
+    return String(v || '').replace(/\D/g, '');
+}
+
+/**
+ * O bot pode responder a ESTE número?
+ *
+ * É a trava que permite rodar o SP Connect com a Ultra Fox ainda de pé: os
+ * dois apps recebem a mesma mensagem, mas só o nosso decide a quem responde.
+ *
+ * DUAS RECUSAS DELIBERADAS:
+ *  · lista vazia no modo piloto ⇒ NÃO responde a ninguém. Poderia significar
+ *    "sem restrição", e é justamente a leitura que soltaria o bot na carteira
+ *    inteira quando alguém apagasse a lista sem querer;
+ *  · número ilegível ⇒ não responde. Bot que responde ao que não sabe
+ *    identificar é bot que escapa do piloto pela porta dos fundos.
+ */
+export function botAlcancaNumero(config, numero) {
+    if (config?.botAlcance === 'todos') return true;
+    const alvo = soDigitos(numero);
+    if (!alvo) return false;
+    // Compara pelos últimos 11 dígitos: o WhatsApp entrega o número com 55 e
+    // ora com o 9 do celular, ora sem — casar a string inteira faria o piloto
+    // "não pegar" justamente o número que a pessoa cadastrou.
+    const cauda = (d) => d.slice(-11);
+    return (config?.botNumerosPiloto || []).some((n) => {
+        const c = soDigitos(n);
+        return c && cauda(c) === cauda(alvo);
+    });
+}
+
 /** Merge raso da config gravada sobre o padrão — campo novo nunca some. */
 export function resolverConfig(gravada) {
     const p = configPadraoAtendimento();
@@ -129,6 +178,17 @@ export function resolverConfig(gravada) {
     const menuGravado = Array.isArray(gravada.menu) ? gravada.menu.filter((m) => filaValida(m.fila)) : [];
     return {
         botAtivo: typeof gravada.botAtivo === 'boolean' ? gravada.botAtivo : p.botAtivo,
+        // 🚨 RETROCOMPATIBILIDADE: config gravada ANTES deste campo existir e
+        // com o bot LIGADO respondia a todo mundo — é o que ela fazia, e uma
+        // migração não pode emudecer o bot em silêncio (o efeito só apareceria
+        // com o cliente sem resposta, e ninguém ligaria uma coisa à outra).
+        // Config NOVA nasce em 'piloto', que é o lado seguro.
+        botAlcance: gravada.botAlcance === 'todos' ? 'todos'
+            : (gravada.botAlcance === 'piloto' ? 'piloto'
+                : (gravada.botAtivo === true ? 'todos' : p.botAlcance)),
+        botNumerosPiloto: Array.isArray(gravada.botNumerosPiloto)
+            ? gravada.botNumerosPiloto.map(soDigitos).filter(Boolean)
+            : p.botNumerosPiloto,
         avisarClienteTransferencia: typeof gravada.avisarClienteTransferencia === 'boolean'
             ? gravada.avisarClienteTransferencia : p.avisarClienteTransferencia,
         avaliacaoAtiva: typeof gravada.avaliacaoAtiva === 'boolean' ? gravada.avaliacaoAtiva : p.avaliacaoAtiva,
@@ -209,9 +269,12 @@ export function interpretarEscolha(texto, config) {
 //   {tipo:'responder', texto}  ·  {tipo:'definirFila', fila}
 //   {tipo:'gravarProtocolo', protocolo}  ·  {tipo:'marcarAusenciaEnviada'}
 //   {tipo:'resetarTriagem'}
-export function decidirAutomacao({ conversa = {}, textoMensagem, nomeContato, config, agora = new Date(), protocoloNovo }) {
+export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeContato, config, agora = new Date(), protocoloNovo }) {
     const acoes = [];
     if (!config?.botAtivo) return acoes;             // desligado = silêncio total
+    // Fora do alcance = silêncio TOTAL, igual a desligado. É o que permite
+    // testar o bot com a Ultra Fox de pé sem cliente nenhum ver menu em dobro.
+    if (!botAlcancaNumero(config, numero)) return acoes;
     const texto = String(textoMensagem || '').trim();
 
     // #sair: o CLIENTE encerra o próprio atendimento — a triagem reseta, a

@@ -3,6 +3,9 @@ export interface FilaAtendimento { id: string; rotulo: string }
 
 export interface ConfigAtendimento {
     botAtivo: boolean;
+    /** 'piloto' = só os números da lista · 'todos' = o dia do corte. */
+    botAlcance: 'piloto' | 'todos';
+    botNumerosPiloto: string[];
     avisarClienteTransferencia: boolean;
     avaliacaoAtiva: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
@@ -36,7 +39,12 @@ export function gerarProtocolo(agora?: Date, aleatorio?: number): string;
 export function renderMensagem(template: string, dados?: Record<string, string | null | undefined>): string;
 export function montarTextoMenu(config: ConfigAtendimento): string;
 export function interpretarEscolha(texto: string, config: ConfigAtendimento): { fila: string; rotulo: string } | null;
+export function soDigitos(v: unknown): string;
+/** O bot pode responder a ESTE número? (piloto = só a lista; ilegível = não) */
+export function botAlcancaNumero(config: Partial<ConfigAtendimento> | null | undefined, numero: unknown): boolean;
+
 export function decidirAutomacao(p: {
+    numero?: string | null;
     conversa?: Record<string, unknown>;
     textoMensagem?: string | null;
     nomeContato?: string | null;

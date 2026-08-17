@@ -1730,10 +1730,64 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             🤖 Bot de triagem {cfg.botAtivo ? 'LIGADO' : 'desligado'}
                                         </span>
                                     </label>
-                                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
-                                        ⚠️ Enquanto a Ultra Fox estiver de pé respondendo, ligar o bot aqui = DOIS bots
-                                        no mesmo cliente (menu em dobro). Ligue só no dia do corte.
-                                    </p>
+                                    {/* 🚨 ALCANCE — é o que deixa os DOIS apps de pé.
+                                        A Ultra Fox continua assinada na WABA de propósito
+                                        (é a rede de segurança); os dois recebem a mesma
+                                        mensagem, então quem limita o menu em dobro é a
+                                        lista daqui. */}
+                                    {cfg.botAtivo && (
+                                        <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+                                            <div className="flex gap-1.5 flex-wrap">
+                                                {([['piloto', '🧪 Só os números de teste'], ['todos', '🌐 Todos os clientes']] as const).map(([id, rot]) => (
+                                                    <button key={id}
+                                                        onClick={() => setCfg((c) => (c ? { ...c, botAlcance: id } : c))}
+                                                        className={`text-[10px] font-bold px-2 py-1 rounded-full ${cfg.botAlcance === id
+                                                            ? (id === 'todos' ? 'bg-red-600 text-white' : 'bg-[#0e3bfa] text-white')
+                                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                        {rot}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {cfg.botAlcance === 'piloto' ? (
+                                                <>
+                                                    <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
+                                                        O bot responde <strong>só</strong> a estes números. É assim que dá para testar
+                                                        com a Ultra Fox ainda de pé: os dois apps continuam recebendo, e
+                                                        <strong> nenhum cliente vê menu em dobro</strong>.
+                                                    </p>
+                                                    <textarea
+                                                        value={(cfg.botNumerosPiloto || []).join('\n')}
+                                                        onChange={(e) => setCfg((c) => (c ? {
+                                                            ...c,
+                                                            botNumerosPiloto: e.target.value.split('\n').map((n) => n.trim()).filter(Boolean),
+                                                        } : c))}
+                                                        rows={3}
+                                                        placeholder={'Um número por linha, com DDD\n11 99999-0000'}
+                                                        className={`${CAMPO} font-mono`} />
+                                                    {/* Lista vazia = bot LIGADO e mudo. Dizer isso evita a
+                                                        conclusão de que o app quebrou. */}
+                                                    {(cfg.botNumerosPiloto || []).length === 0 ? (
+                                                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                                            ⚠️ Lista vazia: o bot está ligado e <strong>não responde a ninguém</strong>.
+                                                            Isso é de propósito — some um número para começar o teste.
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                                                            ✓ {(cfg.botNumerosPiloto || []).length} número(s) no piloto. O resto da carteira
+                                                            segue só com a plataforma antiga.
+                                                        </p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <p className="text-[10px] text-red-700 dark:text-red-400 leading-snug">
+                                                    🚨 <strong>O bot vai responder a TODOS os clientes.</strong> Com a Ultra Fox
+                                                    ainda assinada na WABA, quem escrever recebe <strong>dois menus</strong> —
+                                                    o nosso e o dela. Use isto no dia do corte, depois de remover o app dela.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                     <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                                         <input type="checkbox" checked={cfg.avisarClienteTransferencia}
                                             onChange={(e) => setCfg((c) => (c ? { ...c, avisarClienteTransferencia: e.target.checked } : c))} />
