@@ -313,10 +313,24 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       setEfiscal(parsed);
       // O credito e o aviso de CNPJ sao calculados reativamente
       // (useMemo abaixo) — recalculam quando o PDF OU a empresa mudam.
-      if (!parsed.validacao.ok) {
+      if (parsed.notas.length === 0) {
+        // Zero notas com o PDF certo é BURACO DE LEITURA, não relatório vazio —
+        // e o texto tem de dizer isso, senão a pessoa procura no lugar errado
+        // (foi o caso CLUDE de 17/08: 0 lançamentos e uma "divergência" com
+        // número inventado, enquanto o PDF tinha 148 notas e R$ 580.395,26).
+        setErro(
+          'Nenhuma nota foi lida deste PDF. O arquivo abriu e o texto foi extraído, então não é PDF de imagem: '
+          + 'é a leitura das colunas que não reconheceu o layout. Mande este PDF ao time do CFI — não refaça a conta à mão.',
+        );
+      } else if (parsed.validacao.situacao === 'divergente') {
         setErro(
           'Atencao: os totais extraidos nao bateram 100% com o rodape do PDF. ' +
           'Revise antes de usar. Divergencias: ' + parsed.validacao.divergencias.join('; '),
+        );
+      } else if (parsed.validacao.situacao === 'nao-conferido') {
+        setErro(
+          'Os valores foram lidos, mas a linha "Total" do relatório não foi encontrada — não há contra o que conferir. '
+          + 'Isso não quer dizer que estão errados; confira se o PDF saiu completo, com a última página.',
         );
       }
     } catch (e: unknown) {
@@ -767,9 +781,24 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
               ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
               : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300'
           }`}>
-            {efiscal.validacao.ok ? (
+            {/* TRÊS ESTADOS, TRÊS AÇÕES DIFERENTES. Fundir "não confere" com
+                "não consegui conferir" foi o que mandou a colaboradora revisar
+                uma conta certa (caso CLUDE, 17/08): o app dizia divergência com
+                um número que não existia no PDF. */}
+            {efiscal.validacao.situacao === 'confere' && (
               <span>✓ Extração validada — os totais batem 100% com o rodapé do PDF.</span>
-            ) : (
+            )}
+            {efiscal.validacao.situacao === 'nao-conferido' && (
+              <div>
+                <p className="font-semibold mb-1">⚠️ Não foi possível conferir:</p>
+                <p className="text-xs">
+                  A linha <strong>Total</strong> do relatório não foi encontrada, então não há contra o que comparar —
+                  isso <strong>não</strong> quer dizer que os valores estão errados. Confira se o PDF foi exportado
+                  completo (com a última página) antes de usar.
+                </p>
+              </div>
+            )}
+            {efiscal.validacao.situacao === 'divergente' && (
               <div>
                 <p className="font-semibold mb-1">⚠️ Divergência na extração:</p>
                 <ul className="list-disc list-inside text-xs">
