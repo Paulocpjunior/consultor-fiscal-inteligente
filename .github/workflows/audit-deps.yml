@@ -105,6 +105,14 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Traz a ref remota da branch do robô ANTES de recriá-la.
+          # Sem isto o `--force-with-lease` recusa com "stale info" (ele não tem
+          # com o que comparar) e o fallback simples recusa com "fetch first"
+          # (não é fast-forward) — os DOIS caminhos falham, que foi exatamente o
+          # que travou o robô de 14 a 17/08, todo dia, em silêncio.
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+
           git checkout -B "$BRANCH"
           git add package.json package-lock.json
           git commit -m "chore(deps): correcao automatica de advisory ($HOJE)
@@ -206,6 +214,47 @@ jobs:
           CORPO
           )
 
+          if [ -n "$EXISTE" ]; then
+            gh issue comment "$EXISTE" --body "$CORPO"
+          else
+            gh issue create --title "$TITULO" --body "$CORPO"
+          fi
+
+      # ═══ REDE DE SEGURANÇA ═══════════════════════════════════════════════
+      # O robô caiu por um motivo que ele mesmo não previu (git, rede, cota)?
+      # Então NADA acima abriu issue, e o run vermelho fica num painel que
+      # ninguém abre — que é a definição de aviso que não avisa.
+      #
+      # Foi o que aconteceu de 14 a 17/08: o push era rejeitado, o step morria
+      # com exit 1 ANTES do passo que abre issue, e o robô de SEGURANÇA ficou
+      # três dias quebrado sem ninguém saber. Só apareceu porque o Paulo olhou
+      # a lista de runs.
+      - name: Robô falhou por outro motivo — abrir/atualizar issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITULO="Robô de auditoria de dependências falhou"
+          CORPO=$(cat <<CORPO
+          O robô diário caiu **antes** de concluir, então nenhum dos avisos dele
+          rodou — e o advisory que ele ia corrigir continua de pé.
+
+          · Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          · Commit: ${GITHUB_SHA}
+
+          **Causas já vistas aqui, em ordem de probabilidade:**
+          1. \`push\` da branch \`chore/audit-deps\` rejeitado (a branch remota
+             divergiu). Corrigido em 17/08 com \`fetch\` antes do
+             \`--force-with-lease\`; se voltar, é outra coisa.
+          2. O repositório não permite que o Actions abra pull request
+             (Settings → Actions → General → Workflow permissions).
+          3. Falha de rede/cota do runner — costuma passar sozinha no dia seguinte.
+
+          ⚠️ Enquanto esta issue estiver aberta, **o robô não está protegendo
+          nada**: a correção de advisory depende de alguém rodar à mão.
+          CORPO
+          )
+          EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTE" ]; then
             gh issue comment "$EXISTE" --body "$CORPO"
           else
