@@ -7,8 +7,10 @@
 // ============================================================================
 import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao,
-    textoDaPermissao, lerPreferencias, PREFERENCIAS_PADRAO,
+    textoDaPermissao, lerPreferencias, PREFERENCIAS_PADRAO, faltaNosAvisos,
 } from '../services/notificacaoConnect';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const conversa = (p: Partial<any> = {}) => ({
     numero: '5511964440000', nome: 'Juliana', naoLidas: 1,
@@ -106,5 +108,88 @@ describe('preferências', () => {
         expect(lerPreferencias({ som: false })).toMatchObject({ som: false, popup: true, push: true });
         expect(lerPreferencias(null)).toEqual(PREFERENCIAS_PADRAO);
         expect(lerPreferencias('lixo')).toEqual(PREFERENCIAS_PADRAO);
+    });
+});
+
+// ============================================================================
+// 🚨 MATA-BURRO: A AÇÃO NÃO PODE SUMIR JUNTO COM O ALERTA.
+//
+// Defeito real, achado num print do Paulo em 17/08. A barra de avisos só
+// olhava PERMISSÃO e SOM. Com os dois ligados ela sumia da tela — e o botão
+// "📱 Avisar também no celular" morava DENTRO dela. Resultado: a terceira
+// camada (o push, que é a que avisa com o app FECHADO) não tinha como ser
+// ligada, e nada na tela dizia por quê.
+//
+// É a mesma família do "cadastro que apaga um alerta tem que ENTREGAR o que o
+// alerta cobrava" (15/08): alerta que some sem a entrega parece progresso e é
+// regressão. Aqui era pior — sumia o caminho, não só o aviso.
+// ============================================================================
+
+describe('🚨 faltaNosAvisos — as TRÊS camadas numa pergunta só', () => {
+    const base = { permissao: 'concedida' as const, somOk: true, pushDisponivel: true, pushLigado: true };
+
+    it('tudo ligado = barra some (nada de ruído fixo na tela)', () => {
+        const r = faltaNosAvisos(base);
+        expect(r.falta).toBe(false);
+        expect(r.oferecerPush).toBe(false);
+    });
+
+    it('🚨 som e pop-up ligados, PUSH desligado ⇒ a barra APARECE e oferece o push', () => {
+        // Era exatamente este caso que sumia da tela.
+        const r = faltaNosAvisos({ ...base, pushLigado: false });
+        expect(r.falta).toBe(true);
+        expect(r.oferecerPush).toBe(true);
+        expect(r.texto).toMatch(/CELULAR/i);
+        expect(r.texto).toMatch(/app fechado/i);
+    });
+
+    it('🚨 e a frase NÃO diz "avisos ligados" quando falta o celular', () => {
+        // "Avisos ligados" com o push desligado mente por omissão — a pessoa
+        // fecha a aba confiando num aviso que não vai chegar.
+        const r = faltaNosAvisos({ ...base, pushLigado: false });
+        expect(r.texto).not.toMatch(/^🔔 Avisos ligados neste navegador\.$/);
+    });
+
+    it('permissão pendente manda sobre o resto — é ela que impede o pop-up', () => {
+        const r = faltaNosAvisos({ ...base, permissao: 'nao-pedida', pushLigado: false });
+        expect(r.falta).toBe(true);
+        expect(r.oferecerPush).toBe(false);   // primeiro a permissão, senão são dois botões concorrendo
+        expect(r.acao).toMatch(/Ligar avisos/i);
+    });
+
+    it('permissão NEGADA leva o caminho de reverter (o "não" fica guardado)', () => {
+        const r = faltaNosAvisos({ ...base, permissao: 'negada' });
+        expect(r.falta).toBe(true);
+        expect(r.acao).toMatch(/cadeado/i);
+    });
+
+    it('som pendente aparece — e o botão do push CONTINUA sendo oferecido', () => {
+        // Camadas independentes: esconder uma atrás da outra foi o defeito.
+        const r = faltaNosAvisos({ ...base, somOk: false, pushLigado: false });
+        expect(r.texto).toMatch(/SOM/);
+        expect(r.oferecerPush).toBe(true);
+    });
+
+    it('push INDISPONÍVEL (sem a chave VAPID) não vira pendência eterna na tela', () => {
+        // Sem a chave publicada não há o que a pessoa possa fazer — cobrar
+        // seria alarme sem ação, que é o que ensina a ignorar alarme.
+        const r = faltaNosAvisos({ ...base, pushDisponivel: false, pushLigado: false });
+        expect(r.falta).toBe(false);
+        expect(r.oferecerPush).toBe(false);
+    });
+});
+
+describe('🚨 a tela usa o núcleo, e o botão do push não volta pra dentro da condição antiga', () => {
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('a barra é decidida por faltaNosAvisos, não por uma condição escrita na tela', () => {
+        expect(tela).toMatch(/faltaNosAvisos\(\{/);
+        expect(tela).toMatch(/avisoDoTopo\.falta\s*&&/);
+        // A condição antiga (só permissão + som) não pode reaparecer.
+        expect(tela).not.toMatch(/\(permissaoAviso !== 'concedida' \|\| !somOk\) && \(/);
+    });
+
+    it('o botão do push é oferecido pelo núcleo (oferecerPush), não por condição local', () => {
+        expect(tela).toMatch(/avisoDoTopo\.oferecerPush\s*&&/);
     });
 });

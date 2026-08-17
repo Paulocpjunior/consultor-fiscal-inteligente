@@ -30,7 +30,7 @@ import {
     atingiuLimite, LIMITE_SEGUNDOS,
 } from '../../services/gravacaoAudio';
 import {
-    avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, textoDaPermissao,
+    avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, faltaNosAvisos,
 } from '../../services/notificacaoConnect';
 import { destravarSom, somDestravado, tocarAviso } from '../../services/somAviso';
 import { pushConfigurado, registrarDispositivo } from '../../services/pushConnect';
@@ -840,6 +840,13 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const conduzidaPorOutro = Boolean(sel?.atribuidoA && sel.atribuidoA !== meuEmail);
     const visiveis = filtrarConversas(conversas, { busca, aba });
     const naoLidasTotal = conversas.reduce((s, c) => s + (c.naoLidas || 0), 0);
+    // O que falta nos avisos sai do NÚCLEO (três camadas numa pergunta só).
+    const avisoDoTopo = faltaNosAvisos({
+        permissao: permissaoAviso,
+        somOk,
+        pushDisponivel: pushConfigurado().ok,
+        pushLigado: push.ligado,
+    });
     // Chips por fila: só as que o usuário ENXERGA (o backend já filtrou as
     // conversas; os chips seguem o MESMO recorte, senão é leitura dupla).
     const filasChip = filas.filter((f) => minhasFilas === null || minhasFilas.includes(f.id));
@@ -1888,17 +1895,21 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             placeholder="🔎 Nome, número ou mensagem…"
                             className="w-full px-2.5 py-1.5 text-[12px] rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
                         />
-                        {/* 🔔 Avisos: a barra só aparece quando FALTA alguma
-                            camada — com tudo ligado, nada de ruído fixo. */}
-                        {(permissaoAviso !== 'concedida' || !somOk) && (
+                        {/* 🔔 Avisos: quem decide o que falta é o núcleo
+                            `faltaNosAvisos` — as TRÊS camadas numa pergunta só.
+                            🚨 Antes a barra olhava permissão e som; com os dois
+                            ligados ela sumia, e o botão que liga o PUSH morava
+                            dentro dela. A ação desaparecia junto com o alerta, e o
+                            aviso no celular não tinha como ser ligado (print do
+                            Paulo, 17/08). */}
+                        {avisoDoTopo.falta && (
                             <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5">
                                 <p className="text-[10px] text-amber-800 dark:text-amber-300 leading-snug">
-                                    {textoDaPermissao(permissaoAviso).texto}
-                                    {!somOk && permissaoAviso === 'concedida' && ' O som liga no primeiro clique nesta aba.'}
+                                    {avisoDoTopo.texto}
                                 </p>
-                                {textoDaPermissao(permissaoAviso).acao && (
+                                {avisoDoTopo.acao && (
                                     <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
-                                        {textoDaPermissao(permissaoAviso).acao}
+                                        {avisoDoTopo.acao}
                                     </p>
                                 )}
                                 {permissaoAviso === 'nao-pedida' && (
@@ -1907,9 +1918,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         🔔 Ligar avisos
                                     </button>
                                 )}
-                                {permissaoAviso === 'concedida' && !push.ligado && pushConfigurado().ok && (
+                                {avisoDoTopo.oferecerPush && (
                                     <button onClick={ligarPush}
-                                        className="mt-1 text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                        className="mt-1 ml-1 text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                         📱 Avisar também no celular
                                     </button>
                                 )}
