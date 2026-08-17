@@ -9,6 +9,8 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+// A régua das DUAS FORMAS do documento mora num lugar só (11/08).
+import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -57,6 +59,31 @@ function getCstCofins(item, regimeApuracao, direcao) {
 // BLOCO A — Servicos (NFSe)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * O VALOR do documento de serviço, nas formas em que ele chega.
+ *
+ * A NFS-e do portal de SP grava `valorTotal`/`valorServicos` e o espelho
+ * `totais.vNF`; a do XML/abrasf grava `valor`; o lançamento manual grava
+ * `valorTotal`. Ler um nome só zerava o arquivo inteiro sem avisar.
+ *
+ * ⚠️ Devolve NaN quando NENHUMA forma tem número — e NaN é de propósito: quem
+ * chama precisa distinguir "documento de R$ 0,00" (existe, é raro e é legítimo)
+ * de "não achei o valor". Zero silencioso aqui foi o defeito de 17/08.
+ */
+export function valorDoDocumentoServico(nota) {
+    const n = nota || {};
+    const candidatos = [
+        n.valor, n.valorTotal, n.totalNota, n.valorServicos,
+        n.totais?.vNF, n.totais?.vServ, n.valores?.valorServicos,
+    ];
+    for (const c of candidatos) {
+        if (c === null || c === undefined || c === '') continue;
+        const v = typeof c === 'number' ? c : parseFloat(String(c).replace(',', '.'));
+        if (Number.isFinite(v)) return v;
+    }
+    return NaN;
+}
+
 function filtrarNotasBlocoA(notas) {
     return (notas || []).filter(n => {
         if (n.tipo === 'NFSe' || n.tipo === 'NFSE') return true;
@@ -80,19 +107,29 @@ export function buildBlocoA(dados) {
     linhas.push(fmt.buildLine(['A001', '0']));
     linhas.push(fmt.buildLine(['A010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
 
-    for (const nota of notasA) {
+    for (const notaCrua of notasA) {
+        // 🚨 O DOCUMENTO CHEGA EM DUAS FORMAS — e ler só a ANINHADA zerou tudo.
+        //
+        // 17/08 (CLINICA MEDICA MANTOAN 07/2026): o arquivo saiu com **37 A100 e
+        // TODOS com COD_PART vazio e VL_DOC 0,00**. Os documentos estavam lá; o
+        // que faltava era a leitura. A NFS-e do portal de SP entra ACHATADA
+        // (`cnpjDest`, `valorTotal`), e este bloco lia só `nota.destinatario` e
+        // `nota.valor` — nomes que aquele trilho não usa.
+        //
+        // É a MESMA armadilha de 11/08 (caso EDUARDO GUERRA × DAMIÃO), e a régua
+        // já existe: `normalizarParticipantesDoc` monta o aninhado a partir dos
+        // campos chatos. Reimplementar aqui seria a segunda cópia de sempre.
+        const nota = normalizarParticipantesDoc(notaCrua);
         const direcao = nota.direcao;
         const indOper = direcao === 'saida' ? '1' : '0';
         const indEmit = direcao === 'saida' ? '0' : '1';
 
-        const participanteRaw = direcao === 'saida'
-            ? (nota.destinatario || nota.tomador)
-            : (nota.emitente || nota.prestador);
+        const participanteRaw = direcao === 'saida' ? nota.destinatario : nota.emitente;
         const codPart = participanteRaw
             ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
             : '';
 
-        const vlDoc = parseFloat(nota.valor || nota.totalNota || 0);
+        const vlDoc = valorDoDocumentoServico(nota);
         const vlPis = vlDoc * aliq.pis;
         const vlCofins = vlDoc * aliq.cofins;
 

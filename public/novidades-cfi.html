@@ -68,14 +68,54 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 16/08/2026 · leitura de 5 minutos</p>
+            <p>Departamento Fiscal · atualizado em 17/08/2026 · leitura de 5 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (16/08) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (17/08) — leia esta parte primeiro</h2>
+
+    <h3>1. 🚨 O DARF da DCTFWeb pode trazer imposto de OUTRO departamento</h3>
+    <p>O DARF unificado é montado pela Receita <strong>por vencimento</strong> — ele junta
+    <em>todos</em> os códigos que vencem naquele dia, venham do Fiscal, do DP ou do Contábil.
+    Num caso real de 07/2026 a guia trazia PIS e COFINS (Fiscal) <strong>junto com contribuição
+    previdenciária descontada do segurado</strong> (DP). Se o DP mandasse a guia dele, o cliente
+    pagaria o mesmo débito <strong>duas vezes</strong>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> DCTFWeb → detalhe da declaração. A composição do DARF
+    aparece <strong>na tela, antes dos botões</strong> — você não precisa mais abrir o PDF para
+    descobrir o que está indo.</div>
+    <div class="ganho">💡 <strong>Cada bloco de vencimento tem o seu 📤 Enviar pelo sistema.</strong>
+    A guia separada por vencimento (a que não mistura departamentos) antes existia sem botão: dava
+    para emitir, mas não para enviar com o rito completo. Agora dá.</div>
+    <div class="alerta">⚠️ <strong>Quando dois departamentos caem no MESMO vencimento, a guia é uma
+    só</strong> — é determinação da Receita, não falta de recorte no CFI. Aí a combinação é humana:
+    um departamento envia, o outro precisa saber que não deve enviar.</div>
+    <div class="alerta">⚠️ <strong>O segundo envio do mesmo débito agora é BARRADO.</strong> Se o
+    código já saiu naquela competência, o CFI para e diz quando e por qual canal foi. Reenvio
+    legítimo existe (cliente perdeu a guia, declaração retificada) — nesse caso você escreve o
+    motivo e segue; fica gravado quem seguiu.</div>
+
+    <h3>2. 🧾 EFD-Contribuições de empresa de SERVIÇO parou de sair zerado</h3>
+    <p>O arquivo de quem só emite NFS-e saía com os documentos listados e
+    <strong>valor R$ 0,00 em todos eles</strong>, sem o participante. Os documentos estavam no
+    banco — o que faltava era a leitura: a NFS-e do portal de São Paulo é gravada numa forma e a do
+    XML em outra, e o gerador só conhecia uma das duas.</p>
+    <div class="onde">📍 <strong>Onde:</strong> SPED Contribuições → gerar. Nada muda no seu passo a
+    passo; o que muda é o arquivo sair com valor, com o tomador e com PIS/COFINS calculados.</div>
+    <div class="alerta">⚠️ <strong>Se você gerou EFD-Contribuições de serviço antes de hoje, gere de
+    novo e confira.</strong> Arquivo com valor zerado que tenha sido transmitido precisa de
+    retificadora — fale com o Paulo antes.</div>
+
+    <h3>3. ✍️ Lançar nota sem XML voltou a gravar</h3>
+    <p>A tela dava <em>“Falha ao gravar: Missing or insufficient permissions”</em> em qualquer
+    lançamento — inclusive para administrador. Corrigido. É por essa porta que entra a nota do
+    cliente que não tem trilho de captura (município sem integração, por exemplo), e sem ela o mês
+    fecha a menor.</p>
+
+    <hr>
+    <h2>O que mudou em 16/08</h2>
 
     <h3>1. 📅 ISS de cidade que o CFI ainda não conhece: você informa a data UMA vez</h3>
     <p>Não existe “dia do ISS” nacional — cada prefeitura tem o seu. Até agora, cliente de cidade

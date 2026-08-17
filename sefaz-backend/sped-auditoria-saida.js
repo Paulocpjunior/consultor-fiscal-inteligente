@@ -40,6 +40,14 @@ export const DETALHES_VIGIADOS = {
     // é legítima em CST sem crédito, e vigiar isso encheria a tela de alarme
     // falso — que é o caminho pra ninguém mais ler alarme nenhum.
     A170: { rotulo: 'itens de serviço (Contribuições)', campos: { 5: 'VL_ITEM' } },
+    // 🚨 A100 FALTAVA — e foi por isso que um arquivo com 37 documentos de
+    // serviço, TODOS com VL_DOC 0,00, passou pela auditoria (17/08, CLINICA
+    // MEDICA MANTOAN 07/2026). Só o A170 estava vigiado, e aquele arquivo não
+    // tinha nenhum A170: a trava não teve o que olhar.
+    //
+    // VL_DOC é o valor do documento — zerado em 100% das linhas não é caso
+    // legítimo nenhum, é leitura que não achou o campo.
+    A100: { rotulo: 'documentos de serviço (Contribuições)', campos: { 12: 'VL_DOC' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
     G110: { rotulo: 'CIAP — apuração', campos: { 4: 'VL_ICMS_APROP' } },
 };

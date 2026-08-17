@@ -15,6 +15,7 @@ import {
     buildBlocoF, buildBlocoM, buildBloco1_Contrib, buildBloco9_Contrib,
 } from './sped-contrib-blocos.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -72,11 +73,14 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
 
     // ─── 4. Extrai participantes unicos ───
     const participantesMap = new Map();
-    for (const nota of notas) {
+    for (const notaCrua of notas) {
+        // MESMA régua do bloco A: o documento chega em DUAS formas e ler só a
+        // aninhada deixava o 0150 VAZIO — e sem 0150 o COD_PART do A100 aponta
+        // para um cadastro que não existe. Foi o arquivo de 17/08 (CLINICA
+        // MANTOAN): 37 documentos e nenhum participante.
+        const nota = normalizarParticipantesDoc(notaCrua);
         const direcao = nota.direcao;
-        const participanteRaw = direcao === 'saida'
-            ? (nota.destinatario || nota.tomador)
-            : (nota.emitente || nota.prestador);
+        const participanteRaw = direcao === 'saida' ? nota.destinatario : nota.emitente;
 
         if (!participanteRaw) continue;
         const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';
