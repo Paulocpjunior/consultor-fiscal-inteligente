@@ -16,6 +16,8 @@ export interface ConfigAtendimento {
     botNumerosPiloto: string[];
     avisarClienteTransferencia: boolean;
     avaliacaoAtiva: boolean;
+    /** Escala da nota (5 ou 10) — a mensagem e o painel leem dela. */
+    avaliacaoEscala: number;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
     menu: { opcao: string; fila: string; rotulo: string }[];

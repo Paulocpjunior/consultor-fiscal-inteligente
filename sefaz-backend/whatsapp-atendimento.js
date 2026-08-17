@@ -118,6 +118,15 @@ export function configPadraoAtendimento() {
         // aberta, e SÓ a primeira resposta do cliente vale como nota —
         // insistir em avaliação é spam.
         avaliacaoAtiva: false,
+        // 🚨 ESCALA DA NOTA — decisão do Paulo (17/08): 1 a 10.
+        //
+        // Ela existe porque o TEXTO e a RÉGUA divergiram em produção: alguém
+        // editou a mensagem para "De 1 a 10" e o `interpretarNota` só aceitava
+        // 1-5. O cliente respondeu 10, a nota virou null e NADA avisou — o
+        // painel mostraria "0 avaliações" com o cliente tendo respondido.
+        // Agora a escala é DADO: a mensagem, a leitura da resposta e o painel
+        // leem daqui, e um teste barra mensagem que peça outra escala.
+        avaliacaoEscala: 10,
         horario: {
             dias: [1, 2, 3, 4, 5],
             turnos: [{ inicio: '08:00', fim: '12:00' }, { inicio: '13:00', fim: '17:30' }],
@@ -129,13 +138,17 @@ export function configPadraoAtendimento() {
             foraDeHorario: 'Obrigado por entrar em contato! Nosso horário de atendimento é de Seg. a Sex das 8:00h às 12:00h e 13:00 às 17:30h.\nVisite nosso site: www.spassessoriacontabil.com.br\n\nPode deixar sua mensagem que retornaremos o mais breve possível!',
             sair: 'Atendimento encerrado. Quando precisar, é só chamar!',
             transferencia: 'Você foi direcionado para {fila}. Um atendente do time já vai continuar seu atendimento.',
-            avaliacao: 'Seu atendimento foi encerrado. De 1 a 5, que nota você dá para este atendimento? (responda só com o número)',
+            avaliacao: 'Seu atendimento foi encerrado. De 1 a 10, que nota você dá para este atendimento? (responda só com o número)',
             avaliacaoObrigado: 'Obrigado pela avaliação! 💙 Quando precisar, é só chamar.',
         },
         // Menu numérico → fila. Espelha o menu de 8 opções em uso hoje.
         menu: FILAS_ATENDIMENTO.map((f, i) => ({ opcao: String(i + 1), fila: f.id, rotulo: f.rotulo })),
     };
 }
+
+/** Escalas que o app entende. Fora daqui, cai no padrão. */
+export const ESCALAS_AVALIACAO = [5, 10];
+export const ESCALA_AVALIACAO_PADRAO = 10;
 
 /** Número só em dígitos — máscara é enfeite de tela, chave é dígito. */
 export function soDigitos(v) {
@@ -192,6 +205,8 @@ export function resolverConfig(gravada) {
         avisarClienteTransferencia: typeof gravada.avisarClienteTransferencia === 'boolean'
             ? gravada.avisarClienteTransferencia : p.avisarClienteTransferencia,
         avaliacaoAtiva: typeof gravada.avaliacaoAtiva === 'boolean' ? gravada.avaliacaoAtiva : p.avaliacaoAtiva,
+        avaliacaoEscala: ESCALAS_AVALIACAO.includes(Number(gravada.avaliacaoEscala))
+            ? Number(gravada.avaliacaoEscala) : p.avaliacaoEscala,
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,
@@ -248,11 +263,54 @@ export function montarTextoMenu(config) {
  * " 5 ", "nota 5" e "5 estrelas". Qualquer outra coisa devolve null — a
  * nota nunca é deduzida de texto livre.
  */
-export function interpretarNota(texto) {
+export function interpretarNota(texto, escala = ESCALA_AVALIACAO_PADRAO) {
+    const max = ESCALAS_AVALIACAO.includes(Number(escala)) ? Number(escala) : ESCALA_AVALIACAO_PADRAO;
     const t = String(texto || '').trim().toLowerCase()
         .replace(/^nota\s+/, '').replace(/\s*(estrelas?|⭐+)$/, '').replace(/[.)!]$/, '').trim();
-    if (!/^[1-5]$/.test(t)) return null;
-    return Number(t);
+    if (!/^\d{1,2}$/.test(t)) return null;
+    const n = Number(t);
+    // Fora da escala NÃO vira nota — e quem chama precisa saber a diferença
+    // entre "não é nota" e "é nota inválida" (ver `leituraDaNota`).
+    return n >= 1 && n <= max ? n : null;
+}
+
+/**
+ * A resposta do cliente, classificada. Existe porque `null` fundia dois casos
+ * com AÇÕES OPOSTAS: "isso não é uma nota, é outro assunto" (segue o fluxo) e
+ * "isso é um número FORA da escala" (o cliente tentou avaliar e nós perdemos).
+ * O segundo tem que ser DITO, senão a nota some em silêncio — que foi
+ * exatamente o defeito de 17/08.
+ */
+export function leituraDaNota(texto, escala = ESCALA_AVALIACAO_PADRAO) {
+    const max = ESCALAS_AVALIACAO.includes(Number(escala)) ? Number(escala) : ESCALA_AVALIACAO_PADRAO;
+    const t = String(texto || '').trim().toLowerCase()
+        .replace(/^nota\s+/, '').replace(/\s*(estrelas?|⭐+)$/, '').replace(/[.)!]$/, '').trim();
+    if (!/^\d{1,2}$/.test(t)) return { tipo: 'nao-e-nota', nota: null };
+    const n = Number(t);
+    if (n >= 1 && n <= max) return { tipo: 'nota', nota: n };
+    return { tipo: 'fora-da-escala', nota: null, informado: n, escala: max };
+}
+
+/**
+ * A mensagem de avaliação combina com a escala configurada?
+ *
+ * É a trava do defeito real: o texto dizia "De 1 a 10" e a régua aceitava
+ * 1-5. Procura a faixa escrita no texto e compara — texto sem faixa explícita
+ * não é acusado (nem toda redação diz o intervalo).
+ */
+export function conferirEscalaNaMensagem(mensagem, escala) {
+    const max = ESCALAS_AVALIACAO.includes(Number(escala)) ? Number(escala) : ESCALA_AVALIACAO_PADRAO;
+    const m = /\b(?:de\s*)?([0-9]{1,2})\s*(?:a|até|-|–)\s*([0-9]{1,2})\b/i.exec(String(mensagem || ''));
+    if (!m) return { ok: true, semFaixaNoTexto: true, escala: max };
+    const fim = Number(m[2]);
+    if (fim === max) return { ok: true, escala: max };
+    return {
+        ok: false,
+        escala: max,
+        noTexto: fim,
+        erro: `A mensagem pede nota até ${fim} e a escala configurada vai até ${max}. `
+            + `Quem responder ${fim} teria a nota DESCARTADA sem ninguém saber — ajuste os dois para o mesmo número.`,
+    };
 }
 
 /** Resposta do cliente casa com uma opção do menu? Aceita "1", "1.", " 1 ". */

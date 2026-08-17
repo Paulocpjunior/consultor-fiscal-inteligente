@@ -43,6 +43,7 @@ import {
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
 } from '../../services/spConnect';
+import { conferirEscalaNaMensagem } from '../../sefaz-backend/whatsapp-atendimento.js';
 
 const TOM_TICK: Record<string, string> = {
     ok: 'text-emerald-600 dark:text-emerald-400',
@@ -1800,10 +1801,44 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         <input type="checkbox" checked={cfg.avaliacaoAtiva}
                                             onChange={(e) => setCfg((c) => (c ? { ...c, avaliacaoAtiva: e.target.checked } : c))} />
                                         <span className="text-[11px] text-slate-700 dark:text-slate-200">
-                                            📊 Pedir AVALIAÇÃO (nota 1-5) ao encerrar o atendimento
+                                            📊 Pedir AVALIAÇÃO ao encerrar o atendimento
                                             <span className="block text-[9px] text-slate-400">só sai com a janela aberta; só a PRIMEIRA resposta vale como nota — não insiste</span>
                                         </span>
                                     </label>
+                                    {/* 🚨 ESCALA — nasceu do defeito de 17/08: a mensagem
+                                        pedia "1 a 10" e a régua aceitava 1-5, então a nota
+                                        do cliente era descartada em silêncio. */}
+                                    {cfg.avaliacaoAtiva && (
+                                        <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                            <p className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Escala da nota</p>
+                                            <div className="flex gap-1.5 mt-1">
+                                                {[10, 5].map((n) => (
+                                                    <button key={n}
+                                                        onClick={() => setCfg((c) => (c ? { ...c, avaliacaoEscala: n } : c))}
+                                                        className={`text-[10px] font-bold px-2 py-1 rounded-full ${cfg.avaliacaoEscala === n
+                                                            ? 'bg-[#0e3bfa] text-white'
+                                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                        1 a {n}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {/* A divergência é dita ANTES de salvar — depois, o
+                                                sintoma seria o painel dizendo "0 avaliações". */}
+                                            {(() => {
+                                                const c = conferirEscalaNaMensagem(cfg.mensagens?.avaliacao, cfg.avaliacaoEscala);
+                                                return c.ok ? (
+                                                    <p className="text-[10px] text-slate-400 mt-1">
+                                                        A mensagem lá embaixo precisa pedir a mesma faixa. Nota fora da escala é
+                                                        registrada como descartada — não some calada.
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[10px] text-red-700 dark:text-red-400 mt-1 leading-snug">
+                                                        🚨 {c.erro}
+                                                    </p>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🕐 Horário de funcionamento (fuso de São Paulo)</p>
