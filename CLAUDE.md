@@ -242,6 +242,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
   direção contrária. A composição aparece na TELA antes dos botões: descobrir
   "por desencargo" não pode ser o processo.
+- **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
+  AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
+  meses anteriores… a apuração não está considerando o saldo que já vinha sendo
+  acumulado nas competências anteriores"*). Fui ler: são **TRÊS apurações com
+  TRÊS comportamentos**, e nenhum avisava. **ICMS próprio** (E110 c.10) lê
+  `saldoCredorIcms` da ficha da competência ANTERIOR — mas na ficha esse campo é
+  o que **ENTROU** naquele mês, não o que **SOBROU** dele: transporta DEFASADO e
+  ignora a movimentação do próprio mês anterior. **IPI** (E520): o gerador lê
+  `saldoCredorIpiAnterior` e **o orquestrador nunca passa esse campo** ⇒ sempre
+  0,00. **ICMS-ST** (E210): `apurarStDaUf` aceita `saldoCredorAnterior` e
+  **ninguém passa** ⇒ sempre 0,00.
+  ⚠️ **Para quem tem crédito acumulado isso recolhe a MAIOR — e nada denuncia,
+  porque o arquivo é ACEITO.** É a família do Bloco H zerado: campo de valor
+  recebendo default.
+  ✂️ Este PR **não inventa o saldo** (seria adivinhar imposto): faz o que a casa
+  faz com ausência — `saldo-anterior-apuracao.js` **DIZ** que declarou zero e
+  por quê, com a ação na frase, e o número que existe sai **CARIMBADO com a
+  origem** e com a ressalva de que ele não é o saldo que sobrou. Aviso só nasce
+  para o bloco que REALMENTE saiu (`geraIpi`/`geraSt` vêm do tamanho das linhas
+  produzidas, nunca do cadastro) — alarme sobre bloco inexistente é o que ensina
+  a ignorar alarme.
+  🚧 **A CRONOLOGIA DE VERDADE AINDA NÃO EXISTE** e o desenho está decidido no
+  princípio: saldo de **ABERTURA** carimbado numa competência + transporte
+  CALCULADO mês a mês (nunca redigitado). E a fonte da abertura **não é
+  digitação**: é o **E110 campo 14 (`VL_SLD_CREDOR_TRANSPORTAR`)** do último SPED
+  entregue — que o `spedFiscalParserService` **já sabe ler**
+  (`valorSaldoCredorTransportar`, e o `valorSaldoCredorIpi` do E520). Falta o
+  aceite do Paulo sobre em qual empresa/competência abrir.
+  📌 **E ST NUNCA SE SOMA AO ICMS PRÓPRIO NO DEMONSTRATIVO**: são apurações
+  distintas e a de ST é **POR UF DE DESTINO** (E200/E210/E220/E250, uma GNRE por
+  estado) contra E100/E110/E111 do próprio. Hoje o demonstrativo 📊 ICMS·IPI·ISS
+  não mostra ST — e o que falta ali não é somar, é **DIZER** que não mostra
+  (quem lê não distingue "não teve ST" de "o app não olha ST").
 - **🚨 "CANCELADA" TINHA SEIS RÉGUAS — e o campo cru MENTE justamente no caminho
   NORMAL** (17/08, ao conferir a MV LIDER 639 07/2026 para o Paulo: a aba 🚫
   Canceladas/Faltantes dizia *"✓ numeração contínua · 0 cancelada(s)"*). A régua

@@ -29,6 +29,7 @@ import * as fmt from './sped-fiscal-format.js';
 import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './sped-ajustes-apuracao.js';
 import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
 import { montarLinhasE510 } from './sped-bloco-ipi-e510.js';
+import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
 import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 
 const ZERO = '0,00';
@@ -133,6 +134,10 @@ export function buildBlocoE(dados) {
     // na fórmula do E110. Só pra Lucro — Simples não apura ICMS aqui.
     const uf = (dados?.empresa?.dadosFiscais?.uf || '').toUpperCase();
     const cls = classificarAjustes(regime === 'lucro' ? dados.ajustesApuracao : [], uf);
+    // Só se avisa sobre o saldo do bloco que REALMENTE saiu — aviso sobre bloco
+    // inexistente é o alarme sem ação que ensina a ignorar os que importam.
+    let geraSt = false;
+    let geraIpi = false;
 
     let ap = {
         vlTotDebitos: 0, vlTotAjDebitos: 0, vlEstornosCred: 0,
@@ -193,6 +198,7 @@ export function buildBlocoE(dados) {
         });
         linhas.push(...st.linhas);
         if (Array.isArray(dados.warnings)) dados.warnings.push(...st.avisos);
+        geraSt = st.linhas.length > 0;
     }
 
     // ── IPI (E500/E520) — só para Lucro COM atividade de IPI (indústria/
@@ -201,7 +207,25 @@ export function buildBlocoE(dados) {
     //    CORREÇÃO 04/08: o gerador antigo punha o IPI em E200/E210, que são
     //    registros do ICMS-ST. IPI é E500 (período) + E520 (apuração).
     if (regime === 'lucro') {
-        linhas.push(...buildE500E520(dados));
+        const linhasIpi = buildE500E520(dados);
+        linhas.push(...linhasIpi);
+        geraIpi = linhasIpi.length > 0;
+    }
+
+    // ── O SALDO ANTERIOR DECLARADO SAI DITO, NUNCA CALADO ──────────────────
+    //
+    // Zero num campo de saldo é uma AFIRMAÇÃO à SEFAZ ("não havia crédito a
+    // transportar"), não uma omissão — e para quem tem crédito acumulado isso
+    // recolhe a MAIOR, sem nada denunciar, porque o arquivo é aceito.
+    // Paulo, 17/08: *"a apuração não está considerando o saldo que já vinha
+    // sendo acumulado nas competências anteriores"*.
+    if (regime === 'lucro' && Array.isArray(dados.warnings)) {
+        dados.warnings.push(...avisosDeSaldoAnterior({
+            icmsAnterior: parseFloat(dados.saldoCredorIcmsAnterior || 0),
+            origemIcms: 'ficha da competência anterior',
+            geraIpi,
+            geraSt,
+        }));
     }
 
     const total = linhas.length + 1;
