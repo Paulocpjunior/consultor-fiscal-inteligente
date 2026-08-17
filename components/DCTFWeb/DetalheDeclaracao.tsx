@@ -29,6 +29,9 @@ import { getAuth } from 'firebase/auth';
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 import InsumosDepartamentos from './InsumosDepartamentos';
 import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
+// DE QUEM É CADA DÉBITO — núcleo puro. A régua mora num lugar só; a tela não
+// reimplementa o de-para de código de receita (seria a segunda cópia de sempre).
+import { separarDarfPorDepartamento, avisoDeMistura } from '../../sefaz-backend/darf-departamentos.js';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -140,7 +143,94 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
         }
     };
 
+    /**
+     * 🚨 PORTA ÚNICA ANTES DE QUALQUER ENVIO — a guia é só do seu departamento?
+     *
+     * Paulo, 17/08 (HYPE CAFE 07/2026, *"ERRO GRAVÍSSIMO"*): ele ia enviar o DARF
+     * de PIS/COFINS e, *"por desencargo"*, abriu o PDF — dentro vinha o **1082,
+     * CONTR PREV DESCONTA SEGURADO**, que é do DP/Folha. Se o DP mandar a guia
+     * dele, o cliente paga o mesmo débito DUAS VEZES. O app não dizia nada: os
+     * botões de envio estavam ali, e só o olho do dono pegou.
+     *
+     * ⚠️ ELA CARREGA A COMPOSIÇÃO SOZINHA. Os débitos são sob demanda ("Ver
+     * débitos apurados"), então depender de a pessoa ter clicado antes seria uma
+     * trava que só protege quem já sabia do problema — que é ninguém.
+     *
+     * ⚠️ E FALHA AO CONFERIR NÃO LIBERA EM SILÊNCIO: sem saber a composição, o
+     * envio pede confirmação DIZENDO que não deu para conferir. Aqui o
+     * indeterminado PARA (é envio de guia ao cliente), ao contrário do gate de
+     * departamento, onde ele libera.
+     */
+    /**
+     * 🚨 A COMPOSIÇÃO É CARREGADA JUNTO COM O DARF, sem esperar clique.
+     *
+     * O bloco "de quem é esta guia" não serve para nada se depender de a pessoa
+     * ter clicado em "Ver débitos apurados" antes — ninguém clica no botão que
+     * não sabe que precisa. Custa 1 chamada SERPRO por DARF gerado, e é o preço
+     * de não mandar ao cliente uma guia que outro departamento também vai mandar.
+     *
+     * Falha aqui não derruba nada e não libera nada: a trava do envio tenta de
+     * novo e, sem conseguir, pede confirmação DIZENDO que não conferiu.
+     */
+    const darfConferido = useRef<string | null>(null);
+    useEffect(() => {
+        if (!darfResult?.pdfBase64 || !user) return;
+        const chave = `${declaracao.empresaCnpj}_${declaracao.anoPA}_${declaracao.mesPA}_${declaracao.categoria}`;
+        if (darfConferido.current === chave || debitos?.lido) return;
+        darfConferido.current = chave;
+        listarDebitosDeclaracao(user, {
+            empresaCnpj: declaracao.empresaCnpj,
+            anoPA: declaracao.anoPA,
+            mesPA: declaracao.mesPA,
+            categoria: declaracao.categoria,
+        }).then((r) => setDebitos(r)).catch(() => { darfConferido.current = null; });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [darfResult?.pdfBase64]);
+
+    // A composição sai do MESMO núcleo que a trava do envio — duas leituras do
+    // mesmo fato numa tela só é a armadilha que este projeto mais pagou.
+    const composicaoDarf = React.useMemo(
+        () => (debitos?.lido && (debitos.debitos || []).length
+            ? separarDarfPorDepartamento(debitos.debitos)
+            : null),
+        [debitos],
+    );
+    const avisoDaComposicao = React.useMemo(() => avisoDeMistura(composicaoDarf), [composicaoDarf]);
+
+    const podeEnviarEstaGuia = async (): Promise<boolean> => {
+        let comp = debitos;
+        if (!comp) {
+            try {
+                comp = await listarDebitosDeclaracao(user, {
+                    empresaCnpj: declaracao.empresaCnpj,
+                    anoPA: declaracao.anoPA,
+                    mesPA: declaracao.mesPA,
+                    categoria: declaracao.categoria,
+                });
+                setDebitos(comp);
+            } catch {
+                comp = null;
+            }
+        }
+        if (!comp?.lido || !(comp.debitos || []).length) {
+            return confirm(
+                'NÃO FOI POSSÍVEL CONFERIR o que está dentro desta guia.\n\n'
+                + 'O DARF da DCTFWeb consolida os débitos de TODOS os departamentos (Fiscal, DP/Folha e Contábil). '
+                + 'Sem a lista de débitos apurados não dá para dizer se ele é só do seu.\n\n'
+                + 'Abra o PDF e confira os códigos antes de enviar. Enviar assim mesmo?',
+            );
+        }
+        const sep = separarDarfPorDepartamento(comp.debitos);
+        const aviso = avisoDeMistura(sep);
+        if (!aviso) return true;
+        return confirm(
+            `${aviso.titulo.toUpperCase()}\n\n${aviso.texto}\n\n${aviso.acao}\n\n`
+            + 'Enviar o DARF unificado assim mesmo?',
+        );
+    };
+
     const enviarDarfPeloServidor = async (pdfBase64: string, filename: string) => {
+        if (!(await podeEnviarEstaGuia())) return;
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -191,6 +281,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     // WhatsApp OFICIAL (09/08): o servidor envia pela Cloud API (template
     // aprovado + PDF) e a Meta devolve o comprovante — mesmo rito do e-mail.
     const enviarDarfPorWhatsapp = async (pdfBase64: string, filename: string) => {
+        if (!(await podeEnviarEstaGuia())) return;
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -225,6 +316,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     };
 
     const enviarDarfAoCliente = async (pdfBase64: string, filename: string, modo: ModoComposicao = 'outlook-web') => {
+        if (!(await podeEnviarEstaGuia())) return;
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -665,6 +757,46 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                 </span>
                                             ))}
                                         </p>
+                                    )}
+                                    {/* 🚨 DE QUEM É ESTA GUIA — na cara, ANTES dos botões.
+                                        A trava do clique não bastava: quem lê a tela
+                                        precisa ver que o DARF unificado mistura
+                                        departamentos, senão descobre "por desencargo",
+                                        abrindo o PDF — que foi o que salvou a HYPE em
+                                        17/08 e não pode ser o processo. */}
+                                    {darfResult.pdfBase64 && composicaoDarf && (
+                                        <div className={`rounded-lg border p-3 mt-2 text-xs ${composicaoDarf.misturado
+                                            ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
+                                            : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'}`}>
+                                            {composicaoDarf.misturado ? (
+                                                <>
+                                                    <p className="font-bold text-red-800 dark:text-red-200">
+                                                        ⚠ {avisoDaComposicao?.titulo}
+                                                    </p>
+                                                    <p className="text-red-800 dark:text-red-300 mt-1">{avisoDaComposicao?.texto}</p>
+                                                    <p className="text-red-900 dark:text-red-200 mt-1 font-medium">{avisoDaComposicao?.acao}</p>
+                                                </>
+                                            ) : (
+                                                <p className="font-bold text-emerald-800 dark:text-emerald-200">
+                                                    ✓ Esta guia é só de {composicaoDarf.grupos[0]?.rotulo || 'um departamento'}.
+                                                </p>
+                                            )}
+                                            <div className="mt-2 space-y-1">
+                                                {composicaoDarf.grupos.map((g: any) => (
+                                                    <div key={g.departamento}>
+                                                        <p className="font-semibold text-slate-700 dark:text-slate-200">
+                                                            {g.rotulo} — {formatCurrency(g.total)}
+                                                            <span className="font-normal text-slate-500 dark:text-slate-400"> · {g.origem}</span>
+                                                        </p>
+                                                        {g.linhas.map((l: any, i: number) => (
+                                                            <p key={i} className="pl-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                                                                {l.codigo} · {l.descricao} · {formatCurrency(l.valor)}
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
                                     )}
                                     {darfResult.pdfBase64 && (
                                         <div className="flex flex-wrap gap-2 pt-2">
