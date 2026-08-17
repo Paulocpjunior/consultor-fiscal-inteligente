@@ -247,6 +247,13 @@ export async function enviarGuiaPeloServidor(input: {
     mensagem: string;
     pdfBase64?: string;
     pdfFileName?: string;
+    /**
+     * Guias ADICIONAIS da MESMA cobrança. O Integra Contador emite 1 DARF por
+     * CÓDIGO, então um vencimento pode ter 2-3 arquivos — e eles vão na MESMA
+     * mensagem: um e-mail por código encheria a caixa do cliente pela mesma
+     * cobrança, e ele não saberia se são guias diferentes ou repetidas.
+     */
+    pdfs?: Array<{ nome: string; base64: string }>;
     valor?: number;
     vencimento?: string | null;
     /**

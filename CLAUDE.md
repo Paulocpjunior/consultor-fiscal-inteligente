@@ -187,6 +187,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   segunda cópia** — eu havia dado o MESMO nome (`conferirDebitosJaEnviados`) à
   régua e à porta de fetch. Renomeada para `perguntarDebitosJaEnviados`: função
   com o mesmo nome nos dois lados é o começo de duas respostas divergentes.
+  🚨 **E A GUIA CERTA ERA A ÚNICA SEM BOTÃO DE ENVIAR** (Paulo, na sequência:
+  *"então como eu tenho que emitir em guias separadas, a função envio pelo
+  sistema não vai né"* — e não ia). Eu mandei ele usar a guia separada (a que NÃO
+  mistura departamentos) e o rito completo — SharePoint, gestor em cópia, baixa
+  da obrigação, auditoria e a trava do débito repetido — existia **só no DARF
+  unificado**. Ou seja, o app oferecia o caminho bom sem ferramenta e o caminho
+  ruim com tudo. Família do "rota sem botão" (13/08), na versão pior: o botão
+  existia no lugar ERRADO. Agora cada bloco de vencimento tem **📤 Enviar pelo
+  sistema**, e a composição que viaja é a **DAQUELA DATA** (usar a do unificado
+  barraria por débito que nem está no anexo). As guias da mesma data vão numa
+  mensagem SÓ — o Integra Contador emite 1 DARF por código, e um e-mail por
+  código faria o cliente receber três mensagens da mesma cobrança sem saber se
+  são guias diferentes ou repetidas; o limite de 4 MB passou a ser do TOTAL.
+  ⚠️ `conferirRepeticao` virou função PRÓPRIA porque os dois caminhos passam por
+  ela: duplicar faria um caminho barrar o que o outro libera.
   📌 **PROCEDIMENTO QUE FICA (dito ao Paulo em 17/08)**: ou vai o **unificado**,
   UMA vez, por UM departamento combinado; ou vai o **avulso** de quem pode emitir
   (Fiscal: PIS/COFINS/IRPJ/CSLL/IPI) e o resto exige combinação humana. Nunca os
