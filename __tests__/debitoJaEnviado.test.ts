@@ -191,6 +191,38 @@ describe('🚨 a trava está NO CAMINHO do envio, e o dado chega até a auditori
         expect(rito).toMatch(/reenvioMotivo:/);
     });
 
+    it('🚨 a GUIA SEPARADA também tem envio pelo sistema — e pela mesma trava', () => {
+        // Paulo, 17/08: *"então como eu tenho que emitir em guias separadas, a
+        // função envio pelo sistema não vai né"*. Não ia: o botão existia SÓ no
+        // DARF unificado, que é justamente o caminho que mistura departamentos.
+        // O app mandava usar a guia certa e ela era a única sem rito.
+        expect(tela).toMatch(/const enviarGuiasDaData = async/);
+        expect(tela).toMatch(/onClick=\{\(\) => enviarGuiasDaData\(vencimento, comPdf\)\}/);
+        // A composição é a DESTA data, não a do unificado — senão barraria por
+        // débito que nem está no anexo.
+        expect(tela).toMatch(/podeEnviarEstaGuia\(debitos\)/);
+        expect(tela).toMatch(/debitosExplicitos/);
+    });
+
+    it('🚨 a conferência de repetição mora num lugar só — dois caminhos, uma régua', () => {
+        // Duplicar faria um caminho barrar o que o outro libera, e o erro
+        // apareceria só na conta do cliente.
+        // Os DOIS caminhos (unificado e guia separada) chamam a mesma função.
+        const chamadas = (tela.match(/await conferirRepeticao\(/g) || []).length;
+        expect(chamadas).toBe(2);
+        const defs = (tela.match(/const conferirRepeticao = async/g) || []).length;
+        expect(defs).toBe(1);
+    });
+
+    it('as guias da MESMA data vão numa mensagem só, não uma por código', () => {
+        // Um e-mail por código encheria a caixa do cliente pela mesma cobrança.
+        expect(tela).toMatch(/pdfs: resto\.map/);
+        expect(rotas).toMatch(/const anexosExtra = Array\.isArray\(req\.body\?\.pdfs\)/);
+        // E o limite de tamanho é do TOTAL: duas guias de 2 MB passariam uma a
+        // uma e o Graph recusaria a mensagem inteira.
+        expect(rotas).toMatch(/const totalBytes = pdfLimpo\.length/);
+    });
+
     it('a rota exige carteira e não aceita competência em branco', () => {
         expect(rotas).toMatch(/debitos-ja-enviados/);
         expect(rotas).toMatch(/podeAcessarCnpj\(req\.user, cnpj\)/);

@@ -100,6 +100,15 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             empresaId, empresaCnpj, empresaNome, tipo, competencia,
             para, assunto, mensagem, pdfBase64, pdfFileName, valor, vencimento,
         } = req.body || {};
+        // 🚨 GUIA SEPARADA VEM EM MAIS DE UM PDF — e sem isto ela não tinha
+        // caminho de envio (Paulo, 17/08: *"então como eu tenho que emitir em
+        // guias separadas, a função envio pelo sistema não vai né"* — e não ia).
+        //
+        // A API do Integra Contador emite 1 DARF por CÓDIGO, então a cobrança de
+        // um vencimento pode ter 2-3 arquivos. Um e-mail por guia encheria a
+        // caixa do cliente com mensagens quase idênticas para a MESMA cobrança:
+        // vão todas juntas, numa mensagem só.
+        const anexosExtra = Array.isArray(req.body?.pdfs) ? req.body.pdfs : [];
         if (!empresaCnpj || !tipo || !competencia) {
             return res.status(400).json({ ok: false, error: 'empresaCnpj + tipo + competencia são obrigatórios' });
         }
@@ -112,8 +121,14 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
 
         const pdfLimpo = limparPdf(pdfBase64);
-        if (pdfLimpo && pdfLimpo.length > 4_000_000) {
-            return res.status(413).json({ ok: false, error: 'PDF muito grande para envio automático por e-mail.' });
+        const pdfsLimpos = anexosExtra
+            .map((x) => ({ nome: String(x?.nome || '').trim(), base64: limparPdf(x?.base64) }))
+            .filter((x) => x.base64);
+        // O limite é do TOTAL: duas guias de 2 MB passariam uma a uma e o Graph
+        // recusaria a mensagem inteira.
+        const totalBytes = pdfLimpo.length + pdfsLimpos.reduce((t, x) => t + x.base64.length, 0);
+        if (totalBytes > 4_000_000) {
+            return res.status(413).json({ ok: false, error: 'As guias somam mais de 4 MB — envie em duas mensagens.' });
         }
 
         const padrao = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
@@ -130,7 +145,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         const corpoHtml = montarEmailGuia({
             tipo: String(tipo).toUpperCase(),
             empresaNome, competencia, mensagem,
-            temPdf: Boolean(pdfLimpo),
+            temPdf: Boolean(pdfLimpo || pdfsLimpos.length),
             vencimento: vencimento || null,
         });
         const anexos = [
@@ -139,6 +154,11 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
                 contentType: 'application/pdf',
                 contentBytes: pdfLimpo,
             }] : []),
+            ...pdfsLimpos.map((x) => ({
+                name: x.nome || nomeArquivoGuia({ tipo, competencia }),
+                contentType: 'application/pdf',
+                contentBytes: x.base64,
+            })),
             ...anexoLogo(),
         ];
 
@@ -173,7 +193,8 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         return res.json({
             ok: true, gestor: GESTOR_EMAIL,
             remetente, fonteRemetente, avisoRemetente,
-            copiaPara: bcc, anexouPdf: Boolean(pdfLimpo),
+            copiaPara: bcc, anexouPdf: Boolean(pdfLimpo || pdfsLimpos.length),
+            guiasAnexadas: (pdfLimpo ? 1 : 0) + pdfsLimpos.length,
             ...rito,
         });
     } catch (e) {
