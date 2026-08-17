@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
 import type { DocumentoFiscal, NFeEvento } from '../../types';
+// 🚨 SEGUNDA RÉGUA DE CANCELAMENTO — era esta a linha que faltava.
+//
+// O selo lia SÓ `doc.status === 'cancelado'`, enquanto TODO relatório fiscal
+// decide por `docCancelado` (status OU cStat legado OU evento 110111). Nota
+// cancelada por EVENTO — que é como o cancelamento chega — saía do livro
+// certinho e aparecia aqui 🟢 Vigente: duas leituras do mesmo fato na mesma
+// tela, e a que a pessoa olha é a verde. É o caso MV LIDER 639 (11/08) vivo
+// no selo, quatro dias depois de corrigido no cálculo.
+import { docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
 
 interface Props {
     doc: DocumentoFiscal;
@@ -41,7 +50,7 @@ const NFeStatusCell: React.FC<Props> = ({ doc }) => {
     const [openModal, setOpenModal] = useState(false);
 
     const eventos: NFeEvento[] = doc.eventos || [];
-    const isCancelado = doc.status === 'cancelado';
+    const isCancelado = docCancelado(doc);
     const isPendente = doc.status === 'pendente' || doc.eventosBeforeNFe;
     const cces = eventos.filter(e => e.tipo === 'cce');
     const temEventos = eventos.length > 0;

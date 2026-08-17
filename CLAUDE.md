@@ -242,6 +242,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
   direção contrária. A composição aparece na TELA antes dos botões: descobrir
   "por desencargo" não pode ser o processo.
+- **🚨 "CANCELADA" TINHA SEIS RÉGUAS — e o campo cru MENTE justamente no caminho
+  NORMAL** (17/08, ao conferir a MV LIDER 639 07/2026 para o Paulo: a aba 🚫
+  Canceladas/Faltantes dizia *"✓ numeração contínua · 0 cancelada(s)"*). A régua
+  da LEITURA (`docCancelado`: status OU cStat legado 101/151 OU evento 110111
+  com 135/155) nasceu em **11/08, para ESTE MESMO CLIENTE** — e tinha sido
+  aplicada no CÁLCULO e em quase nada mais. **O cancelamento chega por EVENTO, e
+  nesse caminho o campo `status` continua 'autorizado'**: as cópias só erram no
+  caso comum, que é o pior lugar para um defeito silencioso.
+  Onde estava: selo 🟢 **Vigente** numa nota cancelada (`NFeStatusCell`); PDF da
+  lista somando cancelada no *"valor líquido"*; **Exportar SAGE gravando situação
+  0 no .FML** ⇒ o livro do cliente recebia de volta a nota que o CFI já tinha
+  tirado; helper próprio na `rotina-fiscal`; e o pior — **o EFD-Contribuições**:
+  C/D/F pulavam pelo campo cru e o **bloco A não pulava nada**, ou seja **NFS-e
+  cancelada ia DECLARADA à Receita** com PIS/COFINS calculados em cima dela.
+  ✂️ Trava por **VARREDURA**, não por lista (`canceladaReguaUnica.test.ts`):
+  acusa `status === 'cancelado'` em `components/`, `services/` e
+  `sefaz-backend/`. **A exceção se declara COM o motivo** — TAREFA cancelada é
+  outro domínio, e **NFS-e é o caso em que o campo NÃO mente** (ADN e portal não
+  têm evento; quem informa o cancelamento é o próprio documento). É essa a
+  fronteira: o campo cru só mente onde existe o caminho do evento.
+  ⚠️ No bloco A a cancelada é **PULADA, não marcada `COD_SIT '02'`** — o leiaute
+  do documento cancelado ali não está provado contra arquivo aceito, e inventar
+  código de situação é o oposto da régua da casa.
+  ⚠️ E o falso positivo da varredura se resolveu **renomeando** a variável
+  derivada para `situacao` em vez de virar exceção: o resultado da régua não se
+  chama como o campo cru, senão a próxima leitura confunde os dois de novo.
 - **🚨 A MESMA NF-e É SAÍDA DE UMA EMPRESA E ENTRADA DA OUTRA — e a captura
   TROCAVA A NOTA DE DONA a cada rodada** (Paulo, 17/08: *"importei as notas de
   saída da KROYA e algumas delas foram emitidas para a GOLDLOG… preciso

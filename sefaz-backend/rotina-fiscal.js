@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
+import { docCancelado } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 
@@ -45,7 +46,11 @@ const etapa = (id, status, resumo, acao = null, extra = {}) => {
     return { ...base, status, resumo, acao, ...extra };
 };
 
-const cancelado = (d) => d?.status === 'cancelado' || d?.status === 'cancelada'
+// Cancelamento é decidido pela régua da LEITURA (status OU cStat OU evento
+// 110111) — o campo cru mente quando o cancelamento chega por evento, que é
+// como ele chega. Denegado/inutilizado ficam aqui porque são outros estados,
+// não cancelamento.
+const cancelado = (d) => docCancelado(d)
     || d?.status === 'denegado' || d?.status === 'inutilizado';
 
 // Resumo (resNFe) x completa — MESMA regra do importer (decidirGravacaoNFe):

@@ -11,6 +11,10 @@
 import * as fmt from './sped-fiscal-format.js';
 // A régua das DUAS FORMAS do documento mora num lugar só (11/08).
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
+// 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
+// o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
+// o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
+import { docCancelado } from './xml-metadata-helper.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -86,6 +90,13 @@ export function valorDoDocumentoServico(nota) {
 
 function filtrarNotasBlocoA(notas) {
     return (notas || []).filter(n => {
+        // Cancelada não se declara: os blocos C/D/F já a pulavam e o A não —
+        // então NFS-e cancelada saía com PIS/COFINS calculados em cima dela.
+        // ⚠️ PULA, não emite COD_SIT '02': o leiaute do documento cancelado
+        // neste bloco não está provado contra arquivo aceito, e inventar código
+        // de situação é o oposto da régua da casa. Omitir não declara nada a
+        // menos — a nota cancelada não tem valor a declarar.
+        if (docCancelado(n)) return false;
         if (n.tipo === 'NFSe' || n.tipo === 'NFSE') return true;
         if (String(n.modelo) === 'NFSE') return true;
         return false;
@@ -207,7 +218,7 @@ export function buildBlocoC_Contrib(dados) {
     ]));
 
     for (const nota of notasC) {
-        if (nota.status === 'cancelado' || nota.status === 'denegado') continue;
+        if (docCancelado(nota) || nota.status === 'denegado') continue;
 
         const direcao = nota.direcao;
         const indOper = direcao === 'saida' ? '1' : '0';
@@ -310,7 +321,7 @@ export function buildBlocoD_Contrib(dados) {
     linhas.push(fmt.buildLine(['D010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
 
     for (const nota of notasD) {
-        if (nota.status === 'cancelado') continue;
+        if (docCancelado(nota)) continue;
         const direcao = nota.direcao;
         const indOper = direcao === 'saida' ? '1' : '0';
         const indEmit = direcao === 'saida' ? '0' : '1';
@@ -374,7 +385,7 @@ export function buildBlocoM(dados) {
     let totalPisEntrada = 0, totalCofinsEntrada = 0, totalBcEntrada = 0;
 
     for (const nota of (dados.notas || [])) {
-        if (nota.status === 'cancelado' || nota.status === 'denegado') continue;
+        if (docCancelado(nota) || nota.status === 'denegado') continue;
 
         let vlDoc = 0;
         for (const item of (nota.itens || [])) {
