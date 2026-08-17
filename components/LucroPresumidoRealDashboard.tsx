@@ -144,14 +144,34 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         loadEmpresas();
     }, [currentUser]);
 
+    /**
+     * 🐛 ATIVAR A EMPRESA ABRIA A TELA SEM CARREGAR A EMPRESA (Paulo, 17/08:
+     * *"as fichas do LP/LR não estão aparecendo quando ativamos a empresa; elas
+     * aparecem quando ativamos empresas do SIMPLES"*).
+     *
+     * O atalho da empresa ativa marcava `view = 'details'` e o id, e PARAVA ali
+     * — sem passar pelo `abrirEmpresa`, que é quem busca o documento. A ficha
+     * financeira mora DENTRO do documento (foi por isso que ele virou carga sob
+     * demanda em 15/08), então `selectedEmpresa` ficava `undefined`,
+     * `renderDetails()` devolvia `null` e a lista também não renderizava (a view
+     * já não era `'list'`): **tela vazia, sem caminho de volta**.
+     *
+     * Por que o Simples "funcionava": com uma empresa do Simples ativa, o id do
+     * Lucro vem `null`, este atalho NÃO dispara, e a pessoa cai na lista — onde
+     * o botão Abrir passa pelo carregamento certo. Não era o Simples estar bom,
+     * era o atalho não estar sendo usado.
+     *
+     * REGRA QUE FICA: caminho novo para uma tela passa pelo MESMO carregamento
+     * que o caminho antigo. Atalho que pula a carga entrega a tela sem o dado.
+     */
     useEffect(() => {
-        if (externalSelectedId && empresas.length > 0) {
-            const exists = empresas.find(e => e.id === externalSelectedId);
-            if (exists) {
-                setSelectedEmpresaId(externalSelectedId);
-                setView('details');
-            }
-        }
+        if (!externalSelectedId || empresas.length === 0) return;
+        if (selectedEmpresaId === externalSelectedId) return;   // já estamos nela
+        const daLista = empresas.find(e => e.id === externalSelectedId);
+        // Empresa ativa que não está nesta lista (excluída, fundida, ou é do
+        // Simples) NÃO vira tela vazia: fica na lista, que é o estado honesto.
+        if (!daLista) return;
+        abrirEmpresa(externalSelectedId);
     }, [externalSelectedId, empresas]);
 
     // POPULAR FORMULÁRIO QUANDO ENTRAR EM MODO DE EDIÇÃO
@@ -787,7 +807,30 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     );
 
     const renderDetails = () => {
-        if (!selectedEmpresa) return null;
+        // 🚨 `return null` AQUI ERA UM BECO. Com a view em 'details' e a empresa
+        // não carregada, a tela ficava BRANCA e a lista não renderizava — sem
+        // botão, sem mensagem, sem F5 que resolva. Foi assim que o atalho da
+        // empresa ativa se manifestou (17/08).
+        //
+        // Nenhum estado desta tela pode renderizar NADA: ou tem a empresa, ou
+        // diz por que não tem e devolve o caminho.
+        if (!selectedEmpresa) {
+            return (
+                <div className="p-6 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
+                    <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                        A ficha desta empresa não foi carregada.
+                    </p>
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                        A ficha financeira é buscada quando a empresa é aberta. Se você chegou aqui pela empresa ativa e
+                        a busca falhou, abra a empresa na lista — o botão <strong>Abrir</strong> refaz a leitura.
+                    </p>
+                    <button onClick={() => setView('list')}
+                        className="btn-press mt-3 px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white whitespace-nowrap">
+                        ← Voltar à lista
+                    </button>
+                </div>
+            );
+        }
         return (
             <DetailsView
                 empresa={selectedEmpresa}

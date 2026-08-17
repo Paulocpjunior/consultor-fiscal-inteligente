@@ -75,6 +75,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **🐛 ATIVAR A EMPRESA ABRIA A TELA SEM CARREGAR A EMPRESA — tela BRANCA no
+  LP/LR** (Paulo, 17/08, com print: *"as fichas do LP/LR não estão aparecendo
+  quando ativamos a empresa, elas aparecem quando ativamos empresas do
+  SIMPLES"*). Defeito MEU do PR de 15/08. O atalho da empresa ativa marcava
+  `view = 'details'` + o id e **parava ali**, sem passar pelo `abrirEmpresa`,
+  que é quem BUSCA o documento — e a ficha financeira mora DENTRO dele (virou
+  carga sob demanda no mesmo PR). `selectedEmpresa` ficava `undefined`,
+  `renderDetails()` devolvia **`null`**, e a lista TAMBÉM não renderizava porque
+  a view já não era `'list'`: **tela vazia, sem botão, sem caminho de volta** —
+  e o mesmo valia para o *"próximo passo: apuração"* da Rotina do Mês, que é o
+  guia do colaborador.
+  ⚠️ **O SINTOMA ENGANAVA**: "funciona no Simples" era o atalho **NÃO
+  DISPARANDO** (com empresa do Simples ativa o id do Lucro vem `null`, a pessoa
+  cai na lista, e ali o botão Abrir carrega). Parecia Lucro × Simples e era
+  caminho novo pulando a carga; o Simples nunca teve o buraco porque carrega a
+  lista inteira de uma vez.
+  **DUAS REGRAS QUE FICAM**: (1) **caminho novo para uma tela passa pelo MESMO
+  carregamento que o caminho antigo** — atalho que pula a carga entrega a tela
+  sem o dado, e é a família do "rota sem botão" ao contrário; (2) **`return
+  null` num render de detalhe é BECO** — nenhum estado pode renderizar NADA: ou
+  tem o dado, ou DIZ por que não tem e devolve o botão. Travado por varredura em
+  `empresaAtivaSequencia.test.ts` (exige `abrirEmpresa(externalSelectedId)`,
+  barra o `setView('details')` no atalho e o `return null`), **provado
+  revertendo o código antigo de propósito**.
 - **A SEQUÊNCIA DO APP É LOGIN → ATIVAR EMPRESA → MÓDULOS — e VER a carteira é
   livre, AGIR num cliente exige que ele seja o ATIVO** (Paulo, 15/08, três
   mensagens no mesmo dia). Eu tinha lido *"não carregamos nada até ativar"*

@@ -434,3 +434,46 @@ describe('varredura final: o que sobrou depois das três levas', () => {
         expect(fonte).not.toMatch(/setRelatorio\([^)]*empresaAtiva/);
     });
 });
+
+describe('🐛 ATIVAR A EMPRESA TEM QUE CARREGAR A EMPRESA — o caso do LP/LR', () => {
+    // Paulo, 17/08, com print: *"as fichas do LP/LR não estão aparecendo quando
+    // ativamos a empresa, elas aparecem quando ativamos empresas do SIMPLES"*.
+    //
+    // O atalho da empresa ativa marcava `view = 'details'` e o id, e PARAVA ali
+    // — sem passar pelo `abrirEmpresa`, que é quem busca o documento. A ficha
+    // financeira mora DENTRO do documento (carga sob demanda desde 15/08), então
+    // a empresa ficava indefinida, o detalhe renderizava `null`, e a lista TAMBÉM
+    // não renderizava porque a view já não era 'list': tela vazia, sem volta.
+    //
+    // O "funciona no Simples" era o atalho NÃO DISPARANDO (com empresa do
+    // Simples ativa, o id do Lucro vem null e a pessoa cai na lista, onde o
+    // botão Abrir carrega). Sintoma enganoso: parecia problema do Lucro × Simples
+    // e era caminho novo pulando o carregamento.
+    const fonte = () => semComentarios(
+        readFileSync(join(RAIZ, 'components/LucroPresumidoRealDashboard.tsx'), 'utf8'),
+    );
+
+    it('🚨 o atalho da empresa ativa passa pelo abrirEmpresa, que é quem BUSCA', () => {
+        const f = fonte();
+        const efeito = f.slice(f.indexOf('externalSelectedId'), f.indexOf('const selectedEmpresa') + 1);
+        expect(f).toMatch(/abrirEmpresa\(externalSelectedId\)/);
+        // O que NÃO pode voltar: marcar a view sem ter carregado nada.
+        expect(efeito).not.toMatch(/setView\('details'\)/);
+    });
+
+    it('🚨 nenhum estado do detalhe renderiza NADA — `return null` é beco', () => {
+        // Tela branca sem botão não é estado: é a pessoa presa. A regra vale
+        // para qualquer motivo de a empresa não estar carregada, não só o atalho.
+        const f = fonte();
+        const detalhe = f.slice(f.indexOf('const renderDetails'), f.indexOf('const renderDetails') + 1600);
+        expect(detalhe).not.toMatch(/if \(!selectedEmpresa\) return null/);
+        expect(detalhe).toMatch(/Voltar à lista/);
+    });
+
+    it('empresa ativa fora da lista NÃO vira tela vazia — fica na lista', () => {
+        // Excluída, fundida, ou simplesmente do Simples: o estado honesto é a
+        // lista, nunca um detalhe de empresa que não existe aqui.
+        const f = fonte();
+        expect(f).toMatch(/if \(!daLista\) return;/);
+    });
+});
