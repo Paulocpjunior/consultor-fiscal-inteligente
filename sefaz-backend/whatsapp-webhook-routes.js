@@ -168,6 +168,11 @@ async function baixarMidiaRecebida(db, msg) {
 async function gravarStatus(db, st) {
     const agora = new Date().toISOString();
     const statusPt = traduzirStatusEntrega(st.status);
+    // A mensagem é lida logo abaixo de qualquer jeito; ler ANTES permite que a
+    // frase do erro descreva O QUE foi enviado (o 131053 sem isso é beco).
+    const refMsg = db.collection('whatsapp_mensagens').doc(st.metaMessageId);
+    const atualMsg = await refMsg.get();
+    const midiaDaMsg = atualMsg.data()?.midia || null;
     const patch = {
         statusEntrega: statusPt,
         statusEm: st.timestamp || agora,
@@ -175,15 +180,15 @@ async function gravarStatus(db, st) {
             erroEntrega: {
                 codigo: st.erro.codigo,
                 detalhe: st.erro.detalhe || st.erro.titulo || null,
-                acao: interpretarErroEntrega(st.erro.codigo, st.erro.detalhe || ''),
+                acao: interpretarErroEntrega(st.erro.codigo, st.erro.detalhe || '', midiaDaMsg),
             },
         } : {}),
     };
 
     // "lido" não pode regredir pra "entregue" quando a Meta manda os dois fora
     // de ordem — o read implica delivered, então só avança.
-    const ref = db.collection('whatsapp_mensagens').doc(st.metaMessageId);
-    const atual = await ref.get();
+    const ref = refMsg;
+    const atual = atualMsg;
     const ordem = { enviado: 1, entregue: 2, lido: 3, falhou: 3 };
     const jaTem = ordem[atual.data()?.statusEntrega] || 0;
     const chegando = ordem[statusPt] || 0;

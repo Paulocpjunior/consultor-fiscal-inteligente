@@ -49,7 +49,15 @@ export function extrairEventos(payload: unknown): {
     statuses: StatusEntrega[];
 };
 export function traduzirStatusEntrega(status: string): string;
-export function interpretarErroEntrega(codigo: number | null | undefined, detalhe?: string): string;
+export interface MidiaDaMensagem {
+    nomeArquivo?: string | null;
+    mime?: string | null;
+    tipo?: string | null;
+    tamanhoBytes?: number | null;
+}
+/** `midia` faz o 131053 descrever o ARQUIVO — sem ela a frase vira beco. */
+export function interpretarErroEntrega(
+    codigo: number | null | undefined, detalhe?: string, midia?: MidiaDaMensagem | null): string;
 export function janela24hAte(timestampIso: string | null | undefined): string | null;
 export function resumoParaConversa(msg: Pick<MensagemRecebida, 'tipo' | 'texto' | 'midia'>): string;
 export function caminhoStorageMidia(msg: Pick<MensagemRecebida, 'metaMessageId' | 'de' | 'midia'>): string;

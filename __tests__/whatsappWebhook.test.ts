@@ -181,3 +181,52 @@ describe('janela de 24h e resumo da conversa', () => {
         expect(resumoParaConversa({ tipo: 'document', texto: null, midia: { nomeArquivo: 'x.pdf' } } as any)).toBe('📎 x.pdf');
     });
 });
+
+// ============================================================================
+// 🚨 MATA-BURRO: "TENTE REENVIAR" NÃO SERVE QUANDO JÁ FALHOU TRÊS VEZES.
+//
+// Caso real (17/08, painel do Paulo): três falhas 131053 seguidas, para o
+// mesmo número, com o mesmo arquivo. A frase dizia "tente reenviar o anexo" —
+// e reenviar era exatamente o que não ia funcionar: este erro chega DEPOIS de
+// a Meta aceitar o envio, ou seja, o upload deu certo e o processamento da
+// MÍDIA é que falhou. Repetir o mesmo arquivo repete a falha.
+//
+// É a família do "Já importado" sem estado (14/08): a única saída que sobra
+// para quem lê uma frase dessas é repetir o clique.
+// ============================================================================
+describe('🚨 131053 — a frase diz O QUE foi enviado e o que fazer com o ARQUIVO', () => {
+    it('sem a mídia, ainda assim NÃO manda repetir o mesmo arquivo', () => {
+        const f = interpretarErroEntrega(131053);
+        expect(f).toMatch(/tende a falhar de novo/i);
+        expect(f).toMatch(/converta|reduza/i);
+    });
+
+    it('com a mídia, DESCREVE o arquivo — sem isso quem lê não tem por onde começar', () => {
+        const f = interpretarErroEntrega(131053, '', {
+            nomeArquivo: 'contrato.pdf', mime: 'application/pdf', tipo: 'document', tamanhoBytes: 5 * 1024 * 1024,
+        });
+        expect(f).toContain('contrato.pdf');
+        expect(f).toContain('application/pdf');
+        expect(f).toContain('5,0 MB');
+    });
+
+    it('a ação é POR TIPO — áudio não se resolve como PDF', () => {
+        const audio = interpretarErroEntrega(131053, '', { nomeArquivo: 'a.ogg', tipo: 'audio' });
+        expect(audio).toMatch(/mp3|opus/i);
+        const doc = interpretarErroEntrega(131053, '', { nomeArquivo: 'x.pdf', tipo: 'document' });
+        expect(doc).toMatch(/PDF/);
+        const img = interpretarErroEntrega(131053, '', { nomeArquivo: 'x.png', tipo: 'image' });
+        expect(img).toMatch(/JPG|PNG/);
+    });
+
+    it('diz que a cópia continua no histórico — senão parece que o arquivo se perdeu', () => {
+        const f = interpretarErroEntrega(131053, '', { nomeArquivo: 'x.pdf', tipo: 'document' });
+        expect(f).toMatch(/hist[óo]rico/i);
+    });
+
+    it('os outros códigos não mudaram (a régua do 131049 é a que mais importa)', () => {
+        expect(interpretarErroEntrega(131049)).toMatch(/filtro de marketing/i);
+        expect(interpretarErroEntrega(131047)).toMatch(/24h/);
+        expect(interpretarErroEntrega(131026)).toMatch(/não tem WhatsApp/i);
+    });
+});
