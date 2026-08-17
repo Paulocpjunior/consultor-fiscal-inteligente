@@ -376,6 +376,43 @@ aqui também, porque mudam decisões de HOJE:
    faria o código do Connect viver em dois lugares durante a migração de
    plataforma — duas verdades no pior momento possível.
 
+### 5.11 🧪 O bot em PILOTO — o que torna a convivência possível (Paulo, 17/08)
+
+Correção de premissa minha. Eu tratei "dois apps assinados na WABA" como
+problema a eliminar antes de ligar o bot; o Paulo cortou: *"temos que
+permanecer com os 2 apps ativos, não faz sentido criar uma opção pra migrar o
+bot se os 2 não estiverem ativos"*.
+
+Ele está certo — **a convivência é o plano**, não um estado a atravessar
+depressa: a Ultra Fox de pé é a rede de segurança enquanto o SP Connect é
+validado. Quem precisava se adaptar era o bot.
+
+🚨 **O FATO TÉCNICO QUE MANDA**: a Meta permite **vários apps assinados na
+mesma WABA** (`subscribed_apps`), e **cada um recebe uma cópia** de todo
+evento. Conferido em produção (17/08): `API_Oficial · Business Agent · f-bot`.
+Não é "um webhook só". Logo, se os dois bots responderem, o cliente vê **menu
+em dobro** — e isso é o único sintoma que o cliente percebe na hora.
+
+**A saída não é desligar a Ultra Fox antes da hora; é limitar QUEM o NOSSO bot
+atende.** `botAlcance`:
+
+- `piloto` (padrão) → responde **só** aos números de `botNumerosPiloto`. O
+  teste roda em produção, com os dois apps de pé, sem nenhum cliente afetado.
+- `todos` → o dia do corte, depois de remover o app dela.
+
+RÉGUAS: **lista vazia no piloto não responde a ninguém** (a leitura oposta —
+"sem restrição" — soltaria o bot na carteira quando alguém apagasse a lista);
+**número ilegível não é atendido** (senão o bot escapa do piloto pela porta dos
+fundos); e o casamento é pelos **últimos 11 dígitos**, porque o WhatsApp
+entrega ora com o 9 do celular, ora sem — casar a string inteira faria o piloto
+não pegar justamente o número recém-cadastrado.
+
+⚠️ **A MIGRAÇÃO NÃO EMUDECE QUEM JÁ TINHA O BOT LIGADO**: config gravada antes
+deste campo, com `botAtivo: true`, resolve para `todos` — era o que ela fazia.
+Config nova nasce em `piloto`. Emudecer em silêncio seria pior que o defeito
+que o campo evita: o efeito só apareceria no cliente sem resposta, e ninguém
+ligaria uma coisa à outra.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

@@ -7,6 +7,7 @@ import {
     configPadraoAtendimento, resolverConfig, dentroDoHorario,
     gerarProtocolo, renderMensagem, montarTextoMenu, interpretarEscolha,
     decidirAutomacao, papelValido, podeEncerrar, interpretarNota,
+    botAlcancaNumero, soDigitos,
 } from '../sefaz-backend/whatsapp-atendimento.js';
 
 describe('filas de atendimento (≠ departamentos do SaaS)', () => {
@@ -120,7 +121,9 @@ describe('protocolo, templates e menu', () => {
 });
 
 describe('decidirAutomacao — o cérebro, puro', () => {
-    const cfg = { ...configPadraoAtendimento(), botAtivo: true };
+    // Alcance 'todos' de propósito: esta suíte testa o CÉREBRO do bot. Quem
+    // decide A QUEM ele responde é `botAlcancaNumero`, com testes próprios.
+    const cfg = { ...configPadraoAtendimento(), botAtivo: true, botAlcance: 'todos' as const };
     const dentroDoExpediente = new Date('2026-08-17T09:00:00-03:00');
 
     it('bot desligado = silêncio TOTAL (a plataforma atual ainda responde)', () => {
@@ -187,5 +190,118 @@ describe('decidirAutomacao — o cérebro, puro', () => {
             config: cfg, agora: noite,
         });
         expect(repetida).toEqual([]);
+    });
+});
+
+// ============================================================================
+// 🚨 ALCANCE DO BOT — o que torna a CONVIVÊNCIA possível.
+//
+// Paulo, 17/08: *"temos que permanecer com os 2 apps ativos, não faz sentido
+// criar uma opção pra migrar o bot se os 2 não estiverem ativos"*.
+//
+// Os dois apps ficam assinados na WABA DE PROPÓSITO — a Ultra Fox é a rede de
+// segurança enquanto o SP Connect é validado. Só que os dois recebem a MESMA
+// mensagem: se os dois bots responderem, o cliente vê menu em dobro. A saída
+// não é desligar a Ultra Fox antes da hora; é limitar QUEM o nosso bot atende.
+// ============================================================================
+
+describe('🚨 botAlcancaNumero — o piloto que deixa os dois apps de pé', () => {
+    const piloto = (nums: string[]) => ({ botAlcance: 'piloto' as const, botNumerosPiloto: nums });
+
+    it('responde ao número do piloto', () => {
+        expect(botAlcancaNumero(piloto(['5511999990000']), '5511999990000')).toBe(true);
+    });
+
+    it('🚨 NÃO responde a quem está fora do piloto — é isso que protege o cliente', () => {
+        expect(botAlcancaNumero(piloto(['5511999990000']), '5511888887777')).toBe(false);
+    });
+
+    it('🚨 lista VAZIA no piloto não responde a ninguém (não é "sem restrição")', () => {
+        // A leitura oposta soltaria o bot na carteira inteira quando alguém
+        // apagasse a lista sem querer.
+        expect(botAlcancaNumero(piloto([]), '5511999990000')).toBe(false);
+    });
+
+    it('alcance "todos" responde a qualquer um — é o dia do corte', () => {
+        expect(botAlcancaNumero({ botAlcance: 'todos' as const, botNumerosPiloto: [] }, '5511888887777')).toBe(true);
+    });
+
+    it('máscara no cadastro não impede o casamento (dígito é a chave)', () => {
+        expect(botAlcancaNumero(piloto(['+55 (11) 99999-0000']), '5511999990000')).toBe(true);
+    });
+
+    it('🚨 casa pelos últimos 11 dígitos — o WhatsApp entrega ora com o 9, ora sem', () => {
+        // Casar a string inteira faria o piloto "não pegar" justamente o
+        // número que a pessoa acabou de cadastrar.
+        expect(botAlcancaNumero(piloto(['11999990000']), '5511999990000')).toBe(true);
+        expect(botAlcancaNumero(piloto(['5511999990000']), '11999990000')).toBe(true);
+    });
+
+    it('número ilegível não é atendido — bot não escapa do piloto pela porta dos fundos', () => {
+        expect(botAlcancaNumero(piloto(['5511999990000']), '')).toBe(false);
+        expect(botAlcancaNumero(piloto(['5511999990000']), null as any)).toBe(false);
+    });
+
+    it('config sem alcance definido cai no lado SEGURO (piloto), nunca em "todos"', () => {
+        expect(botAlcancaNumero({} as any, '5511999990000')).toBe(false);
+    });
+
+    it('soDigitos tira máscara', () => {
+        expect(soDigitos('+55 (11) 99999-0000')).toBe('5511999990000');
+    });
+});
+
+describe('🚨 decidirAutomacao respeita o alcance', () => {
+    const cfg = {
+        ...resolverConfig({ botAtivo: true, botAlcance: 'piloto', botNumerosPiloto: ['5511999990000'] }),
+    };
+
+    it('número do piloto recebe o menu', () => {
+        const acoes = decidirAutomacao({
+            conversa: {}, numero: '5511999990000', textoMensagem: 'oi',
+            config: cfg, protocoloNovo: 'P1',
+        });
+        expect(acoes.length).toBeGreaterThan(0);
+    });
+
+    it('🚨 número FORA do piloto recebe SILÊNCIO — igualzinho a bot desligado', () => {
+        const acoes = decidirAutomacao({
+            conversa: {}, numero: '5511888887777', textoMensagem: 'oi',
+            config: cfg, protocoloNovo: 'P1',
+        });
+        expect(acoes).toEqual([]);
+    });
+
+    it('nem #sair escapa do alcance — comando de fora do piloto não age', () => {
+        const acoes = decidirAutomacao({
+            conversa: { fila: 'fiscal' }, numero: '5511888887777', textoMensagem: '#sair',
+            config: cfg, protocoloNovo: 'P1',
+        });
+        expect(acoes).toEqual([]);
+    });
+});
+
+describe('🚨 a migração não emudece o bot de quem já o tinha ligado', () => {
+    it('config ANTIGA com bot ligado (sem o campo novo) segue respondendo a TODOS', () => {
+        // Ela respondia a todo mundo; virar "piloto com lista vazia" a deixaria
+        // MUDA — e o efeito só apareceria no cliente sem resposta, sem ninguém
+        // ligar uma coisa à outra.
+        const c = resolverConfig({ botAtivo: true });
+        expect(c.botAlcance).toBe('todos');
+        expect(botAlcancaNumero(c, '5511888887777')).toBe(true);
+    });
+
+    it('config NOVA (bot desligado) nasce em piloto — o lado seguro', () => {
+        expect(resolverConfig({}).botAlcance).toBe('piloto');
+        expect(configPadraoAtendimento().botAlcance).toBe('piloto');
+    });
+
+    it('escolha EXPLÍCITA do admin vence a retrocompatibilidade', () => {
+        expect(resolverConfig({ botAtivo: true, botAlcance: 'piloto' }).botAlcance).toBe('piloto');
+    });
+
+    it('a lista gravada é normalizada pra dígitos', () => {
+        const c = resolverConfig({ botNumerosPiloto: ['+55 (11) 99999-0000', 'xx'] });
+        expect(c.botNumerosPiloto).toEqual(['5511999990000']);
     });
 });

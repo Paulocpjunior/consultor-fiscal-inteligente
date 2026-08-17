@@ -275,7 +275,10 @@ async function rodarBot(db, msg) {
         const convRef = db.collection('whatsapp_conversas').doc(msg.de);
         const conversa = (await convRef.get()).data() || {};
         const acoes = decidirAutomacao({
-            conversa, textoMensagem: msg.texto, nomeContato: msg.nomePerfil,
+            // `numero` decide o ALCANCE: no modo piloto o bot só responde aos
+            // números cadastrados — é o que deixa a Ultra Fox de pé sem o
+            // cliente receber menu em dobro.
+            conversa, numero: msg.de, textoMensagem: msg.texto, nomeContato: msg.nomePerfil,
             config, agora: new Date(), protocoloNovo: gerarProtocolo(),
         });
 
