@@ -50,6 +50,26 @@ export function gerarProtocolo(agora?: Date, aleatorio?: number): string;
 export function renderMensagem(template: string, dados?: Record<string, string | null | undefined>): string;
 export function montarTextoMenu(config: ConfigAtendimento): string;
 export function interpretarEscolha(texto: string, config: ConfigAtendimento): { fila: string; rotulo: string } | null;
+/** Cobertura de UMA fila: quem é do departamento × quem só enxerga tudo. */
+export interface CoberturaFila {
+    fila: string;
+    rotulo: string;
+    doDepartamento: number;
+    tambemVeem: number;
+    situacao: 'coberta' | 'so-quem-ve-tudo' | 'invisivel';
+}
+export interface CoberturaFilas {
+    /** Sem a lista de atendentes não se afirma nada (nem órfã, nem coberta). */
+    indeterminado: boolean;
+    motivo: string | null;
+    filas: CoberturaFila[];
+    /** Opções do menu que levam o cliente a fila sem ninguém do departamento. */
+    opcoesSemDono: (Partial<CoberturaFila> & { opcao: string; rotulo: string; filaRotulo?: string })[];
+}
+export function coberturaDasFilas(p?: {
+    menu?: { opcao: string | number; fila: string; rotulo: string }[];
+    atendentes?: { uid?: string; role?: string; papelAtendimento?: string | null; departamentos?: string[]; filasAtendimento?: string[] }[] | null;
+}): CoberturaFilas;
 /** Alguém está conduzindo esta conversa? (dono + aberta ⇒ o bot não triaga por cima) */
 export function emConducaoHumana(conversa: Record<string, unknown> | null | undefined): boolean;
 export function soDigitos(v: unknown): string;
