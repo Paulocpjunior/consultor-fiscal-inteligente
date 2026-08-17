@@ -52,16 +52,18 @@ describe('papéis do atendimento (Paulo, 16/08): admin tudo · gestor vê/atende
 
 describe('interpretarNota — a nota nunca é deduzida de texto livre', () => {
     it('aceita "5", " 5 ", "5.", "nota 4", "3 estrelas"; recusa o resto', () => {
-        expect(interpretarNota('5')).toBe(5);
-        expect(interpretarNota(' 5 ')).toBe(5);
-        expect(interpretarNota('5.')).toBe(5);
-        expect(interpretarNota('nota 4')).toBe(4);
-        expect(interpretarNota('3 estrelas')).toBe(3);
-        expect(interpretarNota('0')).toBeNull();
-        expect(interpretarNota('6')).toBeNull();
-        expect(interpretarNota('10')).toBeNull();
-        expect(interpretarNota('obrigado!')).toBeNull();
-        expect(interpretarNota('nota 5 pelo carinho')).toBeNull();
+        // Escala 5 EXPLÍCITA: este teste é sobre a leitura do texto, não sobre
+        // qual escala a casa usa (essa é decisão do Paulo e tem teste próprio).
+        expect(interpretarNota('5', 5)).toBe(5);
+        expect(interpretarNota(' 5 ', 5)).toBe(5);
+        expect(interpretarNota('5.', 5)).toBe(5);
+        expect(interpretarNota('nota 4', 5)).toBe(4);
+        expect(interpretarNota('3 estrelas', 5)).toBe(3);
+        expect(interpretarNota('0', 5)).toBeNull();
+        expect(interpretarNota('6', 5)).toBeNull();
+        expect(interpretarNota('10', 5)).toBeNull();
+        expect(interpretarNota('obrigado!', 5)).toBeNull();
+        expect(interpretarNota('nota 5 pelo carinho', 5)).toBeNull();
     });
 });
 
@@ -168,7 +170,7 @@ describe('decidirAutomacao — o cérebro, puro', () => {
             conversa: { fila: 'fiscal' }, textoMensagem: '#sair',
             config: { ...cfg, avaliacaoAtiva: true }, agora: dentroDoExpediente,
         });
-        expect(comPesquisa.some((a: any) => a.texto?.includes('1 a 5'))).toBe(true);
+        expect(comPesquisa.some((a: any) => a.texto?.includes('1 a 10'))).toBe(true);
         expect(comPesquisa[comPesquisa.length - 1]).toEqual({ tipo: 'marcarAguardandoAvaliacao' });
     });
 
@@ -303,5 +305,84 @@ describe('🚨 a migração não emudece o bot de quem já o tinha ligado', () =
     it('a lista gravada é normalizada pra dígitos', () => {
         const c = resolverConfig({ botNumerosPiloto: ['+55 (11) 99999-0000', 'xx'] });
         expect(c.botNumerosPiloto).toEqual(['5511999990000']);
+    });
+});
+
+// ============================================================================
+// 🚨 MATA-BURRO: O TEXTO NA TELA E A RÉGUA DO CÓDIGO NÃO PODEM DISCORDAR.
+//
+// Defeito real, 17/08, no PRIMEIRO teste ponta a ponta do Paulo. A mensagem
+// de avaliação foi editada para "De 1 a 10" e o `interpretarNota` só aceitava
+// 1-5. Ele respondeu **10** — e a nota virou `null`, sem registro e sem aviso.
+// O painel 📊 mostraria "0 avaliações" com o cliente tendo avaliado.
+//
+// É a família do "número digitado sem documento por trás": duas leituras do
+// mesmo fato discordando, e a perda acontecendo em silêncio. A escala virou
+// DADO (a mensagem, a leitura e o painel leem dela) e o descarte virou
+// REGISTRO NOMEADO.
+// ============================================================================
+import {
+    ESCALAS_AVALIACAO, ESCALA_AVALIACAO_PADRAO, leituraDaNota, conferirEscalaNaMensagem,
+} from '../sefaz-backend/whatsapp-atendimento.js';
+
+describe('🚨 escala da avaliação — o texto e a régua andam juntos', () => {
+    it('a escala padrão é 1 a 10 (decisão do Paulo, 17/08)', () => {
+        expect(ESCALA_AVALIACAO_PADRAO).toBe(10);
+        expect(configPadraoAtendimento().avaliacaoEscala).toBe(10);
+        expect(configPadraoAtendimento().mensagens.avaliacao).toContain('1 a 10');
+    });
+
+    it('🚨 nota 10 é ACEITA na escala 10 — era exatamente a que se perdia', () => {
+        expect(interpretarNota('10', 10)).toBe(10);
+        expect(leituraDaNota('10', 10)).toEqual({ tipo: 'nota', nota: 10 });
+    });
+
+    it('na escala 5, o 10 não vira nota — mas é NOMEADO como fora da escala', () => {
+        // `null` fundia "não é nota" com "é nota inválida", e são ações opostas.
+        expect(leituraDaNota('10', 5)).toEqual({ tipo: 'fora-da-escala', nota: null, informado: 10, escala: 5 });
+    });
+
+    it('texto que não é número segue sendo "não é nota" (o fluxo normal continua)', () => {
+        expect(leituraDaNota('bom dia', 10).tipo).toBe('nao-e-nota');
+    });
+
+    it('zero e 11 não viram nota na escala 10', () => {
+        expect(interpretarNota('0', 10)).toBeNull();
+        expect(interpretarNota('11', 10)).toBeNull();
+    });
+
+    it('escala inválida cai no padrão em vez de aceitar qualquer número', () => {
+        expect(interpretarNota('10', 7 as any)).toBe(10);   // 7 não existe ⇒ padrão 10
+        expect(interpretarNota('99', 999 as any)).toBeNull();
+    });
+
+    it('a config só aceita as escalas conhecidas', () => {
+        expect(resolverConfig({ avaliacaoEscala: 5 }).avaliacaoEscala).toBe(5);
+        expect(resolverConfig({ avaliacaoEscala: 7 }).avaliacaoEscala).toBe(ESCALA_AVALIACAO_PADRAO);
+        expect(ESCALAS_AVALIACAO).toEqual([5, 10]);
+    });
+});
+
+describe('🚨 conferirEscalaNaMensagem — a trava que teria pego o defeito', () => {
+    it('acusa mensagem que pede 1 a 10 com escala 5, dizendo o custo', () => {
+        const r = conferirEscalaNaMensagem('De 1 a 10, que nota você dá?', 5);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.erro).toMatch(/DESCARTADA/);
+    });
+
+    it('aceita quando os dois dizem a mesma coisa', () => {
+        expect(conferirEscalaNaMensagem('De 1 a 10, que nota você dá?', 10).ok).toBe(true);
+        expect(conferirEscalaNaMensagem('De 1 a 5, que nota?', 5).ok).toBe(true);
+    });
+
+    it('entende as várias formas de escrever a faixa', () => {
+        expect(conferirEscalaNaMensagem('nota de 1 até 10', 10).ok).toBe(true);
+        expect(conferirEscalaNaMensagem('nota 1-10', 10).ok).toBe(true);
+    });
+
+    it('texto SEM faixa explícita não é acusado — nem toda redação diz o intervalo', () => {
+        const r = conferirEscalaNaMensagem('Que nota você dá para este atendimento?', 10);
+        expect(r.ok).toBe(true);
+        if (r.ok) expect(r.semFaixaNoTexto).toBe(true);
     });
 });

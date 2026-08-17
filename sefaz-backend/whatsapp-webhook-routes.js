@@ -35,7 +35,7 @@ import {
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
-import { resolverConfig, decidirAutomacao, gerarProtocolo, interpretarNota } from './whatsapp-atendimento.js';
+import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota } from './whatsapp-atendimento.js';
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 
@@ -220,10 +220,28 @@ async function capturarAvaliacao(db, msg) {
         const conversa = (await convRef.get()).data() || {};
         if (!conversa.aguardandoAvaliacao) return false;
 
-        const nota = interpretarNota(msg.texto);
+        const cfgAval = resolverConfig((await db.collection('whatsapp_config').doc('atendimento').get()).data());
+        const leitura = leituraDaNota(msg.texto, cfgAval.avaliacaoEscala);
+        const nota = leitura.nota;
         const agora = new Date().toISOString();
         if (nota == null) {
             await convRef.set({ aguardandoAvaliacao: false }, { merge: true });
+            // 🚨 NÚMERO FORA DA ESCALA NÃO SOME EM SILÊNCIO. Era o defeito de
+            // 17/08: a mensagem pedia "1 a 10", a régua aceitava 1-5, o cliente
+            // respondeu 10 e a nota virou null — o painel diria "0 avaliações"
+            // com o cliente tendo avaliado. Agora fica registrado, com o que
+            // ele respondeu e a escala que valia.
+            if (leitura.tipo === 'fora-da-escala') {
+                await db.collection('whatsapp_avaliacoes').add({
+                    numero: msg.de, nota: null, em: agora,
+                    descartada: 'fora-da-escala',
+                    informado: leitura.informado, escala: leitura.escala,
+                    atendente: conversa.resolvidaPor && conversa.resolvidaPor !== 'cliente' ? conversa.resolvidaPor : null,
+                    fila: conversa.fila || conversa.transferidaDe || 'recepcao',
+                    protocolo: conversa.protocolo || null,
+                }).catch((e) => console.warn('[whatsapp/avaliacao] registro do descarte falhou:', e.message));
+                console.warn(`[whatsapp/avaliacao] nota ${leitura.informado} FORA da escala 1-${leitura.escala} (${msg.de}) — texto e régua divergem`);
+            }
             return false; // a mensagem é outra coisa — segue o fluxo normal
         }
 
@@ -242,8 +260,9 @@ async function capturarAvaliacao(db, msg) {
             protocolo: conversa.protocolo || null,
         });
 
-        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
-        const config = resolverConfig(cfgDoc.data());
+        // Reusa o cfg já lido acima — duas leituras do mesmo doc no mesmo
+        // fluxo é desperdício, e é como duas verdades nascem.
+        const config = cfgAval;
         const envio = await enviarTextoLivre({ para: msg.de, texto: config.mensagens.avaliacaoObrigado });
         if (envio.ok) {
             await db.collection('whatsapp_mensagens').doc(envio.messageId).set({

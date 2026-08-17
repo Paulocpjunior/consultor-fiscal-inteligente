@@ -6,6 +6,8 @@ export interface ConfigAtendimento {
     /** 'piloto' = só os números da lista · 'todos' = o dia do corte. */
     botAlcance: 'piloto' | 'todos';
     botNumerosPiloto: string[];
+    /** Escala da nota da pesquisa (5 ou 10). O texto da mensagem lê dela. */
+    avaliacaoEscala: number;
     avisarClienteTransferencia: boolean;
     avaliacaoAtiva: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
@@ -26,7 +28,16 @@ export interface AcaoBot {
 export const PAPEIS_ATENDIMENTO: string[];
 export function papelValido(p: unknown): boolean;
 export function podeEncerrar(p: { role?: string; papelAtendimento?: string | null; email?: string | null; atribuidoA?: string | null }): boolean;
-export function interpretarNota(texto: unknown): number | null;
+export const ESCALAS_AVALIACAO: number[];
+export const ESCALA_AVALIACAO_PADRAO: number;
+export function leituraDaNota(texto: unknown, escala?: number):
+    { tipo: 'nota'; nota: number }
+    | { tipo: 'nao-e-nota'; nota: null }
+    | { tipo: 'fora-da-escala'; nota: null; informado: number; escala: number };
+export function conferirEscalaNaMensagem(mensagem: unknown, escala?: number):
+    { ok: true; escala: number; semFaixaNoTexto?: boolean }
+    | { ok: false; escala: number; noTexto: number; erro: string };
+export function interpretarNota(texto: unknown, escala?: number): number | null;
 
 export const FILAS_ATENDIMENTO: FilaAtendimento[];
 export function filaValida(id: unknown): boolean;
