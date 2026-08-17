@@ -132,6 +132,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **🚨 O SEGUNDO ENVIO DO MESMO DÉBITO ESTÁ BARRADO — a unidade é o DÉBITO,
+  nunca a guia** (Paulo, 17/08, autorizando na sequência do caso HYPE: *"pode
+  fazer, barrar o segundo envio do mesmo débito"*). O aviso de mistura resolvia
+  METADE: ele DIZ que o DARF unificado carrega débito de outro departamento, e a
+  trava dependia de o outro departamento **LEMBRAR** — memória não é trava (regra
+  de 11/08: quem não sabe não precisa saber, precisa NÃO PASSAR).
+  ⚠️ **O RISCO É ESTRUTURAL, NÃO DESCUIDO**: receita PREVIDENCIÁRIA **não tem
+  guia avulsa** (`RECEITAS_GUIA_SEPARADA` do orquestrador não a inclui — "só sai
+  em DARF numerado"), então o 1082 **só sai dentro do unificado**, que carrega
+  PIS/COFINS de novo. Em TODO cliente com folha E faturamento no mesmo mês existe
+  um caminho de cobrança dobrada. Por isso a régua é `debito-ja-enviado.js` (na
+  `REGUAS_VIGIADAS`) e a chave é `código+extensão` na COMPETÊNCIA — duas guias
+  diferentes com o mesmo código são a MESMA cobrança.
+  A auditoria `impostos_enviados` passou a gravar a **composição** (`debitos[]`
+  com departamento) — sem ela o log sabia que "um DARF saiu" e não sabia O QUE
+  ele cobrava. **Campo novo ⇒ whitelist das TRÊS rotas de envio no mesmo PR**
+  (lição do #382; aqui o descarte silencioso significa conta dobrada no mês
+  seguinte), e um teste conta as 3 ocorrências em cada camada.
+  QUATRO DECISÕES: (1) **reenvio legítimo existe** (cliente perdeu a guia,
+  declaração retificada) ⇒ bloqueio COM saída por **motivo escrito ≥15 caracteres
+  gravado com quem seguiu** — o desenho da trava T3 da DCTFWeb, porque bloqueio
+  puro é trava que a equipe contorna; (2) **canal que não prova envio vai
+  MARCADO** — só `email-graph` e `whatsapp-api` provam (regra de 05/08); tratar
+  `email-app` igual faria o app barrar um primeiro envio de verdade por causa de
+  uma janela que alguém abriu e fechou, então ele barra DIZENDO que o cliente
+  talvez nunca tenha recebido; (3) **valor diferente é sinal de RETIFICAÇÃO** — o
+  app mostra antes×depois e NÃO escolhe; (4) **envio antigo sem composição não
+  vira "nunca foi enviado"**: vira ressalva nomeada (`incerto`), porque ausência
+  de registro não é prova de ausência — e afirmar o contrário é justamente o que
+  dobra a cobrança. Falha na consulta também NÃO libera calado.
+  🐛 **A própria varredura da régua única pegou minha porta do frontend como
+  segunda cópia** — eu havia dado o MESMO nome (`conferirDebitosJaEnviados`) à
+  régua e à porta de fetch. Renomeada para `perguntarDebitosJaEnviados`: função
+  com o mesmo nome nos dois lados é o começo de duas respostas divergentes.
+  📌 **PROCEDIMENTO QUE FICA (dito ao Paulo em 17/08)**: ou vai o **unificado**,
+  UMA vez, por UM departamento combinado; ou vai o **avulso** de quem pode emitir
+  (Fiscal: PIS/COFINS/IRPJ/CSLL/IPI) e o resto exige combinação humana. Nunca os
+  dois caminhos no mesmo mês sem conferir. **Eu errei ao dizer que existia "guia
+  separada de 20/08" para o 1082** — não existe; corrigido na hora.
 - **🚨 O DARF DA DCTFWEB NÃO É DE UM DEPARTAMENTO SÓ — e o app deixava enviar
   sem dizer** (Paulo, 17/08, HYPE CAFE 07/2026: *"ERRO GRAVÍSSIMO, ia enviar os
   impostos PIS/COFINS da HYPE, está vindo os impostos de outro depto junto… por
