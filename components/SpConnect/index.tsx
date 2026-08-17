@@ -43,7 +43,7 @@ import {
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
 } from '../../services/spConnect';
-import { conferirEscalaNaMensagem } from '../../sefaz-backend/whatsapp-atendimento.js';
+import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
 
 const TOM_TICK: Record<string, string> = {
@@ -304,7 +304,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [atdErro, setAtdErro] = useState<string | null>(null);
     const [atdCarregado, setAtdCarregado] = useState(false);
     useEffect(() => {
-        if (!cfgAberta || cfgAba !== 'atendentes' || atdCarregado) return;
+        // Carrega também na aba do BOT: é lá que se decide o alcance, e a
+        // pergunta "tem gente em cada fila do menu?" não pode depender de a
+        // pessoa ter passado pela aba 👥 antes.
+        if (!cfgAberta || !(cfgAba === 'atendentes' || cfgAba === 'bot') || atdCarregado) return;
         (async () => {
             const r = await listarAtendentes();
             if (r.ok) { setAtendentes(r.atendentes || []); setAtdCarregado(true); setAtdErro(null); }
@@ -1467,6 +1470,31 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 </p>
                                 {atdErro && <p className="text-[11px] text-red-600 dark:text-red-400">{atdErro}</p>}
                                 {!atdCarregado && !atdErro && <p className="text-[11px] text-slate-400">Carregando usuários…</p>}
+
+                                {/* O MESMO farol da aba 🤖, aqui na forma de placar: lá ele diz que
+                                    existe o problema, aqui ele mostra quantos faltam por fila —
+                                    que é a informação de quem está resolvendo. Régua única: os dois
+                                    leem `coberturaDasFilas`. */}
+                                {atdCarregado && (() => {
+                                    const cob = coberturaDasFilas({ menu: cfg?.menu || [], atendentes });
+                                    return (
+                                        <div className="flex flex-wrap gap-1">
+                                            {cob.filas.map((f) => (
+                                                <span key={f.fila}
+                                                    title={f.situacao === 'coberta'
+                                                        ? `${f.doDepartamento} pessoa(s) do departamento`
+                                                        : `ninguém do departamento — ${f.tambemVeem} pessoa(s) veem tudo`}
+                                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${f.situacao === 'coberta'
+                                                        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'
+                                                        : f.situacao === 'invisivel'
+                                                            ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'
+                                                            : 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300'}`}>
+                                                    {rotuloCurtoFila(f.fila)} · {f.doDepartamento}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
                                 <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
                                     {atendentes.map((a) => (
                                         <div key={a.uid} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
@@ -1804,6 +1832,57 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     </p>
                                                 </>
                                             )}
+
+                                            {/* 🚨 O MENU PROMETE 8 DEPARTAMENTOS — TEM GENTE EM CADA UM?
+                                                O bot MOVE a conversa para a fila escolhida, e dali em diante
+                                                quem enxerga é quem atende aquela fila. Sem vínculo, o cliente
+                                                é encaminhado para um lugar sem dono e fica esperando — e ele
+                                                não tem como perceber. Este aviso mora AQUI, junto da chave
+                                                que causa o efeito, e não numa aba que ninguém abre. */}
+                                            {(() => {
+                                                const cob = coberturaDasFilas({ menu: cfg.menu, atendentes: atdCarregado ? atendentes : null });
+                                                if (cob.indeterminado) {
+                                                    // Lista não carregada NÃO vira "ninguém vinculado": alarme
+                                                    // falso justo quando pode estar tudo certo.
+                                                    return (
+                                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                            ⏳ Conferindo quem atende cada fila do menu…
+                                                        </p>
+                                                    );
+                                                }
+                                                if (!cob.opcoesSemDono.length) {
+                                                    return (
+                                                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                                                            ✓ Todas as opções do menu têm alguém do departamento vinculado.
+                                                        </p>
+                                                    );
+                                                }
+                                                return (
+                                                    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-2 space-y-1">
+                                                        <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                                                            ⚠️ {cob.opcoesSemDono.length} opção(ões) do menu levam a fila sem ninguém do departamento
+                                                        </p>
+                                                        <ul className="text-[10px] text-amber-900 dark:text-amber-200 space-y-0.5">
+                                                            {cob.opcoesSemDono.map((o) => (
+                                                                <li key={o.opcao}>
+                                                                    <strong>{o.opcao}</strong> — {o.rotulo}:{' '}
+                                                                    {o.situacao === 'invisivel'
+                                                                        ? <span className="font-bold text-red-700 dark:text-red-400">ninguém enxerga esta fila</span>
+                                                                        : <>só {o.tambemVeem} pessoa(s) que veem tudo (Recepção/gestor/admin)</>}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                        <p className="text-[10px] text-amber-800 dark:text-amber-300">
+                                                            O cliente escolhe, a conversa <strong>sai da Recepção</strong> e vai para lá —
+                                                            ele acha que foi encaminhado e espera. Vincule em{' '}
+                                                            <button onClick={() => setCfgAba('atendentes')} className="underline font-bold">
+                                                                👥 Atendentes e filas
+                                                            </button>
+                                                            {' '}ou tire a opção do menu.
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     )}
                                     <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">

@@ -86,6 +86,75 @@ export function conversaVisivel(filasDoUsuario, filaDaConversa) {
     return filasDoUsuario.includes(filaDaConversa || 'recepcao');
 }
 
+/**
+ * 🚨 O MENU PROMETE 8 DEPARTAMENTOS — TEM GENTE EM CADA UM?
+ *
+ * Pergunta que o dia do corte responde do jeito caro. O bot pergunta ao
+ * cliente para qual departamento ele quer ir e MOVE a conversa para aquela
+ * fila. A partir daí, quem enxerga a conversa é só quem atende aquela fila
+ * (`filasVisiveis`) — mais quem vê tudo: Recepção, gestor e admin.
+ *
+ * Enquanto os colaboradores não estiverem vinculados às filas na ⚙️ → 👥, o
+ * efeito é este: o cliente escolhe "3 - Departamento Pessoal", a conversa sai
+ * da Recepção e vai para uma fila **sem ninguém do departamento**. Não é o
+ * cliente que percebe — ele acha que foi encaminhado, e espera.
+ *
+ * ⚠️ **DUAS SITUAÇÕES QUE NÃO PODEM VIRAR UMA**: fila sem ninguém DO
+ * DEPARTAMENTO ainda é vista por quem vê tudo (a conversa não some, mas a
+ * triagem não entregou o que prometeu); fila que NINGUÉM vê é conversa fora
+ * de qualquer tela. As ações são diferentes — vincular alguém × socorrer a
+ * conversa agora — e fundir as duas esconderia a segunda dentro da primeira.
+ *
+ * ⚠️ **LISTA NÃO CARREGADA NÃO É "NINGUÉM"**: sem os atendentes em mãos a
+ * resposta é `indeterminado`. Acusar fila órfã porque a leitura falhou é o
+ * alarme falso que aparece justo quando está tudo certo — e ensina a ignorar
+ * o alarme verdadeiro.
+ */
+export function coberturaDasFilas({ menu = [], atendentes = null } = {}) {
+    if (!Array.isArray(atendentes)) {
+        return { indeterminado: true, motivo: 'a lista de atendentes não foi carregada', filas: [], opcoesSemDono: [] };
+    }
+    const filasDe = (a) => {
+        const brutas = (a?.filasAtendimento?.length ? a.filasAtendimento : (a?.departamentos || []));
+        return brutas.map((f) => String(f || '').trim().toLowerCase()).filter((f) => IDS_FILAS.has(f));
+    };
+    // Quem vê TUDO: admin, gestor e quem tem a fila 'recepcao' (decisão do
+    // Paulo, 16/08: a Recepção atende todos).
+    const veTudo = atendentes.filter((a) => a?.role === 'admin'
+        || String(a?.papelAtendimento || '').toLowerCase() === 'gestor'
+        || filasDe(a).includes('recepcao'));
+
+    const filas = FILAS_ATENDIMENTO.map((f) => {
+        // 'recepcao' é a casa de quem vê tudo — o "departamento" dela são eles.
+        const doDepartamento = f.id === 'recepcao'
+            ? atendentes.filter((a) => filasDe(a).includes('recepcao'))
+            : atendentes.filter((a) => filasDe(a).includes(f.id));
+        const tambemVeem = veTudo.filter((a) => !doDepartamento.includes(a));
+        const situacao = doDepartamento.length ? 'coberta'
+            : (tambemVeem.length ? 'so-quem-ve-tudo' : 'invisivel');
+        return {
+            fila: f.id,
+            rotulo: f.rotulo,
+            doDepartamento: doDepartamento.length,
+            tambemVeem: tambemVeem.length,
+            situacao,
+        };
+    });
+
+    const porId = new Map(filas.map((f) => [f.fila, f]));
+    // O que o CLIENTE veria: a opção do menu, não o id interno da fila.
+    // ⚠️ O RÓTULO QUE VALE É O DO MENU, não o do catálogo: o menu é editável, e
+    // quem lê o aviso precisa achar a mesma frase que o cliente recebeu.
+    const opcoesSemDono = (menu || [])
+        .map((m) => {
+            const f = porId.get(m.fila) || {};
+            return { ...f, filaRotulo: f.rotulo, opcao: String(m.opcao), rotulo: m.rotulo };
+        })
+        .filter((m) => m.situacao && m.situacao !== 'coberta');
+
+    return { indeterminado: false, motivo: null, filas, opcoesSemDono };
+}
+
 // ─── Config do atendimento ──────────────────────────────────────────────────
 
 /** Primeiro valor da config — TUDO editável na ⚙️ do Connect depois. */

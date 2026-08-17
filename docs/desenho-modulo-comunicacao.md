@@ -142,6 +142,28 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   está pedindo outro departamento, e manter o dono anterior deixaria a
   conversa na fila nova com atendente da fila velha — o mesmo estado torto
   que a transferência evita limpando a atribuição.
+- 🚨 **O MENU PROMETE 8 DEPARTAMENTOS — E O APP PASSOU A PERGUNTAR SE TEM
+  GENTE EM CADA UM** (17/08). O bot MOVE a conversa para a fila escolhida, e
+  a partir dali quem enxerga é só quem atende aquela fila (`filasVisiveis`),
+  mais quem vê tudo (Recepção, gestor, admin). Enquanto os colaboradores não
+  estiverem vinculados na ⚙️ → 👥 — tarefa que estava aberta —, o cliente
+  escolhe *"3 - Departamento Pessoal"*, **sai da Recepção** e vai parar numa
+  fila sem ninguém do departamento. **Ele acha que foi encaminhado e espera**;
+  ninguém do lado de cá é avisado.
+  `coberturaDasFilas` responde isso, e o aviso mora **junto da chave que causa
+  o efeito** (a aba 🤖, onde se liga o alcance 🌐), não numa aba que ninguém
+  abre — mesma lição da trava T1 do escopo, que passou 4 dias escrita e não
+  aplicada. Na aba 👥 a mesma régua vira placar por fila, que é a informação
+  de quem está resolvendo.
+  DUAS SITUAÇÕES QUE NÃO VIRAM UMA: fila **sem ninguém do departamento** (a
+  conversa não some — Recepção/gestor ainda veem — mas a triagem não entregou
+  o que prometeu) × fila que **ninguém enxerga** (conversa fora de qualquer
+  tela). Ações diferentes: vincular alguém × socorrer a conversa agora.
+  ⚠️ **LISTA NÃO CARREGADA NÃO É "NINGUÉM"**: sem os atendentes em mãos a
+  resposta é `indeterminado` e a tela diz "conferindo…". Acusar fila órfã
+  porque a leitura falhou é o alarme falso que aparece justo quando está tudo
+  certo. E o rótulo mostrado é o **do menu**, não o do catálogo: é a frase que
+  o cliente recebeu que quem lê precisa reconhecer.
 - 🚨 **O BOT NÃO TRIAGA POR CIMA DE QUEM ESTÁ ATENDENDO** (17/08, achado ao
   ler o que aconteceria no dia em que o alcance virasse `'todos'` — não veio
   de defeito reportado, e é esse o ponto: ele só apareceria **no dia do

@@ -2,12 +2,14 @@
 // F3 do SP Connect — triagem, filas e automações (núcleo puro).
 // Régua de paridade: os prints do bot atual (16/08).
 // ============================================================================
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     configPadraoAtendimento, resolverConfig, dentroDoHorario,
     gerarProtocolo, renderMensagem, montarTextoMenu, interpretarEscolha,
     decidirAutomacao, papelValido, podeEncerrar, interpretarNota,
-    botAlcancaNumero, soDigitos, emConducaoHumana,
+    botAlcancaNumero, soDigitos, emConducaoHumana, coberturaDasFilas,
 } from '../sefaz-backend/whatsapp-atendimento.js';
 
 describe('filas de atendimento (≠ departamentos do SaaS)', () => {
@@ -489,5 +491,106 @@ describe('🚨 decidirAutomacao com atendente conduzindo', () => {
             textoMensagem: 'oi, tenho outra dúvida', config: cfg, agora: dia,
         });
         expect(acoes.some((a: any) => a.texto?.includes('1 - Recepção'))).toBe(true);
+    });
+});
+
+// ============================================================================
+// 🚨 O MENU PROMETE 8 DEPARTAMENTOS — TEM GENTE EM CADA UM?
+//
+// O bot pergunta para onde o cliente quer ir e MOVE a conversa para aquela
+// fila. A partir daí quem enxerga é só quem atende a fila, mais quem vê tudo
+// (Recepção, gestor, admin). Enquanto os colaboradores não estiverem
+// vinculados na ⚙️ → 👥, o cliente escolhe "3 - Departamento Pessoal", sai da
+// Recepção e vai parar numa fila sem ninguém do departamento — achando que
+// foi encaminhado.
+// ============================================================================
+
+describe('🚨 coberturaDasFilas — o menu não pode prometer departamento vazio', () => {
+    const cfg = configPadraoAtendimento();
+    const eu = (extra: any) => ({ uid: String(Math.random()), role: 'colaborador', papelAtendimento: 'colaborador', departamentos: [], filasAtendimento: [], ...extra });
+
+    it('sem a lista de atendentes é INDETERMINADO — não afirma órfã nem coberta', () => {
+        // Acusar fila vazia porque a leitura falhou é o alarme falso que
+        // aparece justo quando está tudo certo.
+        const r = coberturaDasFilas({ menu: cfg.menu });
+        expect(r.indeterminado).toBe(true);
+        expect(r.filas).toEqual([]);
+        expect(r.motivo).toMatch(/atendentes/i);
+    });
+
+    it('fila com colaborador vinculado é COBERTA', () => {
+        const r = coberturaDasFilas({ menu: cfg.menu, atendentes: [eu({ filasAtendimento: ['fiscal'] })] });
+        expect(r.filas.find((f: any) => f.fila === 'fiscal')!.situacao).toBe('coberta');
+    });
+
+    it('fila sem ninguém do departamento, mas com gestor na casa, NÃO é o mesmo que invisível', () => {
+        // Ações diferentes: uma é vincular alguém; a outra é socorrer a
+        // conversa agora. Fundir as duas esconderia a segunda.
+        const comGestor = coberturaDasFilas({ menu: cfg.menu, atendentes: [eu({ papelAtendimento: 'gestor' })] });
+        const rh = comGestor.filas.find((f: any) => f.fila === 'rh')!;
+        expect(rh.situacao).toBe('so-quem-ve-tudo');
+        expect(rh.doDepartamento).toBe(0);
+        expect(rh.tambemVeem).toBe(1);
+
+        const sozinho = coberturaDasFilas({ menu: cfg.menu, atendentes: [eu({ filasAtendimento: ['fiscal'] })] });
+        expect(sozinho.filas.find((f: any) => f.fila === 'rh')!.situacao).toBe('invisivel');
+    });
+
+    it('quem tem a fila Recepção conta como quem vê tudo (decisão de 16/08)', () => {
+        const r = coberturaDasFilas({ menu: cfg.menu, atendentes: [eu({ filasAtendimento: ['recepcao'] })] });
+        expect(r.filas.find((f: any) => f.fila === 'juridico')!.situacao).toBe('so-quem-ve-tudo');
+        // …e a própria Recepção fica COBERTA por essa mesma pessoa
+        expect(r.filas.find((f: any) => f.fila === 'recepcao')!.situacao).toBe('coberta');
+    });
+
+    it('o departamento de MÓDULO vale como fila quando não há atribuição própria', () => {
+        const r = coberturaDasFilas({ menu: cfg.menu, atendentes: [eu({ departamentos: ['contabil'] })] });
+        expect(r.filas.find((f: any) => f.fila === 'contabil')!.situacao).toBe('coberta');
+    });
+
+    it('a lista de problemas sai pela OPÇÃO do menu — é o que o cliente digita', () => {
+        // "ninguém na fila dp-folha" não ajuda quem lê; "a opção 3 leva a…" ajuda.
+        const r = coberturaDasFilas({ menu: cfg.menu, atendentes: [eu({ filasAtendimento: ['recepcao'] })] });
+        const dp = r.opcoesSemDono.find((o: any) => o.fila === 'dp-folha')!;
+        expect(dp.opcao).toBe('3');
+        expect(dp.rotulo).toMatch(/Departamento Pessoal/);
+        // Recepção está coberta, então não aparece na lista de problemas.
+        expect(r.opcoesSemDono.some((o: any) => o.fila === 'recepcao')).toBe(false);
+    });
+
+    it('casa toda vinculada = nenhuma pendência (farol que grita sempre é farol desligado)', () => {
+        const equipe = FILAS_ATENDIMENTO.map((f: any) => eu({ filasAtendimento: [f.id] }));
+        const r = coberturaDasFilas({ menu: cfg.menu, atendentes: equipe });
+        expect(r.opcoesSemDono).toEqual([]);
+    });
+
+    it('menu customizado é respeitado — a régua lê o menu que está no ar', () => {
+        const menu = [{ opcao: '1', fila: 'fiscal', rotulo: 'Impostos' }];
+        const r = coberturaDasFilas({ menu, atendentes: [eu({ filasAtendimento: ['rh'] })] });
+        expect(r.opcoesSemDono).toHaveLength(1);
+        expect(r.opcoesSemDono[0].rotulo).toBe('Impostos');
+    });
+});
+
+describe('🚨 farol de fila órfã tem que aparecer ONDE a decisão é tomada', () => {
+    // Núcleo que ninguém lê é o defeito de 15/08 (a trava T1 do escopo passou
+    // 4 dias escrita e não aplicada). Aqui o leitor tem que ser a aba do BOT —
+    // é lá que se liga o alcance 🌐 — e não só a aba de atendentes.
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('a tela do Connect chama o núcleo (e não refaz a conta)', () => {
+        // A trava contra uma SEGUNDA cópia mora em `reguaUnica.test.ts` (a
+        // assinatura vigiada é a definição da função). Aqui basta provar que a
+        // tela CHAMA o núcleo — e a chamada não pode virar assertiva mais
+        // esperta que isso: a tela legitimamente lê `filasAtendimento` para
+        // desenhar os chips de cada pessoa, e um teste que grita por causa
+        // disso é um teste que alguém desliga.
+        expect(tela).toMatch(/coberturaDasFilas\(/);
+    });
+
+    it('a aba do BOT carrega os atendentes — senão o farol nasce mudo', () => {
+        // O efeito só existe porque o carregamento deixou de ser exclusivo da
+        // aba 👥; sem isto, o aviso ficaria em "conferindo…" para sempre.
+        expect(tela).toMatch(/cfgAba === 'atendentes' \|\| cfgAba === 'bot'/);
     });
 });

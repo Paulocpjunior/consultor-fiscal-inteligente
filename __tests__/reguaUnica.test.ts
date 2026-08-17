@@ -90,6 +90,20 @@ const REGUAS_VIGIADAS: Regua[] = [
         ],
     },
     {
+        nome: 'Quem atende cada fila do menu do bot (fila órfã)',
+        dono: 'sefaz-backend/whatsapp-atendimento.js',
+        comoUsar: "import { coberturaDasFilas } from 'sefaz-backend/whatsapp-atendimento.js'",
+        porque: 'O bot MOVE a conversa para a fila que o cliente escolheu, e dali em diante quem enxerga '
+            + 'é só quem atende aquela fila. Sem vínculo, o cliente é encaminhado para um lugar sem dono '
+            + 'e fica esperando — e ele não tem como perceber. A pergunta aparece em pelo menos dois '
+            + 'lugares (a chave do alcance e a tela de atendentes) e vai aparecer no relatório de '
+            + 'atendimento; duas contagens divergindo fariam uma tela dizer que está tudo coberto '
+            + 'enquanto a outra acusa fila vazia.',
+        assinaturas: [
+            /function coberturaDasFilas\s*\(/,
+        ],
+    },
+    {
         nome: 'De quem é a mensagem que falhou (nossa × da outra plataforma)',
         dono: 'sefaz-backend/whatsapp-webhook.js',
         comoUsar: "import { saiuPorOutraPlataforma } from 'sefaz-backend/whatsapp-webhook.js'",
