@@ -17,7 +17,7 @@ export interface ConfigAtendimento {
 
 export interface AcaoBot {
     tipo: 'responder' | 'definirFila' | 'gravarProtocolo' | 'marcarAusenciaEnviada' | 'resetarTriagem'
-        | 'resolverConversa' | 'marcarAguardandoAvaliacao';
+        | 'resolverConversa' | 'marcarAguardandoAvaliacao' | 'liberarConducao';
     texto?: string;
     fila?: string;
     protocolo?: string;
@@ -50,6 +50,8 @@ export function gerarProtocolo(agora?: Date, aleatorio?: number): string;
 export function renderMensagem(template: string, dados?: Record<string, string | null | undefined>): string;
 export function montarTextoMenu(config: ConfigAtendimento): string;
 export function interpretarEscolha(texto: string, config: ConfigAtendimento): { fila: string; rotulo: string } | null;
+/** Alguém está conduzindo esta conversa? (dono + aberta ⇒ o bot não triaga por cima) */
+export function emConducaoHumana(conversa: Record<string, unknown> | null | undefined): boolean;
 export function soDigitos(v: unknown): string;
 /** O bot pode responder a ESTE número? (piloto = só a lista; ilegível = não) */
 export function botAlcancaNumero(config: Partial<ConfigAtendimento> | null | undefined, numero: unknown): boolean;

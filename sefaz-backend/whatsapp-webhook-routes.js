@@ -316,6 +316,10 @@ async function rodarBot(db, msg) {
                 await convRef.set({ ausenciaAvisadaEm: acao.dia }, { merge: true });
             } else if (acao.tipo === 'resetarTriagem') {
                 await convRef.set({ fila: null, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'liberarConducao') {
+                // Cliente pediu #menu: a conversa volta pra triagem SEM dono,
+                // igual à transferência. Quem conduzia continua no histórico.
+                await convRef.set({ atribuidoA: null, atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'resolverConversa') {
                 await convRef.set({ status: 'resolvida', resolvidaPor: acao.por || 'cliente', atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'marcarAguardandoAvaliacao') {

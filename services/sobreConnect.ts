@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-16';
+export const SOBRE_VERSAO = '2026-08-17';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -83,7 +83,7 @@ export const O_QUE_FAZ: Bloco[] = [
     },
     {
         titulo: '✅ Encerrar com avaliação',
-        texto: 'O atendimento tem fim explícito, e o cliente recebe a pesquisa de nota (1 a 5). O painel 📊 mostra média, distribuição e as últimas avaliações.',
+        texto: 'O atendimento tem fim explícito, e o cliente recebe a pesquisa de nota — a escala é definida na ⚙️, junto com o texto da mensagem. O painel 📊 mostra média, distribuição e as últimas avaliações.',
     },
     {
         titulo: '📝 Combinar entre a equipe sem o cliente ver',
@@ -196,7 +196,7 @@ export const MANUAL: PassoManual[] = [
         titulo: '8. Encerrar e pedir a avaliação',
         passos: [
             '✅ Encerrar atendimento marca a conversa como resolvida.',
-            'Com a pesquisa ligada na ⚙️, o cliente recebe na hora o pedido de nota de 1 a 5.',
+            'Com a pesquisa ligada na ⚙️, o cliente recebe na hora o pedido de nota. A escala é a que estiver configurada na ⚙️ — a mensagem e a leitura da resposta saem de lá, juntas.',
             'As notas aparecem no 📊 (média, distribuição e as últimas).',
         ],
         atencao: 'Encerrar é de quem conduz a conversa — ou de gestor e admin. Se o botão estiver travado, assuma a conversa (🙋) primeiro.',
@@ -223,9 +223,10 @@ export const MANUAL: PassoManual[] = [
         titulo: '11. O que o CLIENTE consegue fazer sozinho',
         passos: [
             '#menu — ele pede o menu de novo, em qualquer momento, e escolhe outro departamento sem precisar de nós.',
+            'Se você estava conduzindo essa conversa, ela VOLTA para a triagem sem dono: o cliente pediu outro departamento, e ficar com o atendente da fila anterior deixaria a conversa torta. O histórico continua inteiro.',
             '#sair — ele encerra o próprio atendimento (e recebe a pesquisa de avaliação, se estiver ligada).',
         ],
-        atencao: 'Esses comandos só funcionam com o bot ligado na ⚙️. Enquanto o bot estiver desligado, quem encaminha é a equipe.',
+        atencao: 'Esses comandos só funcionam com o bot ligado na ⚙️. Enquanto o bot estiver desligado, quem encaminha é a equipe. Fora esses dois comandos, o bot NÃO fala em conversa que já tem atendente — nada de saudação ou menu por cima do seu atendimento.',
     },
     {
         titulo: '12. Quem pode o quê',
@@ -241,12 +242,21 @@ export const MANUAL: PassoManual[] = [
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
     {
+        data: '2026-08-17',
+        itens: [
+            '🤖 O bot não fala por cima de atendimento em andamento: conversa que já tem atendente não recebe mais saudação nem menu. Ele só faz a triagem de quem ainda não tem dono.',
+            '🔁 Quando o cliente digita #menu no meio de um atendimento, a conversa volta para a triagem SEM dono — ele pediu outro departamento. O histórico continua inteiro.',
+            '⭐ A pesquisa de avaliação passou a ser de 1 a 10 (era 1 a 5). A escala fica na ⚙️, e a mensagem e a leitura da resposta andam juntas — nota fora da escala não é mais descartada em silêncio.',
+            '📎 Quando a Meta não consegue processar um anexo enviado, o erro passou a dizer QUAL arquivo era e o que fazer — reenviar o mesmo arquivo não resolve esse caso.',
+        ],
+    },
+    {
         data: '2026-08-16',
         itens: [
             'ℹ️ SOBRE: este manual, com o histórico de atualizações e o selo vermelho quando houver novidade.',
             '📲 Guia de instalação no Teams, celular, tablet e computador (link no topo do manual).',
             '🔔 Aviso de mensagem nova em três camadas: som, pop-up do navegador e contador no título da aba.',
-            '📱 Push no celular com o app fechado — pronto, aguardando o admin publicar a chave Web Push.',
+            '📱 Push no celular com o app fechado. O próprio painel diz se ele está ligado — se estiver pendente de chave, a barra de avisos avisa em vez de fingir que notifica.',
             '🎤 Gravar e enviar áudio pelo próprio painel.',
             '📎 Abrir o anexo recebido (imagem, áudio, vídeo e documento) e enviar anexo na conversa.',
             '📞 Preparado para um segundo número / segunda conta da Meta, com o roteamento de entrada por canal.',
@@ -254,7 +264,7 @@ export const REVISOES: Revisao[] = [
             '📇 Contatos: agenda completa com busca, cadastro à mão, compartilhar contato na conversa e a importação do backup num só lugar.',
             '🏷 Etiquetas do contato (Lead, Cliente, Marketing, Colaborador, Candidato…), cada uma com a finalidade e a base legal escritas — e aviso quando falta o consentimento que a LGPD exige.',
             '🔒 Direitos do titular (LGPD): exportar tudo o que guardamos de uma pessoa e eliminar os dados dela, com o que fica por obrigação legal aparecendo nomeado antes de confirmar. Página de privacidade no rodapé.',
-            '✅ Encerramento de atendimento com pesquisa de avaliação (1 a 5) e painel 📊.',
+            '✅ Encerramento de atendimento com pesquisa de avaliação e painel 📊 (a escala está na ⚙️).',
             '👥 Papéis de atendimento: colaborador, gestor e admin, com as permissões aplicadas na tela e no servidor.',
             '↪️ Transferência entre departamentos, com nota automática e aviso opcional ao cliente.',
             '🔗 Vínculo da conversa com o cliente do escritório, mostrando responsável da carteira e guias enviadas.',
