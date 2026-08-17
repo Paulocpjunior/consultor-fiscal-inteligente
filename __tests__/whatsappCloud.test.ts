@@ -13,6 +13,7 @@
 import {
     configWhatsapp, faltasDaConfig, normalizarNumeroBr,
     montarMensagemTemplate, interpretarRespostaWhatsapp, enviarGuiaWhatsapp,
+    interpretarAppsAssinados,
 } from '../sefaz-backend/whatsapp-cloud.js';
 import { canalComprovaEnvio } from '../sefaz-backend/envio-imposto-painel.js';
 
@@ -125,5 +126,22 @@ describe('régua de prova de envio', () => {
         expect(canalComprovaEnvio('email-graph')).toBe(true);
         expect(canalComprovaEnvio('whatsapp')).toBe(false);
         expect(canalComprovaEnvio('email-app')).toBe(false);
+    });
+});
+
+describe('assinatura da WABA (a 2ª amarração do webhook)', () => {
+    test('achata a resposta do subscribed_apps; vazio = lista vazia, nunca explode', () => {
+        expect(interpretarAppsAssinados({
+            data: [
+                { whatsapp_business_api_data: { id: '119741', name: 'API_Oficial' } },
+                { whatsapp_business_api_data: { id: '555', name: 'Plataforma Atendimento' } },
+            ],
+        })).toEqual([
+            { id: '119741', nome: 'API_Oficial' },
+            { id: '555', nome: 'Plataforma Atendimento' },
+        ]);
+        expect(interpretarAppsAssinados({ data: [] })).toEqual([]);
+        expect(interpretarAppsAssinados(undefined)).toEqual([]);
+        expect(interpretarAppsAssinados({ data: [{}] })).toEqual([{ id: null, nome: null }]);
     });
 });

@@ -1,0 +1,65 @@
+// Tipos do núcleo de atendimento (F3 do SP Connect) — o dono é o .js.
+export interface FilaAtendimento { id: string; rotulo: string }
+
+export interface ConfigAtendimento {
+    botAtivo: boolean;
+    /** 'piloto' = só os números da lista · 'todos' = o dia do corte. */
+    botAlcance: 'piloto' | 'todos';
+    botNumerosPiloto: string[];
+    /** Escala da nota da pesquisa (5 ou 10). O texto da mensagem lê dela. */
+    avaliacaoEscala: number;
+    avisarClienteTransferencia: boolean;
+    avaliacaoAtiva: boolean;
+    horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
+    mensagens: Record<string, string>;
+    menu: { opcao: string; fila: string; rotulo: string }[];
+}
+
+export interface AcaoBot {
+    tipo: 'responder' | 'definirFila' | 'gravarProtocolo' | 'marcarAusenciaEnviada' | 'resetarTriagem'
+        | 'resolverConversa' | 'marcarAguardandoAvaliacao';
+    texto?: string;
+    fila?: string;
+    protocolo?: string;
+    dia?: string;
+    por?: string;
+}
+
+export const PAPEIS_ATENDIMENTO: string[];
+export function papelValido(p: unknown): boolean;
+export function podeEncerrar(p: { role?: string; papelAtendimento?: string | null; email?: string | null; atribuidoA?: string | null }): boolean;
+export const ESCALAS_AVALIACAO: number[];
+export const ESCALA_AVALIACAO_PADRAO: number;
+export function leituraDaNota(texto: unknown, escala?: number):
+    { tipo: 'nota'; nota: number }
+    | { tipo: 'nao-e-nota'; nota: null }
+    | { tipo: 'fora-da-escala'; nota: null; informado: number; escala: number };
+export function conferirEscalaNaMensagem(mensagem: unknown, escala?: number):
+    { ok: true; escala: number; semFaixaNoTexto?: boolean }
+    | { ok: false; escala: number; noTexto: number; erro: string };
+export function interpretarNota(texto: unknown, escala?: number): number | null;
+
+export const FILAS_ATENDIMENTO: FilaAtendimento[];
+export function filaValida(id: unknown): boolean;
+export function filasVisiveis(p: { role?: string; papelAtendimento?: string | null; departamentos?: string[]; filasAtendimento?: string[] }): string[] | null;
+export function conversaVisivel(filasDoUsuario: string[] | null, filaDaConversa: string | null | undefined): boolean;
+export function configPadraoAtendimento(): ConfigAtendimento;
+export function resolverConfig(gravada: unknown): ConfigAtendimento;
+export function dentroDoHorario(horario: ConfigAtendimento['horario'], agora?: Date): boolean;
+export function gerarProtocolo(agora?: Date, aleatorio?: number): string;
+export function renderMensagem(template: string, dados?: Record<string, string | null | undefined>): string;
+export function montarTextoMenu(config: ConfigAtendimento): string;
+export function interpretarEscolha(texto: string, config: ConfigAtendimento): { fila: string; rotulo: string } | null;
+export function soDigitos(v: unknown): string;
+/** O bot pode responder a ESTE número? (piloto = só a lista; ilegível = não) */
+export function botAlcancaNumero(config: Partial<ConfigAtendimento> | null | undefined, numero: unknown): boolean;
+
+export function decidirAutomacao(p: {
+    numero?: string | null;
+    conversa?: Record<string, unknown>;
+    textoMensagem?: string | null;
+    nomeContato?: string | null;
+    config: ConfigAtendimento;
+    agora?: Date;
+    protocoloNovo?: string;
+}): AcaoBot[];

@@ -29,6 +29,28 @@ export interface MensagemTemplatePayload {
 }
 export function montarMensagemTemplate(p: MensagemTemplateInput): MensagemTemplatePayload;
 
+export interface ContatoParaCartao {
+    numero: string;
+    nome?: string | null;
+    empresa?: string | null;
+}
+export interface MensagemContatoPayload {
+    messaging_product: string;
+    to: string;
+    type: string;
+    contacts: Array<{
+        name: { formatted_name: string; first_name: string; last_name?: string };
+        phones: Array<{ phone: string; type: string; wa_id: string }>;
+        org?: { company: string };
+    }>;
+}
+export function montarMensagemContato(
+    p: { para: string; contatos?: ContatoParaCartao[] }): MensagemContatoPayload;
+export function enviarContatoWhatsapp(
+    p: { para: string; contatos: ContatoParaCartao[] },
+    deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
+): Promise<RespostaWhatsapp & { configuracaoIncompleta?: boolean }>;
+
 export interface RespostaWhatsapp {
     ok: boolean;
     messageId: string | null;
@@ -53,3 +75,14 @@ export function subirPdf(
     p: { pdfBase64: string; nomeArquivo?: string | null },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<string>;
+
+// ─── Assinatura da WABA (a 2ª amarração do webhook) ─────────────────────────
+export function listarAppsAssinadosNaWaba(deps?: Record<string, unknown>): Promise<{
+    ok: boolean; wabaId?: string; erro?: string;
+    apps?: { id: string | null; nome: string | null }[];
+}>;
+export function assinarWaba(deps?: Record<string, unknown>): Promise<{
+    ok: boolean; wabaId?: string; erro?: string; acao?: string;
+}>;
+export function interpretarAppsAssinados(corpo: unknown): { id: string | null; nome: string | null }[];
+export const GRAPH_BASE: string;

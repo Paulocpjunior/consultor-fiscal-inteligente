@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import { APP_BUILD_TIME, formatBuildDate, rotuloVersao } from './version';
 import LoadingSpinner from './components/LoadingSpinner';
 import Logo from './components/Logo';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -77,6 +78,11 @@ const DctfwebHub = lazy(() => import('./components/DCTFWeb/DctfwebHub'));
 const DiagnosticoHub = lazy(() => import('./components/Diagnostico/DiagnosticoHub'));
 const CarteiraDashboard = lazy(() => import('./components/Carteira'));
 const RelatoriosHub = lazy(() => import('./components/Relatorios'));
+const SpConnect = lazy(() => import('./components/SpConnect'));
+
+// /connect é o app SP CONNECT (substituto da Ultra Fox, vive no Teams) — a
+// mesma SPA, outra casa. Decidido no load: trocar de app é trocar de URL.
+const MODO_SP_CONNECT = typeof window !== 'undefined' && window.location.pathname.startsWith('/connect');
 const AgentesA3Dashboard = lazy(() => import('./components/AgentesA3'));
 const NfseNacionalHub = lazy(() => import('./components/NfseNacional/NfseNacionalHub'));
 const DashboardCeo = lazy(() => import('./components/DashboardCeo'));
@@ -92,6 +98,29 @@ const App: React.FC = () => {
     const confirm = useConfirm();
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         if (typeof window !== 'undefined') {
+            // SP CONNECT ABRE CLARO POR PADRÃO (Paulo, 16/08 — 3ª vez): a
+            // identidade do app de atendimento é a do mockup aprovado, tema
+            // claro. Memória de tema PRÓPRIA ('spconnect-theme') — o escuro do
+            // CFI não contamina o Connect, nem o contrário.
+            if (MODO_SP_CONNECT) {
+                // ?tema=claro|escuro FORÇA e grava — é o destravador quando o
+                // cache do navegador segura bundle velho e ninguém sabe qual
+                // versão está rodando (print sem versão não é evidência).
+                const forcado = new URLSearchParams(window.location.search).get('tema');
+                if (forcado === 'claro' || forcado === 'escuro') {
+                    const t = forcado === 'escuro' ? 'dark' : 'light';
+                    safeStorage.setItem('spconnect-theme', t);
+                    document.documentElement.classList.toggle('dark', t === 'dark');
+                    return t;
+                }
+                const proprio = safeStorage.getItem('spconnect-theme');
+                if (proprio === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    return 'dark';
+                }
+                document.documentElement.classList.remove('dark');
+                return 'light';
+            }
             const stored = safeStorage.getItem('theme');
             const preferDark = stored == null && window.matchMedia('(prefers-color-scheme: dark)').matches;
             if (stored === 'dark' || preferDark) {
@@ -239,13 +268,45 @@ const App: React.FC = () => {
         }
     }, []);
 
+    // PWA do SP Connect: manifest + ícone de tela inicial injetados SÓ no
+    // /connect (a Ultra Fox também é app de celular/tablet; sem isto o
+    // colaborador só teria o navegador). O index.html é UM para os dois
+    // apps — pôr o manifest lá faria o CFI se instalar como "SP Connect".
     useEffect(() => {
+        if (!MODO_SP_CONNECT || typeof document === 'undefined') return;
+        const criados: HTMLElement[] = [];
+        const por = (rel: string, href: string, extra?: Record<string, string>) => {
+            if (document.querySelector(`link[rel="${rel}"]`)) return;
+            const el = document.createElement('link');
+            el.rel = rel;
+            el.href = href;
+            Object.entries(extra || {}).forEach(([k, v]) => el.setAttribute(k, v));
+            document.head.appendChild(el);
+            criados.push(el);
+        };
+        por('manifest', '/connect.webmanifest');
+        por('apple-touch-icon', '/connect-icon-192.png', { sizes: '192x192' });
+        if (!document.querySelector('meta[name="theme-color"]')) {
+            const m = document.createElement('meta');
+            m.name = 'theme-color';
+            m.content = '#0e3bfa';
+            document.head.appendChild(m);
+            criados.push(m);
+        }
+        document.title = 'SP Connect — Atendimento WhatsApp';
+        return () => { criados.forEach((el) => el.remove()); };
+    }, []);
+
+    useEffect(() => {
+        // No /connect a memória de tema é própria — o Connect claro não pode
+        // reescrever a preferência escura do CFI (e vice-versa).
+        const chave = MODO_SP_CONNECT ? 'spconnect-theme' : 'theme';
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
-            safeStorage.setItem('theme', 'dark');
+            safeStorage.setItem(chave, 'dark');
         } else {
             document.documentElement.classList.remove('dark');
-            safeStorage.setItem('theme', 'light');
+            safeStorage.setItem(chave, 'light');
         }
     }, [theme]);
 
@@ -707,6 +768,68 @@ const App: React.FC = () => {
                 </div>
                 <UpdateBanner />
             </>
+        );
+    }
+
+    // ─── 💬 SP CONNECT É APP PRÓPRIO, NÃO CARD (Paulo, 16/08) ───────────────
+    //
+    // O SP Connect substitui a Ultra Fox e vive no TEAMS — atendente do DP,
+    // da Legalização e do RH nunca abre o CFI. Em /connect a MESMA SPA vira o
+    // app SP Connect: login unificado, tela cheia, SEM menu do CFI e SEM o
+    // portão de empresa ativa (conversa é da carteira toda, não de um
+    // cliente). O motor continua neste serviço (credencial não trafega); o
+    // que muda é a CASA do produto. A aba do Teams aponta pra <url>/connect.
+    if (MODO_SP_CONNECT) {
+        return (
+            <ErrorBoundary modulo="SP Connect">
+                <div className="min-h-screen" style={{ background: 'var(--bg-page)' }}>
+                    <header className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Identidade é da CASA: o MESMO componente Logo do
+                                CFI, dos guias e do e-mail ao cliente — o
+                                atendente do RH/DP tem que reconhecer o app como
+                                da SP, não como "mais uma ferramenta". */}
+                            <Logo className="h-8 w-auto shrink-0" />
+                            <div className="min-w-0 border-l border-slate-200 dark:border-slate-700 pl-2.5">
+                                <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">SP Connect</p>
+                                <p className="text-[10px] text-slate-400 leading-tight">WhatsApp API Oficial · +55 11 3337-1554</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="hidden sm:block text-[11px] text-slate-400 truncate max-w-[220px]">{currentUser.email}</span>
+                            <button onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')} title="Tema claro/escuro"
+                                className="text-[13px] px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                {theme === 'light' ? '🌙' : '☀️'}
+                            </button>
+                            <button onClick={handleLogout} className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Sair</button>
+                        </div>
+                    </header>
+                    <main className="p-3 sm:p-4">
+                        <Suspense fallback={<LoadingSpinner />}>
+                            <SpConnect currentUser={currentUser} />
+                        </Suspense>
+                    </main>
+                    {/* Rodapé do Connect: versão (print sem versão é narrativa,
+                        não evidência) e a nota de LGPD — que aqui pesa MAIS que
+                        no CFI, porque é neste app que moram as conversas de
+                        cliente. O texto é o que o app sustenta, e o link leva à
+                        página que detalha os direitos. */}
+                    <footer className="text-center px-4 pb-6 pt-2 space-y-1">
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                            SP Connect · {rotuloVersao()} · atualizado {formatBuildDate(APP_BUILD_TIME)}
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            🔒 <strong className="font-semibold">Conversas tratadas conforme a LGPD</strong> (Lei 13.709/2018),
+                            com finalidade e base legal declaradas.{' '}
+                            <a href="/privacidade.html" target="_blank" rel="noreferrer"
+                                className="text-sky-600 dark:text-sky-400 hover:underline underline-offset-2 font-semibold">
+                                Privacidade e seus direitos →
+                            </a>
+                        </p>
+                    </footer>
+                    <UpdateBanner />
+                </div>
+            </ErrorBoundary>
         );
     }
 

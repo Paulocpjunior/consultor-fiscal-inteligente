@@ -34,7 +34,10 @@ import {
     interpretarErroEntrega, janela24hAte, resumoParaConversa,
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
-import { configWhatsapp, GRAPH_BASE } from './whatsapp-cloud.js';
+import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
+import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota } from './whatsapp-atendimento.js';
+import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
+import { notificarMensagem } from './whatsapp-push-envio.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -59,8 +62,27 @@ router.get('/webhook', (req, res) => {
 });
 
 /** Grava UMA mensagem recebida + contato + conversa. Idempotente pelo wamid. */
-async function gravarMensagemRecebida(db, msg) {
+/**
+ * Catálogo de canais (padrão do env + cadastrados). Leitura BEST-EFFORT: se
+ * a coleção falhar, vale só o canal do env — um cadastro que piscou não pode
+ * derrubar a captura de mensagem, que é o que não se recupera.
+ */
+async function catalogoDeCanais(db) {
+    let cadastrados = [];
+    try {
+        const snap = await db.collection('whatsapp_canais').get();
+        cadastrados = snap.docs.map((d) => ({ id: d.id, dados: d.data() }));
+    } catch (e) {
+        console.warn('[whatsapp/canais] catálogo não lido, valendo só o canal do env:', e.message);
+    }
+    return montarCatalogoCanais({ cadastrados });
+}
+
+async function gravarMensagemRecebida(db, msg, catalogo = null) {
     const agora = new Date().toISOString();
+    // De qual número esta mensagem veio? A Meta diz no payload — é fonte.
+    const canal = catalogo ? canalDoEvento(catalogo, msg.phoneNumberId) : { canalId: null, conhecido: true, motivo: null };
+    if (catalogo && !canal.conhecido) console.warn('[whatsapp/canais]', canal.motivo);
     await db.collection('whatsapp_mensagens').doc(msg.metaMessageId).set({
         conversaId: msg.de,
         direcao: 'entrada',
@@ -70,6 +92,7 @@ async function gravarMensagemRecebida(db, msg) {
         respostaA: msg.respostaA,
         timestamp: msg.timestamp,
         phoneNumberId: msg.phoneNumberId,
+        canalId: canal.canalId,          // null = número fora do catálogo (nomeado no log)
         recebidoEm: agora,
     }, { merge: true });
 
@@ -86,6 +109,10 @@ async function gravarMensagemRecebida(db, msg) {
 
     await db.collection('whatsapp_conversas').doc(msg.de).set({
         numero: msg.de,
+        // O canal da conversa é o do PRIMEIRO contato e não muda sozinho: se
+        // o cliente escrever pro outro número, a linha do canal desta
+        // conversa continua sendo a que o atendente já está usando.
+        ...(canal.canalId ? { canalId: canal.canalId } : {}),
         ultimaMensagem: { resumo: resumoParaConversa(msg), direcao: 'entrada', em: msg.timestamp || agora },
         // Mensagem do cliente ABRE/renova a janela de 24h — é ela que a F2 mostra.
         janela24hAte: janela24hAte(msg.timestamp || agora),
@@ -179,6 +206,137 @@ async function gravarStatus(db, st) {
     }
 }
 
+/**
+ * AVALIAÇÃO DO ATENDIMENTO — captura a nota 1-5 depois do encerramento.
+ * Independente do botAtivo (a pesquisa é disparada pelo ENCERRAMENTO, não
+ * pela triagem). SÓ a primeira mensagem após a pesquisa vale: se vier uma
+ * nota, grava e agradece; se vier qualquer outra coisa, a espera é limpa —
+ * insistir em avaliação é spam, e nota nunca se deduz de texto livre.
+ * Devolve true quando a mensagem FOI a nota (o bot não roda em cima dela).
+ */
+async function capturarAvaliacao(db, msg) {
+    try {
+        const convRef = db.collection('whatsapp_conversas').doc(msg.de);
+        const conversa = (await convRef.get()).data() || {};
+        if (!conversa.aguardandoAvaliacao) return false;
+
+        const cfgAval = resolverConfig((await db.collection('whatsapp_config').doc('atendimento').get()).data());
+        const leitura = leituraDaNota(msg.texto, cfgAval.avaliacaoEscala);
+        const nota = leitura.nota;
+        const agora = new Date().toISOString();
+        if (nota == null) {
+            await convRef.set({ aguardandoAvaliacao: false }, { merge: true });
+            // 🚨 NÚMERO FORA DA ESCALA NÃO SOME EM SILÊNCIO. Era o defeito de
+            // 17/08: a mensagem pedia "1 a 10", a régua aceitava 1-5, o cliente
+            // respondeu 10 e a nota virou null — o painel diria "0 avaliações"
+            // com o cliente tendo avaliado. Agora fica registrado, com o que
+            // ele respondeu e a escala que valia.
+            if (leitura.tipo === 'fora-da-escala') {
+                await db.collection('whatsapp_avaliacoes').add({
+                    numero: msg.de, nota: null, em: agora,
+                    descartada: 'fora-da-escala',
+                    informado: leitura.informado, escala: leitura.escala,
+                    atendente: conversa.resolvidaPor && conversa.resolvidaPor !== 'cliente' ? conversa.resolvidaPor : null,
+                    fila: conversa.fila || conversa.transferidaDe || 'recepcao',
+                    protocolo: conversa.protocolo || null,
+                }).catch((e) => console.warn('[whatsapp/avaliacao] registro do descarte falhou:', e.message));
+                console.warn(`[whatsapp/avaliacao] nota ${leitura.informado} FORA da escala 1-${leitura.escala} (${msg.de}) — texto e régua divergem`);
+            }
+            return false; // a mensagem é outra coisa — segue o fluxo normal
+        }
+
+        await convRef.set({
+            aguardandoAvaliacao: false,
+            avaliacao: { nota, em: agora },
+            atualizadoEm: agora,
+        }, { merge: true });
+        await db.collection('whatsapp_avaliacoes').add({
+            numero: msg.de,
+            nota,
+            em: agora,
+            atendente: conversa.resolvidaPor && conversa.resolvidaPor !== 'cliente' ? conversa.resolvidaPor : null,
+            encerradaPor: conversa.resolvidaPor || null,
+            fila: conversa.fila || conversa.transferidaDe || 'recepcao',
+            protocolo: conversa.protocolo || null,
+        });
+
+        // Reusa o cfg já lido acima — duas leituras do mesmo doc no mesmo
+        // fluxo é desperdício, e é como duas verdades nascem.
+        const config = cfgAval;
+        const envio = await enviarTextoLivre({ para: msg.de, texto: config.mensagens.avaliacaoObrigado });
+        if (envio.ok) {
+            await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                conversaId: msg.de, direcao: 'saida', tipo: 'text',
+                texto: config.mensagens.avaliacaoObrigado, midia: null, timestamp: agora,
+                statusEntrega: 'enviado', enviadoPor: 'bot',
+            }, { merge: true });
+        }
+        return true;
+    } catch (e) {
+        console.warn('[whatsapp/avaliacao] falhou (webhook segue intacto):', e.message);
+        return false;
+    }
+}
+
+/**
+ * F3 — executa o bot pra UMA mensagem recebida. O cérebro (decidirAutomacao)
+ * é puro e testado; aqui é só I/O: ler estado, executar ações, gravar o que
+ * o bot respondeu (a resposta do bot entra na thread como mensagem 'saida'
+ * com enviadoPor 'bot', senão o atendente não vê o que o cliente recebeu).
+ * Best-effort: falha aqui NUNCA derruba o webhook.
+ */
+async function rodarBot(db, msg) {
+    try {
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+        const config = resolverConfig(cfgDoc.data());
+        if (!config.botAtivo) return;
+
+        const convRef = db.collection('whatsapp_conversas').doc(msg.de);
+        const conversa = (await convRef.get()).data() || {};
+        const acoes = decidirAutomacao({
+            // `numero` decide o ALCANCE: no modo piloto o bot só responde aos
+            // números cadastrados — é o que deixa a Ultra Fox de pé sem o
+            // cliente receber menu em dobro.
+            conversa, numero: msg.de, textoMensagem: msg.texto, nomeContato: msg.nomePerfil,
+            config, agora: new Date(), protocoloNovo: gerarProtocolo(),
+        });
+
+        for (const acao of acoes) {
+            const agora = new Date().toISOString();
+            if (acao.tipo === 'definirFila') {
+                await convRef.set({ fila: acao.fila, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'gravarProtocolo') {
+                await convRef.set({ protocolo: acao.protocolo, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'marcarAusenciaEnviada') {
+                await convRef.set({ ausenciaAvisadaEm: acao.dia }, { merge: true });
+            } else if (acao.tipo === 'resetarTriagem') {
+                await convRef.set({ fila: null, atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'resolverConversa') {
+                await convRef.set({ status: 'resolvida', resolvidaPor: acao.por || 'cliente', atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'marcarAguardandoAvaliacao') {
+                await convRef.set({ aguardandoAvaliacao: true }, { merge: true });
+            } else if (acao.tipo === 'responder') {
+                const envio = await enviarTextoLivre({ para: msg.de, texto: acao.texto });
+                if (envio.ok) {
+                    await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                        conversaId: msg.de, direcao: 'saida', tipo: 'text',
+                        texto: acao.texto, midia: null, timestamp: agora,
+                        statusEntrega: 'enviado', enviadoPor: 'bot',
+                    }, { merge: true });
+                    await convRef.set({
+                        ultimaMensagem: { resumo: acao.texto.slice(0, 140), direcao: 'saida', em: agora },
+                        atualizadoEm: agora,
+                    }, { merge: true });
+                } else {
+                    console.warn('[whatsapp/bot] resposta não saiu:', envio.erro);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[whatsapp/bot] falhou (webhook segue intacto):', e.message);
+    }
+}
+
 // ─── POST: eventos da Meta (mensagens + statuses) ───────────────────────────
 router.post('/webhook', async (req, res) => {
     const cfg = configWebhook();
@@ -209,7 +367,8 @@ router.post('/webhook', async (req, res) => {
             console.warn('[whatsapp/webhook POST] payload fora do esperado:', ev.motivo);
             return res.sendStatus(200); // assinado pela Meta, mas não é da WABA — nada a fazer
         }
-        for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg);
+        const catalogo = await catalogoDeCanais(db);
+        for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg, catalogo);
         for (const st of ev.statuses) await gravarStatus(db, st);
 
         // Mídia DEPOIS da resposta (setImmediate, padrão da casa): a Meta quer
@@ -218,6 +377,29 @@ router.post('/webhook', async (req, res) => {
         if (comMidia.length) {
             setImmediate(async () => {
                 for (const m of comMidia) await baixarMidiaRecebida(db, m);
+            });
+        }
+
+        // ── F3: o BOT (triagem/saudação/ausência) — também pós-200 ─────────
+        // decidirAutomacao é puro; aqui só se executa. Com botAtivo=false
+        // (o padrão) NADA responde — a plataforma atual segue sozinha.
+        if (ev.mensagens.length) {
+            setImmediate(async () => {
+                for (const msg of ev.mensagens) {
+                    // A avaliação vem ANTES do bot: se a mensagem for a nota
+                    // da pesquisa, ela não pode virar gatilho de triagem.
+                    const foiNota = await capturarAvaliacao(db, msg);
+                    if (!foiNota) await rodarBot(db, msg);
+                    // 🔔 Push no celular (a régua de QUEM recebe é a mesma
+                    // fila do inbox). Best-effort: a mensagem já está salva.
+                    try {
+                        const conversa = (await db.collection('whatsapp_conversas').doc(msg.de).get()).data() || {};
+                        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+                        await notificarMensagem({ msg, conversa, config: resolverConfig(cfgDoc.data()) });
+                    } catch (e) {
+                        console.warn('[whatsapp/push] falhou (webhook intacto):', e.message);
+                    }
+                }
             });
         }
 

@@ -42,6 +42,7 @@ export enum SearchType {
   RECUPERACAO_TRIBUTARIA = 'Recuperação Tributária',
   NFP_PRO_CLOUD = 'Consulta Situação Fiscal',
   RELATORIOS = 'Relatórios',
+  SP_CONNECT = 'SP Connect',
 }
 
 export interface GroundingSource {

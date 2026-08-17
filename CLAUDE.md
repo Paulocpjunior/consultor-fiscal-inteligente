@@ -5,6 +5,63 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **💬 SP CONNECT — o app de atendimento WhatsApp que SUBSTITUI a Ultra Fox**
+  (projeto vivo desde 14/08; o documento de GOVERNO é
+  `docs/desenho-modulo-comunicacao.md` — estado, fases e decisões moram LÁ,
+  não aqui). O que NÃO se esquece entre sessões: (1) é **APP PRÓPRIO em
+  `/connect`** (Paulo: *"não faz sentido algum ter um card dentro do CFI"*) —
+  mesmo serviço Cloud Run, casa separada, tema CLARO por padrão, build no
+  rodapé; (2) **identidade é da CASA, nunca da ferramenta** (ele recusou
+  subdomínio "claude": *"eu não queria que os colaboradores associassem a
+  você"*) — nome SP Connect, domínio alvo `app.spassessoriacontabil.com.br`;
+  (3) **o bot de triagem NASCE DESLIGADO** (`whatsapp_config/atendimento`,
+  chave na ⚙️ do Connect): enquanto a Ultra Fox estiver de pé são DOIS bots no
+  mesmo cliente — liga no dia do corte, e a Ultra Fox só cai após aceite;
+  (4) **FILA ≠ DEPARTAMENTO do SaaS**: catálogo próprio de 8 filas em
+  `whatsapp-atendimento.js` (Recepção vê TUDO; RH e Jurídico são filas), o
+  catálogo dos 5 módulos não incha; (5) fora da janela de 24h SÓ template
+  aprovado (Meta) — a trava é do backend; (6) credencial da WABA vive SÓ no
+  CFI (irmãos usam o túnel); token/app secret NUNCA em chat ou print;
+  (7) pacote do app do TEAMS pronto em `teams-app/` (zip servido em
+  `/sp-connect-teams.zip`; GUID do manifest NUNCA muda entre versões);
+  (8) backup da Ultra Fox entra pela ⚙️ → 📥 (preview antes de gravar,
+  contato existente não é sobrescrito, reimportar não duplica, direção do
+  .txt é escolha humana); (9) **quem responde "dá pra derrubar a Ultra Fox?"
+  é `docs/de-para-ultrafox-spconnect.md`** — documento VIVO, atualizado no
+  MESMO PR que fecha ou abre lacuna, com trava por comportamento
+  (`__tests__/deParaUltrafox.test.ts` pergunta ao CÓDIGO e exige que o
+  documento concorde). Nele, o que sei da Ultra Fox vem CARIMBADO com a
+  origem ([print] · [Paulo] · [produção] · [?] = não conferido), porque
+  de-para que finge conhecer a ferramenta antiga faz o corte acontecer com
+  buraco escondido. ✅ **AS 3 BLOQUEANTES FECHARAM EM 16/08** (mídia
+  recebida, envio de anexo e aviso de mensagem nova) — a última só depende
+  de o Paulo publicar a `VITE_FIREBASE_VAPID_KEY`, e enquanto isso o app
+  DIZ que o push está pendente em vez de fingir; (10) **o ℹ️ SOBRE é a casa
+  do manual, do histórico e da identidade do app** (`services/
+  sobreConnect.ts` — conteúdo é DADO, não JSX, senão não se testa). Selo
+  vermelho com a régua IMPORTADA do `novidadesService` (segunda cópia foi o
+  que deixou o 📣 do CFI onze dias apagado) e DUAS travas provadas
+  quebrando de propósito: versão tem que ser a data da revisão mais nova, e
+  **comando novo do bot obriga manual novo NO MESMO PR** (a varredura lê
+  `decidirAutomacao`, nunca uma lista copiada). Regra que fica: **manual
+  errado é pior que manual nenhum** — quem não sabe segue o que está
+  escrito, então o manual se trava contra o COMPORTAMENTO do app;
+  (11) 🔀 **A SEPARAÇÃO DE VERDADE ESTÁ PLANEJADA PARA DEPOIS DO CORTE**
+  (Paulo, 17/08, ao ver CFI e Connect misturados na lista de runs do GitHub:
+  *"planeja separação de verdade depois do corte da Ultra Fox"*). O plano é
+  **`docs/separacao-sp-connect.md`** — fases, riscos, e a divisão do que é
+  dele e do que é meu. O que muda decisão de HOJE: **separar SERVIÇO ≠
+  separar BANCO** (precedente do 📋 Legalização — repo e serviço próprios,
+  MESMO Firestore/Auth, zero migração de dados); a credencial da WABA
+  **INVERTE de casa** (o Connect vira dono do canal e o CFI passa a PEDIR
+  pelo túnel — manter a WABA no CFI anularia o motivo, porque queda do
+  fiscal voltaria a calar o atendimento); e **nada começa antes do corte
+  assentado**, senão o código do Connect vive em dois lugares justamente
+  durante a migração de plataforma.
+  ⚠️ **E AO RELATAR, SEPARAR AS DUAS CASAS**: ele reclamou com razão de eu
+  misturar pendência do CFI (envs, robô de auditoria, fila do FUNRURAL) com
+  pendência do Connect na mesma lista. Dividir CFI × Connect, e dentro de
+  cada uma, o que é dele × o que é meu.
 - **A RAZÃO SOCIAL JÁ RESPONDE: LTDA/S.A./EIRELI É PESSOA JURÍDICA** (13/08,
   fila da NOVA ERA). Metade das pendências de *"consulte o CADESP"* era de
   fornecedor cujo nome DIZ o que ele é — MIXTER … LTDA, PONTUAL COMERCIAL
@@ -1188,6 +1245,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   trabalho atrás: mesclá-la à tarde teria revertido ~4.900 linhas. NUNCA abrir
   PR de uma branch do robô sem conferir a data; a correção do lock cabe num
   `npm audit fix` sobre a main de hoje, que é o que foi feito.
+  🚨 **E ELA VIROU A MINA QUE PREVIA — TRAVANDO O PRÓPRIO ROBÔ POR 3 DIAS**
+  (17/08, achado num print do Paulo da LISTA DE RUNS, não por alarme). A branch
+  parada de 07/08 (140 commits atrás) fazia o `git push` ser REJEITADO nos DOIS
+  caminhos: `--force-with-lease` sem a remote-tracking ref recusa com *"stale
+  info"*, e o fallback simples recusa com *"fetch first"*. O step morria em
+  `exit 1` (bash -e) **ANTES** do passo que abre issue — então o robô de
+  SEGURANÇA ficou quebrado em 14, 15 e 17/08 **sem uma única issue**. Ele achava
+  o advisory, corrigia, validava, commitava… e morria no push, todo dia.
+  ✂️ **A CORREÇÃO SÃO DUAS, e a segunda vale mais**: (1) `git fetch` da ref
+  ANTES do push, senão o lease não tem com o que comparar; (2) um passo
+  **`if: failure()`** no fim — a MESMA rede que o `deploy-app.yml` ganhou em
+  13/08 e que ninguém tinha aplicado aqui. **REGRA QUE FICA: todo workflow que
+  a casa depende nasce com o `if: failure()` que vira issue** — a lição de
+  13/08 (*"run vermelho num painel que ninguém abre não é aviso; issue é"*)
+  vale para o robô igual valia para o deploy, e foi só o olho do dono que
+  cobriu a falta. `__tests__/roboAuditoriaAvisa.test.ts` trava as duas, provado
+  removendo o fetch de propósito.
 - **DEPLOY: automático VOLTOU em 07/08** (runs 345-348 verdes). O bloqueio de
   runner do dia 06 passou sozinho — merge na main dispara `deploy-app.yml` e
   sobe. **CONFERIR ANTES DE MANDAR RODAR SCRIPT À MÃO**: continuar pedindo

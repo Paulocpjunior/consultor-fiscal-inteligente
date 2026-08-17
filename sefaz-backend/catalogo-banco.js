@@ -114,9 +114,17 @@ export const CATALOGO_BANCO = [
     { colecao: 'whatsapp_templates', grupo: 'Comunicação', funcionalidade: 'Cadastro de templates da Meta por departamento (⚙️ Config Admin) — o de-para nome × variáveis nomeadas' },
     { colecao: 'whatsapp_envios', grupo: 'Comunicação', funcionalidade: 'Auditoria de envio por template (destino, template, messageId, quem, projeto) + status de entrega vindo do webhook — nunca o conteúdo do documento' },
     { colecao: 'whatsapp_contatos', grupo: 'Comunicação', funcionalidade: 'Contatos do WhatsApp: 1 doc por número E.164, vínculo com empresa (nullable = pendência) e origem carimbada (ultrafox-import/cadastro/espontaneo)' },
+    { colecao: 'whatsapp_etiquetas', grupo: 'Comunicação', funcionalidade: 'Catálogo de etiquetas (flags) do contato — Lead/Cliente/Marketing/Candidato… Cada uma guarda FINALIDADE e BASE LEGAL (LGPD art. 6º I e art. 7º); o padrão vive no código e o admin acrescenta os dele' },
+    { colecao: 'lgpd_solicitacoes', grupo: 'Comunicação', funcionalidade: 'Pedidos de titular atendidos (LGPD art. 18): acesso e eliminação, com quem atendeu, quando, o que foi removido e o que foi mantido por obrigação legal (art. 16). É este registro que PROVA que o direito foi exercido — art. 37' },
     { colecao: 'whatsapp_conversas', grupo: 'Comunicação', funcionalidade: 'Estado da conversa por número: fila, atribuição, janela de 24h, última mensagem, não lidas (inbox da F2)' },
     { colecao: 'whatsapp_mensagens', grupo: 'Comunicação', funcionalidade: 'Mensagens recebidas e status de entrega dos envios (entregue/lido/falhou+motivo) — id = wamid da Meta (idempotência)' },
     { colecao: 'whatsapp_webhook_eventos', grupo: 'Comunicação', funcionalidade: 'Payload CRU de cada evento do webhook (aprender a forma real — padrão Jotform Sign); id = hash do corpo' },
+    { colecao: 'whatsapp_config', grupo: 'Comunicação', funcionalidade: 'Config do atendimento (doc "atendimento"): bot de triagem (nasce DESLIGADO), horário de funcionamento, mensagens automáticas e menu → fila (⚙️ do SP Connect, só admin grava)' },
+    { colecao: 'whatsapp_push_tokens', grupo: 'Comunicação', funcionalidade: 'Token do celular de cada atendente (push de mensagem nova) + preferências de aviso — 1 doc por uid; quem recebe o quê é decidido pela fila, não pelo token' },
+    { colecao: 'whatsapp_canais', grupo: 'Comunicação', funcionalidade: 'Canais do WhatsApp (2º número / 2ª WABA): rótulo, phoneNumberId e o NOME da variável do Cloud Run que guarda o token — o VALOR do token nunca entra no banco' },
+    { colecao: 'whatsapp_avaliacoes', grupo: 'Comunicação', funcionalidade: 'Notas 1-5 da pesquisa de satisfação pós-encerramento (número, nota, atendente, fila, protocolo) — admin/gestor veem todas, colaborador as próprias' },
+
+    { colecao: 'auditoria_permissoes', grupo: 'Sistema', funcionalidade: 'Trilha de mudança de PODER (role, departamentos, filas, papel do atendimento): quem mudou, de quê para quê e quando — lida pelo relatório 🔐 de auditoria do dono' },
 
     // ── Sistema / observabilidade ──────────────────────────────────────────
     { colecao: 'cron_health_alerta_state', grupo: 'Sistema', funcionalidade: 'Anti-spam do alerta de saúde dos crons' },

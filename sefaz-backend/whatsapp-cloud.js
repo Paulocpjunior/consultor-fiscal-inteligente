@@ -20,6 +20,8 @@
 // - Recusa da Meta sai TRADUZIDA com a ação (padrão interpretarCstat).
 // ============================================================================
 
+import { montarMensagemMidia } from './whatsapp-midia.js';
+
 // Exportada: o webhook baixa mídia recebida pela MESMA base (segunda cópia
 // da URL divergiria de versão em silêncio).
 export const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
@@ -97,6 +99,54 @@ export function montarMensagemTemplate({ para, template, idioma, variaveis = [],
             ...(components.length ? { components } : {}),
         },
     };
+}
+
+/**
+ * 📤 CARTÃO DE CONTATO — compartilhar um contato dentro da conversa.
+ *
+ * Paulo, 17/08: *"compartilhar novos contatos"*. É o tipo `contacts` do mesmo
+ * endpoint /messages, e ele chega no cliente como cartão salvável (não como
+ * texto com um número solto que a pessoa precisa copiar à mão).
+ *
+ * O `wa_id` é o número EM DÍGITOS e é o que faz o botão "Conversar" aparecer
+ * no cartão — sem ele o WhatsApp mostra um cartão morto, que é pior que um
+ * texto, porque parece que vai funcionar.
+ */
+export function montarMensagemContato({ para, contatos = [] }) {
+    const lista = (Array.isArray(contatos) ? contatos : []).map((c) => {
+        const digitos = String(c.numero || '').replace(/\D/g, '');
+        const nome = String(c.nome || '').trim() || digitos;
+        // A Meta exige formatted_name E pelo menos um dos campos de nome:
+        // mandar só o formatado é recusa do payload inteiro.
+        const [primeiro, ...resto] = nome.split(/\s+/);
+        return {
+            name: {
+                formatted_name: nome.slice(0, 120),
+                first_name: primeiro.slice(0, 60),
+                ...(resto.length ? { last_name: resto.join(' ').slice(0, 60) } : {}),
+            },
+            phones: [{ phone: `+${digitos}`, type: 'CELL', wa_id: digitos }],
+            ...(c.empresa ? { org: { company: String(c.empresa).slice(0, 120) } } : {}),
+        };
+    });
+    return { messaging_product: 'whatsapp', to: para, type: 'contacts', contacts: lista };
+}
+
+export async function enviarContatoWhatsapp({ para, contatos }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const corpoEnvio = montarMensagemContato({ para, contatos });
+    if (!corpoEnvio.contacts.length) return { ok: false, erro: 'Nenhum contato para compartilhar.' };
+    const r = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpoEnvio),
+    });
+    const corpo = await r.json().catch(() => ({}));
+    return interpretarRespostaWhatsapp(r.status, corpo);
 }
 
 /**
@@ -202,18 +252,120 @@ export function lerTemplateDaMeta(t) {
     };
 }
 
+/** Deriva a WABA a partir do número (mesma lógica do listarTemplatesAprovados). */
+async function descobrirWabaId(cfg, doFetch) {
+    if (cfg.wabaId) return { ok: true, wabaId: cfg.wabaId };
+    const r = await doFetch(
+        `${GRAPH_BASE}/${cfg.phoneNumberId}?fields=whatsapp_business_account`,
+        { headers: { Authorization: `Bearer ${cfg.token}` } },
+    );
+    const c = await r.json().catch(() => ({}));
+    const wabaId = c?.whatsapp_business_account?.id || '';
+    if (!wabaId) return { ok: false, erro: c?.error?.message || `HTTP ${r.status}` };
+    return { ok: true, wabaId };
+}
+
+/**
+ * ═══ ASSINATURA DA WABA — a segunda amarração do webhook ════════════════════
+ *
+ * Configurar Callback URL + verify token no APP resolve o canal; mas evento
+ * REAL só chega se o app estiver ASSINADO na WABA (subscribed_apps). O teste
+ * do painel da Meta NÃO passa por essa amarração — foi exatamente assim que o
+ * teste chegou e a mensagem real não (16/08). WABA conectada por plataforma
+ * de atendimento costuma ter SÓ o app dela assinado.
+ */
+export async function listarAppsAssinadosNaWaba(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) return { ok: false, erro: 'Canal não configurado.' };
+    const w = await descobrirWabaId(cfg, doFetch);
+    if (!w.ok) return { ok: false, erro: `Não achei a WABA: ${w.erro}` };
+    const r = await doFetch(`${GRAPH_BASE}/${w.wabaId}/subscribed_apps`, {
+        headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}` };
+    return { ok: true, wabaId: w.wabaId, apps: interpretarAppsAssinados(corpo) };
+}
+
+/** Assina O NOSSO app (o dono do token) na WABA — é isto que liga o fluxo real. */
+export async function assinarWaba(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) return { ok: false, erro: 'Canal não configurado.' };
+    const w = await descobrirWabaId(cfg, doFetch);
+    if (!w.ok) return { ok: false, erro: `Não achei a WABA: ${w.erro}` };
+    const r = await doFetch(`${GRAPH_BASE}/${w.wabaId}/subscribed_apps`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok || corpo?.success !== true) {
+        return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}`, acao: 'O token precisa ter a permissão whatsapp_business_management.' };
+    }
+    return { ok: true, wabaId: w.wabaId };
+}
+
+/**
+ * ═══ TEXTO LIVRE — a resposta DENTRO da janela de 24h ══════════════════════
+ * Fora da janela a Meta recusa (131047) e o SP Connect nem tenta: a trava é
+ * no backend, antes da rede. Texto livre é a alma do atendimento — é o que a
+ * plataforma substituída faz o dia todo.
+ */
+export async function enviarTextoLivre({ para, texto }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const numero = normalizarNumeroBr(para);
+    if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".` };
+    const corpo = String(texto ?? '').trim();
+    if (!corpo) return { ok: false, erro: 'Mensagem vazia não sai.' };
+    const doFetch = deps.fetchImpl || fetch;
+    let resp;
+    try {
+        resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp', to: numero, type: 'text',
+                text: { body: corpo.slice(0, 4096), preview_url: false },
+            }),
+        });
+    } catch (e) {
+        return { ok: false, indeterminado: true, erro: `Rede caiu durante o envio (${e.message}) — a mensagem PODE ter saído.`, acao: 'Confira a conversa antes de reenviar: reenviar duplica.' };
+    }
+    const json = await resp.json().catch(() => ({}));
+    const r = interpretarRespostaWhatsapp(resp.status, json);
+    return { ...r, numeroEnviado: numero };
+}
+
+/** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */
+export function interpretarAppsAssinados(corpo) {
+    return (Array.isArray(corpo?.data) ? corpo.data : []).map((d) => ({
+        id: d?.whatsapp_business_api_data?.id || null,
+        nome: d?.whatsapp_business_api_data?.name || null,
+    }));
+}
+
 /**
  * Sobe o PDF pro media endpoint e devolve o media id. O PDF nunca vai por
  * link público — sobe direto pra Meta, mesmo desenho do anexo do Graph.
  */
-export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
+/**
+ * Sobe QUALQUER arquivo à Meta e devolve o media id. É a régua ÚNICA de
+ * upload — o `subirPdf` da guia chama esta função (segunda cópia de upload
+ * divergiria no dia em que a Meta mudasse o endpoint).
+ */
+export async function subirMidiaWhatsapp({ base64, nomeArquivo, mime }, deps = {}) {
     const cfg = deps.cfg || configWhatsapp(deps.env);
     const doFetch = deps.fetchImpl || fetch;
-    const bin = Buffer.from(pdfBase64, 'base64');
+    const tipoMime = String(mime || 'application/octet-stream').split(';')[0].trim();
+    const bin = Buffer.from(base64, 'base64');
     const form = new FormData();
     form.append('messaging_product', 'whatsapp');
-    form.append('type', 'application/pdf');
-    form.append('file', new Blob([bin], { type: 'application/pdf' }), nomeArquivo || 'guia.pdf');
+    form.append('type', tipoMime);
+    form.append('file', new Blob([bin], { type: tipoMime }), nomeArquivo || 'arquivo');
     const resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/media`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${cfg.token}` },
@@ -222,9 +374,49 @@ export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
     const corpo = await resp.json().catch(() => ({}));
     if (!resp.ok || !corpo.id) {
         const det = corpo?.error?.message || `HTTP ${resp.status}`;
-        throw new Error(`Upload do PDF ao WhatsApp falhou: ${det}`);
+        throw new Error(`Upload do arquivo ao WhatsApp falhou: ${det}`);
     }
     return corpo.id;
+}
+
+export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
+    return subirMidiaWhatsapp(
+        { base64: pdfBase64, nomeArquivo: nomeArquivo || 'guia.pdf', mime: 'application/pdf' },
+        deps,
+    );
+}
+
+/**
+ * Envia MÍDIA já subida (media id) dentro da janela de 24h. Mesma régua do
+ * `enviarTextoLivre`: falha de REDE é indeterminado (a mensagem pode ter
+ * saído) e NUNCA se repete sozinho — duplicar anexo no cliente é pior.
+ */
+export async function enviarMidiaWhatsapp({ para, tipo, mediaId, nomeArquivo, legenda }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const faltas = faltasDaConfig(cfg);
+    if (faltas.length) {
+        return { ok: false, configuracaoIncompleta: true, erro: `Canal do WhatsApp não configurado: ${faltas.join('; ')}.`, acao: 'Configure as credenciais no Cloud Run.' };
+    }
+    const numero = normalizarNumeroBr(para);
+    if (!numero) return { ok: false, erro: `Número inválido: ${para}`, acao: 'Confira DDD e número.' };
+    const doFetch = deps.fetchImpl || fetch;
+    const corpoMsg = montarMensagemMidia({ para: numero, tipo, mediaId, nomeArquivo, legenda });
+    try {
+        const resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(corpoMsg),
+        });
+        const corpo = await resp.json().catch(() => ({}));
+        const r = interpretarRespostaWhatsapp(resp.status, corpo);
+        return r.ok ? { ...r, numeroEnviado: numero } : r;
+    } catch (e) {
+        return {
+            ok: false, indeterminado: true,
+            erro: `Falha de rede ao enviar o anexo: ${e.message}`,
+            acao: 'NÃO reenvie por reflexo — confira na conversa se o arquivo chegou antes de tentar de novo.',
+        };
+    }
 }
 
 /**

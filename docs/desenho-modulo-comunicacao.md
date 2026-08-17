@@ -1,4 +1,16 @@
-# 💬 Módulo Comunicação (WhatsApp) — Documento de Desenho
+# 💬 SP CONNECT — Módulo de Comunicação (WhatsApp) — Documento de Desenho
+
+> **NOME OFICIAL: SP Connect** (Paulo, 14/08) — identidade da casa, sem nome
+> de ferramenta.
+>
+> 🚨 **SP CONNECT É APP PRÓPRIO, NÃO CARD DO CFI** (Paulo, 16/08: *"vem pra
+> substituir a Ultra Fox, um app totalmente novo que irá rodar dentro do
+> Teams — não faz sentido algum ter um card dentro do CFI"*). O CFI é o app
+> do FISCAL; o atendimento é de TODOS os departamentos. A casa do SP Connect
+> é **`/connect`** (mesma SPA, tela cheia, sem menu do CFI e sem portão de
+> empresa ativa) — é essa URL que vira a aba/app do Teams e o PWA. O MOTOR
+> (webhook, credencial, banco, rotas) continua no serviço do CFI: a chave
+> não trafega; o que é próprio é a CASA do produto, não o backend.
 
 > Estado: **DESENHO** (nada aqui está implementado além do que a seção
 > "O que já existe" lista). Aprovação do Paulo pendente nas "Decisões em
@@ -91,10 +103,315 @@ Regras de tela que não se afrouxam:
 
 ## 5. Departamentos = filas
 
-As filas são exatamente `DEPARTAMENTOS_WHATSAPP` (fiscal, contabil, dp-folha,
-legalizacao, financeiro) + **Recepção** (conversa nova sem triagem). Não
-existe cadastro de fila separado — fila nova só existe se nascer departamento
-novo no catálogo (régua única).
+~~As filas são exatamente `DEPARTAMENTOS_WHATSAPP`~~ **SUPERADO 16/08 pela
+decisão do Paulo** (*"Recepção podem atender todos departamentos, RH é um
+departamento separado como todos os outros"*): **FILA ≠ DEPARTAMENTO do
+SaaS**. O catálogo próprio de 8 filas mora em `whatsapp-atendimento.js`
+(Recepção, Financeiro, DP, Fiscal, Contábil, Legalização, RH, Jurídico);
+o catálogo dos 5 módulos não incha. Visibilidade: Recepção vê TUDO; os
+demais veem a(s) própria(s) fila(s) + Recepção; admin vê tudo. A atribuição
+é `users.filasAtendimento` (aba 👥 da ⚙️ do Connect; sem atribuição valem os
+departamentos de módulo; rules com anti-autoconcessão).
+
+### 5.1 Transferência entre departamentos (16/08)
+
+A conversa de um número é **UMA só** (o cliente tem um chat no celular) —
+transferir é trocar o DONO, nunca abrir uma segunda conversa:
+
+- **↪️ Transferir de fila** (qualquer atendente): a atribuição é **LIMPA**
+  (chega SEM dono na fila destino — presa no atendente de origem, o destino
+  veria uma conversa "ocupada" que ninguém de lá conduz), fica **nota
+  automática na thread** (de onde veio, quem mandou, recado opcional — sem
+  rastro o destino pergunta tudo de novo ao cliente) e a conversa ganha o
+  selo "↪ de X" até alguém assumir.
+- **Aviso ao cliente** na transferência é OPCIONAL (chave na ⚙️, nasce
+  DESLIGADA) e só sai com a janela de 24h aberta; falha no aviso não desfaz
+  a transferência, mas é dita.
+- **Guarda de condução**: responder conversa em condução por OUTRO atendente
+  é recusado (409) — assumir é UM clique, auditado (mata-burro com caminho,
+  não parede). Responder conversa SEM dono te torna o condutor
+  (auto-assumir). Duas vozes na mesma conversa confundem o cliente.
+- **✚ Nova conversa** para número JÁ em condução é recusada dizendo quem
+  conduz e em qual fila — a saída é nota interna pra quem conduz ou pedir a
+  transferência.
+- **O cliente pede outro departamento**: com o bot ligado, `#menu`
+  reapresenta o menu em qualquer estado e a escolha re-roteia (comando
+  EXPLÍCITO de propósito — numa conversa triada, um "2" solto é resposta ao
+  atendente, nunca menu). Com o bot desligado, é o atendente que transfere.
+
+### 5.2 Papéis, encerramento e avaliação (Paulo, 16/08)
+
+**Papéis do ATENDIMENTO** (`users.papelAtendimento`, ≠ role do CFI; a
+atribuição é na aba 👥 da ⚙️, SÓ admin; rules com anti-autoconcessão):
+
+| papel | vê | atende | encerra | ⚙️ (config) |
+| --- | --- | --- | --- | --- |
+| admin (role do CFI) | tudo | tudo | tudo | SIM |
+| gestor | tudo | tudo | **qualquer atendimento** | não |
+| colaborador (padrão) | filas linkadas + Recepção | as que vê (transfere) | **só o que ELE conduz** | não |
+
+**Quem encerra**: admin e gestor, qualquer um; colaborador, só o atendimento
+atribuído a ele (encerrar o próprio atendimento é parte do atendimento —
+exigir gestor pra tudo viraria gargalo); o CLIENTE encerra pelo `#sair`
+(bot), que resolve a conversa com `resolvidaPor: 'cliente'`.
+
+**Avaliação (nota 1-5 pelo WhatsApp)**: no encerramento, com a chave
+`avaliacaoAtiva` LIGADA (nasce DESLIGADA) e a janela de 24h aberta, o
+convite sai; **só a PRIMEIRA resposta do cliente vale** — se for 1-5 vira
+nota (gravada em `whatsapp_avaliacoes` com atendente/fila/protocolo) e
+recebe agradecimento; qualquer outra coisa limpa a espera (insistir em
+avaliação é spam, e nota nunca se deduz de texto livre). A captura roda
+ANTES do bot no webhook (a nota não pode virar gatilho de triagem) e é
+independente do `botAtivo`. Painel **📊** no cabeçalho do inbox: admin e
+gestor veem todas; colaborador vê as próprias — o recorte é do backend.
+
+### 5.4 Segundo número / segunda WABA — o app APTO (16/08)
+
+Paulo pediu o app "apto para inclusão de segundo número e/ou segunda API".
+`whatsapp-canais.js` (13 testes) faz isso SEM cadastro obrigatório:
+
+- **O número de hoje continua vindo do ENV e é o canal `principal`.** Com um
+  número só, nada muda: `multiCanal` é false e a tela não mostra seletor
+  (seletor com uma opção é clique a mais por nada).
+- **A ENTRADA roteia pelo `phone_number_id` do próprio payload** — a Meta diz
+  em qual número a mensagem caiu. É FONTE, não dedução.
+- **Número desconhecido NÃO cai no padrão**: fica com `canalId: null` e
+  NOMEADO no log. Jogar no padrão misturaria conversas de dois números na
+  mesma caixa — o defeito que ninguém desconfia.
+- **Mensagem antiga sem carimbo é do padrão, e isso é FATO** (até o 2º
+  número existir, só havia um) — não é suposição.
+- 🔒 **O TOKEN do canal novo nunca entra no banco**: o cadastro guarda o
+  NOME da variável do Cloud Run (`envToken`); o valor vive lá, como o de
+  hoje. O cadastro RECUSA se alguém colar o token no lugar do nome. É a
+  régua do cofre de certificados — leva-se a operação, nunca a chave.
+- Cadastro na aba **📞 Números** da ⚙️ do Connect; `pronto` de cada canal
+  responde pela credencial REAL (a env no Cloud Run), não só pelo cadastro.
+
+### 5.3 Cliente 360 na coluna e PWA (16/08)
+
+- **Coluna do cliente viva**: com o contato VINCULADO, a terceira coluna
+  mostra a empresa (nome/CNPJ/regime do cadastro central), o **responsável
+  da carteira** e as **últimas guias enviadas** pelo rito #293
+  (`impostos_enviados`). **NENHUMA conta nova** — a rota só LÊ o que outras
+  telas já produzem (mesma regra dos Relatórios: relatório nunca tem conta
+  própria). Lista sem envio DIZ que não prova ausência de guia, e lista
+  cortada diz "mostrando X de N" (farol honesto vale pra contagem).
+- **PWA**: `public/connect.webmanifest` (`start_url`/`scope` = `/connect`,
+  standalone, tema azul SP) + ícones 192/512 gerados por
+  `scripts/gerar-icones-pwa.py`. O manifest é injetado pelo App **só no modo
+  /connect** — declarar no `index.html` faria o CFI se instalar como "SP
+  Connect", que é o mesmo erro de identidade do card removido em 14/08.
+  ⚠️ `.webmanifest` entra na regra de **no-store** do `server.js` junto com o
+  HTML: sem hash no nome, "immutable 1 ano" prenderia o manifest velho no
+  celular de quem já instalou. `__tests__/spConnectPwa.test.ts` trava as
+  três coisas — e a trava do cache foi **provada revertendo a regra** (a 1ª
+  versão dela passava com a regra desfeita, porque casava a palavra
+  `.webmanifest` da linha de Content-Type logo abaixo em vez da CONDIÇÃO do
+  `if`: sentinela tem que responder a pergunta certa).
+
+### 5.5 Aviso de mensagem nova — as três camadas (Paulo, 16/08)
+
+Ordem dele: *"quanto mais notificação melhor, evita desculpa que o
+colaborador não viu, não recebeu, e o cliente reclama"*.
+
+- **Som + pop-up + contador no título** (app aberto): `notificacaoConnect.ts`
+  com idempotência por `${numero}|${em}` — a mesma mensagem nunca apita duas
+  vezes, a **primeira carga aprende sem apitar** (senão abrir o app de manhã
+  dispararia 40 avisos de mensagens velhas), conversa ABERTA não apita e
+  mensagem de SAÍDA não apita. O som é **sintetizado no WebAudio**: a CSP
+  bloqueia mídia externa, e arquivo no bundle envelheceria no cache.
+- **Push no celular com o app fechado**: `whatsapp-push.js` decide QUEM
+  recebe pela **MESMA régua de fila do inbox** (`filasVisiveis`/
+  `conversaVisivel`) — push que alcançasse quem não pode ABRIR a conversa
+  seria vazamento por aviso, já que o corpo leva nome e trecho da mensagem.
+  Quem ficou de fora volta NOMEADO com o motivo. **Fora do expediente é
+  opt-in** (`pushForaDoExpediente` nasce desligado): acordar a equipe de
+  madrugada por padrão é o alarme que ensina a desligar o alarme. Envio é
+  **best-effort** (aviso é aviso, mensagem é dado) e token que o FCM disser
+  que morreu sai do cadastro — aparelho trocado vira entulho que FINGE
+  alcance.
+  ⚠️ **Falta UMA chave**: `VITE_FIREBASE_VAPID_KEY` (Firebase Console →
+  Cloud Messaging → certificados push da Web). Sem ela o app **DIZ** que o
+  push está pendente, em vez de fingir — colaborador que confia num aviso
+  que nunca chega é pior que colaborador que sabe que precisa deixar a aba
+  aberta.
+
+### 5.6 ℹ️ SOBRE — manual, novidades e identidade do app (Paulo, 16/08)
+
+Pedido dele: *"criar um modal chamado SOBRE, nele deve conter um manual de
+uso para os colaboradores, um resumo das atualizações sempre que houver, um
+resumo do que nosso app é capaz, o que ele faz, conta um pouco sobre o porquê
+da sua criação, seus diferenciais em relação aos apps do mercado"*.
+
+- **O conteúdo é DADO, não JSX** (`services/sobreConnect.ts`): texto dentro
+  de componente não se testa, e é justamente a comparação entre o manual e o
+  que o app FAZ que precisa de trava.
+- **Selo vermelho no ℹ️**, com a régua **importada** do `novidadesService`
+  (`temNovidadeNaoLida`) e chave própria. Segunda cópia da régua divergiria,
+  e foi assim que o 📣 Novidades do CFI passou **onze dias apagado**.
+  O selo **só apaga quando alguém ABRE** — apagar sozinho seria mentira.
+- **DUAS travas provadas quebrando de propósito** (`sobreConnect.test.ts`):
+  (1) `SOBRE_VERSAO` tem que ser a data da revisão mais nova — nem selo sem
+  texto (promete leitura que não está lá), nem texto sem selo (a equipe nunca
+  fica sabendo); (2) **todo comando que o BOT reconhece está ensinado no
+  manual** — a varredura lê os comandos de quem DECIDE (`decidirAutomacao`
+  em `whatsapp-atendimento.js`), nunca de uma lista copiada no teste: lista
+  envelhece no primeiro comando novo, e envelhece calada.
+- **A lista de filas do manual sai do catálogo CARREGADO**, não de uma cópia
+  escrita no texto — fila nova apareceria só num dos dois lugares.
+- **Manual errado é pior que manual nenhum**: quem não sabe segue o que está
+  escrito. Por isso o topo da aba diz que, divergindo da tela, **o errado é o
+  manual**.
+
+### 5.7 ☎️ Chamada de voz/vídeo — SONDA, não interruptor (Paulo, 16/08)
+
+Pergunta dele: *"como habilitar ou não a opção de ligação de voz/vídeo, já
+liberado pela Meta Brasil"*.
+
+O que entrou é a aba **⚙️ → ☎️ Voz e vídeo**, que **pergunta à Meta e
+relata** — e não liga nada. Duas razões, as duas de peso:
+
+1. **Payload de API externa não se deduz.** É a lição que o MSG_ISN_023 (PGDAS-D
+   sem movimento) e o MS0030 (R-2055) cobraram caro. `CANDIDATOS_SONDA` leva a
+   **hipótese escrita** de cada caminho, a resposta **CRUA** vai na tela, e o
+   que o app não souber nomear vira `nao-reconhecido` em vez de chute.
+2. **Ligar muda o WhatsApp DO CLIENTE.** Habilitada, aparece o botão de ligar na
+   conversa dele. Sem destino que ATENDA (HitPhone, ramal, plantão), o cliente
+   liga e chama no vazio — e a leitura dele não é "o recurso está desligado", é
+   **"a SP não me atende"**. Isso é pior que não ter o botão. `ANTES_DE_LIGAR`
+   põe esse efeito na tela, junto do veredito, porque ele não aparece em lugar
+   nenhum do painel da Meta.
+
+RÉGUAS: **indeterminado nunca vira "desligado"** (rede que piscou faria alguém
+ligar à mão o que já estava ligado, ou concluir que a conta não tem o recurso);
+token sem permissão é `sem-permissao` e a resposta **diz que isso não fala da
+chamada**; e um teste recorta o núcleo e prova que ele **não escreve** — nem na
+Meta, nem no banco (mesma prova do `/prazos-municipais/consultar`).
+
+### 5.8 📇 Contatos e 🏷 etiquetas (Paulo, 17/08)
+
+Pedido dele: flags (*"Leads, Clientes, Marketing, Colaboradores, Candidatos"*)
+e o menu de contatos — *"essencial para importação do backup Ultra Fox,
+adicionar novos contatos, compartilhar novos contatos"*.
+
+- **O menu de contatos era defeito real**: `whatsapp_contatos` era gravado por
+  QUATRO caminhos (webhook, importador, template, vínculo) e **lido por nenhuma
+  tela**. Importar 800 contatos os deixava invisíveis até alguém escrever pro
+  número — o importador parecia entregue e não estava.
+- **Etiqueta não é enfeite**: classificar uma pessoa é tratamento de dado
+  pessoal com finalidade (LGPD art. 6º, I). Cada etiqueta **nasce com finalidade
+  e base legal**, e o cadastro RECUSA quem não trouxer — a mesma razão do prazo
+  órfão do calendário municipal: daqui a três meses ninguém lembra por que ela
+  existe, e a resposta ao titular precisa existir ANTES da pergunta.
+- **A linha entre alerta e recusa**: CLASSIFICAR acende pendência (bloquear
+  faria a equipe parar de etiquetar, e aí o dado fica lá, tratado, sem nem a
+  etiqueta que explica por quê); **ENVIAR** o que depende de consentimento é
+  RECUSA, porque a mensagem enviada não volta. Só `marketing` pede
+  consentimento — cobrar em `cliente` seria alarme sem ação.
+- **Compartilhar vai como CARTÃO** (tipo `contacts`), com o **`wa_id`** — é ele
+  que faz aparecer o botão "Conversar". Sem ele o cartão chega MORTO, pior que
+  texto, porque parece que vai funcionar. Guardas iguais às do texto livre.
+- A contagem por etiqueta sai do **conjunto inteiro**, não do filtrado (do
+  filtrado seria circular), e o teto de leitura aparece — 2000 lidos com 2500 no
+  banco faria a contagem mentir para baixo, calada.
+
+### 5.9 🔒 LGPD — mecanismo antes da frase (Paulo, 17/08)
+
+Pedido: *"devemos atender a lei de proteção de dados LGPD, evidenciar de forma
+enfática que estamos em acordo com a lei, sugiro isso no rodapé"*.
+
+🚨 **A decisão que manda: SELO NÃO É CONFORMIDADE.** Escrever "100% em
+conformidade com a LGPD" custa uma linha e vira uma **afirmação ao titular** —
+que, no dia em que alguém pedir os dados e não houver como responder, deixa de
+ser marketing e passa a ser **prova de informação enganosa**. É o farol honesto
+aplicado a outro domínio: verde tem que significar alguma coisa.
+
+Então a ordem foi **mecanismo primeiro, frase depois**:
+
+| Direito | Mecanismo |
+|---|---|
+| Acesso (art. 18, II) e portabilidade (V) | relatório com cadastro, etiquetas **com a finalidade de cada uma**, consentimentos, **conteúdo** das mensagens e envios de guia — baixável |
+| Eliminação (art. 18, VI) | **plano antes de apagar**: o que sai, o que fica e **por quê** |
+| Revogação (art. 18, IX) | vale na hora e passa a recusar o envio daquela natureza |
+| Registro (art. 37) | `lgpd_solicitacoes`, com autor e data |
+
+RÉGUAS: o **registro entra ANTES do apagamento** (falha no meio deixa a prova
+de que o pedido existiu; o contrário deixaria dado sumido sem rastro de quem
+mandou sumir); o relatório entrega o **conteúdo** das mensagens, porque "temos
+40 mensagens suas" não é acesso, é avisar que se tem algo; e o que a lei manda
+guardar (**comprovante de envio de guia**, documento fiscal, trilha de
+auditoria — art. 16) vem **nomeado** no plano, em vez de a promessa dizer
+"apagamos tudo".
+
+`public/privacidade.html` traz a base legal **por tipo de dado** e uma seção
+**"o que ainda está em andamento"** (encarregado/DPO nomeado, registro completo,
+revisão de contratos com operadores). Isso é deliberado: selo que esconde
+pendência não protege ninguém, e diante da ANPD **informação enganosa é pior
+que informação incompleta**.
+
+⚠️ `__tests__/lgpdRodape.test.ts` derruba o build se o rodapé prometer
+conformidade absoluta ("100%", "totalmente", "certificado"), se a página parar
+de declarar as pendências, ou se os mecanismos sumirem do código deixando a
+frase de pé. **Provado quebrando as duas de propósito.**
+
+### 5.10 🔀 A separação de verdade — PLANEJADA (Paulo, 17/08)
+
+Ele viu na lista de runs do GitHub que as duas casas se misturam (*"estamos
+usando o projeto do CFI p o SP-Connect, algumas coisas que você cita são do
+projeto CFI"*) e decidiu: **"planeja separação de verdade depois do corte da
+Ultra Fox"**.
+
+O plano inteiro — fases, riscos, estimativa e a divisão do que é dele e do que
+é meu — está em **`docs/separacao-sp-connect.md`**. Três coisas que valem estar
+aqui também, porque mudam decisões de HOJE:
+
+1. **Separar serviço ≠ separar banco.** O precedente é o 📋 Legalização: repo e
+   serviço próprios, **mesmo Firestore e mesmo Auth**. Isso zera a migração de
+   dados e mantém a coluna do cliente como leitura direta.
+2. **A credencial da WABA INVERTE de casa.** Hoje ela vive só no CFI e os irmãos
+   usam o túnel; depois, quem é dono do canal é o Connect, e é o **CFI** que
+   passa a pedir para enviar guia. Manter a WABA no CFI anularia o motivo da
+   separação (queda do fiscal voltaria a calar o atendimento).
+3. **NADA começa antes do corte assentado.** Adiantar a mudança de repositório
+   faria o código do Connect viver em dois lugares durante a migração de
+   plataforma — duas verdades no pior momento possível.
+
+### 5.11 🧪 O bot em PILOTO — o que torna a convivência possível (Paulo, 17/08)
+
+Correção de premissa minha. Eu tratei "dois apps assinados na WABA" como
+problema a eliminar antes de ligar o bot; o Paulo cortou: *"temos que
+permanecer com os 2 apps ativos, não faz sentido criar uma opção pra migrar o
+bot se os 2 não estiverem ativos"*.
+
+Ele está certo — **a convivência é o plano**, não um estado a atravessar
+depressa: a Ultra Fox de pé é a rede de segurança enquanto o SP Connect é
+validado. Quem precisava se adaptar era o bot.
+
+🚨 **O FATO TÉCNICO QUE MANDA**: a Meta permite **vários apps assinados na
+mesma WABA** (`subscribed_apps`), e **cada um recebe uma cópia** de todo
+evento. Conferido em produção (17/08): `API_Oficial · Business Agent · f-bot`.
+Não é "um webhook só". Logo, se os dois bots responderem, o cliente vê **menu
+em dobro** — e isso é o único sintoma que o cliente percebe na hora.
+
+**A saída não é desligar a Ultra Fox antes da hora; é limitar QUEM o NOSSO bot
+atende.** `botAlcance`:
+
+- `piloto` (padrão) → responde **só** aos números de `botNumerosPiloto`. O
+  teste roda em produção, com os dois apps de pé, sem nenhum cliente afetado.
+- `todos` → o dia do corte, depois de remover o app dela.
+
+RÉGUAS: **lista vazia no piloto não responde a ninguém** (a leitura oposta —
+"sem restrição" — soltaria o bot na carteira quando alguém apagasse a lista);
+**número ilegível não é atendido** (senão o bot escapa do piloto pela porta dos
+fundos); e o casamento é pelos **últimos 11 dígitos**, porque o WhatsApp
+entrega ora com o 9 do celular, ora sem — casar a string inteira faria o piloto
+não pegar justamente o número recém-cadastrado.
+
+⚠️ **A MIGRAÇÃO NÃO EMUDECE QUEM JÁ TINHA O BOT LIGADO**: config gravada antes
+deste campo, com `botAtivo: true`, resolve para `todos` — era o que ela fazia.
+Config nova nasce em `piloto`. Emudecer em silêncio seria pior que o defeito
+que o campo evita: o efeito só apareceria no cliente sem resposta, e ninguém
+ligaria uma coisa à outra.
 
 ## 6. Regras de horário e auto-resposta
 
@@ -145,6 +462,13 @@ MESMO PR que a cria.**
 
 ## 9. Fases e critérios de aceite
 
+> 📋 **Quem responde "dá pra derrubar a Ultra Fox?" é o
+> `de-para-ultrafox-spconnect.md`** (16/08) — função a função, com a ORIGEM
+> da evidência de cada linha da ferramenta antiga e as lacunas que BLOQUEIAM
+> o corte separadas das que podem esperar. Fases dizem o que foi construído;
+> o de-para diz o que ainda falta pra desligar. Atualizar no MESMO PR que
+> fecha ou abre lacuna (travado por `__tests__/deParaUltrafox.test.ts`).
+
 **F1 — Webhook + status + gravação** (paralelo com a Ultra Fox, risco zero)
 - Rota de verificação (GET) + recebimento (POST) com validação de assinatura
   (`X-Hub-Signature-256`, secret do app Meta).
@@ -178,9 +502,37 @@ MESMO PR que a cria.**
   CFI (receber → responder na janela → template fora dela → resolver), com
   atribuição e auditoria. Só DEPOIS disso se discute cancelar a Ultra Fox.
 
-**F3 — Triagem e automação**
-- Bot de primeira linha ("1 Fiscal · 2 Contábil · …") roteando pra fila;
-  relatórios de atendimento (volume, tempo de resposta, por fila/atendente).
+**F3 — Triagem e automação** (escopo detalhado em 16/08, com os prints do
+bot da Ultra Fox como RÉGUA DE PARIDADE — Paulo: *"temos que criar os
+atendentes, departamentos, mensagens automáticas, definição de horário de
+funcionamento e todas as outras utilidades"*)
+- **Atendentes**: são os usuários que JÁ existem (login unificado +
+  `users.departamentos[]`) — o que nasce é PRESENÇA (online/ausente) e
+  atribuição de conversa; cadastro novo de atendente seria a segunda cópia
+  do Gerenciar Usuários.
+- **Filas/menu de triagem**: "Digite uma das opções: 1 - Recepção · 2 -
+  Financeiro · …" roteando pra fila.
+  ✅ **DECIDIDO (Paulo, 16/08)**: **RH é departamento separado como todos os
+  outros** — entra no catálogo de departamentos de ATENDIMENTO (`rh`, e
+  `juridico` idem, espelhando o menu atual; nenhum dos dois abre app irmão,
+  são filas). E **a Recepção atende TODOS os departamentos**: a régua de
+  visibilidade é *atendente vê a fila do(s) seu(s) departamento(s) +
+  Recepção; atendente da Recepção vê TODAS as filas*.
+  O menu de triagem (número → fila) é CONFIGURÁVEL na ⚙️ do Connect, com o
+  default espelhando o menu de 8 opções em uso hoje — mudar item de menu é
+  config, nunca deploy.
+- **Mensagens automáticas**: saudação com Nº DE PROTOCOLO ("Ju, aguarde um
+  momento… Protocolo: 576695860"), instrução #sair, mensagem de fora de
+  horário ("não temos atendentes online, deixe sua mensagem"), rodapé com
+  site/redes. Textos CONFIGURÁVEIS na ⚙️ do Connect, nunca cravados no
+  código.
+- **Horário de FUNCIONAMENTO do atendimento**: cadastro PRÓPRIO — o print
+  do bot prova que o horário do atendimento (Seg–Sex 8:00–12:00/13:00–17:30)
+  é DIFERENTE do horário de acesso da casa (07:00–20:00), então reusar o
+  `horario-acesso` aqui estaria ERRADO (revisão da §6 deste doc: a régua de
+  acesso continua valendo pro LOGIN; o funcionamento do atendimento é outro
+  cadastro, com almoço).
+- Relatórios de atendimento (volume, tempo de resposta, por fila/atendente).
 
 **F4 — Voz (Calling API da Meta) — DESENHADA, NÃO HABILITADA**
 - Decisão de 13/08: NÃO habilitar agora. Habilitar acende o botão de ligar no
@@ -214,14 +566,53 @@ dentro é ferramenta na mão de quem já está com o Teams aberto o dia todo.
   `X-Frame-Options` do helmet desligado (dois cabeçalhos com regras
   diferentes = navegador antigo obedece o errado e a aba abre em branco).
   `__tests__/teamsFrameAncestors.test.ts` trava a lista NOS DOIS sentidos.
-  A aba de canal já pode ser criada; o app do tenant (manifest) fica pra
-  quando o Paulo quiser dar esse passo.
+  A aba de canal já pode ser criada.
+- **App do tenant**: ✅ **PACOTE PRONTO 16/08** — `teams-app/` (manifest
+  v1.16 com aba estática pessoal → `/connect`, ícones gerados por
+  `scripts/gerar-icones-teams.py`, zip por `scripts/gerar-pacote-teams.sh`).
+  O zip também é servido pelo app em **`/sp-connect-teams.zip`**. Upload e
+  liberação são no Admin Center do Teams (passo a passo no
+  `teams-app/README.md`). O `contentUrl` aponta pra URL do Cloud Run
+  (funciona hoje); quando o domínio `app.spassessoriacontabil.com.br`
+  entrar no ar, troca-se a URL no manifest e reenviam-se (o domínio já está
+  em `validDomains`). ⚠️ O `id` (GUID) do manifest NUNCA muda entre versões
+  — mudar cria OUTRO app e a equipe perde o fixado.
 - **Login funciona embutido**: o CFI autentica por e-mail/senha do Firebase
   (`signInWithEmailAndPassword`), sem popup de terceiro — o caso que quebra
   dentro de iframe não existe aqui. SSO com a conta Microsoft do tenant é
   melhoria futura, não pré-requisito.
 
-## 11. Decisões em aberto (Paulo)
+## 11. CRM em camadas — e o Jotform é a fonte do relacionamento
+
+Paulo, 14/08: *"hoje nosso CRM é o Jotform — ali estão todos os detalhes de
+cada cliente, separado por departamentos: se tem folha, se vai impresso, por
+e-mail ou WhatsApp, o que gosta"*. Isso define a incorporação:
+
+- **Inbox ≠ CRM**: o inbox é a conversa de AGORA; o CRM é a memória do
+  relacionamento. A vantagem estrutural da casa é que metade do "cliente
+  360" já existe espalhada (cadastro central, carteira, Rotina do Mês,
+  auditoria de envios, Legalização, Financeiro) — falta a linha do tempo
+  unificada e o dado de RELACIONAMENTO, que mora no Jotform.
+- **O Jotform NÃO se substitui — se LÊ** (trilho provado: Legalização e
+  Financeiro já leem por API, parser casando campo pelo TEXTO da pergunta,
+  `PARSER_VERSAO` + re-sync no boot; a chave já está no Secret Manager).
+  A equipe continua preenchendo lá; o ecossistema espelha por CNPJ num
+  bloco `relacionamento` com **origem carimbada `jotform`**. Regras de
+  06/08 valem inteiras: divergência entre Jotform e cadastro central é
+  ALERTA (nunca escolha silenciosa), espelho não sobrescreve digitação, e
+  campo ausente não vira default.
+- **O OURO imediato: a preferência de envio é ROTEAMENTO.** "Vai impresso /
+  por e-mail / por WhatsApp" decide qual botão o rito #293 sugere na hora de
+  enviar guia, e o SP Connect (F2) nasce sabendo o canal que o cliente
+  escolheu. "Tem folha de pagamentos" liga o cliente à fila do DP.
+- **Fases (segundo plano, sem atrapalhar a F2)**: (a) mapear os campos
+  reais dos formulários (de-para escrito, como o da Legalização); (b) sync
+  diário → bloco `relacionamento` no espelho central + painel de
+  divergências; (c) ligar a preferência no rito de envio e no inbox;
+  (d) só DEPOIS discutir migrar a digitação pra dentro do app — hoje o
+  Jotform é a UI de entrada e trocá-la sem necessidade é retrabalho.
+
+## 12. Decisões em aberto (Paulo)
 
 1. **Retenção de conversas**: guardar para sempre ou expurgo após N anos?
 2. **Recepção**: quem enxerga a fila Recepção — todos os atendentes (proposta)

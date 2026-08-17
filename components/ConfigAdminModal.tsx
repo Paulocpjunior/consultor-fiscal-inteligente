@@ -7,14 +7,19 @@
 //   · Horários dos colaboradores — a EXCEÇÃO de horário mora por usuário no
 //     "Gerenciar Usuários"; aqui só o atalho, pra não duplicar a régua.
 // ============================================================================
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
     listarTemplates, salvarTemplate, desativarTemplate, statusWhatsapp,
-    listarTemplatesDaMeta, statusWebhook,
+    listarTemplatesDaMeta, statusWebhook, assinarWabaWebhook,
     WhatsappTemplate, TemplateVariavel, TemplateDaMeta, WebhookStatus,
 } from '../services/whatsappTemplatesService';
+import { dataHoraSp } from '../services/spConnect';
 import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
+import { tenhoAcessoAuditoria } from '../services/auditoriaDonoService';
+
+// Lazy: quem não é dono nunca baixa o painel.
+const AuditoriaDono = lazy(() => import('./AuditoriaDono'));
 
 interface Props {
     isOpen: boolean;
@@ -67,6 +72,9 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     const [form, setForm] = useState({ ...FORM_VAZIO });
     const [editando, setEditando] = useState(false);
     const [msg, setMsg] = useState<{ texto: string; tipo: 'ok' | 'erro' } | null>(null);
+    // Quem vê o painel de auditoria é o BACKEND que diz (nem todo admin vê).
+    const [donoDaAuditoria, setDonoDaAuditoria] = useState(false);
+    const [auditoriaAberta, setAuditoriaAberta] = useState(false);
     const [salvando, setSalvando] = useState(false);
     // O id do doc é `departamento__nome`, então renomear CRIA outro template.
     // Guardar o id de origem é o que permite ao backend desativar o antigo em
@@ -98,6 +106,13 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
 
     useEffect(() => { if (isOpen) { setMsg(null); recarregar(); } }, [isOpen, recarregar]);
 
+    // Pergunta ao BACKEND se esta pessoa é dona (a resposta não revela quem
+    // são os donos). Hook ANTES do early return — a lição do erro #310.
+    useEffect(() => {
+        if (!isOpen) return;
+        tenhoAcessoAuditoria().then((r) => setDonoDaAuditoria(Boolean(r.ok && r.tenho))).catch(() => setDonoDaAuditoria(false));
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const limparForm = () => { setForm({ ...FORM_VAZIO }); setEditando(false); setIdAnterior(null); };
@@ -126,6 +141,17 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
         } finally {
             setBuscandoWebhook(false);
         }
+    };
+
+    const assinarWaba = async () => {
+        setMsg(null);
+        const r = await assinarWabaWebhook();
+        if (!r.ok) {
+            setMsg({ texto: `${r.error}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`, tipo: 'erro' });
+            return;
+        }
+        setMsg({ texto: 'App do CFI assinado na WABA — mande uma mensagem de teste e consulte de novo.', tipo: 'ok' });
+        await buscarWebhook();
     };
 
     const buscarNaMeta = async () => {
@@ -224,6 +250,36 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                 </div>
 
                 <div className="overflow-y-auto p-4 space-y-5">
+                    {/* 🔐 AUDITORIA DO DONO — só aparece pra quem o BACKEND
+                        confirmar como dono (outros admins não veem nem o
+                        botão). Esconder aqui é cortesia; a trava é a rota. */}
+                    {donoDaAuditoria && (
+                        <div className="rounded-lg border border-slate-800 dark:border-slate-600 bg-slate-900 dark:bg-slate-900/70 p-3 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-sm font-bold text-white">🔐 Auditoria — ações sensíveis</p>
+                                <p className="text-[11px] text-slate-300">
+                                    Quem enviou guia, quem transmitiu declaração, quem mudou permissão. Restrito a você.
+                                </p>
+                            </div>
+                            <button onClick={() => setAuditoriaAberta(true)}
+                                className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-slate-200">
+                                Abrir
+                            </button>
+                        </div>
+                    )}
+                    {auditoriaAberta && (
+                        <div className="fixed inset-0 bg-black/70 z-[90] p-3 overflow-y-auto" onClick={() => setAuditoriaAberta(false)}>
+                            <div className="bg-slate-50 dark:bg-slate-900 rounded-xl max-w-[1400px] mx-auto my-4 p-3" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-end">
+                                    <button onClick={() => setAuditoriaAberta(false)}
+                                        className="text-slate-400 hover:text-slate-600 px-2 py-1 text-sm">✕ fechar</button>
+                                </div>
+                                <Suspense fallback={<p className="text-xs text-slate-400 p-4">Carregando…</p>}>
+                                    <AuditoriaDono />
+                                </Suspense>
+                            </div>
+                        </div>
+                    )}
                     {msg && (
                         <p className={`text-xs px-3 py-2 rounded ${msg.tipo === 'ok'
                             ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
@@ -394,10 +450,38 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                         <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold">webhook configurado</span>
                                         <span className="ml-2 text-slate-500 dark:text-slate-400">
                                             {webhook.ultimoEventoEm
-                                                ? `último evento recebido em ${new Date(webhook.ultimoEventoEm).toLocaleString('pt-BR')}`
+                                                ? `último evento recebido em ${dataHoraSp(webhook.ultimoEventoEm)}`
                                                 : 'nenhum evento recebido ainda — confira a assinatura do campo "messages" no painel da Meta'}
                                         </span>
                                     </p>
+                                )}
+
+                                {/* A 2ª amarração: URL+token configurados NÃO bastam — o app
+                                    precisa estar ASSINADO na WABA, senão o teste do painel chega
+                                    e a mensagem real não (caso de 16/08). */}
+                                {webhook.assinaturaWaba && (
+                                    <div className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-[11px]">
+                                        {webhook.assinaturaWaba.ok ? (
+                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                <span className="text-slate-600 dark:text-slate-300">
+                                                    <strong>Apps assinados na WABA:</strong>{' '}
+                                                    {(webhook.assinaturaWaba.apps || []).length
+                                                        ? (webhook.assinaturaWaba.apps || []).map((a) => a.nome || a.id).join(' · ')
+                                                        : 'NENHUM — é por isso que mensagem real não chega'}
+                                                </span>
+                                                <button
+                                                    onClick={assinarWaba}
+                                                    className="text-[10px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold whitespace-nowrap"
+                                                >
+                                                    📡 Assinar o app do CFI na WABA
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span className="text-amber-700 dark:text-amber-400">
+                                                Não consegui ler a assinatura da WABA: {webhook.assinaturaWaba.erro}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -413,7 +497,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                             {s.status === 'lido' ? '✓✓ lido' : s.status === 'entregue' ? '✓✓ entregue' : s.status === 'enviado' ? '✓ enviado' : `✗ ${s.status}`}
                                                         </span>
                                                         <span className="ml-1 text-slate-500 dark:text-slate-400">
-                                                            {s.numero || 'sem número'}{s.em ? ` · ${new Date(s.em).toLocaleString('pt-BR')}` : ''}
+                                                            {s.numero || 'sem número'}{s.em ? ` · ${dataHoraSp(s.em)}` : ''}
                                                         </span>
                                                         {s.erro && (
                                                             <p className="text-red-600 dark:text-red-400 mt-0.5">
@@ -435,7 +519,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                     <div key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px]">
                                                         <span className="font-semibold text-slate-600 dark:text-slate-300">{m.numero || 'sem número'}</span>
                                                         <span className="ml-1 text-slate-500 dark:text-slate-400">
-                                                            {m.em ? new Date(m.em).toLocaleString('pt-BR') : ''}{m.temMidia ? ' · 📎' : ''}
+                                                            {m.em ? dataHoraSp(m.em) : ''}{m.temMidia ? ' · 📎' : ''}
                                                         </span>
                                                         <p className="text-slate-500 dark:text-slate-400 truncate">{m.texto || `(${m.tipo})`}</p>
                                                     </div>

@@ -62,6 +62,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.RECUPERACAO_TRIBUTARIA]: 'Recuperação Tributária — identifica impostos pagos a maior e oportunidades de restituição/compensação.',
     [SearchType.NFP_PRO_CLOUD]: 'Consulta de situação fiscal: débitos, certidões, obrigações, parcelamentos e plano de ação. Acesso restrito — liberado pelo administrador.',
     [SearchType.RELATORIOS]: 'Relatórios do departamento em PDF com a identidade da SP: Livro de Entradas/Saídas, Faturamento por carteira, Impostos apurados × enviados e DIPAM/FUNRURAL.',
+    [SearchType.SP_CONNECT]: 'SP Connect — as conversas do WhatsApp oficial do escritório: mensagens dos clientes, status real de entrega das guias (entregue/lido/falhou) e a janela de 24h de cada conversa.',
 };
 
 export interface MenuCard {
@@ -160,6 +161,9 @@ export const MENU_GRUPOS: MenuGrupo[] = [
             { type: SearchType.DASHBOARD_CEO, Icon: RocketIcon },
             { type: SearchType.RELATORIOS, Icon: DocumentTextIcon },
             { type: SearchType.CARTEIRA, Icon: UserGroupIcon },
+            // SP Connect NÃO tem card aqui de propósito (Paulo, 16/08): é APP
+            // próprio (substitui a Ultra Fox, vive no Teams) e atende TODOS os
+            // departamentos — a casa dele é /connect, não o menu do fiscal.
             { type: SearchType.AGENTES_A3, Icon: BriefcaseIcon },
         ],
     },

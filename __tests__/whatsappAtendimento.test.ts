@@ -1,0 +1,388 @@
+// ============================================================================
+// F3 do SP Connect — triagem, filas e automações (núcleo puro).
+// Régua de paridade: os prints do bot atual (16/08).
+// ============================================================================
+import {
+    FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
+    configPadraoAtendimento, resolverConfig, dentroDoHorario,
+    gerarProtocolo, renderMensagem, montarTextoMenu, interpretarEscolha,
+    decidirAutomacao, papelValido, podeEncerrar, interpretarNota,
+    botAlcancaNumero, soDigitos,
+} from '../sefaz-backend/whatsapp-atendimento.js';
+
+describe('filas de atendimento (≠ departamentos do SaaS)', () => {
+    it('as 8 filas do menu atual, com RH e Jurídico separados (decisão de 16/08)', () => {
+        expect(FILAS_ATENDIMENTO.map((f: any) => f.id)).toEqual(
+            ['recepcao', 'financeiro', 'dp-folha', 'fiscal', 'contabil', 'legalizacao', 'rh', 'juridico'],
+        );
+        expect(filaValida('rh')).toBe(true);
+        expect(filaValida('marketing')).toBe(false);
+    });
+
+    it('Recepção atende TODOS; os demais veem a própria + Recepção; admin vê tudo', () => {
+        expect(filasVisiveis({ role: 'admin' })).toBeNull();
+        expect(filasVisiveis({ role: 'colaborador', filasAtendimento: ['recepcao'] })).toBeNull();
+        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'] })).toEqual(['fiscal', 'recepcao']);
+        // filasAtendimento explícita VENCE os departamentos de módulo
+        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh', 'recepcao']);
+    });
+
+    it('conversa sem fila é da Recepção — todo atendente a enxerga', () => {
+        expect(conversaVisivel(['fiscal', 'recepcao'], null)).toBe(true);
+        expect(conversaVisivel(['fiscal', 'recepcao'], 'juridico')).toBe(false);
+        expect(conversaVisivel(null, 'juridico')).toBe(true);
+    });
+});
+
+describe('papéis do atendimento (Paulo, 16/08): admin tudo · gestor vê/atende/encerra tudo · colaborador só o seu', () => {
+    it('gestor vê TODAS as filas; papel desconhecido é recusado', () => {
+        expect(filasVisiveis({ role: 'colaborador', papelAtendimento: 'gestor', departamentos: ['fiscal'] })).toBeNull();
+        expect(papelValido('gestor')).toBe(true);
+        expect(papelValido('colaborador')).toBe(true);
+        expect(papelValido('supervisor')).toBe(false);
+    });
+    it('encerrar: admin e gestor qualquer atendimento; colaborador SÓ o que conduz', () => {
+        expect(podeEncerrar({ role: 'admin', email: 'a@sp', atribuidoA: 'x@sp' })).toBe(true);
+        expect(podeEncerrar({ role: 'colaborador', papelAtendimento: 'gestor', email: 'g@sp', atribuidoA: 'x@sp' })).toBe(true);
+        expect(podeEncerrar({ role: 'colaborador', email: 'x@sp', atribuidoA: 'x@sp' })).toBe(true);
+        expect(podeEncerrar({ role: 'colaborador', email: 'x@sp', atribuidoA: 'y@sp' })).toBe(false);
+        expect(podeEncerrar({ role: 'colaborador', email: 'x@sp', atribuidoA: null })).toBe(false);
+    });
+});
+
+describe('interpretarNota — a nota nunca é deduzida de texto livre', () => {
+    it('aceita "5", " 5 ", "5.", "nota 4", "3 estrelas"; recusa o resto', () => {
+        // Escala 5 EXPLÍCITA: este teste é sobre a leitura do texto, não sobre
+        // qual escala a casa usa (essa é decisão do Paulo e tem teste próprio).
+        expect(interpretarNota('5', 5)).toBe(5);
+        expect(interpretarNota(' 5 ', 5)).toBe(5);
+        expect(interpretarNota('5.', 5)).toBe(5);
+        expect(interpretarNota('nota 4', 5)).toBe(4);
+        expect(interpretarNota('3 estrelas', 5)).toBe(3);
+        expect(interpretarNota('0', 5)).toBeNull();
+        expect(interpretarNota('6', 5)).toBeNull();
+        expect(interpretarNota('10', 5)).toBeNull();
+        expect(interpretarNota('obrigado!', 5)).toBeNull();
+        expect(interpretarNota('nota 5 pelo carinho', 5)).toBeNull();
+    });
+});
+
+describe('config: padrão honesto e merge que não engole campo', () => {
+    it('o bot NASCE DESLIGADO — dois bots no mesmo cliente é menu em dobro', () => {
+        expect(configPadraoAtendimento().botAtivo).toBe(false);
+    });
+    it('o aviso de transferência ao cliente também NASCE DESLIGADO (admin liga)', () => {
+        expect(configPadraoAtendimento().avisarClienteTransferencia).toBe(false);
+        expect(configPadraoAtendimento().mensagens.transferencia).toContain('{fila}');
+        expect(resolverConfig({ avisarClienteTransferencia: true }).avisarClienteTransferencia).toBe(true);
+    });
+    it('resolverConfig preserva o gravado e completa o que faltar', () => {
+        const r = resolverConfig({ botAtivo: true, mensagens: { sair: 'Tchau!' } });
+        expect(r.botAtivo).toBe(true);
+        expect(r.mensagens.sair).toBe('Tchau!');
+        expect(r.mensagens.saudacao).toContain('{protocolo}');
+        expect(r.menu).toHaveLength(8);
+        // item de menu com fila inválida é filtrado, nunca engolido em silêncio no envio
+        expect(resolverConfig({ menu: [{ opcao: '1', fila: 'marketing', rotulo: 'X' }] }).menu).toHaveLength(8);
+    });
+});
+
+describe('horário de funcionamento (SP, com almoço)', () => {
+    const h = configPadraoAtendimento().horario; // seg-sex 8-12 / 13-17:30
+    it('manhã e tarde dentro; almoço e noite fora; fim de semana fora', () => {
+        expect(dentroDoHorario(h, new Date('2026-08-17T09:00:00-03:00'))).toBe(true);  // seg 9h
+        expect(dentroDoHorario(h, new Date('2026-08-17T12:30:00-03:00'))).toBe(false); // almoço
+        expect(dentroDoHorario(h, new Date('2026-08-17T17:29:00-03:00'))).toBe(true);
+        expect(dentroDoHorario(h, new Date('2026-08-17T17:30:00-03:00'))).toBe(false);
+        expect(dentroDoHorario(h, new Date('2026-08-16T10:00:00-03:00'))).toBe(false); // domingo
+    });
+});
+
+describe('protocolo, templates e menu', () => {
+    it('protocolo é número solto (estilo do bot atual) e cresce com o tempo', () => {
+        const a = gerarProtocolo(new Date('2026-08-16T12:00:00Z'), 5);
+        const b = gerarProtocolo(new Date('2026-08-16T12:00:01Z'), 5);
+        expect(a).toMatch(/^\d+$/);
+        expect(Number(b)).toBeGreaterThan(Number(a));
+    });
+    it('placeholders preenchem; desconhecido fica VISÍVEL (nunca some em silêncio)', () => {
+        expect(renderMensagem('Oi {nome}, protocolo {protocolo}', { nome: 'Ju', protocolo: '123' }))
+            .toBe('Oi Ju, protocolo 123');
+        expect(renderMensagem('Oi {nome}', {})).toBe('Oi {nome}');
+    });
+    it('menu lista as 8 opções e a escolha aceita "1", "1." e " 1 "', () => {
+        const cfg = configPadraoAtendimento();
+        const menu = montarTextoMenu(cfg);
+        expect(menu).toContain('1 - Recepção / Front Desk');
+        expect(menu).toContain('8 - Departamento - Jurídico');
+        expect(interpretarEscolha('4', cfg)?.fila).toBe('fiscal');
+        expect(interpretarEscolha(' 8. ', cfg)?.fila).toBe('juridico');
+        expect(interpretarEscolha('99', cfg)).toBeNull();
+        expect(interpretarEscolha('quero falar do DAS', cfg)).toBeNull();
+    });
+});
+
+describe('decidirAutomacao — o cérebro, puro', () => {
+    // Alcance 'todos' de propósito: esta suíte testa o CÉREBRO do bot. Quem
+    // decide A QUEM ele responde é `botAlcancaNumero`, com testes próprios.
+    const cfg = { ...configPadraoAtendimento(), botAtivo: true, botAlcance: 'todos' as const };
+    const dentroDoExpediente = new Date('2026-08-17T09:00:00-03:00');
+
+    it('bot desligado = silêncio TOTAL (a plataforma atual ainda responde)', () => {
+        expect(decidirAutomacao({ conversa: {}, textoMensagem: 'oi', config: configPadraoAtendimento(), agora: dentroDoExpediente })).toEqual([]);
+    });
+
+    it('1º contato: protocolo + saudação com nome + menu', () => {
+        const acoes = decidirAutomacao({
+            conversa: {}, textoMensagem: 'Bom dia', nomeContato: 'Ju',
+            config: cfg, agora: dentroDoExpediente, protocoloNovo: '2077',
+        });
+        expect(acoes[0]).toEqual({ tipo: 'gravarProtocolo', protocolo: '2077' });
+        expect(acoes[1].texto).toContain('Ju, aguarde um momento');
+        expect(acoes[1].texto).toContain('Protocolo: 2077');
+        expect(acoes[2].texto).toContain('1 - Recepção / Front Desk');
+    });
+
+    it('escolha numérica define a fila e confirma com o nome da fila', () => {
+        const acoes = decidirAutomacao({
+            conversa: { protocolo: '2077' }, textoMensagem: '5',
+            config: cfg, agora: dentroDoExpediente,
+        });
+        expect(acoes[0]).toEqual({ tipo: 'definirFila', fila: 'contabil' });
+        expect(acoes[1].texto).toContain('Gestão - Departamento Contábil');
+    });
+
+    it('conversa JÁ triada não recebe menu — atendente humano assume dali', () => {
+        const acoes = decidirAutomacao({
+            conversa: { fila: 'fiscal', protocolo: '2077' }, textoMensagem: 'segue o comprovante',
+            config: cfg, agora: dentroDoExpediente,
+        });
+        expect(acoes).toEqual([]);
+    });
+
+    it('#sair encerra: reseta a triagem, RESOLVE (por cliente) e — com a pesquisa ligada — pede a nota', () => {
+        const acoes = decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '#sair', config: cfg, agora: dentroDoExpediente });
+        expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
+        expect(acoes[1]).toEqual({ tipo: 'resolverConversa', por: 'cliente' });
+        expect(acoes[2].texto).toContain('encerrado');
+        expect(acoes.some((a: any) => a.tipo === 'marcarAguardandoAvaliacao')).toBe(false); // pesquisa desligada
+        const comPesquisa = decidirAutomacao({
+            conversa: { fila: 'fiscal' }, textoMensagem: '#sair',
+            config: { ...cfg, avaliacaoAtiva: true }, agora: dentroDoExpediente,
+        });
+        expect(comPesquisa.some((a: any) => a.texto?.includes('1 a 10'))).toBe(true);
+        expect(comPesquisa[comPesquisa.length - 1]).toEqual({ tipo: 'marcarAguardandoAvaliacao' });
+    });
+
+    it('#menu reapresenta o menu em qualquer estado — é o cliente pedindo outro depto', () => {
+        const acoes = decidirAutomacao({ conversa: { fila: 'fiscal', protocolo: '2077' }, textoMensagem: '#menu', config: cfg, agora: dentroDoExpediente });
+        expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
+        expect(acoes[1].texto).toContain('1 - Recepção / Front Desk');
+        // "2" solto em conversa TRIADA continua sendo resposta ao atendente, nunca menu
+        expect(decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '2', config: cfg, agora: dentroDoExpediente })).toEqual([]);
+    });
+
+    it('fora do horário avisa UMA vez por dia por conversa (anti-metralhadora)', () => {
+        const noite = new Date('2026-08-17T22:00:00-03:00');
+        const primeira = decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: 'oi', config: cfg, agora: noite });
+        expect(primeira.some((a: any) => a.texto?.includes('horário de atendimento'))).toBe(true);
+        expect(primeira.some((a: any) => a.tipo === 'marcarAusenciaEnviada')).toBe(true);
+        const repetida = decidirAutomacao({
+            conversa: { fila: 'fiscal', ausenciaAvisadaEm: '2026-08-17' }, textoMensagem: 'alguém?',
+            config: cfg, agora: noite,
+        });
+        expect(repetida).toEqual([]);
+    });
+});
+
+// ============================================================================
+// 🚨 ALCANCE DO BOT — o que torna a CONVIVÊNCIA possível.
+//
+// Paulo, 17/08: *"temos que permanecer com os 2 apps ativos, não faz sentido
+// criar uma opção pra migrar o bot se os 2 não estiverem ativos"*.
+//
+// Os dois apps ficam assinados na WABA DE PROPÓSITO — a Ultra Fox é a rede de
+// segurança enquanto o SP Connect é validado. Só que os dois recebem a MESMA
+// mensagem: se os dois bots responderem, o cliente vê menu em dobro. A saída
+// não é desligar a Ultra Fox antes da hora; é limitar QUEM o nosso bot atende.
+// ============================================================================
+
+describe('🚨 botAlcancaNumero — o piloto que deixa os dois apps de pé', () => {
+    const piloto = (nums: string[]) => ({ botAlcance: 'piloto' as const, botNumerosPiloto: nums });
+
+    it('responde ao número do piloto', () => {
+        expect(botAlcancaNumero(piloto(['5511999990000']), '5511999990000')).toBe(true);
+    });
+
+    it('🚨 NÃO responde a quem está fora do piloto — é isso que protege o cliente', () => {
+        expect(botAlcancaNumero(piloto(['5511999990000']), '5511888887777')).toBe(false);
+    });
+
+    it('🚨 lista VAZIA no piloto não responde a ninguém (não é "sem restrição")', () => {
+        // A leitura oposta soltaria o bot na carteira inteira quando alguém
+        // apagasse a lista sem querer.
+        expect(botAlcancaNumero(piloto([]), '5511999990000')).toBe(false);
+    });
+
+    it('alcance "todos" responde a qualquer um — é o dia do corte', () => {
+        expect(botAlcancaNumero({ botAlcance: 'todos' as const, botNumerosPiloto: [] }, '5511888887777')).toBe(true);
+    });
+
+    it('máscara no cadastro não impede o casamento (dígito é a chave)', () => {
+        expect(botAlcancaNumero(piloto(['+55 (11) 99999-0000']), '5511999990000')).toBe(true);
+    });
+
+    it('🚨 casa pelos últimos 11 dígitos — o WhatsApp entrega ora com o 9, ora sem', () => {
+        // Casar a string inteira faria o piloto "não pegar" justamente o
+        // número que a pessoa acabou de cadastrar.
+        expect(botAlcancaNumero(piloto(['11999990000']), '5511999990000')).toBe(true);
+        expect(botAlcancaNumero(piloto(['5511999990000']), '11999990000')).toBe(true);
+    });
+
+    it('número ilegível não é atendido — bot não escapa do piloto pela porta dos fundos', () => {
+        expect(botAlcancaNumero(piloto(['5511999990000']), '')).toBe(false);
+        expect(botAlcancaNumero(piloto(['5511999990000']), null as any)).toBe(false);
+    });
+
+    it('config sem alcance definido cai no lado SEGURO (piloto), nunca em "todos"', () => {
+        expect(botAlcancaNumero({} as any, '5511999990000')).toBe(false);
+    });
+
+    it('soDigitos tira máscara', () => {
+        expect(soDigitos('+55 (11) 99999-0000')).toBe('5511999990000');
+    });
+});
+
+describe('🚨 decidirAutomacao respeita o alcance', () => {
+    const cfg = {
+        ...resolverConfig({ botAtivo: true, botAlcance: 'piloto', botNumerosPiloto: ['5511999990000'] }),
+    };
+
+    it('número do piloto recebe o menu', () => {
+        const acoes = decidirAutomacao({
+            conversa: {}, numero: '5511999990000', textoMensagem: 'oi',
+            config: cfg, protocoloNovo: 'P1',
+        });
+        expect(acoes.length).toBeGreaterThan(0);
+    });
+
+    it('🚨 número FORA do piloto recebe SILÊNCIO — igualzinho a bot desligado', () => {
+        const acoes = decidirAutomacao({
+            conversa: {}, numero: '5511888887777', textoMensagem: 'oi',
+            config: cfg, protocoloNovo: 'P1',
+        });
+        expect(acoes).toEqual([]);
+    });
+
+    it('nem #sair escapa do alcance — comando de fora do piloto não age', () => {
+        const acoes = decidirAutomacao({
+            conversa: { fila: 'fiscal' }, numero: '5511888887777', textoMensagem: '#sair',
+            config: cfg, protocoloNovo: 'P1',
+        });
+        expect(acoes).toEqual([]);
+    });
+});
+
+describe('🚨 a migração não emudece o bot de quem já o tinha ligado', () => {
+    it('config ANTIGA com bot ligado (sem o campo novo) segue respondendo a TODOS', () => {
+        // Ela respondia a todo mundo; virar "piloto com lista vazia" a deixaria
+        // MUDA — e o efeito só apareceria no cliente sem resposta, sem ninguém
+        // ligar uma coisa à outra.
+        const c = resolverConfig({ botAtivo: true });
+        expect(c.botAlcance).toBe('todos');
+        expect(botAlcancaNumero(c, '5511888887777')).toBe(true);
+    });
+
+    it('config NOVA (bot desligado) nasce em piloto — o lado seguro', () => {
+        expect(resolverConfig({}).botAlcance).toBe('piloto');
+        expect(configPadraoAtendimento().botAlcance).toBe('piloto');
+    });
+
+    it('escolha EXPLÍCITA do admin vence a retrocompatibilidade', () => {
+        expect(resolverConfig({ botAtivo: true, botAlcance: 'piloto' }).botAlcance).toBe('piloto');
+    });
+
+    it('a lista gravada é normalizada pra dígitos', () => {
+        const c = resolverConfig({ botNumerosPiloto: ['+55 (11) 99999-0000', 'xx'] });
+        expect(c.botNumerosPiloto).toEqual(['5511999990000']);
+    });
+});
+
+// ============================================================================
+// 🚨 MATA-BURRO: O TEXTO NA TELA E A RÉGUA DO CÓDIGO NÃO PODEM DISCORDAR.
+//
+// Defeito real, 17/08, no PRIMEIRO teste ponta a ponta do Paulo. A mensagem
+// de avaliação foi editada para "De 1 a 10" e o `interpretarNota` só aceitava
+// 1-5. Ele respondeu **10** — e a nota virou `null`, sem registro e sem aviso.
+// O painel 📊 mostraria "0 avaliações" com o cliente tendo avaliado.
+//
+// É a família do "número digitado sem documento por trás": duas leituras do
+// mesmo fato discordando, e a perda acontecendo em silêncio. A escala virou
+// DADO (a mensagem, a leitura e o painel leem dela) e o descarte virou
+// REGISTRO NOMEADO.
+// ============================================================================
+import {
+    ESCALAS_AVALIACAO, ESCALA_AVALIACAO_PADRAO, leituraDaNota, conferirEscalaNaMensagem,
+} from '../sefaz-backend/whatsapp-atendimento.js';
+
+describe('🚨 escala da avaliação — o texto e a régua andam juntos', () => {
+    it('a escala padrão é 1 a 10 (decisão do Paulo, 17/08)', () => {
+        expect(ESCALA_AVALIACAO_PADRAO).toBe(10);
+        expect(configPadraoAtendimento().avaliacaoEscala).toBe(10);
+        expect(configPadraoAtendimento().mensagens.avaliacao).toContain('1 a 10');
+    });
+
+    it('🚨 nota 10 é ACEITA na escala 10 — era exatamente a que se perdia', () => {
+        expect(interpretarNota('10', 10)).toBe(10);
+        expect(leituraDaNota('10', 10)).toEqual({ tipo: 'nota', nota: 10 });
+    });
+
+    it('na escala 5, o 10 não vira nota — mas é NOMEADO como fora da escala', () => {
+        // `null` fundia "não é nota" com "é nota inválida", e são ações opostas.
+        expect(leituraDaNota('10', 5)).toEqual({ tipo: 'fora-da-escala', nota: null, informado: 10, escala: 5 });
+    });
+
+    it('texto que não é número segue sendo "não é nota" (o fluxo normal continua)', () => {
+        expect(leituraDaNota('bom dia', 10).tipo).toBe('nao-e-nota');
+    });
+
+    it('zero e 11 não viram nota na escala 10', () => {
+        expect(interpretarNota('0', 10)).toBeNull();
+        expect(interpretarNota('11', 10)).toBeNull();
+    });
+
+    it('escala inválida cai no padrão em vez de aceitar qualquer número', () => {
+        expect(interpretarNota('10', 7 as any)).toBe(10);   // 7 não existe ⇒ padrão 10
+        expect(interpretarNota('99', 999 as any)).toBeNull();
+    });
+
+    it('a config só aceita as escalas conhecidas', () => {
+        expect(resolverConfig({ avaliacaoEscala: 5 }).avaliacaoEscala).toBe(5);
+        expect(resolverConfig({ avaliacaoEscala: 7 }).avaliacaoEscala).toBe(ESCALA_AVALIACAO_PADRAO);
+        expect(ESCALAS_AVALIACAO).toEqual([5, 10]);
+    });
+});
+
+describe('🚨 conferirEscalaNaMensagem — a trava que teria pego o defeito', () => {
+    it('acusa mensagem que pede 1 a 10 com escala 5, dizendo o custo', () => {
+        const r = conferirEscalaNaMensagem('De 1 a 10, que nota você dá?', 5);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.erro).toMatch(/DESCARTADA/);
+    });
+
+    it('aceita quando os dois dizem a mesma coisa', () => {
+        expect(conferirEscalaNaMensagem('De 1 a 10, que nota você dá?', 10).ok).toBe(true);
+        expect(conferirEscalaNaMensagem('De 1 a 5, que nota?', 5).ok).toBe(true);
+    });
+
+    it('entende as várias formas de escrever a faixa', () => {
+        expect(conferirEscalaNaMensagem('nota de 1 até 10', 10).ok).toBe(true);
+        expect(conferirEscalaNaMensagem('nota 1-10', 10).ok).toBe(true);
+    });
+
+    it('texto SEM faixa explícita não é acusado — nem toda redação diz o intervalo', () => {
+        const r = conferirEscalaNaMensagem('Que nota você dá para este atendimento?', 10);
+        expect(r.ok).toBe(true);
+        if (r.ok) expect(r.semFaixaNoTexto).toBe(true);
+    });
+});

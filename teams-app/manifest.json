@@ -1,0 +1,40 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.16",
+    "version": "1.0.0",
+    "id": "957eb31d-719a-4ea5-adc6-de5f41be6219",
+    "packageName": "br.com.spassessoriacontabil.spconnect",
+    "developer": {
+        "name": "SP Assessoria Contábil",
+        "websiteUrl": "https://www.spassessoriacontabil.com.br",
+        "privacyUrl": "https://www.spassessoriacontabil.com.br",
+        "termsOfUseUrl": "https://www.spassessoriacontabil.com.br"
+    },
+    "icons": {
+        "color": "color.png",
+        "outline": "outline.png"
+    },
+    "name": {
+        "short": "SP Connect",
+        "full": "SP Connect — WhatsApp API Oficial"
+    },
+    "description": {
+        "short": "Atendimento WhatsApp da SP Assessoria Contábil",
+        "full": "Inbox de atendimento do WhatsApp (API oficial da Meta) da SP Assessoria Contábil: conversas por fila de departamento, janela de 24h, templates aprovados e histórico por cliente."
+    },
+    "accentColor": "#0E3BFA",
+    "staticTabs": [
+        {
+            "entityId": "spconnect",
+            "name": "SP Connect",
+            "contentUrl": "https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/connect",
+            "websiteUrl": "https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/connect",
+            "scopes": ["personal"]
+        }
+    ],
+    "permissions": ["identity"],
+    "validDomains": [
+        "consultor-fiscal-inteligente-631239634290.us-west1.run.app",
+        "app.spassessoriacontabil.com.br"
+    ]
+}
