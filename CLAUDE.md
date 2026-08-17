@@ -132,6 +132,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **🚨 O AVISADOR NÃO PODE COMPARTILHAR O MODO DE FALHA QUE ELE DENUNCIA — 3ª
+  vez do mesmo cenário** (17/08, deploy 566). O deploy caiu em **"Prepare all
+  required actions"**: o GitHub devolveu **429 e depois 503** ao baixar
+  `google-github-actions/auth`. **Nenhum passo do job rodou** — inclusive o que
+  abre a issue, que morava DENTRO do mesmo job. Resultado: trabalho mesclado na
+  main, FORA DO AR, e ninguém avisado. As duas correções anteriores (a issue em
+  13/08 e o `env:` no mesmo dia) não alcançavam este caso, porque as duas viviam
+  no job que morre.
+  ✂️ A trava virou **ESTRUTURAL**: job próprio `avisar-falha`, com `needs:
+  deploy`, e **ZERO `uses:`** — usa só o `gh` que já vem no runner, porque a
+  falha coberta é justamente o download de action (sem checkout também; o corpo
+  da issue não precisa do repo, e por isso o `gh` leva `--repo` explícito).
+  ⚠️ E passou a disparar em **`cancelled()`** além de `failure()`: em 06/08 três
+  deploys foram cancelados aos 15m00s cravados sem runner atribuído (cota da
+  conta) e não geraram aviso nenhum — cancelamento por plataforma é tão
+  invisível quanto falha. A issue diz em qual estado terminou.
+  ⚠️ **E EU NÃO CONSIGO REEXECUTAR DEPLOY**: `rerun_failed_jobs` e
+  `run_workflow` devolvem **403 (Resource not accessible by integration)** para
+  este token. Quando um deploy cai por infraestrutura, o caminho é **um push
+  novo na main** (ou o Paulo reexecutando no painel) — não perder tempo tentando
+  disparar pela API.
 - **🚨 O SEGUNDO ENVIO DO MESMO DÉBITO ESTÁ BARRADO — a unidade é o DÉBITO,
   nunca a guia** (Paulo, 17/08, autorizando na sequência do caso HYPE: *"pode
   fazer, barrar o segundo envio do mesmo débito"*). O aviso de mistura resolvia
