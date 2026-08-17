@@ -44,6 +44,7 @@ import {
     rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
 } from '../../services/spConnect';
 import { conferirEscalaNaMensagem } from '../../sefaz-backend/whatsapp-atendimento.js';
+import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
 
 const TOM_TICK: Record<string, string> = {
     ok: 'text-emerald-600 dark:text-emerald-400',
@@ -2196,7 +2197,13 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 {m.texto && <p className="whitespace-pre-wrap break-words">{m.texto}</p>}
                                                 {!m.texto && !midia && (
                                                     <p className="italic text-slate-400 text-[11px]">
-                                                        {saida
+                                                        {/* A MESMA régua que o backend usa pra decidir de quem é a
+                                                            falha de entrega. Tinha aqui uma cópia (`saida` + sem
+                                                            conteúdo) — duas réguas pro mesmo fato divergem, e aqui
+                                                            elas apareceriam LADO A LADO no mesmo balão: a linha
+                                                            dizendo "de outra plataforma" e o erro logo abaixo
+                                                            mandando o colaborador converter o arquivo. */}
+                                                        {saiuPorOutraPlataforma(m as any)
                                                             ? 'mensagem enviada por outra plataforma (a Meta não compartilha o texto)'
                                                             : `(${m.tipo || 'mensagem'})`}
                                                     </p>

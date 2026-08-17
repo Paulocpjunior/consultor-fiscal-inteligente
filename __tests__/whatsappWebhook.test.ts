@@ -6,7 +6,7 @@ import { createHmac } from 'crypto';
 import {
     configWebhook, faltasDaConfigWebhook, responderVerificacao,
     assinaturaValida, extrairEventos, traduzirStatusEntrega,
-    interpretarErroEntrega, janela24hAte, resumoParaConversa,
+    interpretarErroEntrega, saiuPorOutraPlataforma, janela24hAte, resumoParaConversa,
     caminhoStorageMidia,
 } from '../sefaz-backend/whatsapp-webhook.js';
 
@@ -203,7 +203,8 @@ describe('🚨 131053 — a frase diz O QUE foi enviado e o que fazer com o ARQU
 
     it('com a mídia, DESCREVE o arquivo — sem isso quem lê não tem por onde começar', () => {
         const f = interpretarErroEntrega(131053, '', {
-            nomeArquivo: 'contrato.pdf', mime: 'application/pdf', tipo: 'document', tamanhoBytes: 5 * 1024 * 1024,
+            enviadoPor: 'ju@sp.com.br',
+            midia: { nomeArquivo: 'contrato.pdf', mime: 'application/pdf', tipo: 'document', tamanhoBytes: 5 * 1024 * 1024 },
         });
         expect(f).toContain('contrato.pdf');
         expect(f).toContain('application/pdf');
@@ -211,16 +212,16 @@ describe('🚨 131053 — a frase diz O QUE foi enviado e o que fazer com o ARQU
     });
 
     it('a ação é POR TIPO — áudio não se resolve como PDF', () => {
-        const audio = interpretarErroEntrega(131053, '', { nomeArquivo: 'a.ogg', tipo: 'audio' });
+        const audio = interpretarErroEntrega(131053, '', { midia: { nomeArquivo: 'a.ogg', tipo: 'audio' } });
         expect(audio).toMatch(/mp3|opus/i);
-        const doc = interpretarErroEntrega(131053, '', { nomeArquivo: 'x.pdf', tipo: 'document' });
+        const doc = interpretarErroEntrega(131053, '', { midia: { nomeArquivo: 'x.pdf', tipo: 'document' } });
         expect(doc).toMatch(/PDF/);
-        const img = interpretarErroEntrega(131053, '', { nomeArquivo: 'x.png', tipo: 'image' });
+        const img = interpretarErroEntrega(131053, '', { midia: { nomeArquivo: 'x.png', tipo: 'image' } });
         expect(img).toMatch(/JPG|PNG/);
     });
 
     it('diz que a cópia continua no histórico — senão parece que o arquivo se perdeu', () => {
-        const f = interpretarErroEntrega(131053, '', { nomeArquivo: 'x.pdf', tipo: 'document' });
+        const f = interpretarErroEntrega(131053, '', { midia: { nomeArquivo: 'x.pdf', tipo: 'document' } });
         expect(f).toMatch(/hist[óo]rico/i);
     });
 
@@ -228,5 +229,68 @@ describe('🚨 131053 — a frase diz O QUE foi enviado e o que fazer com o ARQU
         expect(interpretarErroEntrega(131049)).toMatch(/filtro de marketing/i);
         expect(interpretarErroEntrega(131047)).toMatch(/24h/);
         expect(interpretarErroEntrega(131026)).toMatch(/não tem WhatsApp/i);
+    });
+});
+
+// ============================================================================
+// 🚨 A AÇÃO TEM QUE SER DE QUEM PODE AGIR
+//
+// Print do Paulo (17/08, conversa da Agatha, já no build 570): a falha 131053
+// apareceu num balão que a própria tela rotulava como *"mensagem enviada por
+// outra plataforma"* — e logo abaixo a frase mandava o NOSSO colaborador
+// converter o PDF. Ele nunca enviou aquele arquivo, e este app nem o tem: a
+// Meta manda o STATUS de toda mensagem do número para todos os apps
+// assinados, mas não manda o conteúdo das que saíram por outro.
+//
+// Ação impossível ocupa o lugar da útil — é a mesma família do "tente
+// reenviar" que este mesmo código corrigiu de manhã.
+// ============================================================================
+describe('🚨 falha de mensagem que saiu pela OUTRA plataforma', () => {
+    // Exatamente o que o webhook grava quando só o status chega: sem
+    // enviadoPor, sem texto, sem mídia.
+    const daOutra = { direcao: 'saida', texto: null, midia: null };
+
+    it('reconhece pelo REGISTRO PRÓPRIO: sem enviadoPor, sem texto, sem mídia', () => {
+        expect(saiuPorOutraPlataforma(daOutra)).toBe(true);
+        expect(saiuPorOutraPlataforma({ ...daOutra, enviadoPor: 'ju@sp.com.br' })).toBe(false);
+        expect(saiuPorOutraPlataforma({ ...daOutra, texto: 'oi' })).toBe(false);
+        expect(saiuPorOutraPlataforma({ ...daOutra, midia: { tipo: 'document' } })).toBe(false);
+        expect(saiuPorOutraPlataforma({ direcao: 'entrada' })).toBe(false);
+    });
+
+    it('NA DÚVIDA não afirma que é de outro — o erro nessa direção é o caro', () => {
+        // Sem o documento (status chegando antes da nossa gravação), dizer
+        // "saiu por outra plataforma" faria o colaborador ignorar uma falha
+        // que é DELE. O contrário só custa uma frase inútil.
+        expect(saiuPorOutraPlataforma(null)).toBe(false);
+        expect(saiuPorOutraPlataforma(undefined)).toBe(false);
+    });
+
+    it('131053 de mensagem alheia: diz de QUEM é a ação e NÃO manda converter arquivo nenhum', () => {
+        const f = interpretarErroEntrega(131053, '', daOutra);
+        expect(f).toMatch(/NÃO saiu pelo SP Connect|outra plataforma/i);
+        expect(f).toMatch(/quem reenvia é quem mandou/i);
+        expect(f).toMatch(/cliente NÃO recebeu/i);
+        // e não finge conhecer um arquivo que nunca passou por aqui
+        expect(f).not.toMatch(/PDF → imagem/);
+    });
+
+    it('a mesma falha SENDO nossa continua descrevendo o arquivo', () => {
+        const f = interpretarErroEntrega(131053, '', {
+            direcao: 'saida', enviadoPor: 'ju@sp.com.br',
+            midia: { nomeArquivo: 'guia.pdf', tipo: 'document' },
+        });
+        expect(f).toContain('guia.pdf');
+        expect(f).not.toMatch(/outra plataforma/i);
+    });
+
+    it('os outros códigos ganham a RESSALVA de dono, sem perder a explicação', () => {
+        const filtro = interpretarErroEntrega(131049, '', daOutra);
+        expect(filtro).toMatch(/filtro de marketing/i);      // a causa continua dita
+        expect(filtro).toMatch(/OUTRA plataforma/);          // e agora diz de quem é
+        expect(interpretarErroEntrega(131047, '', daOutra)).toMatch(/OUTRA plataforma/);
+        expect(interpretarErroEntrega(0, '', daOutra)).toMatch(/OUTRA plataforma/);
+        // Nossa mensagem não carrega ressalva nenhuma.
+        expect(interpretarErroEntrega(131049)).not.toMatch(/OUTRA plataforma/);
     });
 });

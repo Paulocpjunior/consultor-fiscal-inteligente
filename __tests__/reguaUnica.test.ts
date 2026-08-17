@@ -71,6 +71,28 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'De quem é a mensagem que falhou (nossa × da outra plataforma)',
+        dono: 'sefaz-backend/whatsapp-webhook.js',
+        comoUsar: "import { saiuPorOutraPlataforma } from 'sefaz-backend/whatsapp-webhook.js'",
+        porque: 'Print do Paulo em 17/08 (conversa da Agatha): a falha de mídia apareceu num balão que a '
+            + 'própria tela rotulava "mensagem enviada por outra plataforma" — e a linha de baixo mandava '
+            + 'o colaborador converter um PDF que ele nunca enviou. Eram DUAS réguas pro mesmo fato, e '
+            + 'elas se contradiziam no MESMO balão: a tela decidia por conta própria (saída + sem '
+            + 'conteúdo) e o backend não decidia nada. Enquanto os dois apps ficarem assinados na WABA, '
+            + 'a Meta manda o status de TODA mensagem do número para todos — então esta pergunta aparece '
+            + 'em toda tela que mostrar entrega, e a resposta tem que ser uma só.',
+        assinaturas: [
+            /function saiuPorOutraPlataforma\s*\(/,
+            // A cópia que existia: "é saída, não tem texto e não tem mídia ⇒ é de outro app".
+            /enviada por outra plataforma \(a Meta não compartilha o texto\)/,
+        ],
+        permitido: [
+            // A TELA imprime a frase — ela é o texto que o usuário lê, e quem
+            // DECIDE se ela aparece é o núcleo, importado logo acima.
+            'components/SpConnect/index.tsx',
+        ],
+    },
+    {
         nome: 'Débito já enviado ao cliente nesta competência (barra a cobrança em dobro)',
         dono: 'sefaz-backend/debito-ja-enviado.js',
         comoUsar: "import { conferirDebitosJaEnviados } from 'sefaz-backend/debito-ja-enviado.js'",

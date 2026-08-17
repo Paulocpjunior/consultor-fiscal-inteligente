@@ -172,7 +172,10 @@ async function gravarStatus(db, st) {
     // frase do erro descreva O QUE foi enviado (o 131053 sem isso é beco).
     const refMsg = db.collection('whatsapp_mensagens').doc(st.metaMessageId);
     const atualMsg = await refMsg.get();
-    const midiaDaMsg = atualMsg.data()?.midia || null;
+    // O DOCUMENTO inteiro, não só a mídia: é dele que sai também a resposta
+    // de QUEM mandou — com os dois apps na WABA, boa parte das falhas que
+    // chegam aqui é de mensagem que saiu pela outra plataforma.
+    const msgDoc = atualMsg.data() || null;
     const patch = {
         statusEntrega: statusPt,
         statusEm: st.timestamp || agora,
@@ -180,7 +183,7 @@ async function gravarStatus(db, st) {
             erroEntrega: {
                 codigo: st.erro.codigo,
                 detalhe: st.erro.detalhe || st.erro.titulo || null,
-                acao: interpretarErroEntrega(st.erro.codigo, st.erro.detalhe || '', midiaDaMsg),
+                acao: interpretarErroEntrega(st.erro.codigo, st.erro.detalhe || '', msgDoc),
             },
         } : {}),
     };
