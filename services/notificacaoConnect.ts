@@ -115,6 +115,53 @@ export function textoDaPermissao(estado: EstadoPermissao): { texto: string; acao
 }
 
 /**
+ * 🚨 O QUE FALTA NOS AVISOS — considerando as TRÊS camadas.
+ *
+ * Nasceu de um defeito real (17/08, print do Paulo): a barra de aviso só
+ * olhava permissão e som. Com os dois ligados ela sumia — e o botão que liga
+ * o **push do celular** morava DENTRO dela. Resultado: a terceira camada não
+ * tinha como ser ligada, e nada na tela dizia por quê. A ação desapareceu
+ * junto com o alerta.
+ *
+ * Por isso a pergunta agora é uma só e mora aqui, testável: *"falta alguma
+ * camada?"*. E ela é ordenada pelo que BLOQUEIA mais — permissão negada
+ * impede tudo; push desligado só impede o app fechado.
+ */
+export function faltaNosAvisos(p: {
+    permissao: EstadoPermissao;
+    somOk: boolean;
+    pushDisponivel: boolean;
+    pushLigado: boolean;
+}): { falta: boolean; texto: string; acao: string | null; oferecerPush: boolean } {
+    // Sem permissão (ou negada/sem suporte) manda: é o que impede o pop-up.
+    if (p.permissao !== 'concedida') {
+        const t = textoDaPermissao(p.permissao);
+        return { falta: true, texto: t.texto, acao: t.acao, oferecerPush: false };
+    }
+    if (!p.somOk) {
+        return {
+            falta: true,
+            texto: '🔔 Avisos ligados — falta liberar o SOM.',
+            acao: 'O navegador só libera som depois do primeiro clique nesta aba.',
+            // Mesmo faltando som, se o push estiver disponível e desligado o
+            // botão dele aparece: são camadas independentes, e esconder uma
+            // atrás da outra foi exatamente o defeito.
+            oferecerPush: p.pushDisponivel && !p.pushLigado,
+        };
+    }
+    if (p.pushDisponivel && !p.pushLigado) {
+        return {
+            falta: true,
+            texto: '🔔 Som e pop-up ligados. Falta o aviso no CELULAR — é o que avisa com o app fechado.',
+            acao: null,
+            oferecerPush: true,
+        };
+    }
+    // Tudo ligado: nada de ruído fixo na tela.
+    return { falta: false, texto: '', acao: null, oferecerPush: false };
+}
+
+/**
  * Preferências por pessoa. Tudo LIGADO por padrão — a decisão do Paulo é
  * "quanto mais notificação melhor"; quem se incomodar desliga, e aí é
  * escolha dela, não omissão do app.
