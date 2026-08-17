@@ -29,6 +29,28 @@ export interface MensagemTemplatePayload {
 }
 export function montarMensagemTemplate(p: MensagemTemplateInput): MensagemTemplatePayload;
 
+export interface ContatoParaCartao {
+    numero: string;
+    nome?: string | null;
+    empresa?: string | null;
+}
+export interface MensagemContatoPayload {
+    messaging_product: string;
+    to: string;
+    type: string;
+    contacts: Array<{
+        name: { formatted_name: string; first_name: string; last_name?: string };
+        phones: Array<{ phone: string; type: string; wa_id: string }>;
+        org?: { company: string };
+    }>;
+}
+export function montarMensagemContato(
+    p: { para: string; contatos?: ContatoParaCartao[] }): MensagemContatoPayload;
+export function enviarContatoWhatsapp(
+    p: { para: string; contatos: ContatoParaCartao[] },
+    deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
+): Promise<RespostaWhatsapp & { configuracaoIncompleta?: boolean }>;
+
 export interface RespostaWhatsapp {
     ok: boolean;
     messageId: string | null;

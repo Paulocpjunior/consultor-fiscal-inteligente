@@ -20,6 +20,8 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada,
+    listarContatos, criarContato, atualizarContato, salvarEtiqueta,
+    Contato, Etiqueta,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -499,6 +501,72 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         else setAvErro(r.error || 'Falha ao carregar as avaliações.');
     };
 
+    // ── 📇 CONTATOS: a agenda que faltava. O importador da Ultra Fox grava em
+    // `whatsapp_contatos` e, até aqui, NENHUMA tela lia — 800 contatos
+    // importados ficavam invisíveis até alguém escrever pro número.
+    const [contatosAberto, setContatosAberto] = useState(false);
+    const [contatos, setContatos] = useState<Contato[]>([]);
+    const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([]);
+    const [ctResumo, setCtResumo] = useState<{
+        total: number; totalFiltrado: number; truncado: boolean; limiteLeitura: number | null;
+        semEtiquetaTotal: number; porEtiqueta: Record<string, number>;
+    } | null>(null);
+    const [ctBusca, setCtBusca] = useState('');
+    const [ctFiltro, setCtFiltro] = useState<string>('');   // '' = todos · '__sem' = sem etiqueta
+    const [ctCarregando, setCtCarregando] = useState(false);
+    const [ctErro, setCtErro] = useState<string | null>(null);
+    const [ctSel, setCtSel] = useState<Contato | null>(null);
+    const [ctNovo, setCtNovo] = useState<{ numero: string; nome: string } | null>(null);
+    const [ctMsg, setCtMsg] = useState<string | null>(null);
+
+    const carregarContatos = async (opts: { busca?: string; filtro?: string } = {}) => {
+        setCtCarregando(true); setCtErro(null);
+        const filtro = opts.filtro !== undefined ? opts.filtro : ctFiltro;
+        const r = await listarContatos({
+            busca: opts.busca !== undefined ? opts.busca : ctBusca,
+            etiqueta: filtro && filtro !== '__sem' ? filtro : '',
+            semEtiqueta: filtro === '__sem',
+        });
+        setCtCarregando(false);
+        if (!r.ok) { setCtErro(r.error || 'Falha ao carregar os contatos.'); return; }
+        setContatos(r.contatos); setEtiquetas(r.etiquetas);
+        setCtResumo({
+            total: r.total, totalFiltrado: r.totalFiltrado, truncado: r.truncado,
+            limiteLeitura: r.limiteLeitura, semEtiquetaTotal: r.semEtiquetaTotal, porEtiqueta: r.porEtiqueta,
+        });
+    };
+    const abrirContatos = () => { setContatosAberto(true); setCtMsg(null); carregarContatos(); };
+
+    const alternarEtiqueta = async (c: Contato, id: string) => {
+        const novas = c.etiquetas.includes(id) ? c.etiquetas.filter((x) => x !== id) : [...c.etiquetas, id];
+        const r = await atualizarContato(c.numero, { etiquetas: novas });
+        if (!r.ok) { setCtMsg(r.error || 'Não deu para etiquetar.'); return; }
+        const atualizado = { ...c, etiquetas: novas, pendenciasLgpd: r.pendenciasLgpd };
+        setCtSel(atualizado);
+        setContatos((l) => l.map((x) => (x.numero === c.numero ? atualizado : x)));
+        setCtMsg(null);
+    };
+
+    const registrarConsentimento = async (c: Contato, etiqueta: string) => {
+        const como = window.prompt(
+            'Como o titular consentiu? (ex.: "pediu no WhatsApp em 10/08", "assinou no contrato", "marcou no formulário do site")\n\n'
+            + 'Isto fica gravado com a data e o seu nome — é a prova de que houve consentimento.');
+        if (como == null || !como.trim()) return;
+        const r = await atualizarContato(c.numero, { consentimento: { etiqueta, como } });
+        if (!r.ok) { setCtMsg(r.error || 'Não deu para registrar.'); return; }
+        setCtMsg('✓ Consentimento registrado.');
+        carregarContatos();
+        setCtSel(null);
+    };
+
+    const criarNovoContato = async () => {
+        if (!ctNovo) return;
+        const r = await criarContato({ numero: ctNovo.numero, nome: ctNovo.nome });
+        if (!r.ok) { setCtMsg(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
+        setCtNovo(null); setCtMsg('✓ Contato criado.');
+        carregarContatos();
+    };
+
     // ── ℹ️ SOBRE: manual, o que o app faz, por que existe e o que mudou.
     // O selo vermelho é a única coisa que diz à equipe que há o que ler — e
     // ele só apaga quando ALGUÉM ABRE (apagar sozinho seria mentira).
@@ -924,6 +992,181 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 </div>
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal 📇 CONTATOS (agenda, etiquetas, LGPD) ────────────────── */}
+            {contatosAberto && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setContatosAberto(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl my-8" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+                            <div className="min-w-0">
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">📇 Contatos</h3>
+                                <p className="text-[10px] text-slate-400">
+                                    {ctResumo ? `${ctResumo.total} no total` : 'carregando…'}
+                                    {ctResumo?.limiteLeitura ? ` · lendo os primeiros ${ctResumo.limiteLeitura} (há mais no banco)` : ''}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <button onClick={() => { setCtNovo({ numero: '', nome: '' }); setCtMsg(null); }}
+                                    className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
+                                    ➕ Novo
+                                </button>
+                                {ehAdmin && (
+                                    <button onClick={() => { setContatosAberto(false); setCfgAba('importar'); setCfgAberta(true); }}
+                                        title="Importar o backup da Ultra Fox (contatos e mensagens)"
+                                        className="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
+                                        📥 Importar
+                                    </button>
+                                )}
+                                <button onClick={() => setContatosAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                            </div>
+                        </div>
+
+                        <div className="p-4 space-y-2">
+                            <input value={ctBusca}
+                                onChange={(e) => { setCtBusca(e.target.value); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') carregarContatos(); }}
+                                onBlur={() => carregarContatos()}
+                                placeholder="🔎 Nome, empresa ou número… (Enter para buscar)"
+                                className="w-full px-2.5 py-1.5 text-[12px] rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400" />
+
+                            {/* Cada etiqueta com a CONTAGEM do conjunto inteiro — número do
+                                filtro seria circular ("mostra 3 de 3"). */}
+                            <div className="flex gap-1.5 flex-wrap">
+                                {([['', `Todos · ${ctResumo?.total ?? 0}`], ['__sem', `Sem etiqueta · ${ctResumo?.semEtiquetaTotal ?? 0}`]] as const).map(([id, rot]) => (
+                                    <button key={id || 'todos'} onClick={() => { setCtFiltro(id); carregarContatos({ filtro: id }); }}
+                                        className={`text-[10px] font-bold px-2 py-1 rounded-full ${ctFiltro === id
+                                            ? 'bg-[#0e3bfa] text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                        {rot}
+                                    </button>
+                                ))}
+                                {etiquetas.map((e) => (
+                                    <button key={e.id} onClick={() => { setCtFiltro(e.id); carregarContatos({ filtro: e.id }); }}
+                                        title={`${e.finalidade} (base legal: ${e.baseLegal})`}
+                                        className={`text-[10px] font-bold px-2 py-1 rounded-full ${ctFiltro === e.id
+                                            ? 'bg-[#0e3bfa] text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                        {e.rotulo} · {ctResumo?.porEtiqueta?.[e.id] ?? 0}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {ctMsg && <p className="text-[11px] text-slate-600 dark:text-slate-300">{ctMsg}</p>}
+                            {ctErro && <p className="text-[11px] text-red-600 dark:text-red-400">{ctErro}</p>}
+
+                            {/* ➕ Novo contato */}
+                            {ctNovo && (
+                                <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">➕ Novo contato</p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <input value={ctNovo.numero} onChange={(e) => setCtNovo({ ...ctNovo, numero: e.target.value })}
+                                            placeholder="Número com DDD (11 99999-0000)" className={CAMPO} />
+                                        <input value={ctNovo.nome} onChange={(e) => setCtNovo({ ...ctNovo, nome: e.target.value })}
+                                            placeholder="Nome" className={CAMPO} />
+                                    </div>
+                                    <div className="flex gap-1.5">
+                                        <button onClick={criarNovoContato}
+                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white">Criar</button>
+                                        <button onClick={() => setCtNovo(null)}
+                                            className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">Cancelar</button>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                        As etiquetas se aplicam depois, clicando no contato — assim ficam gravadas com o seu nome.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Lista */}
+                            <div className="space-y-1 max-h-[45vh] overflow-y-auto">
+                                {ctCarregando && <p className="text-[11px] text-slate-400">Carregando…</p>}
+                                {!ctCarregando && contatos.length === 0 && (
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        {ctResumo?.total === 0
+                                            ? 'Nenhum contato ainda. Eles nascem sozinhos quando alguém escreve — e o backup da Ultra Fox entra pelo 📥 Importar.'
+                                            : 'Nenhum contato com este filtro. (O total da casa continua acima.)'}
+                                    </p>
+                                )}
+                                {contatos.map((c) => (
+                                    <button key={c.numero} onClick={() => { setCtSel(ctSel?.numero === c.numero ? null : c); setCtMsg(null); }}
+                                        className={`w-full text-left rounded-lg border px-2.5 py-1.5 ${ctSel?.numero === c.numero
+                                            ? 'border-[#0e3bfa] bg-[#0e3bfa]/5'
+                                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40'}`}>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                                {c.nomePerfil || formatarNumeroBr(c.numero)}
+                                                {c.empresaNome && <span className="ml-1.5 text-[10px] font-normal text-slate-400">· {c.empresaNome}</span>}
+                                            </p>
+                                            <div className="flex gap-1 shrink-0">
+                                                {c.etiquetas.map((id) => {
+                                                    const e = etiquetas.find((x) => x.id === id);
+                                                    return (
+                                                        <span key={id} className="text-[9px] font-bold px-1.5 py-px rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                            {e?.rotulo || id}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400">
+                                            {formatarNumeroBr(c.numero)}
+                                            {c.origem ? ` · ${c.origem === 'ultrafox-import' ? 'veio do backup' : c.origem}` : ''}
+                                        </p>
+                                        {/* Pendência de LGPD fica NA LINHA da pessoa a que ela se
+                                            refere — numa aba de auditoria, ninguém abriria. */}
+                                        {(c.pendenciasLgpd || []).map((p, i) => (
+                                            <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5 leading-snug">
+                                                ⚠️ {p.motivo} <span className="text-amber-600 dark:text-amber-500">{p.acao}</span>
+                                            </p>
+                                        ))}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {ctResumo?.truncado && (
+                                <p className="text-[10px] text-slate-400">
+                                    Mostrando 500 de {ctResumo.totalFiltrado} — refine a busca para ver o resto.
+                                </p>
+                            )}
+
+                            {/* Painel do contato escolhido */}
+                            {ctSel && (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                        {ctSel.nomePerfil || formatarNumeroBr(ctSel.numero)}
+                                    </p>
+                                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">🏷 Etiquetas</p>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                        {etiquetas.map((e) => {
+                                            const ativa = ctSel.etiquetas.includes(e.id);
+                                            return (
+                                                <button key={e.id} onClick={() => alternarEtiqueta(ctSel, e.id)}
+                                                    title={`${e.finalidade}\nBase legal: ${e.baseLegal}`}
+                                                    className={`text-[10px] font-bold px-2 py-1 rounded-full ${ativa
+                                                        ? 'bg-[#0e3bfa] text-white'
+                                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                    {ativa ? '✓ ' : ''}{e.rotulo}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {(ctSel.pendenciasLgpd || []).filter((p) => p.tipo === 'sem-consentimento').map((p) => (
+                                        <div key={p.etiqueta} className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5">
+                                            <p className="text-[10px] text-amber-800 dark:text-amber-300 leading-snug">{p.motivo}</p>
+                                            <button onClick={() => registrarConsentimento(ctSel, p.etiqueta)}
+                                                className="mt-1 text-[10px] font-bold px-2 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white">
+                                                ✍️ Registrar consentimento
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <p className="text-[10px] text-slate-400">
+                                        A etiqueta é classificação de pessoa: fica gravado quem etiquetou e quando.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -1497,11 +1740,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 <div className={`${sel ? 'hidden md:flex' : 'flex'} flex-col md:border-r border-slate-200 dark:border-slate-700 min-h-0`}>
                     <div className="p-2.5 space-y-2 border-b border-slate-200 dark:border-slate-700">
                         <div className="flex items-center justify-between gap-2">
-                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Conversas</p>
-                            <div className="flex items-center gap-1.5">
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide shrink-0">Conversas</p>
+                            {/* flex-wrap: a fileira passou de 3 pra 5 botões, e em coluna
+                                estreita ela transborda — é a lição de 13/08, aplicada antes
+                                de o Paulo mandar o print. */}
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
                                 <button onClick={abrirNova} title="Iniciar conversa por template aprovado"
                                     className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ✚ Nova
+                                </button>
+                                <button onClick={abrirContatos} title="Contatos: agenda, etiquetas (Lead, Cliente, Marketing…) e importação do backup"
+                                    className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
+                                    📇
                                 </button>
                                 <button onClick={abrirAvaliacoes} title="Avaliações dos atendimentos (nota 1-5 do cliente)"
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">

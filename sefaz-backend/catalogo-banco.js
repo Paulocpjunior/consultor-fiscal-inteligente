@@ -114,6 +114,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'whatsapp_templates', grupo: 'Comunicação', funcionalidade: 'Cadastro de templates da Meta por departamento (⚙️ Config Admin) — o de-para nome × variáveis nomeadas' },
     { colecao: 'whatsapp_envios', grupo: 'Comunicação', funcionalidade: 'Auditoria de envio por template (destino, template, messageId, quem, projeto) + status de entrega vindo do webhook — nunca o conteúdo do documento' },
     { colecao: 'whatsapp_contatos', grupo: 'Comunicação', funcionalidade: 'Contatos do WhatsApp: 1 doc por número E.164, vínculo com empresa (nullable = pendência) e origem carimbada (ultrafox-import/cadastro/espontaneo)' },
+    { colecao: 'whatsapp_etiquetas', grupo: 'Comunicação', funcionalidade: 'Catálogo de etiquetas (flags) do contato — Lead/Cliente/Marketing/Candidato… Cada uma guarda FINALIDADE e BASE LEGAL (LGPD art. 6º I e art. 7º); o padrão vive no código e o admin acrescenta os dele' },
     { colecao: 'whatsapp_conversas', grupo: 'Comunicação', funcionalidade: 'Estado da conversa por número: fila, atribuição, janela de 24h, última mensagem, não lidas (inbox da F2)' },
     { colecao: 'whatsapp_mensagens', grupo: 'Comunicação', funcionalidade: 'Mensagens recebidas e status de entrega dos envios (entregue/lido/falhou+motivo) — id = wamid da Meta (idempotência)' },
     { colecao: 'whatsapp_webhook_eventos', grupo: 'Comunicação', funcionalidade: 'Payload CRU de cada evento do webhook (aprender a forma real — padrão Jotform Sign); id = hash do corpo' },

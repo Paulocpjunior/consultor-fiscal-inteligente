@@ -90,9 +90,9 @@ export const enviarAnexo = (numero: string, p: { base64: string; nomeArquivo: st
 // ─── F3: config do atendimento + ações de conversa ──────────────────────────
 // O escopo (quem vê o quê, quem grava) é do BACKEND; aqui é só a chamada.
 
-const post = <T>(url: string, body?: unknown) =>
+const post = <T>(url: string, body?: unknown, metodo: 'POST' | 'PATCH' = 'POST') =>
     req<T>(url, {
-        method: 'POST',
+        method: metodo,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body || {}),
     });
@@ -165,6 +165,58 @@ export const salvarCanal = (p: {
     id: string; rotulo: string; phoneNumberId: string; envToken: string;
     numeroExibicao?: string; wabaId?: string; ativo?: boolean;
 }) => post<{ id: string; canais: CanalWhatsapp[] }>('/api/admin/whatsapp/canais', p);
+
+// ─── 📇 Contatos e 🏷 etiquetas ─────────────────────────────────────────────
+
+export interface Etiqueta {
+    id: string; rotulo: string; cor: string; ordem: number;
+    finalidade: string; baseLegal: string; origem?: string;
+}
+
+export interface PendenciaLgpd {
+    etiqueta: string; tipo: string; motivo: string; acao: string;
+}
+
+export interface Contato {
+    numero: string;
+    nomePerfil: string | null;
+    empresaId: string | null;
+    empresaNome: string | null;
+    empresaNomeSugerido: string | null;
+    etiquetas: string[];
+    consentimentos: Record<string, { em?: string | null; como?: string | null; revogadoEm?: string | null }>;
+    origem: string | null;
+    criadoEm: string | null;
+    observacao: string | null;
+    pendenciasLgpd?: PendenciaLgpd[];
+}
+
+export const listarContatos = (p: { busca?: string; etiqueta?: string; semEtiqueta?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (p.busca) q.set('busca', p.busca);
+    if (p.etiqueta) q.set('etiqueta', p.etiqueta);
+    if (p.semEtiqueta) q.set('semEtiqueta', 'true');
+    return req<{
+        contatos: Contato[]; total: number; totalFiltrado: number; truncado: boolean;
+        limiteLeitura: number | null; semEtiquetaTotal: number;
+        porEtiqueta: Record<string, number>; etiquetas: Etiqueta[];
+    }>(`/api/admin/whatsapp/contatos${q.toString() ? `?${q}` : ''}`);
+};
+
+export const criarContato = (p: { numero: string; nome?: string; etiquetas?: string[] }) =>
+    post<{ numero: string; jaExiste?: boolean; acao?: string }>('/api/admin/whatsapp/contatos', p);
+
+export const atualizarContato = (numero: string, p: {
+    etiquetas?: string[]; nome?: string; observacao?: string;
+    consentimento?: { etiqueta: string; como?: string; revogar?: boolean };
+}) => post<{ pendenciasLgpd: PendenciaLgpd[] }>(`/api/admin/whatsapp/contatos/${numero}`, p, 'PATCH');
+
+export const listarEtiquetas = () =>
+    req<{ etiquetas: Etiqueta[]; basesLegais: Record<string, { rotulo: string; artigo: string; pedeConsentimento: boolean }>; cores: string[] }>(
+        '/api/admin/whatsapp/etiquetas');
+
+export const salvarEtiqueta = (p: { rotulo: string; finalidade: string; baseLegal: string; cor?: string; ordem?: number }) =>
+    post<{ etiquetas: Etiqueta[] }>('/api/admin/whatsapp/etiquetas', p);
 
 // ─── ☎️ Chamada de voz/vídeo — SONDA, não interruptor ───────────────────────
 // Ela pergunta à Meta e relata. Ligar a chamada abre um botão no WhatsApp de

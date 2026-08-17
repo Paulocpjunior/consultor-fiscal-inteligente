@@ -30,11 +30,15 @@ import {
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
-    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE,
+    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
 } from './whatsapp-chamadas.js';
+import {
+    BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
+    validarEtiquetasDoContato, pendenciasLgpdDoContato, filtrarContatos,
+} from './whatsapp-etiquetas.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
@@ -893,6 +897,257 @@ router.post('/conversas/:numero/vincular', requireAuth, async (req, res) => {
         }, { merge: true });
         return res.json({ ok: true });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ═══ 📇 CONTATOS ═══════════════════════════════════════════════════════════
+// Paulo, 17/08: *"também não vejo o menu de contatos, esse é essencial para
+// importação do backup Ultra Fox, adicionar novos contatos, compartilhar
+// novos contatos"*. Ele está certo, e o defeito era da família de sempre:
+// `whatsapp_contatos` era GRAVADO por quatro caminhos (webhook, importador,
+// template, vínculo) e LIDO por nenhuma tela. Importar 800 contatos os
+// deixava invisíveis até alguém escrever pro número.
+
+const LIMITE_CONTATOS = 2000;
+
+async function lerCatalogoEtiquetas(db) {
+    const snap = await db.collection('whatsapp_etiquetas').limit(200).get();
+    return montarCatalogoEtiquetas(snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })));
+}
+
+router.get('/etiquetas', requireAuth, async (_req, res) => {
+    try {
+        return res.json({ ok: true, etiquetas: await lerCatalogoEtiquetas(getDb()), basesLegais: BASES_LEGAIS, cores: CORES_ETIQUETA });
+    } catch (e) {
+        console.error('[whatsapp/etiquetas]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Cadastro de etiqueta é ADMIN: ela declara a FINALIDADE de um tratamento de
+// dado pessoal, e isso não é escolha de quem opera a conversa.
+router.post('/etiquetas', requireAdmin, async (req, res) => {
+    try {
+        const v = validarEtiqueta(req.body || {});
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+        const agora = new Date().toISOString();
+        await getDb().collection('whatsapp_etiquetas').doc(v.etiqueta.id).set({
+            ...v.etiqueta, atualizadoEm: agora, atualizadoPor: req.user?.email || null,
+        }, { merge: true });
+        return res.json({ ok: true, etiquetas: await lerCatalogoEtiquetas(getDb()) });
+    } catch (e) {
+        console.error('[whatsapp/etiquetas/post]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/contatos', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const [snap, catalogo] = await Promise.all([
+            db.collection('whatsapp_contatos').limit(LIMITE_CONTATOS).get(),
+            lerCatalogoEtiquetas(db),
+        ]);
+        const todos = snap.docs.map((d) => {
+            const c = d.data() || {};
+            return {
+                numero: d.id,
+                nomePerfil: c.nomePerfil || null,
+                empresaId: c.empresaId || null,
+                empresaNome: c.empresaNome || null,
+                empresaNomeSugerido: c.empresaNomeSugerido || null,
+                etiquetas: Array.isArray(c.etiquetas) ? c.etiquetas : [],
+                consentimentos: c.consentimentos || {},
+                origem: c.origem || null,
+                criadoEm: c.criadoEm || null,
+                atualizadoEm: c.atualizadoEm || null,
+                observacao: c.observacao || null,
+            };
+        });
+        const filtrados = filtrarContatos(todos, {
+            busca: req.query.busca || '',
+            etiqueta: req.query.etiqueta || '',
+            semEtiqueta: String(req.query.semEtiqueta || '') === 'true',
+        });
+        // Pendência de LGPD vai JUNTO da lista: separada numa aba de auditoria,
+        // ninguém abre — e ela é sobre a pessoa que está na linha.
+        const comPendencia = filtrados.map((c) => ({ ...c, pendenciasLgpd: pendenciasLgpdDoContato(c, catalogo) }));
+        // Contagem por etiqueta sai do conjunto INTEIRO, não do filtrado: é ela
+        // que diz o tamanho de cada grupo (número do filtro seria circular).
+        const porEtiqueta = {};
+        todos.forEach((c) => (c.etiquetas || []).forEach((e) => { porEtiqueta[e] = (porEtiqueta[e] || 0) + 1; }));
+        return res.json({
+            ok: true,
+            contatos: comPendencia.slice(0, 500),
+            total: todos.length,
+            totalFiltrado: filtrados.length,
+            // Lista cortada SEMPRE diz que foi cortada (farol honesto vale pra contagem).
+            truncado: filtrados.length > 500,
+            // E o teto da leitura também: 2000 contatos lidos com 2500 no banco
+            // faria a contagem por etiqueta mentir para baixo, calada.
+            limiteLeitura: snap.size >= LIMITE_CONTATOS ? LIMITE_CONTATOS : null,
+            semEtiquetaTotal: todos.filter((c) => !(c.etiquetas || []).length).length,
+            porEtiqueta, etiquetas: catalogo,
+        });
+    } catch (e) {
+        console.error('[whatsapp/contatos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Novo contato à mão. NÃO sobrescreve quem já existe — devolve o que está lá,
+// com a causa ("já existe" sem estado é beco, 14/08).
+router.post('/contatos', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const numero = normalizarNumeroBr(req.body?.numero || '');
+        if (!numero || numero.length < 12) {
+            return res.status(400).json({ ok: false, error: 'Informe o número com DDD (ex.: 11 99999-0000).' });
+        }
+        const nome = String(req.body?.nome || '').trim().slice(0, 80);
+        const catalogo = await lerCatalogoEtiquetas(db);
+        const v = validarEtiquetasDoContato(req.body?.etiquetas, catalogo);
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+
+        const ref = db.collection('whatsapp_contatos').doc(numero);
+        const atual = await ref.get();
+        if (atual.exists) {
+            const d = atual.data() || {};
+            return res.status(409).json({
+                ok: false,
+                error: `Este número já está cadastrado${d.nomePerfil ? ` como "${d.nomePerfil}"` : ''}${(d.etiquetas || []).length ? ` · etiquetas: ${d.etiquetas.join(', ')}` : ''}.`,
+                acao: 'Abra o contato na lista para editar — nada foi sobrescrito.',
+                jaExiste: true, numero,
+            });
+        }
+        const agora = new Date().toISOString();
+        await ref.set({
+            numero, ...(nome ? { nomePerfil: nome } : {}),
+            etiquetas: v.etiquetas, empresaId: null,
+            origem: 'cadastro', criadoPor: req.user?.email || null,
+            criadoEm: agora, atualizadoEm: agora,
+        });
+        return res.json({ ok: true, numero });
+    } catch (e) {
+        console.error('[whatsapp/contatos/post]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Etiquetar. Grava QUEM etiquetou: classificar uma pessoa é ato com autor.
+router.patch('/contatos/:numero', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const ref = db.collection('whatsapp_contatos').doc(numero);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: 'Contato não encontrado.' });
+
+        const catalogo = await lerCatalogoEtiquetas(db);
+        const patch = { atualizadoEm: new Date().toISOString() };
+
+        if (req.body?.etiquetas !== undefined) {
+            const v = validarEtiquetasDoContato(req.body.etiquetas, catalogo);
+            if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+            patch.etiquetas = v.etiquetas;
+            patch.etiquetadoPor = req.user?.email || null;
+            patch.etiquetadoEm = patch.atualizadoEm;
+        }
+        if (req.body?.nome !== undefined) patch.nomePerfil = String(req.body.nome).trim().slice(0, 80) || null;
+        if (req.body?.observacao !== undefined) patch.observacao = String(req.body.observacao).trim().slice(0, 500) || null;
+
+        // Consentimento: registra COMO e QUANDO. "Consentimento" sem forma
+        // registrada não prova nada se um dia a ANPD perguntar.
+        if (req.body?.consentimento) {
+            const { etiqueta, como, revogar } = req.body.consentimento;
+            const id = String(etiqueta || '').trim();
+            if (!catalogo.some((e) => e.id === id)) {
+                return res.status(400).json({ ok: false, error: `Etiqueta "${id}" não existe no catálogo.` });
+            }
+            const atualCons = (snap.data() || {}).consentimentos || {};
+            patch.consentimentos = {
+                ...atualCons,
+                [id]: revogar
+                    // Revogar NÃO apaga o consentimento antigo: some da conta,
+                    // não da história — é ela que explica os envios de antes.
+                    ? { ...(atualCons[id] || {}), revogadoEm: patch.atualizadoEm, revogadoPor: req.user?.email || null }
+                    : { em: patch.atualizadoEm, como: String(como || '').trim().slice(0, 200) || null, por: req.user?.email || null, revogadoEm: null },
+            };
+            if (!revogar && !String(como || '').trim()) {
+                return res.status(400).json({
+                    ok: false,
+                    error: 'Diga COMO o titular consentiu (ex.: "pediu no WhatsApp em 10/08", "assinou no contrato", "marcou no formulário do site").',
+                });
+            }
+        }
+
+        await ref.set(patch, { merge: true });
+        const atualizado = { numero, ...(snap.data() || {}), ...patch };
+        return res.json({ ok: true, pendenciasLgpd: pendenciasLgpdDoContato(atualizado, catalogo) });
+    } catch (e) {
+        console.error('[whatsapp/contatos/patch]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 📤 Compartilhar contato — manda o CARTÃO dentro de uma conversa aberta.
+ *
+ * Duas guardas, as mesmas do texto livre (compartilhar contato é mensagem
+ * como qualquer outra, e a Meta não abre exceção):
+ *  · a janela de 24h precisa estar ABERTA (fora dela só template aprovado);
+ *  · a conversa precisa ser VISÍVEL pra quem clicou — senão dava pra
+ *    escrever numa conversa de outra fila por esta porta lateral.
+ */
+router.post('/contatos/:numero/compartilhar', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const destino = String(req.params.numero || '').replace(/\D/g, '');
+        const alvos = Array.isArray(req.body?.numeros) ? req.body.numeros.map((n) => String(n).replace(/\D/g, '')).filter(Boolean) : [];
+        if (!destino || !alvos.length) return res.status(400).json({ ok: false, error: 'Escolha o contato a compartilhar.' });
+        if (alvos.length > 5) return res.status(400).json({ ok: false, error: 'Compartilhe até 5 contatos por vez.' });
+
+        // Régua ÚNICA de visibilidade — a mesma do GET e do stream de mídia.
+        const visao = await podeVerConversa(db, req.user, destino);
+        const c = visao.conversa || {};
+        if (!c.numero && !c.atualizadoEm) {
+            return res.status(404).json({ ok: false, error: 'Não há conversa com este número — o cartão só vai dentro de uma conversa.' });
+        }
+        if (!visao.ok) return res.status(403).json({ ok: false, error: 'Esta conversa não é de uma fila sua.' });
+        const ate = c.janela24hAte ? new Date(c.janela24hAte).getTime() : 0;
+        if (!(ate > Date.now())) {
+            return res.status(422).json({
+                ok: false,
+                error: 'A janela de 24h desta conversa está fechada — fora dela a Meta só aceita template aprovado.',
+                acao: 'Peça ao cliente para escrever, ou inicie por template (✚ Nova).',
+            });
+        }
+
+        const refs = alvos.map((n) => db.collection('whatsapp_contatos').doc(n));
+        const snaps = await db.getAll(...refs);
+        const cartoes = snaps.map((s, i) => {
+            const d = s.data() || {};
+            return { numero: alvos[i], nome: d.nomePerfil || null, empresa: d.empresaNome || d.empresaNomeSugerido || null };
+        });
+
+        const envio = await enviarContatoWhatsapp({ para: destino, contatos: cartoes });
+        if (!envio.ok) return res.status(502).json({ ok: false, error: envio.erro, acao: envio.acao });
+
+        const agora = new Date().toISOString();
+        const resumo = `📇 Contato compartilhado: ${cartoes.map((x) => x.nome || x.numero).join(' · ')}`;
+        await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+            conversaId: destino, direcao: 'saida', tipo: 'contacts',
+            texto: resumo, midia: null, timestamp: agora,
+            statusEntrega: 'enviado', enviadoPor: req.user?.email || null,
+        }, { merge: true });
+        await db.collection('whatsapp_conversas').doc(destino).set({
+            ultimaMensagem: { resumo, direcao: 'saida', em: agora }, atualizadoEm: agora,
+        }, { merge: true });
+        return res.json({ ok: true, messageId: envio.messageId, compartilhados: cartoes.length });
+    } catch (e) {
+        console.error('[whatsapp/contatos/compartilhar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 // ─── 📎 MÍDIA: abrir a recebida e enviar anexo ──────────────────────────────
