@@ -211,6 +211,39 @@ export const atualizarContato = (numero: string, p: {
     consentimento?: { etiqueta: string; como?: string; revogar?: boolean };
 }) => post<{ pendenciasLgpd: PendenciaLgpd[] }>(`/api/admin/whatsapp/contatos/${numero}`, p, 'PATCH');
 
+// ─── 🔒 Direitos do titular (LGPD art. 18) ──────────────────────────────────
+// Selo sem mecanismo é afirmação enganosa: é isto que dá lastro à frase do
+// rodapé. Ambas são admin — atender pedido de titular é ato do escritório.
+
+export interface RelatorioTitular {
+    numero: string; geradoEm: string | null; temCadastro: boolean;
+    cadastro: { nome: string | null; empresaVinculada: string | null; origem: string | null; criadoEm: string | null; observacao: string | null } | null;
+    etiquetas: { id: string; rotulo: string; finalidade: string; baseLegal: string | null }[];
+    consentimentos: { etiqueta: string; registradoEm: string | null; como: string | null; revogadoEm: string | null }[];
+    conversa: { fila: string | null; situacao: string | null; ultimaAtualizacao: string | null } | null;
+    mensagens: { total: number; itens: { em: string | null; direcao: string | null; tipo: string | null; texto: string | null; temAnexo: boolean }[] };
+    enviosDeGuia: { total: number; itens: unknown[] };
+    guardaObrigatoria: { id: string; rotulo: string; motivo: string }[];
+}
+
+export interface PlanoEliminacao {
+    numero: string;
+    remove: { item: string; quantidade: number }[];
+    mantem: { item: string; motivo: string }[];
+    nadaARemover: boolean;
+    aviso: string;
+}
+
+/** Acesso (art. 18, II) — o relatório de tudo o que o app guarda da pessoa. */
+export const relatorioTitular = (numero: string) =>
+    req<{ relatorio: RelatorioTitular }>(`/api/admin/whatsapp/lgpd/titular/${encodeURIComponent(numero)}`);
+
+/** Eliminação (art. 18, VI). SEM `confirmar` devolve só o PLANO — nada some
+ *  antes de a pessoa ver o que sai e o que fica. */
+export const eliminarDadosTitular = (numero: string, p: { confirmar?: boolean; motivo?: string } = {}) =>
+    post<{ plano: PlanoEliminacao; confirmado: boolean; removidas?: number; aviso?: string }>(
+        `/api/admin/whatsapp/lgpd/titular/${encodeURIComponent(numero)}/eliminar`, p);
+
 export const listarEtiquetas = () =>
     req<{ etiquetas: Etiqueta[]; basesLegais: Record<string, { rotulo: string; artigo: string; pedeConsentimento: boolean }>; cores: string[] }>(
         '/api/admin/whatsapp/etiquetas');

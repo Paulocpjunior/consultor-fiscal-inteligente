@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import { APP_BUILD_TIME, formatBuildDate, rotuloVersao } from './version';
 import LoadingSpinner from './components/LoadingSpinner';
 import Logo from './components/Logo';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -808,6 +809,24 @@ const App: React.FC = () => {
                             <SpConnect currentUser={currentUser} />
                         </Suspense>
                     </main>
+                    {/* Rodapé do Connect: versão (print sem versão é narrativa,
+                        não evidência) e a nota de LGPD — que aqui pesa MAIS que
+                        no CFI, porque é neste app que moram as conversas de
+                        cliente. O texto é o que o app sustenta, e o link leva à
+                        página que detalha os direitos. */}
+                    <footer className="text-center px-4 pb-6 pt-2 space-y-1">
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                            SP Connect · {rotuloVersao()} · atualizado {formatBuildDate(APP_BUILD_TIME)}
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            🔒 <strong className="font-semibold">Conversas tratadas conforme a LGPD</strong> (Lei 13.709/2018),
+                            com finalidade e base legal declaradas.{' '}
+                            <a href="/privacidade.html" target="_blank" rel="noreferrer"
+                                className="text-sky-600 dark:text-sky-400 hover:underline underline-offset-2 font-semibold">
+                                Privacidade e seus direitos →
+                            </a>
+                        </p>
+                    </footer>
                     <UpdateBanner />
                 </div>
             </ErrorBoundary>

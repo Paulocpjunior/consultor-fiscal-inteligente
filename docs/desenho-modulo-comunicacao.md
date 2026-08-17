@@ -288,6 +288,72 @@ token sem permissão é `sem-permissao` e a resposta **diz que isso não fala da
 chamada**; e um teste recorta o núcleo e prova que ele **não escreve** — nem na
 Meta, nem no banco (mesma prova do `/prazos-municipais/consultar`).
 
+### 5.8 📇 Contatos e 🏷 etiquetas (Paulo, 17/08)
+
+Pedido dele: flags (*"Leads, Clientes, Marketing, Colaboradores, Candidatos"*)
+e o menu de contatos — *"essencial para importação do backup Ultra Fox,
+adicionar novos contatos, compartilhar novos contatos"*.
+
+- **O menu de contatos era defeito real**: `whatsapp_contatos` era gravado por
+  QUATRO caminhos (webhook, importador, template, vínculo) e **lido por nenhuma
+  tela**. Importar 800 contatos os deixava invisíveis até alguém escrever pro
+  número — o importador parecia entregue e não estava.
+- **Etiqueta não é enfeite**: classificar uma pessoa é tratamento de dado
+  pessoal com finalidade (LGPD art. 6º, I). Cada etiqueta **nasce com finalidade
+  e base legal**, e o cadastro RECUSA quem não trouxer — a mesma razão do prazo
+  órfão do calendário municipal: daqui a três meses ninguém lembra por que ela
+  existe, e a resposta ao titular precisa existir ANTES da pergunta.
+- **A linha entre alerta e recusa**: CLASSIFICAR acende pendência (bloquear
+  faria a equipe parar de etiquetar, e aí o dado fica lá, tratado, sem nem a
+  etiqueta que explica por quê); **ENVIAR** o que depende de consentimento é
+  RECUSA, porque a mensagem enviada não volta. Só `marketing` pede
+  consentimento — cobrar em `cliente` seria alarme sem ação.
+- **Compartilhar vai como CARTÃO** (tipo `contacts`), com o **`wa_id`** — é ele
+  que faz aparecer o botão "Conversar". Sem ele o cartão chega MORTO, pior que
+  texto, porque parece que vai funcionar. Guardas iguais às do texto livre.
+- A contagem por etiqueta sai do **conjunto inteiro**, não do filtrado (do
+  filtrado seria circular), e o teto de leitura aparece — 2000 lidos com 2500 no
+  banco faria a contagem mentir para baixo, calada.
+
+### 5.9 🔒 LGPD — mecanismo antes da frase (Paulo, 17/08)
+
+Pedido: *"devemos atender a lei de proteção de dados LGPD, evidenciar de forma
+enfática que estamos em acordo com a lei, sugiro isso no rodapé"*.
+
+🚨 **A decisão que manda: SELO NÃO É CONFORMIDADE.** Escrever "100% em
+conformidade com a LGPD" custa uma linha e vira uma **afirmação ao titular** —
+que, no dia em que alguém pedir os dados e não houver como responder, deixa de
+ser marketing e passa a ser **prova de informação enganosa**. É o farol honesto
+aplicado a outro domínio: verde tem que significar alguma coisa.
+
+Então a ordem foi **mecanismo primeiro, frase depois**:
+
+| Direito | Mecanismo |
+|---|---|
+| Acesso (art. 18, II) e portabilidade (V) | relatório com cadastro, etiquetas **com a finalidade de cada uma**, consentimentos, **conteúdo** das mensagens e envios de guia — baixável |
+| Eliminação (art. 18, VI) | **plano antes de apagar**: o que sai, o que fica e **por quê** |
+| Revogação (art. 18, IX) | vale na hora e passa a recusar o envio daquela natureza |
+| Registro (art. 37) | `lgpd_solicitacoes`, com autor e data |
+
+RÉGUAS: o **registro entra ANTES do apagamento** (falha no meio deixa a prova
+de que o pedido existiu; o contrário deixaria dado sumido sem rastro de quem
+mandou sumir); o relatório entrega o **conteúdo** das mensagens, porque "temos
+40 mensagens suas" não é acesso, é avisar que se tem algo; e o que a lei manda
+guardar (**comprovante de envio de guia**, documento fiscal, trilha de
+auditoria — art. 16) vem **nomeado** no plano, em vez de a promessa dizer
+"apagamos tudo".
+
+`public/privacidade.html` traz a base legal **por tipo de dado** e uma seção
+**"o que ainda está em andamento"** (encarregado/DPO nomeado, registro completo,
+revisão de contratos com operadores). Isso é deliberado: selo que esconde
+pendência não protege ninguém, e diante da ANPD **informação enganosa é pior
+que informação incompleta**.
+
+⚠️ `__tests__/lgpdRodape.test.ts` derruba o build se o rodapé prometer
+conformidade absoluta ("100%", "totalmente", "certificado"), se a página parar
+de declarar as pendências, ou se os mecanismos sumirem do código deixando a
+frase de pé. **Provado quebrando as duas de propósito.**
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

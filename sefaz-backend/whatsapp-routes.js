@@ -39,6 +39,9 @@ import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
     validarEtiquetasDoContato, pendenciasLgpdDoContato, filtrarContatos,
 } from './whatsapp-etiquetas.js';
+import {
+    montarRelatorioTitular, planoDeEliminacao, registroDaSolicitacao,
+} from './lgpd-titular.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
@@ -1086,6 +1089,103 @@ router.patch('/contatos/:numero', requireAuth, async (req, res) => {
         return res.json({ ok: true, pendenciasLgpd: pendenciasLgpdDoContato(atualizado, catalogo) });
     } catch (e) {
         console.error('[whatsapp/contatos/patch]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══ 🔒 LGPD — DIREITOS DO TITULAR ═════════════════════════════════════════
+// Paulo, 17/08: *"devemos atender a lei de proteção de dados LGPD, evidenciar
+// de forma enfática que estamos em acordo"*. O que dá lastro à frase do
+// rodapé é ISTO — o mecanismo. Selo sem mecanismo é afirmação enganosa ao
+// titular, e vira prova contra quem o escreveu.
+//
+// AMBAS SÃO requireAdmin: atender pedido de titular é ato do escritório, e o
+// relatório entrega a conversa INTEIRA daquela pessoa — dado que o
+// colaborador da fila X não teria por que ver de um contato da fila Y.
+
+async function coletarDadosDoTitular(db, numero) {
+    const [contato, conversa, msgs, envios, catalogo] = await Promise.all([
+        db.collection('whatsapp_contatos').doc(numero).get(),
+        db.collection('whatsapp_conversas').doc(numero).get(),
+        db.collection('whatsapp_mensagens').where('conversaId', '==', numero).limit(2000).get(),
+        db.collection('impostos_enviados').where('telefone', '==', numero).limit(500).get()
+            .catch(() => ({ docs: [] })),   // coleção de outro trilho: ausência não derruba o direito de acesso
+        lerCatalogoEtiquetas(db),
+    ]);
+    return {
+        contato: contato.exists ? contato.data() : null,
+        conversa: conversa.exists ? conversa.data() : null,
+        mensagens: msgs.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })),
+        envios: envios.docs.map((d) => d.data() || {}),
+        catalogo,
+    };
+}
+
+router.get('/lgpd/titular/:numero', requireAdmin, async (req, res) => {
+    try {
+        const db = getDb();
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const d = await coletarDadosDoTitular(db, numero);
+        const relatorio = montarRelatorioTitular({
+            numero, contato: d.contato, conversa: d.conversa,
+            mensagens: d.mensagens, envios: d.envios, catalogoEtiquetas: d.catalogo,
+        });
+        const em = new Date().toISOString();
+        // O pedido de ACESSO também se registra: é ele que prova, depois, que
+        // o direito foi atendido (art. 37).
+        const reg = registroDaSolicitacao({ numero, tipo: 'acesso', quem: req.user?.email || null, em });
+        if (reg.ok) {
+            await db.collection('lgpd_solicitacoes').add(reg.registro).catch((e) =>
+                console.warn('[lgpd] registro do acesso falhou:', e.message));
+        }
+        return res.json({ ok: true, relatorio: { ...relatorio, geradoEm: em } });
+    } catch (e) {
+        console.error('[lgpd/titular]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * Eliminação (art. 18, VI). SEM `confirmar:true` devolve só o PLANO — a mesma
+ * regra do importador: nada é apagado sem a pessoa ver antes o que sai e o
+ * que fica. E o que fica vem NOMEADO, porque prometer "apagamos tudo" e
+ * guardar comprovante seria informação enganosa.
+ */
+router.post('/lgpd/titular/:numero/eliminar', requireAdmin, async (req, res) => {
+    try {
+        const db = getDb();
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const d = await coletarDadosDoTitular(db, numero);
+        const plano = planoDeEliminacao({
+            numero, contato: d.contato, mensagens: d.mensagens.length, envios: d.envios.length,
+        });
+        if (!req.body?.confirmar) return res.json({ ok: true, plano, confirmado: false });
+        if (plano.nadaARemover) return res.json({ ok: true, plano, confirmado: false, aviso: plano.aviso });
+
+        const em = new Date().toISOString();
+        const reg = registroDaSolicitacao({
+            numero, tipo: 'eliminacao', quem: req.user?.email || null, em, plano,
+            motivoDoTitular: String(req.body?.motivo || '').trim().slice(0, 300) || null,
+        });
+        if (!reg.ok) return res.status(400).json({ ok: false, error: reg.erro });
+        // O registro entra ANTES do apagamento: se algo falhar no meio, fica a
+        // prova de que o pedido existiu — o contrário deixaria dado sumido sem
+        // rastro de quem mandou sumir.
+        await db.collection('lgpd_solicitacoes').add(reg.registro);
+
+        for (let i = 0; i < d.mensagens.length; i += 400) {
+            const batch = db.batch();
+            d.mensagens.slice(i, i + 400).forEach((m) => batch.delete(db.collection('whatsapp_mensagens').doc(m.id)));
+            await batch.commit();
+        }
+        await db.collection('whatsapp_conversas').doc(numero).delete().catch(() => {});
+        await db.collection('whatsapp_contatos').doc(numero).delete().catch(() => {});
+
+        return res.json({ ok: true, plano, confirmado: true, removidas: d.mensagens.length });
+    } catch (e) {
+        console.error('[lgpd/eliminar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
