@@ -13,6 +13,8 @@ import {
 import { getCompetenciaDocumento } from '../../services/xmlDocumentosFilter';
 import { downloadXmlText } from '../../services/xmlStorageService';
 import NFeStatusCell from './NFeStatusCell';
+// A MESMA régua de cancelamento do selo e dos relatórios — nunca o campo cru.
+import { docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import EmpresaFilterCombobox from './EmpresaFilterCombobox';
 
@@ -422,7 +424,12 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
             let dataMin = '';
             let dataMax = '';
             docsView.forEach(({ d, v }) => {
-                const st = (d.status || 'desconhecido').toLowerCase();
+                // 🚨 O STATUS GRAVADO PODE MENTIR — quem decide é a régua da
+                // LEITURA. Cancelamento chega por EVENTO e o campo `status`
+                // fica 'autorizado'; contando por ele, o PDF somava a cancelada
+                // no "valor líquido" (o defeito MV LIDER 639, 11/08, que já
+                // tinha sido corrigido no cálculo e sobreviveu aqui).
+                const st = docCancelado(d) ? 'cancelado' : (d.status || 'desconhecido').toLowerCase();
                 porStatus[st] = porStatus[st] || { qtd: 0, valor: 0 };
                 porStatus[st].qtd++;
                 porStatus[st].valor += v.valores.total || 0;
@@ -574,11 +581,16 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
                     pdf.rect(tableX, y, W - 2 * M, rowH, 'F');
                 }
                 const contraparte = d.direcao === 'entrada' ? v.emitente : v.destinatario;
-                const status = (d.status || 'desconhecido');
+                // Mesma derivação do contador acima — a linha não pode sair
+                // verde no papel enquanto o total já a tirou.
+                // `situacao`, não `status`: é o resultado da RÉGUA, não o campo
+                // cru. O nome importa — foi o campo cru com esse nome que fez a
+                // linha sair verde no papel enquanto o total já a tinha tirado.
+                const situacao = docCancelado(d) ? 'cancelado' : (d.status || 'desconhecido');
                 const statusColor: [number, number, number] =
-                    status === 'cancelado' ? colorRed :
-                    status === 'denegado' || status === 'rejeitado' ? colorAmber :
-                    status === 'autorizado' ? colorOk : colorMuted;
+                    situacao === 'cancelado' ? colorRed :
+                    situacao === 'denegado' || situacao === 'rejeitado' ? colorAmber :
+                    situacao === 'autorizado' ? colorOk : colorMuted;
 
                 const cells = [
                     { txt: formatDate(d.dhEmi).split(' ')[0] || '—', color: [40,40,40] as [number,number,number] },
@@ -588,7 +600,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
                     { txt: v.direcao || '—', color: [40,40,40] as [number,number,number] },
                     { txt: truncate(`${contraparte.nome || '—'} ${contraparte.cnpj ? `(${formatCnpjCpf(contraparte.cnpj)})` : ''}`, 50), color: [40,40,40] as [number,number,number] },
                     { txt: fmtBRL(v.valores.total || 0), color: [40,40,40] as [number,number,number] },
-                    { txt: status, color: statusColor },
+                    { txt: situacao, color: statusColor },
                 ];
 
                 let cx = tableX + 2;

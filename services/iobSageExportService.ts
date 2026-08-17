@@ -8,6 +8,9 @@ import { buildFile, buildRecord, LAYOUT_VERSION } from './iobSageLayout';
 import { LAYOUT } from './iobSageLayoutData';
 // MESMA regra de correlação do backend — CFOP de entrada não se duplica aqui.
 import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js';
+// Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
+// chega por evento (caso MV LIDER 639, 11/08).
+import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -591,8 +594,11 @@ function mapTipoFrete(tpFrete: unknown): number {
 
 function buildE200(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = ''): string {
     const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
+    // 🚨 A SITUAÇÃO DO .FML DECIDE SE O SAGE ESCRITURA A NOTA. Lendo só o campo
+    // `status`, cancelada por EVENTO saía como situação 0 (normal) — ou seja,
+    // o livro do cliente recebia de volta a nota que o CFI já tinha tirado.
     const situacao =
-        d.status === 'cancelado' ? 2
+        docCancelado(d) ? 2
         : d.status === 'denegado' ? 4
         : d.status === 'inutilizado' ? 5
         : 0;

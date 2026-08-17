@@ -1,0 +1,187 @@
+// ============================================================================
+// 🚨 "CANCELADA" TINHA SEIS RÉGUAS — e o campo cru MENTE.
+//
+// Paulo, 17/08, fechando a MV LIDER 639 (07/2026): a aba 🚫 Canceladas/Faltantes
+// dizia **"✓ numeração contínua · 0 cancelada(s)"** enquanto ele estava vendo
+// notas canceladas em vermelho na outra tela. Fui conferir a régua e achei o
+// que estava por baixo.
+//
+// O CANCELAMENTO CHEGA POR EVENTO (110111) — e nesse caminho o campo `status`
+// do documento continua 'autorizado'. Por isso a régua da LEITURA existe desde
+// 11/08 (`docCancelado`: status OU cStat legado 101/151 OU evento 110111 com
+// 135/155). O caso que a criou foi ESTE MESMO CLIENTE, a MV LIDER 639.
+//
+// Só que ela tinha sido aplicada no CÁLCULO e não em todo o resto:
+//
+//   · NFeStatusCell            selo 🟢 Vigente numa nota cancelada
+//   · XmlDocumentosList (PDF)  cancelada somada no "valor líquido"
+//   · iobSageExportService     situação 0 no .FML ⇒ o SAGE escritura de volta
+//   · rotina-fiscal            helper `cancelado` próprio
+//   · sped-contrib-blocos      C/D/F pulavam por `status`; o BLOCO A não pulava
+//                              nada ⇒ NFS-e cancelada DECLARADA à Receita
+//
+// A pior delas é a última: arquivo entregue declarando documento que não existe
+// mais. E as seis passavam por teste verde, porque cada uma fazia exatamente o
+// que o próprio teste mandava.
+//
+// REGRA QUE FICA: quem pergunta "esta nota está cancelada?" chama `docCancelado`.
+// Ler `status === 'cancelado'` é a segunda cópia, e ela envelhece EM SILÊNCIO —
+// só aparece quando o cancelamento vem por evento, que é o caminho normal.
+// ============================================================================
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join, relative } from 'path';
+import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
+
+const RAIZ = join(__dirname, '..');
+const PASTAS = ['components', 'services', 'sefaz-backend'];
+const EXTENSOES = ['.ts', '.tsx', '.js'];
+
+/**
+ * Onde ler o campo cru é LEGÍTIMO, com o motivo escrito.
+ * Exceção se declara aqui — nunca apagando a varredura.
+ */
+const PERMITIDO: Record<string, string> = {
+    // É a régua. O campo cru é um dos três sinais que ela combina.
+    'sefaz-backend/xml-metadata-helper.js': 'é o arquivo DONO da régua',
+    // Grava o campo a partir do XML — escrita, não leitura de situação.
+    'sefaz-backend/xml-importer.js': 'ESCREVE o status a partir do protocolo/evento',
+    // Parcelamento tem status próprio ('inadimplente'/'cancelado') e nada tem a
+    // ver com cancelamento de documento fiscal.
+    'services/nfpProCloudPdf.ts': 'status de PARCELAMENTO, outro domínio',
+
+    // ── TAREFA cancelada não é DOCUMENTO cancelado ──────────────────────────
+    'components/Tarefas.tsx': 'status de TAREFA, outro domínio',
+    'sefaz-backend/tarefas-orchestrator.js': 'status de TAREFA, outro domínio',
+    'sefaz-backend/envio-imposto.js': 'status de TAREFA (baixa da obrigação), outro domínio',
+    'sefaz-backend/prazos-municipais-routes.js': 'status de TAREFA, outro domínio',
+
+    // ── NFS-e: o cancelamento vem NO PRÓPRIO STATUS, não por evento ─────────
+    //
+    // É esta a razão de o campo cru mentir na NF-e e não aqui: o cancelamento
+    // da NF-e chega como EVENTO 110111 e o `status` fica 'autorizado'. A NFS-e
+    // (ADN e portal) não tem esse caminho — quem informa o cancelamento é o
+    // próprio documento. Ler o campo ali é ler a fonte, não uma segunda régua.
+    'sefaz-backend/nfse-nacional-orchestrator.js': 'NFS-e: cancelamento vem no próprio status, não por evento',
+    'components/NfseNacional/index.tsx': 'NFS-e: cancelamento vem no próprio status, não por evento',
+    'services/danfseGenerator.ts': 'NFS-e: cancelamento vem no próprio status, não por evento',
+};
+
+function varrer(dir: string, out: string[] = []): string[] {
+    for (const nome of readdirSync(dir)) {
+        if (nome === 'node_modules' || nome === 'dist' || nome.startsWith('.')) continue;
+        const p = join(dir, nome);
+        if (statSync(p).isDirectory()) varrer(p, out);
+        else if (EXTENSOES.some((e) => nome.endsWith(e))) out.push(p);
+    }
+    return out;
+}
+
+describe('🚨 a régua de "cancelada" mora num lugar só', () => {
+    it('ninguém decide cancelamento pelo campo cru', () => {
+        const infratores: string[] = [];
+        for (const pasta of PASTAS) {
+            for (const arquivo of varrer(join(RAIZ, pasta))) {
+                const rel = relative(RAIZ, arquivo).replace(/\\/g, '/');
+                if (PERMITIDO[rel]) continue;
+                const linhas = readFileSync(arquivo, 'utf8').split('\n');
+                linhas.forEach((linha, i) => {
+                    // Comentário citando o defeito é documentação, não código.
+                    const semComentario = linha.replace(/\/\/.*$/, '');
+                    if (/status\s*===?\s*['"]cancelad[ao]['"]/.test(semComentario)) {
+                        infratores.push(`${rel}:${i + 1}  ${linha.trim().slice(0, 90)}`);
+                    }
+                });
+            }
+        }
+        if (infratores.length) {
+            throw new Error(
+                '\n\n🚧 SEGUNDA RÉGUA DE CANCELAMENTO\n\n'
+                + infratores.map((x) => `  · ${x}`).join('\n')
+                + '\n\nUse a régua:\n'
+                + "  import { docCancelado } from 'sefaz-backend/xml-metadata-helper.js'\n\n"
+                + 'O campo `status` MENTE quando o cancelamento chega por EVENTO (110111), que é\n'
+                + 'como ele chega: o campo fica "autorizado" e a nota já não existe. Foi assim que\n'
+                + 'a MV LIDER 639 contou nota cancelada no faturamento (11/08) e que, em 17/08, a\n'
+                + 'NFS-e cancelada ia DECLARADA no EFD-Contribuições.\n\n'
+                + 'Se a leitura for legítima (outro domínio, ou escrita do campo), declare o\n'
+                + 'arquivo em PERMITIDO COM o motivo — nunca apague a varredura.\n',
+            );
+        }
+    });
+
+    it('e os leitores que importam a régua continuam importando', () => {
+        const exigido = [
+            'components/xml/NFeStatusCell.tsx',
+            'components/xml/XmlDocumentosList.tsx',
+            'services/iobSageExportService.ts',
+            'sefaz-backend/rotina-fiscal.js',
+            'sefaz-backend/sped-contrib-blocos.js',
+            'services/relatoriosAgregacoes.ts',
+        ];
+        for (const rel of exigido) {
+            const fonte = readFileSync(join(RAIZ, rel), 'utf8');
+            expect({ rel, importa: /import \{[^}]*docCancelado/.test(fonte) })
+                .toEqual({ rel, importa: true });
+        }
+    });
+});
+
+describe('a régua responde o que o campo cru não responde', () => {
+    it('cancelamento por EVENTO conta, mesmo com status autorizado', () => {
+        const doc = {
+            status: 'autorizado',
+            eventos: [{ tpEvento: '110111', cStat: '135' }],
+        };
+        expect(doc.status === 'cancelado').toBe(false);   // o que as cópias viam
+        expect(docCancelado(doc)).toBe(true);             // o que é verdade
+    });
+
+    it('cancelamento HOMOLOGADO FORA DE PRAZO (155) também', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [{ tpEvento: '110111', cStat: '155' }] })).toBe(true);
+    });
+
+    it('evento de REJEIÇÃO não cancela — alarme falso é pior que silêncio', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [{ tpEvento: '110111', cStat: '573' }] })).toBe(false);
+    });
+
+    it('CC-e não cancela', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [{ tpEvento: '110110', cStat: '135' }] })).toBe(false);
+    });
+
+    it('nota vigente continua vigente', () => {
+        expect(docCancelado({ status: 'autorizado', eventos: [] })).toBe(false);
+    });
+});
+
+describe('🚨 o EFD-Contribuições não declara documento cancelado', () => {
+    it('NFS-e cancelada por evento fica FORA do bloco A', () => {
+        const { buildBlocoA } = require('../sefaz-backend/sped-contrib-blocos.js');
+        const empresa = { cnpj: '20385150000100', nome: 'MV LIDER' };
+        const viva = {
+            tipo: 'NFSe', direcao: 'saida', numero: '1', dataEmissao: '2026-07-10',
+            cnpjDest: '00621930000162', valorTotal: 1000, status: 'autorizado',
+        };
+        const cancelada = {
+            ...viva, numero: '2', valorTotal: 9999,
+            status: 'autorizado',                                   // o campo MENTE
+            eventos: [{ tpEvento: '110111', cStat: '135' }],
+        };
+        const linhas: string[] = buildBlocoA({ empresa, notas: [viva, cancelada], regimeApuracao: '2' });
+        const a100 = linhas.filter((l) => l.startsWith('|A100|'));
+        expect(a100).toHaveLength(1);
+        expect(a100[0]).toContain('1000,00');
+        expect(linhas.join('\n')).not.toContain('9999,00');
+    });
+
+    it('e um bloco A que fica sem nota nenhuma se declara VAZIO, não cheio', () => {
+        const { buildBlocoA } = require('../sefaz-backend/sped-contrib-blocos.js');
+        const linhas: string[] = buildBlocoA({
+            empresa: { cnpj: '20385150000100' },
+            notas: [{ tipo: 'NFSe', direcao: 'saida', numero: '2', valorTotal: 10, status: 'cancelado' }],
+            regimeApuracao: '2',
+        });
+        // IND_MOV=1 (sem dados). Declarar 0 com bloco vazio é o que a auditoria
+        // de saída acusa como 'bloco-vazio-declarado-cheio'.
+        expect(linhas[0].trim()).toBe('|A001|1|');
+    });
+});
