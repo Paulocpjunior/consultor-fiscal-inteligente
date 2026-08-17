@@ -102,6 +102,54 @@ export function montarMensagemTemplate({ para, template, idioma, variaveis = [],
 }
 
 /**
+ * 📤 CARTÃO DE CONTATO — compartilhar um contato dentro da conversa.
+ *
+ * Paulo, 17/08: *"compartilhar novos contatos"*. É o tipo `contacts` do mesmo
+ * endpoint /messages, e ele chega no cliente como cartão salvável (não como
+ * texto com um número solto que a pessoa precisa copiar à mão).
+ *
+ * O `wa_id` é o número EM DÍGITOS e é o que faz o botão "Conversar" aparecer
+ * no cartão — sem ele o WhatsApp mostra um cartão morto, que é pior que um
+ * texto, porque parece que vai funcionar.
+ */
+export function montarMensagemContato({ para, contatos = [] }) {
+    const lista = (Array.isArray(contatos) ? contatos : []).map((c) => {
+        const digitos = String(c.numero || '').replace(/\D/g, '');
+        const nome = String(c.nome || '').trim() || digitos;
+        // A Meta exige formatted_name E pelo menos um dos campos de nome:
+        // mandar só o formatado é recusa do payload inteiro.
+        const [primeiro, ...resto] = nome.split(/\s+/);
+        return {
+            name: {
+                formatted_name: nome.slice(0, 120),
+                first_name: primeiro.slice(0, 60),
+                ...(resto.length ? { last_name: resto.join(' ').slice(0, 60) } : {}),
+            },
+            phones: [{ phone: `+${digitos}`, type: 'CELL', wa_id: digitos }],
+            ...(c.empresa ? { org: { company: String(c.empresa).slice(0, 120) } } : {}),
+        };
+    });
+    return { messaging_product: 'whatsapp', to: para, type: 'contacts', contacts: lista };
+}
+
+export async function enviarContatoWhatsapp({ para, contatos }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const corpoEnvio = montarMensagemContato({ para, contatos });
+    if (!corpoEnvio.contacts.length) return { ok: false, erro: 'Nenhum contato para compartilhar.' };
+    const r = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpoEnvio),
+    });
+    const corpo = await r.json().catch(() => ({}));
+    return interpretarRespostaWhatsapp(r.status, corpo);
+}
+
+/**
  * Traduz a resposta da Graph API pra frase COM AÇÃO. 200 com messages[0].id é
  * a prova de aceite; erro vem em corpo.error {message, code, error_data}.
  */

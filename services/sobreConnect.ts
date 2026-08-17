@@ -78,6 +78,10 @@ export const O_QUE_FAZ: Bloco[] = [
         texto: 'A conversa se vincula ao cliente do cadastro do escritório e passa a mostrar quem é o responsável pela carteira dele e quais guias já foram enviadas.',
     },
     {
+        titulo: '📇 Manter a agenda organizada',
+        texto: 'Contatos com busca, cadastro à mão, importação do backup e etiquetas (Lead, Cliente, Marketing, Colaborador, Candidato…). Cada etiqueta carrega a finalidade e a base legal do tratamento, como a LGPD exige.',
+    },
+    {
         titulo: '✅ Encerrar com avaliação',
         texto: 'O atendimento tem fim explícito, e o cliente recebe a pesquisa de nota (1 a 5). O painel 📊 mostra média, distribuição e as últimas avaliações.',
     },
@@ -194,7 +198,17 @@ export const MANUAL: PassoManual[] = [
         atencao: 'Encerrar é de quem conduz a conversa — ou de gestor e admin. Se o botão estiver travado, assuma a conversa (🙋) primeiro.',
     },
     {
-        titulo: '9. Vincular a conversa ao cliente do escritório',
+        titulo: '9. Contatos e etiquetas (📇 no topo da lista)',
+        passos: [
+            'O 📇 abre a agenda inteira: quem já escreveu, quem veio do backup da Ultra Fox e quem você cadastrou à mão.',
+            'Clique no contato e marque as etiquetas dele: Lead, Cliente, Marketing, Colaborador, Candidato…',
+            'Os chips do topo filtram por etiqueta e mostram quantos há em cada uma. "Sem etiqueta" é a sua fila de trabalho.',
+            '➕ Novo cadastra um número à mão; 📥 Importar (admin) traz o backup da Ultra Fox.',
+        ],
+        atencao: 'Etiqueta classifica uma PESSOA, então fica gravado quem etiquetou e quando. "Marketing" pede consentimento do titular: enquanto ele não estiver registrado, o contato aparece com aviso âmbar — e não se manda campanha para esse número.',
+    },
+    {
+        titulo: '10. Vincular a conversa ao cliente do escritório',
         passos: [
             'Em 🔗 Vincular ao cliente, busque por nome ou CNPJ e confirme.',
             'A partir daí a coluna do cliente mostra o responsável pela carteira e as guias já enviadas.',
@@ -202,7 +216,7 @@ export const MANUAL: PassoManual[] = [
         atencao: 'Fica gravado quem vinculou. Vincular no cliente errado mistura o histórico de duas empresas — confira o CNPJ.',
     },
     {
-        titulo: '10. O que o CLIENTE consegue fazer sozinho',
+        titulo: '11. O que o CLIENTE consegue fazer sozinho',
         passos: [
             '#menu — ele pede o menu de novo, em qualquer momento, e escolhe outro departamento sem precisar de nós.',
             '#sair — ele encerra o próprio atendimento (e recebe a pesquisa de avaliação, se estiver ligada).',
@@ -210,7 +224,7 @@ export const MANUAL: PassoManual[] = [
         atencao: 'Esses comandos só funcionam com o bot ligado na ⚙️. Enquanto o bot estiver desligado, quem encaminha é a equipe.',
     },
     {
-        titulo: '11. Quem pode o quê',
+        titulo: '12. Quem pode o quê',
         passos: [
             'Colaborador: atende as filas ligadas ao seu nome, transfere e encerra o atendimento que ele conduz.',
             'Gestor: vê e atende tudo, encerra qualquer atendimento — só não mexe em configuração.',
@@ -233,6 +247,8 @@ export const REVISOES: Revisao[] = [
             '📎 Abrir o anexo recebido (imagem, áudio, vídeo e documento) e enviar anexo na conversa.',
             '📞 Preparado para um segundo número / segunda conta da Meta, com o roteamento de entrada por canal.',
             '☎️ Sonda de voz/vídeo na ⚙️: pergunta à Meta como está a chamada para o nosso número (ela não liga nada — ligar é decisão do escritório).',
+            '📇 Contatos: agenda completa com busca, cadastro à mão, compartilhar contato na conversa e a importação do backup num só lugar.',
+            '🏷 Etiquetas do contato (Lead, Cliente, Marketing, Colaborador, Candidato…), cada uma com a finalidade e a base legal escritas — e aviso quando falta o consentimento que a LGPD exige.',
             '✅ Encerramento de atendimento com pesquisa de avaliação (1 a 5) e painel 📊.',
             '👥 Papéis de atendimento: colaborador, gestor e admin, com as permissões aplicadas na tela e no servidor.',
             '↪️ Transferência entre departamentos, com nota automática e aviso opcional ao cliente.',

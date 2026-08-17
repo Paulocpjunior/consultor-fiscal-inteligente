@@ -75,7 +75,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Encerrar atendimento | ✔ **[print]** (o `#sair` prova que existe encerramento) | ✅ Encerrar — admin e gestor qualquer um; colaborador só o que conduz; cliente pelo `#sair` | ✅ |
 | Perfis de acesso (admin/gestor/colaborador) | **[?]** | 3 papéis com a régua do Paulo (16/08): gestor vê/atende/encerra tudo e não configura | ✅ |
 | **Avaliação do atendimento (nota 1-5)** | **[?]** | pesquisa pós-encerramento + painel 📊 (média, distribuição, últimas) | 🆕 (chave nasce desligada) |
-| Etiquetas/tags na conversa | **[?]** | — | 🔴 depende do §7 |
+| Etiquetas/tags | **[?]** | **📇 → 🏷 (17/08)**: catálogo Lead · Cliente · Marketing · Colaborador · Candidato · Fornecedor · Parceiro · Ex-cliente, editável pelo admin. Filtro por etiqueta com a contagem de cada uma, e "sem etiqueta" como fila de trabalho | ✅ **respondeu a pergunta 3 do §7** — o Paulo pediu, então alguém usa |
 | Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
 | Notificação sonora / pop-up de mensagem nova | ✔ **[Paulo, 16/08]** | **som** (sintetizado, sem arquivo externo), **pop-up do navegador** (clique abre a conversa) e **contador no título da aba** — a mesma mensagem nunca apita duas vezes, a conversa aberta não apita e a 1ª carga aprende sem apitar | ✅ **16/08** |
 | Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | **pronto** — service worker, cadastro do aparelho, escolha de quem recebe (a MESMA régua de fila do inbox) e envio pelo FCM; fora do expediente só quem pediu | 🟡 **falta UMA chave**: `VITE_FIREBASE_VAPID_KEY` (Firebase Console → Cloud Messaging → certificados push da Web). Sem ela o app **diz** que o push está pendente — não finge |
@@ -85,7 +85,8 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 
 | Função | Ultra Fox | SP Connect | Status |
 |---|---|---|---|
-| Cadastro de contatos | ✔ **[Paulo]** (o backup é dela) | `whatsapp_contatos`, nasce do próprio atendimento | ✅ |
+| Cadastro de contatos | ✔ **[Paulo]** (o backup é dela) | **📇 Contatos (17/08)**: agenda com busca por nome/empresa/número, ➕ cadastro à mão, etiquetas e o 📥 Importar no mesmo lugar | ✅ **17/08** — até aqui a coleção era gravada por 4 caminhos e **lida por nenhuma tela** |
+| **Compartilhar um contato na conversa** | ✔ **[Paulo]** | cartão do WhatsApp (tipo `contacts`), com `wa_id` — o cliente toca e já conversa | ✅ **17/08** · guardas iguais às do texto livre (janela de 24h + fila visível) |
 | **Restaurar o backup da Ultra Fox** | — | ⚙️ → 📥: contatos (CSV) e mensagens (CSV/.txt), com preview antes de gravar, sem sobrescrever contato existente e sem duplicar ao reimportar | ✅ **16/08** — falta rodar com o arquivo real |
 | Vincular contato ↔ cliente do escritório | **[?]** | 🔗 busca no cadastro central (nome/CNPJ), gravando quem vinculou | 🆕 |
 | Ver responsável da carteira do cliente | ✕ (a Ultra Fox não conhece o cadastro) | coluna do cliente, lendo `carteiras` | 🆕 |
@@ -124,8 +125,14 @@ neste documento (e, quando faltar, vira fila de construção):
    por nós (🎤 no composer).
 2. **Respostas rápidas**: existem frases salvas na Ultra Fox que a equipe
    usa direto? Se sim, quero a lista — vira cadastro editável.
-3. **Etiquetas/tags**: alguém marca conversa com etiqueta ("aguardando
-   documento", "urgente")? Se ninguém usa, é ⚫ e não construo.
+3. ✅ ~~**Etiquetas/tags**~~ — **RESPONDIDO/FEITO 17/08**: o Paulo pediu as
+   flags nomeando as que quer (*"Leads, Clientes, Marketing, Colaboradores,
+   Candidatos, entre outros"*), então alguém usa. Elas são do **CONTATO**,
+   não da conversa — classificam a pessoa, não o estado do atendimento.
+   ⚠️ Etiqueta de ESTADO da conversa ("aguardando documento", "urgente")
+   continua sendo outra coisa, e **não foi construída**: a situação da
+   conversa hoje é aberta/resolvida + fila. Se a equipe usa etiqueta de
+   estado na Ultra Fox, isso ainda é pergunta aberta.
 4. **Relatórios**: qual relatório da Ultra Fox alguém realmente abre? (não
    quero reproduzir tela que nunca foi lida — a lição do e-Fiscal)
 5. ✅ ~~**Notificação**~~ — **RESPONDIDO 16/08**: a Ultra Fox faz **som,
