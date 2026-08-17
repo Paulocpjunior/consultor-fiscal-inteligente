@@ -63,6 +63,14 @@ export interface EfiscalPdfParsed {
     totalCalculado: { valorNf: number; baseCalculo: number; valorIss: number; issRetido: number };
     /** A linha "Total" do relatório foi encontrada? Sem ela não se confere. */
     rodapeEncontrado: boolean;
+    /** Medida da leitura — vira o chamado quando o layout não é reconhecido. */
+    diagnostico: {
+        paginas: number;
+        /** Linhas que começam com data (candidatas a nota). */
+        linhasComData: number;
+        notasLidas: number;
+        rodapeEncontrado: boolean;
+    };
     validacao: {
         ok: boolean;
         divergencias: string[];
@@ -111,15 +119,25 @@ async function extrairLinhas(file: File): Promise<{ linhas: LinhaPdf[]; rawLen: 
 export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
     const { linhas, rawLen } = await extrairLinhas(file);
     if (rawLen < 100) {
+        // AQUI "consiga outro arquivo" É a solução, e a mensagem tem de dizer:
+        // outro arquivo REALMENTE sai diferente (basta exportar em vez de
+        // digitalizar). Contraste com o layout não reconhecido, onde reexportar
+        // devolve o mesmo PDF e mandar buscar outro é caça a fantasma.
         throw new EfiscalPdfParseError(
-            'Não foi possível extrair texto do PDF. Pode ser um documento digitalizado (imagem).',
+            'Este PDF não tem texto — é uma digitalização (imagem). Volte ao E-Fiscal e exporte o relatório '
+            + 'em PDF pela própria tela de impressão, em vez de escanear o papel. Com o arquivo exportado o CFI lê.',
         );
     }
 
     const textoTodo = linhas.flatMap(l => l.tokens.map(t => t.str)).join(' ');
     if (!/Servi[cç]os\s+(Tomados|Prestados)/i.test(textoTodo) && !/E-?Fiscal/i.test(textoTodo) && !/Office\s+Fiscal/i.test(textoTodo)) {
+        // Também é caso de OUTRO ARQUIVO — e aqui a mensagem diz QUAL, senão
+        // "não parece ser o relatório" deixa a pessoa adivinhando qual dos
+        // dezenas de relatórios do E-Fiscal ela deveria ter tirado.
         throw new EfiscalPdfParseError(
-            'Documento não parece ser o relatório "Relação de NFs de Serviços" do E-Fiscal / Office Fiscal.',
+            'Este PDF não é o relatório que esta tela lê. O certo é o '
+            + '"Relação de NFs de Serviços Tomados" (ou Prestados) do E-Fiscal / Office Fiscal, '
+            + 'no período que você quer analisar. Tire esse e importe de novo.',
         );
     }
 
@@ -140,6 +158,11 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
     const notas: EfiscalNf[] = [];
     const totalImpresso = { valorNf: 0, baseCalculo: 0, valorIss: 0, issRetido: 0 };
     let rodapeEncontrado = false;
+    // Linha que COMEÇA com data é candidata a nota. Contar as candidatas separa
+    // "o PDF não tem notas" de "as notas estão lá e as COLUNAS não casaram" —
+    // duas causas com ações opostas.
+    let linhasComData = 0;
+    const paginasLidas = new Set(linhas.map(l => l.pagina)).size;
 
     for (let i = 0; i < linhas.length; i++) {
         const linha = linhas[i];
@@ -174,6 +197,7 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
             continue;
         }
 
+        linhasComData++;
         const nf: EfiscalNf = {
             emissao: primeiro, numero: '', serie: '', cnpjCpf: '', razaoSocial: '',
             valorNf: 0, baseCalculo: 0, aliquota: 0, valorIss: 0, issRetido: 0,
@@ -266,6 +290,20 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
         empresaCodigo, empresaNome, empresaCnpj, periodo,
         notas, fornecedores, totalImpresso, totalCalculado,
         rodapeEncontrado,
+        // 🚨 EVIDÊNCIA PRONTA para o caso em que o layout não é reconhecido.
+        //
+        // Paulo, 11/08: *"o colaborador não sabe falar o que quer porque não sabe
+        // fazer e não sabe explicar"* — então o app não pede explicação, ele
+        // MEDE. Estes quatro números dizem, sozinhos, se o PDF chegou inteiro,
+        // se as linhas de nota existem e se foram as COLUNAS que não casaram.
+        // É o que transforma "não funcionou" num chamado que eu resolvo sem
+        // pedir o arquivo do cliente de volta.
+        diagnostico: {
+            paginas: paginasLidas,
+            linhasComData: linhasComData,
+            notasLidas: notas.length,
+            rodapeEncontrado,
+        },
         validacao: {
             // `ok` continua significando CONFERIDO E BATEU — nunca "não achei
             // problema porque não procurei" (verde por omissão).

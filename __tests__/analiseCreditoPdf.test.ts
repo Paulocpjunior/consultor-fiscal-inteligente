@@ -51,6 +51,7 @@ const efiscalDemo = (): EfiscalPdfParsed => ({
     totalImpresso:  { valorNf: 1000, baseCalculo: 1000, valorIss: 50, issRetido: 0 },
     totalCalculado: { valorNf: 1000, baseCalculo: 1000, valorIss: 50, issRetido: 0 },
     rodapeEncontrado: true,
+    diagnostico: { paginas: 1, linhasComData: 0, notasLidas: 0, rodapeEncontrado: true },
     validacao: { ok: true, divergencias: [], situacao: 'confere' as const },
     rawTextLength: 500,
 });

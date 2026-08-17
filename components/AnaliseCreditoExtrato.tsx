@@ -314,13 +314,29 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       // O credito e o aviso de CNPJ sao calculados reativamente
       // (useMemo abaixo) — recalculam quando o PDF OU a empresa mudam.
       if (parsed.notas.length === 0) {
-        // Zero notas com o PDF certo é BURACO DE LEITURA, não relatório vazio —
-        // e o texto tem de dizer isso, senão a pessoa procura no lugar errado
-        // (foi o caso CLUDE de 17/08: 0 lançamentos e uma "divergência" com
-        // número inventado, enquanto o PDF tinha 148 notas e R$ 580.395,26).
+        // Zero notas com o PDF certo é BURACO DE LEITURA, não relatório vazio.
+        //
+        // 🚨 E AQUI O APP NÃO MANDA BUSCAR OUTRO ARQUIVO, de propósito (Paulo,
+        // 17/08: *"não seria melhor informar ao colaborador que consiga outro
+        // arquivo?"* — sim, mas só onde outro arquivo SAI diferente). Este é o
+        // caso oposto: o PDF da CLUDE estava perfeito, e reexportar devolveria
+        // exatamente o mesmo arquivo. Mandar buscar outro pareceria acionável e
+        // faria a pessoa tentar três vezes antes de concluir que o app quebrou.
+        //
+        // O que sobra de útil é a MEDIDA da leitura — ela vira o chamado sem
+        // pedir explicação a quem não tem como explicar (regra de 11/08).
+        const d = parsed.diagnostico;
+        const cabecalhoOk = !!(parsed.empresaNome || parsed.periodo);
         setErro(
-          'Nenhuma nota foi lida deste PDF. O arquivo abriu e o texto foi extraído, então não é PDF de imagem: '
-          + 'é a leitura das colunas que não reconheceu o layout. Mande este PDF ao time do CFI — não refaça a conta à mão.',
+          'Nenhuma nota foi lida deste PDF, e o problema não é o seu arquivo: ele abriu, o texto foi extraído e '
+          + (cabecalhoOk ? 'o cabeçalho do relatório foi reconhecido' : 'o cabeçalho não foi reconhecido')
+          + `. ${d.linhasComData > 0
+            ? `Há ${d.linhasComData} linha(s) de nota no documento e as COLUNAS não foram reconhecidas`
+            : 'Não há linhas de nota reconhecíveis'}`
+          + ' — é a leitura do CFI que precisa aprender este layout, e reexportar do E-Fiscal traria o mesmo arquivo. '
+          + `Mande este PDF ao time do CFI com esta linha: páginas=${d.paginas} · linhas com data=${d.linhasComData} · `
+          + `notas lidas=${d.notasLidas} · rodapé=${d.rodapeEncontrado ? 'sim' : 'não'}. `
+          + 'Não refaça a conta à mão.',
         );
       } else if (parsed.validacao.situacao === 'divergente') {
         setErro(
