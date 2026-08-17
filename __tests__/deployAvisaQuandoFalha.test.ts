@@ -63,6 +63,66 @@ describe('o workflow de deploy avisa quando falha', () => {
 });
 
 // ============================================================================
+// 🚨 O AVISADOR NÃO PODE COMPARTILHAR O MODO DE FALHA QUE ELE DENUNCIA.
+//
+// 17/08, deploy 566: caiu em **"Prepare all required actions"** — o GitHub
+// devolveu 429 e depois 503 ao baixar `google-github-actions/auth`. NENHUM passo
+// do job rodou, inclusive o que abre a issue, que morava dentro do mesmo job.
+//
+// Resultado: trabalho mesclado na main, FORA DO AR, e ninguém avisado. É o
+// cenário de 12/08 pela TERCEIRA vez — e as duas correções anteriores (a issue
+// em 13/08, o `env:` no mesmo dia) não alcançavam este caso, porque as duas
+// viviam dentro do job que morre.
+//
+// A trava agora é estrutural: job PRÓPRIO, com `needs`, e ZERO `uses:`.
+// ============================================================================
+describe('🚨 o aviso vive num JOB SEPARADO, e não depende de baixar action', () => {
+    const jobs = require('js-yaml') as any;
+
+    const doc = (() => {
+        try { return jobs.load(yml); } catch { return null; }
+    })();
+
+    it('existe um job de aviso com `needs` no job de deploy', () => {
+        expect(doc).not.toBeNull();
+        const aviso = doc.jobs['avisar-falha'];
+        expect(aviso).toBeTruthy();
+        expect(aviso.needs).toBe('deploy');
+    });
+
+    it('🚨 dispara em falha E em CANCELAMENTO — cota da conta cancela aos 15m', () => {
+        // 06/08: três deploys cancelados aos 15m00s cravados, runner_id 0, zero
+        // passos executados. Cancelamento por plataforma é tão invisível quanto
+        // falha, e ficava sem aviso nenhum.
+        const cond = String(doc.jobs['avisar-falha'].if);
+        expect(cond).toMatch(/failure\(\)/);
+        expect(cond).toMatch(/cancelled\(\)/);
+    });
+
+    it('🚨 NÃO usa nenhuma action — é exatamente esse download que falhou', () => {
+        // `gh` já vem no runner. Qualquer `uses:` aqui devolveria o avisador ao
+        // modo de falha que ele existe para denunciar.
+        const steps = doc.jobs['avisar-falha'].steps || [];
+        expect(steps.length).toBeGreaterThan(0);
+        for (const s of steps) expect(s.uses).toBeUndefined();
+    });
+
+    it('o job de aviso tem a própria permissão de abrir issue', () => {
+        expect(doc.jobs['avisar-falha'].permissions?.issues).toBe('write');
+    });
+
+    it('sem checkout, o gh precisa do --repo explícito', () => {
+        // Sem `actions/checkout` não há contexto de repositório no diretório.
+        expect(yml).toMatch(/gh issue list --repo "\$REPO"/);
+        expect(yml).toMatch(/gh issue create --repo "\$REPO"/);
+    });
+
+    it('a issue diz em que estado o deploy terminou (falha × cancelado)', () => {
+        expect(yml).toMatch(/RESULTADO: \$\{\{ needs\.deploy\.result \}\}/);
+    });
+});
+
+// ============================================================================
 // MATA-BURRO: TEXTO DE COMMIT NÃO PODE VIRAR CÓDIGO NO WORKFLOW.
 //
 // 13/08, deploy 470: o `Push image` caiu (infraestrutura) e ESTA trava — a que
