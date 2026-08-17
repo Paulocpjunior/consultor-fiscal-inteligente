@@ -181,8 +181,8 @@ não alcança e que ninguém deve fazer no lugar dele. **É meu todo o resto.**
 | # | O quê | Quando | Por que só ele |
 |---|---|---|---|
 | P1 | **Dizer que a F0 fechou** — uma semana de atendimento assentado no Connect, sem volta à Ultra Fox | gatilho de tudo | é leitura da operação, não do código |
-| P2 | **Nome do repositório** (sugestão: `sp-connect`) | antes da F1 | é dele a conta do GitHub |
-| P3 | **Criar o repositório vazio** e me dar acesso | antes da F1 | credencial |
+| ~~P2~~ | ✅ **FEITO 17/08** — nome escolhido: **`sp-connect`** | — | — |
+| ~~P3~~ | ✅ **FEITO 17/08** — repositório criado: `https://github.com/Paulocpjunior/sp-connect.git` | — | ⚠️ falta só o ACESSO deste ambiente a ele (ver nota abaixo) |
 | P4 | **Confirmar a inversão da §3** — o Connect vira dono da WABA e o CFI passa a pedir | antes da F3 | é a decisão que dá sentido ao projeto; sem ela a separação entrega metade |
 | P5 | **Escolher a janela da F3** (dia e hora, fora do expediente) e estar por perto | F3 | é o momento de risco: o canal do escritório fica virando |
 | P6 | **Reapontar o webhook no painel da Meta** e publicar a credencial da WABA no serviço novo | F3 | credencial e painel externo — não passo por aqui |
@@ -198,8 +198,22 @@ não alcança e que ninguém deve fazer no lugar dele. **É meu todo o resto.**
 | F4 | a ponte CFI→Connect pelo túnel, com a falha **dita na tela** e o e-mail como alternativa |
 | F5 | remover do CFI o `/connect`, os `whatsapp-*.js` e os testes movidos; atualizar `catalogo-banco.js`, `deploy-app.yml` e este documento |
 
+### ⚠️ O acesso do ambiente ao repositório novo
+
+O repositório já existe, mas a sessão que trabalha aqui enxerga **um escopo de
+repositórios** — hoje só o `consultor-fiscal-inteligente`. Antes da F1, o
+`sp-connect` precisa entrar nesse escopo (a autorização é um passo do Paulo).
+
+**Isso não é urgente e não muda o gatilho**: a F1 só começa depois do P1. Se na
+hora o acesso não vier, o caminho alternativo é abrir a sessão apontando
+direto para o `sp-connect` — o código a mover está todo neste repositório e é
+lido normalmente.
+
 ### O que NÃO é de ninguém agora
 
 Nada disso começa antes do **P1**. Se eu adiantar a F1 "porque é barato", o
 código do Connect passa a viver em dois lugares durante o corte — que é
 exatamente o pior momento para ter duas verdades.
+
+**O repositório criado hoje não antecipa nada** — ele fica vazio esperando, e
+isso é o estado correto.
