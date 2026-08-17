@@ -56,8 +56,21 @@ function lerMd(nome: string): Metade {
     return { arquivo: `docs/${nome}`, id: m?.[1] ?? null, revisao: m?.[2] ?? null };
 }
 
-const HTMLS = readdirSync(PUBLIC).filter((f) => /^guia-.*\.html$/.test(f)).map(lerHtml);
-const MDS = readdirSync(DOCS).filter((f) => /^guia-colaborador-.*\.md$/.test(f)).map(lerMd);
+// A varredura é por COMPORTAMENTO, não por prefixo de nome: qualquer página de
+// public/ que DECLARE o marcador `guia-id` entra na trava, e todo `guia-*.html`
+// entra mesmo sem declarar (senão bastaria esquecer o meta pra escapar).
+//
+// Foi a página de privacidade (`public/privacidade.html`, 17/08) que mostrou o
+// buraco: ela é material da equipe, tem par em docs/, e o filtro por `guia-`
+// não a enxergava — a trava passaria verde com metade órfã, que é exatamente o
+// defeito que ela existe pra pegar.
+const HTMLS = readdirSync(PUBLIC)
+    .filter((f) => f.endsWith('.html'))
+    .filter((f) => /^guia-/.test(f) || /<meta\s+name="guia-id"/i.test(readFileSync(join(PUBLIC, f), 'utf8')))
+    .map(lerHtml);
+const MDS = readdirSync(DOCS)
+    .filter((f) => /^guia-colaborador-.*\.md$/.test(f))
+    .map(lerMd);
 
 describe('MATA-BURRO: guia do colaborador anda em par', () => {
     it('a varredura enxerga os guias (trava vazia é trava falsa)', () => {

@@ -94,6 +94,10 @@ export const O_QUE_FAZ: Bloco[] = [
         texto: 'Som, pop-up do navegador e contador no título da aba. Com a chave de push publicada, o aviso também chega no celular com o app fechado.',
     },
     {
+        titulo: '🔒 Responder ao titular dos dados',
+        texto: 'A LGPD dá à pessoa o direito de saber o que guardamos e de pedir a eliminação. O app faz as duas coisas: gera o relatório completo e, antes de apagar, mostra o que sai e o que fica por obrigação legal — com o motivo de cada item.',
+    },
+    {
         titulo: '💼 Rodar onde a equipe já trabalha',
         texto: 'No navegador, instalado como aplicativo no celular (PWA) e dentro do Microsoft Teams.',
     },
@@ -249,6 +253,7 @@ export const REVISOES: Revisao[] = [
             '☎️ Sonda de voz/vídeo na ⚙️: pergunta à Meta como está a chamada para o nosso número (ela não liga nada — ligar é decisão do escritório).',
             '📇 Contatos: agenda completa com busca, cadastro à mão, compartilhar contato na conversa e a importação do backup num só lugar.',
             '🏷 Etiquetas do contato (Lead, Cliente, Marketing, Colaborador, Candidato…), cada uma com a finalidade e a base legal escritas — e aviso quando falta o consentimento que a LGPD exige.',
+            '🔒 Direitos do titular (LGPD): exportar tudo o que guardamos de uma pessoa e eliminar os dados dela, com o que fica por obrigação legal aparecendo nomeado antes de confirmar. Página de privacidade no rodapé.',
             '✅ Encerramento de atendimento com pesquisa de avaliação (1 a 5) e painel 📊.',
             '👥 Papéis de atendimento: colaborador, gestor e admin, com as permissões aplicadas na tela e no servidor.',
             '↪️ Transferência entre departamentos, com nota automática e aviso opcional ao cliente.',

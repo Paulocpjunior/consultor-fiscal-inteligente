@@ -21,7 +21,8 @@ import {
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
-    Contato, Etiqueta,
+    Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
+    RelatorioTitular, PlanoEliminacao,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -557,6 +558,47 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setCtMsg('✓ Consentimento registrado.');
         carregarContatos();
         setCtSel(null);
+    };
+
+    // ── 🔒 Direitos do titular (LGPD art. 18). É o mecanismo que dá lastro à
+    // frase do rodapé — sem ele, o selo seria afirmação enganosa ao titular.
+    const [lgpd, setLgpd] = useState<{ relatorio?: RelatorioTitular; plano?: PlanoEliminacao } | null>(null);
+    const [lgpdOcupado, setLgpdOcupado] = useState(false);
+
+    const exportarDadosTitular = async (numero: string) => {
+        setLgpdOcupado(true); setCtMsg(null);
+        const r = await relatorioTitular(numero);
+        setLgpdOcupado(false);
+        if (!r.ok) { setCtMsg(r.error || 'Não deu para gerar o relatório.'); return; }
+        setLgpd({ relatorio: r.relatorio });
+        // Baixar é o direito à PORTABILIDADE (art. 18, V): o titular precisa
+        // levar o arquivo, não só ver na tela de quem atende.
+        const blob = new Blob([JSON.stringify(r.relatorio, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `dados-titular-${numero}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+
+    const pedirPlanoEliminacao = async (numero: string) => {
+        setLgpdOcupado(true); setCtMsg(null);
+        const r = await eliminarDadosTitular(numero);
+        setLgpdOcupado(false);
+        if (!r.ok) { setCtMsg(r.error || 'Não deu para montar o plano.'); return; }
+        setLgpd({ plano: r.plano });
+    };
+
+    const confirmarEliminacao = async (numero: string) => {
+        const motivo = window.prompt('Registre o pedido do titular (fica gravado com o seu nome e a data):');
+        if (motivo == null) return;
+        setLgpdOcupado(true);
+        const r = await eliminarDadosTitular(numero, { confirmar: true, motivo });
+        setLgpdOcupado(false);
+        if (!r.ok) { setCtMsg(r.error || 'Não deu para eliminar.'); return; }
+        setLgpd(null); setCtSel(null);
+        setCtMsg(`✓ Dados eliminados (${r.removidas || 0} mensagens). O registro da solicitação ficou gravado.`);
+        carregarContatos();
     };
 
     const criarNovoContato = async () => {
@@ -1164,6 +1206,67 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <p className="text-[10px] text-slate-400">
                                         A etiqueta é classificação de pessoa: fica gravado quem etiquetou e quando.
                                     </p>
+
+                                    {/* 🔒 Direitos do titular. Só admin — o relatório traz a
+                                        conversa INTEIRA da pessoa, que o colaborador da fila X
+                                        não teria por que ver de um contato da fila Y. */}
+                                    {ehAdmin && (
+                                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">🔒 Pedido do titular (LGPD)</p>
+                                            <div className="flex gap-1.5 flex-wrap mt-1">
+                                                <button onClick={() => exportarDadosTitular(ctSel.numero)} disabled={lgpdOcupado}
+                                                    title="Art. 18, II e V: gera e baixa tudo o que guardamos desta pessoa"
+                                                    className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40">
+                                                    📄 Exportar os dados dele
+                                                </button>
+                                                <button onClick={() => pedirPlanoEliminacao(ctSel.numero)} disabled={lgpdOcupado}
+                                                    title="Art. 18, VI: mostra o que sai e o que fica ANTES de apagar"
+                                                    className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40">
+                                                    🗑 Eliminar os dados dele
+                                                </button>
+                                            </div>
+
+                                            {lgpd?.relatorio && (
+                                                <p className="mt-1.5 text-[10px] text-emerald-700 dark:text-emerald-400">
+                                                    ✓ Relatório gerado e baixado · {lgpd.relatorio.mensagens.total} mensagem(ns) ·
+                                                    {' '}{lgpd.relatorio.etiquetas.length} etiqueta(s). O pedido ficou registrado.
+                                                </p>
+                                            )}
+
+                                            {/* O plano vem ANTES do apagamento: o que fica vem
+                                                NOMEADO, porque prometer "apagamos tudo" e guardar
+                                                comprovante seria informação enganosa. */}
+                                            {lgpd?.plano && (
+                                                <div className="mt-1.5 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-2.5 py-2 space-y-1">
+                                                    <p className="text-[11px] font-bold text-red-800 dark:text-red-300">O que será APAGADO</p>
+                                                    {lgpd.plano.remove.length === 0
+                                                        ? <p className="text-[10px] text-red-700 dark:text-red-400">Nada — não há dado deste número no app.</p>
+                                                        : lgpd.plano.remove.map((r, i) => (
+                                                            <p key={i} className="text-[10px] text-red-700 dark:text-red-400">• {r.item} ({r.quantidade})</p>
+                                                        ))}
+                                                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 pt-1">O que NÃO pode ser apagado — e por quê</p>
+                                                    {lgpd.plano.mantem.map((m, i) => (
+                                                        <p key={i} className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
+                                                            • <strong>{m.item}</strong>: {m.motivo}
+                                                        </p>
+                                                    ))}
+                                                    <p className="text-[10px] text-red-800 dark:text-red-300 pt-0.5">{lgpd.plano.aviso}</p>
+                                                    <div className="flex gap-1.5 pt-0.5">
+                                                        {!lgpd.plano.nadaARemover && (
+                                                            <button onClick={() => confirmarEliminacao(ctSel.numero)} disabled={lgpdOcupado}
+                                                                className="text-[10px] font-bold px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-40">
+                                                                Confirmar eliminação
+                                                            </button>
+                                                        )}
+                                                        <button onClick={() => setLgpd(null)}
+                                                            className="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
+                                                            Cancelar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
