@@ -71,6 +71,25 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'De quem é o documento — quando reatribuir é conserto e quando é roubo',
+        dono: 'sefaz-backend/documento-posse.js',
+        comoUsar: "import { decidirPosseDocumento, ehParteDoDocumento } from 'sefaz-backend/documento-posse.js'",
+        porque: 'KROYA × GOLDLOG (Paulo, 17/08): a MESMA NF-e é saída de uma e entrada da outra, e as duas '
+            + 'são clientes da casa. Como o id do documento é a CHAVE, uma chave só comporta um dono — e o '
+            + 'importer, achando a chave com empresaId diferente, REATRIBUÍA. Com as duas capturando, a nota '
+            + 'trocava de dona a cada rodada e o livro de quem perdeu ficava a menor EM SILÊNCIO. A régua '
+            + 'existe em DOIS caminhos (o importer e a mensagem da importação manual): a segunda cópia faria '
+            + 'a tela dizer "corrija na origem" enquanto o backend deixa passar.',
+        // ⚠️ A SITUAÇÃO ('contraparte-legitima') NÃO é assinatura: todo CONSUMIDOR
+        // legítimo compara com ela, e vigiar a string faria a trava acusar quem
+        // está usando a régua direito. Assinatura é a IMPLEMENTAÇÃO — teste que
+        // grita sem motivo é teste desligado.
+        assinaturas: [
+            /function decidirPosseDocumento\s*\(/,
+            /function ehParteDoDocumento\s*\(/,
+        ],
+    },
+    {
         nome: 'De quem é a mensagem que falhou (nossa × da outra plataforma)',
         dono: 'sefaz-backend/whatsapp-webhook.js',
         comoUsar: "import { saiuPorOutraPlataforma } from 'sefaz-backend/whatsapp-webhook.js'",

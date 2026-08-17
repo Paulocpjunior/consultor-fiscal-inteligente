@@ -34,13 +34,22 @@ export type SituacaoDuplicado =
     | 'ja-esta-nesta-empresa'
     /** Gravado em OUTRA empresa — reimportar não corrige a dona. */
     | 'em-outra-empresa'
+    /** As DUAS empresas são partes do documento: saída de uma, entrada da outra. */
+    | 'contraparte-na-carteira'
     /** Tem lápide de exclusão: invisível no app e bloqueando a reentrada. */
     | 'excluido-pode-reincluir'
     /** Documento cancelado — está aqui, mas fora dos totais por natureza. */
     | 'ja-esta-cancelado';
 
+import { decidirPosseDocumento } from '../sefaz-backend/documento-posse.js';
+
 export interface DocumentoExistente {
     empresaId?: string | null;
+    /** Partes do documento — é delas que sai "as duas empresas estão certas". */
+    cnpjEmit?: string | null;
+    cnpjDest?: string | null;
+    emitente?: any;
+    destinatario?: any;
     empresaNome?: string | null;
     empresaCnpj?: string | null;
     origem?: string | null;
@@ -161,6 +170,37 @@ export function lerDuplicado(
     const mesmaEmpresa = (texto(d.empresaId) && texto(d.empresaId) === texto(empresaEscolhida.id))
         || (soDigitos(d.empresaCnpj) && soDigitos(d.empresaCnpj) === soDigitos(empresaEscolhida.cnpj));
     if (!mesmaEmpresa) {
+        // 🚨 AS DUAS PODEM ESTAR CERTAS. Quando a empresa escolhida E a dona são
+        // partes do documento (KROYA × GOLDLOG, 17/08), a nota é saída de uma e
+        // entrada da outra — ninguém errou, e mandar "corrigir na origem" faria
+        // o colaborador cobrar do cliente uma nota que está perfeita.
+        //
+        // O que impede a segunda escrituração é o CFI: o id do documento é a
+        // CHAVE, então uma chave só comporta um dono. A frase DIZ isso, em vez
+        // de culpar o cadastro ou o emissor.
+        // A pergunta NÃO é "a empresa escolhida é parte?" — é "as DUAS são?".
+        // Escolhida parte + dono que não é parte continua sendo posse errada, e
+        // a primeira versão disto engoliu esse caso (pego pelo teste na hora).
+        // Quem responde é a MESMA régua do importer, nunca uma cópia aqui.
+        const posse = decidirPosseDocumento({
+            existente: d,
+            pretendente: { empresaId: empresaEscolhida.id, empresaCnpj: empresaEscolhida.cnpj },
+            documento: d,
+        });
+        if (posse.situacao === 'contraparte-legitima') {
+            return {
+                situacao: 'contraparte-na-carteira',
+                permiteReincluir: false,
+                exigeAcao: true,
+                mensagem: `Esta NF-e é da ${texto(empresaEscolhida.nome) || 'empresa selecionada'} TAMBÉM — ela é `
+                    + `saída de uma das duas e entrada da outra. Hoje o documento está gravado em ${dono} `
+                    + `(${carimbo}), e o CFI ainda guarda UM dono por chave.`,
+                acao: 'Ninguém errou aqui: as duas empresas precisam escriturar. Enquanto a identidade do '
+                    + 'documento não separa os dois lados, lance a nota que falta pelo ✍️ Lançar nota sem XML '
+                    + 'DEIXANDO A CHAVE EM BRANCO (com a chave ela cai no mesmo documento) — e avise o time, '
+                    + 'porque essa é para sair quando a correção subir.',
+            };
+        }
         return {
             situacao: 'em-outra-empresa',
             permiteReincluir: false,

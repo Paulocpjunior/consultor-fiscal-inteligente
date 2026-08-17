@@ -242,6 +242,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
   direção contrária. A composição aparece na TELA antes dos botões: descobrir
   "por desencargo" não pode ser o processo.
+- **🚨 A MESMA NF-e É SAÍDA DE UMA EMPRESA E ENTRADA DA OUTRA — e a captura
+  TROCAVA A NOTA DE DONA a cada rodada** (Paulo, 17/08: *"importei as notas de
+  saída da KROYA e algumas delas foram emitidas para a GOLDLOG… preciso
+  importar/escriturar a mesma NF-e nas duas empresas?"*). **Precisa** — são dois
+  contribuintes e dois livros (saída/débito numa, entrada/crédito na outra). E o
+  CFI não fazia: em `documentos_fiscais` **o id do documento é a CHAVE**
+  (`xml-importer.js`, `xmlFiscalService.ts`), então **uma chave só comporta UM
+  dono**.
+  🔴 **E O DANO ERA MAIOR QUE A RECUSA NA TELA**: na captura automática o
+  importer não recusava — ele **REATRIBUÍA** (`status: 'reatribuido'`). Aquilo
+  nasceu para o caso GUARANI (27/07: notas **SEM DONO**, invisíveis em qualquer
+  filtro por cliente) e nunca previu **duas empresas da mesma carteira
+  negociando entre si**: com as duas capturando, a nota trocava de lado toda
+  rodada e o livro de quem perdeu ficava a menor **sem nada acender**.
+  ✂️ `documento-posse.js` (na `REGUAS_VIGIADAS`): **dono errado é dono que NÃO É
+  PARTE do documento**. Se o CNPJ de quem está com a nota é o emitente ou o
+  destinatário dela, ele não é dono errado — é a CONTRAPARTE, e tirar dele apaga
+  a escrituração de um contribuinte. `sem-dono` e `dono-nao-e-parte` continuam
+  reatribuindo; `contraparte-legitima` **não**, e a recusa sai NOMEADA no
+  resultado (nota que não entrou e ninguém soube é buraco escondido).
+  ⚠️ **AUSÊNCIA NÃO É PROVA**: dono cujo CNPJ não está gravado vira
+  `posse-indeterminada` e a nota FICA onde está — afirmar erro no escuro é
+  justamente o que estava corrompendo dado.
+  ⚠️ **E A MENSAGEM DA IMPORTAÇÃO MANUAL DAVA O CONSELHO ERRADO**: *"a nota
+  precisa ser corrigida na origem"* mandaria o colaborador cobrar do cliente uma
+  nota **perfeita**. Agora, quando as DUAS são partes, ela DIZ que ninguém errou
+  e que o limite é do CFI. 🐛 A primeira versão dessa condição perguntava só *"a
+  empresa escolhida é parte?"* — o que engolia o caso de posse errada de verdade
+  (escolhida parte × dono não-parte); pego pelo teste na hora, e a tela passou a
+  chamar a MESMA régua em vez de ter cópia.
+  🚧 **A RAIZ CONTINUA ABERTA — a identidade do documento ainda não separa os
+  dois lados.** Enquanto isso o lado que falta se lança pelo ✍️ **sem preencher
+  a CHAVE** (com a chave ele cai no mesmo documento), e essas notas SAEM quando
+  a correção subir, senão contam duas vezes.
 - **🚨 O EFD-CONTRIBUIÇÕES DE SERVIÇO SAÍA DECLARANDO ZERO — e o arquivo mentia
   sobre si mesmo em três lugares** (Paulo, 17/08: *"fui testar um EFD
   Contribuições de prestação de serviço e puxou zerado alguns blocos"*, depois
