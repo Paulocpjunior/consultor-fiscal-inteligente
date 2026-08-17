@@ -168,6 +168,30 @@ describe('🚨 total que o app INVENTA é pior que total que ele não acha', () 
     it('zero notas é dito como BURACO DE LEITURA, não como relatório vazio', () => {
         const tela = readFileSync(join(__dirname, '..', 'components/AnaliseCreditoExtrato.tsx'), 'utf8');
         expect(tela).toMatch(/parsed\.notas\.length === 0/);
-        expect(tela).toMatch(/não refaça a conta à mão/);
+        expect(tela).toMatch(/não refaça a conta à mão/i);
+    });
+
+    it('🚨 "consiga outro arquivo" só onde outro arquivo SAI diferente', () => {
+        // Paulo, 17/08: *"não seria melhor informar ao colaborador que consiga
+        // outro arquivo?"* — sim, e o app agora diz isso nos DOIS casos em que
+        // resolve (PDF escaneado e relatório errado). No layout não reconhecido
+        // ele diz o CONTRÁRIO, porque reexportar traz o mesmo arquivo: mandar
+        // buscar outro pareceria acionável e faria a pessoa tentar três vezes.
+        const parser = readFileSync(join(__dirname, '..', 'services/efiscalPdfParserService.ts'), 'utf8');
+        expect(parser).toMatch(/exporte o relatório/);          // imagem ⇒ outro arquivo
+        expect(parser).toMatch(/Tire esse e importe de novo/);   // relatório errado ⇒ outro arquivo
+        const tela = readFileSync(join(__dirname, '..', 'components/AnaliseCreditoExtrato.tsx'), 'utf8');
+        expect(tela).toMatch(/reexportar do E-Fiscal traria o mesmo arquivo/);
+        expect(tela).toMatch(/o problema não é o seu arquivo/);
+    });
+
+    it('a mensagem leva a MEDIDA da leitura — chamado sem pedir explicação', () => {
+        // Regra de 11/08: o colaborador não sabe explicar porque não sabe fazer.
+        // O app não pergunta, ele mede.
+        const tela = readFileSync(join(__dirname, '..', 'components/AnaliseCreditoExtrato.tsx'), 'utf8');
+        expect(tela).toMatch(/parsed\.diagnostico/);
+        for (const campo of ['páginas=', 'linhas com data=', 'notas lidas=', 'rodapé=']) {
+            expect(tela).toContain(campo);
+        }
     });
 });
