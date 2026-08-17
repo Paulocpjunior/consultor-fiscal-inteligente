@@ -11,6 +11,7 @@ import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
 import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
+import { decidirPosseDocumento } from './documento-posse.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -678,8 +679,28 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     // invisíveis no filtro por empresa). Corrige aqui mesmo, sem regravar o
     // XML no Storage: o corpo da nota já está lá, só a posse estava errada.
     const donoNovo = empresaId || null;
+    const cnpjPretendente = empresaCnpj?.replace(/\D/g, '') || null;
+    // 🚨 REATRIBUIR NÃO É SEMPRE CONSERTO. Quando as duas empresas são PARTES do
+    // documento (KROYA × GOLDLOG, 17/08), a nota é saída de uma e entrada da
+    // outra: trocar a dona apaga o livro de um contribuinte para preencher o do
+    // outro, e a cada rodada de captura ela troca de lado em silêncio.
+    // Quem decide é a régua, num lugar só.
+    const posse = decidirPosseDocumento({
+      existente: existingData,
+      pretendente: { empresaId: donoNovo, empresaCnpj: cnpjPretendente },
+      documento: { ...(existingData || {}), cnpjEmit: existingData?.cnpjEmit || meta.cnpjEmit, cnpjDest: existingData?.cnpjDest || meta.cnpjDest },
+    });
+    if (donoNovo && existingData && existingData.empresaId !== donoNovo && !posse.reatribuir) {
+      // NÃO é silêncio: a situação sai nomeada pra aparecer no log do cron. Nota
+      // que não entrou e ninguém soube é o buraco escondido de sempre.
+      return {
+        status: 'duplicado', chave: meta.chave,
+        posse: posse.situacao, motivoPosse: posse.motivo,
+        deEmpresaId: existingData.empresaId || null,
+      };
+    }
     if (donoNovo && existingData && existingData.empresaId !== donoNovo) {
-      const cnpjLimpo = empresaCnpj?.replace(/\D/g, '') || null;
+      const cnpjLimpo = cnpjPretendente;
       const direcaoNova = decidirDirecaoPorTpNF(existingData.cnpjEmit || meta.cnpjEmit, existingData.cnpjDest || meta.cnpjDest, cnpjLimpo, existingData.tpNF ?? meta.tpNF);
       try {
         await docRef.update({
@@ -920,6 +941,15 @@ export async function reatribuirDesconhecidas({ limit = 500 } = {}) {
         const dono = await resolverDonoPorParticipantes(db, d.cnpjEmit, d.cnpjDest, d.empresaCnpj, d.tpNF);
         if (!dono) { semDono++; continue; }
         if (d.empresaId === dono.empresaId && d.direcao === dono.direcao) continue;
+        // MESMA régua do importer: quem já está com a nota e é PARTE dela não é
+        // dono errado. Aqui isso quase nunca acontece (direção 'desconhecida'
+        // costuma ser justamente dono que não é parte), mas régua aplicada num
+        // caminho só é como as duas leituras do mesmo fato nascem.
+        if (!decidirPosseDocumento({
+          existente: d,
+          pretendente: { empresaId: dono.empresaId, empresaCnpj: dono.empresaCnpj },
+          documento: d,
+        }).reatribuir && d.empresaId) { semDono++; continue; }
         await docSnap.ref.update({
           empresaId: dono.empresaId,
           empresaCnpj: dono.empresaCnpj,
