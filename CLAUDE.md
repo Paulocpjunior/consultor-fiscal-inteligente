@@ -132,6 +132,47 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **🚨 PDF GIRADO (`/Rotate 90`) FAZIA O PARSER LER O EIXO ERRADO — e ele acusava
+  a COLABORADORA de um erro que era DELE** (Paulo, 17/08, urgente: *"a
+  colaboradora reporta este erro do CFI, porém ela analisa está correto"*, caso
+  CLUDE, análise de créditos de 07/2026). A tela mostrava **0 lançamentos**,
+  R$ 0,00 em tudo, e uma "divergência" citando *"Valor da NF: PDF=R$ 5017.50"* —
+  **número que não existe no documento**. O rodapé real é
+  `Total 580.395,26 · 66.652,60 · 0,00 · 0,00`.
+  **A CAUSA**: este relatório do E-Fiscal sai em **A4 RETRATO (595×842) com
+  `/Rotate 90`** — paisagem GIRADA. O `efiscalPdfParserService` extrai por
+  COORDENADA X e usava `item.transform[4]`, que é o espaço do PDF **antes** da
+  rotação: com /Rotate 90 aquilo é o eixo VERTICAL do que a pessoa vê. As janelas
+  de coluna (calibradas num PDF de mediabox paisagem) nunca casavam ⇒ nenhuma
+  linha reconhecida. A correção é compor a matriz do item com a do **VIEWPORT**,
+  que é quem conhece o `/Rotate`; para `/Rotate 0` ela devolve o mesmo x, então
+  nada regride. ⚠️ **No espaço do viewport o Y cresce PARA BAIXO** — a ordenação
+  das linhas virou y CRESCENTE, senão a linha "Total" (a última) viraria a
+  primeira e a razão social de duas linhas colaria na nota errada.
+  ✅ **PROVADO contra o PDF real: 137 notas e os totais batem CENTAVO A CENTAVO**
+  (580.395,26 · 66.652,60). Antes: zero.
+  🚨 **E O SEGUNDO DEFEITO ERA PIOR QUE O PRIMEIRO: o app INVENTAVA o total.** O
+  rodapé era "a última linha sem data que tivesse valor numa janela" — qualquer
+  token que caísse ali por acidente virava o total impresso, e foi de onde saiu o
+  R$ 5017,50. Agora o rodapé se identifica pela palavra **Total** (âncora no token
+  inteiro: existe fornecedor "TOTAL PASS PARTICIPACOES"), e **sem rodapé não se
+  afirma divergência nem se dá verde** — vira `nao-conferido`, porque comparar
+  contra zero acusaria o relatório inteiro justamente quando a extração está
+  perfeita. **Total que o app inventa é pior que total que ele não acha**: manda
+  a pessoa revisar uma conta certa.
+  ✂️ A tela separa os **TRÊS** estados (confere · não conferido · divergente) e
+  **zero notas** passou a ser dito como BURACO DE LEITURA, com a ação certa
+  ("mande o PDF ao time — **não refaça a conta à mão**"), em vez de relatório
+  vazio.
+  **REGRA QUE FICA: parser por coordenada é calibrado numa AMOSTRA, então a régua
+  mora em módulo PURO e testável.** Ela vivia dentro do arquivo que importa
+  `pdfjs-dist`, que **não carrega no jest** — ou seja, era inexercitável por
+  teste, e foi exatamente por isso que isto passou. `services/efiscalPdfGeometria.ts`
+  guarda as janelas, os regexes e o `mapearTokens`; o teste mede as DUAS rotações
+  com as coordenadas reais **sem PDF de cliente no repositório**.
+  🐛 E o teste pegou um defeito meu na hora: escrevi `/^totais?$/`, que casa
+  "totai" e "totais" e **nunca "Total"** — a correção teria subido sem achar
+  rodapé nenhum, trocando um total inventado por um "não conferido" eterno.
 - **🐛 ATIVAR A EMPRESA ABRIA A TELA SEM CARREGAR A EMPRESA — tela BRANCA no
   LP/LR** (Paulo, 17/08, com print: *"as fichas do LP/LR não estão aparecendo
   quando ativamos a empresa, elas aparecem quando ativamos empresas do
