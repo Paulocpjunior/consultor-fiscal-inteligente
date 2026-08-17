@@ -313,10 +313,40 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
       setEfiscal(parsed);
       // O credito e o aviso de CNPJ sao calculados reativamente
       // (useMemo abaixo) — recalculam quando o PDF OU a empresa mudam.
-      if (!parsed.validacao.ok) {
+      if (parsed.notas.length === 0) {
+        // Zero notas com o PDF certo é BURACO DE LEITURA, não relatório vazio.
+        //
+        // 🚨 E AQUI O APP NÃO MANDA BUSCAR OUTRO ARQUIVO, de propósito (Paulo,
+        // 17/08: *"não seria melhor informar ao colaborador que consiga outro
+        // arquivo?"* — sim, mas só onde outro arquivo SAI diferente). Este é o
+        // caso oposto: o PDF da CLUDE estava perfeito, e reexportar devolveria
+        // exatamente o mesmo arquivo. Mandar buscar outro pareceria acionável e
+        // faria a pessoa tentar três vezes antes de concluir que o app quebrou.
+        //
+        // O que sobra de útil é a MEDIDA da leitura — ela vira o chamado sem
+        // pedir explicação a quem não tem como explicar (regra de 11/08).
+        const d = parsed.diagnostico;
+        const cabecalhoOk = !!(parsed.empresaNome || parsed.periodo);
+        setErro(
+          'Nenhuma nota foi lida deste PDF, e o problema não é o seu arquivo: ele abriu, o texto foi extraído e '
+          + (cabecalhoOk ? 'o cabeçalho do relatório foi reconhecido' : 'o cabeçalho não foi reconhecido')
+          + `. ${d.linhasComData > 0
+            ? `Há ${d.linhasComData} linha(s) de nota no documento e as COLUNAS não foram reconhecidas`
+            : 'Não há linhas de nota reconhecíveis'}`
+          + ' — é a leitura do CFI que precisa aprender este layout, e reexportar do E-Fiscal traria o mesmo arquivo. '
+          + `Mande este PDF ao time do CFI com esta linha: páginas=${d.paginas} · linhas com data=${d.linhasComData} · `
+          + `notas lidas=${d.notasLidas} · rodapé=${d.rodapeEncontrado ? 'sim' : 'não'}. `
+          + 'Não refaça a conta à mão.',
+        );
+      } else if (parsed.validacao.situacao === 'divergente') {
         setErro(
           'Atencao: os totais extraidos nao bateram 100% com o rodape do PDF. ' +
           'Revise antes de usar. Divergencias: ' + parsed.validacao.divergencias.join('; '),
+        );
+      } else if (parsed.validacao.situacao === 'nao-conferido') {
+        setErro(
+          'Os valores foram lidos, mas a linha "Total" do relatório não foi encontrada — não há contra o que conferir. '
+          + 'Isso não quer dizer que estão errados; confira se o PDF saiu completo, com a última página.',
         );
       }
     } catch (e: unknown) {
@@ -767,9 +797,24 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
               ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
               : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300'
           }`}>
-            {efiscal.validacao.ok ? (
+            {/* TRÊS ESTADOS, TRÊS AÇÕES DIFERENTES. Fundir "não confere" com
+                "não consegui conferir" foi o que mandou a colaboradora revisar
+                uma conta certa (caso CLUDE, 17/08): o app dizia divergência com
+                um número que não existia no PDF. */}
+            {efiscal.validacao.situacao === 'confere' && (
               <span>✓ Extração validada — os totais batem 100% com o rodapé do PDF.</span>
-            ) : (
+            )}
+            {efiscal.validacao.situacao === 'nao-conferido' && (
+              <div>
+                <p className="font-semibold mb-1">⚠️ Não foi possível conferir:</p>
+                <p className="text-xs">
+                  A linha <strong>Total</strong> do relatório não foi encontrada, então não há contra o que comparar —
+                  isso <strong>não</strong> quer dizer que os valores estão errados. Confira se o PDF foi exportado
+                  completo (com a última página) antes de usar.
+                </p>
+              </div>
+            )}
+            {efiscal.validacao.situacao === 'divergente' && (
               <div>
                 <p className="font-semibold mb-1">⚠️ Divergência na extração:</p>
                 <ul className="list-disc list-inside text-xs">

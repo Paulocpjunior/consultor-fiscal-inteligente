@@ -26,9 +26,12 @@ import {
     type DctfwebDebitosResult,
 } from '../../services/dctfwebService';
 import { getAuth } from 'firebase/auth';
-import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
+import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, perguntarDebitosJaEnviados, type ModoComposicao } from '../../services/envioImpostoService';
 import InsumosDepartamentos from './InsumosDepartamentos';
 import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
+// DE QUEM É CADA DÉBITO — núcleo puro. A régua mora num lugar só; a tela não
+// reimplementa o de-para de código de receita (seria a segunda cópia de sempre).
+import { separarDarfPorDepartamento, avisoDeMistura } from '../../sefaz-backend/darf-departamentos.js';
 
 interface Props {
     declaracao: DctfwebDeclaracao;
@@ -140,7 +143,253 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
         }
     };
 
+    /**
+     * 🚨 PORTA ÚNICA ANTES DE QUALQUER ENVIO — a guia é só do seu departamento?
+     *
+     * Paulo, 17/08 (HYPE CAFE 07/2026, *"ERRO GRAVÍSSIMO"*): ele ia enviar o DARF
+     * de PIS/COFINS e, *"por desencargo"*, abriu o PDF — dentro vinha o **1082,
+     * CONTR PREV DESCONTA SEGURADO**, que é do DP/Folha. Se o DP mandar a guia
+     * dele, o cliente paga o mesmo débito DUAS VEZES. O app não dizia nada: os
+     * botões de envio estavam ali, e só o olho do dono pegou.
+     *
+     * ⚠️ ELA CARREGA A COMPOSIÇÃO SOZINHA. Os débitos são sob demanda ("Ver
+     * débitos apurados"), então depender de a pessoa ter clicado antes seria uma
+     * trava que só protege quem já sabia do problema — que é ninguém.
+     *
+     * ⚠️ E FALHA AO CONFERIR NÃO LIBERA EM SILÊNCIO: sem saber a composição, o
+     * envio pede confirmação DIZENDO que não deu para conferir. Aqui o
+     * indeterminado PARA (é envio de guia ao cliente), ao contrário do gate de
+     * departamento, onde ele libera.
+     */
+    /**
+     * 🚨 A COMPOSIÇÃO É CARREGADA JUNTO COM O DARF, sem esperar clique.
+     *
+     * O bloco "de quem é esta guia" não serve para nada se depender de a pessoa
+     * ter clicado em "Ver débitos apurados" antes — ninguém clica no botão que
+     * não sabe que precisa. Custa 1 chamada SERPRO por DARF gerado, e é o preço
+     * de não mandar ao cliente uma guia que outro departamento também vai mandar.
+     *
+     * Falha aqui não derruba nada e não libera nada: a trava do envio tenta de
+     * novo e, sem conseguir, pede confirmação DIZENDO que não conferiu.
+     */
+    // Motivo do reenvio proposital — viaja com a gravação (quem/quando/por quê).
+    const [reenvioMotivo, setReenvioMotivo] = useState<string | null>(null);
+    /**
+     * Os débitos que esta guia cobra, já com o departamento de cada um — é o que
+     * vai para a auditoria. Sem composição gravada, o envio de amanhã não tem
+     * como saber o que o de hoje cobrou.
+     */
+    const debitosParaAuditoria = () => {
+        if (!composicaoDarf) return undefined;
+        return composicaoDarf.grupos.flatMap((g: any) => g.linhas.map((l: any) => ({
+            codigo: l.codigo, descricao: l.descricao, valor: l.valor, departamento: g.departamento,
+        })));
+    };
+    const darfConferido = useRef<string | null>(null);
+    useEffect(() => {
+        if (!darfResult?.pdfBase64 || !user) return;
+        const chave = `${declaracao.empresaCnpj}_${declaracao.anoPA}_${declaracao.mesPA}_${declaracao.categoria}`;
+        if (darfConferido.current === chave || debitos?.lido) return;
+        darfConferido.current = chave;
+        listarDebitosDeclaracao(user, {
+            empresaCnpj: declaracao.empresaCnpj,
+            anoPA: declaracao.anoPA,
+            mesPA: declaracao.mesPA,
+            categoria: declaracao.categoria,
+        }).then((r) => setDebitos(r)).catch(() => { darfConferido.current = null; });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [darfResult?.pdfBase64]);
+
+    // A composição sai do MESMO núcleo que a trava do envio — duas leituras do
+    // mesmo fato numa tela só é a armadilha que este projeto mais pagou.
+    const composicaoDarf = React.useMemo(
+        () => (debitos?.lido && (debitos.debitos || []).length
+            ? separarDarfPorDepartamento(debitos.debitos)
+            : null),
+        [debitos],
+    );
+    const avisoDaComposicao = React.useMemo(() => avisoDeMistura(composicaoDarf), [composicaoDarf]);
+
+    /**
+     * 🚨 SEGUNDA PORTA: ESTE DÉBITO JÁ FOI ENVIADO NESTA COMPETÊNCIA?
+     *
+     * Paulo, 17/08: *"pode fazer, barrar o segundo envio do mesmo débito"*. O
+     * aviso de mistura dependia de o outro departamento LEMBRAR — e memória não
+     * é trava. Quem responde é a auditoria, porque o outro envio foi de outra
+     * pessoa, de outro departamento, em outra máquina.
+     *
+     * Função PRÓPRIA porque os DOIS caminhos passam por ela — o DARF unificado e
+     * a guia separada por vencimento. Duplicar aqui faria um caminho barrar o que
+     * o outro libera, com o erro aparecendo só na conta do cliente.
+     */
+    const conferirRepeticao = async (debitosDaGuia: any[]): Promise<boolean> => {
+        const competenciaIso = `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`;
+        const r = await perguntarDebitosJaEnviados({
+            cnpj: declaracao.empresaCnpj,
+            competencia: competenciaIso,
+            debitos: debitosDaGuia,
+        });
+        if (!r.ok) {
+            // Rede que piscou NÃO vira "nunca foi enviado" — afirmar isso é o
+            // que dobra a cobrança. Pede confirmação dizendo que não conferiu.
+            return confirm(
+                'NÃO FOI POSSÍVEL CONFERIR se estes débitos já foram enviados nesta competência '
+                + `(${r.error || 'falha na consulta'}).\n\n`
+                + 'Se outro departamento já mandou, o cliente paga duas vezes. Enviar assim mesmo?',
+            );
+        }
+        if (r.aviso) {
+            if (!r.conferencia?.bloqueia) {
+                // Só ressalva (envio antigo sem composição gravada): avisa e segue.
+                onShowToast?.(`${r.aviso.titulo} — ${r.aviso.acao}`);
+                return true;
+            }
+            const motivo = prompt(
+                `${r.aviso.titulo.toUpperCase()}\n\n${r.aviso.texto}\n\n${r.aviso.acao}\n\n`
+                + 'Para reenviar, escreva o MOTIVO (mínimo 15 caracteres). Ele fica gravado com o seu nome.\n'
+                + 'Deixe em branco para NÃO enviar.',
+                '',
+            );
+            const limpo = String(motivo || '').trim();
+            if (limpo.length < 15) {
+                onShowToast?.(limpo
+                    ? 'Motivo curto demais — o reenvio foi cancelado. Descreva por que a guia precisa sair de novo.'
+                    : 'Envio cancelado — o débito já tinha saído nesta competência.');
+                return false;
+            }
+            setReenvioMotivo(limpo);
+        }
+        return true;
+    };
+
+    /**
+     * @param debitosExplicitos quando o envio é de uma GUIA SEPARADA, a
+     *   composição é a daquele vencimento — não a do DARF unificado. Usar a do
+     *   unificado ali barraria por débito que nem está no anexo.
+     */
+    const podeEnviarEstaGuia = async (debitosExplicitos?: any[]): Promise<boolean> => {
+        if (debitosExplicitos?.length) {
+            const sepG = separarDarfPorDepartamento(debitosExplicitos);
+            const avisoG = avisoDeMistura(sepG);
+            if (avisoG && !confirm(
+                `${avisoG.titulo.toUpperCase()}\n\n${avisoG.texto}\n\n${avisoG.acao}\n\nEnviar assim mesmo?`,
+            )) return false;
+            return await conferirRepeticao(debitosExplicitos);
+        }
+        let comp = debitos;
+        if (!comp) {
+            try {
+                comp = await listarDebitosDeclaracao(user, {
+                    empresaCnpj: declaracao.empresaCnpj,
+                    anoPA: declaracao.anoPA,
+                    mesPA: declaracao.mesPA,
+                    categoria: declaracao.categoria,
+                });
+                setDebitos(comp);
+            } catch {
+                comp = null;
+            }
+        }
+        if (!comp?.lido || !(comp.debitos || []).length) {
+            return confirm(
+                'NÃO FOI POSSÍVEL CONFERIR o que está dentro desta guia.\n\n'
+                + 'O DARF da DCTFWeb consolida os débitos de TODOS os departamentos (Fiscal, DP/Folha e Contábil). '
+                + 'Sem a lista de débitos apurados não dá para dizer se ele é só do seu.\n\n'
+                + 'Abra o PDF e confira os códigos antes de enviar. Enviar assim mesmo?',
+            );
+        }
+        const sep = separarDarfPorDepartamento(comp.debitos);
+        const aviso = avisoDeMistura(sep);
+        if (aviso && !confirm(
+            `${aviso.titulo.toUpperCase()}\n\n${aviso.texto}\n\n${aviso.acao}\n\n`
+            + 'Enviar o DARF unificado assim mesmo?',
+        )) return false;
+
+        return await conferirRepeticao(comp.debitos);
+    };
+
+    /**
+     * 🚨 ENVIAR AS GUIAS DE UM VENCIMENTO — o caminho que faltava.
+     *
+     * Paulo, 17/08: *"então como eu tenho que emitir em guias separadas, a função
+     * envio pelo sistema não vai né"*. Não ia. Eu havia mandado ele usar a guia
+     * separada (a que NÃO mistura departamentos) e o único botão de envio estava
+     * no DARF unificado — ou seja, o app oferecia o rito completo só no caminho
+     * errado, e no certo sobrava baixar o PDF e anexar à mão, perdendo SharePoint,
+     * gestor em cópia, baixa da obrigação, auditoria e a trava do débito repetido.
+     *
+     * A composição aqui é a DESTA DATA, não a do unificado: é isso que faz a
+     * trava barrar o segundo envio do código certo e a auditoria registrar o que
+     * de fato saiu.
+     */
+    const enviarGuiasDaData = async (vencimento: string, guias: any[]) => {
+        const debitos = guias.map((g) => ({
+            codigo: String(g.codigo || ''),
+            extensao: g.extensao ? String(g.extensao) : null,
+            descricao: g.descricao || null,
+            valor: Number(g.valorPrincipal ?? g.valor ?? 0) || null,
+        }));
+        if (!(await podeEnviarEstaGuia(debitos))) return;
+        setEnviandoDarf(true);
+        try {
+            const token = await getAuth().currentUser?.getIdToken();
+            if (!token) throw new Error('Sessão expirada');
+            const resp = await fetch(`/api/admin/empresa-contato/${encodeURIComponent(declaracao.empresaCnpj)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const contato = resp.ok ? await resp.json() : { email: '' };
+            if (!contato.email) {
+                onShowToast?.('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
+                return;
+            }
+            const competencia = `${declaracao.anoPA}-${String(declaracao.mesPA).padStart(2, '0')}`;
+            const total = guias.reduce((t, g) => t + (Number(g.valorPrincipal ?? g.valor ?? 0) || 0), 0);
+            const linhas = guias.map((g) => `• ${g.codigo}${g.extensao || ''} ${g.descricao || ''} — ${formatCurrency(Number(g.valorPrincipal ?? g.valor ?? 0) || 0)}`);
+            const corpo = [
+                'Olá, tudo bem?',
+                '',
+                `Seguem as guias da DCTFWeb — competência ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)}, com vencimento em ${formatDataBr(vencimento)}.`,
+                '',
+                ...linhas,
+                '',
+                `Total nesta data: ${formatCurrency(total)}`,
+                '',
+                'Por gentileza, confirme o pagamento após a regularização.',
+                '',
+                'Atenciosamente,',
+                user?.name || 'Equipe SP Assessoria Contábil',
+            ].join('\n');
+            const [primeira, ...resto] = guias;
+            const nomeDe = (g: any) => `darf_${g.codigo}${g.extensao || ''}${g.cota != null ? `_quota${g.cota}` : ''}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`;
+            const r = await enviarGuiaPeloServidor({
+                empresaCnpj: declaracao.empresaCnpj,
+                empresaNome: declaracao.empresaCnpj,
+                tipo: 'DARF',
+                competencia,
+                para: contato.email,
+                assunto: `DARF DCTFWeb ${formatPaLabel(declaracao.anoPA, declaracao.mesPA)} — vencimento ${formatDataBr(vencimento)}`,
+                mensagem: corpo,
+                pdfBase64: primeira.pdfBase64,
+                pdfFileName: nomeDe(primeira),
+                // As demais guias da MESMA data vão na MESMA mensagem: é uma
+                // cobrança só, e um e-mail por código encheria a caixa do cliente.
+                pdfs: resto.map((g) => ({ nome: nomeDe(g), base64: g.pdfBase64 })),
+                valor: total,
+                vencimento,
+                debitos,
+                reenvioMotivo,
+            });
+            if (r.ok) onShowToast?.(mensagemEnvioServidor(r));
+            else onShowToast?.(`Falha no envio: ${r.error}`);
+        } catch (e: any) {
+            onShowToast?.(`Falha no envio: ${e.message}`);
+        } finally {
+            setEnviandoDarf(false);
+        }
+    };
+
     const enviarDarfPeloServidor = async (pdfBase64: string, filename: string) => {
+        if (!(await podeEnviarEstaGuia())) return;
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -178,6 +427,10 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 pdfFileName: filename,
                 valor: darfResult?.valor ?? undefined,
                 vencimento: darfResult?.vencimento ?? null,
+                // A COMPOSIÇÃO viaja com o envio: é ela que faz a próxima
+                // tentativa (de qualquer departamento) saber o que já saiu.
+                debitos: debitosParaAuditoria(),
+                reenvioMotivo,
             });
             if (r.ok) onShowToast?.(mensagemEnvioServidor(r));
             else onShowToast?.(`Falha no envio: ${r.error}`);
@@ -191,6 +444,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     // WhatsApp OFICIAL (09/08): o servidor envia pela Cloud API (template
     // aprovado + PDF) e a Meta devolve o comprovante — mesmo rito do e-mail.
     const enviarDarfPorWhatsapp = async (pdfBase64: string, filename: string) => {
+        if (!(await podeEnviarEstaGuia())) return;
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -214,6 +468,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 pdfFileName: filename,
                 valor: darfResult?.valor ?? undefined,
                 vencimento: darfResult?.vencimento ?? null,
+                debitos: debitosParaAuditoria(),
+                reenvioMotivo,
             });
             if (r.ok) onShowToast?.(mensagemEnvioWhatsapp(r));
             else onShowToast?.(`Falha no envio por WhatsApp: ${r.error}`);
@@ -225,6 +481,7 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
     };
 
     const enviarDarfAoCliente = async (pdfBase64: string, filename: string, modo: ModoComposicao = 'outlook-web') => {
+        if (!(await podeEnviarEstaGuia())) return;
         setEnviandoDarf(true);
         try {
             const token = await getAuth().currentUser?.getIdToken();
@@ -265,6 +522,8 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                 pdfBase64,
                 pdfFileName: filename,
                 valor: darfResult?.valor ?? undefined,
+                debitos: debitosParaAuditoria(),
+                reenvioMotivo,
             });
             if (r.ok) {
                 const sp = r.sharePoint?.status === 'arquivado'
@@ -666,6 +925,46 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                             ))}
                                         </p>
                                     )}
+                                    {/* 🚨 DE QUEM É ESTA GUIA — na cara, ANTES dos botões.
+                                        A trava do clique não bastava: quem lê a tela
+                                        precisa ver que o DARF unificado mistura
+                                        departamentos, senão descobre "por desencargo",
+                                        abrindo o PDF — que foi o que salvou a HYPE em
+                                        17/08 e não pode ser o processo. */}
+                                    {darfResult.pdfBase64 && composicaoDarf && (
+                                        <div className={`rounded-lg border p-3 mt-2 text-xs ${composicaoDarf.misturado
+                                            ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
+                                            : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'}`}>
+                                            {composicaoDarf.misturado ? (
+                                                <>
+                                                    <p className="font-bold text-red-800 dark:text-red-200">
+                                                        ⚠ {avisoDaComposicao?.titulo}
+                                                    </p>
+                                                    <p className="text-red-800 dark:text-red-300 mt-1">{avisoDaComposicao?.texto}</p>
+                                                    <p className="text-red-900 dark:text-red-200 mt-1 font-medium">{avisoDaComposicao?.acao}</p>
+                                                </>
+                                            ) : (
+                                                <p className="font-bold text-emerald-800 dark:text-emerald-200">
+                                                    ✓ Esta guia é só de {composicaoDarf.grupos[0]?.rotulo || 'um departamento'}.
+                                                </p>
+                                            )}
+                                            <div className="mt-2 space-y-1">
+                                                {composicaoDarf.grupos.map((g: any) => (
+                                                    <div key={g.departamento}>
+                                                        <p className="font-semibold text-slate-700 dark:text-slate-200">
+                                                            {g.rotulo} — {formatCurrency(g.total)}
+                                                            <span className="font-normal text-slate-500 dark:text-slate-400"> · {g.origem}</span>
+                                                        </p>
+                                                        {g.linhas.map((l: any, i: number) => (
+                                                            <p key={i} className="pl-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                                                                {l.codigo} · {l.descricao} · {formatCurrency(l.valor)}
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                     {darfResult.pdfBase64 && (
                                         <div className="flex flex-wrap gap-2 pt-2">
                                             <button
@@ -819,9 +1118,29 @@ const DetalheDeclaracao: React.FC<Props> = ({ declaracao, user, onClose, onShowT
                                                                     g.pdfBase64,
                                                                     `darf_${g.codigo}${g.extensao}${g.cota != null ? `_quota${g.cota}` : ''}_${declaracao.empresaCnpj}_${declaracao.anoPA}${String(declaracao.mesPA).padStart(2, '0')}.pdf`,
                                                                 ))}
-                                                                className="mt-1 text-xs px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                                                className="mt-1 text-xs px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 whitespace-nowrap"
                                                             >
                                                                 Baixar as {comPdf.length} guias desta data
+                                                            </button>
+                                                        )}
+                                                        {/* 🚨 A GUIA CERTA TAMBÉM PRECISA DO CAMINHO DE ENVIO.
+                                                            Paulo, 17/08: *"então como eu tenho que emitir em guias
+                                                            separadas, a função envio pelo sistema não vai né"*. Não
+                                                            ia — e o app estava mandando usar a guia separada, que era
+                                                            justamente a única sem botão de enviar. Rota sem botão não
+                                                            é funcionalidade; aqui era pior: o botão existia só no
+                                                            caminho ERRADO (o unificado, que mistura departamentos).
+                                                            Vai pelo MESMO rito: SharePoint, gestor em cópia, baixa da
+                                                            obrigação, auditoria — e pela MESMA trava de débito
+                                                            repetido, com a composição DESTA data. */}
+                                                        {comPdf.length > 0 && (
+                                                            <button
+                                                                onClick={() => enviarGuiasDaData(vencimento, comPdf)}
+                                                                disabled={enviandoDarf}
+                                                                title="O SISTEMA envia o e-mail com estas guias anexadas, pela SUA caixa, com o gestor em cópia oculta — e registra na auditoria os códigos desta data."
+                                                                className="mt-1 ml-1 text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                                                            >
+                                                                {enviandoDarf ? '⏳…' : `📤 Enviar ${comPdf.length > 1 ? `as ${comPdf.length} ` : 'a '}pelo sistema`}
                                                             </button>
                                                         )}
                                                     </div>

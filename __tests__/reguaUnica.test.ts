@@ -71,6 +71,39 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'Débito já enviado ao cliente nesta competência (barra a cobrança em dobro)',
+        dono: 'sefaz-backend/debito-ja-enviado.js',
+        comoUsar: "import { conferirDebitosJaEnviados } from 'sefaz-backend/debito-ja-enviado.js'",
+        porque: 'Paulo autorizou em 17/08 ("barrar o segundo envio do mesmo débito") depois do caso HYPE. '
+            + 'O risco é ESTRUTURAL: receita previdenciária não tem guia avulsa, então o 1082 só sai no '
+            + 'DARF unificado, que carrega PIS/COFINS de novo — em todo cliente com folha E faturamento '
+            + 'existe um caminho de cobrança dobrada. A unidade é o DÉBITO, não a guia, e uma segunda '
+            + 'cópia desta régua faria uma tela liberar o que a outra barra — com o erro aparecendo só '
+            + 'na conta do cliente.',
+        assinaturas: [
+            /function conferirDebitosJaEnviados\s*\(/,
+            /function canalProvaEnvio\s*\(/,
+            /new Set\(\['email-graph', 'whatsapp-api'\]\)/,
+        ],
+    },
+    {
+        nome: 'De quem é cada débito do DARF da DCTFWeb (código de receita → departamento)',
+        dono: 'sefaz-backend/darf-departamentos.js',
+        comoUsar: "import { separarDarfPorDepartamento } from 'sefaz-backend/darf-departamentos.js'",
+        porque: 'Paulo, 17/08 (HYPE CAFE 07/2026, "ERRO GRAVÍSSIMO"): ia enviar o DARF de PIS/COFINS ao '
+            + 'cliente e, "por desencargo", abriu o PDF — dentro vinha o 1082 (CONTR PREV DESCONTA '
+            + 'SEGURADO), que é do DP/Folha. Se o DP mandar a guia dele, o cliente paga o mesmo débito '
+            + 'DUAS VEZES. A DCTFWeb é UMA declaração do CNPJ alimentada por TRÊS departamentos, então '
+            + 'este de-para vale em toda tela que envia guia; uma segunda cópia divergindo faria uma '
+            + 'tela liberar o que a outra barra, e o erro só aparece na conta do cliente.',
+        assinaturas: [
+            // Código de receita da DCTFWeb classificado fora do módulo dono.
+            /1082\s*:\s*\{/,
+            /function departamentoPelaDescricao\s*\(/,
+            /function separarDarfPorDepartamento\s*\(/,
+        ],
+    },
+    {
         nome: 'Direção do documento (o tpNF decide quando a empresa é a emitente)',
         dono: 'sefaz-backend/xml-metadata-helper.js',
         comoUsar: "import { decidirDirecaoPorTpNF } from 'sefaz-backend/xml-metadata-helper.js'",

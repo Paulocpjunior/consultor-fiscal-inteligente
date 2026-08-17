@@ -132,6 +132,181 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   julgar o lado da ENTRADA: CFOP de saída (5101) numa nota de entrada é a NF-e do
   próprio produtor, que sai pela dedup do art. 136 e **não pode cobrar
   pendência** — era exatamente o alarme apagado em 12/08.
+- **🚨 O AVISADOR NÃO PODE COMPARTILHAR O MODO DE FALHA QUE ELE DENUNCIA — 3ª
+  vez do mesmo cenário** (17/08, deploy 566). O deploy caiu em **"Prepare all
+  required actions"**: o GitHub devolveu **429 e depois 503** ao baixar
+  `google-github-actions/auth`. **Nenhum passo do job rodou** — inclusive o que
+  abre a issue, que morava DENTRO do mesmo job. Resultado: trabalho mesclado na
+  main, FORA DO AR, e ninguém avisado. As duas correções anteriores (a issue em
+  13/08 e o `env:` no mesmo dia) não alcançavam este caso, porque as duas viviam
+  no job que morre.
+  ✂️ A trava virou **ESTRUTURAL**: job próprio `avisar-falha`, com `needs:
+  deploy`, e **ZERO `uses:`** — usa só o `gh` que já vem no runner, porque a
+  falha coberta é justamente o download de action (sem checkout também; o corpo
+  da issue não precisa do repo, e por isso o `gh` leva `--repo` explícito).
+  ⚠️ E passou a disparar em **`cancelled()`** além de `failure()`: em 06/08 três
+  deploys foram cancelados aos 15m00s cravados sem runner atribuído (cota da
+  conta) e não geraram aviso nenhum — cancelamento por plataforma é tão
+  invisível quanto falha. A issue diz em qual estado terminou.
+  ⚠️ **E EU NÃO CONSIGO REEXECUTAR DEPLOY**: `rerun_failed_jobs` e
+  `run_workflow` devolvem **403 (Resource not accessible by integration)** para
+  este token. Quando um deploy cai por infraestrutura, o caminho é **um push
+  novo na main** (ou o Paulo reexecutando no painel) — não perder tempo tentando
+  disparar pela API.
+- **🚨 O SEGUNDO ENVIO DO MESMO DÉBITO ESTÁ BARRADO — a unidade é o DÉBITO,
+  nunca a guia** (Paulo, 17/08, autorizando na sequência do caso HYPE: *"pode
+  fazer, barrar o segundo envio do mesmo débito"*). O aviso de mistura resolvia
+  METADE: ele DIZ que o DARF unificado carrega débito de outro departamento, e a
+  trava dependia de o outro departamento **LEMBRAR** — memória não é trava (regra
+  de 11/08: quem não sabe não precisa saber, precisa NÃO PASSAR).
+  ⚠️ **O RISCO É ESTRUTURAL, NÃO DESCUIDO**: receita PREVIDENCIÁRIA **não tem
+  guia avulsa** (`RECEITAS_GUIA_SEPARADA` do orquestrador não a inclui — "só sai
+  em DARF numerado"), então o 1082 **só sai dentro do unificado**, que carrega
+  PIS/COFINS de novo. Em TODO cliente com folha E faturamento no mesmo mês existe
+  um caminho de cobrança dobrada. Por isso a régua é `debito-ja-enviado.js` (na
+  `REGUAS_VIGIADAS`) e a chave é `código+extensão` na COMPETÊNCIA — duas guias
+  diferentes com o mesmo código são a MESMA cobrança.
+  A auditoria `impostos_enviados` passou a gravar a **composição** (`debitos[]`
+  com departamento) — sem ela o log sabia que "um DARF saiu" e não sabia O QUE
+  ele cobrava. **Campo novo ⇒ whitelist das TRÊS rotas de envio no mesmo PR**
+  (lição do #382; aqui o descarte silencioso significa conta dobrada no mês
+  seguinte), e um teste conta as 3 ocorrências em cada camada.
+  QUATRO DECISÕES: (1) **reenvio legítimo existe** (cliente perdeu a guia,
+  declaração retificada) ⇒ bloqueio COM saída por **motivo escrito ≥15 caracteres
+  gravado com quem seguiu** — o desenho da trava T3 da DCTFWeb, porque bloqueio
+  puro é trava que a equipe contorna; (2) **canal que não prova envio vai
+  MARCADO** — só `email-graph` e `whatsapp-api` provam (regra de 05/08); tratar
+  `email-app` igual faria o app barrar um primeiro envio de verdade por causa de
+  uma janela que alguém abriu e fechou, então ele barra DIZENDO que o cliente
+  talvez nunca tenha recebido; (3) **valor diferente é sinal de RETIFICAÇÃO** — o
+  app mostra antes×depois e NÃO escolhe; (4) **envio antigo sem composição não
+  vira "nunca foi enviado"**: vira ressalva nomeada (`incerto`), porque ausência
+  de registro não é prova de ausência — e afirmar o contrário é justamente o que
+  dobra a cobrança. Falha na consulta também NÃO libera calado.
+  🐛 **A própria varredura da régua única pegou minha porta do frontend como
+  segunda cópia** — eu havia dado o MESMO nome (`conferirDebitosJaEnviados`) à
+  régua e à porta de fetch. Renomeada para `perguntarDebitosJaEnviados`: função
+  com o mesmo nome nos dois lados é o começo de duas respostas divergentes.
+  🚨 **E A GUIA CERTA ERA A ÚNICA SEM BOTÃO DE ENVIAR** (Paulo, na sequência:
+  *"então como eu tenho que emitir em guias separadas, a função envio pelo
+  sistema não vai né"* — e não ia). Eu mandei ele usar a guia separada (a que NÃO
+  mistura departamentos) e o rito completo — SharePoint, gestor em cópia, baixa
+  da obrigação, auditoria e a trava do débito repetido — existia **só no DARF
+  unificado**. Ou seja, o app oferecia o caminho bom sem ferramenta e o caminho
+  ruim com tudo. Família do "rota sem botão" (13/08), na versão pior: o botão
+  existia no lugar ERRADO. Agora cada bloco de vencimento tem **📤 Enviar pelo
+  sistema**, e a composição que viaja é a **DAQUELA DATA** (usar a do unificado
+  barraria por débito que nem está no anexo). As guias da mesma data vão numa
+  mensagem SÓ — o Integra Contador emite 1 DARF por código, e um e-mail por
+  código faria o cliente receber três mensagens da mesma cobrança sem saber se
+  são guias diferentes ou repetidas; o limite de 4 MB passou a ser do TOTAL.
+  ⚠️ `conferirRepeticao` virou função PRÓPRIA porque os dois caminhos passam por
+  ela: duplicar faria um caminho barrar o que o outro libera.
+  📌 **PROCEDIMENTO QUE FICA (dito ao Paulo em 17/08)**: ou vai o **unificado**,
+  UMA vez, por UM departamento combinado; ou vai o **avulso** de quem pode emitir
+  (Fiscal: PIS/COFINS/IRPJ/CSLL/IPI) e o resto exige combinação humana. Nunca os
+  dois caminhos no mesmo mês sem conferir. **Eu errei ao dizer que existia "guia
+  separada de 20/08" para o 1082** — não existe; corrigido na hora.
+- **🚨 O DARF DA DCTFWEB NÃO É DE UM DEPARTAMENTO SÓ — e o app deixava enviar
+  sem dizer** (Paulo, 17/08, HYPE CAFE 07/2026: *"ERRO GRAVÍSSIMO, ia enviar os
+  impostos PIS/COFINS da HYPE, está vindo os impostos de outro depto junto… por
+  desencargo eu abri o PDF para conferir… senão vai acabar indo em duplicidade
+  os impostos"*). O DARF unificado trazia **1082 CONTR PREV DESCONTA SEGURADO
+  R$ 201,71** (DP/Folha) junto com **2172 COFINS 591,68 + 8109 PIS 128,20**
+  (Fiscal), total 921,59. Se o DP mandasse a guia dele, o cliente pagaria o 1082
+  **duas vezes** — e só o olho do dono pegou, abrindo o PDF por desconfiança.
+  ⚠️ **A OPÇÃO QUE ELE PEDIU NÃO EXISTE, E A QUE RESOLVE JÁ EXISTIA**: não se
+  escolhe imposto num DARF — a **Receita consolida por VENCIMENTO** (um
+  vencimento, uma cobrança, todos os códigos daquela data). A saída real é a
+  guia POR VENCIMENTO, que a aba DARF já emite; na HYPE ela resolve inteiro
+  (1082 vence 20/08, PIS/COFINS 25/08). O defeito não era falta de recorte, era
+  o app **não DIZER** que o unificado mistura departamentos. Prometer "escolha
+  os impostos" seria promessa que a tela não cumpre — a lição do ✕ de 14/08.
+  **E quando dois departamentos caem no MESMO vencimento a guia É uma só por
+  determinação da Receita**: aí o app diz isso em vez de inventar recorte, e a
+  combinação passa a ser humana (um envia, o outro sabe que não deve).
+  `darf-departamentos.js` (na `REGUAS_VIGIADAS`) classifica pela **DESCRIÇÃO**,
+  com o código de receita CORROBORANDO — de-para de código não é tabela oficial,
+  então cada entrada carrega a FONTE (as três da HYPE vêm do DARF real).
+  TRÊS TRAVAS: (1) **`misturado` é TRUE também com débito não classificado** —
+  não saber de quem é não é o mesmo que saber que é meu, e o silêncio aqui é
+  justamente o que dobra a cobrança; (2) **a trava CARREGA a composição sozinha**
+  (os débitos são sob demanda, e depender de a pessoa ter clicado "Ver débitos"
+  protegeria só quem já sabia do problema, que é ninguém) e **falha ao conferir
+  PEDE confirmação dizendo que não conferiu** — indeterminado PARA aqui, ao
+  contrário do gate de departamento, porque é guia indo ao cliente;
+  (3) a régua é por **VARREDURA das rotas de envio**, não por lista — botão de
+  envio novo sem a trava é guia dobrada, e envelheceria em silêncio (lição de
+  13/08). ⚠️ **ORDEM DA CLASSIFICAÇÃO É REGRA, não detalhe**: "RETIDA/RETENÇÃO"
+  é testado ANTES de "contribuição previdenciária", senão a CP retida de serviço
+  tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
+  direção contrária. A composição aparece na TELA antes dos botões: descobrir
+  "por desencargo" não pode ser o processo.
+- **🚨 PDF GIRADO (`/Rotate 90`) FAZIA O PARSER LER O EIXO ERRADO — e ele acusava
+  a COLABORADORA de um erro que era DELE** (Paulo, 17/08, urgente: *"a
+  colaboradora reporta este erro do CFI, porém ela analisa está correto"*, caso
+  CLUDE, análise de créditos de 07/2026). A tela mostrava **0 lançamentos**,
+  R$ 0,00 em tudo, e uma "divergência" citando *"Valor da NF: PDF=R$ 5017.50"* —
+  **número que não existe no documento**. O rodapé real é
+  `Total 580.395,26 · 66.652,60 · 0,00 · 0,00`.
+  **A CAUSA**: este relatório do E-Fiscal sai em **A4 RETRATO (595×842) com
+  `/Rotate 90`** — paisagem GIRADA. O `efiscalPdfParserService` extrai por
+  COORDENADA X e usava `item.transform[4]`, que é o espaço do PDF **antes** da
+  rotação: com /Rotate 90 aquilo é o eixo VERTICAL do que a pessoa vê. As janelas
+  de coluna (calibradas num PDF de mediabox paisagem) nunca casavam ⇒ nenhuma
+  linha reconhecida. A correção é compor a matriz do item com a do **VIEWPORT**,
+  que é quem conhece o `/Rotate`; para `/Rotate 0` ela devolve o mesmo x, então
+  nada regride. ⚠️ **No espaço do viewport o Y cresce PARA BAIXO** — a ordenação
+  das linhas virou y CRESCENTE, senão a linha "Total" (a última) viraria a
+  primeira e a razão social de duas linhas colaria na nota errada.
+  ✅ **PROVADO contra o PDF real: 137 notas e os totais batem CENTAVO A CENTAVO**
+  (580.395,26 · 66.652,60). Antes: zero.
+  🚨 **E O SEGUNDO DEFEITO ERA PIOR QUE O PRIMEIRO: o app INVENTAVA o total.** O
+  rodapé era "a última linha sem data que tivesse valor numa janela" — qualquer
+  token que caísse ali por acidente virava o total impresso, e foi de onde saiu o
+  R$ 5017,50. Agora o rodapé se identifica pela palavra **Total** (âncora no token
+  inteiro: existe fornecedor "TOTAL PASS PARTICIPACOES"), e **sem rodapé não se
+  afirma divergência nem se dá verde** — vira `nao-conferido`, porque comparar
+  contra zero acusaria o relatório inteiro justamente quando a extração está
+  perfeita. **Total que o app inventa é pior que total que ele não acha**: manda
+  a pessoa revisar uma conta certa.
+  ✂️ A tela separa os **TRÊS** estados (confere · não conferido · divergente) e
+  **zero notas** passou a ser dito como BURACO DE LEITURA, com a ação certa
+  ("mande o PDF ao time — **não refaça a conta à mão**"), em vez de relatório
+  vazio.
+  **REGRA QUE FICA: parser por coordenada é calibrado numa AMOSTRA, então a régua
+  mora em módulo PURO e testável.** Ela vivia dentro do arquivo que importa
+  `pdfjs-dist`, que **não carrega no jest** — ou seja, era inexercitável por
+  teste, e foi exatamente por isso que isto passou. `services/efiscalPdfGeometria.ts`
+  guarda as janelas, os regexes e o `mapearTokens`; o teste mede as DUAS rotações
+  com as coordenadas reais **sem PDF de cliente no repositório**.
+  🐛 E o teste pegou um defeito meu na hora: escrevi `/^totais?$/`, que casa
+  "totai" e "totais" e **nunca "Total"** — a correção teria subido sem achar
+  rodapé nenhum, trocando um total inventado por um "não conferido" eterno.
+- **🐛 ATIVAR A EMPRESA ABRIA A TELA SEM CARREGAR A EMPRESA — tela BRANCA no
+  LP/LR** (Paulo, 17/08, com print: *"as fichas do LP/LR não estão aparecendo
+  quando ativamos a empresa, elas aparecem quando ativamos empresas do
+  SIMPLES"*). Defeito MEU do PR de 15/08. O atalho da empresa ativa marcava
+  `view = 'details'` + o id e **parava ali**, sem passar pelo `abrirEmpresa`,
+  que é quem BUSCA o documento — e a ficha financeira mora DENTRO dele (virou
+  carga sob demanda no mesmo PR). `selectedEmpresa` ficava `undefined`,
+  `renderDetails()` devolvia **`null`**, e a lista TAMBÉM não renderizava porque
+  a view já não era `'list'`: **tela vazia, sem botão, sem caminho de volta** —
+  e o mesmo valia para o *"próximo passo: apuração"* da Rotina do Mês, que é o
+  guia do colaborador.
+  ⚠️ **O SINTOMA ENGANAVA**: "funciona no Simples" era o atalho **NÃO
+  DISPARANDO** (com empresa do Simples ativa o id do Lucro vem `null`, a pessoa
+  cai na lista, e ali o botão Abrir carrega). Parecia Lucro × Simples e era
+  caminho novo pulando a carga; o Simples nunca teve o buraco porque carrega a
+  lista inteira de uma vez.
+  **DUAS REGRAS QUE FICAM**: (1) **caminho novo para uma tela passa pelo MESMO
+  carregamento que o caminho antigo** — atalho que pula a carga entrega a tela
+  sem o dado, e é a família do "rota sem botão" ao contrário; (2) **`return
+  null` num render de detalhe é BECO** — nenhum estado pode renderizar NADA: ou
+  tem o dado, ou DIZ por que não tem e devolve o botão. Travado por varredura em
+  `empresaAtivaSequencia.test.ts` (exige `abrirEmpresa(externalSelectedId)`,
+  barra o `setView('details')` no atalho e o `return null`), **provado
+  revertendo o código antigo de propósito**.
 - **A SEQUÊNCIA DO APP É LOGIN → ATIVAR EMPRESA → MÓDULOS — e VER a carteira é
   livre, AGIR num cliente exige que ele seja o ATIVO** (Paulo, 15/08, três
   mensagens no mesmo dia). Eu tinha lido *"não carregamos nada até ativar"*
@@ -2029,10 +2204,34 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
       condição DELE (ver `conferirAtualizacao` acima). Se um dia quiser os dois
       degraus de volta, o caminho é remover os dois envs
       (`--remove-env-vars GEMINI_MODEL_PRO,GEMINI_MODEL_FLASH`).
-   b) `SISTEMA_DEV_EMAILS=p.c.pereira@me.com` (aberta desde 31/07) — restringe
-      o painel Sistema→Banco além de admin.
+   b) ✅ **RESOLVIDO 17/08** — `SISTEMA_DEV_EMAILS=p.c.pereira@me.com` gravado e
+      **em vigor** (100% do tráfego na revisão `-01034-4r8`). Aberta desde 31/07.
+      ⚠️ Confirmação por RESULTADO ainda pendente: abrir Sistema→Banco com um
+      admin que NÃO seja esse e-mail e ver se é barrado.
    c) Rotação do `sefaz-cron-secret` (higiene: o valor vazou 2× em colas de
       terminal no chat). Exige rodar de novo os DOIS scripts de scheduler.
+      🚨 **E ELA CAI NA ARMADILHA DO ITEM ABAIXO, com consequência pior**: env
+      trocado por `services update` cria revisão a **0% de tráfego**, então os
+      crons continuariam batendo com o segredo VELHO e falhariam **calados** até
+      o próximo deploy. Trocar o secret exige conferir o tráfego depois.
+
+🚨 **`gcloud run services update` CRIA REVISÃO A 0% DE TRÁFEGO NESTE SERVIÇO —
+   env "gravado" não é env "em vigor"** (17/08, ao aplicar o `SISTEMA_DEV_EMAILS`).
+   A causa: o `deploy-app.yml` roteia com `update-traffic --to-revisions REV=100`,
+   ou seja o tráfego fica **PINADO** numa revisão; qualquer revisão criada depois
+   nasce sem tráfego, e o gcloud diz isso na última linha (*"is serving 0 percent
+   of traffic"*) — que é fácil de não ler depois de três "✓ Done".
+   O env FICA salvo na configuração do serviço, então o **próximo deploy o leva
+   sozinho** (o `gcloud run deploy` do workflow passa só a imagem e preserva env).
+   Para valer NA HORA: testar pela URL com tag da revisão nova e só então
+   `update-traffic --to-latest`.
+   ⚠️ **Rotear para LATEST tem efeito colateral**: o serviço sai de "revisão
+   fixa" e passa a promover automaticamente a mais nova. O próximo deploy re-fixa
+   (sobe com `--no-traffic`, faz health check, então roteia), mas até lá revisão
+   criada à mão assume tráfego SEM passar pelo health check.
+   ⚠️ E **`--to-latest` às cegas é aposta**: neste serviço o workflow deixa
+   revisão sem tráfego justamente quando o health check FALHA, então "latest" nem
+   sempre é a boa. Conferir a imagem antes.
 
 1. **NOVA ERA — os seis produtores tirados do FUNRURAL por engano** (14/08). Ele
    clicou ✕ para limpar a lista quando a tela ainda não dizia qual nota era

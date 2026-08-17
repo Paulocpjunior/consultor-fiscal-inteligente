@@ -31,7 +31,9 @@ const efiscalVazio = (): EfiscalPdfParsed => ({
     fornecedores: [],
     totalImpresso:  { valorNf: 0, baseCalculo: 0, valorIss: 0, issRetido: 0 },
     totalCalculado: { valorNf: 0, baseCalculo: 0, valorIss: 0, issRetido: 0 },
-    validacao: { ok: true, divergencias: [] },
+    rodapeEncontrado: true,
+    diagnostico: { paginas: 1, linhasComData: 0, notasLidas: 0, rodapeEncontrado: true },
+    validacao: { ok: true, divergencias: [], situacao: 'confere' as const },
     rawTextLength: 0,
 });
 

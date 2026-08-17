@@ -29,6 +29,10 @@ export interface EnvioImpostoInput {
     pdfBase64?: string | null;
     pdfFileName?: string;
     valor?: number;
+    /** Composição da guia — é o que barra o segundo envio do mesmo débito. */
+    debitos?: Array<{ codigo: string; extensao?: string | null; descricao?: string | null; valor?: number | null; departamento?: string | null }>;
+    /** Reenvio proposital: motivo escrito, gravado com quem seguiu. */
+    reenvioMotivo?: string | null;
 }
 
 export interface RitoResultado {
@@ -243,8 +247,23 @@ export async function enviarGuiaPeloServidor(input: {
     mensagem: string;
     pdfBase64?: string;
     pdfFileName?: string;
+    /**
+     * Guias ADICIONAIS da MESMA cobrança. O Integra Contador emite 1 DARF por
+     * CÓDIGO, então um vencimento pode ter 2-3 arquivos — e eles vão na MESMA
+     * mensagem: um e-mail por código encheria a caixa do cliente pela mesma
+     * cobrança, e ele não saberia se são guias diferentes ou repetidas.
+     */
+    pdfs?: Array<{ nome: string; base64: string }>;
     valor?: number;
     vencimento?: string | null;
+    /**
+     * A COMPOSIÇÃO da guia — é o que permite barrar o SEGUNDO envio do mesmo
+     * débito (Paulo, 17/08). Sem ela a auditoria sabe que "um DARF saiu" e não
+     * sabe O QUE ele cobrava, e dois departamentos cobram o mesmo código.
+     */
+    debitos?: Array<{ codigo: string; extensao?: string | null; descricao?: string | null; valor?: number | null; departamento?: string | null }>;
+    /** Reenvio proposital: o motivo fica gravado com quem seguiu. */
+    reenvioMotivo?: string | null;
 }): Promise<EnvioGraphResultado> {
     const u = getAuth().currentUser;
     if (!u) return { ok: false, error: 'Sessão expirada' };
@@ -300,6 +319,14 @@ export async function enviarGuiaPorWhatsapp(input: {
     pdfFileName?: string;
     valor?: number;
     vencimento?: string | null;
+    /**
+     * A COMPOSIÇÃO da guia — é o que permite barrar o SEGUNDO envio do mesmo
+     * débito (Paulo, 17/08). Sem ela a auditoria sabe que "um DARF saiu" e não
+     * sabe O QUE ele cobrava, e dois departamentos cobram o mesmo código.
+     */
+    debitos?: Array<{ codigo: string; extensao?: string | null; descricao?: string | null; valor?: number | null; departamento?: string | null }>;
+    /** Reenvio proposital: o motivo fica gravado com quem seguiu. */
+    reenvioMotivo?: string | null;
 }): Promise<EnvioWhatsappResultado> {
     const u = getAuth().currentUser;
     if (!u) return { ok: false, error: 'Sessão expirada' };
@@ -335,4 +362,51 @@ export function mensagemEnvioServidor(r: EnvioGraphResultado): string {
     const copia = r.copiaPara?.length ? ` Cópia oculta a ${r.copiaPara.join(', ')}.` : '';
     const aviso = r.avisoRemetente ? ` ⚠ ${r.avisoRemetente}.` : '';
     return `${base}${copia}${aviso} A cópia fica em Itens Enviados da caixa remetente.`;
+}
+
+
+/**
+ * 🚨 ESTE DÉBITO JÁ FOI ENVIADO NESTA COMPETÊNCIA?
+ *
+ * PORTA FINA, não régua: quem CONFERE é `sefaz-backend/debito-ja-enviado.js`,
+ * chamado pelo backend. O nome é diferente de propósito — `conferir*` aqui faria
+ * a varredura da régua única ler isto como segunda cópia, e com razão: função
+ * com o mesmo nome nos dois lados é o começo de duas respostas divergentes.
+ *
+ * Paulo, 17/08: *"pode fazer, barrar o segundo envio do mesmo débito"*. Quem
+ * responde é o BACKEND, contra a auditoria `impostos_enviados` — a resposta não
+ * pode sair do que esta tela lembra, porque o outro envio foi de outra pessoa,
+ * possivelmente de outro departamento, em outra máquina.
+ *
+ * Falha de rede devolve `indeterminado`, NUNCA "não foi enviado": afirmar que
+ * nunca saiu porque a consulta piscou é justamente o que dobra a cobrança.
+ */
+export async function perguntarDebitosJaEnviados(input: {
+    cnpj: string;
+    competencia: string;
+    debitos: Array<{ codigo: string; extensao?: string | null; descricao?: string | null; valor?: number | null }>;
+}): Promise<{
+    ok: boolean;
+    indeterminado?: boolean;
+    error?: string;
+    conferencia?: { bloqueia: boolean; incerto: boolean; temRepetidoComProva: boolean; repetidos: any[]; semComposicao: any[] };
+    aviso?: { titulo: string; texto: string; acao: string; severidade: string } | null;
+}> {
+    try {
+        const u = getAuth().currentUser;
+        if (!u) return { ok: false, indeterminado: true, error: 'Sessão expirada' };
+        const token = await u.getIdToken();
+        const res = await fetch('/api/admin/envio-imposto/debitos-ja-enviados', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(input),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+            return { ok: false, indeterminado: true, error: data?.error || `HTTP ${res.status}` };
+        }
+        return data;
+    } catch (e: any) {
+        return { ok: false, indeterminado: true, error: e?.message || 'falha na consulta' };
+    }
 }

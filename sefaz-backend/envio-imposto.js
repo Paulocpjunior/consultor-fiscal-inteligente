@@ -253,6 +253,23 @@ export async function executarRitoEnvioImposto(p) {
             para: p.para || null,
             copiaPara: [...new Set([GESTOR_EMAIL, ...(p.copiaPara || [])])],
             valor: Number.isFinite(Number(p.valor)) ? Number(p.valor) : null,
+            // 🚨 A COMPOSIÇÃO DA GUIA — é o que permite barrar o SEGUNDO envio do
+            // mesmo débito (Paulo, 17/08, depois do caso HYPE). Sem isto a
+            // auditoria sabe que "um DARF foi enviado" e não sabe O QUE ele
+            // cobrava, então dois departamentos cobram o mesmo código sem que
+            // nada acuse. Débito é a unidade, não a guia.
+            debitos: Array.isArray(p.debitos)
+                ? p.debitos.map((d) => ({
+                    codigo: String(d?.codigo || d?.codReceita || '').replace(/\D/g, ''),
+                    extensao: String(d?.extensao ?? '').replace(/\D/g, '') || null,
+                    descricao: String(d?.descricao || '').trim() || null,
+                    valor: Number.isFinite(Number(d?.valor)) ? Number(d.valor) : null,
+                    departamento: d?.departamento || null,
+                })).filter((d) => d.codigo)
+                : null,
+            // Reenvio proposital: o motivo fica gravado com quem seguiu. Trava
+            // sem caminho é trava que a equipe contorna (T3 da DCTFWeb, 12/08).
+            reenvioMotivo: String(p.reenvioMotivo || '').trim() || null,
             anexouPdf: Boolean(pdf),
             // Canal whatsapp-api: o id que a Meta devolveu é o COMPROVANTE de
             // envio (equivalente ao Graph 202 do e-mail) — fica na auditoria.

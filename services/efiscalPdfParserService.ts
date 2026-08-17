@@ -14,6 +14,14 @@
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
+// A RÉGUA DE COORDENADAS mora num módulo PURO — o parser importa `pdfjs-dist`,
+// que não carrega no jest, e enquanto a régua morava aqui ela era inexercitável
+// por teste. Foi assim que o defeito do PDF girado (17/08) passou.
+import {
+    mapearTokens, colunaPorX, parseValor, ehLinhaDeTotal, onlyDigits,
+    DATA_RE, CNPJ_CPF_RE, VALOR_RE,
+    FAIXA_NUMERO, FAIXA_SERIE, FAIXA_CNPJ, FAIXA_RAZAO,
+} from './efiscalPdfGeometria';
 
 if (typeof window !== 'undefined') {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -53,7 +61,21 @@ export interface EfiscalPdfParsed {
     fornecedores: EfiscalFornecedorAgrupado[];
     totalImpresso: { valorNf: number; baseCalculo: number; valorIss: number; issRetido: number };
     totalCalculado: { valorNf: number; baseCalculo: number; valorIss: number; issRetido: number };
-    validacao: { ok: boolean; divergencias: string[] };
+    /** A linha "Total" do relatório foi encontrada? Sem ela não se confere. */
+    rodapeEncontrado: boolean;
+    /** Medida da leitura — vira o chamado quando o layout não é reconhecido. */
+    diagnostico: {
+        paginas: number;
+        /** Linhas que começam com data (candidatas a nota). */
+        linhasComData: number;
+        notasLidas: number;
+        rodapeEncontrado: boolean;
+    };
+    validacao: {
+        ok: boolean;
+        divergencias: string[];
+        situacao: 'confere' | 'divergente' | 'nao-conferido';
+    };
     rawTextLength: number;
 }
 
@@ -62,27 +84,6 @@ export class EfiscalPdfParseError extends Error {
         super(message);
         this.name = 'EfiscalPdfParseError';
     }
-}
-
-const DATA_RE = /^\d{2}\/\d{2}\/\d{4}$/;
-const CNPJ_CPF_RE = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
-const VALOR_RE = /^-?\d{1,3}(\.\d{3})*,\d{2}$/;
-
-function parseValor(s: string): number {
-    if (!s || !VALOR_RE.test(s.trim())) return 0;
-    const n = parseFloat(s.trim().replace(/\./g, '').replace(',', '.'));
-    return Number.isFinite(n) ? n : 0;
-}
-
-const onlyDigits = (s: string): string => (s || '').replace(/\D+/g, '');
-
-function colunaPorX(x1: number): string | null {
-    if (x1 >= 490 && x1 <= 515) return 'valorNf';
-    if (x1 >= 590 && x1 <= 610) return 'baseCalculo';
-    if (x1 >= 625 && x1 <= 645) return 'aliquota';
-    if (x1 >= 698 && x1 <= 715) return 'valorIss';
-    if (x1 >= 788 && x1 <= 802) return 'issRetido';
-    return null;
 }
 
 interface Token { x0: number; x1: number; str: string; }
@@ -97,39 +98,46 @@ async function extrairLinhas(file: File): Promise<{ linhas: LinhaPdf[]; rawLen: 
     for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
+        // O viewport é quem conhece o /Rotate da página.
+        const viewport = page.getViewport({ scale: 1 });
         const porY = new Map<number, Token[]>();
-        for (const item of content.items as any[]) {
-            const str = ('str' in item ? item.str : '').trim();
-            if (!str) continue;
-            rawLen += str.length;
-            const x = item.transform[4];
-            const width = item.width || 0;
-            const y = Math.round(item.transform[5]);
-            const tok: Token = { x0: x, x1: x + width, str };
-            if (!porY.has(y)) porY.set(y, []);
-            porY.get(y)!.push(tok);
+        for (const tok of mapearTokens(content.items as any[], viewport.transform as any)) {
+            rawLen += tok.str.length;
+            if (!porY.has(tok.y)) porY.set(tok.y, []);
+            porY.get(tok.y)!.push({ x0: tok.x0, x1: tok.x1, str: tok.str });
         }
         for (const [y, tokens] of porY) {
             tokens.sort((a, b) => a.x0 - b.x0);
             linhas.push({ y, tokens, pagina: p });
         }
     }
-    linhas.sort((a, b) => (a.pagina - b.pagina) || (b.y - a.y));
+    // y CRESCENTE = de cima para baixo no espaço do viewport.
+    linhas.sort((a, b) => (a.pagina - b.pagina) || (a.y - b.y));
     return { linhas, rawLen };
 }
 
 export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
     const { linhas, rawLen } = await extrairLinhas(file);
     if (rawLen < 100) {
+        // AQUI "consiga outro arquivo" É a solução, e a mensagem tem de dizer:
+        // outro arquivo REALMENTE sai diferente (basta exportar em vez de
+        // digitalizar). Contraste com o layout não reconhecido, onde reexportar
+        // devolve o mesmo PDF e mandar buscar outro é caça a fantasma.
         throw new EfiscalPdfParseError(
-            'Não foi possível extrair texto do PDF. Pode ser um documento digitalizado (imagem).',
+            'Este PDF não tem texto — é uma digitalização (imagem). Volte ao E-Fiscal e exporte o relatório '
+            + 'em PDF pela própria tela de impressão, em vez de escanear o papel. Com o arquivo exportado o CFI lê.',
         );
     }
 
     const textoTodo = linhas.flatMap(l => l.tokens.map(t => t.str)).join(' ');
     if (!/Servi[cç]os\s+(Tomados|Prestados)/i.test(textoTodo) && !/E-?Fiscal/i.test(textoTodo) && !/Office\s+Fiscal/i.test(textoTodo)) {
+        // Também é caso de OUTRO ARQUIVO — e aqui a mensagem diz QUAL, senão
+        // "não parece ser o relatório" deixa a pessoa adivinhando qual dos
+        // dezenas de relatórios do E-Fiscal ela deveria ter tirado.
         throw new EfiscalPdfParseError(
-            'Documento não parece ser o relatório "Relação de NFs de Serviços" do E-Fiscal / Office Fiscal.',
+            'Este PDF não é o relatório que esta tela lê. O certo é o '
+            + '"Relação de NFs de Serviços Tomados" (ou Prestados) do E-Fiscal / Office Fiscal, '
+            + 'no período que você quer analisar. Tire esse e importe de novo.',
         );
     }
 
@@ -149,6 +157,12 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
 
     const notas: EfiscalNf[] = [];
     const totalImpresso = { valorNf: 0, baseCalculo: 0, valorIss: 0, issRetido: 0 };
+    let rodapeEncontrado = false;
+    // Linha que COMEÇA com data é candidata a nota. Contar as candidatas separa
+    // "o PDF não tem notas" de "as notas estão lá e as COLUNAS não casaram" —
+    // duas causas com ações opostas.
+    let linhasComData = 0;
+    const paginasLidas = new Set(linhas.map(l => l.pagina)).size;
 
     for (let i = 0; i < linhas.length; i++) {
         const linha = linhas[i];
@@ -160,19 +174,30 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
         const primeiro = primeiroTok.str;
 
         if (!DATA_RE.test(primeiro)) {
-            const temValorNaColuna = toks.some(t => colunaPorX(t.x1) && VALOR_RE.test(t.str));
-            if (temValorNaColuna) {
+            // 🚨 O RODAPÉ SE IDENTIFICA PELA PALAVRA "Total", não por "ser a
+            // última linha com número numa coluna".
+            //
+            // A régua antiga pegava QUALQUER linha sem data que tivesse valor
+            // numa janela, e a última vencia. Foi assim que o caso CLUDE
+            // (17/08) exibiu *"PDF=R$ 5017.50"* — número que não existe no
+            // documento — e mandou a colaboradora revisar uma conta que estava
+            // certa. Total que o app INVENTA é pior que total que ele não acha.
+            const ehRodape = ehLinhaDeTotal(toks);
+            if (ehRodape) {
                 for (const t of toks) {
                     const col = colunaPorX(t.x1);
+                    if (!VALOR_RE.test(t.str)) continue;
                     if (col === 'valorNf') totalImpresso.valorNf = parseValor(t.str);
                     if (col === 'baseCalculo') totalImpresso.baseCalculo = parseValor(t.str);
                     if (col === 'valorIss') totalImpresso.valorIss = parseValor(t.str);
                     if (col === 'issRetido') totalImpresso.issRetido = parseValor(t.str);
                 }
+                rodapeEncontrado = true;
             }
             continue;
         }
 
+        linhasComData++;
         const nf: EfiscalNf = {
             emissao: primeiro, numero: '', serie: '', cnpjCpf: '', razaoSocial: '',
             valorNf: 0, baseCalculo: 0, aliquota: 0, valorIss: 0, issRetido: 0,
@@ -183,9 +208,9 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
             const t = toks[j];
             if (!t) continue;
             const s = t.str;
-            if (CNPJ_CPF_RE.test(s) && t.x0 >= 205 && t.x0 <= 295) { nf.cnpjCpf = s; continue; }
-            if (/^\d{6,}$/.test(s) && t.x0 >= 50 && t.x0 <= 110 && !nf.numero) { nf.numero = s; continue; }
-            if (t.x0 >= 135 && t.x0 <= 212 && !CNPJ_CPF_RE.test(s)) { nf.serie = (nf.serie + ' ' + s).trim(); continue; }
+            if (CNPJ_CPF_RE.test(s) && t.x0 >= FAIXA_CNPJ.min && t.x0 <= FAIXA_CNPJ.max) { nf.cnpjCpf = s; continue; }
+            if (/^\d{6,}$/.test(s) && t.x0 >= FAIXA_NUMERO.min && t.x0 <= FAIXA_NUMERO.max && !nf.numero) { nf.numero = s; continue; }
+            if (t.x0 >= FAIXA_SERIE.min && t.x0 <= FAIXA_SERIE.max && !CNPJ_CPF_RE.test(s)) { nf.serie = (nf.serie + ' ' + s).trim(); continue; }
             const col = colunaPorX(t.x1);
             if (col && VALOR_RE.test(s)) {
                 if (col === 'valorNf') nf.valorNf = parseValor(s);
@@ -195,7 +220,7 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
                 else if (col === 'issRetido') nf.issRetido = parseValor(s);
                 continue;
             }
-            if (t.x0 >= 290 && t.x0 <= 460) { razaoTokens.push(s); continue; }
+            if (t.x0 >= FAIXA_RAZAO.min && t.x0 <= FAIXA_RAZAO.max) { razaoTokens.push(s); continue; }
         }
 
         const prox = linhas[i + 1];
@@ -203,7 +228,7 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
             const proxToks = prox.tokens;
             const proxFirst = proxToks[0];
             const proxSemData = !!proxFirst && !DATA_RE.test(proxFirst.str);
-            const proxSoRazao = proxToks.every(t => t.x0 >= 290 && t.x0 <= 460);
+            const proxSoRazao = proxToks.every(t => t.x0 >= FAIXA_RAZAO.min && t.x0 <= FAIXA_RAZAO.max);
             if (proxSemData && proxSoRazao && proxToks.length > 0) {
                 for (const t of proxToks) razaoTokens.push(t.str);
                 i++;
@@ -250,15 +275,44 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
             divergencias.push(`${nome}: PDF=R$ ${imp.toFixed(2)} vs extraído=R$ ${calc.toFixed(2)}`);
         }
     };
-    checa('Valor da NF', totalImpresso.valorNf, totalCalculado.valorNf);
-    checa('Base de Cálculo', totalImpresso.baseCalculo, totalCalculado.baseCalculo);
-    checa('Valor do ISS', totalImpresso.valorIss, totalCalculado.valorIss);
-    checa('Iss Retido', totalImpresso.issRetido, totalCalculado.issRetido);
+    // SEM RODAPÉ NÃO SE AFIRMA DIVERGÊNCIA. Comparar contra zero acusaria o
+    // relatório inteiro como divergente justamente quando a extração pode estar
+    // perfeita — e é o alarme falso que aparece quando está tudo certo que
+    // ensina a equipe a ignorar a conferência.
+    if (rodapeEncontrado) {
+        checa('Valor da NF', totalImpresso.valorNf, totalCalculado.valorNf);
+        checa('Base de Cálculo', totalImpresso.baseCalculo, totalCalculado.baseCalculo);
+        checa('Valor do ISS', totalImpresso.valorIss, totalCalculado.valorIss);
+        checa('Iss Retido', totalImpresso.issRetido, totalCalculado.issRetido);
+    }
 
     return {
         empresaCodigo, empresaNome, empresaCnpj, periodo,
         notas, fornecedores, totalImpresso, totalCalculado,
-        validacao: { ok: divergencias.length === 0, divergencias },
+        rodapeEncontrado,
+        // 🚨 EVIDÊNCIA PRONTA para o caso em que o layout não é reconhecido.
+        //
+        // Paulo, 11/08: *"o colaborador não sabe falar o que quer porque não sabe
+        // fazer e não sabe explicar"* — então o app não pede explicação, ele
+        // MEDE. Estes quatro números dizem, sozinhos, se o PDF chegou inteiro,
+        // se as linhas de nota existem e se foram as COLUNAS que não casaram.
+        // É o que transforma "não funcionou" num chamado que eu resolvo sem
+        // pedir o arquivo do cliente de volta.
+        diagnostico: {
+            paginas: paginasLidas,
+            linhasComData: linhasComData,
+            notasLidas: notas.length,
+            rodapeEncontrado,
+        },
+        validacao: {
+            // `ok` continua significando CONFERIDO E BATEU — nunca "não achei
+            // problema porque não procurei" (verde por omissão).
+            ok: rodapeEncontrado && divergencias.length === 0,
+            divergencias,
+            situacao: !rodapeEncontrado
+                ? 'nao-conferido'
+                : (divergencias.length === 0 ? 'confere' : 'divergente'),
+        },
         rawTextLength: rawLen,
     };
 }
