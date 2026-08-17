@@ -1164,6 +1164,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   trabalho atrás: mesclá-la à tarde teria revertido ~4.900 linhas. NUNCA abrir
   PR de uma branch do robô sem conferir a data; a correção do lock cabe num
   `npm audit fix` sobre a main de hoje, que é o que foi feito.
+  🚨 **E ELA VIROU A MINA QUE PREVIA — TRAVANDO O PRÓPRIO ROBÔ POR 3 DIAS**
+  (17/08, achado num print do Paulo da LISTA DE RUNS, não por alarme). A branch
+  parada de 07/08 (140 commits atrás) fazia o `git push` ser REJEITADO nos DOIS
+  caminhos: `--force-with-lease` sem a remote-tracking ref recusa com *"stale
+  info"*, e o fallback simples recusa com *"fetch first"*. O step morria em
+  `exit 1` (bash -e) **ANTES** do passo que abre issue — então o robô de
+  SEGURANÇA ficou quebrado em 14, 15 e 17/08 **sem uma única issue**. Ele achava
+  o advisory, corrigia, validava, commitava… e morria no push, todo dia.
+  ✂️ **A CORREÇÃO SÃO DUAS, e a segunda vale mais**: (1) `git fetch` da ref
+  ANTES do push, senão o lease não tem com o que comparar; (2) um passo
+  **`if: failure()`** no fim — a MESMA rede que o `deploy-app.yml` ganhou em
+  13/08 e que ninguém tinha aplicado aqui. **REGRA QUE FICA: todo workflow que
+  a casa depende nasce com o `if: failure()` que vira issue** — a lição de
+  13/08 (*"run vermelho num painel que ninguém abre não é aviso; issue é"*)
+  vale para o robô igual valia para o deploy, e foi só o olho do dono que
+  cobriu a falta. `__tests__/roboAuditoriaAvisa.test.ts` trava as duas, provado
+  removendo o fetch de propósito.
 - **DEPLOY: automático VOLTOU em 07/08** (runs 345-348 verdes). O bloqueio de
   runner do dia 06 passou sozinho — merge na main dispara `deploy-app.yml` e
   sobe. **CONFERIR ANTES DE MANDAR RODAR SCRIPT À MÃO**: continuar pedindo
