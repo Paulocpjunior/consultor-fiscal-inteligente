@@ -383,15 +383,35 @@ export function buildBlocoM(dados) {
 
     let totalPisSaida = 0, totalCofinsSaida = 0, totalBcSaida = 0;
     let totalPisEntrada = 0, totalCofinsEntrada = 0, totalBcEntrada = 0;
+    /** Documento sem valor legível em nenhuma das formas — sai do total e é DITO. */
+    const semValor = [];
 
     for (const nota of (dados.notas || [])) {
         if (docCancelado(nota) || nota.status === 'denegado') continue;
 
+        // 🚨 A ARMADILHA DAS DUAS FORMAS, TERCEIRA VEZ NO MESMO ARQUIVO.
+        //
+        // A NFS-e do portal de SP não tem `itens` e grava o valor em
+        // `valorTotal` — nome que este trecho não lia. Resultado: `vlDoc` = 0
+        // para TODA nota de serviço e **M200/M600 saindo 0,00** num arquivo com
+        // 37 documentos e PIS/COFINS destacados no A100 (MANTOAN 07/2026).
+        // Ou seja, o arquivo declarava à Receita que não havia contribuição a
+        // pagar. A régua já existe num lugar só.
         let vlDoc = 0;
         for (const item of (nota.itens || [])) {
             vlDoc += parseFloat(item.vProd || item.valor || 0);
         }
-        if (vlDoc === 0) vlDoc = parseFloat(nota.valor || nota.totalNota || 0);
+        if (vlDoc === 0) {
+            const doDocumento = valorDoDocumentoServico(nota);
+            if (Number.isFinite(doDocumento)) {
+                vlDoc = doDocumento;
+            } else {
+                // Ausência NÃO vira zero — foi o zero silencioso que produziu o
+                // M200 zerado. A nota sai NOMEADA e fora da conta.
+                semValor.push(String(nota.numero || nota.chave || '(sem número)'));
+                continue;
+            }
+        }
 
         if (nota.direcao === 'saida') {
             totalBcSaida += vlDoc;
@@ -416,6 +436,18 @@ export function buildBlocoM(dados) {
             totalPisEntrada += pis;
             totalCofinsEntrada += cofins;
         }
+    }
+
+    // Documento que não teve valor lido não some calado: ele estaria FORA do
+    // M200/M600, e um total a menor num arquivo entregue à Receita não tem como
+    // ser percebido depois.
+    if (semValor.length && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Apuração PIS/COFINS (bloco M): ${semValor.length} documento(s) ficaram FORA da base porque o valor `
+            + `não foi lido em nenhuma das formas — nº ${semValor.slice(0, 10).join(', ')}`
+            + `${semValor.length > 10 ? ` e mais ${semValor.length - 10}` : ''}. `
+            + 'O M200/M600 está a MENOR: confira esses documentos antes de transmitir.',
+        );
     }
 
     const isNaoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
@@ -532,13 +564,34 @@ export function buildBlocoM(dados) {
 // ═══════════════════════════════════════════════════════════════════════
 
 export function buildBloco1_Contrib(_dados) {
+    // 🚨 O 1010 QUE ESTAVA AQUI ERA DE OUTRO ARQUIVO.
+    //
+    // Paulo, 17/08 (MANTOAN 07/2026), com o recibo do PVA: *"O número de campos
+    // informado no registro difere do número de campos especificado no leiaute"*
+    // — esperado 7, veio 9 — e mais duas recusas em `IND_NAT_ACAO` e
+    // `DT_SENT_JUD` recebendo 'N'.
+    //
+    // A causa: **1010 existe nos DOIS arquivos, com leiautes diferentes.**
+    //   EFD ICMS/IPI      1010 = Obrigatoriedade de registros do Bloco 1
+    //                     (IND_EXP, IND_CCRF, IND_COMB… — a fileira de 'N')
+    //   EFD Contribuições 1010 = Processo Referenciado — AÇÃO JUDICIAL
+    //                     (NUM_PROC, ID_SEC_JUD, ID_VARA, IND_NAT_ACAO,
+    //                      DESC_DEC_JUD, DT_SENT_JUD) = 7 campos
+    //
+    // Ou seja, o gerador declarava um PROCESSO JUDICIAL preenchendo os campos
+    // com 'N'. Número igual, arquivo diferente — a mesma família do IPI que foi
+    // parar em E200/E210 (04/08), que são registros do ICMS-ST.
+    //
+    // ⚠️ E NÃO SE INVENTA O 1010 CERTO: ele só existe quando a empresa TEM ação
+    // judicial referenciada, e isso é dado que ninguém cadastrou. Bloco sem
+    // dados se declara SEM DADOS.
+    const conteudo = [];
+    // IND_MOV: 0 = bloco COM dados · 1 = sem dados. Sai do que foi REALMENTE
+    // produzido — registro novo aqui vira '0' sozinho, sem ninguém lembrar.
     return [
-        fmt.buildLine(['1001', '0']),
-        fmt.buildLine([
-            '1010',
-            'N', 'N', 'N', 'N', 'N', 'N', 'N', 'N',
-        ]),
-        fmt.buildLine(['1990', '3']),
+        fmt.buildLine(['1001', conteudo.length ? '0' : '1']),
+        ...conteudo,
+        fmt.buildLine(['1990', String(conteudo.length + 2)]),
     ];
 }
 
