@@ -1,4 +1,3 @@
-// @ts-expect-error — módulo .js puro (sem tipos)
 import { auditarSaidaSped, resumoAuditoria, valorSped, campo } from '../sefaz-backend/sped-auditoria-saida';
 
 /**
@@ -44,8 +43,8 @@ describe('o inventário zerado (defeito real de 06/08) é pego pelo arquivo', ()
         expect(r.ok).toBe(false);
         const qtd = r.suspeitas.find((s: any) => s.tipo === 'coluna-toda-zerada' && /QTD/.test(s.detalhe));
         expect(qtd).toBeTruthy();
-        expect(qtd.gravidade).toBe('bloqueia');
-        expect(qtd.detalhe).toMatch(/não foi informado|campo errado/);
+        expect(qtd!.gravidade).toBe('bloqueia');
+        expect(qtd!.detalhe).toMatch(/não foi informado|campo errado/);
     });
 
     it('inventário de verdade passa limpo', () => {
@@ -71,8 +70,8 @@ describe('total no campo errado (o H005 que punha VL_AJ_PERDA no lugar do VL_INV
         ]);
         const t = r.suspeitas.find((s: any) => s.tipo === 'total-nao-bate');
         expect(t).toBeTruthy();
-        expect(t.detalhe).toMatch(/declara 0\.00/);
-        expect(t.detalhe).toMatch(/é 25\.00/);
+        expect(t!.detalhe).toMatch(/declara 0\.00/);
+        expect(t!.detalhe).toMatch(/é 25\.00/);
     });
 
     it('diferença de centavo não é divergência', () => {
@@ -91,7 +90,7 @@ describe('bloco que promete conteúdo e entrega vazio', () => {
         const r = auditarSaidaSped([L('H001', '0'), L('H990', '2')]);
         const s = r.suspeitas.find((x: any) => x.tipo === 'bloco-vazio-declarado-cheio');
         expect(s).toBeTruthy();
-        expect(s.detalhe).toMatch(/Ou gera o conteúdo, ou declara IND_MOV=1/);
+        expect(s!.detalhe).toMatch(/Ou gera o conteúdo, ou declara IND_MOV=1/);
     });
 
     it('IND_MOV=1 (bloco sem dados) é legítimo e não acusa nada', () => {
@@ -110,7 +109,7 @@ describe('campo obrigatório em branco', () => {
         ]);
         const s = r.suspeitas.find((x: any) => x.tipo === 'coluna-vazia');
         expect(s).toBeTruthy();
-        expect(s.detalhe).toMatch(/não passa no PVA/);
+        expect(s!.detalhe).toMatch(/não passa no PVA/);
     });
 });
 
@@ -140,7 +139,7 @@ describe('SPED Contribuições entra na mesma trava', () => {
         ]);
         const s = r.suspeitas.find((x: any) => x.registro === 'A170');
         expect(s).toBeTruthy();
-        expect(s.detalhe).toMatch(/VL_ITEM/);
+        expect(s!.detalhe).toMatch(/VL_ITEM/);
     });
 
     it('base de PIS zerada NÃO é vigiada — é legítima em CST sem crédito', () => {

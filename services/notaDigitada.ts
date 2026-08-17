@@ -103,6 +103,16 @@ export interface NotaDigitadaInput {
     /** Só na espécie mercadoria — serviço não tem itens com CFOP. */
     itens: ItemDigitado[];
     digitadaPorEmail: string;
+    /**
+     * 🚨 UID de quem está lançando — SEM ELE O FIRESTORE RECUSA A CRIAÇÃO.
+     *
+     * A regra de `documentos_fiscais` exige
+     * `request.resource.data.createdBy == request.auth.uid` no CREATE, e não há
+     * escape nem para admin. Como este objeto não trazia `createdBy`, TODA nota
+     * nova era negada com "Missing or insufficient permissions" (Paulo, 17/08,
+     * com print) — ou seja, a terceira porta nunca gravou nota nenhuma.
+     */
+    createdByUid?: string;
 }
 
 /** Espécie efetiva — o padrão é mercadoria (como a porta nasceu). */
@@ -116,6 +126,14 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
     const erros: string[] = [];
     if (!i.empresaId || soDigitos(i.empresaCnpj).length !== 14) {
         erros.push('Empresa inválida — ative a empresa antes de lançar.');
+    }
+    // 🚨 Sem UID a gravação é RECUSADA pelo Firestore com "Missing or
+    // insufficient permissions" — mensagem que não diz nada a quem lê e manda
+    // procurar problema de permissão que não existe. A recusa DIZ a causa e a
+    // saída aqui, antes de tentar.
+    if (!String(i.createdByUid || '').trim()) {
+        erros.push('Sessão sem usuário identificado — saia e entre de novo antes de lançar. '
+            + 'A nota é gravada em nome de quem a lançou, e sem isso o banco recusa.');
     }
     if (!String(i.numero || '').trim()) erros.push('Informe o número da nota.');
     if (!/^\d{4}-\d{2}-\d{2}/.test(String(i.dhEmi || ''))) {
@@ -248,6 +266,7 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
             vIPI: it.vIPI !== undefined ? Number(it.vIPI) : undefined,
         })),
         origem: 'digitada',
+        createdBy: i.createdByUid || null,
         digitadaPorEmail: i.digitadaPorEmail,
         digitadaEm: new Date().toISOString(),
         importadoPorEmail: i.digitadaPorEmail,
@@ -321,6 +340,7 @@ function montarNfseDigitada(i: NotaDigitadaInput): DocumentoFiscal {
         totais: { vNF: Number(i.valorTotal), vServ: Number(i.valorTotal), vISS: num(sv.valorIss) },
 
         origem: 'digitada',
+        createdBy: i.createdByUid || null,
         digitadaPorEmail: i.digitadaPorEmail,
         digitadaEm: new Date().toISOString(),
         importadoPorEmail: i.digitadaPorEmail,

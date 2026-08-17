@@ -38,6 +38,7 @@ const base = (over: Partial<NotaDigitadaInput> = {}): NotaDigitadaInput => ({
     valorTotal: 1500,
     itens: [{ cfop: '1102', vProd: 1500 }],
     digitadaPorEmail: 'colab@spassessoriacontabil.com.br',
+    createdByUid: 'uid-do-colaborador',
     ...over,
 });
 

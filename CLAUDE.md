@@ -242,6 +242,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
   direção contrária. A composição aparece na TELA antes dos botões: descobrir
   "por desencargo" não pode ser o processo.
+- **🚨 O EFD-CONTRIBUIÇÕES DE SERVIÇO SAÍA DECLARANDO ZERO — e o arquivo mentia
+  sobre si mesmo em três lugares** (Paulo, 17/08: *"fui testar um EFD
+  Contribuições de prestação de serviço e puxou zerado alguns blocos"*, depois
+  *"teste com 2 empresas que tem movimento e o mesmo erro"*). CLINICA MEDICA
+  MANTOAN 07/2026: **37 registros A100, todos com COD_PART VAZIO e VL_DOC
+  0,00**. Os documentos ESTAVAM no banco — o que faltou foi a LEITURA: é a
+  **armadilha das DUAS FORMAS** (11/08) pela oitava vez, agora no bloco A. A
+  NFS-e do portal de SP entra ACHATADA (`cnpjDest`, `valorTotal`) e o gerador
+  lia só a ANINHADA (`nota.destinatario`, `nota.valor`). A régua já existia num
+  lugar só (`normalizarParticipantesDoc`) e o bloco A não a chamava; o
+  orquestrador tinha a MESMA falta, e por isso o **0150 saía vazio** — sem
+  cadastro de participante, o COD_PART do A100 apontaria para o nada.
+  ✂️ E o valor virou `valorDoDocumentoServico`, que **devolve NaN quando nenhuma
+  forma tem número** — de propósito: "documento de R$ 0,00" e "não achei o
+  valor" são coisas diferentes, e foi o zero silencioso que produziu 37 linhas
+  zeradas num arquivo entregue à Receita.
+  🚨 **E A AUDITORIA DE SAÍDA NÃO PEGOU PORQUE SÓ O A170 ERA VIGIADO** — e
+  aquele arquivo não tinha **nenhum** A170, então a trava de "coluna zerada em
+  100% das linhas" não teve o que olhar. `A100 → VL_DOC` entrou em
+  `DETALHES_VIGIADOS`, e o teste PROVA contra as linhas reais do arquivo do
+  Paulo. É a regra de 06/08: **detalhe novo entra em `DETALHES_VIGIADOS` no
+  mesmo PR** — quem não entra envelhece em silêncio.
+  🚨 **E O `0110` DIZIA `IND_REG_CUM = 1`, que é regime de CAIXA consolidado no
+  registro F500 — que este gerador NUNCA produz.** O arquivo afirmava sobre si
+  mesmo uma coisa que não fazia. O EFD do E-Fiscal **ACEITO** (06/2025, mesmo
+  cliente) usa **9** = escrituração DETALHADA nos blocos A/C/D/F, que é o que
+  este gerador de fato faz. Régua "arquivo aceito > leiaute deduzido" pela
+  quarta vez (R-4020, E510, R-2010, agora o 0110).
+  🐛 **E A TERCEIRA PONTA ERA A PORTA DE SAÍDA DO PROBLEMA**: a RADIO E TV
+  IBIRAPUERA (DF, sem trilho de captura) tinha **zero documento** e ficha de
+  R$ 2.000 — o caminho para isso é o ✍️ **Lançar nota sem XML**, que estava
+  **quebrado para todo mundo, inclusive admin**: *"Falha ao gravar: Missing or
+  insufficient permissions"*. A regra de `documentos_fiscais` exige
+  `createdBy == request.auth.uid` no CREATE e **não abre exceção para admin**;
+  o objeto montado não levava o campo. Ou seja **a terceira porta nunca gravou
+  uma nota**. Agora o UID viaja, e a validação **RECUSA ANTES com a causa
+  escrita** ("saia e entre de novo") em vez de deixar o banco responder —
+  "Missing or insufficient permissions" manda a pessoa procurar problema de
+  permissão que não existe.
 - **🚨 PDF GIRADO (`/Rotate 90`) FAZIA O PARSER LER O EIXO ERRADO — e ele acusava
   a COLABORADORA de um erro que era DELE** (Paulo, 17/08, urgente: *"a
   colaboradora reporta este erro do CFI, porém ela analisa está correto"*, caso

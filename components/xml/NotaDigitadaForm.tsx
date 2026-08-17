@@ -21,6 +21,7 @@ import {
 import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
 import type { User } from '../../types';
+import { getAuth } from 'firebase/auth';
 
 interface Props {
     currentUser: User;
@@ -75,6 +76,11 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             valorTotal: num(valorTotal),
             itens: itens.map(it => ({ ...it, vProd: typeof it.vProd === 'number' ? it.vProd : num(String(it.vProd ?? '')) })),
             digitadaPorEmail: currentUser.email || '',
+            // Sem o UID o Firestore RECUSA a criação — a regra de
+            // `documentos_fiscais` exige createdBy == auth.uid no CREATE, e não
+            // há escape nem para admin. Era o "Missing or insufficient
+            // permissions" de 17/08.
+            createdByUid: getAuth().currentUser?.uid || '',
         };
         const v = validarNotaDigitada(input as any);
         if (v.length) { setErros(v); return; }

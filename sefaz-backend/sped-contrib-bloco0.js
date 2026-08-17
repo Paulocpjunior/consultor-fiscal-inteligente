@@ -143,7 +143,18 @@ function build0100(dados) {
 function build0110(dados) {
     const regimeApuracao = dados.regimeApuracao || '2';
     const indAproCred = (regimeApuracao === '1' || regimeApuracao === '3') ? '2' : '';
-    const indRegCum = (regimeApuracao === '2' || regimeApuracao === '3') ? '1' : '';
+    // 🚨 IND_REG_CUM = 9 — ESCRITURAÇÃO DETALHADA nos blocos A/C/D/F.
+    //
+    // Estava cravado em '1', que significa **regime de CAIXA, escrituração
+    // consolidada no registro F500** — e o gerador NUNCA produz F500. O arquivo
+    // afirmava sobre si mesmo uma coisa que não fazia (17/08, RADIO E TV
+    // IBIRAPUERA). O 9 é o que o arquivo ACEITO do E-Fiscal usa (06/2025), e é o
+    // que descreve o que este gerador de fato faz: documento a documento nos
+    // blocos A/C/D/F.
+    //
+    // Se um dia existir o caminho consolidado, o valor passa a DEPENDER do que
+    // foi gerado — nunca a ser cravado, que é o defeito de origem aqui.
+    const indRegCum = (regimeApuracao === '2' || regimeApuracao === '3') ? '9' : '';
     return fmt.buildLine([
         '0110',
         regimeApuracao,
