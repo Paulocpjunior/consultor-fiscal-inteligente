@@ -242,6 +242,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
   direção contrária. A composição aparece na TELA antes dos botões: descobrir
   "por desencargo" não pode ser o processo.
+- **🚨 O `1010` DO EFD-CONTRIBUIÇÕES NÃO É O DO EFD ICMS/IPI — mesmo número,
+  arquivo diferente** (Paulo, 17/08, com o recibo do PVA da MANTOAN 07/2026:
+  *"O número de campos informado no registro difere do especificado no leiaute"*
+  — esperado **7**, veio **9** — mais recusa em `IND_NAT_ACAO` e `DT_SENT_JUD`
+  recebendo `'N'`). O gerador emitia `|1010|N|N|N|N|N|N|N|N|`, que é a
+  **Obrigatoriedade de registros do Bloco 1 do EFD ICMS/IPI**; no
+  EFD-Contribuições o 1010 é **Processo Referenciado — AÇÃO JUDICIAL**
+  (`NUM_PROC, ID_SEC_JUD, ID_VARA, IND_NAT_ACAO, DESC_DEC_JUD, DT_SENT_JUD`).
+  Ou seja, **declarava um processo judicial com os campos preenchidos com 'N'**.
+  É a família do IPI que foi parar em E200/E210 (04/08), que são registros do
+  ICMS-ST. ⚠️ **E não se inventa o 1010 certo**: ele só existe quando a empresa
+  TEM ação referenciada, e isso ninguém cadastrou — bloco sem dados se declara
+  **SEM DADOS** (`1001|1`), com o `IND_MOV` saindo do que foi PRODUZIDO (registro
+  novo vira '0' sozinho) em vez de constante.
+  🚨 **E O QUE O PVA NÃO RECUSOU ERA PIOR: M200/M600 SAÍAM 0,00** num arquivo com
+  37 A100 e PIS/COFINS destacados — o arquivo dizia à Receita que **não havia
+  contribuição a pagar**, e isso o PVA aceita (**arquivo aceito não é arquivo
+  certo**). Causa: a armadilha das DUAS FORMAS pela **terceira vez no mesmo
+  arquivo** — a NFS-e do portal não tem `itens` e grava `valorTotal`, e o bloco M
+  lia `nota.valor || nota.totalNota`. Agora cai em `valorDoDocumentoServico`, e
+  documento sem valor em forma nenhuma **sai da base NOMEADO num aviso** ("o
+  M200/M600 está a MENOR"), nunca como zero. Provado contra o arquivo real: 33
+  prestações = base **43.890,00** · PIS **285,28** · COFINS **1.316,70**.
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo
