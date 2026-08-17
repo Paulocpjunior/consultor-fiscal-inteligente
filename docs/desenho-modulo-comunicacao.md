@@ -354,6 +354,28 @@ conformidade absoluta ("100%", "totalmente", "certificado"), se a página parar
 de declarar as pendências, ou se os mecanismos sumirem do código deixando a
 frase de pé. **Provado quebrando as duas de propósito.**
 
+### 5.10 🔀 A separação de verdade — PLANEJADA (Paulo, 17/08)
+
+Ele viu na lista de runs do GitHub que as duas casas se misturam (*"estamos
+usando o projeto do CFI p o SP-Connect, algumas coisas que você cita são do
+projeto CFI"*) e decidiu: **"planeja separação de verdade depois do corte da
+Ultra Fox"**.
+
+O plano inteiro — fases, riscos, estimativa e a divisão do que é dele e do que
+é meu — está em **`docs/separacao-sp-connect.md`**. Três coisas que valem estar
+aqui também, porque mudam decisões de HOJE:
+
+1. **Separar serviço ≠ separar banco.** O precedente é o 📋 Legalização: repo e
+   serviço próprios, **mesmo Firestore e mesmo Auth**. Isso zera a migração de
+   dados e mantém a coluna do cliente como leitura direta.
+2. **A credencial da WABA INVERTE de casa.** Hoje ela vive só no CFI e os irmãos
+   usam o túnel; depois, quem é dono do canal é o Connect, e é o **CFI** que
+   passa a pedir para enviar guia. Manter a WABA no CFI anularia o motivo da
+   separação (queda do fiscal voltaria a calar o atendimento).
+3. **NADA começa antes do corte assentado.** Adiantar a mudança de repositório
+   faria o código do Connect viver em dois lugares durante a migração de
+   plataforma — duas verdades no pior momento possível.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

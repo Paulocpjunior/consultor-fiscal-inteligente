@@ -45,7 +45,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **comando novo do bot obriga manual novo NO MESMO PR** (a varredura lê
   `decidirAutomacao`, nunca uma lista copiada). Regra que fica: **manual
   errado é pior que manual nenhum** — quem não sabe segue o que está
-  escrito, então o manual se trava contra o COMPORTAMENTO do app.
+  escrito, então o manual se trava contra o COMPORTAMENTO do app;
+  (11) 🔀 **A SEPARAÇÃO DE VERDADE ESTÁ PLANEJADA PARA DEPOIS DO CORTE**
+  (Paulo, 17/08, ao ver CFI e Connect misturados na lista de runs do GitHub:
+  *"planeja separação de verdade depois do corte da Ultra Fox"*). O plano é
+  **`docs/separacao-sp-connect.md`** — fases, riscos, e a divisão do que é
+  dele e do que é meu. O que muda decisão de HOJE: **separar SERVIÇO ≠
+  separar BANCO** (precedente do 📋 Legalização — repo e serviço próprios,
+  MESMO Firestore/Auth, zero migração de dados); a credencial da WABA
+  **INVERTE de casa** (o Connect vira dono do canal e o CFI passa a PEDIR
+  pelo túnel — manter a WABA no CFI anularia o motivo, porque queda do
+  fiscal voltaria a calar o atendimento); e **nada começa antes do corte
+  assentado**, senão o código do Connect vive em dois lugares justamente
+  durante a migração de plataforma.
+  ⚠️ **E AO RELATAR, SEPARAR AS DUAS CASAS**: ele reclamou com razão de eu
+  misturar pendência do CFI (envs, robô de auditoria, fila do FUNRURAL) com
+  pendência do Connect na mesma lista. Dividir CFI × Connect, e dentro de
+  cada uma, o que é dele × o que é meu.
 - **A RAZÃO SOCIAL JÁ RESPONDE: LTDA/S.A./EIRELI É PESSOA JURÍDICA** (13/08,
   fila da NOVA ERA). Metade das pendências de *"consulte o CADESP"* era de
   fornecedor cujo nome DIZ o que ele é — MIXTER … LTDA, PONTUAL COMERCIAL
