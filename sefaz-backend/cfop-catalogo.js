@@ -47,6 +47,33 @@ export const FONTE_CFOP = {
 };
 
 /**
+ * 🚨 CUIDADO AO CARREGAR ESTE CATÁLOGO: EXISTE MAIS DE UMA REDAÇÃO DO CFOP, E A
+ * QUE O CONFAZ PUBLICA EM `.../copy_of_cfop_cvsn_70_nova` **NÃO É A EM VIGOR**.
+ *
+ * Paulo mandou o PDF dessa página em 17/08 para preencher o catálogo. Ao ler o
+ * arquivo antes de carregar, ele se desmente no próprio cabeçalho:
+ *
+ *   "Nova redação dada ao CFOP pelo Ajuste SINIEF 16/20, SEM EFEITOS."
+ *   "Revogado, a partir de 01.06.22, pelo Ajuste SINIEF 03/22."
+ *
+ * E a prova prática é maior que a leitura do cabeçalho: aquela redação
+ * **ELIMINA A FAMÍLIA DE SUBSTITUIÇÃO TRIBUTÁRIA INTEIRA**. Nela não existem
+ * 1401, 1403, 1406, 1407, 1408, 1409, 1410 nem 1411 — a faixa 1.4xx tem só
+ * 1450-1456. Também não existe 1655.
+ *
+ * ⚠️ E o CFI ESCRITURA 1403 HOJE: ele aparece no Resumo por CFOP da NOVA ERA
+ * (07/2026) com 56 notas e R$ 85.553,20. Carregar essa tabela faria o app dizer
+ * "1403 não cadastrado" para um código que ele mesmo produz dezenas de vezes por
+ * mês — e alguém poderia "corrigir" a escrituração por causa de uma tabela que
+ * não está em vigor. Descrição errada faz escolher com confiança o CFOP errado.
+ *
+ * **REGRA QUE FICA: antes de carregar qualquer tabela de CFOP, confira se ela
+ * tem a família ST (x401/x403/x407/x410/x411).** Se não tiver, é a redação do
+ * Ajuste SINIEF 16/20 e ela NÃO SERVE. A que serve é o Convênio s/nº de
+ * 15/12/1970 na redação EM VIGOR.
+ */
+
+/**
  * Descrições CONFERIDAS contra a tabela oficial.
  *
  * ⚠️ Está propositalmente PEQUENO. O que falta se preenche colando a tabela do

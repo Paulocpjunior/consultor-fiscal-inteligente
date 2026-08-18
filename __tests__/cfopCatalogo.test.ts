@@ -85,3 +85,36 @@ describe('🚨 a tabela mora num lugar só', () => {
         expect(f).toMatch(/O que esse CFOP é/);
     });
 });
+
+// ============================================================================
+// 🚨 A TABELA QUE O CONFAZ PUBLICA EM "cfop_cvsn_70_nova" NÃO É A EM VIGOR.
+//
+// Paulo mandou o PDF dessa página em 17/08 para preencher o catálogo. Ao ler o
+// arquivo ANTES de carregar, ele se desmente no próprio cabeçalho ("Nova redação
+// dada ao CFOP pelo Ajuste SINIEF 16/20, SEM EFEITOS" · "Revogado, a partir de
+// 01.06.22, pelo Ajuste SINIEF 03/22") — e a prova prática é maior: aquela
+// redação ELIMINA A FAMÍLIA ST INTEIRA (a faixa 1.4xx fica só com 1450-1456).
+//
+// O CFI escritura 1403 HOJE — ele está no Resumo por CFOP da NOVA ERA 07/2026
+// com 56 notas. Carregar aquela tabela faria o app dizer "não cadastrado" para
+// um código que ele mesmo produz.
+//
+// ESTA É A TRAVA: se um dia o catálogo for carregado, a família ST tem que estar
+// nele. Catálogo sem ela é a redação errada.
+// ============================================================================
+describe('🚨 catálogo carregado tem que ter a família ST', () => {
+    const ST_OBRIGATORIOS = ['1401', '1403', '1406', '1407', '1408', '1409', '1410', '1411'];
+
+    it('ou o catálogo está vazio (estado atual), ou ele conhece a família ST', () => {
+        if (tamanhoDoCatalogo() <= 2) return;   // ainda não carregado
+        const faltando = ST_OBRIGATORIOS.filter((c) => !descricaoCfop(c));
+        expect({ faltando, dica: faltando.length ? 'é a redação do Ajuste SINIEF 16/20, que está SEM EFEITOS' : '' })
+            .toEqual({ faltando: [], dica: '' });
+    });
+
+    it('e a régua produz esses códigos — por isso eles não podem faltar', () => {
+        const { correlacionarCfop } = require('../sefaz-backend/cfop-correlacao.js');
+        expect(correlacionarCfop('5405', 'entrada', { naturezaAtividade: 'comercio' })).toBe('1403');
+        expect(correlacionarCfop('5410', 'entrada', { naturezaAtividade: 'comercio' })).toBe('1411');
+    });
+});
