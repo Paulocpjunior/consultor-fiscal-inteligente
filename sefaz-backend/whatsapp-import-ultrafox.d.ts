@@ -20,7 +20,12 @@ export function interpretarMensagensCsv(texto: string): {
     descartadas: { linha: number; motivo: string }[];
     avisos: string[];
 };
-export function idMensagemImportada(m: { numero: string; em: string; direcao: string; texto: string }): string;
+/**
+ * A chave usa `autor` quando presente (import de .txt) — é o dado BRUTO, e
+ * corrigir a marcação de autores pode reclassificar `direcao` sem duplicar a
+ * mensagem. Sem autor (import de CSV), cai em `direcao`.
+ */
+export function idMensagemImportada(m: { numero: string; em: string; direcao: string; texto: string; autor?: string | null }): string;
 export function prepararMensagensDoTxt(p: {
     mensagens: { em: string; autor: string; texto: string }[];
     numero: string;

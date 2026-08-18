@@ -142,6 +142,22 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   está pedindo outro departamento, e manter o dono anterior deixaria a
   conversa na fila nova com atendente da fila velha — o mesmo estado torto
   que a transferência evita limpando a atribuição.
+- 🚨 **CORRIGIR QUEM É O ESCRITÓRIO NÃO PODIA DUPLICAR A MENSAGEM** (18/08,
+  achado ao ler o print do Paulo escolhendo autores num lote real: 1.851
+  conversas, 47.099 mensagens, 1.367 autores). O id de dedup levava
+  `direcao` na chave — e `direcao` é DERIVADA de quem foi marcado como
+  escritório. Se o Paulo marcasse um autor errado, confirmasse, percebesse e
+  reimportasse com a marcação certa, a `direcao` mudaria e, com ela, o
+  próprio ID: a mensagem ANTIGA (com a direção errada) ficaria presa na
+  conversa para sempre, e uma SEGUNDA, com a direção certa, entraria do lado
+  dela. A pessoa acabaria vendo a mesma frase duas vezes — uma "enviada",
+  outra "recebida" — pior que o erro original, porque ninguém saberia qual
+  das duas é a real.
+  A chave passou a usar `autor` (o dado BRUTO do arquivo) quando ele existe
+  — import de `.txt`, que é onde a classificação pode ser refeita — e cai em
+  `direcao` só no import de CSV, onde a direção JÁ vem pronta da coluna e é
+  ela o dado bruto. Travado por teste, provado revertendo: **corrigir a
+  marcação de autores agora SOBRESCREVE a mensagem (merge), nunca duplica.**
 - 📎 **"TEXTO NO WHATSAPP, ANEXO SHAREPOINT"** (decisão do Paulo, 18/08). O
   arquivo NÃO entra no app: o histórico fica legível aqui e o zip do backup
   vive no SharePoint como arquivo morto. **Menos dado pessoal guardado é menos
