@@ -39,6 +39,7 @@
 // 3) metadados de certificado · 4) assinatura como operação remota.
 // ============================================================================
 
+import { regimeDaEmpresa, rotuloRegime, semFinsLucrativos as ehSemFinsLucrativos } from './regime-tributario.js';
 export const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const texto = (v) => {
     const t = String(v ?? '').trim();
@@ -58,13 +59,39 @@ export function normalizarEmpresaCadastro(doc, regime) {
     const cnpj = soDigitos(doc.cnpj);
     if (cnpj.length !== 14) return null;
 
+    // A coleção entra como PISTA de menor precedência: o campo explícito vence.
+    const vereditoRegime = regimeDaEmpresa({
+        ...doc,
+        colecao: doc.colecao || (regime === 'simples' ? 'simples_empresas' : regime === 'lucro' ? 'lucro_empresas' : ''),
+    });
+
     return {
         id: doc.id || null,
         // SEMPRE dígitos. É o contrato do túnel.
         cnpj,
         raiz: cnpj.slice(0, 8),
         nome: texto(doc.razaoSocial) || texto(doc.nome) || texto(doc.fantasia) || null,
+        // ⚠️ `regime` continua sendo a COLEÇÃO ('simples'/'lucro'). Ele NÃO muda
+        // de significado: os apps irmãos já o consomem, e trocar o sentido de um
+        // campo em uso é o pior tipo de quebra — a que não dá erro.
         regime: regime || null,
+
+        // 🆕 O REGIME DE VERDADE, com a origem carimbada (Paulo, 18/08: "temos
+        // empresas isentas, imunes e terceiro setor"). Antes disto, o CCI exibia
+        // uma IGREJA como "Lucro Presumido", porque a única informação que
+        // atravessava o túnel era em qual coleção ela tinha sido cadastrada.
+        regimeTributario: vereditoRegime.regime,
+        regimeTributarioRotulo: rotuloRegime(vereditoRegime.regime),
+        // De ONDE saiu: 'cadastro' (alguém marcou) · 'regimePadrao' · 'colecao'.
+        // Sem isso o outro app não distingue o que foi DITO do que foi DEDUZIDO.
+        regimeOrigem: vereditoRegime.origem,
+        // O CFI sabe apurar este regime? Imune e isenta ainda não têm lista de
+        // obrigações definida — e dizer isso é o que impede o irmão de assumir
+        // que o silêncio é "nada a fazer".
+        regimeApuracaoDefinida: vereditoRegime.apuracaoDefinida,
+        regimeRessalva: vereditoRegime.motivo || null,
+        // Eixo SEPARADO: terceiro setor não é regime, e convive com ele.
+        semFinsLucrativos: ehSemFinsLucrativos(doc),
 
         codCliente: texto(df.codCliente),
         cnae: texto(doc.cnae) || texto(df.cnae),
