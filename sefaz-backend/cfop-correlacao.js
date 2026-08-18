@@ -26,6 +26,9 @@
 //      Override sempre vence o default.
 // ============================================================================
 
+import { parametroAplicavel, rotuloParametro } from './cfop-cerebro.js';
+import { cnpjEmitente } from './participante-doc-helper.js';
+
 /**
  * Apenas os CFOPs de COMPRA DE PRODUTO/MERCADORIA exigem heurística de
  * natureza (porque o sufixo do destinatário DIFERE do sufixo do emitente:
@@ -327,7 +330,36 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
 export function cfopDoLancamento(doc, cfopDoItem, direcao, ctx = {}) {
     const daNota = String(doc?.cfopEscriturado || '').replace(/\D/g, '');
     if (daNota.length === 4) return daNota;
+    // O CÉREBRO entra AQUI, entre a decisão da nota e o override da empresa: ele
+    // é o palpite melhor (o que uma pessoa já decidiu para este fornecedor),
+    // nunca a verdade daquela nota.
+    const doCerebro = parametroDaNota(doc, cfopDoItem, direcao, ctx);
+    if (doCerebro) return doCerebro.cfopDestino;
     return correlacionarCfop(cfopDoItem, direcao, ctx);
+}
+
+/**
+ * O parâmetro do cérebro que se aplica a esta nota, ou null.
+ *
+ * Só vale na ENTRADA: na saída o CFOP é da nota da própria empresa e já está
+ * certo — aprender ali seria reescrever o que o cliente emitiu.
+ */
+export function parametroDaNota(doc, cfopDoItem, direcao, ctx = {}) {
+    if (direcao !== 'entrada') return null;
+    if (!ctx.parametrosCfop || !ctx.parametrosCfop.length) return null;
+    return parametroAplicavel(ctx.parametrosCfop, {
+        cnpjFornecedor: cnpjEmitente(doc),
+        cfopOrigem: cfopDoItem,
+        competencia: competenciaDoDoc(doc),
+    });
+}
+
+/** 'AAAA-MM' da nota, nas formas em que a competência chega. */
+function competenciaDoDoc(doc) {
+    const direto = String(doc?.competencia || '').trim();
+    if (/^\d{4}-\d{2}$/.test(direto)) return direto;
+    const data = String(doc?.dhEmi || doc?.dataEmissao || '').slice(0, 7);
+    return /^\d{4}-\d{2}$/.test(data) ? data : '';
 }
 
 /** De onde veio o CFOP do lançamento — número sem origem não se confere. */
@@ -339,6 +371,15 @@ export function origemDoCfopLancamento(doc, cfopDoItem, direcao, ctx = {}) {
             rotulo: 'informado nesta NF',
             por: doc?.cfopEscrituradoPor || null,
             em: doc?.cfopEscrituradoEm || null,
+        };
+    }
+    const doCerebro = parametroDaNota(doc, cfopDoItem, direcao, ctx);
+    if (doCerebro) {
+        return {
+            origem: 'cerebro',
+            rotulo: rotuloParametro(doCerebro),
+            por: doCerebro.criadoPor || null,
+            em: doCerebro.criadoEm || null,
         };
     }
     const c = String(cfopDoItem || '');

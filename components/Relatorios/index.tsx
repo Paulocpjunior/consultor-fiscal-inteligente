@@ -57,7 +57,12 @@ type AbaId =
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
 
 import { livroSemNotaDeProdutorDuplicada } from '../../services/livroNotaProdutor';
-import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
+import {
+    gravarCfopEscriturado, lerParametrosCfop, gravarParametroCfop, desligarParametroCfop,
+    type ParametroCfopDoc,
+} from '../../services/cfopEscrituradoService';
+// 🧠 O CÉREBRO: o que alguém corrigiu numa nota vira parâmetro do FORNECEDOR.
+import { sugerirParametro, rotuloParametro } from '../../sefaz-backend/cfop-cerebro.js';
 // A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
 import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
@@ -535,6 +540,10 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
     const { gerando, rodar } = usePdf();
     const [salvando, setSalvando] = useState<string | null>(null);
     const [rascunho, setRascunho] = useState<Record<string, string>>({});
+    /** 🧠 Parâmetros do cérebro — o palpite melhor, entre a NF e o override. */
+    const [parametros, setParametros] = useState<ParametroCfopDoc[]>([]);
+    const [sugestao, setSugestao] = useState<any>(null);
+    const [verParametros, setVerParametros] = useState(false);
     /** Gravado nesta sessão — o recorte não é relido a cada tecla. */
     const [gravado, setGravado] = useState<Record<string, string>>({});
     const [erro, setErro] = useState<string | null>(null);
@@ -544,9 +553,19 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         [cadastroFiscal],
     );
     const ctx = useMemo(
-        () => ({ naturezaAtividade: natureza.natureza, cfopOverrides: cadastroFiscal?.cfopOverrides }),
-        [natureza, cadastroFiscal],
+        () => ({
+            naturezaAtividade: natureza.natureza,
+            cfopOverrides: cadastroFiscal?.cfopOverrides,
+            parametrosCfop: parametros.filter(p => p.ativo !== false),
+        }),
+        [natureza, cadastroFiscal, parametros],
     );
+
+    React.useEffect(() => {
+        let vivo = true;
+        void lerParametrosCfop(empresa.id).then(ps => { if (vivo) setParametros(ps); });
+        return () => { vivo = false; };
+    }, [empresa.id]);
 
     const linhas = useMemo(() => {
         return docs
@@ -567,6 +586,11 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                     numero: d.numero || '—',
                     participante: parte?.nome || '—',
+                    // O cérebro é POR FORNECEDOR: sem CNPJ e sem competência ele
+                    // não tem chave nem data de início, e a sugestão não nasce.
+                    cnpjFornecedor: String(parte?.cnpjCpf || parte?.cnpj || d.cnpjEmit || '').replace(/\D/g, ''),
+                    competencia: String(d.competencia || (d.dhEmi || '').slice(0, 7) || ''),
+                    cfopCru: cru,
                     direcao,
                     daRegua,
                     /** Nota com mais de um CFOP: carimbar UM colapsa os outros. */
@@ -607,6 +631,18 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             onShowToast?.(r.cfop
                 ? `NF ${l.numero}: CFOP ${r.cfop} informado.`
                 : `NF ${l.numero}: voltou para a correlação automática.`, 'success');
+            // 🧠 A SUGESTÃO É OPT-IN. Nascer ligada faria o app aprender com um
+            // clique de teste — e parâmetro errado é pior que a correção nota a
+            // nota, porque se aplica calado a tudo que vier depois.
+            if (r.cfop && l.direcao === 'entrada') {
+                setSugestao(sugerirParametro({
+                    cnpjFornecedor: l.cnpjFornecedor,
+                    nomeFornecedor: l.participante,
+                    cfopOrigem: l.cfopCru,
+                    cfopDestino: r.cfop,
+                    competencia: l.competencia,
+                }));
+            }
         } catch (e: any) {
             setErro(e?.message || 'Falha ao gravar.');
         } finally {
@@ -654,6 +690,10 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         <Card>
             <div className="flex flex-wrap items-center gap-2">
                 <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                <button
+                    onClick={() => setVerParametros(v => !v)}
+                    className="btn-press px-3 py-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-700 whitespace-nowrap"
+                >🧠 Parâmetros ({parametros.filter(p => p.ativo !== false).length})</button>
                 <span className="text-xs text-slate-500">
                     {linhas.length} nota(s) · {comCarimbo} com CFOP informado
                 </span>
@@ -669,6 +709,44 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 marcado. A tabela oficial é a do{' '}
                 <a href={FONTE_CFOP.url} target="_blank" rel="noreferrer" className="underline">{FONTE_CFOP.titulo}</a>.
             </p>
+            {/* 🧠 A SUGESTÃO DO CÉREBRO — opt-in, com a consequência escrita. */}
+            {sugestao && (
+                <div className={`mt-3 rounded-lg border-l-4 p-3 text-xs ${sugestao.pode
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'
+                    : 'border-slate-400 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                    {sugestao.pode ? (
+                        <>
+                            <strong>🧠 {sugestao.pergunta}</strong>
+                            <p className="mt-1">{sugestao.detalhe}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                    className="btn-press px-3 py-1 rounded bg-blue-700 text-white font-bold whitespace-nowrap"
+                                    onClick={async () => {
+                                        try {
+                                            await gravarParametroCfop({
+                                                empresaId: empresa.id,
+                                                ...sugestao.parametro,
+                                                porEmail: currentUser?.email || '',
+                                            });
+                                            setParametros(await lerParametrosCfop(empresa.id));
+                                            onShowToast?.('Parâmetro criado — vale das próximas notas em diante.', 'success');
+                                        } catch (e: any) { setErro(e?.message || 'Falha ao criar o parâmetro.'); }
+                                        setSugestao(null);
+                                    }}
+                                >Sim, aprender</button>
+                                <button
+                                    className="btn-press px-3 py-1 rounded bg-slate-200 dark:bg-slate-700 whitespace-nowrap"
+                                    onClick={() => setSugestao(null)}
+                                >Só nesta nota</button>
+                            </div>
+                        </>
+                    ) : (
+                        <>🧠 {sugestao.motivo}{' '}
+                            <button className="underline" onClick={() => setSugestao(null)}>ok</button>
+                        </>
+                    )}
+                </div>
+            )}
             {!!inexistentes.fora.length && (
                 <div className="mt-3 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-300">
                     <strong>{inexistentes.notas} nota(s) com CFOP que NÃO CONSTA da tabela em vigor</strong>{' '}
@@ -682,6 +760,39 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             {erro && (
                 <div className="mt-2 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
                     {erro}
+                </div>
+            )}
+            {verParametros && (
+                <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-xs">
+                    <p className="text-slate-500">
+                        O que uma pessoa corrigiu numa nota e mandou aprender. Vale <strong>da competência de
+                        início em diante</strong> — competência anterior não muda. Desligar não apaga: o
+                        parâmetro continua explicando os meses que ele já datou.
+                    </p>
+                    {!parametros.length ? (
+                        <p className="mt-2 text-slate-500">Nenhum parâmetro ainda. Corrija um CFOP na lista abaixo e o app pergunta se deve aprender.</p>
+                    ) : (
+                        <ul className="mt-2 space-y-1">
+                            {parametros.map(p => (
+                                <li key={p.id} className={`flex flex-wrap items-center gap-2 ${p.ativo === false ? 'opacity-50 line-through' : ''}`}>
+                                    <span className="font-mono">{p.cfopOrigem || 'qualquer'} → {p.cfopDestino}</span>
+                                    <span>{p.nomeFornecedor || p.cnpjFornecedor}</span>
+                                    <span className="text-slate-500">desde {p.vigenciaInicio} · {p.criadoPor || '—'}</span>
+                                    {p.ativo !== false && (
+                                        <button
+                                            className="btn-press underline text-red-600 whitespace-nowrap"
+                                            onClick={async () => {
+                                                try {
+                                                    await desligarParametroCfop(p.id!, currentUser?.email || '');
+                                                    setParametros(await lerParametrosCfop(empresa.id));
+                                                } catch (e: any) { setErro(e?.message || 'Falha ao desligar.'); }
+                                            }}
+                                        >desligar</button>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
             )}
             {!linhas.length ? (

@@ -71,6 +71,20 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O CÉREBRO do CFOP — parâmetro por fornecedor, com vigência',
+        dono: 'sefaz-backend/cfop-cerebro.js',
+        comoUsar: "import { parametroAplicavel, sugerirParametro } from 'sefaz-backend/cfop-cerebro.js'",
+        porque: 'Paulo, 18/08: a decisão humana numa nota vira parâmetro para as próximas. A régua tem TRÊS '
+            + 'partes que não podem divergir: a chave (fornecedor + CFOP de origem, o mais específico vence), '
+            + 'a VIGÊNCIA (não retroage — mês já entregue não muda de CFOP sozinho) e a PRECEDÊNCIA (a decisão '
+            + 'naquela NF vence o parâmetro). Uma segunda cópia faria a tela mostrar um CFOP e o SPED gravar '
+            + 'outro — e num parâmetro o erro se multiplica por todas as notas do fornecedor.',
+        assinaturas: [
+            /function parametroAplicavel\s*\(/,
+            /function sugerirParametro\s*\(/,
+        ],
+    },
+    {
         nome: 'De quem é o documento — quando reatribuir é conserto e quando é roubo',
         dono: 'sefaz-backend/documento-posse.js',
         comoUsar: "import { decidirPosseDocumento, ehParteDoDocumento } from 'sefaz-backend/documento-posse.js'",

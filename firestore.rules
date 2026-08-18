@@ -473,6 +473,26 @@ service cloud.firestore {
     // Leitura liberada a quem esta logado — a tela consulta direto; ESCRITA
     // so pelo backend, que valida (IVA-ST sem Portaria e aliquota fora da
     // faixa sao recusados la).
+    // cfop_parametros: o CEREBRO do CFOP (Paulo, 18/08) — a decisao humana numa
+    // nota vira parametro para as PROXIMAS notas daquele fornecedor.
+    //
+    // ESCRITA por qualquer logado, de proposito: quem confere a escrituracao e o
+    // colaborador da carteira, e exigir admin faria o parametro morrer na fila
+    // do dono (o desenho que ele recusou no calendario municipal em 16/08).
+    // O rastro é o freio: o doc carrega criadoPor/criadoEm, desligar NAO apaga,
+    // e a tela mostra de qual parametro cada CFOP veio.
+    match /cfop_parametros/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 2000;
+      allow create: if isSignedIn() && request.resource.data.criadoPor == request.auth.token.email;
+      // UPDATE so para DESLIGAR — parametro nao se reescreve por baixo, porque
+      // ele explica as competencias que ja datou. Vigencia nova = doc novo.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['ativo', 'desligadoPor', 'desligadoEm']);
+      allow delete: if isAdmin();
+    }
+
     match /ncm_parametros/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;

@@ -342,6 +342,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   recebida de terceiros"*; e **1208/1209** no mesmo par. Também confirma o caso
   KALUNGA: **1556** *"Compra de material para uso ou consumo"* e **1551**
   *"Compra de bem para o ativo imobilizado"*.
+  🧠 **E O CAMPO GANHOU CÉREBRO — ideia dele, 18/08**: *"um cérebro que, quando o
+  usuário faz a alteração de forma manual, ele deve gravar, criando um parâmetro
+  para os próximos meses"*. `cfop-cerebro.js` (na `REGUAS_VIGIADAS`) + coleção
+  `cfop_parametros`. **O NÚMERO QUE JUSTIFICA** veio do Relatório de Notas que ele
+  mandou (2.330 entradas em 6 meses): **914 notas (39%)** escrituradas como
+  uso/consumo ou ativo — destino que o XML NÃO carrega, porque o fornecedor emite
+  5102/5405 (para ELE é venda de mercadoria). Corrigir 914 à mão por semestre não
+  é processo.
+  📐 **A MEDIÇÃO DEFINIU A CHAVE**: no mesmo arquivo, **apenas 6 de 311
+  fornecedores** aparecem em mais de um grupo de destino — o FORNECEDOR decide em
+  98% dos casos, e 10 fornecedores cobrem 66% daquelas 914 notas. Mas 98% não é
+  100%, então a chave é **fornecedor + CFOP DE ORIGEM** (o CFOP que o fornecedor
+  emitiu já separa venda normal de ST e de ativo), com "qualquer CFOP do
+  fornecedor" como escopo largo — **o mais específico vence**.
+  🚨 **TRÊS TRAVAS**: (1) **vigência NÃO RETROAGE** — o parâmetro vale da
+  competência em que nasceu em diante, senão um mês já entregue mudaria de CFOP
+  depois do SPED transmitido (régua do IVA-ST e do calendário municipal); entre
+  dois vigentes ganha o mais RECENTE, resolvendo pela DATA do fato; (2) **a NF
+  vence o cérebro** — precedência NF > cérebro > empresa > régua, porque quem
+  corrigiu a nota olhou a nota; (3) **é OPT-IN** — depois de corrigir, o app
+  PERGUNTA se deve aprender, com a consequência escrita antes do clique; nascer
+  ligado faria o app aprender com um clique de teste, e parâmetro errado é pior
+  que a correção nota a nota porque se aplica calado a tudo que vier depois.
+  ⚠️ **SAÍDA NÃO APRENDE** (aprender ali seria reescrever a nota que o cliente
+  emitiu) e **desligar NÃO APAGA** (o parâmetro continua explicando as
+  competências que já datou). Falha ao ler os parâmetros devolve `[]`: o cérebro
+  é palpite melhor, não trava — sem ele a régua automática segue valendo.
+  ⚠️ **O QUE ELE DELIBERADAMENTE NÃO FAZ**: aprender por NCM ou pela descrição do
+  produto. Acertaria na maioria e erraria EM SILÊNCIO na minoria — e num livro
+  fiscal o erro silencioso é o caro. Ele aprende do que uma PESSOA decidiu.
   ✅ **E O CAMPO DE LANÇAMENTO ENTROU — a decisão dele foi "é por NF"** (perguntei
   se era por nota ou por item). Aba **✏️ CFOP por nota** em Relatórios:
   `documentos_fiscais.cfopEscriturado` + carimbo (`...Por`/`...Em`), com

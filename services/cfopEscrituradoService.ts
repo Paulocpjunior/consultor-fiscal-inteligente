@@ -22,7 +22,9 @@
  * carimbo (`cfopEscrituradoPor`/`cfopEscrituradoEm`) é obrigatório, igual ao
  * `_substituidoEm` da importação com substituição (14/08).
  */
-import { doc, updateDoc, deleteField } from 'firebase/firestore';
+import {
+    doc, updateDoc, deleteField, collection, addDoc, getDocs, query, where, orderBy,
+} from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
 /** A coleção mora aqui porque `COLLECTIONS` do xmlFiscalService não é exportada. */
@@ -67,4 +69,98 @@ export async function gravarCfopEscriturado(i: GravarCfopEscrituradoInput): Prom
         cfopEscrituradoEm: new Date().toISOString(),
     });
     return { cfop: v.cfop };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧠 O CÉREBRO — a decisão humana vira PARÂMETRO para as próximas notas
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Paulo, 18/08: *"um cérebro que, quando o usuário faz a alteração de forma
+// manual, ele deve gravar, criando um parâmetro para os próximos meses"*.
+//
+// A coleção é POR EMPRESA (`empresaId` no doc): o mesmo fornecedor pode ter
+// destino diferente em clientes diferentes — o posto que abastece o caminhão de
+// um é o fornecedor de revenda do outro.
+
+const COLECAO_PARAMETROS = 'cfop_parametros';
+
+export interface ParametroCfopDoc {
+    id?: string;
+    empresaId: string;
+    cnpjFornecedor: string;
+    nomeFornecedor?: string | null;
+    cfopOrigem?: string | null;
+    cfopDestino: string;
+    vigenciaInicio: string;
+    ativo: boolean;
+    criadoPor?: string | null;
+    criadoEm?: string | null;
+}
+
+/** Os parâmetros ATIVOS da empresa. Falha de leitura devolve [] — o cérebro é
+ *  um palpite melhor, não uma trava: sem ele a régua automática segue valendo. */
+export async function lerParametrosCfop(empresaId: string): Promise<ParametroCfopDoc[]> {
+    if (!empresaId) return [];
+    try {
+        const snap = await getDocs(query(
+            collection(db, COLECAO_PARAMETROS),
+            where('empresaId', '==', empresaId),
+        ));
+        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroCfopDoc[];
+    } catch {
+        return [];
+    }
+}
+
+export async function gravarParametroCfop(p: {
+    empresaId: string;
+    cnpjFornecedor: string;
+    nomeFornecedor?: string | null;
+    cfopOrigem?: string | null;
+    cfopDestino: string;
+    vigenciaInicio: string;
+    porEmail: string;
+}): Promise<void> {
+    if (!p.empresaId) throw new Error('Empresa não identificada.');
+    if (!String(p.porEmail || '').trim()) {
+        throw new Error('Sessão sem usuário identificado — saia e entre de novo. '
+            + 'O parâmetro fica gravado com quem o criou.');
+    }
+    // ⚠️ O destino é validado com a MESMA régua da nota (faixa × direção). O
+    // parâmetro se aplica a ENTRADAS, então o CFOP tem que ser de entrada —
+    // senão ele espalharia um CFOP torto por todas as notas do fornecedor.
+    const v = validarCfopEscriturado(p.cfopDestino, 'entrada');
+    if (!v.ok) throw new Error(v.motivo);
+    if (!v.cfop) throw new Error('Parâmetro precisa de um CFOP de destino.');
+    if (!/^\d{4}-\d{2}$/.test(String(p.vigenciaInicio || ''))) {
+        throw new Error('Parâmetro precisa da competência a partir da qual ele vale.');
+    }
+    await addDoc(collection(db, COLECAO_PARAMETROS), {
+        empresaId: p.empresaId,
+        cnpjFornecedor: String(p.cnpjFornecedor).replace(/\D/g, ''),
+        nomeFornecedor: p.nomeFornecedor || null,
+        cfopOrigem: p.cfopOrigem ? String(p.cfopOrigem).replace(/\D/g, '') : null,
+        cfopDestino: v.cfop,
+        vigenciaInicio: p.vigenciaInicio,
+        ativo: true,
+        criadoPor: p.porEmail,
+        criadoEm: new Date().toISOString(),
+    });
+}
+
+/**
+ * Desliga o parâmetro — NÃO apaga.
+ *
+ * Apagar tiraria da vista a explicação das competências que ele já datou, e a
+ * pergunta "por que esta nota saiu 1407 em julho?" ficaria sem resposta. Mesma
+ * regra do calendário municipal desativado.
+ */
+export async function desligarParametroCfop(id: string, porEmail: string): Promise<void> {
+    if (!id) throw new Error('Parâmetro sem id.');
+    await updateDoc(doc(db, COLECAO_PARAMETROS, id), {
+        ativo: false,
+        desligadoPor: porEmail || null,
+        desligadoEm: new Date().toISOString(),
+    });
 }

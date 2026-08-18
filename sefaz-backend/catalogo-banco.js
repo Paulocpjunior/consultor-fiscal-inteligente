@@ -70,6 +70,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'pgdas_sem_movimento', grupo: 'Simples · DAS', funcionalidade: 'PGDAS-D de mês sem movimento (declaração sem guia)' },
     { colecao: 'pgdas_atividades_codigos', grupo: 'Simples · DAS', funcionalidade: 'Código oficial de atividade do PGDAS-D cadastrado pelo admin (ISS fixo/SUP)' },
     { colecao: 'ncm_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Cadastro de NCM: alíquota interna, IVA-ST (com Portaria e vigência), CEST e redução de base' },
+    { colecao: 'cfop_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'CÉREBRO do CFOP: o que alguém corrigiu numa nota vira parâmetro do FORNECEDOR para as próximas competências (não retroage)' },
     { colecao: 'das_envios_cliente', grupo: 'Simples · DAS', funcionalidade: 'Envios de DAS ao cliente' },
     { colecao: 'das_cron_logs', grupo: 'Simples · DAS', funcionalidade: 'Execuções do cron de DAS/vencimentos' },
 
