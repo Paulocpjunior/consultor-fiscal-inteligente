@@ -309,7 +309,8 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast} />
             )}
             {aba === 'canceladas' && docsRecorte && empresa && (
-                <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
+                <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado}
+                    onRebuscar={() => buscar(empresa.id)} />
             )}
             {aba === 'aliquota' && docsRecorte && empresa && (
                 <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
@@ -1131,7 +1132,9 @@ const RESSALVAS_NUMERACAO = [
     'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Cobertura de Saída.',
 ];
 
-const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao }) => {
+const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
+    docs, empresa, competencia, truncado, identificacao, onRebuscar,
+}) => {
     const { gerando, rodar } = usePdf();
     const linhas = useMemo(() => nfCanceladasFaltantes(docs, empresa.cnpj), [docs, empresa.cnpj]);
     // "Nenhuma nota emitida" e "não capturamos as saídas desta empresa" são
@@ -1151,10 +1154,28 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
     // (Rej. 641 + cofre traz só o XML autorizado), então aqui se PERGUNTA.
     const [reconf, setReconf] = useState<any>(null);
     const [reconferindo, setReconferindo] = useState(false);
+    // 🚨 AÇÃO SEM EFEITO VISÍVEL — a reconferência gravava a cancelada na
+    // SEFAZ, e a TELA continuava mostrando "0 cancelada(s)".
+    //
+    // Caso MV LIDER 639, 18/08 (Paulo, DUAS vezes: "mesmo erro, continua sem
+    // aparecer as canceladas e continua considerando no faturamento"). A régua
+    // (docCancelado) e a gravação estavam corretas — o defeito era que
+    // `linhas`/`totalCanceladas` vêm de `docs`, e `docs` é o recorte que o
+    // "Buscar" carregou ANTES da reconferência. Escrever no Firestore não
+    // republica os `props` que este componente já tem na mão: a única frase
+    // que avisava disso era um texto pequeno ("Recarregue o relatório…"),
+    // fácil de não ligar a "preciso clicar em algo lá em cima".
+    //
+    // ✂️ Agora o componente pede pro PAI rebuscar sozinho, sem esperar o clique
+    // — é a mesma família do "informar vencimento não atualizava a tarefa"
+    // (16/08): ação sem efeito visível é beco, e a única saída que sobra pra
+    // quem está na tela é repetir o clique achando que não funcionou.
     const reconferir = async (simular: boolean) => {
         setReconferindo(true);
         try {
-            setReconf(await reconferirCancelamento({ cnpj: empresa.cnpj, competencia, simular }));
+            const r = await reconferirCancelamento({ cnpj: empresa.cnpj, competencia, simular });
+            setReconf(r);
+            if (r?.ok && !simular) await onRebuscar?.();
         } catch (e: any) {
             setReconf({ error: e?.message || 'Falha ao consultar a SEFAZ.' });
         } finally {
@@ -1289,7 +1310,11 @@ const AbaCanceladas: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tru
                                 </p>
                             ))}
                             {!reconf.simulado && (
-                                <p className="text-slate-500">Recarregue o relatório para ver os totais já sem as canceladas.</p>
+                                <p className="text-slate-500">
+                                    {onRebuscar
+                                        ? 'Recorte recarregado — os totais acima já refletem o que a SEFAZ confirmou.'
+                                        : 'Recarregue o relatório para ver os totais já sem as canceladas.'}
+                                </p>
                             )}
                         </div>
                     )}
