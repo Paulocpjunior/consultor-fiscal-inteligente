@@ -180,18 +180,89 @@ export function lerRespostaCancelamento(resp) {
     };
 }
 
+// cStat da CONSULTA SITUAÇÃO (NfeConsultaProtocolo4) — vocabulário PRÓPRIO,
+// diferente do cStat de evento (110111) lido acima: aqui é o status
+// consolidado da nota, não o resultado de um evento específico.
+const CSTAT_SITUACAO_CANCELADA = new Set(['101', '151']);
+const CSTAT_SITUACAO_AUTORIZADA = new Set(['100']);
+
+/**
+ * Lê a resposta da CONSULTA SITUAÇÃO (fallback quando a empresa não tem A1
+ * próprio — usa o certificado do escritório, que essa consulta aceita porque
+ * ela só devolve STATUS, nunca o conteúdo do documento).
+ *
+ * Mesmo contrato de `lerRespostaCancelamento`: 'cancelada' · 'nao-cancelada' ·
+ * 'indeterminado', nunca inventando a terceira a partir do silêncio ou de um
+ * cStat que este módulo não conhece.
+ */
+export function lerRespostaConsultaSituacao(resp) {
+    if (!resp || resp.erro) {
+        return {
+            situacao: 'indeterminado',
+            motivo: `Não foi possível perguntar à SEFAZ (Consulta Situação)${resp?.erro ? `: ${resp.erro}` : '.'} `
+                + 'A nota fica como está — falha de consulta não prova que a nota é válida.',
+        };
+    }
+    if (resp.indisponivel) {
+        return { situacao: 'indeterminado', motivo: resp.motivo };
+    }
+
+    const cStat = String(resp.cStat || '');
+
+    if (CSTAT_SITUACAO_CANCELADA.has(cStat)) {
+        return {
+            situacao: 'cancelada',
+            cStat,
+            evento: {
+                tpEvento: '110111', tipo: 'cancelamento', cStat,
+                dhEvento: resp.dhRecbto || null, nProt: resp.nProt || null, xJust: null,
+            },
+            motivo: `Consulta Situação (certificado do escritório): ${resp.xMotivo || 'cancelamento homologado'} `
+                + `(cStat ${cStat}).`,
+        };
+    }
+    if (CSTAT_SITUACAO_AUTORIZADA.has(cStat)) {
+        return {
+            situacao: 'nao-cancelada',
+            cStat,
+            motivo: 'Consulta Situação: a SEFAZ confirma a NF-e autorizada, sem cancelamento.',
+        };
+    }
+    // Qualquer outro cStat (217/218 "não consta", 110 denegada, desconhecido…)
+    // NÃO se afirma nada — é exatamente esse silêncio que produzia faturamento
+    // a maior antes desta régua existir.
+    return {
+        situacao: 'indeterminado',
+        cStat,
+        motivo: `A Consulta Situação devolveu cStat ${cStat || '—'}`
+            + `${resp.xMotivo ? ` — ${resp.xMotivo}` : ''}. Isso não permite concluir sobre cancelamento.`,
+    };
+}
+
 /**
  * Resumo da rodada, com a CAUSA junto do número.
  *
  * Contagem sem leitura é meio farol: "12 consultadas" não diz se o mês mudou.
  */
-export function resumirReconferencia({ selecao, resultados, simulado = false }) {
+export function resumirReconferencia({ selecao, resultados, simulado = false, modo = 'distdfe' }) {
     const r = resultados || [];
     const canceladas = r.filter((x) => x.situacao === 'cancelada');
     const indeterminadas = r.filter((x) => x.situacao === 'indeterminado');
     const valorRemovido = canceladas.reduce((t, x) => t + (Number(x.valorTotal) || 0), 0);
 
     const avisos = [];
+    // 18/08: empresa sem A1 próprio (MV LIDER, cert é A3) cai neste modo — a
+    // pergunta sai com o certificado do ESCRITÓRIO, num webservice diferente
+    // (Consulta Situação, não o DistDFe). O colaborador precisa saber que a
+    // rodada foi por esse caminho, porque é NOVO e a prova real ainda depende
+    // do primeiro resultado em produção.
+    if (modo === 'consulta-situacao' && !simulado && r.length) {
+        avisos.push(
+            'Esta empresa não tem certificado A1 próprio (nem da mesma raiz) — a rodada usou a Consulta '
+            + 'Situação com o certificado do ESCRITÓRIO, que só devolve status (nunca o conteúdo do '
+            + 'documento) e por isso não exige o certificado do emitente.',
+        );
+    }
     if (canceladas.length) {
         avisos.push(
             `${canceladas.length} nota(s) estavam canceladas na SEFAZ e contavam como faturamento aqui — `

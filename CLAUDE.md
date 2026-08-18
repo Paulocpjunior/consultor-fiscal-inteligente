@@ -582,6 +582,56 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   escrever — corrigido o pai, o filho parou de faltar. **Arquivo aceito >
   leiaute deduzido**, mais uma vez: não escrevi nada para M205/M605, e o
   recibo é quem prova que não havia nada a escrever.
+- **🚨 "CANCELADA DEVERIA PUXAR" — e ele tinha razão: o webservice era outro**
+  (Paulo, MV LIDER 639 · 18/08, clicando em "Reconferir na SEFAZ" e caindo no
+  erro "Empresa sem certificado A1 próprio ou da mesma raiz"). O cert dela é
+  A3 (não assina em nuvem), e a reconferência de cancelamento usava o
+  `NFeDistribuicaoDFe`/`consChNFe` — que ENTREGA o conteúdo do documento, e por
+  isso SEFAZ exige que o CNPJ consultante seja parte dele (emitente/
+  destinatário). Existe um SEGUNDO webservice, a **Consulta Situação**
+  (`NfeConsultaProtocolo4`), que só devolve STATUS (autorizada/cancelada/
+  denegada) — nunca o conteúdo — e por isso é PÚBLICA: qualquer A1 válido
+  pergunta, inclusive o do ESCRITÓRIO. `consultaSituacaoNFe` (sefaz-client.js) +
+  `lerRespostaConsultaSituacao` (reconferir-cancelamento.js) entram como
+  FALLBACK em `/reconferir-cancelamento`: só quando a empresa não tem A1
+  próprio/da raiz, E só se a UF tiver o host cadastrado (hoje só **SP** — UF
+  sem host RECUSA com a causa, nunca tenta endereço chutado). Mesmo
+  vocabulário de saída de sempre (cancelada/não-cancelada/indeterminado, falha
+  de rede NUNCA virando "não cancelada").
+  🚧 **O HOST NÃO FOI PROVADO CONTRA RESPOSTA REAL** — a rede da SEFAZ é
+  bloqueada deste ambiente (mesma cegueira que já vale pro DistDFe, nunca
+  testado daqui, só em produção). `nfe.fazenda.sp.gov.br/ws/
+  nfeconsultaprotocolo4.asmx` segue a convenção estável do autorizador de SP;
+  a prova real é rodar contra uma das 3 chaves da MV LIDER que o Paulo já
+  confirmou canceladas no portal.
+- **🚨 CT-e NUNCA TEVE CAPTURA AUTOMÁTICA — o NFe DistDFe nunca pergunta por
+  CT-e** (Paulo, 18/08, EDUARDO GUERRA — tomadora de frete, 0 documento
+  capturado apesar dela ser a DESTINATÁRIA: *"o consultor não está fazendo a
+  captura de CT-e, confirma pra mim"* → confirmado: busquei em TODO o
+  histórico do git por `CTeDistribuicaoDFe`/`DistCTe` e não existe nenhum
+  commit. O parser (`xml-importer.js`) já entendia `infCte`/`chCTe`/`vTPrest`
+  desde sempre — o que faltava era PERGUNTAR à SEFAZ, porque CT-e tem
+  webservice de distribuição PRÓPRIO, `CTeDistribuicaoDFe`, nunca chamado.
+  *"como automatizar as CTeS então"* → `cte-client.js` espelha ponto a ponto o
+  `NFeDistribuicaoDFe` que já roda em produção (mesmo envelope `distDFeInt`,
+  troca só o namespace de `.../nfe` pra `.../cte`), e
+  `sync-orchestrator-cte.js` espelha `sincronizarEmpresa` reaproveitando
+  `calcularCursorSeguro` (pura, já testada — reescrevê-la seria a segunda
+  cópia) e `importarXmlSefaz` (o MESMO leitor, que já reconhece
+  resCTe/procCTe). Rota manual `POST /sync-cte-one` pra provar numa empresa
+  real ANTES de entrar no cron noturno.
+  🚨 **CURSOR E LOCK PRÓPRIOS — `sefaz_state_cte`/`sefaz_locks_cte`, NUNCA os
+  do NF-e**: compartilhar o cursor faria um dos dois documentos ficar
+  "sincronizado" com o NSU do lado errado — a mesma armadilha das duas formas
+  que já mordeu o projeto (11/08), agora entre NF-e e CT-e em vez de entre
+  dois formatos do mesmo documento. Travado por varredura de fonte
+  (`syncOrchestratorCte.test.ts`).
+  🚧 **HOST NÃO PROVADO CONTRA RESPOSTA REAL** — mesma cegueira de rede do item
+  acima; `www1.cte.fazenda.gov.br/CTeDistribuicaoDFe/...` segue a convenção de
+  nome do NF-e (mesma infraestrutura nacional), mas só produção confirma.
+  Escopo desta rodada: só ENTRADA (empresa tomadora, caso EDUARDO GUERRA) —
+  emissão própria de CT-e e "Manifestação do Destinatário" de CT-e ficam de
+  fora, por decisão explícita, até haver caso real que peça.
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo
