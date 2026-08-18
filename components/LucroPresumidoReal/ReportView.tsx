@@ -74,6 +74,35 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
     const saldos = saldosDaFicha(ficha);
     const saldosVisiveis = itensVisiveis(saldos);
 
+    /**
+     * 📤 A PRÉVIA QUE VAI AO CLIENTE (Paulo, 18/08 — "essa empresa me pede a
+     * prévia dos impostos antes da emissão, até então enviava esse relatório do
+     * Excel").
+     *
+     * Por que não é o "Imprimir" ao lado: aquele é `window.print()` da tela, e
+     * arrasta o rodapé do APP — build, commit, links internos e a frase "as
+     * informações são geradas por IA". Numa prévia de imposto ela é falsa (o
+     * número sai de calcularLucro) e cara: convida o cliente a desconfiar de um
+     * valor que ele vai pagar.
+     */
+    const handlePreviaCliente = async () => {
+        const { montarPreviaImpostos } = await import('../../services/previaImpostosCliente');
+        const { gerarRelatorioPdf, montarIdentificacao } = await import('../../services/relatorioPdf');
+        const p = montarPreviaImpostos({
+            empresaNome: empresa?.nome || '',
+            empresaCnpj: (empresa as any)?.cnpj,
+            competencia: ficha.mesReferencia,
+            resultado: resultadoCalculado,
+            ficha,
+            // Quem responde pela empresa vai no bloco de identificação (regra de
+            // 01/08). "Emitido por" fica de fora enquanto esta tela não conhece
+            // o usuário — campo inventado num papel de cliente é pior que campo
+            // ausente, e o contador responsável já está no bloco.
+            identificacao: montarIdentificacao((empresa as any)?.dadosFiscais),
+        });
+        await gerarRelatorioPdf({ ...p, orientacao: 'portrait' });
+    };
+
     const handleComparativoPdf = async () => {
         // Gera PDF profissional Presumido × Real com capa, sumario, apuracao
         // lado a lado e disclaimer (padrao Big4) via lazy import.
@@ -102,7 +131,9 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
                     <button onClick={onVoltar} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ArrowLeftIcon className="w-5 h-5" /></button>
                     <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Relatório de Apuração</h2>
                 </div>
-                <div className="flex gap-2">
+                {/* flex-wrap obrigatório: com o 5º botão a fileira transborda a
+                    viewport e empurra o cabeçalho (trava cabecalhoNaoTransborda). */}
+                <div className="flex flex-wrap gap-2">
                     <button
                         onClick={onEditar}
                         className="btn-press flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-bold rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
@@ -117,7 +148,14 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
                         <DownloadIcon className="w-4 h-4" /> Imprimir (regime atual)
                     </button>
                     <button
-                        className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition-colors"
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors whitespace-nowrap"
+                        onClick={handlePreviaCliente}
+                        title="PDF da prévia dos impostos para MANDAR AO CLIENTE: memória da base, impostos do período e saldos credores, com a identidade da SP. Sem rodapé interno."
+                    >
+                        <DownloadIcon className="w-4 h-4" /> 📤 Prévia p/ o cliente
+                    </button>
+                    <button
+                        className="btn-press flex items-center gap-2 px-4 py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition-colors whitespace-nowrap"
                         onClick={handleComparativoPdf}
                         title="Gera PDF profissional Presumido × Real com capa, sumário executivo, apuração lado a lado e recomendação. Pronto pra levar à reunião com o cliente."
                     >
