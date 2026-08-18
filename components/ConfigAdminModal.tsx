@@ -16,6 +16,7 @@ import {
 } from '../services/whatsappTemplatesService';
 import { dataHoraSp } from '../services/spConnect';
 import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
+import TriagemTerceiroSetorPanel from './TriagemTerceiroSetorPanel';
 import { tenhoAcessoAuditoria } from '../services/auditoriaDonoService';
 
 // Lazy: quem não é dono nunca baixa o painel.
@@ -390,6 +391,14 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                         colaborador trabalha — aqui é onde se RESOLVE. */}
                     <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
                         <PrazosMunicipaisPanel onShowToast={(m) => setMsg({ texto: m, tipo: 'ok' })} />
+                    </section>
+
+                    {/* ── 🏛️ Imunes, isentas e terceiro setor ────────────────────
+                        Mora aqui pela mesma razão do calendário municipal: é
+                        CONFIG de cadastro que vale para a casa, e o trabalho é de
+                        confirmação — não de apuração. */}
+                    <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                        <TriagemTerceiroSetorPanel onShowToast={(m) => setMsg({ texto: m, tipo: 'ok' })} />
                     </section>
 
                     {/* ── Horários dos colaboradores (atalho) ─────────────────── */}

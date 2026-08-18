@@ -30,6 +30,7 @@ import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horario-acesso.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
+import { triarCarteira } from './triagem-terceiro-setor.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
@@ -69,6 +70,25 @@ async function lerCadastro(db) {
     }
     return montarCadastroEmpresas(fontes);
 }
+
+/**
+ * 🔎 A FILA CURTA: quem PARECE imune, isenta ou terceiro setor.
+ *
+ * Paulo, 18/08: *"o que eu tenho que pedir p colaborador?"*. Não é "preencham as
+ * ~390" — o regime deduzido acerta na esmagadora maioria. O que o app não tem
+ * como saber é quem é imune/isenta/sem fins lucrativos, e essas são poucas.
+ *
+ * ⚠️ Consulta PURA: não grava regime nenhum. Quem grava é o cadastro, com o
+ * nome de quem confirmou — mesma figura da consulta de prazo municipal.
+ */
+router.get('/triagem-terceiro-setor', autorizar, async (req, res) => {
+    try {
+        const cadastro = await lerCadastro(getDb());
+        return res.json({ ok: true, ...triarCarteira(cadastro.empresas) });
+    } catch (e) {
+        return res.status(500).json({ error: e?.message || 'Falha na triagem.' });
+    }
+});
 
 router.get('/empresas', autorizar, async (req, res) => {
     try {
