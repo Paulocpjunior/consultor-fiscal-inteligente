@@ -17,7 +17,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
     mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos,
-    MENSAGENS_POR_ENVIO,
+    MENSAGENS_POR_ENVIO, detectarAnexo, avisoDeAnexos,
 } from '../sefaz-backend/whatsapp-import-lote.js';
 
 const RAIZ = 'bot-131293-17082026233001/whatsapp/551133371554';
@@ -72,8 +72,12 @@ describe('mapa do backup — o que é conversa e o que é atendimento', () => {
             `${RAIZ}/lixeira/_full-chat.txt`,
         ]);
         expect(m.conversas).toHaveLength(1);
-        expect(m.ignorados).toHaveLength(2);
-        expect(m.ignorados.map((i) => i.motivo).join(' ')).toMatch(/fora do padrão|não é um número/);
+        // A pasta `_files` deixou de contar como "fora do padrão" quando a
+        // decisão de 18/08 a nomeou (anexo vai pro SharePoint): ela é MÍDIA,
+        // e é a contagem dela que denuncia marcador de anexo desconhecido.
+        expect(m.midias).toBe(1);
+        expect(m.ignorados).toHaveLength(1);
+        expect(m.ignorados[0].motivo).toMatch(/não é um número/);
     });
 
     it('entrada vazia não explode e diz que não achou nada', () => {
@@ -211,5 +215,92 @@ describe('a tela do Connect é quem roda o lote', () => {
         // Seguir em frente deixaria metade gravada sem ninguém saber qual
         // metade — e a pessoa não teria como decidir se recomeça.
         expect(tela).toMatch(/parou no bloco/);
+    });
+});
+
+// ============================================================================
+// 📎 "TEXTO NO WHATSAPP, ANEXO SHAREPOINT" (decisão do Paulo, 18/08)
+//
+// O arquivo não entra no app — mas a MENSAGEM que o carregava entra. Sem
+// tratar isso, a thread mostraria um `<anexado: x.pdf>` enigmático e quem
+// lesse procuraria no app um arquivo que ele nunca teve.
+// ============================================================================
+describe('anexo que fica no backup', () => {
+    it('reconhece os marcadores conhecidos e devolve o NOME do arquivo', () => {
+        expect(detectarAnexo('<anexado: DOC-20260327-WA0001.pdf>')).toEqual({ temAnexo: true, arquivo: 'DOC-20260327-WA0001.pdf' });
+        expect(detectarAnexo('IMG-20260327-WA0001.jpg (arquivo anexado)')).toEqual({ temAnexo: true, arquivo: 'IMG-20260327-WA0001.jpg' });
+        expect(detectarAnexo('<attached: 00000042-PHOTO.jpg>')).toMatchObject({ temAnexo: true });
+    });
+
+    it('mídia OCULTA é anexo sem nome — e o nome NÃO se inventa', () => {
+        // Inventar faria alguém procurar no SharePoint um arquivo que não existe.
+        expect(detectarAnexo('‎<Mídia oculta>')).toEqual({ temAnexo: true, arquivo: null });
+        expect(detectarAnexo('imagem ocultada')).toEqual({ temAnexo: true, arquivo: null });
+    });
+
+    it('texto comum NÃO vira anexo', () => {
+        expect(detectarAnexo('bom dia, segue o contrato').temAnexo).toBe(false);
+        expect(detectarAnexo('').temAnexo).toBe(false);
+        expect(detectarAnexo(null).temAnexo).toBe(false);
+    });
+
+    it('a pasta _files é CONTADA, não tratada como arquivo fora do padrão', () => {
+        const m = mapearArquivosDoBackup([
+            `${RAIZ}/551120818300/_full-chat.txt`,
+            'bot-131293/_files/1-Guia_DARF_pro_labore_032026.pdf',
+            'bot-131293/_files/18-a5ca0b58.mp3',
+        ]);
+        expect(m.midias).toBe(2);
+        expect(m.ignorados).toHaveLength(0);
+    });
+
+    it('🚨 mídia no backup + ZERO anexo reconhecido = o marcador é outro, e isso é GRAVE', () => {
+        // Descobrir isso depois de gravar é descobrir tarde: as mensagens
+        // teriam entrado sem dizer que havia arquivo.
+        const av = avisoDeAnexos({ midias: 2500, comAnexo: 0 })!;
+        expect(av.grave).toBe(true);
+        expect(av.texto).toMatch(/marcador de anexo deste export é diferente/i);
+    });
+
+    it('com anexos reconhecidos, o aviso EXPLICA onde o arquivo ficou (não é alarme)', () => {
+        const av = avisoDeAnexos({ midias: 2500, comAnexo: 340 })!;
+        expect(av.grave).toBe(false);
+        expect(av.texto).toMatch(/SharePoint/);
+    });
+
+    it('backup sem mídia nenhuma não gera aviso — farol que grita sempre é farol desligado', () => {
+        expect(avisoDeAnexos({ midias: 0, comAnexo: 0 })).toBeNull();
+    });
+
+    it('a prévia conta as mensagens com anexo', () => {
+        const p = consolidarPrevia([{
+            numero: '551120818300',
+            mensagens: [
+                { em: '2026-08-01T12:00:00.000Z', autor: 'Ju', texto: '<anexado: a.pdf>' },
+                { em: '2026-08-01T12:01:00.000Z', autor: 'Ju', texto: 'segue' },
+            ],
+        }]);
+        expect(p.comAnexo).toBe(1);
+    });
+});
+
+describe('a thread DIZ que o anexo ficou no backup', () => {
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+    const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    it('a mensagem importada com anexo é MARCADA na gravação', () => {
+        expect(rotas).toMatch(/anexoNoBackup/);
+        expect(rotas).toMatch(/detectarAnexo\(/);
+    });
+
+    it('o campo novo entra na LISTAGEM no mesmo PR — fora dela some em silêncio', () => {
+        // A lição da whitelist do #382: campo que o backend não devolve nunca
+        // chega na tela, e a thread jamais diria que houve arquivo.
+        expect(rotas).toMatch(/anexoNoBackup: x\.anexoNoBackup/);
+    });
+
+    it('a tela mostra onde o arquivo está', () => {
+        expect(tela).toMatch(/anexoNoBackup/);
+        expect(tela).toMatch(/SharePoint/);
     });
 });
