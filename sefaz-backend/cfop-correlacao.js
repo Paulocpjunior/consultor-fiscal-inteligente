@@ -39,6 +39,31 @@
  */
 export const SUFIXOS_COMPRA_PRODUTO = ['101', '102', '116', '117', '118', '120', '122'];
 
+/**
+ * TRANSFERÊNCIA RECEBIDA — a MESMA assimetria de 101/102, e ela estava fora.
+ *
+ * Paulo, 17/08, com o livro de Entradas da NOVA ERA (comércio de frutas) do
+ * E-Fiscal ao lado do Resumo por CFOP do CFI: lá aparece **1.152**, aqui saía
+ * **1151**. Não é preferência de um sistema ou de outro — é a tabela:
+ *
+ *   SAÍDA (descreve a ORIGEM de quem envia)
+ *     5151  transferência de PRODUÇÃO do estabelecimento
+ *     5152  transferência de mercadoria adquirida de TERCEIROS
+ *   ENTRADA (descreve o DESTINO de quem recebe)
+ *     1151  transferência para INDUSTRIALIZAÇÃO
+ *     1152  transferência para COMERCIALIZAÇÃO
+ *     1154  transferência para utilização na PRESTAÇÃO DE SERVIÇO
+ *
+ * Ou seja: o sufixo muda de SIGNIFICADO ao atravessar a operação, exatamente
+ * como 101/102. Preservá-lo escritura "recebi para industrializar" num comércio
+ * que vai revender — que é o que estava acontecendo.
+ *
+ * ⚠️ **153 fica FORA**: transferência de energia elétrica para distribuição é
+ * família própria, e mandá-la para 152 porque o cliente é comércio seria
+ * inventar operação.
+ */
+export const SUFIXOS_TRANSFERENCIA_RECEBIDA = ['151', '152', '154'];
+
 export { SUFIXOS_ST_VENDA };
 
 /**
@@ -100,6 +125,22 @@ function sufixoCompraPorNatureza(naturezaAtividade) {
     }
 }
 
+/**
+ * Sufixo da TRANSFERÊNCIA recebida, pelo destino que o recebedor dá.
+ * Mesma régua da compra — e por isso mora ao lado dela, não numa cópia.
+ */
+function sufixoTransferenciaPorNatureza(naturezaAtividade) {
+    switch (naturezaAtividade) {
+        case 'comercio':  return '152';  // Transferência para comercialização
+        case 'industria': return '151';  // Transferência para industrialização
+        case 'servicos':  return '154';  // Utilização na prestação de serviço
+        // Misto/indefinido NÃO força: aqui a conversão mecânica produz CFOP que
+        // EXISTE (1151/1152/1154), então preservar o sufixo é uma escolha
+        // plausível — ao contrário da família ST, onde ela inventa código.
+        default:          return null;
+    }
+}
+
 function inverterPrimeiroDigito(c) {
     const map = { '5': '1', '6': '2', '7': '3' };
     const novo = map[c[0]];
@@ -139,6 +180,14 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
     if (SUFIXOS_COMPRA_PRODUTO.includes(sufixo)) {
         const sufNatureza = sufixoCompraPorNatureza(ctx.naturezaAtividade);
         if (sufNatureza) return primeiroDestino + sufNatureza;
+        // Sem natureza definida ou misto -> conversão mecânica
+    }
+
+    // Transferência recebida: o sufixo muda de significado ao atravessar a
+    // operação (origem de quem envia × destino de quem recebe), igual a 101/102.
+    if (SUFIXOS_TRANSFERENCIA_RECEBIDA.includes(sufixo)) {
+        const sufTransf = sufixoTransferenciaPorNatureza(ctx.naturezaAtividade);
+        if (sufTransf) return primeiroDestino + sufTransf;
         // Sem natureza definida ou misto -> conversão mecânica
     }
 
