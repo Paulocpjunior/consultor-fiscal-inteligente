@@ -317,3 +317,15 @@ export const importarUltrafox = (p: {
     conteudo: string; confirmar: boolean;
     numero?: string; autoresEscritorio?: string[];
 }) => post<ImportPreview>('/api/admin/whatsapp/importar-ultrafox', p);
+
+/**
+ * Grava UM bloco do lote. As mensagens já vêm lidas (o parser roda no
+ * navegador, na máquina de quem importa) — mas quem decide ENTRADA × SAÍDA e
+ * quem calcula o id de cada mensagem é o servidor.
+ */
+export const importarUltrafoxLote = (p: {
+    conversas: { numero: string; mensagens: { em: string; autor: string; texto: string }[] }[];
+    autoresEscritorio: string[];
+}) => post<{ gravadas?: number; conversas?: number; totalRecusadas?: number; recusadas?: { numero: string; motivo: string }[] }>(
+    '/api/admin/whatsapp/importar-ultrafox/lote', p,
+);

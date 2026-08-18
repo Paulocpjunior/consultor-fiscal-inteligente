@@ -28,7 +28,7 @@ import {
     DEPARTAMENTOS_WHATSAPP,
 } from './whatsapp-templates.js';
 import {
-    enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados,
+    enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp,
 } from './whatsapp-cloud.js';
@@ -1881,6 +1881,77 @@ router.post('/importar-ultrafox', requireAdmin, async (req, res) => {
         return res.status(400).json({ ok: false, error: 'tipo deve ser contatos, mensagens-txt ou mensagens-csv.' });
     } catch (e) {
         console.error('[whatsapp/importar-ultrafox]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 📦 IMPORTAÇÃO EM LOTE do backup da Ultra Fox (Paulo, 18/08: *"pode
+ * construir"*). O export tem ~800 MB e centenas de pastas — subir arquivo por
+ * arquivo pela tela antiga seria trabalho humano de horas, e o corpo do POST
+ * tem teto de 20 MB, então o zip inteiro não passa de jeito nenhum.
+ *
+ * DESENHO: **o navegador LÊ e INTERPRETA na máquina de quem importa** (o
+ * parser é o mesmo módulo puro, importado no front — segunda cópia dele seria
+ * a divergência de sempre) e manda MENSAGENS JÁ LIDAS, em blocos. A mídia nem
+ * sai do computador nesta etapa.
+ *
+ * 🚨 **MAS QUEM DECIDE A DIREÇÃO É O SERVIDOR**, com a mesma
+ * `prepararMensagensDoTxt` da importação de um arquivo só: o cliente manda o
+ * AUTOR de cada mensagem e a lista de quem é do escritório; entrada/saída sai
+ * daqui. E o **id é recalculado aqui** (`gravarMensagensImportadas`), nunca
+ * aceito do navegador — id vindo de fora é a porta para gravar duas vezes a
+ * mesma mensagem, que é justamente o que o determinismo existe para impedir.
+ *
+ * ⚠️ Número vem da PASTA e entra COMO ESTÁ (`numeroCanonicoWhatsapp`): foi
+ * este backup que revelou os clientes de fora do Brasil.
+ */
+router.post('/importar-ultrafox/lote', requireAdmin, async (req, res) => {
+    try {
+        const p = req.body || {};
+        const autoresEscritorio = Array.isArray(p.autoresEscritorio) ? p.autoresEscritorio : [];
+        if (!autoresEscritorio.length) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Marque qual(is) autor(es) são do ESCRITÓRIO — a direção das mensagens não se adivinha.',
+            });
+        }
+        const conversas = Array.isArray(p.conversas) ? p.conversas : [];
+        if (!conversas.length) return res.status(400).json({ ok: false, error: 'Bloco sem conversa nenhuma.' });
+
+        const docs = [];
+        const recusadas = [];
+        for (const c of conversas) {
+            const numero = numeroCanonicoWhatsapp(c?.numero);
+            if (!numero) { recusadas.push({ numero: String(c?.numero || ''), motivo: 'número da pasta ilegível' }); continue; }
+            const mensagens = (Array.isArray(c?.mensagens) ? c.mensagens : []).filter((m) => {
+                // Data que não é data NÃO vira "agora" — mensagem no lugar
+                // errado da thread é pior que mensagem que não entrou.
+                const ok = m && typeof m.em === 'string' && Number.isFinite(Date.parse(m.em)) && typeof m.texto === 'string';
+                if (!ok) recusadas.push({ numero, motivo: 'mensagem sem data legível ou sem texto' });
+                return ok;
+            });
+            if (!mensagens.length) continue;
+            docs.push(...prepararMensagensDoTxt({ mensagens, numero, autoresEscritorio }));
+        }
+
+        if (docs.length > LIMITE_MENSAGENS_IMPORT) {
+            return res.status(422).json({
+                ok: false,
+                error: `Bloco com ${docs.length} mensagens — o limite por requisição é ${LIMITE_MENSAGENS_IMPORT}.`,
+                acao: 'A tela divide sozinha; se isto apareceu, recarregue e tente de novo.',
+            });
+        }
+        if (!docs.length) {
+            return res.status(422).json({ ok: false, error: 'Nenhuma mensagem legível neste bloco — nada foi gravado.', recusadas: recusadas.slice(0, 20) });
+        }
+
+        const g = await gravarMensagensImportadas(getDb(), docs, req.user?.email || null);
+        // Recusadas SEMPRE voltam: bloco que grava 900 de 1000 e não diz nada
+        // é o contador mudo que faz alguém achar que importou tudo.
+        return res.json({ ok: true, ...g, recusadas: recusadas.slice(0, 20), totalRecusadas: recusadas.length });
+    } catch (e) {
+        console.error('[whatsapp/importar-ultrafox/lote]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
