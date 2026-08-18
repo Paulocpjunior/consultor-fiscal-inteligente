@@ -572,10 +572,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   IND_ORIG_CRED = '0' (mercado interno), tenha ou não crédito; saída continua
   SEM o campo (ele descreve a origem da AQUISIÇÃO, que só existe do lado de
   quem compra). NAT_BC_CRED não mudou — o PVA não acusou ele nestas linhas, e
-  continua só com CST de crédito. **Pendente**: as 2 recusas de M205/M605
-  ("registro filho obrigatório") não entraram nesta rodada — a régua da casa
-  proíbe deduzir leiaute de registro sem o texto exato do PVA na mão, e o
-  recibo desta rodada não detalhou o conteúdo esperado desses dois registros.
+  continua só com CST de crédito.
+  ✅ **CASO FECHADO EM PRODUÇÃO (18/08, mesmo dia)**: Paulo regerou o arquivo da
+  MANTOAN 07/2026 e validou no PVA de novo — *"empresa 0040 ... zerou"*. As 39
+  recusas saíram, incluindo as 2 de M205/M605 ("registro filho obrigatório")
+  que este PR não tinha tocado: elas eram CONSEQUÊNCIA do COD_ITEM vazio (um
+  A170 sem item identificável quebra o encadeamento que o PVA cobra do
+  detalhamento por código de receita), não um leiaute próprio que faltasse
+  escrever — corrigido o pai, o filho parou de faltar. **Arquivo aceito >
+  leiaute deduzido**, mais uma vez: não escrevi nada para M205/M605, e o
+  recibo é quem prova que não havia nada a escrever.
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo
