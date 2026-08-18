@@ -198,18 +198,16 @@ describe('pendenciasDeConfirmacao — o checklist que impede o "sync manual" de 
         const cods = p.map((x: any) => x.obrigacao);
         expect(cods).toContain('INSS_CPP');             // proposta (depende de folha)
         expect(cods).toContain('ISS');                  // proposta (calendário municipal)
-        // ⚠️ TESTE AJUSTADO EM 18/08. O FGTS do Lucro continua RESOLVIDO (direção
-        // decidida em 11/08) e NÃO aparece — o que aparece é a variante da
-        // IMUNE/ISENTA, que é 'proposta' e depende de folha. A checagem virou
-        // "de QUEM é a pendência", porque desde hoje a mesma obrigação tem
-        // regras diferentes por regime.
-        const fgts = p.filter((p: any) => p.obrigacao === 'FGTS');
-        expect(fgts).toHaveLength(1);
-        expect(fgts[0].status).toBe('proposta');
-        expect(fgts[0].regimes.sort()).toEqual(['IMUNE', 'ISENTA']);
-        // Sem duplicata: a chave agora é a REGRA (obrigação + status + condição
-        // + frequência), senão variantes legítimas colapsariam numa linha só.
-        const chaves = p.map((p: any) => [p.obrigacao, p.status, p.dependeDe || '', p.frequencia].join('|'));
+        // O FGTS do Lucro/Simples continua RESOLVIDO (direção decidida em
+        // 11/08) e NÃO aparece. E ele também não entra pela IMUNE/ISENTA: Paulo,
+        // 18/08, cortou essa entrada — "FGTS é um imposto gerado pelo
+        // departamento pessoal, não faz base para impostos gerados pelo CFI".
+        // Não existe hoje NENHUMA variante de FGTS pendente de confirmação.
+        expect(cods).not.toContain('FGTS');
+        // Sem duplicata: a chave é a REGRA (obrigação + status + condição +
+        // frequência), senão variantes legítimas colapsariam numa linha só —
+        // é o que passou a valer desde que imune/isenta ganharam lista própria.
+        const chaves = p.map((x: any) => [x.obrigacao, x.status, x.dependeDe || '', x.frequencia].join('|'));
         expect(new Set(chaves).size).toBe(chaves.length);
         expect(cods).not.toContain('DAS');              // ativa e conferida
     });

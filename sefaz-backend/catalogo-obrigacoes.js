@@ -287,16 +287,15 @@ const DCTFWEB_EVENTOS = {
     dependeDe: 'evento no mês (aluguel, folha ou retenção)',
     baseLegal: DCTFWEB.baseLegal + ' — imune/isenta: só com evento (Paulo, 18/08)',
 };
-const FGTS_SE_FOLHA = {
-    ...FGTS,
-    // ⚠️ EXTENSÃO MINHA, não fala dele: ele citou FOLHA entre os eventos da
-    // DCTFWeb, e FGTS é consequência de folha. Entra como PROPOSTA (não gera
-    // tarefa) porque errar para MENOS aqui custa multa e errar para MAIS criaria
-    // pendência falsa todo mês em entidade sem empregado. Confirmar com ele.
-    status: 'proposta',
-    dependeDe: 'folha',
-    revisar: true,
-};
+// ❌ FGTS SAIU DA LISTA — pergunta respondida, 18/08.
+//
+// Eu tinha incluído FGTS_SE_FOLHA como EXTENSÃO MINHA (ele citou FOLHA entre os
+// eventos da DCTFWeb, e FGTS é consequência de folha) e marquei para confirmar.
+// Paulo respondeu: *"FGTS é um imposto gerado pelo departamento pessoal, não faz
+// base para impostos gerados pelo CFI"*.
+//
+// Ou seja: mesmo quando a imune/isenta TEM folha, o FGTS não é obrigação que o
+// CFI acompanha — é do módulo de DP. Extensão minha, dedução errada, removida.
 const INSS_CPP_SE_FOLHA = { ...INSS_CPP, revisar: true };
 const ECD_SE_MOVIMENTO = {
     ...ECD,
@@ -340,10 +339,14 @@ const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, IS
  * O que ela NÃO tem, e por quê: **PIS/COFINS mensal** (a resposta dele sobre a
  * EFD-Contribuições — só dezembro, sem movimento — diz que não há contribuição
  * mensal a declarar; e no terceiro setor o PIS é sobre a FOLHA, não sobre o
- * faturamento) e **EFD ICMS/IPI** (obrigação de contribuinte de ICMS).
+ * faturamento), **EFD ICMS/IPI** (obrigação de contribuinte de ICMS) e
+ * **FGTS** (Paulo, 18/08: *"FGTS é um imposto gerado pelo departamento
+ * pessoal, não faz base para impostos gerados pelo CFI"* — mesmo havendo
+ * folha, o FGTS Digital não é obrigação que este catálogo acompanha; é do
+ * módulo de DP).
  */
 const IMUNE_ISENTA = [
-    DCTFWEB_EVENTOS, FGTS_SE_FOLHA, INSS_CPP_SE_FOLHA,
+    DCTFWEB_EVENTOS, INSS_CPP_SE_FOLHA,
     EFD_CONTRIB_ANUAL, ECD_SE_MOVIMENTO, ECF_SE_MOVIMENTO,
 ];
 

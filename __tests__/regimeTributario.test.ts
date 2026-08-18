@@ -235,14 +235,15 @@ describe('a lista da imune e da isenta é a que ele respondeu', () => {
         expect(obrigacoesAplicaveis('IMUNE', '12/2027').map((x: any) => x.obrigacao)).toContain('EFD_CONTRIB');
     });
 
-    it('⚠️ FGTS entrou como PROPOSTA e MARCADO para revisar — extensão minha', () => {
-        // Ele citou FOLHA entre os eventos da DCTFWeb; FGTS é consequência de
-        // folha. Como PROPOSTA não gera tarefa: errar para menos aqui custaria
-        // multa, e errar para mais criaria pendência falsa todo mês.
-        const o = porNome('FGTS');
-        expect(o.status).toBe('proposta');
-        expect(o.dependeDe).toBe('folha');
-        expect(o.revisar).toBe(true);
+    // ⚠️ TESTE TROCADO EM 18/08, e a troca é o registro da decisão. Eu tinha
+    // incluído FGTS como EXTENSÃO MINHA (ele citou FOLHA entre os eventos da
+    // DCTFWeb, e FGTS é consequência de folha) e marquei para confirmar. Paulo
+    // respondeu: "FGTS é um imposto gerado pelo departamento pessoal, não faz
+    // base para impostos gerados pelo CFI". Mesmo com folha, não é obrigação
+    // que este catálogo acompanha — é do módulo de DP.
+    it('🚫 FGTS NÃO entra na lista — é do departamento pessoal, não do CFI', () => {
+        const obrigacoes = CATALOGO.IMUNE.map((o: any) => o.obrigacao);
+        expect(obrigacoes).not.toContain('FGTS');
     });
 
     it('mês comum de uma imune não gera tarefa nenhuma — e isso é o certo', () => {
