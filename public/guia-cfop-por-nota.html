@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: este guia e a fonte em docs/ se atualizam JUNTOS.
+     `guiaParDuplo` barra o build se as revisões divergirem. -->
+<meta name="guia-id" content="cfop-por-nota">
+<meta name="guia-revisao" content="2026-08-18">
+<title>Guia do Colaborador — CFOP por nota e o cérebro do fornecedor · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Guia do Colaborador — CFOP por nota</h1>
+            <p>Corrigir a escrituração e ensinar o CFI · SP Assessoria Contábil · Consultor Fiscal Inteligente</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<section>
+    <h2>📌 O que você precisa saber antes de tudo</h2>
+    <div class="quando"><strong>O XML da compra traz o CFOP do FORNECEDOR, não o seu.</strong>
+    Quando a Kalunga te vende papel, ela emite <code>5102</code> — <em>para ela</em> é
+    venda de mercadoria. O que <strong>você</strong> vai fazer com aquele papel
+    (uso e consumo) <strong>não está escrito em campo nenhum da nota</strong>.</div>
+    <p>Por isso o CFI aplica uma régua automática pelo <strong>ramo da empresa</strong>
+    (comércio compra para revender, indústria para industrializar) e <strong>acerta na
+    maioria</strong>. Onde ela erra, quem corrige é você — e agora dá para ensinar o
+    sistema a não errar de novo.</p>
+    <div class="alerta"><strong>Onde a régua erra com mais frequência:</strong> material
+    de escritório, combustível, peças, produto de limpeza e computador. Tudo isso o
+    fornecedor vende como mercadoria, e o seu cliente usa ou imobiliza.</div>
+</section>
+
+<section>
+    <h2>📍 Onde fica</h2>
+    <div class="onde">
+        <strong>Relatórios → ✏️ CFOP por nota</strong> — escolha a competência e a empresa.
+        Uma linha por nota, com o CFOP que a régua escreveu, o que aquele CFOP significa,
+        e um campo para corrigir.
+    </div>
+    <p>A mesma correção também aparece em <strong>Simples → detalhe da empresa →
+    🔄 Correlação de CFOP</strong>, na aba <strong>🧠 Por fornecedor</strong>. É a
+    mesma lista nos dois lugares.</p>
+</section>
+
+<section>
+    <h2>🪜 Corrigir uma nota</h2>
+    <ol>
+        <li>Abra <strong>Relatórios → ✏️ CFOP por nota</strong>.</li>
+        <li>Ache a nota. A coluna <strong>“O que esse CFOP é”</strong> mostra a descrição
+            oficial do que a régua escreveu — é ali que o erro aparece
+            (<em>“1101 — Compra para industrialização”</em> numa nota de material de
+            escritório salta aos olhos).</li>
+        <li>Digite o CFOP certo na coluna <strong>CFOP informado</strong> e saia do campo
+            (ou tecle Enter). Grava na hora.</li>
+        <li>O CFI pergunta: <strong>“Aplicar nas próximas notas deste fornecedor?”</strong>
+            — leia o próximo bloco antes de responder.</li>
+    </ol>
+    <div class="quando"><strong>Para desfazer:</strong> apague o campo e saia dele. A nota
+    volta para a régua automática.</div>
+    <div class="alerta">O CFOP que você informa vale para <strong>TODOS os itens daquela
+    nota</strong>. Se a nota tiver itens com CFOPs diferentes, ela aparece marcada
+    <strong>⚠ mista</strong> mostrando quais CFOPs vão ser juntados num só. Confira antes.</div>
+</section>
+
+<section>
+    <h2>🧠 Ensinar o CFI (o “cérebro”)</h2>
+    <p>Depois de corrigir, o CFI oferece guardar aquilo como <strong>parâmetro do
+    fornecedor</strong>. Se você aceitar, as <strong>próximas</strong> notas daquele
+    fornecedor já chegam com o CFOP certo — sem você digitar de novo.</p>
+    <div class="tabela-rolagem">
+    <table>
+        <thead><tr><th>Responda</th><th>Quando</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><strong>Sim, aprender</strong></td>
+                <td>Quando <strong>tudo</strong> que vem daquele fornecedor tem o mesmo
+                    destino. Posto de combustível, papelaria, autopeças, empresa de
+                    limpeza — é quase sempre o caso.</td>
+            </tr>
+            <tr>
+                <td><strong>Só nesta nota</strong></td>
+                <td>Quando foi exceção. O fornecedor te vende mercadoria para revender e
+                    <em>desta vez</em> mandou outra coisa.</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+    <div class="quando"><strong>Não precisa esperar uma nota para cadastrar.</strong>
+    No modal <strong>🔄 Correlação de CFOP → 🧠 Por fornecedor</strong> você escolhe o
+    fornecedor na lista (ela vem das notas reais da empresa, do que mais aparece para o
+    que menos aparece), diz como escriturar e a partir de qual mês.</div>
+    <p>Se o fornecedor manda coisas com destinos diferentes, escolha também o
+    <strong>CFOP de origem</strong> — assim o parâmetro só vale quando ele emitir
+    <em>aquele</em> CFOP. Deixando “qualquer CFOP”, vale para tudo dele.</p>
+</section>
+
+<section>
+    <h2>⚠️ Três coisas que o parâmetro NÃO faz</h2>
+    <ul>
+        <li><strong>Não mexe no passado.</strong> Ele vale da competência de início em
+            diante. Mês que já foi entregue não muda de CFOP sozinho — e é para ser
+            assim: o SPED daquele mês já foi transmitido.</li>
+        <li><strong>Não passa por cima da nota.</strong> Se você informou o CFOP naquela
+            NF, ele vence o parâmetro. Quem olhou a nota foi você.</li>
+        <li><strong>Não aprende sozinho.</strong> Ele só grava o que uma pessoa mandou
+            gravar. O CFI não adivinha destino por produto nem por NCM.</li>
+    </ul>
+    <div class="alerta"><strong>Desligar não apaga.</strong> Um parâmetro desligado
+    continua na lista, riscado — porque ele ainda explica por que as notas de meses
+    anteriores saíram daquele jeito.</div>
+</section>
+
+<section>
+    <h2>🚩 Quando aparecer “NÃO CONSTA na tabela em vigor”</h2>
+    <p>Significa que o CFOP escrito <strong>não existe</strong> na tabela oficial
+    (Ajuste SINIEF 03/24). Acontece porque a conversão automática, em algumas famílias,
+    produz um código que não tem par na entrada.</p>
+    <div class="quando"><strong>O que fazer:</strong> informe o CFOP certo naquelas notas,
+    uma a uma, ou cadastre o parâmetro do fornecedor. O CFI <strong>não escolhe o
+    substituto sozinho</strong> — escolher seria inventar, e é justamente inventar que
+    gera esses códigos.</div>
+    <p>O topo da tela mostra a lista e quantas notas estão nessa situação. Se for muita
+    coisa, avise o time antes de sair corrigindo: pode ser uma família inteira, e aí o
+    conserto é no sistema, não na unha.</p>
+</section>
+
+<section>
+    <h2>🔍 Como saber de onde veio o CFOP</h2>
+    <p>A coluna <strong>Origem</strong>, em cada linha, diz qual régua decidiu:</p>
+    <div class="tabela-rolagem">
+    <table>
+        <thead><tr><th>Origem</th><th>Quer dizer</th></tr></thead>
+        <tbody>
+            <tr><td><span class="selo selo-verde">informado nesta NF</span></td>
+                <td>Alguém digitou o CFOP nesta nota. Aparece quem foi.</td></tr>
+            <tr><td><span class="selo selo-ambar">parâmetro do fornecedor</span></td>
+                <td>Veio do cérebro. Mostra o escopo e desde quando vale.</td></tr>
+            <tr><td><span class="selo selo-ambar">override da empresa</span></td>
+                <td>Veio do mapa CFOP→CFOP da aba 🔄 Por CFOP.</td></tr>
+            <tr><td><span class="selo selo-verde">correlação automática</span></td>
+                <td>A régua padrão, pelo ramo da empresa.</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section>
+    <h2>✅ Onde a correção aparece depois</h2>
+    <p>Em <strong>todos</strong> os lugares que geram documento, não só nesta tela:</p>
+    <ul>
+        <li>Livro de Entradas/Saídas</li>
+        <li>Resumo por CFOP e Por produto</li>
+        <li><strong>SPED Fiscal</strong> (registros C170 e C190) e o E510 do IPI</li>
+        <li><strong>Exportar SAGE</strong> — o .FML e a planilha</li>
+    </ul>
+    <div class="quando">Ou seja: <strong>o que você conferiu aqui é o que vai no arquivo</strong>.
+    Não existe “corrigir na tela e o SPED sair com o antigo”.</div>
+</section>
+
+<section>
+    <h2>❓ Dúvidas que vão aparecer</h2>
+    <h3>Preciso corrigir nota por nota todo mês?</h3>
+    <p>Não. Corrija uma vez e mande aprender — nas competências seguintes o fornecedor já
+    vem certo. Em um cliente real, <strong>10 fornecedores respondiam por dois terços</strong>
+    das notas que precisavam de correção.</p>
+
+    <h3>Corrigi e o número do relatório não mudou.</h3>
+    <p>Recarregue a aba. Se continuar, confira se você está na competência certa — o
+    parâmetro só vale da competência de início em diante.</p>
+
+    <h3>E se eu errar o parâmetro?</h3>
+    <p>Desligue na lista e crie o certo. As notas voltam para a régua automática (ou para
+    o parâmetro certo) nas competências que ainda não fecharam.</p>
+
+    <h3>Vale para saída também?</h3>
+    <p>Não. Na saída o CFOP é o da nota que o próprio cliente emitiu — o CFI não mexe.</p>
+
+    <div class="alerta">Na dúvida sobre <strong>qual</strong> CFOP é o certo, não chute:
+    fale com o responsável pela carteira. Errar o CFOP não trava nada na hora — aparece
+    na fiscalização.</div>
+</section>
+
+</main>
+<footer>
+    SP Assessoria Contábil · Consultor Fiscal Inteligente · guia revisado em 18/08/2026
+</footer>
+</body>
+</html>

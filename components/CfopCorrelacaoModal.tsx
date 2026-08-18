@@ -244,9 +244,17 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                             {empresaNome}
                         </p>
                     </div>
-                    <button onClick={onClose} className="btn-press p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
-                        <CloseIcon className="w-5 h-5 text-slate-500" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <a
+                    href="/guia-cfop-por-nota.html"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 whitespace-nowrap"
+                >📗 Guia do colaborador</a>
+                        <button onClick={onClose} className="btn-press p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                            <CloseIcon className="w-5 h-5 text-slate-500" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Abas — o override POR CFOP (empresa) e o CÉREBRO (por

@@ -369,6 +369,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emitiu) e **desligar NÃO APAGA** (o parâmetro continua explicando as
   competências que já datou). Falha ao ler os parâmetros devolve `[]`: o cérebro
   é palpite melhor, não trava — sem ele a régua automática segue valendo.
+  📗 **E A EQUIPE TEM GUIA** (Paulo, 18/08: *"aonde e como explico p colaborador"*).
+  `/guia-cfop-por-nota.html` — botão 📗 na aba ✏️ E no cabeçalho do modal 🔗, par
+  duplo com `docs/guia-colaborador-cfop.md`, e seção nas 📣 Novidades com o
+  `NOVIDADES_VERSAO` no par. A frase que abre o guia é a que resolve a dúvida
+  toda: **"o XML da compra traz o CFOP do FORNECEDOR, não o nosso"** — a Kalunga
+  emite 5102 porque para ELA é venda, e o destino do papel não está em campo
+  nenhum da nota. O resto (corrigir, ensinar, o que o parâmetro NÃO faz, e o
+  "NÃO CONSTA") decorre disso.
   🏠 **E A CASA DELE É O MODAL** (Paulo, 18/08: *"pode usar o modal"*). O painel
   virou COMPONENTE (`CfopCerebroPainel`), montado em DOIS lugares: aba
   **🧠 Por fornecedor** dentro do 🔗 Correlação de CFOP, e a aba ✏️ CFOP por nota.
