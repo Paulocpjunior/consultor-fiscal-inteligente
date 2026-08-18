@@ -48,9 +48,17 @@ import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 interface Props {
     currentUser: User | null;
     onShowToast?: (msg: string) => void;
+    /**
+     * Aba em que a tela ABRE quando se chega por atalho.
+     *
+     * Paulo, 18/08, no card 🔄 CFOP: *"n identifiquei"*. O ✏️ CFOP por nota
+     * nasceu dentro de Relatórios, e quem procura CFOP procura no card de CFOP
+     * — então o atalho de lá precisa chegar NA ABA, não na primeira.
+     */
+    abaInicial?: AbaId;
 }
 
-type AbaId =
+export type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
     | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
@@ -130,8 +138,8 @@ const competenciaAtual = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
-    const [aba, setAba] = useState<AbaId>('livro');
+const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }) => {
+    const [aba, setAba] = useState<AbaId>(abaInicial || 'livro');
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     // NASCE NA EMPRESA ATIVA (Paulo, 15/08 — a sequência é login → ativar).

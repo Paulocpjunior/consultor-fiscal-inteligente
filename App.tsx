@@ -144,6 +144,8 @@ const App: React.FC = () => {
     const [isConfigAdminOpen, setIsConfigAdminOpen] = useState(false);
 
     const [searchType, setSearchType] = useState<SearchType>(SearchType.CFOP);
+    /** Aba em que Relatórios abre quando se chega por atalho (null = a primeira). */
+    const [relatoriosAba, setRelatoriosAba] = useState<'cfop-nota' | null>(null);
     const [mode, setMode] = useState<'single' | 'compare'>('single');
     const [query1, setQuery1] = useState('');
     const [query2, setQuery2] = useState('');
@@ -866,6 +868,10 @@ const App: React.FC = () => {
     // cards (antes era repetido inline em cada botão).
     const selecionarTipo = (type: SearchType) => {
         setSearchType(type);
+        // O atalho vale para O CLIQUE que o pediu. Sem esta limpeza, quem
+        // usasse o ✏️ uma vez abriria Relatórios naquela aba para sempre —
+        // e a tela responderia a um pedido que ninguém fez.
+        setRelatoriosAba(null);
         setResult(null);
         setQuery1('');
         setQuery2('');
@@ -1016,6 +1022,28 @@ const App: React.FC = () => {
                         {/* Standard Search Views (CFOP, NCM, Serviço, Simples, Lucro, Obrigações) */}
                         {[SearchType.CFOP, SearchType.NCM, SearchType.SERVICO, SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) && (
                             <>
+                                {/* 🔀 O CARD DE CFOP É CONSULTA À IA — quem escritura está
+                                    procurando OUTRA tela.
+
+                                    Paulo, 18/08, com o print deste card: *"n identifiquei"*.
+                                    Ele estava certo em procurar aqui: o card se chama CFOP.
+                                    O ✏️ CFOP por nota nasceu dentro de Relatórios (é lá que
+                                    mora o recorte empresa × competência), e ninguém adivinha
+                                    isso. Rota sem botão não é funcionalidade — e botão na
+                                    tela errada é a mesma família. O atalho leva DIRETO à aba. */}
+                                {searchType === SearchType.CFOP && (
+                                    <div className="p-4 rounded-xl mb-4 animate-fade-in flex flex-wrap items-center gap-3" style={{background:"var(--accent-soft)",border:"1px solid var(--border-subtle)"}}>
+                                        <p className="text-sm flex-grow min-w-0" style={{color:"var(--text-secondary)"}}>
+                                            Esta tela <strong>consulta a IA</strong> sobre CFOP. Para <strong>corrigir o CFOP
+                                            de uma nota escriturada</strong> (e ensinar o parâmetro do fornecedor), o campo
+                                            fica em Relatórios.
+                                        </p>
+                                        <button
+                                            onClick={() => { selecionarTipo(SearchType.RELATORIOS); setRelatoriosAba('cfop-nota'); }}
+                                            className="btn-press px-4 py-2 rounded-lg text-white font-medium text-sm whitespace-nowrap" style={{background:"var(--accent)"}}
+                                        >✏️ CFOP por nota</button>
+                                    </div>
+                                )}
                                 <div className={`p-6 rounded-xl mb-6 animate-fade-in ${[SearchType.SIMPLES_NACIONAL, SearchType.LUCRO_PRESUMIDO_REAL, SearchType.OBRIGACOES_FISCAIS, SearchType.IMPORTA_XML].includes(searchType) ? 'hidden' : ''}`} style={{background:"var(--bg-elevated)",border:"1px solid var(--border-subtle)"}}>
                                     <div className="flex items-center gap-4 mb-4">
                                         <button
@@ -1434,6 +1462,7 @@ const App: React.FC = () => {
                                 <RelatoriosHub
                                     currentUser={currentUser ?? null}
                                     onShowToast={(msg) => setToastMessage(msg)}
+                                    abaInicial={relatoriosAba || undefined}
                                 />
                             </Suspense>
                             </ErrorBoundary>
