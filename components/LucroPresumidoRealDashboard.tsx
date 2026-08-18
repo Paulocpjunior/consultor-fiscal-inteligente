@@ -119,6 +119,10 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [despesasAvulsas, setDespesasAvulsas] = useState<ItemFinanceiroAvulso[]>([]);
     const [saldoCredorIcms, setSaldoCredorIcms] = useState(0);
     const [saldoCredorIpi, setSaldoCredorIpi] = useState(0);
+    // ⚠️ NULL, não 0: "não informado" e "zerou o crédito" são respostas
+    // diferentes, e num papel que vai ao cliente a diferença é o mês inteiro.
+    const [saldoCredorIcmsTransportar, setSaldoCredorIcmsTransportar] = useState<number | null>(null);
+    const [saldoCredorIpiTransportar, setSaldoCredorIpiTransportar] = useState<number | null>(null);
     const [saldoCredorPis, setSaldoCredorPis] = useState(0);
     const [saldoCredorCofins, setSaldoCredorCofins] = useState(0);
 
@@ -247,6 +251,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 setAjustesLucroRealExclusoes(ficha.ajustesLucroRealExclusoes || 0);
                 setSaldoCredorIcms(ficha.saldoCredorIcms || 0);
                 setSaldoCredorIpi(ficha.saldoCredorIpi || 0);
+                setSaldoCredorIcmsTransportar(ficha.saldoCredorIcmsTransportar ?? null);
+                setSaldoCredorIpiTransportar(ficha.saldoCredorIpiTransportar ?? null);
                 setSaldoCredorPis(ficha.saldoCredorPis || 0);
                 setSaldoCredorCofins(ficha.saldoCredorCofins || 0);
                 
@@ -436,7 +442,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         fichaRetPis, fichaRetCofins, fichaRetIrpj, fichaRetCsll,
         isEquiparacaoHospitalar, isPresuncaoReduzida,
         fichaIpiRecolher, fichaIcmsProprio, fichaIcmsSt,
-        ajustesLucroRealAdicoes, ajustesLucroRealExclusoes, saldoCredorIcms, saldoCredorIpi, saldoCredorPis, saldoCredorCofins, itensAdicionaisExtra,
+        ajustesLucroRealAdicoes, ajustesLucroRealExclusoes, saldoCredorIcms, saldoCredorIpi, saldoCredorIcmsTransportar, saldoCredorIpiTransportar, saldoCredorPis, saldoCredorCofins, itensAdicionaisExtra,
         retencoesAcumuladas
     ]);
 
@@ -636,6 +642,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 ajustesLucroRealExclusoes: ajustesLucroRealExclusoes,
                 saldoCredorIcms: saldoCredorIcms,
                 saldoCredorIpi: saldoCredorIpi,
+                saldoCredorIcmsTransportar: saldoCredorIcmsTransportar ?? undefined,
+                saldoCredorIpiTransportar: saldoCredorIpiTransportar ?? undefined,
                 saldoCredorPis: saldoCredorPis,
                 saldoCredorCofins: saldoCredorCofins,
                 itensAvulsos: [
@@ -791,6 +799,8 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             onUpdateDespesa={handleUpdateDespesa}
             saldoCredorIcms={saldoCredorIcms} setSaldoCredorIcms={setSaldoCredorIcms}
             saldoCredorIpi={saldoCredorIpi} setSaldoCredorIpi={setSaldoCredorIpi}
+            saldoCredorIcmsTransportar={saldoCredorIcmsTransportar} setSaldoCredorIcmsTransportar={setSaldoCredorIcmsTransportar}
+            saldoCredorIpiTransportar={saldoCredorIpiTransportar} setSaldoCredorIpiTransportar={setSaldoCredorIpiTransportar}
             saldoCredorPis={saldoCredorPis} setSaldoCredorPis={setSaldoCredorPis}
             saldoCredorCofins={saldoCredorCofins} setSaldoCredorCofins={setSaldoCredorCofins}
             isEquiparacaoHospitalar={isEquiparacaoHospitalar} setIsEquiparacaoHospitalar={setIsEquiparacaoHospitalar}

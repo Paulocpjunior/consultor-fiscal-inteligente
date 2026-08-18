@@ -775,7 +775,20 @@ const calcularLucroPresumido = (input: LucroInput): LucroResult => {
         totalImpostos,
         cargaTributaria: receitaTotalMes > 0 ? (totalImpostos / receitaTotalMes) * 100 : 0,
         lucroLiquidoEstimado: lucroLiquido,
-        alertaLc224: aplicouLc224
+        alertaLc224: aplicouLc224,
+        // A memória sai DAQUI, das mesmas variáveis que produziram os impostos
+        // acima — é isso que impede a tela de ter uma segunda conta "de exibição"
+        // que discorda do imposto impresso ao lado (caso KROYA, 18/08).
+        memoriaBase: {
+            faturamentoBruto: totalFaturadoInputs,
+            deducaoIpi: valorIpi,
+            deducaoIcmsSt: valorIcmsSt,
+            deducaoDevolucoes: valorDevolucoes,
+            baseIrpjCsll: receitaBrutaEfetiva,
+            deducaoIcmsVendas: icmsVendas,
+            deducaoMonofasico: valorMonofasico,
+            basePisCofins,
+        },
     };
 };
 
@@ -956,6 +969,19 @@ const calcularLucroReal = (input: LucroInput): LucroResult => {
     ,
         saldoResidualPis: residualPis,
         saldoResidualCofins: residualCofins,
+        // Mesma memória do Presumido, das variáveis deste cálculo. Ela existe
+        // nos DOIS regimes de propósito: a ficha é a mesma tela, e memória só
+        // num deles faria o relatório mudar de conteúdo conforme o regime.
+        memoriaBase: {
+            faturamentoBruto: faturamentoBrutoInput,
+            deducaoIpi: input.valorIpi || 0,
+            deducaoIcmsSt: input.valorIcmsSt || 0,
+            deducaoDevolucoes: input.valorDevolucoes || 0,
+            baseIrpjCsll: receitaLiquida,
+            deducaoIcmsVendas: icmsVendas,
+            deducaoMonofasico: input.faturamentoMonofasico || 0,
+            basePisCofins,
+        },
     };
 };
 

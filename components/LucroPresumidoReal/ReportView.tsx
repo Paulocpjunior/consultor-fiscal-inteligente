@@ -25,6 +25,7 @@ import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, LucroInput } from '../.
 import { calcularLucro } from '../../services/lucroService';
 import { ArrowLeftIcon, PencilIcon, DownloadIcon, BuildingIcon, InfoIcon } from '../Icons';
 import { convertFichaToInput, getRetencoesAcumuladasTrimestre } from './fichaCalc';
+import { saldosDaFicha, itensVisiveis } from '../../services/saldoCredorFicha';
 
 interface ReportViewProps {
     ficha: FichaFinanceiraRegistro;
@@ -57,10 +58,21 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
     const dateObj = new Date(parseInt(ano), parseInt(mes) - 1, 1);
     const mesExtenso = dateObj.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
 
-    // Bases pra exibicao
-    const baseIrpjCsll = ficha.faturamentoMesTotal - (ficha.valorIpi || 0) - (ficha.valorDevolucoes || 0);
-    // Base PIS/COFINS pra referencia visual (liquida de ICMS)
-    const basePisCofins = baseIrpjCsll - (ficha.icmsVendas || 0);
+    // 🚨 AS BASES SAEM DO CÁLCULO, NUNCA DE UMA CONTA DAQUI.
+    //
+    // Até 18/08 estas duas linhas eram uma segunda conta "pra exibição" —
+    // faturamento − IPI − devoluções, sem o ICMS-ST — e o resultado era o pior
+    // desfecho possível: o relatório imprimia uma BASE que não produzia o
+    // IMPOSTO impresso três linhas abaixo. KROYA 07/2026: base 77.291,40 na
+    // tela, PIS 502,34 (que só sai de 77.283,57, a base com ST deduzido, que é
+    // justamente o número da planilha do Paulo). Diferença de R$ 7,83 — o ST.
+    // E isso vai ao CLIENTE, que divide e acha.
+    const memoria = resultadoCalculado.memoriaBase;
+    const baseIrpjCsll = memoria?.baseIrpjCsll ?? 0;
+    const basePisCofins = memoria?.basePisCofins ?? 0;
+
+    const saldos = saldosDaFicha(ficha);
+    const saldosVisiveis = itensVisiveis(saldos);
 
     const handleComparativoPdf = async () => {
         // Gera PDF profissional Presumido × Real com capa, sumario, apuracao
@@ -169,11 +181,15 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
                                 </div>
                             )}
 
-                            {/* Deduções e Bases */}
-                            {(ficha.valorIpi > 0 || ficha.valorDevolucoes > 0) && (
+                            {/* Deduções e Bases — a lista vem da MEMÓRIA do cálculo.
+                                O ICMS-ST faltava aqui: ele deduz a receita bruta igual
+                                ao IPI (DL 1.598/77 art. 12 §4º), o núcleo já o deduzia,
+                                e só a tela não o mostrava. */}
+                            {((memoria?.deducaoIpi || 0) > 0 || (memoria?.deducaoIcmsSt || 0) > 0 || (memoria?.deducaoDevolucoes || 0) > 0) && (
                                 <div className="pt-2 mt-2 border-t border-dashed border-slate-200">
-                                    {ficha.valorIpi > 0 && <div className="flex justify-between text-xs font-bold text-red-400 italic"><span>(-) Dedução IPI:</span><span>{brl(ficha.valorIpi)}</span></div>}
-                                    {ficha.valorDevolucoes > 0 && <div className="flex justify-between text-xs font-bold text-red-400 italic"><span>(-) Dedução Devoluções:</span><span>{brl(ficha.valorDevolucoes)}</span></div>}
+                                    {(memoria?.deducaoIpi || 0) > 0 && <div className="flex justify-between text-xs font-bold text-red-400 italic"><span>(-) Dedução IPI:</span><span>{brl(memoria!.deducaoIpi)}</span></div>}
+                                    {(memoria?.deducaoIcmsSt || 0) > 0 && <div className="flex justify-between text-xs font-bold text-red-400 italic"><span>(-) Dedução ICMS ST:</span><span>{brl(memoria!.deducaoIcmsSt)}</span></div>}
+                                    {(memoria?.deducaoDevolucoes || 0) > 0 && <div className="flex justify-between text-xs font-bold text-red-400 italic"><span>(-) Dedução Devoluções:</span><span>{brl(memoria!.deducaoDevolucoes)}</span></div>}
                                 </div>
                             )}
 
@@ -182,17 +198,17 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
                                 <span>{brl(baseIrpjCsll)}</span>
                             </div>
 
-                            {ficha.icmsVendas > 0 && (
+                            {(memoria?.deducaoIcmsVendas || 0) > 0 && (
                                 <div className="flex justify-between text-xs font-bold text-blue-400 italic mt-1">
                                     <span>(-) Ded. ICMS s/ Vendas (STF):</span>
-                                    <span>{brl(ficha.icmsVendas)}</span>
+                                    <span>{brl(memoria!.deducaoIcmsVendas)}</span>
                                 </div>
                             )}
 
-                            {ficha.faturamentoMonofasico > 0 && (
+                            {(memoria?.deducaoMonofasico || 0) > 0 && (
                                 <div className="flex justify-between text-xs font-bold text-blue-400 italic mt-1">
                                     <span>(-) Receita Monofásica (PIS/COFINS):</span>
-                                    <span>{brl(ficha.faturamentoMonofasico)}</span>
+                                    <span>{brl(memoria!.deducaoMonofasico)}</span>
                                 </div>
                             )}
 
@@ -220,12 +236,31 @@ const ReportView: React.FC<ReportViewProps> = ({ ficha, empresa, onVoltar, onEdi
                             <div className="flex justify-between text-sm font-bold text-slate-600"><span>Folha e Encargos Sociais:</span><span>{brl(financeiro.folha)}</span></div>
                             <div className="flex justify-between text-sm font-bold text-slate-600"><span>Despesas Operacionais:</span><span>{brl(financeiro.despesas)}</span></div>
 
-                            {/* Saldos Credores */}
-                            {((ficha.saldoCredorIcms || 0) > 0 || (ficha.saldoCredorIpi || 0) > 0) && (
+                            {/* Saldos credores — o que ENTROU e, principalmente, o que
+                                SOBRA. Pedido do Paulo em 18/08: é o saldo a transportar
+                                que ele informa ao cliente todo mês. Régua única em
+                                services/saldoCredorFicha.ts; a tela só imprime. */}
+                            {saldosVisiveis.length > 0 && (
                                 <div className="pt-2 mt-2 border-t border-slate-100">
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-1">Saldos Credores Compensados</h5>
-                                    {(ficha.saldoCredorIcms || 0) > 0 && <div className="flex justify-between text-xs font-bold text-slate-500"><span>Cred. ICMS Anterior:</span><span>{brl(ficha.saldoCredorIcms || 0)}</span></div>}
-                                    {(ficha.saldoCredorIpi || 0) > 0 && <div className="flex justify-between text-xs font-bold text-slate-500"><span>Cred. IPI Anterior:</span><span>{brl(ficha.saldoCredorIpi || 0)}</span></div>}
+                                    <h5 className="text-[10px] font-black text-slate-400 uppercase mb-1">Saldos Credores</h5>
+                                    {saldosVisiveis.map(s => (
+                                        <div key={s.tributo} className="mb-1">
+                                            {(s.anterior || 0) > 0 && (
+                                                <div className="flex justify-between text-xs font-bold text-slate-500">
+                                                    <span>Cred. {s.tributo} do mês anterior (compensado):</span>
+                                                    <span>{brl(s.anterior || 0)}</span>
+                                                </div>
+                                            )}
+                                            {s.situacao === 'nao-informado' ? (
+                                                <div className="text-[10px] font-bold text-amber-600 italic">{s.texto}</div>
+                                            ) : (
+                                                <div className="flex justify-between text-xs font-black text-emerald-700">
+                                                    <span>{s.tributo} a transportar{saldos.competenciaSeguinte ? ` p/ ${saldos.competenciaSeguinte}` : ''}:</span>
+                                                    <span>{brl(s.transportar || 0)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             )}
 
