@@ -242,6 +242,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   tomado (Reinf, Contábil) seria carimbada como folha — a mesma mistura na
   direção contrária. A composição aparece na TELA antes dos botões: descobrir
   "por desencargo" não pode ser o processo.
+- **🚨 TRANSFERÊNCIA RECEBIDA: o sufixo MUDA DE SIGNIFICADO ao atravessar a
+  operação — e o CFI escriturava 1151 onde a tabela diz 1152** (Paulo, 17/08,
+  NOVA ERA, com o livro de Entradas do E-Fiscal ao lado do Resumo por CFOP do
+  CFI: *"precisamos trabalhar a correlação dos CFOPs com maior detalhe, melhor
+  amarração de acordo com o RAMO da empresa que adquire a mercadoria"*).
+  Na **SAÍDA** o sufixo descreve a ORIGEM de quem envia (5151 produção própria ·
+  5152 mercadoria de terceiros); na **ENTRADA** ele descreve o DESTINO de quem
+  recebe (1151 industrialização · 1152 comercialização · 1154 prestação de
+  serviço). **É a MESMA assimetria de 101/102**, que a correlação já tratava — a
+  família de transferência é que estava fora, então preservar o sufixo
+  escriturava *"recebi para industrializar"* num comércio de frutas que revende.
+  ⚠️ **Quem decide aqui não é o E-Fiscal, é a TABELA** (a régua de 11/08 continua
+  valendo: E-Fiscal é referência, nunca gabarito — divergir dele é uma PERGUNTA,
+  e esta tinha resposta na norma).
+  ⚠️ **153 (energia elétrica para distribuição) fica FORA** — família própria;
+  mandá-la para 152 porque o cliente é comércio seria inventar operação. E
+  **misto/indefinido NÃO força**, ao contrário da família ST: aqui a conversão
+  mecânica produz CFOP que EXISTE, então preservar é honesto (na ST ela inventava
+  o 1405).
+  🚧 **O PEDIDO MAIOR CONTINUA ABERTO**: (a) quais outras famílias devem seguir o
+  ramo — a candidata forte é **devolução de venda (201/202, 410/411)**, cujo
+  sufixo espelha a natureza de QUEM VENDEU; e (b) **155/156 (transferência com
+  ST) provavelmente não têm par mecânico** (1155/1156 não existem na tabela de
+  entrada) — é o mesmo desenho do 1405 e precisa de confirmação antes de virar
+  código. Nenhuma das duas se encoda por dedução minha.
+  🚧 **E o "campo para lançamento das notas escrituradas" (pedido dele) ainda não
+  existe**: hoje o override é POR EMPRESA (`dadosFiscais.cfopOverrides`, mapa
+  CFOP→CFOP no modal 🔗). O que ele pede é granularidade por NOTA/ITEM — e a
+  decisão de desenho é essa, porque *"algumas notas podem ter mais de um CFOP,
+  mais de um produto"* (palavra dele, 04/08). Campo novo aqui só entra com TODOS
+  os leitores no mesmo PR (livro, C170/C190 do SPED, Resumo por CFOP, Exportar
+  SAGE), senão vira o campo que uma tela honra e o arquivo ignora.
 - **🚨 O `1010` DO EFD-CONTRIBUIÇÕES NÃO É O DO EFD ICMS/IPI — mesmo número,
   arquivo diferente** (Paulo, 17/08, com o recibo do PVA da MANTOAN 07/2026:
   *"O número de campos informado no registro difere do especificado no leiaute"*

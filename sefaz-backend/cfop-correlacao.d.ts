@@ -38,3 +38,9 @@ export function resolverNaturezaAtividade(dadosFiscais: unknown): {
  */
 export const SUFIXOS_COMPRA_PRODUTO: string[];
 export const SUFIXOS_ST_VENDA: string[];
+/**
+ * Transferência recebida (151/152/154) — o sufixo muda de significado ao
+ * atravessar a operação, igual a 101/102: na saída descreve a ORIGEM de quem
+ * envia, na entrada o DESTINO de quem recebe. 153 (energia elétrica) fica fora.
+ */
+export const SUFIXOS_TRANSFERENCIA_RECEBIDA: string[];
