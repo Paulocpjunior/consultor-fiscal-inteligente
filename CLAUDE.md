@@ -5,6 +5,76 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏛️ O CFI NUNCA TEVE CAMPO DE REGIME TRIBUTÁRIO — e uma IGREJA chegava ao
+  CCI como "Lucro Presumido"** (Paulo, 18/08, com o print do cadastro do túnel:
+  *"criamos no CCI que as informações de cadastro sejam compartilhadas do CFI…
+  temos empresas Simples, Presumido, Real, isentas, imunes — devemos nos atentar
+  às que são isentas/imunes e terceiro setor"*; e, ao ver o defeito de frente:
+  *"é uma falta grave, como um sistema de apuração e tributos não tem campo de
+  regime de tributação"*). A COMUNIDADE EVANGÉLICA SARA NOSSA TERRA aparecia
+  como Lucro Presumido porque o regime era DEDUZIDO da COLEÇÃO em que a empresa
+  foi cadastrada — não existia lugar nenhum para "imune". O caro não era o
+  rótulo: era a HERANÇA — entidade imune apurando PIS/COFINS sobre FATURAMENTO
+  quando, em regra, recolhe PIS sobre a FOLHA (Lei 9.532/97 art. 13).
+  ✂️ `sefaz-backend/regime-tributario.js` — vocabulário único (SIMPLES ·
+  LUCRO_PRESUMIDO · LUCRO_REAL · IMUNE · ISENTA), precedência **campo explícito
+  > regimePadrao > COLEÇÃO** com a ORIGEM carimbada. A coleção fica por ÚLTIMO
+  de propósito: ela responde "onde foi cadastrada", não "o que a empresa é".
+  ⚠️ **DOIS EIXOS, NÃO UM**: "terceiro setor" (`semFinsLucrativos`) NÃO é
+  regime — é a natureza da entidade, e CONVIVE com ele (templo é imune E sem
+  fins lucrativos; associação pode ser isenta e ter atividade tributada).
+  Juntar os dois numa lista só obrigaria a escolher entre fatos que coexistem.
+  ⚠️ **O CAMPO `regime` DO TÚNEL NÃO MUDA DE SIGNIFICADO** (continua sendo a
+  coleção, 'simples'/'lucro' — os apps irmãos já o consomem): o regime de
+  verdade viaja em campos NOVOS (`regimeTributario`, `regimeOrigem`,
+  `regimeApuracaoDefinida`, `regimeRessalva`). Campo entrou na whitelist de
+  `dadosFiscais` no MESMO PR (lição do #382) e a gravação RECUSA valor fora do
+  vocabulário, nunca descarta calada.
+  🚨 **O QUE O MÓDULO SE RECUSOU A FAZER, POR ALGUMAS HORAS**: inventar a lista
+  de obrigações da imune e da isenta — montá-la por dedução minha seria o erro
+  do 1405 num lugar onde o custo é multa. Enquanto ninguém tinha decidido,
+  IMUNE/ISENTA caíam em INDEFINIDO de propósito e recebiam só o comum aos dois
+  regimes do Lucro — nunca a lista do Presumido em SILÊNCIO.
+  ✅ **A LISTA VEIO DELE NO MESMO DIA, em três respostas**: ECD e ECF só com
+  MOVIMENTO FINANCEIRO no ano; DCTFWeb só com EVENTO (aluguel, folha ou
+  retenção); EFD-Contribuições **apenas em dezembro, sem movimento** — que por
+  isso usa a MESMA régua de `frequencia: 'anual'` da DEFIS, não uma exceção
+  nova. Cada entrada do catálogo carrega a FALA que a decidiu.
+  🚩 **O FIM DE VIGÊNCIA DE 12/2026 É EXPECTATIVA, NÃO NORMA** (*"com a reforma
+  estão indicando que essa obrigação encerra em 12/2026"*): "estão indicando"
+  não é norma publicada, então o app CONTINUA gerando depois de 12/2026 e
+  carrega a ressalva — parar por expectativa faria a obrigação sumir em
+  silêncio, e sumir da tela é pior que aparecer com ressalva.
+  ❌ **FGTS SAIU DA LISTA — segunda resposta dele, corrigindo uma extensão
+  MINHA.** Eu tinha incluído FGTS como proposta (ele citou FOLHA entre os
+  eventos da DCTFWeb, e FGTS é consequência de folha) e marquei para
+  confirmar. Paulo: *"FGTS é um imposto gerado pelo departamento pessoal, não
+  faz base para impostos gerados pelo CFI"* — mesmo havendo folha, o FGTS
+  Digital não é obrigação que este catálogo acompanha, é do módulo de DP.
+  Removido; um teste MEU que exigia o contrário foi TROCADO, porque premissa
+  em aberto se fecha por decisão do dono, nunca por extensão minha.
+  🚨 **E O CHECKLIST DE PENDÊNCIAS PASSOU A DEDUPLICAR PELA REGRA, NÃO PELO
+  NOME**: desde este PR a MESMA obrigação tem regras diferentes por regime (o
+  FGTS do Lucro é `ativa` e conferido; a variante que existiu brevemente para a
+  imune era `proposta`) — deduplicar só por `obrigacao` colapsaria as duas numa
+  linha e diria "FGTS não conferido" sobre a carteira inteira, uma afirmação
+  falsa. A chave virou `obrigação+status+condição+frequência`.
+  🔎 **E O PEDIDO AO COLABORADOR VIROU UMA FILA CURTA, NÃO "PREENCHAM AS
+  ~390"** — ele já tinha recusado esse desenho uma vez (16/08, calendário
+  municipal: *"eu não vou fazer nada manual"*). `triagem-terceiro-setor.js` +
+  painel no ⚙️ Config Admin levantam quem PARECE imune/isenta pela razão social
+  e pelo CNAE, e a fila é CURTA porque o regime deduzido já acerta a maioria.
+  🚨 **O sinal NEGATIVO vale tanto quanto o positivo**: razão social com
+  LTDA/S.A./EIRELI é SOCIEDADE (CC art. 44), e sociedade empresária não é
+  entidade sem fins lucrativos — mesma leitura que resolveu metade das
+  pendências do FUNRURAL em 13/08, régua REUSADA (`tipoSocietarioNoNome`), não
+  reescrita. Sem essa trava, todo "INSTITUTO DE BELEZA LTDA" cairia na fila, e
+  fila com falso positivo é fila que ninguém abre. CNAE de escola e de clínica
+  ficam de FORA (dizem o que a entidade FAZ, não o que ela É); sinal fraco
+  ("INSTITUTO", "CASA DE") sozinho não vira candidato. O painel NÃO DECIDE
+  nada — é sugestão carimbada com a origem, quem marca é uma pessoa no
+  cadastro — e o que a régua BARROU também aparece, com o tipo societário.
+
 - **💬 SP CONNECT — o app de atendimento WhatsApp que SUBSTITUI a Ultra Fox**
   (projeto vivo desde 14/08; o documento de GOVERNO é
   `docs/desenho-modulo-comunicacao.md` — estado, fases e decisões moram LÁ,
