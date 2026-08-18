@@ -85,6 +85,21 @@ const REGUAS_VIGIADAS: Regua[] = [
         ],
     },
     {
+        nome: 'O CST que a escrituração usa quando o CFOP foi reclassificado',
+        dono: 'sefaz-backend/cst-correlacao.js',
+        comoUsar: "import { cstDoLancamento } from 'sefaz-backend/cst-correlacao.js'",
+        porque: 'Paulo, 18/08: "a nota vai vir 5102, vamos registrar como 1556; aí que está a chave do SPED: '
+            + 'o CST do fornecedor vai vir como 00, temos que indicar 90 para essas operações". A régua vive '
+            + 'em DOIS registros do mesmo item (C170 e C190) — se divergirem, o detalhe e o consolidado do '
+            + 'MESMO item contam histórias diferentes, e é o C190 que a apuração soma. E ela guarda a '
+            + 'armadilha que o CFOP não tem: o CST leva a ORIGEM da mercadoria no 1º dígito, então converter '
+            + 'para "090" às cegas afirmaria dentro do SPED que um produto importado é nacional.',
+        assinaturas: [
+            /function cstDoLancamento\s*\(/,
+            /function partesDoCst\s*\(/,
+        ],
+    },
+    {
         nome: 'De quem é o documento — quando reatribuir é conserto e quando é roubo',
         dono: 'sefaz-backend/documento-posse.js',
         comoUsar: "import { decidirPosseDocumento, ehParteDoDocumento } from 'sefaz-backend/documento-posse.js'",

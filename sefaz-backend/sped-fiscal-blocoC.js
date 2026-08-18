@@ -21,6 +21,7 @@
 import * as fmt from './sped-fiscal-format.js';
 import { montarC197Difal } from './sped-difal-c197.js';
 import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
+import { cstDoLancamento } from './cst-correlacao.js';
 
 
 /**
@@ -75,6 +76,19 @@ function statusParaCodSit(status) {
  * Aceita varias variacoes que XMLs costumam ter.
  * Fallback: '01' (ICMS comum).
  */
+/**
+ * O CST que VAI PARA O ARQUIVO, já correlacionado com o CFOP escriturado.
+ *
+ * Sempre 3 dígitos (origem + tributação), como o SPED exige. Quando a régua não
+ * converte, ele é o do fornecedor — que é o comportamento de sempre.
+ */
+function cstEscriturado(item, cfopLancado) {
+    const cru = getCstIcms(item);
+    const r = cstDoLancamento(cru, cfopLancado);
+    const escolhido = r.cst || cru;
+    return escolhido.length === 2 ? '0' + escolhido : String(escolhido).padStart(3, '0').slice(-3);
+}
+
 function getCstIcms(item) {
     return (
         item.cstIcms || item.cst || item.CST || item.CSTICMS ||
@@ -333,10 +347,13 @@ function buildC100(nota, dados) {
  *  37 COD_CTA         Codigo conta contabil (vazio)
  */
 function buildC170(item, nItem, nota) {
-    const cst = getCstIcms(item);
-    // CST eh 3 chars no SPED: "OOO" onde primeiro digito eh origem (0-8)
-    // Se XML so tem 2 chars (CST sem origem), prepend '0' (origem nacional)
-    const cstFmt = cst.length === 2 ? '0' + cst : cst.padStart(3, '0').slice(-3);
+    const cfopLancado = convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados, nota);
+    // 🔁 O CST SEGUE O CFOP ESCRITURADO — Paulo, 18/08: "a nota vai vir 5102,
+    // vamos registrar como 1556; aí que está a chave do SPED: o CST do
+    // fornecedor vai vir como 00, temos que indicar 90 para essas operações".
+    // A régua mora em cst-correlacao.js e PRESERVA a origem (1º dígito), que é
+    // fato da mercadoria e não da operação.
+    const cstFmt = cstEscriturado(item, cfopLancado);
 
     const aliqIcms = item.aliqIcms || (
         item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0
@@ -353,7 +370,7 @@ function buildC170(item, nItem, nota) {
         fmt.formatValue(item.vDesc, 2),
         '0',  // IND_MOV: 0=Sim (movimentacao fisica)
         cstFmt,
-        fmt.sanitizeString(convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados, nota), 4),
+        fmt.sanitizeString(cfopLancado, 4),
         '',  // COD_NAT
         fmt.formatValue(item.vBC, 2),
         fmt.formatValue(aliqIcms, 2),
@@ -408,10 +425,12 @@ function buildC190sFromNota(nota) {
     const grupos = new Map();  // key: "CST|CFOP|ALIQ" -> totais
 
     for (const item of (nota.itens || [])) {
-        const cst = getCstIcms(item);
-        const cstFmt = cst.length === 2 ? '0' + cst : cst.padStart(3, '0').slice(-3);
         const cfopRaw = String(item.cfop || item.CFOP || '0000');
         const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao, nota._dados, nota);
+        // O C190 agrupa por CST+CFOP: usar o CST cru aqui e o convertido no
+        // C170 faria os dois registros do MESMO item discordarem — e é o C190
+        // que a apuração soma.
+        const cstFmt = cstEscriturado(item, cfop);
 
         const aliqIcms = item.aliqIcms || (
             item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0

@@ -100,6 +100,29 @@ inventar que gera esses códigos.
 Se for muita coisa, avisar o time antes: pode ser uma família inteira, e aí o
 conserto é no sistema, não na unha.
 
+## A coluna CST
+
+Quando a nota é reclassificada para **uso ou consumo** (1556/1557), o CST muda
+junto — e a coluna mostra o de-para: `000→090`.
+
+**Por quê:** o CST no XML é do **fornecedor**. A Kalunga vende papel tributado
+integralmente (CST 00), porque *para ela* é venda de mercadoria. Do nosso lado
+a entrada não é de mercadoria, e a operação se escritura como **90 — Outras**.
+É a mesma lógica do CFOP, um campo adiante.
+
+⚠️ **O primeiro dígito não muda.** O CST tem 3 dígitos: origem + tributação. Um
+produto importado sai `100→190`, nunca `090` — a origem é fato da mercadoria,
+não da operação.
+
+**O que o app NÃO converte, e diz na tela:**
+
+| Caso | O que acontece |
+|---|---|
+| **Ativo imobilizado** (1551/1552) | mantém o CST do fornecedor. Aqui existe crédito de ICMS em 48 parcelas (CIAP), então não é o mesmo caso — a decisão está em aberto. |
+| CST 40, 41, 50, 51, 60, 70 | mantém. Esses já dizem um fato (isenta, diferimento, ST já cobrada) que o 90 apagaria. |
+| CSOSN do Simples (102, 500…) | mantém. É outra tabela. |
+| Item sem CST no XML | fica sem CST e aparece marcado. O CST **não se deduz do CFOP** — confira na origem. |
+
 ## A coluna Origem
 
 | Origem | Quer dizer |
