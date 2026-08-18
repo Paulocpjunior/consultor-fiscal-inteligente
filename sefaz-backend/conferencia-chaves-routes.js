@@ -242,7 +242,9 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
             return res.json({
                 ok: true, simulado: true, cnpj: cnpjEmpresa, competencia,
                 selecao: { ...selecao, aConsultar: selecao.aConsultar.length },
-                resumo: resumirReconferencia({ selecao, resultados: [] }),
+                // `simulado` viaja para o resumo NÃO falar no passado sobre uma
+                // rodada que não aconteceu (caso MV LIDER, 18/08).
+                resumo: resumirReconferencia({ selecao, resultados: [], simulado: true }),
             });
         }
         if (!selecao.aConsultar.length) {
