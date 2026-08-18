@@ -204,6 +204,102 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
 }
 
 /**
+ * ═══ O CFOP QUE VAI PARA O LANÇAMENTO — a régua COM o documento na mão ═══════
+ *
+ * Paulo, 17/08, comparando o Resumo por CFOP do CFI com o livro do E-Fiscal:
+ * *"é necessário incluir um campo para lançamento das notas escrituradas, a fim
+ * de corrigir esses detalhes e facilitar a conferência"*. E, quando perguntei se
+ * o campo era por NOTA ou por ITEM: **"é por NF"**.
+ *
+ * Precedência — o MAIS ESPECÍFICO vence, igual ao cadastro de NCM:
+ *
+ *   1. `doc.cfopEscriturado`  — decisão humana NAQUELA nota
+ *   2. `ctx.cfopOverrides`    — mapa CFOP→CFOP da EMPRESA (modal 🔗)
+ *   3. `correlacionarCfop`    — a régua automática
+ *
+ * ⚠️ **A decisão por NF vale para TODOS OS ITENS da nota** — foi o que o dono
+ * pediu, e a consequência tem que ser DITA por quem oferece o campo: nota com
+ * itens de CFOPs diferentes (compra + ST, por exemplo) passa a sair com um só.
+ * Quem informa é `cfopsDistintosDaNota`, para a tela avisar ANTES do clique em
+ * vez de o número mudar sozinho depois.
+ *
+ * @param {object} doc            o documento (é dele que sai o override por NF)
+ * @param {string} cfopDoItem     CFOP cru do item, como veio no XML
+ * @param {'entrada'|'saida'} direcao
+ * @param {object} [ctx]          { naturezaAtividade, cfopOverrides }
+ */
+export function cfopDoLancamento(doc, cfopDoItem, direcao, ctx = {}) {
+    const daNota = String(doc?.cfopEscriturado || '').replace(/\D/g, '');
+    if (daNota.length === 4) return daNota;
+    return correlacionarCfop(cfopDoItem, direcao, ctx);
+}
+
+/** De onde veio o CFOP do lançamento — número sem origem não se confere. */
+export function origemDoCfopLancamento(doc, cfopDoItem, direcao, ctx = {}) {
+    const daNota = String(doc?.cfopEscriturado || '').replace(/\D/g, '');
+    if (daNota.length === 4) {
+        return {
+            origem: 'nota',
+            rotulo: 'informado nesta NF',
+            por: doc?.cfopEscrituradoPor || null,
+            em: doc?.cfopEscrituradoEm || null,
+        };
+    }
+    const c = String(cfopDoItem || '');
+    if (ctx.cfopOverrides && ctx.cfopOverrides[c]) {
+        return { origem: 'empresa', rotulo: 'override da empresa', por: null, em: null };
+    }
+    return { origem: 'regra', rotulo: 'correlação automática', por: null, em: null };
+}
+
+/**
+ * Os CFOPs DISTINTOS que a nota teria sem o override — é o que a tela precisa
+ * dizer antes de alguém carimbar um CFOP só na NF inteira.
+ */
+export function cfopsDistintosDaNota(doc, direcao, ctx = {}) {
+    const fora = new Set();
+    for (const item of (doc?.itens || [])) {
+        const cru = String(item?.cfop || '').replace(/\D/g, '');
+        if (cru.length !== 4) continue;
+        fora.add(String(correlacionarCfop(cru, direcao, ctx) || cru));
+    }
+    return Array.from(fora).sort();
+}
+
+/**
+ * O CFOP informado à mão é válido para a DIREÇÃO da nota?
+ *
+ * Entrada se escritura com 1/2/3 e saída com 5/6/7. Aceitar o contrário deixaria
+ * alguém gravar 5102 numa entrada — a mesma classe do 1405, que é CFOP que não
+ * existe: campo fiscal digitado sem trava vira dado torto que só a fiscalização
+ * encontra.
+ */
+export function validarCfopEscriturado(cfop, direcao) {
+    const c = String(cfop || '').replace(/\D/g, '');
+    if (c === '') return { ok: true, cfop: '', motivo: 'em branco devolve a nota à régua automática' };
+    if (c.length !== 4) {
+        return { ok: false, motivo: `CFOP tem 4 dígitos — "${cfop}" tem ${c.length}.` };
+    }
+    // ⚠️ Testado por REGEX de propósito. A varredura da régua única acusou a
+    // versão anterior (um includes sobre a lista dos dígitos de entrada) como
+    // cópia de `ehNotaPropriaDeEntrada` — e ela estava certa em perguntar. Aqui
+    // a pergunta é OUTRA: a FAIXA do CFOP digitado, não a natureza da nota. A
+    // forma tem que dizer isso, igual ao `status` que virou `situacao` em 17/08.
+    const faixaEntrada = /^[123]/.test(c);
+    const faixaSaida = /^[567]/.test(c);
+    if (direcao === 'entrada' && !faixaEntrada) {
+        return { ok: false, motivo: `Esta nota é de ENTRADA: o CFOP tem que começar com 1, 2 ou 3 — "${c}" não serve.` };
+    }
+    if (direcao === 'saida' && !faixaSaida) {
+        return { ok: false, motivo: `Esta nota é de SAÍDA: o CFOP tem que começar com 5, 6 ou 7 — "${c}" não serve.` };
+    }
+    if (!faixaEntrada && !faixaSaida) {
+        return { ok: false, motivo: `"${c}" não começa com um dígito de CFOP (1,2,3,5,6,7).` };
+    }
+    return { ok: true, cfop: c };
+}
+
+/**
  * Deriva naturezaAtividade a partir do indAtividade quando não declarada.
  *   industrial -> industria
  *   outras     -> comercio (assumido como mais comum em "outras")

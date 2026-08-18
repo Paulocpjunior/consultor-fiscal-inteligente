@@ -20,7 +20,7 @@
 
 import * as fmt from './sped-fiscal-format.js';
 import { montarC197Difal } from './sped-difal-c197.js';
-import { correlacionarCfop, derivarNaturezaAtividade } from './cfop-correlacao.js';
+import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
 
 
 /**
@@ -90,10 +90,13 @@ function getCstIcms(item) {
  *
  * O contexto eh extraido de `dados.empresa.dadosFiscais` quando disponivel.
  */
-export function convertCfopParaEntrada(rawCfop, direcao, dados) {
+export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
     const empresa = dados?.empresa;
     const df = empresa?.dadosFiscais || {};
-    return correlacionarCfop(rawCfop, direcao, {
+    // `doc` traz o CFOP informado NA NF, que vence a régua automática (decisão
+    // do Paulo, 17/08: "é por NF"). Chamador que não passa o doc continua
+    // caindo na correlação de sempre — nada regride.
+    return cfopDoLancamento(doc, rawCfop, direcao, {
         naturezaAtividade: derivarNaturezaAtividade(empresa),
         cfopOverrides: df.cfopOverrides,
     });
@@ -350,7 +353,7 @@ function buildC170(item, nItem, nota) {
         fmt.formatValue(item.vDesc, 2),
         '0',  // IND_MOV: 0=Sim (movimentacao fisica)
         cstFmt,
-        fmt.sanitizeString(convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados), 4),
+        fmt.sanitizeString(convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados, nota), 4),
         '',  // COD_NAT
         fmt.formatValue(item.vBC, 2),
         fmt.formatValue(aliqIcms, 2),
@@ -408,7 +411,7 @@ function buildC190sFromNota(nota) {
         const cst = getCstIcms(item);
         const cstFmt = cst.length === 2 ? '0' + cst : cst.padStart(3, '0').slice(-3);
         const cfopRaw = String(item.cfop || item.CFOP || '0000');
-        const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao, nota._dados);
+        const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao, nota._dados, nota);
 
         const aliqIcms = item.aliqIcms || (
             item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0

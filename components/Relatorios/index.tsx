@@ -22,7 +22,10 @@ import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 // Régua ÚNICA de correlação — a mesma do Exportar SAGE e do modal de CFOP.
-import { correlacionarCfop, resolverNaturezaAtividade } from '../../sefaz-backend/cfop-correlacao.js';
+import {
+    correlacionarCfop, resolverNaturezaAtividade, cfopDoLancamento,
+    origemDoCfopLancamento, cfopsDistintosDaNota, validarCfopEscriturado,
+} from '../../sefaz-backend/cfop-correlacao.js';
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import {
@@ -49,17 +52,19 @@ interface Props {
 
 type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
-    | 'canceladas' | 'aliquota' | 'produto' | 'participante'
+    | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
 
 import { livroSemNotaDeProdutorDuplicada } from '../../services/livroNotaProdutor';
+import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
         titulo: 'Movimento (por empresa)', abas: [
             { id: 'livro', label: '📒 Livro Entradas/Saídas' },
             { id: 'cfop', label: '🔢 Resumo por CFOP' },
+            { id: 'cfop-nota', label: '✏️ CFOP por nota' },
             { id: 'impostos-resumo', label: '🧾 ICMS · IPI · ISS' },
             { id: 'uf', label: '🗺️ Resumo por UF' },
             { id: 'canceladas', label: '🚫 Canceladas/Faltantes' },
@@ -89,7 +94,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
 ];
 
 const ABAS_POR_EMPRESA: AbaId[] = [
-    'livro', 'cfop', 'impostos-resumo', 'uf',
+    'livro', 'cfop', 'cfop-nota', 'impostos-resumo', 'uf',
     'canceladas', 'aliquota', 'produto', 'participante',
     'serv-tomados', 'serv-prestados', 'serv-codigo', 'retencoes',
 ];
@@ -281,6 +286,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {aba === 'uf' && docsRecorte && empresa && (
                 <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
+            {aba === 'cfop-nota' && docsRecorte && empresa && (
+                <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast} />
+            )}
             {aba === 'canceladas' && docsRecorte && empresa && (
                 <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
@@ -399,7 +407,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 (d.itens || [])
                     .map((i: any) => String(i.cfop || '').replace(/\D/g, ''))
                     .filter(Boolean)
-                    .map((c: string) => String(correlacionarCfop(c, direcao, {
+                    .map((c: string) => String(cfopDoLancamento(d, c, direcao, {
                         naturezaAtividade: natureza.natureza,
                         cfopOverrides: cadastroFiscal?.cfopOverrides,
                     }) || c)),
@@ -502,6 +510,211 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         </Card>
     );
 };
+
+// ─── 2b. CFOP por nota (o campo de lançamento pedido pelo Paulo) ─────────────
+
+/**
+ * ✏️ CFOP POR NOTA — o "campo para lançamento das notas escrituradas".
+ *
+ * Paulo, 17/08, com o Resumo por CFOP do CFI ao lado do livro do E-Fiscal:
+ * *"é necessário incluir um campo para lançamento das notas escrituradas, a fim
+ * de corrigir esses detalhes e facilitar a conferência"* — e, perguntado se era
+ * por nota ou por item: **"é por NF"**.
+ *
+ * A tela NÃO decide CFOP: ela mostra o que a régua devolveu, aceita a correção e
+ * grava carimbada. Quem decide é `cfopDoLancamento`, que TODOS os leitores usam
+ * (livro, Resumo por CFOP, C170/C190 do SPED e Exportar SAGE) — por isso o que
+ * for corrigido aqui aparece nos quatro, e não só nesta tela.
+ */
+const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?: (m: string, t?: any) => void }> = ({
+    docs, empresa, competencia, truncado, identificacao, cadastroFiscal, currentUser, onShowToast,
+}) => {
+    const { gerando, rodar } = usePdf();
+    const [salvando, setSalvando] = useState<string | null>(null);
+    const [rascunho, setRascunho] = useState<Record<string, string>>({});
+    /** Gravado nesta sessão — o recorte não é relido a cada tecla. */
+    const [gravado, setGravado] = useState<Record<string, string>>({});
+    const [erro, setErro] = useState<string | null>(null);
+
+    const natureza = useMemo(
+        () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
+        [cadastroFiscal],
+    );
+    const ctx = useMemo(
+        () => ({ naturezaAtividade: natureza.natureza, cfopOverrides: cadastroFiscal?.cfopOverrides }),
+        [natureza, cadastroFiscal],
+    );
+
+    const linhas = useMemo(() => {
+        return docs
+            .filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) && docValido(d))
+            .map((d: any) => {
+                const direcao = direcaoEfetivaDoc(d) as 'entrada' | 'saida';
+                // O que ESTA sessão gravou vence o que veio do recorte — sem isso
+                // a linha voltaria ao valor antigo até alguém recarregar a tela,
+                // que é a "ação sem efeito visível" de 16/08.
+                const informado = gravado[d.id] !== undefined ? gravado[d.id] : (d.cfopEscriturado || '');
+                const docEfetivo = { ...d, cfopEscriturado: informado };
+                const daRegua = cfopsDistintosDaNota(d, direcao, ctx);
+                const cru = String(d.itens?.[0]?.cfop || '').replace(/\D/g, '');
+                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx);
+                const parte: any = contraparteDoc(d);
+                return {
+                    id: d.id,
+                    data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
+                    numero: d.numero || '—',
+                    participante: parte?.nome || '—',
+                    direcao,
+                    daRegua,
+                    /** Nota com mais de um CFOP: carimbar UM colapsa os outros. */
+                    mista: daRegua.length > 1,
+                    informado,
+                    origem,
+                    valor: d.totais?.vNF || d.valorTotal || 0,
+                };
+            })
+            .sort((a, b) => a.data.localeCompare(b.data) || String(a.numero).localeCompare(String(b.numero)));
+    }, [docs, ctx, gravado]);
+
+    const comCarimbo = linhas.filter(l => l.informado).length;
+
+    const salvar = async (l: typeof linhas[number], valor: string) => {
+        setErro(null);
+        setSalvando(l.id);
+        try {
+            const r = await gravarCfopEscriturado({
+                documentoId: l.id, direcao: l.direcao, cfop: valor,
+                porEmail: currentUser?.email || '',
+            });
+            setGravado(g => ({ ...g, [l.id]: r.cfop }));
+            setRascunho(x => { const n = { ...x }; delete n[l.id]; return n; });
+            onShowToast?.(r.cfop
+                ? `NF ${l.numero}: CFOP ${r.cfop} informado.`
+                : `NF ${l.numero}: voltou para a correlação automática.`, 'success');
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao gravar.');
+        } finally {
+            setSalvando(null);
+        }
+    };
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `CFOP por nota — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} nota(s) · ${comCarimbo} com CFOP informado`,
+        colunas: [
+            { titulo: 'Data', largura: 8 }, { titulo: 'Nº NF', largura: 8 },
+            { titulo: 'E/S', largura: 4 },
+            { titulo: 'Participante', largura: 26 },
+            { titulo: 'CFOP pela régua', largura: 14 },
+            { titulo: 'CFOP informado', largura: 12 },
+            { titulo: 'Origem', largura: 14 },
+            { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
+        ],
+        linhas: linhas.map(l => [
+            l.data, l.numero, l.direcao === 'entrada' ? 'E' : 'S', l.participante,
+            l.daRegua.join(' ') || '—', l.informado || '—', l.origem.rotulo, l.valor,
+        ]),
+        identificacao,
+        observacoes: [
+            'O CFOP informado na NF vence a correlação automática e o override da empresa, e vale para TODOS os '
+            + 'itens daquela nota (decisão de 17/08: o campo é por NF).',
+            `Natureza da atividade "${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
+            ...(linhas.some(l => l.mista) ? [
+                `${linhas.filter(l => l.mista).length} nota(s) têm mais de um CFOP entre os itens — informar um CFOP `
+                + 'na NF faz os itens saírem todos com ele.',
+            ] : []),
+            ...obsTruncado(truncado),
+        ],
+        fileName: `cfop-por-nota-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-center gap-2">
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">
+                    {linhas.length} nota(s) · {comCarimbo} com CFOP informado
+                </span>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">
+                O CFOP informado aqui vence a correlação automática e o override da empresa, e vale para{' '}
+                <strong>todos os itens daquela nota</strong>. Ele aparece no Livro, no Resumo por CFOP, no SPED
+                (C170/C190) e no Exportar SAGE — não só nesta tela. <strong>Campo em branco</strong> devolve a
+                nota à régua automática.
+            </p>
+            {erro && (
+                <div className="mt-2 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
+                    {erro}
+                </div>
+            )}
+            {!linhas.length ? (
+                <p className="mt-3 text-sm text-slate-500">
+                    Nenhuma NF-e/NFC-e no recorte. Se a empresa emite ou recebe nota, isto é buraco de captura —
+                    veja Prova de captura e Cobertura de Saída.
+                </p>
+            ) : (
+                <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500">
+                            <tr className="text-left border-b border-slate-200 dark:border-slate-700">
+                                <th className="py-1 pr-2">Data</th>
+                                <th className="py-1 pr-2">Nº NF</th>
+                                <th className="py-1 pr-2">E/S</th>
+                                <th className="py-1 pr-2">Participante</th>
+                                <th className="py-1 pr-2">CFOP pela régua</th>
+                                <th className="py-1 pr-2">CFOP informado</th>
+                                <th className="py-1 pr-2">Origem</th>
+                                <th className="py-1 pr-2 text-right">Vlr. Contábil</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {linhas.map(l => (
+                                <tr key={l.id} className="border-b border-slate-100 dark:border-slate-800">
+                                    <td className="py-1 pr-2 whitespace-nowrap">{l.data}</td>
+                                    <td className="py-1 pr-2 font-mono">{l.numero}</td>
+                                    <td className="py-1 pr-2">{l.direcao === 'entrada' ? 'E' : 'S'}</td>
+                                    <td className="py-1 pr-2 max-w-[16rem] truncate" title={l.participante}>{l.participante}</td>
+                                    <td className="py-1 pr-2 font-mono">
+                                        {l.daRegua.join(' ') || '—'}
+                                        {l.mista && (
+                                            <span className="ml-1 text-amber-600 dark:text-amber-400"
+                                                title="Esta nota tem mais de um CFOP entre os itens. Informar um CFOP na NF faz todos saírem com ele.">
+                                                ⚠ mista
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="py-1 pr-2">
+                                        <input
+                                            value={rascunho[l.id] !== undefined ? rascunho[l.id] : l.informado}
+                                            onChange={e => setRascunho(x => ({ ...x, [l.id]: e.target.value }))}
+                                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                            onBlur={e => {
+                                                const v = e.target.value.trim();
+                                                if (v === (l.informado || '')) return;
+                                                void salvar(l, v);
+                                            }}
+                                            disabled={salvando === l.id}
+                                            placeholder="—"
+                                            maxLength={4}
+                                            className="w-20 p-1 font-mono text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 disabled:opacity-50"
+                                        />
+                                    </td>
+                                    <td className="py-1 pr-2 text-slate-500">
+                                        {l.origem.rotulo}
+                                        {l.origem.por && <span className="block text-[10px]">{l.origem.por}</span>}
+                                    </td>
+                                    <td className="py-1 pr-2 text-right whitespace-nowrap">{fmtBRL(l.valor)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── 3. ICMS · IPI · ISS ────────────────────────────────────────────────────
 
 // ─── 2. Resumo por CFOP ─────────────────────────────────────────────────────
 

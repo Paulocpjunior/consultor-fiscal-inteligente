@@ -267,13 +267,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ST) provavelmente não têm par mecânico** (1155/1156 não existem na tabela de
   entrada) — é o mesmo desenho do 1405 e precisa de confirmação antes de virar
   código. Nenhuma das duas se encoda por dedução minha.
-  🚧 **E o "campo para lançamento das notas escrituradas" (pedido dele) ainda não
-  existe**: hoje o override é POR EMPRESA (`dadosFiscais.cfopOverrides`, mapa
-  CFOP→CFOP no modal 🔗). O que ele pede é granularidade por NOTA/ITEM — e a
-  decisão de desenho é essa, porque *"algumas notas podem ter mais de um CFOP,
-  mais de um produto"* (palavra dele, 04/08). Campo novo aqui só entra com TODOS
-  os leitores no mesmo PR (livro, C170/C190 do SPED, Resumo por CFOP, Exportar
-  SAGE), senão vira o campo que uma tela honra e o arquivo ignora.
+  ✅ **E O CAMPO DE LANÇAMENTO ENTROU — a decisão dele foi "é por NF"** (perguntei
+  se era por nota ou por item). Aba **✏️ CFOP por nota** em Relatórios:
+  `documentos_fiscais.cfopEscriturado` + carimbo (`...Por`/`...Em`), com
+  precedência **NF > override da EMPRESA > régua automática** (o mais específico
+  vence, igual ao cadastro de NCM) e **campo em branco devolvendo a nota à régua**.
+  A decisão vale para TODOS OS ITENS da nota — foi o pedido, e a consequência é
+  DITA antes do clique: nota com CFOPs diferentes entre os itens aparece marcada
+  **⚠ mista** com os CFOPs que o carimbo vai colapsar (`cfopsDistintosDaNota`),
+  em vez de o total mudar sozinho depois.
+  🚨 **A trava que manda aqui é a dos LEITORES**: campo que só a tela honra seria
+  pior que não ter o campo — a conferência daria certo e o SPED sairia com o CFOP
+  velho. `cfopPorNota.test.ts` varre e exige que Livro, Resumo por CFOP, Por
+  produto, C170/C190, E510 e as DUAS saídas do Exportar SAGE passem o DOCUMENTO
+  para `cfopDoLancamento`, não só o CFOP do item.
+  ⚠️ **CFOP digitado não entra torto**: `validarCfopEscriturado` recusa faixa
+  incompatível com a direção (5102 numa entrada) — é a família do 1405, e campo
+  fiscal digitado sem trava vira dado que só a fiscalização acha. 🐛 A varredura
+  da régua única pegou meu `['1','2','3'].includes(...)` como cópia de
+  `ehNotaPropriaDeEntrada`; virou regex de faixa em vez de exceção — mesma saída
+  do `status` que virou `situacao`.
 - **🚨 O `1010` DO EFD-CONTRIBUIÇÕES NÃO É O DO EFD ICMS/IPI — mesmo número,
   arquivo diferente** (Paulo, 17/08, com o recibo do PVA da MANTOAN 07/2026:
   *"O número de campos informado no registro difere do especificado no leiaute"*

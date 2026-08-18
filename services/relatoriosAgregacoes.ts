@@ -15,7 +15,7 @@ import { alocarTributacaoIcms } from './iobSageExportService';
 // relatório dizer "nenhuma nota emitida" com 436 documentos no recorte.
 import { cnpjEmitente, modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
 // Régua ÚNICA de correlação de CFOP — a mesma do Exportar SAGE e do modal.
-import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js';
+import { correlacionarCfop, cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 // Cancelamento EFETIVO — o status gravado pode mentir (evento 155 não virava o
 // status; merge stub→nota ressuscitava a cancelada). docCancelado decide na
 // LEITURA olhando também eventos[]/cStat — bug 11/08, MV LIDER 639: cancelada
@@ -93,7 +93,9 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             const cru = String(it.cfop || '0000').replace(/\D/g, '') || '0000';
             // Na saída `correlacionarCfop` devolve o próprio CFOP; a nota
             // própria de entrada (art. 136) já nasce 1xxx e passa intacta.
-            const cfop = String(correlacionarCfop(cru, d.direcao as any, ctx) || cru);
+            // O CFOP informado NA NF vence a régua automática (decisão do
+            // Paulo, 17/08: "é por NF"). Sem ele, nada muda.
+            const cfop = String(cfopDoLancamento(d, cru, d.direcao as any, ctx) || cru);
             if (!porCfop.has(cfop)) porCfop.set(cfop, []);
             porCfop.get(cfop)!.push(it);
         }
@@ -632,7 +634,7 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
             if (it.uCom) linha._unidades.add(String(it.uCom).trim().toUpperCase());
             if (it.cfop) {
                 const cru = String(it.cfop).replace(/\D/g, '');
-                linha._cfops.add(String(correlacionarCfop(cru, direcao, ctx) || cru));
+                linha._cfops.add(String(cfopDoLancamento(d, cru, direcao, ctx) || cru));
             }
             linha._notas.add(d.id || d.chave);
             mapa.set(k, linha);
