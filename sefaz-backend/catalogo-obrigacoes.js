@@ -79,12 +79,14 @@ import { resolverPrazoMunicipal, resolverPrazoEstadual } from './prazos-municipa
 import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
 
 /** Regimes que o mês entende. INDEFINIDO é um estado real, não um erro. */
-export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'INDEFINIDO'];
+export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'IMUNE', 'ISENTA', 'INDEFINIDO'];
 
 export const REGIME_LABEL = {
     SIMPLES: 'Simples Nacional',
     LUCRO_PRESUMIDO: 'Lucro Presumido',
     LUCRO_REAL: 'Lucro Real',
+    IMUNE: 'Imune',
+    ISENTA: 'Isenta',
     INDEFINIDO: 'Regime não definido',
 };
 
@@ -111,23 +113,14 @@ export function resolverRegime(empresa) {
     // a lista de obrigações.
     const v = regimeDaEmpresa(empresa);
 
-    // ⚠️ IMUNE e ISENTA NÃO HERDAM A LISTA DO PRESUMIDO.
+    // ✅ IMUNE e ISENTA TÊM LISTA PRÓPRIA desde 18/08 — respondida pelo Paulo,
+    // não deduzida por mim. Antes disso elas caíam em INDEFINIDO de propósito,
+    // para não herdarem em SILÊNCIO a lista do Presumido (que punha PIS/COFINS
+    // mensal sobre faturamento e EFD ICMS/IPI numa igreja).
     //
-    // Elas TÊM obrigações (ECD, ECF, DCTFWeb, EFD-Contribuições com PIS sobre
-    // FOLHA — Lei 9.532/97 art. 13), mas montar essa lista por dedução minha é o
-    // erro do 1405 num lugar onde o custo é multa. Até o Paulo defini-la, elas
-    // recebem só o que é COMUM a todos os regimes e a falta sai NOMEADA — que é
-    // exatamente o que o INDEFINIDO já fazia. Herdar Presumido em silêncio
-    // apuraria PIS/COFINS sobre faturamento de quem recolhe sobre a folha.
-    if (!v.apuracaoDefinida && v.regime !== 'INDEFINIDO') {
-        return {
-            regime: 'INDEFINIDO',
-            regimeDeclarado: v.regime,
-            motivo: `Empresa marcada como ${rotuloRegime(v.regime)}. ${v.motivo || ''} `
-                + 'O CFI NÃO aplica a lista do Lucro Presumido a ela: entrega só as obrigações '
-                + 'comuns e avisa, em vez de apurar imposto que talvez não exista.',
-        };
-    }
+    // O que continua valendo: elas NÃO recebem o catálogo do Lucro. A lista
+    // delas está em CATALOGO.IMUNE / CATALOGO.ISENTA, com a fala que decidiu
+    // cada entrada.
     return { regime: v.regime, motivo: v.motivo };
 }
 
@@ -276,12 +269,90 @@ const ISS = {
     status: 'proposta', dependeDe: 'calendário do município', revisar: true,
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// IMUNES, ISENTAS E TERCEIRO SETOR — as respostas do Paulo, 18/08
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Perguntei três coisas e ele respondeu as três. Cada entrada abaixo carrega a
+// FALA que a decidiu — é o que separa encodar uma decisão de deduzir uma.
+//
+// ⚠️ Até aqui a entidade imune HERDAVA a lista do Presumido, porque o regime era
+// deduzido da COLEÇÃO em que ela tinha sido cadastrada. Isso punha PIS/COFINS
+// MENSAL sobre faturamento e EFD ICMS/IPI numa igreja.
+
+const DCTFWEB_EVENTOS = {
+    ...DCTFWEB,
+    // "apenas quando houver eventos (ALUGUEL/FOLHA/RETIDOS FISCAL)"
+    status: 'proposta',
+    dependeDe: 'evento no mês (aluguel, folha ou retenção)',
+    baseLegal: DCTFWEB.baseLegal + ' — imune/isenta: só com evento (Paulo, 18/08)',
+};
+const FGTS_SE_FOLHA = {
+    ...FGTS,
+    // ⚠️ EXTENSÃO MINHA, não fala dele: ele citou FOLHA entre os eventos da
+    // DCTFWeb, e FGTS é consequência de folha. Entra como PROPOSTA (não gera
+    // tarefa) porque errar para MENOS aqui custa multa e errar para MAIS criaria
+    // pendência falsa todo mês em entidade sem empregado. Confirmar com ele.
+    status: 'proposta',
+    dependeDe: 'folha',
+    revisar: true,
+};
+const INSS_CPP_SE_FOLHA = { ...INSS_CPP, revisar: true };
+const ECD_SE_MOVIMENTO = {
+    ...ECD,
+    // "entrega se tiver movimento financeiro"
+    status: 'proposta',
+    dependeDe: 'movimento financeiro no ano',
+    baseLegal: ECD.baseLegal + ' — imune/isenta: só com movimento financeiro (Paulo, 18/08)',
+};
+const ECF_SE_MOVIMENTO = {
+    ...ECF,
+    status: 'proposta',
+    dependeDe: 'movimento financeiro no ano',
+    baseLegal: ECF.baseLegal + ' — imune/isenta: só com movimento financeiro (Paulo, 18/08)',
+};
+const EFD_CONTRIB_ANUAL = {
+    ...EFD_CONTRIB,
+    // "Apenas em dezembro, indicando sem movimento."
+    // `frequencia: A` já significa "competência que FECHA o ano" (dezembro) —
+    // é a mesma régua da DEFIS, não uma exceção nova.
+    frequencia: A,
+    label: 'EFD-Contribuições (anual, dez)',
+    nome: 'EFD-Contribuições — dezembro, sem movimento',
+    baseLegal: EFD_CONTRIB.baseLegal + ' — imune/isenta: só a competência 12, sem movimento (Paulo, 18/08)',
+    status: 'ativa',
+    // 🚩 FIM DE VIGÊNCIA ESPERADO, NÃO CONFIRMADO. Paulo, 18/08: *"com a reforma
+    // estão indicando que essa obrigação encerra em 12/2026"*. "Estão indicando"
+    // não é norma publicada, então o app **continua gerando** e DIZ a ressalva:
+    // parar de gerar por causa de uma expectativa faria a obrigação sumir em
+    // silêncio, e sumir da tela é pior que aparecer com ressalva.
+    vigenciaAteEsperada: '12/2026',
+    vigenciaRessalva: 'Com a reforma tributária (extinção de PIS/COFINS), a expectativa é que esta '
+        + 'obrigação encerre em 12/2026. Enquanto não houver norma publicada, o CFI CONTINUA gerando — '
+        + 'confira antes de deixar de entregar.',
+};
+
 const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, ISS];
+
+/**
+ * A lista da IMUNE e da ISENTA.
+ *
+ * O que ela NÃO tem, e por quê: **PIS/COFINS mensal** (a resposta dele sobre a
+ * EFD-Contribuições — só dezembro, sem movimento — diz que não há contribuição
+ * mensal a declarar; e no terceiro setor o PIS é sobre a FOLHA, não sobre o
+ * faturamento) e **EFD ICMS/IPI** (obrigação de contribuinte de ICMS).
+ */
+const IMUNE_ISENTA = [
+    DCTFWEB_EVENTOS, FGTS_SE_FOLHA, INSS_CPP_SE_FOLHA,
+    EFD_CONTRIB_ANUAL, ECD_SE_MOVIMENTO, ECF_SE_MOVIMENTO,
+];
 
 export const CATALOGO = {
     SIMPLES: [DAS, FGTS, DEFIS],
     LUCRO_PRESUMIDO: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM, ECF, ECD],
     LUCRO_REAL: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM, ECF, ECD],
+    IMUNE: IMUNE_ISENTA,
+    ISENTA: IMUNE_ISENTA,
     // Regime indefinido NÃO fica vazio (isso apagaria o cliente do mês) e NÃO
     // recebe o catálogo do Lucro inteiro (isso escolheria um regime). Recebe o
     // que é comum aos dois — o que dá pra afirmar sem saber qual deles é.
@@ -446,6 +517,10 @@ export function obrigacoesDoCliente(regime, competencia, { uf = '', codMunIBGE =
     const mes = mesDoCliente({
         colecao: chave === 'SIMPLES' ? 'simples_empresas' : 'lucro_empresas',
         regimePadrao: chave === 'LUCRO_PRESUMIDO' ? 'presumido' : (chave === 'LUCRO_REAL' ? 'real' : ''),
+        // IMUNE/ISENTA não têm coleção própria — sem o campo explícito aqui,
+        // `resolverRegime` cairia em INDEFINIDO e a entidade voltaria a receber
+        // a lista comum do Lucro, que é justamente o defeito corrigido.
+        regimeTributario: (chave === 'IMUNE' || chave === 'ISENTA') ? chave : undefined,
         uf, codMunIBGE, prazosMunicipais,
     }, competencia);
     return { ...mes, regimeReconhecido: reconhecido, regimeInformado: regime };
@@ -704,11 +779,19 @@ export function pendenciasDeConfirmacao() {
     for (const regime of Object.keys(CATALOGO)) {
         for (const r of CATALOGO[regime]) {
             if (r.status !== 'ativa' || r.revisar) {
-                const chave = r.obrigacao;
+                // 🚨 A CHAVE É A REGRA, NÃO SÓ O NOME DA OBRIGAÇÃO.
+                //
+                // Desde 18/08 a MESMA obrigação tem regras diferentes por regime:
+                // o FGTS do Lucro é 'ativa' e conferido, o da imune é 'proposta'
+                // (depende de folha). Deduplicar só por `obrigacao` colapsaria as
+                // duas numa linha e o checklist diria "FGTS não conferido" — uma
+                // afirmação falsa sobre o FGTS de toda a carteira.
+                const chave = [r.obrigacao, r.status, r.dependeDe || '', r.frequencia].join('|');
                 if (!vistos.has(chave)) {
                     vistos.set(chave, {
                         obrigacao: r.obrigacao,
                         label: r.label,
+                        frequencia: r.frequencia,
                         esfera: r.esfera,
                         abrangencia: r.abrangencia,
                         status: r.status,

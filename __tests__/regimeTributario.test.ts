@@ -22,7 +22,7 @@ import {
 // @ts-ignore
 } from '../sefaz-backend/regime-tributario.js';
 // @ts-ignore
-import { resolverRegime } from '../sefaz-backend/catalogo-obrigacoes.js';
+import { resolverRegime, CATALOGO, obrigacoesAplicaveis } from '../sefaz-backend/catalogo-obrigacoes.js';
 // @ts-ignore
 import { normalizarEmpresaCadastro } from '../sefaz-backend/cadastro-central.js';
 
@@ -33,12 +33,17 @@ describe('o vocabulário cobre o que o Paulo nomeou', () => {
         );
     });
 
-    it('imune e isenta declaram que a apuração NÃO está definida', () => {
-        expect(REGIMES.IMUNE.apuracao).toBe(false);
-        expect(REGIMES.ISENTA.apuracao).toBe(false);
-        // E cada uma carrega a ressalva escrita — silêncio aqui vira herança.
-        expect(REGIMES.IMUNE.ressalva).toMatch(/NÃO está definida/);
-        expect(REGIMES.ISENTA.ressalva).toMatch(/NÃO está definida/);
+    // ⚠️ TESTE TROCADO EM 18/08, e a troca é o registro da decisão. A 1ª versão
+    // exigia `apuracao: false` — o comportamento certo ENQUANTO ninguém tinha
+    // decidido a lista. Paulo respondeu as três perguntas e a lista passou a
+    // existir; exigir o contrário agora seria travar o app na dúvida antiga.
+    it('imune e isenta têm lista própria, e a ressalva diz QUAL é', () => {
+        expect(REGIMES.IMUNE.apuracao).toBe(true);
+        expect(REGIMES.ISENTA.apuracao).toBe(true);
+        for (const r of [REGIMES.IMUNE, REGIMES.ISENTA]) {
+            expect(r.ressalva).toMatch(/não dispensa obrigação acessória|dispensa de obrigação acessória/);
+            expect(r.ressalva).toMatch(/apenas em dezembro/);
+        }
     });
 
     it('normaliza o que o cadastro antigo escrevia, sem chutar o resto', () => {
@@ -70,7 +75,10 @@ describe('precedência: o campo vence a coleção', () => {
         const v = regimeDaEmpresa(igreja);
         expect(v.regime).toBe('IMUNE');
         expect(v.origem).toBe('cadastro');
-        expect(v.apuracaoDefinida).toBe(false);
+        // A lista dela EXISTE desde 18/08 — mas a ressalva continua viajando,
+        // porque é ela que diz o que a entidade deve e o que não deve.
+        expect(v.apuracaoDefinida).toBe(true);
+        expect(v.motivo).toMatch(/dezembro/);
     });
 
     it('sem o campo, a coleção ainda responde — e a ORIGEM diz que foi deduzido', () => {
@@ -95,20 +103,19 @@ describe('precedência: o campo vence a coleção', () => {
 });
 
 describe('🚨 imune e isenta NÃO herdam a lista do Presumido', () => {
-    it('resolverRegime devolve INDEFINIDO, com o regime declarado NOMEADO', () => {
-        const r = resolverRegime({ colecao: 'lucro_empresas', regimePadrao: 'presumido', regimeTributario: 'IMUNE' });
-        // INDEFINIDO aqui não é "não sabemos o que ela é" — é "não sabemos o que
-        // ela DEVE". O que ela é vai junto, escrito.
-        expect(r.regime).toBe('INDEFINIDO');
-        expect(r.regimeDeclarado).toBe('IMUNE');
-        expect(r.motivo).toMatch(/Imune/);
-        expect(r.motivo).toMatch(/NÃO aplica a lista do Lucro Presumido/);
+    it('o regime é o DELAS, não INDEFINIDO nem Presumido', () => {
+        expect(resolverRegime({ colecao: 'lucro_empresas', regimePadrao: 'presumido', regimeTributario: 'IMUNE' }))
+            .toMatchObject({ regime: 'IMUNE' });
+        expect(resolverRegime({ colecao: 'lucro_empresas', regimeTributario: 'ISENTA' }))
+            .toMatchObject({ regime: 'ISENTA' });
     });
 
-    it('e o mesmo para a isenta', () => {
-        const r = resolverRegime({ colecao: 'lucro_empresas', regimeTributario: 'ISENTA' });
-        expect(r.regime).toBe('INDEFINIDO');
-        expect(r.regimeDeclarado).toBe('ISENTA');
+    it('🚨 e a lista NÃO tem PIS/COFINS mensal nem EFD ICMS/IPI', () => {
+        const obrigacoes = CATALOGO.IMUNE.map((o: any) => o.obrigacao);
+        // Era isto que a herança do Presumido punha numa igreja.
+        expect(obrigacoes).not.toContain('PIS_COFINS');
+        expect(obrigacoes).not.toContain('SPED');
+        expect(CATALOGO.ISENTA).toBe(CATALOGO.IMUNE);
     });
 
     it('quem TEM apuração definida segue igual — nada regride', () => {
@@ -168,9 +175,12 @@ describe('o túnel entrega o regime de verdade aos apps irmãos', () => {
         expect(igreja.semFinsLucrativos).toBe(true);
     });
 
-    it('e recebe a RESSALVA junto — silêncio não é "nada a fazer"', () => {
-        expect(igreja.regimeApuracaoDefinida).toBe(false);
+    it('e recebe a RESSALVA junto — com a lista, não só com o aviso', () => {
+        expect(igreja.regimeApuracaoDefinida).toBe(true);
         expect(igreja.regimeRessalva).toMatch(/obrigação acessória/);
+        // A ressalva agora DIZ as obrigações, que é o que o CCI precisa.
+        expect(igreja.regimeRessalva).toMatch(/DCTFWeb só com evento/);
+        expect(igreja.regimeRessalva).toMatch(/apenas em dezembro/);
     });
 
     it('a ORIGEM viaja: o irmão distingue o que foi DITO do que foi DEDUZIDO', () => {
@@ -184,5 +194,58 @@ describe('o túnel entrega o regime de verdade aos apps irmãos', () => {
         // Trocar o sentido de um campo em uso é a quebra que não dá erro.
         expect(igreja.regime).toBe('lucro');
         expect(normalizarEmpresaCadastro({ cnpj: '11222333000181', nome: 'X' }, 'simples').regime).toBe('simples');
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AS TRÊS RESPOSTAS DO PAULO (18/08) — cada uma virou entrada do catálogo
+// ═══════════════════════════════════════════════════════════════════════════
+describe('a lista da imune e da isenta é a que ele respondeu', () => {
+    const porNome = (n: string): any => CATALOGO.IMUNE.find((o: any) => o.obrigacao === n)!;
+
+    it('1 · ECD e ECF: "entrega se tiver movimento financeiro"', () => {
+        for (const n of ['ECD', 'ECF']) {
+            const o = porNome(n);
+            expect(o.status).toBe('proposta');
+            expect(o.dependeDe).toMatch(/movimento financeiro/);
+        }
+    });
+
+    it('2 · DCTFWeb: "apenas quando houver eventos (aluguel/folha/retidos)"', () => {
+        const o = porNome('DCTFWEB');
+        expect(o.status).toBe('proposta');
+        expect(o.dependeDe).toMatch(/aluguel, folha ou retenção/);
+    });
+
+    it('3 · EFD-Contribuições: "apenas em dezembro, indicando sem movimento"', () => {
+        const o = porNome('EFD_CONTRIB');
+        expect(o.frequencia).toBe('anual');
+        expect(o.status).toBe('ativa');
+        // `frequencia: 'anual'` já quer dizer "competência que fecha o ano".
+        expect(obrigacoesAplicaveis('IMUNE', '12/2026').map((x: any) => x.obrigacao)).toContain('EFD_CONTRIB');
+        expect(obrigacoesAplicaveis('IMUNE', '07/2026').map((x: any) => x.obrigacao)).not.toContain('EFD_CONTRIB');
+    });
+
+    it('🚩 o fim de vigência de 12/2026 é EXPECTATIVA — o app segue gerando e DIZ', () => {
+        const o = porNome('EFD_CONTRIB');
+        expect(o.vigenciaAteEsperada).toBe('12/2026');
+        expect(o.vigenciaRessalva).toMatch(/reforma tributária/);
+        // Parar de gerar por causa de expectativa faria a obrigação sumir em
+        // silêncio — e sumir da tela é pior que aparecer com ressalva.
+        expect(obrigacoesAplicaveis('IMUNE', '12/2027').map((x: any) => x.obrigacao)).toContain('EFD_CONTRIB');
+    });
+
+    it('⚠️ FGTS entrou como PROPOSTA e MARCADO para revisar — extensão minha', () => {
+        // Ele citou FOLHA entre os eventos da DCTFWeb; FGTS é consequência de
+        // folha. Como PROPOSTA não gera tarefa: errar para menos aqui custaria
+        // multa, e errar para mais criaria pendência falsa todo mês.
+        const o = porNome('FGTS');
+        expect(o.status).toBe('proposta');
+        expect(o.dependeDe).toBe('folha');
+        expect(o.revisar).toBe(true);
+    });
+
+    it('mês comum de uma imune não gera tarefa nenhuma — e isso é o certo', () => {
+        expect(obrigacoesAplicaveis('IMUNE', '07/2026')).toHaveLength(0);
     });
 });
