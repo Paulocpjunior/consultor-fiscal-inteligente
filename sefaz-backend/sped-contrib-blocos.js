@@ -90,8 +90,8 @@ const COD_SIT_REGULAR = '00';
 const IND_PGTO_PADRAO = '0';
 
 /**
- * CSTs de aquisição que GERAM crédito (Tabela 4.3.7) — só neles os campos
- * NAT_BC_CRED e IND_ORIG_CRED do A170 existem.
+ * CSTs de aquisição que GERAM crédito (Tabela 4.3.7) — só neles o campo
+ * NAT_BC_CRED do A170 existe.
  */
 const CSTS_COM_CREDITO = new Set(['50', '51', '52', '53', '54', '55', '56']);
 
@@ -101,6 +101,20 @@ function descricaoDoServico(nota) {
     if (d && String(d).trim()) return String(d).trim();
     return 'Prestação de serviços conforme documento fiscal';
 }
+
+/**
+ * COD_ITEM do A170 quando o documento não traz itens capturados (NFS-e do
+ * portal, que grava `valorTotal` em vez de `itens[]`).
+ *
+ * Paulo, 18/08 (MANTOAN, 3ª rodada do PVA): 36 recusas "Campo obrigatório não
+ * informado · COD_ITEM" — o item sintético do A170 saía com `cod: ''`. Não é
+ * item de estoque nenhum (não existe cProd numa NFS-e sem discriminação), então
+ * inventar um código POR DOCUMENTO seria fingir um catálogo que não existe. A
+ * saída é UM código FIXO e reconhecível, que representa "serviço sem item
+ * discriminado" — e ele PRECISA aparecer no 0200 (Bloco 0), senão o A170 aponta
+ * para um item que a Tabela de Identificação não cadastrou.
+ */
+export const COD_ITEM_SERVICO_GENERICO = 'SERV-GENERICO';
 
 /**
  * O VALOR do documento de serviço, nas formas em que ele chega.
@@ -127,7 +141,7 @@ export function valorDoDocumentoServico(nota) {
     return NaN;
 }
 
-function filtrarNotasBlocoA(notas) {
+export function filtrarNotasBlocoA(notas) {
     return (notas || []).filter(n => {
         // Cancelada não se declara: os blocos C/D/F já a pulavam e o A não —
         // então NFS-e cancelada saía com PIS/COFINS calculados em cima dela.
@@ -235,16 +249,29 @@ export function buildBlocoA(dados) {
                 valor: parseFloat(item.vProd || item.valor || 0),
                 item,
             }))
-            : [{ nItem: '1', cod: '', descr: descricaoDoServico(nota), valor: vlDoc, item: {} }];
+            : [{
+                nItem: '1',
+                cod: COD_ITEM_SERVICO_GENERICO,
+                descr: descricaoDoServico(nota),
+                valor: vlDoc,
+                item: {},
+            }];
 
         for (const it of itensDoDoc) {
             const cstPis = getCstPis(it.item, regimeApuracao, direcao);
             const cstCofins = getCstCofins(it.item, regimeApuracao, direcao);
-            // ⚠️ NAT_BC_CRED e IND_ORIG_CRED só existem quando HÁ crédito (CST de
-            // aquisição 50-56). O código antigo cravava NAT_BC_CRED = '0', que
-            // não é sequer um código da tabela (ela vai de 01 a 18) — e ia junto
-            // na saída, onde crédito não existe. Campo fiscal não recebe default.
+            // ⚠️ NAT_BC_CRED só existe quando HÁ crédito (CST de aquisição
+            // 50-56) — campo fiscal não recebe default.
             const comCredito = CSTS_COM_CREDITO.has(cstPis);
+            // 🚨 IND_ORIG_CRED — Paulo, 18/08, 3ª rodada do PVA da MANTOAN: 3
+            // recusas em itens de ENTRADA com CST 70 (sem crédito), com a
+            // mensagem "Campo obrigatório PARA NOTAS FISCAIS DE ENTRADA". O
+            // código anterior condicionava este campo ao CST TER crédito — e
+            // a mensagem do PVA desmente essa premissa: quem manda aqui é a
+            // DIREÇÃO do documento, não o CST. Toda entrada leva IND_ORIG_CRED
+            // (0 = mercado interno), tenha ou não direito a crédito; saída não
+            // tem o campo (ele descreve a origem da AQUISIÇÃO).
+            const indOrigemCredito = direcao !== 'saida' ? '0' : '';
             linhas.push(fmt.buildLine([
                 'A170',
                 it.nItem,
@@ -253,7 +280,7 @@ export function buildBlocoA(dados) {
                 fmt.formatValue(it.valor),
                 '',                                   // VL_DESC
                 comCredito ? '01' : '',               // NAT_BC_CRED
-                comCredito ? '0' : '',                // IND_ORIG_CRED (0 = mercado interno)
+                indOrigemCredito,                     // IND_ORIG_CRED
                 cstPis,
                 fmt.formatValue(it.valor),
                 fmt.formatValue(aliq.pis * 100, 4),
