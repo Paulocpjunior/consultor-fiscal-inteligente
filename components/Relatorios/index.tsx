@@ -60,7 +60,7 @@ import { livroSemNotaDeProdutorDuplicada } from '../../services/livroNotaProduto
 import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
 // A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
-import { textoDoCfop, FONTE_CFOP } from '../../sefaz-backend/cfop-catalogo.js';
+import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -581,6 +581,19 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
 
     const comCarimbo = linhas.filter(l => l.informado).length;
 
+    // 🚨 CFOP QUE NÃO CONSTA DA TABELA EM VIGOR — a conferência contra a NORMA.
+    //
+    // Foi assim que apareceram, no Resumo por CFOP da NOVA ERA 07/2026, o 1655
+    // (109 notas), o 1929 (25), o 1103 (9) e o 2104 (1): a conversão mecânica
+    // preserva o sufixo do vendedor e, em várias famílias, aquele sufixo não tem
+    // par na entrada. É o defeito do 1405, repetido.
+    const inexistentes = useMemo(() => {
+        const usados = linhas.map(l => l.informado || l.daRegua[0] || '').filter(Boolean);
+        const fora = cfopsInexistentes(usados);
+        const notas = linhas.filter(l => fora.includes(l.informado || l.daRegua[0] || '')).length;
+        return { fora, notas };
+    }, [linhas]);
+
     const salvar = async (l: typeof linhas[number], valor: string) => {
         setErro(null);
         setSalvando(l.id);
@@ -624,6 +637,10 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             'O CFOP informado na NF vence a correlação automática e o override da empresa, e vale para TODOS os '
             + 'itens daquela nota (decisão de 17/08: o campo é por NF).',
             `Natureza da atividade "${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
+            ...(inexistentes.fora.length ? [
+                `${inexistentes.notas} nota(s) com CFOP que NÃO CONSTA da tabela em vigor (${FONTE_CFOP.redacao}): `
+                + `${inexistentes.fora.join(', ')}. O app não escolhe o substituto — informe o CFOP nota a nota.`,
+            ] : []),
             ...(linhas.some(l => l.mista) ? [
                 `${linhas.filter(l => l.mista).length} nota(s) têm mais de um CFOP entre os itens — informar um CFOP `
                 + 'na NF faz os itens saírem todos com ele.',
@@ -652,6 +669,16 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 marcado. A tabela oficial é a do{' '}
                 <a href={FONTE_CFOP.url} target="_blank" rel="noreferrer" className="underline">{FONTE_CFOP.titulo}</a>.
             </p>
+            {!!inexistentes.fora.length && (
+                <div className="mt-3 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-300">
+                    <strong>{inexistentes.notas} nota(s) com CFOP que NÃO CONSTA da tabela em vigor</strong>{' '}
+                    ({FONTE_CFOP.redacao}): <span className="font-mono">{inexistentes.fora.join(' · ')}</span>.
+                    <br />
+                    Isso quase sempre é a conversão automática preservando um sufixo do vendedor que não tem par na
+                    entrada — o app não sabe qual é o certo, e por isso NÃO escolhe. Informe o CFOP na coluna ao lado,
+                    nota a nota.
+                </div>
+            )}
             {erro && (
                 <div className="mt-2 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
                     {erro}

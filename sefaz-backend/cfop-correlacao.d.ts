@@ -49,6 +49,11 @@ export const SUFIXOS_TRANSFERENCIA_RECEBIDA: string[];
  * mercadoria de terceiros), não o destino que o cliente tinha dado. O par fica
  * DENTRO da família: 201/202 venda · 208/209 transferência · 410/411 com ST.
  */
+/**
+ * Combustível: a entrada só tem TRÊS códigos (651/652/653 = o destino) contra
+ * seis na saída. Preservar o sufixo produzia 1654/1655/1656, inexistentes.
+ */
+export const PARES_COMBUSTIVEL_ENTRADA: Record<string, string>;
 export const PARES_DEVOLUCAO_RECEBIDA: Record<string, { producao: string; terceiros: string }>;
 
 /**

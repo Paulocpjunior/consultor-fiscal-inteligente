@@ -292,6 +292,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   de qualificação do PGDAS. **Descrição entra COPIADA, nunca de memória**:
   descrição errada é pior que descrição nenhuma, porque faz escolher com
   confiança o CFOP errado.
+  ✅ **CATÁLOGO CARREGADO EM 18/08 — 619 códigos da redação EM VIGOR** (Ajuste
+  SINIEF 03/24, Anexo II do Convênio s/nº 15/12/1970; PDF da compilação da
+  SEFAZ-SC mandado pelo Paulo). **Extraídos por script, nenhum digitado.** O
+  arquivo `cfop-catalogo.js` é GERADO — para atualizar, regere do PDF novo.
+  🚨 **E O CATÁLOGO ACHOU O QUE NENHUM TESTE ACHAVA: o app estava INVENTANDO
+  CFOP na família do COMBUSTÍVEL.** A saída tem SEIS códigos (origem × destino:
+  5651-5656) e a entrada tem TRÊS (só o destino: 1651 industrialização · 1652
+  comercialização · 1653 consumidor final). **1654, 1655 e 1656 NÃO EXISTEM** —
+  e o Resumo por CFOP da NOVA ERA 07/2026 tem **1655 com 109 notas e
+  R$ 72.805,21**. É o **mesmo defeito do 1405**, três meses depois, noutra
+  família. ⚠️ Aqui NÃO se decide pelo ramo: o próprio CFOP do vendedor já DECLARA
+  o destino ("destinados à comercialização"), então o de-para é direto
+  (`PARES_COMBUSTIVEL_ENTRADA`) e não depende de cadastro nenhum.
+  📌 **E SOBRARAM TRÊS que a régua NÃO conserta**: o mesmo print tem **1103** (9
+  notas), **1929** (25) e **2104** (1) — códigos que o SINIEF 03/24 REMOVEU e que
+  a conversão mecânica ainda produz. O app **não escolhe o substituto** (seria
+  inventar), mas agora **DIZ**: a aba ✏️ CFOP por nota mostra `NÃO CONSTA` na
+  linha e um resumo em vermelho no topo com a lista e a contagem de notas.
+  🚨 **A TRAVA QUE FICA É A MAIS FORTE DO DIA**: `cfopCatalogo.test.ts` roda a
+  régua sobre **os CFOPs de saída que EXISTEM de verdade** nas famílias que ela
+  transforma e exige que o resultado conste da tabela. ⚠️ A 1ª versão montava os
+  códigos combinando faixa × sufixo e acusou 37 falhas — todas na faixa 3
+  (importação), para códigos como "7151" que **não existem nem como saída**. O
+  app só converte CFOP que veio num XML, e XML carrega código real: alimentar a
+  régua com código inventado é acusar defeito onde não há.
+  📉 O catálogo guarda a descrição **CURTA** (o título). As notas explicativas
+  inteiras somariam ~250 KB no bundle, e o que vai na tela ao lado do número é o
+  título — quem precisa da nota tem o link da fonte.
   🚨 **E A PRIMEIRA TABELA MANDADA NÃO SERVIA — a página `cfop_cvsn_70_nova` do
   CONFAZ NÃO é a redação EM VIGOR** (18/08, Paulo mandou o PDF de 59 páginas).
   Ela se desmente no cabeçalho — *"Nova redação dada ao CFOP pelo Ajuste SINIEF

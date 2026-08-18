@@ -83,6 +83,37 @@ export const SUFIXOS_TRANSFERENCIA_RECEBIDA = ['151', '152', '154'];
  *   208/209  devolução de mercadoria remetida em transferência
  *   410/411  devolução de venda em operação com ST
  */
+/**
+ * 🚨 COMBUSTÍVEL — a TERCEIRA assimetria, e esta INVENTA CFOP.
+ *
+ * Achada em 18/08, ao carregar a tabela oficial: o Resumo por CFOP da NOVA ERA
+ * 07/2026 tem **1655 com 109 notas e R$ 72.805,21** — e **1655 NÃO EXISTE**.
+ *
+ * A tabela em vigor (Ajuste SINIEF 03/24) mostra por quê:
+ *
+ *   SAÍDA — origem × destino, SEIS códigos
+ *     5651 produção própria → industrialização    5654 terceiros → industrialização
+ *     5652 produção própria → comercialização     5655 terceiros → comercialização
+ *     5653 produção própria → consumidor final    5656 terceiros → consumidor final
+ *   ENTRADA — só o DESTINO, TRÊS códigos
+ *     1651 para industrialização subsequente
+ *     1652 para comercialização
+ *     1653 por consumidor ou usuário final
+ *
+ * Não existem 1654, 1655 nem 1656. A conversão mecânica (5→1 preservando o
+ * sufixo) produz os três — é o **mesmo defeito do 1405**, na família do
+ * combustível.
+ *
+ * ⚠️ E aqui NÃO se decide pelo ramo: o próprio CFOP do vendedor já DECLARA o
+ * destino ("destinados à comercialização", "a consumidor ou usuário final").
+ * O de-para é direto e não depende de cadastro nenhum.
+ */
+export const PARES_COMBUSTIVEL_ENTRADA = {
+    '651': '651', '654': '651',   // → industrialização subsequente
+    '652': '652', '655': '652',   // → comercialização
+    '653': '653', '656': '653',   // → consumidor ou usuário final
+};
+
 export const PARES_DEVOLUCAO_RECEBIDA = {
     // sufixo do XML -> { producaoPropria, mercadoriaDeTerceiros }
     '201': { producao: '201', terceiros: '202' },
@@ -246,6 +277,14 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
         const sufDev = sufixoDevolucaoPorNatureza(sufixo, ctx.naturezaAtividade);
         if (sufDev) return primeiroDestino + sufDev;
         // Sem natureza definida ou misto -> conversão mecânica
+    }
+
+    // Combustível: a entrada só tem TRÊS códigos (o destino), a saída tem seis
+    // (origem × destino). Preservar o sufixo produz 1654/1655/1656, que NÃO
+    // EXISTEM — o defeito do 1405 nesta família. O destino vem do próprio CFOP
+    // do vendedor, então não depende de cadastro.
+    if (PARES_COMBUSTIVEL_ENTRADA[sufixo]) {
+        return primeiroDestino + PARES_COMBUSTIVEL_ENTRADA[sufixo];
     }
 
     // Venda com ST: o sufixo do vendedor não tem par na entrada (ver
