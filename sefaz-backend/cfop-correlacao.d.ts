@@ -44,6 +44,12 @@ export const SUFIXOS_ST_VENDA: string[];
  * envia, na entrada o DESTINO de quem recebe. 153 (energia elétrica) fica fora.
  */
 export const SUFIXOS_TRANSFERENCIA_RECEBIDA: string[];
+/**
+ * Devolução recebida — o sufixo espelha O QUE EU VENDI (produção própria ×
+ * mercadoria de terceiros), não o destino que o cliente tinha dado. O par fica
+ * DENTRO da família: 201/202 venda · 208/209 transferência · 410/411 com ST.
+ */
+export const PARES_DEVOLUCAO_RECEBIDA: Record<string, { producao: string; terceiros: string }>;
 
 /**
  * O CFOP que vai para o LANÇAMENTO, com o documento na mão.

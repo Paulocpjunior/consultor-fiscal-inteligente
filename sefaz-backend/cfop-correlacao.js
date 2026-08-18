@@ -64,6 +64,35 @@ export const SUFIXOS_COMPRA_PRODUTO = ['101', '102', '116', '117', '118', '120',
  */
 export const SUFIXOS_TRANSFERENCIA_RECEBIDA = ['151', '152', '154'];
 
+/**
+ * DEVOLUÇÃO RECEBIDA — o sufixo espelha O QUE EU VENDI, não o que o cliente fez.
+ *
+ * Paulo, 17/08, confirmando a pergunta que eu tinha deixado aberta: *"a sua
+ * questão está correta quanto à devolução — as devoluções de mercadorias devem
+ * sempre se basear em COMO FOI DADO ENTRADA na NF"*.
+ *
+ * Quando o cliente devolve, ele emite pelo lado DELE (5201 "devolução de compra
+ * para industrialização", 5202 "para comercialização"): isso descreve o destino
+ * que ELE tinha dado à mercadoria. Do meu lado o que importa é se eu vendi
+ * PRODUÇÃO PRÓPRIA (201) ou MERCADORIA DE TERCEIROS (202) — exatamente a mesma
+ * assimetria de 101/102 e 151/152.
+ *
+ * São TRÊS famílias e o par tem que ficar DENTRO da família — trocar de família
+ * inventaria operação:
+ *   201/202  devolução de venda
+ *   208/209  devolução de mercadoria remetida em transferência
+ *   410/411  devolução de venda em operação com ST
+ */
+export const PARES_DEVOLUCAO_RECEBIDA = {
+    // sufixo do XML -> { producaoPropria, mercadoriaDeTerceiros }
+    '201': { producao: '201', terceiros: '202' },
+    '202': { producao: '201', terceiros: '202' },
+    '208': { producao: '208', terceiros: '209' },
+    '209': { producao: '208', terceiros: '209' },
+    '410': { producao: '410', terceiros: '411' },
+    '411': { producao: '410', terceiros: '411' },
+};
+
 export { SUFIXOS_ST_VENDA };
 
 /**
@@ -122,6 +151,26 @@ function sufixoCompraPorNatureza(naturezaAtividade) {
         case 'servicos':  return '556';  // Uso e consumo
         case 'misto':     return null;   // Não força — mantém sufixo original
         default:          return null;
+    }
+}
+
+/**
+ * Sufixo da DEVOLUÇÃO recebida, pelo que a EMPRESA vende.
+ *
+ * ⚠️ Indústria que também REVENDE mercadoria de terceiros vai cair em "produção"
+ * por default e precisa da correção por NF — é o mesmo limite de 101/102, e é
+ * justamente por isso que o campo por NF existe (17/08).
+ */
+function sufixoDevolucaoPorNatureza(sufixo, naturezaAtividade) {
+    const par = PARES_DEVOLUCAO_RECEBIDA[sufixo];
+    if (!par) return null;
+    switch (naturezaAtividade) {
+        case 'industria': return par.producao;
+        case 'comercio':  return par.terceiros;
+        // Prestador de serviço não produz mercadoria: o que ele devolveria é
+        // mercadoria de terceiros.
+        case 'servicos':  return par.terceiros;
+        default:          return null;   // misto/indefinido: não força
     }
 }
 
@@ -188,6 +237,14 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
     if (SUFIXOS_TRANSFERENCIA_RECEBIDA.includes(sufixo)) {
         const sufTransf = sufixoTransferenciaPorNatureza(ctx.naturezaAtividade);
         if (sufTransf) return primeiroDestino + sufTransf;
+        // Sem natureza definida ou misto -> conversão mecânica
+    }
+
+    // Devolução recebida: o sufixo espelha o que EU vendi (produção própria ×
+    // mercadoria de terceiros), não o destino que o cliente tinha dado.
+    if (PARES_DEVOLUCAO_RECEBIDA[sufixo]) {
+        const sufDev = sufixoDevolucaoPorNatureza(sufixo, ctx.naturezaAtividade);
+        if (sufDev) return primeiroDestino + sufDev;
         // Sem natureza definida ou misto -> conversão mecânica
     }
 

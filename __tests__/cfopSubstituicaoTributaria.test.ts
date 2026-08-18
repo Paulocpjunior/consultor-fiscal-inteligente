@@ -49,9 +49,27 @@ describe('o que NÃO mudou (sufixo com par na entrada)', () => {
         expect(entrada('5409', 'comercio')).toBe('1409');
     });
 
-    it('devolução com ST preserva o sufixo — 1410/1411 existem', () => {
-        expect(entrada('5410', 'comercio')).toBe('1410');
+    // ⚠️ TROCADO EM 17/08 — a premissa deste teste era mais fraca que a regra.
+    //
+    // Ele dizia "preserva o sufixo, porque 1410/1411 existem". Existir era só
+    // metade da pergunta; a outra metade é QUAL DOS DOIS. Paulo confirmou o
+    // princípio: *"as devoluções de mercadorias devem sempre se basear em como
+    // foi dado entrada na NF"* — e do meu lado o que vale é o que EU vendi:
+    //   1410  devolução de venda de PRODUÇÃO do estabelecimento (com ST)
+    //   1411  devolução de venda de mercadoria de TERCEIROS (com ST)
+    // Comércio revende mercadoria de terceiros ⇒ 1411.
+    it('devolução com ST segue o ramo, dentro da família ST', () => {
+        expect(entrada('5410', 'comercio')).toBe('1411');
         expect(entrada('5411', 'comercio')).toBe('1411');
+        expect(entrada('5410', 'industria')).toBe('1410');
+        expect(entrada('5411', 'industria')).toBe('1410');
+    });
+
+    it('mas TRANSFERÊNCIA com ST (408/409) continua mecânica — não foi confirmada', () => {
+        // 408/409 não entraram na família por ramo: a semântica deles não está
+        // provada aqui, e deduzir é o que produziu o 1405. Fica como pergunta.
+        expect(entrada('5408', 'comercio')).toBe('1408');
+        expect(entrada('5409', 'industria')).toBe('1409');
     });
 
     it('compra normal continua decidida pela natureza', () => {
