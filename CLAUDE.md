@@ -377,6 +377,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emite 5102 porque para ELA é venda, e o destino do papel não está em campo
   nenhum da nota. O resto (corrigir, ensinar, o que o parâmetro NÃO faz, e o
   "NÃO CONSTA") decorre disso.
+  🔁 **E O CST SEGUE O CFOP — a mesma assimetria, um campo adiante** (Paulo,
+  18/08: *"adiciona o CST para validarmos a operação… a nota vai vir 5102, vamos
+  registrar como 1556; aí que está a chave do SPED: o CST do fornecedor vai vir
+  como 00, temos que indicar 90 para essas operações"*). A nota é do FORNECEDOR:
+  para a Kalunga aquilo é venda tributada integralmente (CST 00); do lado de cá a
+  entrada não é de mercadoria, e a operação se escritura como **90 (Outras)**.
+  Precedente já provado no IPI (IN RFB 932/2009, 11/08) — preservar o CST cru é
+  escriturar a operação DELE.
+  🚨 **A ARMADILHA QUE O CST TEM E O CFOP NÃO: a ORIGEM mora no 1º dígito.**
+  Escrever `090` direto faria todo produto IMPORTADO (`100`) virar NACIONAL
+  dentro do SPED. A conversão troca só os dois últimos dígitos — provado para as
+  nove origens da Tabela A.
+  ⚠️ **O QUE A RÉGUA RECUSA, E DIZ**: CST 40/41/50/51/60/70 é MANTIDO (cada um já
+  declara um fato — isenta, diferimento, ST já cobrada — que o 90 apagaria, e é
+  justo o 60 que o livro precisa enxergar); CSOSN é outra tabela; item sem CST
+  não recebe CST deduzido do CFOP.
+  ✅ **E O ATIVO É O EXEMPLO DE COMO SE FECHA UMA PREMISSA**: ele nasceu FORA da
+  tabela, devolvido como pergunta COM CONTAGEM, porque o raciocínio parecia o
+  mesmo mas o fato não era (no ativo há crédito de ICMS por CIAP; no uso/consumo
+  não há crédito nenhum). Perguntado, Paulo respondeu **"Sim, CST 90"** — e só
+  então 551/552 entraram, com a fala dele como FONTE. Um teste MEU que exigia o
+  contrário foi TROCADO: premissa em aberto se fecha por decisão do dono, nunca
+  por dedução minha. A fila `DESTINOS_SEM_DECISAO` fica de pé VAZIA, porque é a
+  forma certa de a próxima família entrar.
+  🚨 A trava é a dos **LEITORES**: C170 e C190 passam pela MESMA função, contado
+  por varredura — se divergirem, o detalhe e o consolidado do MESMO item contam
+  histórias diferentes, e é o C190 que a apuração soma.
   🚪 **E A ENTREGA FICOU NUMA PORTA QUE NINGUÉM ABRE — o card de CFOP não levava
   ao CFOP** (Paulo, 18/08, com o print do card 🔄 CFOP aberto: *"n
   identifiquei"*). Ele procurou no lugar CERTO: **o card se chama CFOP**. O
@@ -2615,11 +2642,13 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
    c) **MANTOAN — regerar o EFD-Contribuições e revalidar no PVA**. O 1010 e o
       M200/M600 zerado foram corrigidos; **arquivo aceito não é arquivo certo**,
       então o que fecha o caso é o recibo novo.
-   d) **NOVA ERA — as ~144 notas em `1103` (9), `1929` (25) e `2104` (1)**,
-      códigos que o SINIEF 03/24 REMOVEU. O app **DIZ** (`NÃO CONSTA` na linha +
-      resumo vermelho no topo do ✏️) e **não escolhe o substituto** — escolher
-      seria inventar, e inventar é o que produziu o 1405 e o 1655. A decisão é
-      por família, e ela é dele.
+   d) ✅ **RESOLVIDO 18/08 — as ~144 notas da NOVA ERA em `1103`/`1929`/`2104`
+      saem NA MÃO** (Paulo: *"decidimos que os demais ajustes faremos
+      manualmente"*). O app continua fazendo o que faz: **DIZ** (`NÃO CONSTA` na
+      linha + resumo vermelho no topo do ✏️) e **não escolhe o substituto** —
+      escolher seria inventar, e inventar é o que produziu o 1405 e o 1655.
+      ⚠️ **NÃO ressuscitar como "pendência do app"**: a correção nota a nota é
+      decisão dele, não lacuna minha. O que o CFI deve é continuar denunciando.
 
 ## Pendências operacionais (23/07/2026)
 

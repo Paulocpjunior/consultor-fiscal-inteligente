@@ -85,13 +85,26 @@ describe('o que a régua se RECUSA a converter', () => {
         expect(cstDoLancamento('102', '1556').situacao).toBe('preservado-por-situacao');
     });
 
-    it('🚨 ATIVO (1551/2551) NÃO converte — fica NOMEADO como decisão em aberto', () => {
-        const r = cstDoLancamento('000', '1551');
-        expect(r.situacao).toBe('nao-decidido');
-        expect(r.cst).toBe('000');
-        // O motivo diz POR QUE não é o mesmo caso: no ativo há crédito por CIAP.
-        expect(r.motivo).toMatch(/CIAP/);
-        expect(DESTINOS_SEM_DECISAO['551']).toBeTruthy();
+    // ⚠️ ESTE TESTE FOI TROCADO EM 18/08, e a troca é o registro da decisão.
+    //
+    // A 1ª versão exigia que o ativo NÃO convertesse e voltasse como pergunta —
+    // era o comportamento certo enquanto ninguém tinha decidido, porque no ativo
+    // existe crédito de ICMS por CIAP e no uso/consumo não existe crédito nenhum.
+    // Perguntado, Paulo respondeu **"Sim, CST 90"**. Premissa em aberto fechada
+    // por decisão do dono — não por dedução minha.
+    it('ATIVO (1551/1552) converte também — decisão do Paulo, 18/08', () => {
+        expect(cstDoLancamento('000', '1551').cst).toBe('090');
+        expect(cstDoLancamento('000', '2551').cst).toBe('090');
+        expect(cstDoLancamento('000', '1552').cst).toBe('090');
+        expect(cstDoLancamento('000', '1551').situacao).toBe('convertido');
+        // A origem continua intocada aqui também.
+        expect(cstDoLancamento('100', '1551').cst).toBe('190');
+    });
+
+    it('a fila de "sem decisão" continua de pé para a PRÓXIMA família', () => {
+        // Hoje está vazia. O mecanismo fica porque é assim que uma família nova
+        // deve entrar: nomeada e contada, nunca convertida por dedução.
+        expect(Object.keys(DESTINOS_SEM_DECISAO)).toHaveLength(0);
     });
 
     it('CFOP de mercadoria comum não é tocado', () => {
@@ -128,16 +141,15 @@ describe('resumo com a causa junto do número', () => {
         const r = resumirCst([
             { cst: '000', cfop: '1556' },
             { cst: '000', cfop: '1556' },
+            { cst: '000', cfop: '1551' },   // ativo — agora também converte
             { cst: '000', cfop: '1551' },
             { cst: '000', cfop: '1551' },
-            { cst: '000', cfop: '1551' },
-            { cst: '060', cfop: '1556' },
-            { cst: '', cfop: '1556' },
+            { cst: '060', cfop: '1556' },   // ST já cobrada: preservado e dito
+            { cst: '', cfop: '1556' },      // sem CST: nomeado, nunca deduzido
         ]);
-        expect(r.convertidos).toBe(2);
+        expect(r.convertidos).toBe(5);
         const avisos = r.avisos.join(' | ');
-        expect(avisos).toMatch(/3 item\(ns\) escriturado\(s\) como ativo imobilizado/);
-        expect(avisos).toMatch(/1 item\(ns\) de uso\/consumo vieram com CST que não é 00\/20/);
+        expect(avisos).toMatch(/1 item\(ns\) reclassificado\(s\) \(uso\/consumo ou ativo\) vieram com CST que não é 00\/20/);
         expect(avisos).toMatch(/1 item\(ns\) sem CST/);
     });
 

@@ -721,7 +721,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 + `${inexistentes.fora.join(', ')}. O app não escolhe o substituto — informe o CFOP nota a nota.`,
             ] : []),
             ...(resumoCst.convertidos ? [
-                `${resumoCst.convertidos} item(ns) de uso/consumo tiveram o CST convertido para 90 (Outras): o `
+                `${resumoCst.convertidos} item(ns) de uso/consumo ou ativo tiveram o CST convertido para 90 (Outras): o `
                 + 'CST que vem no XML é o do FORNECEDOR, para quem a operação foi venda. A origem da mercadoria '
                 + '(1º dígito) é preservada.',
             ] : []),
@@ -819,7 +819,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 <div className="mt-3 rounded-lg border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 p-3 text-xs text-emerald-800 dark:text-emerald-300">
                     {!!resumoCst.convertidos && (
                         <p>
-                            <strong>{resumoCst.convertidos} item(ns) de uso/consumo com CST convertido para 90</strong>{' '}
+                            <strong>{resumoCst.convertidos} item(ns) de uso/consumo ou ativo com CST convertido para 90</strong>{' '}
                             (Outras). O CST que vem no XML é o do <strong>fornecedor</strong> — para ele a operação foi
                             venda. A origem da mercadoria (1º dígito) é preservada.
                         </p>
