@@ -6,6 +6,8 @@
 export type DirecaoCfop = 'entrada' | 'saida';
 
 export interface CorrelacaoCtx {
+    /** Parâmetros do CÉREBRO (por fornecedor) — entram entre a NF e o override. */
+    parametrosCfop?: import('./cfop-cerebro.js').ParametroCfop[] | null;
     /** 'comercio' | 'industria' | 'servicos' | 'misto' */
     naturezaAtividade?: string | null;
     /** Overrides manuais por CFOP de origem. Sempre vencem. */
@@ -83,3 +85,8 @@ export function cfopsDistintosDaNota(doc: any, direcao: DirecaoCfop, ctx?: Corre
 export function validarCfopEscriturado(
     cfop: unknown, direcao: DirecaoCfop,
 ): { ok: true; cfop: string; motivo?: string } | { ok: false; motivo: string };
+
+/** O parâmetro do cérebro que se aplica a esta nota, ou null (só na ENTRADA). */
+export function parametroDaNota(
+    doc: any, cfopDoItem: string | undefined, direcao: DirecaoCfop, ctx?: CorrelacaoCtx,
+): import('./cfop-cerebro.js').ParametroCfop | null;
