@@ -492,14 +492,44 @@ export function buildBlocoM(dados) {
     ]));
 
     // M210 — Detalhamento PIS por CST
+    //
+    // 🚨 ESTE REGISTRO SAÍA COM 8 CAMPOS, E O LEIAUTE TEM 16 (Paulo, 18/08, com
+    // o recibo do PVA da MANTOAN 07/2026: *"O número de campos informado no
+    // registro difere do número de campos especificado no leiaute"* — esperado
+    // 16, veio 8 — e mais *"VL_BC_CONT: Registro/Campo não informado ou
+    // inválido · Conteúdo 0,6500"*).
+    //
+    // A segunda recusa DIZ a causa da primeira: faltando os campos do meio, a
+    // ALÍQUOTA (0,65) caía na posição da BASE DE CÁLCULO. Ou seja o arquivo
+    // declarava base de R$ 0,65 sobre a qual saía contribuição de R$ 285,28.
+    //
+    // ⚠️ Os VALORES já estavam certos (base 43.890,00, PIS 285,28, conferidos
+    // contra as 33 prestações do próprio arquivo) — o defeito era de FORMA. E é
+    // a MESMA classe do 1010 de 17/08: registro emitido com contagem de campos
+    // que não é a do leiaute. Por isso este PR não corrige só a linha: ele passa
+    // a CONFERIR a contagem antes de o arquivo sair (sped-contrib-campos.js).
+    //
+    // Ordem oficial (Guia Prático EFD-Contribuições), com a posição 4 nomeada
+    // pelo próprio PVA: REG · COD_CONT · VL_REC_BRT · VL_BC_CONT ·
+    // VL_AJUS_ACRES_BC_PIS · VL_AJUS_REDUC_BC_PIS · VL_BC_CONT_AJUS · ALIQ_PIS ·
+    // QUANT_BC_PIS · ALIQ_PIS_QUANT · VL_CONT_APUR · VL_AJUS_ACRES ·
+    // VL_AJUS_REDUC · VL_CONT_DIFER · VL_CONT_DIFER_ANT · VL_CONT_PER.
+    //
+    // Campo de ajuste/diferimento que esta empresa não tem sai VAZIO, nunca
+    // 0,00 inventado: campo de valor não recebe default (regra de 06/08).
     if (totalPisSaida > 0) {
         linhas.push(fmt.buildLine([
             'M210', '01',
-            fmt.formatValue(totalBcSaida),
-            fmt.formatValue(aliq.pis * 100, 4),
-            '', '',
-            fmt.formatValue(totalPisSaida),
-            '',
+            fmt.formatValue(totalBcSaida),      // VL_REC_BRT
+            fmt.formatValue(totalBcSaida),      // VL_BC_CONT  ← recebia a alíquota
+            '', '',                             // ajustes de BC (acréscimo/redução)
+            fmt.formatValue(totalBcSaida),      // VL_BC_CONT_AJUS (sem ajuste = a própria BC)
+            fmt.formatValue(aliq.pis * 100, 4), // ALIQ_PIS
+            '', '',                             // QUANT_BC_PIS · ALIQ_PIS_QUANT
+            fmt.formatValue(totalPisSaida),     // VL_CONT_APUR
+            '', '',                             // ajustes de contribuição
+            '', '',                             // diferimento (período e anterior)
+            fmt.formatValue(totalPisSaida),     // VL_CONT_PER
         ]));
     }
 
@@ -542,15 +572,22 @@ export function buildBlocoM(dados) {
         fmt.formatValue(vlContribARecolherCofins),
     ]));
 
-    // M610 — Detalhamento COFINS por CST
+    // M610 — Detalhamento COFINS por CST. Mesmo defeito, mesma correção: o PVA
+    // recusou com "esperado 16, veio 8" e "VL_BC_CONT · Conteúdo 3,0000" — a
+    // alíquota da COFINS ocupando a casa da base.
     if (totalCofinsSaida > 0) {
         linhas.push(fmt.buildLine([
             'M610', '01',
-            fmt.formatValue(totalBcSaida),
-            fmt.formatValue(aliq.cofins * 100, 4),
-            '', '',
-            fmt.formatValue(totalCofinsSaida),
-            '',
+            fmt.formatValue(totalBcSaida),         // VL_REC_BRT
+            fmt.formatValue(totalBcSaida),         // VL_BC_CONT
+            '', '',                                // ajustes de BC
+            fmt.formatValue(totalBcSaida),         // VL_BC_CONT_AJUS
+            fmt.formatValue(aliq.cofins * 100, 4), // ALIQ_COFINS
+            '', '',                                // QUANT_BC · ALIQ_QUANT
+            fmt.formatValue(totalCofinsSaida),     // VL_CONT_APUR
+            '', '',                                // ajustes de contribuição
+            '', '',                                // diferimento
+            fmt.formatValue(totalCofinsSaida),     // VL_CONT_PER
         ]));
     }
 

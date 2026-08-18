@@ -7,6 +7,7 @@
 
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
+import { conferirContagemDeCampos } from './sped-contrib-campos.js';
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { requireAdmin } from './require-admin.js';
 
@@ -64,6 +65,18 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         const auditoria = auditarSaidaSped(txt.split('\r\n').filter(Boolean));
         for (const s of auditoria.suspeitas) dados.warnings.push(`[auditoria] ${s.detalhe}`);
 
+        // CONTAGEM DE CAMPOS POR REGISTRO — a classe de defeito que já derrubou
+        // o arquivo da MANTOAN DUAS vezes (1010 em 17/08, M210/M610 em 18/08).
+        // A auditoria acima pergunta sobre o CONTEÚDO (coluna zerada, total que
+        // não bate); esta pergunta é sobre a ESTRUTURA, e faltava.
+        //
+        // ⚠️ Ela só acusa registro com contagem PROVADA por recibo do PVA — e o
+        // que não foi provado volta NOMEADO, porque silêncio aqui não é
+        // aprovação. Tabela de contagens escrita de memória seria uma segunda
+        // cópia do mesmo palpite que produziu o defeito.
+        const campos = conferirContagemDeCampos(txt.split('\r\n').filter(Boolean));
+        for (const e of campos.erros) dados.warnings.push(`[leiaute] ${e.mensagem}`);
+
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
 
@@ -86,6 +99,11 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         })));
         res.setHeader('X-SPED-Auditoria', encodeURIComponent(JSON.stringify({
             ok: auditoria.ok, resumo: resumoAuditoria(auditoria), suspeitas: auditoria.suspeitas,
+            leiaute: {
+                ok: campos.ok,
+                erros: campos.erros,
+                naoConferidos: campos.naoConferidos,
+            },
         })));
         return res.send(buffer);
     } catch (e) {
