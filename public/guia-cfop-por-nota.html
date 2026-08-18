@@ -200,8 +200,9 @@
 
 <section>
     <h2>🔁 A coluna CST</h2>
-    <p>Quando a nota é reclassificada para <strong>uso ou consumo</strong> (1556/1557), o CST
-    muda junto — e a coluna mostra o de-para: <code>000&rarr;090</code>.</p>
+    <p>Quando a nota é reclassificada para <strong>uso ou consumo</strong> (1556/1557) ou para
+    <strong>ativo imobilizado</strong> (1551/1552), o CST muda junto — e a coluna mostra o
+    de-para: <code>000&rarr;090</code>.</p>
     <p><strong>Por quê:</strong> o CST no XML é do <strong>fornecedor</strong>. A Kalunga vende
     papel tributado integralmente (CST 00), porque <em>para ela</em> é venda de mercadoria. Do
     nosso lado a entrada não é de mercadoria, e a operação se escritura como
@@ -212,9 +213,6 @@
     <p><strong>O que o app NÃO converte, e diz na tela:</strong></p>
     <table>
         <tr><th>Caso</th><th>O que acontece</th></tr>
-        <tr><td><strong>Ativo imobilizado</strong> (1551/1552)</td><td>mantém o CST do fornecedor.
-        Aqui existe crédito de ICMS em 48 parcelas (CIAP), então não é o mesmo caso — a decisão
-        está em aberto.</td></tr>
         <tr><td>CST 40, 41, 50, 51, 60, 70</td><td>mantém. Esses já dizem um fato (isenta,
         diferimento, ST já cobrada) que o 90 apagaria.</td></tr>
         <tr><td>CSOSN do Simples (102, 500…)</td><td>mantém. É outra tabela.</td></tr>

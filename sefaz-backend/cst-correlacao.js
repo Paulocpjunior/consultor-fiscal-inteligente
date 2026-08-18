@@ -19,17 +19,18 @@
  *
  * ═══ O QUE ESTE MÓDULO SE RECUSA A FAZER ════════════════════════════════════
  *
- * **Não deduz de-para que ninguém provou.** A tabela tem UMA família — a que o
- * Paulo nomeou — e cada entrada carrega a FONTE, igual ao catálogo de CFOP e às
- * contagens de campo do PVA. Família fora dela **preserva o CST e volta NOMEADA**
+ * **Não deduz de-para que ninguém provou.** Cada entrada da tabela carrega a
+ * FONTE — a fala que a decidiu —, igual ao catálogo de CFOP e às contagens de
+ * campo do PVA. Família fora dela **preserva o CST e volta NOMEADA**
  * (`nao-decidido`), para virar uma pergunta com contagem em vez de um chute
  * aplicado calado a milhares de linhas.
  *
- * Em particular: **ATIVO IMOBILIZADO (1551/2551) FICA DE FORA.** O raciocínio
- * *parece* o mesmo, mas não é o mesmo fato — no ativo o crédito de ICMS existe e
- * é controlado em 48 parcelas pelo CIAP (LC 87/96 art. 20 §5º), enquanto no
- * uso/consumo não há crédito nenhum. Deduzir aqui é o que produziu o 1405 e o
- * 1655; a decisão é do Paulo, e a tela conta quantas notas esperam por ela.
+ * O ATIVO IMOBILIZADO (1551/1552) é o exemplo de como isso funciona na prática:
+ * ele nasceu FORA da tabela, devolvido como pergunta com contagem, porque o
+ * raciocínio parecia o mesmo mas o fato não era (no ativo há crédito de ICMS por
+ * CIAP, LC 87/96 art. 20 §5º; no uso/consumo não há crédito nenhum). Perguntado,
+ * Paulo respondeu **"Sim, CST 90"** — e só então ele entrou, com a resposta dele
+ * como fonte. É essa a diferença entre encodar uma decisão e deduzir uma.
  *
  * ═══ A ARMADILHA QUE O CST TEM E O CFOP NÃO ═════════════════════════════════
  *
@@ -82,18 +83,41 @@ export const CST_POR_DESTINO = {
         fonte: 'Mesma família do 556 — o destino declarado pelo próprio CFOP é uso/consumo; '
             + 'o que muda é a operação de origem (transferência), não o destino.',
     },
+    // ✅ ATIVO ENTROU EM 18/08, POR DECISÃO DELE — não por dedução minha.
+    //
+    // A primeira versão deste módulo DEIXOU o ativo de fora e o devolveu como
+    // pergunta com contagem, porque o raciocínio parecia o mesmo mas o fato não
+    // era: no ativo existe crédito de ICMS controlado em 48 parcelas (CIAP), e
+    // no uso/consumo não há crédito nenhum. Perguntado, Paulo respondeu: **"Sim,
+    // CST 90"**. A régua agora converte, e a fonte é a resposta dele.
+    //
+    // ⚠️ Isso NÃO mexe no CIAP: o crédito do ativo continua sendo controlado no
+    // bloco G, que não lê o CST. São duas coisas separadas.
+    551: {
+        cst: '90',
+        rotulo: 'ativo imobilizado',
+        fonte: 'Paulo, 18/08/2026: "Sim, CST 90" — respondendo à pergunta explícita sobre '
+            + 'estender ao ativo a conversão que ele havia definido para uso/consumo.',
+    },
+    552: {
+        cst: '90',
+        rotulo: 'ativo imobilizado (transferência)',
+        fonte: 'Mesma decisão do 551 (Paulo, 18/08) — o destino é o mesmo; o que muda é a '
+            + 'operação de origem.',
+    },
 };
 
 /**
  * SUFIXOS QUE A REGRA ALCANÇA MAS AINDA NÃO TÊM DECISÃO.
  *
- * Eles NÃO são convertidos — voltam nomeados para virar UMA pergunta com
- * contagem, em vez de um chute aplicado a milhares de linhas.
+ * Hoje está VAZIO — o ativo, que morava aqui, foi respondido em 18/08. O
+ * mecanismo fica de pé porque é a forma certa de tratar a próxima família em
+ * aberto: ela NÃO é convertida e volta NOMEADA, virando uma pergunta com
+ * contagem em vez de um chute aplicado calado a milhares de linhas.
+ *
+ * Família nova entra aqui — nunca direto em `CST_POR_DESTINO` sem fonte.
  */
-export const DESTINOS_SEM_DECISAO = {
-    551: 'ativo imobilizado (compra)',
-    552: 'ativo imobilizado (transferência)',
-};
+export const DESTINOS_SEM_DECISAO = {};
 
 /**
  * TRIBUTAÇÕES QUE SE CONVERTEM.
@@ -199,8 +223,8 @@ export function resumirCst(itens) {
     }
     if (preservadoPorSituacao.length) {
         avisos.push(
-            `${preservadoPorSituacao.length} item(ns) de uso/consumo vieram com CST que não é 00/20 `
-            + '(isenta, ST anterior, diferimento…) e foram MANTIDOS: o 90 apagaria esse fato.',
+            `${preservadoPorSituacao.length} item(ns) reclassificado(s) (uso/consumo ou ativo) vieram com `
+            + 'CST que não é 00/20 — isenta, ST anterior, diferimento… — e foram MANTIDOS: o 90 apagaria esse fato.',
         );
     }
     if (semCst.length) {
