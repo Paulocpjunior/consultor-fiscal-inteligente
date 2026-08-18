@@ -104,7 +104,18 @@
     <p>📗 <strong><a href="/guia-cfop-por-nota.html" target="_blank" rel="noreferrer">Guia do
     colaborador — CFOP por nota</a></strong> (também tem botão dentro da própria tela).</p>
 
-    <h3>2. 🚩 “NÃO CONSTA na tabela em vigor”</h3>
+    <h3>2. 🔁 O CST acompanha o CFOP reclassificado</h3>
+    <p>Quando você escritura uma compra como <strong>uso ou consumo</strong> (1556/1557), o
+    <strong>CST muda junto</strong>: a coluna mostra <code>000&rarr;090</code>. O CST que vem no
+    XML é o do <strong>fornecedor</strong> — para a Kalunga aquilo foi venda tributada; do nosso
+    lado a operação é “Outras”.</p>
+    <div class="alerta">⚠️ O <strong>1º dígito não muda</strong>: ele é a ORIGEM da mercadoria.
+    Importado sai <code>100&rarr;190</code>, nunca <code>090</code>.</div>
+    <div class="alerta">⚠️ <strong>Ativo imobilizado (1551/1552) NÃO converte</strong> — lá existe
+    crédito de ICMS em 48 parcelas (CIAP), e a decisão está em aberto. CST que já diz um fato
+    (isenta, diferimento, ST já cobrada) também é mantido, e a tela conta quantos são.</div>
+
+    <h3>3. 🚩 “NÃO CONSTA na tabela em vigor”</h3>
     <p>O CFI passou a carregar a <strong>tabela oficial de CFOP</strong> (619 códigos,
     redação do Ajuste SINIEF 03/24). Com ela, o app avisa quando o CFOP escrito
     <strong>não existe</strong> — e já achou casos reais em produção.</p>
@@ -112,7 +123,7 @@
     ou cadastre o parâmetro do fornecedor. O CFI <strong>não escolhe o substituto sozinho</strong>:
     escolher seria inventar. Se for muita nota, avise o time antes de sair corrigindo.</div>
 
-    <h3>3. 🔄 A correlação ficou mais fina</h3>
+    <h3>4. 🔄 A correlação ficou mais fina</h3>
     <p>Transferência recebida e devolução passaram a seguir o <strong>ramo da empresa</strong>,
     como já era na compra. Um comércio que recebe transferência agora escritura
     <code>1152</code> (para comercialização), não <code>1151</code> (para

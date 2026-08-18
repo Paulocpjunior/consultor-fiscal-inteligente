@@ -76,6 +76,7 @@ import CfopCerebroPainel, { type FornecedorOpcao } from '../CfopCerebroPainel';
 // A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
 import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
+import { cstDoLancamento, resumirCst } from '../../sefaz-backend/cst-correlacao.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -607,6 +608,14 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     mista: daRegua.length > 1,
                     informado,
                     origem,
+                    // 🔁 O CST SEGUE O CFOP (Paulo, 18/08: "adiciona o CST para
+                    // validarmos a operação... o CST do fornecedor vai vir como
+                    // 00, temos que indicar 90 para essas operações"). A régua é
+                    // a mesma que o SPED usa — a tela não recalcula nada.
+                    cst: cstDoLancamento(
+                        d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || '',
+                        informado || daRegua[0] || '',
+                    ),
                     valor: d.totais?.vNF || d.valorTotal || 0,
                 };
             })
@@ -641,6 +650,13 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         const notas = linhas.filter(l => fora.includes(l.informado || l.daRegua[0] || '')).length;
         return { fora, notas };
     }, [linhas]);
+
+    // 🔁 Resumo do CST: o que converteu e o que ficou esperando decisão. Causa
+    // junto do número — "confira o CST" sem contagem é alarme sem alvo.
+    const resumoCst = useMemo(
+        () => resumirCst(linhas.map(l => ({ cst: l.cst.original, cfop: l.informado || l.daRegua[0] || '' }))),
+        [linhas],
+    );
 
     const salvar = async (l: typeof linhas[number], valor: string) => {
         setErro(null);
@@ -683,14 +699,17 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             { titulo: 'Participante', largura: 26 },
             { titulo: 'CFOP pela régua', largura: 14 },
             { titulo: 'CFOP informado', largura: 12 },
-            { titulo: 'O que esse CFOP é', largura: 30 },
-            { titulo: 'Origem', largura: 14 },
+            { titulo: 'O que esse CFOP é', largura: 26 },
+            { titulo: 'CST', largura: 8 },
+            { titulo: 'Origem', largura: 12 },
             { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [
             l.data, l.numero, l.direcao === 'entrada' ? 'E' : 'S', l.participante,
             l.daRegua.join(' ') || '—', l.informado || '—',
-            textoDoCfop(l.informado || l.daRegua[0] || '').texto, l.origem.rotulo, l.valor,
+            textoDoCfop(l.informado || l.daRegua[0] || '').texto,
+            l.cst.situacao === 'convertido' ? `${l.cst.original}→${l.cst.cst}` : (l.cst.cst || '—'),
+            l.origem.rotulo, l.valor,
         ]),
         identificacao,
         observacoes: [
@@ -701,6 +720,12 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 `${inexistentes.notas} nota(s) com CFOP que NÃO CONSTA da tabela em vigor (${FONTE_CFOP.redacao}): `
                 + `${inexistentes.fora.join(', ')}. O app não escolhe o substituto — informe o CFOP nota a nota.`,
             ] : []),
+            ...(resumoCst.convertidos ? [
+                `${resumoCst.convertidos} item(ns) de uso/consumo tiveram o CST convertido para 90 (Outras): o `
+                + 'CST que vem no XML é o do FORNECEDOR, para quem a operação foi venda. A origem da mercadoria '
+                + '(1º dígito) é preservada.',
+            ] : []),
+            ...resumoCst.avisos,
             ...(linhas.some(l => l.mista) ? [
                 `${linhas.filter(l => l.mista).length} nota(s) têm mais de um CFOP entre os itens — informar um CFOP `
                 + 'na NF faz os itens saírem todos com ele.',
@@ -790,6 +815,20 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     nota a nota.
                 </div>
             )}
+            {(!!resumoCst.convertidos || !!resumoCst.avisos.length) && (
+                <div className="mt-3 rounded-lg border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+                    {!!resumoCst.convertidos && (
+                        <p>
+                            <strong>{resumoCst.convertidos} item(ns) de uso/consumo com CST convertido para 90</strong>{' '}
+                            (Outras). O CST que vem no XML é o do <strong>fornecedor</strong> — para ele a operação foi
+                            venda. A origem da mercadoria (1º dígito) é preservada.
+                        </p>
+                    )}
+                    {resumoCst.avisos.map((a: string, i: number) => (
+                        <p key={i} className="mt-1 text-amber-700 dark:text-amber-400">⚠ {a}</p>
+                    ))}
+                </div>
+            )}
             {erro && (
                 <div className="mt-2 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
                     {erro}
@@ -824,6 +863,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                 <th className="py-1 pr-2">CFOP pela régua</th>
                                 <th className="py-1 pr-2">CFOP informado</th>
                                 <th className="py-1 pr-2">O que esse CFOP é</th>
+                                <th className="py-1 pr-2">CST</th>
                                 <th className="py-1 pr-2">Origem</th>
                                 <th className="py-1 pr-2 text-right">Vlr. Contábil</th>
                             </tr>
@@ -871,6 +911,24 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                                 </span>
                                             );
                                         })()}
+                                    </td>
+                                    {/* 🔁 O CST QUE VAI PARA O SPED — mesma régua do
+                                        arquivo (cstDoLancamento), nunca uma conta daqui.
+                                        Convertido aparece como "000→090" para a
+                                        conferência ver o de-para, que é o pedido:
+                                        "adiciona o CST para validarmos a operação". */}
+                                    <td className="py-1 pr-2 font-mono whitespace-nowrap" title={l.cst.motivo}>
+                                        {l.cst.situacao === 'convertido' ? (
+                                            <span className="text-emerald-700 dark:text-emerald-400">
+                                                {l.cst.original}→<strong>{l.cst.cst}</strong>
+                                            </span>
+                                        ) : l.cst.situacao === 'sem-cst' ? (
+                                            <span className="text-amber-600 dark:text-amber-400">sem CST</span>
+                                        ) : l.cst.situacao === 'nao-decidido' || l.cst.situacao === 'preservado-por-situacao' ? (
+                                            <span className="text-amber-600 dark:text-amber-400">{l.cst.cst} ⚠</span>
+                                        ) : (
+                                            <span className="text-slate-500">{l.cst.cst || '—'}</span>
+                                        )}
                                     </td>
                                     <td className="py-1 pr-2 text-slate-500">
                                         {l.origem.rotulo}
