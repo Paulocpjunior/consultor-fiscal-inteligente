@@ -1380,6 +1380,27 @@ export interface CondicaoRuralEmpresa {
 
 export interface EmpresaDadosFiscais {
     /**
+     * REGIME TRIBUTÁRIO da empresa (Paulo, 18/08).
+     *
+     * Até aqui o CFI DEDUZIA o regime da COLEÇÃO em que a empresa tinha sido
+     * cadastrada — e não havia onde marcar imune/isenta. No print do CCI, uma
+     * IGREJA aparecia como "Lucro Presumido". O rótulo era o sintoma; o caro é
+     * herdar a apuração do Presumido (PIS/COFINS sobre faturamento em quem
+     * recolhe PIS sobre a FOLHA, Lei 9.532/97 art. 13).
+     *
+     * Vazio = deduzir do cadastro, como antes. Vocabulário e precedência em
+     * `sefaz-backend/regime-tributario.js`.
+     */
+    regimeTributario?: 'SIMPLES' | 'LUCRO_PRESUMIDO' | 'LUCRO_REAL' | 'IMUNE' | 'ISENTA' | null;
+    /**
+     * Entidade sem fins lucrativos (terceiro setor).
+     *
+     * ⚠️ EIXO SEPARADO do regime, de propósito: um templo é imune E sem fins
+     * lucrativos, e existe associação tributada pelo Presumido. Juntar os dois
+     * numa lista só obrigaria a escolher entre fatos que coexistem.
+     */
+    semFinsLucrativos?: boolean;
+    /**
      * Cod.Cliente — código da empresa no E-Fiscal (Paulo, 04/08). TEXTO de 4
      * dígitos com zero à esquerda ('0001'–'9999'), ÚNICO na carteira. É a
      * chave do confronto CNPJ ↔ schema e{código} na migração do PG12, e o

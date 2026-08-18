@@ -59,8 +59,24 @@ export const REGIME_LABEL: Record<RegimeCatalogo, string>;
 export const CATALOGO: Record<RegimeCatalogo, ObrigacaoCatalogo[]>;
 
 export function resolverRegime(
-    empresa: { colecao?: string; regimePadrao?: string } | null | undefined,
-): { regime: RegimeCatalogo; motivo: string | null };
+    empresa: {
+        colecao?: string;
+        regimePadrao?: string;
+        /** Regime marcado no cadastro — vence a coleção (18/08). */
+        regimeTributario?: string | null;
+        dadosFiscais?: { regimeTributario?: string | null } | null;
+    } | null | undefined,
+): {
+    regime: RegimeCatalogo;
+    motivo: string | null;
+    /**
+     * O que a empresa DECLAROU ser, quando o regime existe mas a lista de
+     * obrigações dele ainda não (imune/isenta). O `regime` acima vira
+     * INDEFINIDO nesse caso — de propósito, para não herdar a lista do
+     * Presumido em silêncio.
+     */
+    regimeDeclarado?: string;
+};
 
 /** Valida MM/AAAA na porta e devolve a própria competência. Lança se inválida. */
 export function assertCompetencia(competencia: string): string;

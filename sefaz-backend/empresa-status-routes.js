@@ -29,6 +29,7 @@ import { classificarCapturaNfseNacionalAdn } from './empresa-status-helper.js';
 import { selecionarCertA1PorBase } from './cert-base-helper.js';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 import { normalizarCodCliente } from './cod-cliente.js';
+import { validarRegimeParaGravacao } from './regime-tributario.js';
 
 const router = express.Router();
 
@@ -555,6 +556,11 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // esquerda, 0001–9999, ÚNICO na carteira — validação em cod-cliente.js e
     // recusa de duplicado logo abaixo, antes do update.
     'codCliente',
+    // 🆕 REGIME TRIBUTÁRIO E TERCEIRO SETOR (Paulo, 18/08). Sem estes dois aqui,
+    // o campo nasceria e NUNCA seria gravado por este caminho — o defeito do
+    // #382 na íntegra. São EIXOS SEPARADOS de propósito: "terceiro setor" não é
+    // regime, e convive com ele (um templo é imune E sem fins lucrativos).
+    'regimeTributario', 'semFinsLucrativos',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.
@@ -628,6 +634,13 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
         const update = {};
         for (const [k, v] of Object.entries(dadosFiscais)) {
             if (!CAMPOS_DADOS_FISCAIS.has(k)) continue;
+            // Regime fora do vocabulário é RECUSADO com a lista do que vale, e
+            // não descartado calado — quem digitou precisa saber que não colou.
+            if (k === 'regimeTributario') {
+                const v = validarRegimeParaGravacao(dadosFiscais[k]);
+                if (!v.ok) return res.status(400).json({ error: 'REGIME_INVALIDO', message: v.motivo });
+                dadosFiscais[k] = v.regime;
+            }
             let val = typeof v === 'string' ? v.trim() : v;
             if (k === 'uf' && typeof val === 'string') val = val.toUpperCase();
             if (k === 'ccmSp' && typeof val === 'string') val = val.replace(/\D/g, '');

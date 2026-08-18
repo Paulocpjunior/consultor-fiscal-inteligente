@@ -490,6 +490,56 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                         </div>
                     </Section>
 
+                    {/* 🆕 REGIME TRIBUTÁRIO — Paulo, 18/08. Antes disto o CFI DEDUZIA o
+                        regime da COLEÇÃO em que a empresa foi cadastrada, e não havia
+                        onde marcar imune/isenta: uma IGREJA chegava ao CCI rotulada
+                        como "Lucro Presumido". O rótulo era o sintoma; o caro é herdar
+                        a apuração do Presumido — PIS/COFINS sobre faturamento em quem
+                        recolhe PIS sobre a FOLHA. */}
+                    <Section titulo="🏛️ Regime tributário">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <SelectField
+                                label="Regime tributário"
+                                value={dados.regimeTributario || ''}
+                                onChange={v => handleField('regimeTributario', v as any)}
+                                options={[
+                                    { value: '', label: '— Deduzir do cadastro (Simples/Lucro) —' },
+                                    { value: 'SIMPLES', label: 'Simples Nacional' },
+                                    { value: 'LUCRO_PRESUMIDO', label: 'Lucro Presumido' },
+                                    { value: 'LUCRO_REAL', label: 'Lucro Real' },
+                                    { value: 'IMUNE', label: 'Imune (CF art. 150, VI)' },
+                                    { value: 'ISENTA', label: 'Isenta (Lei 9.532/97 art. 15 e análogos)' },
+                                ]}
+                                hint="Em branco, o CFI deduz de onde a empresa foi cadastrada — que é o que fazia uma igreja aparecer como Lucro Presumido."
+                            />
+                            <label className="flex items-start gap-2 text-sm mt-6">
+                                <input
+                                    type="checkbox"
+                                    checked={dados.semFinsLucrativos === true}
+                                    onChange={e => handleField('semFinsLucrativos', e.target.checked as any)}
+                                    className="mt-1"
+                                />
+                                <span>
+                                    <strong>Entidade sem fins lucrativos (terceiro setor)</strong>
+                                    <span className="block text-xs text-slate-500">
+                                        Associação, fundação, OSCIP, templo. É campo SEPARADO do regime de
+                                        propósito: um templo é imune <em>e</em> sem fins lucrativos, e existe
+                                        associação tributada pelo Presumido.
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                        {(dados.regimeTributario === 'IMUNE' || dados.regimeTributario === 'ISENTA') && (
+                            <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+                                ⚠️ <strong>O CFI ainda não tem a lista de obrigações desta entidade.</strong>{' '}
+                                Imunidade e isenção não dispensam obrigação acessória (ECD, ECF, DCTFWeb,
+                                EFD-Contribuições com PIS sobre a folha). Enquanto a lista não for definida, o
+                                app entrega só o que é comum a todos os regimes e <strong>avisa</strong> — em vez
+                                de aplicar a do Lucro Presumido e apurar imposto que talvez não exista.
+                            </div>
+                        )}
+                    </Section>
+
                     {/* SPED config */}
                     <Section titulo="📊 Configuração SPED Fiscal">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

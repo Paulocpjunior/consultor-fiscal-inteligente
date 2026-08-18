@@ -76,6 +76,7 @@
 
 import { ehDiaUtil } from './feriados-nacionais.js';
 import { resolverPrazoMunicipal, resolverPrazoEstadual } from './prazos-municipais.js';
+import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
 
 /** Regimes que o mês entende. INDEFINIDO é um estado real, não um erro. */
 export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'INDEFINIDO'];
@@ -99,23 +100,35 @@ export const REGIME_LABEL = {
  *          INDEFINIDO — é o texto que o alerta mostra.
  */
 export function resolverRegime(empresa) {
-    const colecao = String(empresa?.colecao || '').trim();
-    if (colecao === 'simples_empresas') return { regime: 'SIMPLES', motivo: null };
+    // 🚨 O REGIME NÃO É MAIS DEDUZIDO SÓ DA COLEÇÃO.
+    //
+    // Paulo, 18/08, com o print do CCI: uma IGREJA (COMUNIDADE EVANGÉLICA SARA
+    // NOSSA TERRA) aparecia como "Lucro Presumido", porque o CFI deduzia o
+    // regime de ONDE a empresa foi cadastrada. Não existia lugar para "imune".
+    //
+    // A régua agora mora em `regime-tributario.js` (campo explícito > regimePadrao
+    // > coleção, com a origem carimbada). Aqui só se traduz o veredito dela para
+    // a lista de obrigações.
+    const v = regimeDaEmpresa(empresa);
 
-    if (colecao === 'lucro_empresas') {
-        const rp = String(empresa?.regimePadrao || '').trim().toLowerCase();
-        if (rp === 'presumido') return { regime: 'LUCRO_PRESUMIDO', motivo: null };
-        if (rp === 'real') return { regime: 'LUCRO_REAL', motivo: null };
+    // ⚠️ IMUNE e ISENTA NÃO HERDAM A LISTA DO PRESUMIDO.
+    //
+    // Elas TÊM obrigações (ECD, ECF, DCTFWeb, EFD-Contribuições com PIS sobre
+    // FOLHA — Lei 9.532/97 art. 13), mas montar essa lista por dedução minha é o
+    // erro do 1405 num lugar onde o custo é multa. Até o Paulo defini-la, elas
+    // recebem só o que é COMUM a todos os regimes e a falta sai NOMEADA — que é
+    // exatamente o que o INDEFINIDO já fazia. Herdar Presumido em silêncio
+    // apuraria PIS/COFINS sobre faturamento de quem recolhe sobre a folha.
+    if (!v.apuracaoDefinida && v.regime !== 'INDEFINIDO') {
         return {
             regime: 'INDEFINIDO',
-            motivo: 'Cliente do Lucro sem "Regime padrão" (Presumido ou Real) na ficha. '
-                + 'Sem ele o mês sai incompleto: só as obrigações comuns aos dois regimes são geradas.',
+            regimeDeclarado: v.regime,
+            motivo: `Empresa marcada como ${rotuloRegime(v.regime)}. ${v.motivo || ''} `
+                + 'O CFI NÃO aplica a lista do Lucro Presumido a ela: entrega só as obrigações '
+                + 'comuns e avisa, em vez de apurar imposto que talvez não exista.',
         };
     }
-    return {
-        regime: 'INDEFINIDO',
-        motivo: `Coleção "${colecao || '(vazia)'}" não corresponde a nenhum regime conhecido.`,
-    };
+    return { regime: v.regime, motivo: v.motivo };
 }
 
 /**
