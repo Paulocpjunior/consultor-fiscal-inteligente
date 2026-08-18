@@ -710,6 +710,15 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     onClick={() => setVerParametros(v => !v)}
                     className="btn-press px-3 py-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-700 whitespace-nowrap"
                 >🧠 Parâmetros ({parametros.filter(p => p.ativo !== false).length})</button>
+                {/* Guia servido pelo PRÓPRIO app (public/ → dist/): link estável
+                    para a equipe toda. Material de equipe nunca vai por link
+                    externo — o colaborador receberia "link inválido". */}
+                <a
+                    href="/guia-cfop-por-nota.html"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 whitespace-nowrap"
+                >📗 Guia do colaborador</a>
                 <span className="text-xs text-slate-500">
                     {linhas.length} nota(s) · {comCarimbo} com CFOP informado
                 </span>
