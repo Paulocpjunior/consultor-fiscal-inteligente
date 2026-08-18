@@ -53,6 +53,12 @@ export const CAMPOS_POR_REGISTRO = {
         fonte: 'Recibo do PVA — MANTOAN 13344638000191 07/2026, 18/08/2026: '
             + '"Número de Campos · Valor Esperado 16 · Conteúdo do Campo 8".',
     },
+    A100: {
+        campos: 21,
+        fonte: 'Recibo do PVA — MANTOAN 07/2026, 18/08/2026: ele nomeou "5 - COD_SIT" e '
+            + '"13 - IND_PGTO" sobre a linha do A100, o que fixa as posições, e NÃO acusou '
+            + 'contagem de campos nessa linha (21 como ela saiu).',
+    },
     1010: {
         campos: 7,
         fonte: 'Recibo do PVA — MANTOAN 13344638000191 07/2026, 17/08/2026: '
