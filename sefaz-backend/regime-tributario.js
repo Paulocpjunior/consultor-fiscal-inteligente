@@ -32,14 +32,18 @@
  * o significado de cada um escrito ao lado. É esse vocabulário que o CFI grava e
  * que o túnel entrega aos apps irmãos.
  *
- * RECUSA: **inventar a lista de obrigações da imune e da isenta.** Ela existe
- * (ECD, ECF, DCTFWeb, EFD-Contribuições com PIS sobre folha…), mas montá-la por
- * dedução minha é o mesmo erro do 1405 num lugar onde o custo é multa. Até o
- * Paulo defini-la, `IMUNE` e `ISENTA` recebem só o que é COMUM a todos e a
- * ausência sai NOMEADA — do mesmo jeito que `INDEFINIDO` já sai hoje.
+ * RECUSOU, e essa recusa durou algumas horas: montar a lista de obrigações da
+ * imune e da isenta por dedução minha seria o erro do 1405 num lugar onde o
+ * custo é multa. Enquanto ninguém tinha decidido, `IMUNE` e `ISENTA` caíam em
+ * INDEFINIDO de propósito e recebiam só o comum.
  *
- * 🚨 O QUE NÃO PODE ACONTECER, E É O QUE ACONTECIA: herdar a lista do Presumido
- * em silêncio. Alarme dá para ver; herança calada, não.
+ * ✅ **A LISTA VEIO DELE EM 18/08**, em três respostas — ECD/ECF só com movimento
+ * financeiro; DCTFWeb só com evento (aluguel, folha ou retenção);
+ * EFD-Contribuições apenas em dezembro, sem movimento. Está em
+ * `CATALOGO.IMUNE`/`CATALOGO.ISENTA`, cada entrada com a FALA que a decidiu.
+ *
+ * 🚨 O QUE NUNCA PODE VOLTAR A ACONTECER: herdar a lista do Presumido em
+ * silêncio. Alarme dá para ver; herança calada, não.
  *
  * ═══ DOIS EIXOS, NÃO UM ═════════════════════════════════════════════════════
  *
@@ -53,7 +57,8 @@
 
 /**
  * O vocabulário. `apuracao: false` marca quem NÃO tem lista de obrigações
- * decidida — é o que impede a herança silenciosa.
+ * decidida — é o que impede a herança silenciosa. Hoje TODOS têm lista; o campo
+ * fica porque é assim que o próximo regime sem decisão deve entrar.
  */
 export const REGIMES = {
     SIMPLES: {
@@ -73,21 +78,25 @@ export const REGIMES = {
     },
     IMUNE: {
         rotulo: 'Imune',
-        apuracao: false,
+        // ✅ 18/08: a lista de obrigações EXISTE agora (respondida pelo Paulo,
+        // não deduzida) — ver CATALOGO.IMUNE em catalogo-obrigacoes.js.
+        apuracao: true,
         descricao: 'Imunidade constitucional (CF art. 150, VI) — templos, partidos, '
             + 'sindicatos, instituições de educação e assistência social sem fins lucrativos, '
             + 'livros e periódicos.',
         ressalva: 'A imunidade alcança IMPOSTOS sobre patrimônio, renda e serviços — não é '
             + 'dispensa de obrigação acessória, e não alcança automaticamente as contribuições. '
-            + 'A lista de obrigações desta entidade ainda NÃO está definida no CFI.',
+            + 'Obrigações no CFI: DCTFWeb só com evento (aluguel, folha ou retenção); ECD e ECF só '
+            + 'com movimento financeiro; EFD-Contribuições apenas em dezembro, sem movimento.',
     },
     ISENTA: {
         rotulo: 'Isenta',
-        apuracao: false,
+        apuracao: true,
         descricao: 'Isenção por lei — entidades sem fins lucrativos isentas de IRPJ/CSLL '
             + '(Lei 9.532/97 art. 15) e casos análogos.',
-        ressalva: 'Isenção não é imunidade e não dispensa obrigação acessória. A lista de '
-            + 'obrigações desta entidade ainda NÃO está definida no CFI.',
+        ressalva: 'Isenção não é imunidade e não dispensa obrigação acessória. Obrigações no CFI: '
+            + 'DCTFWeb só com evento (aluguel, folha ou retenção); ECD e ECF só com movimento '
+            + 'financeiro; EFD-Contribuições apenas em dezembro, sem movimento.',
     },
 };
 
@@ -144,7 +153,11 @@ export function regimeDaEmpresa(empresa) {
             regime: explicito,
             origem: 'cadastro',
             apuracaoDefinida: REGIMES[explicito].apuracao,
-            motivo: REGIMES[explicito].apuracao ? null : REGIMES[explicito].ressalva,
+            // A ressalva viaja SEMPRE que existe, mesmo com a lista definida: é
+            // ela que diz ao app irmão o que a entidade deve e o que não deve.
+            // Amarrá-la a "apuração indefinida" faria a informação sumir no dia
+            // em que a lista foi respondida — exatamente quando ela vale mais.
+            motivo: REGIMES[explicito].ressalva || null,
         };
     }
 

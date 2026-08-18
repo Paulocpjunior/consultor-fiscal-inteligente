@@ -198,8 +198,19 @@ describe('pendenciasDeConfirmacao — o checklist que impede o "sync manual" de 
         const cods = p.map((x: any) => x.obrigacao);
         expect(cods).toContain('INSS_CPP');             // proposta (depende de folha)
         expect(cods).toContain('ISS');                  // proposta (calendário municipal)
-        expect(cods).not.toContain('FGTS');             // direção RESOLVIDA em 11/08
-        expect(new Set(cods).size).toBe(cods.length);   // sem duplicata
+        // ⚠️ TESTE AJUSTADO EM 18/08. O FGTS do Lucro continua RESOLVIDO (direção
+        // decidida em 11/08) e NÃO aparece — o que aparece é a variante da
+        // IMUNE/ISENTA, que é 'proposta' e depende de folha. A checagem virou
+        // "de QUEM é a pendência", porque desde hoje a mesma obrigação tem
+        // regras diferentes por regime.
+        const fgts = p.filter((p: any) => p.obrigacao === 'FGTS');
+        expect(fgts).toHaveLength(1);
+        expect(fgts[0].status).toBe('proposta');
+        expect(fgts[0].regimes.sort()).toEqual(['IMUNE', 'ISENTA']);
+        // Sem duplicata: a chave agora é a REGRA (obrigação + status + condição
+        // + frequência), senão variantes legítimas colapsariam numa linha só.
+        const chaves = p.map((p: any) => [p.obrigacao, p.status, p.dependeDe || '', p.frequencia].join('|'));
+        expect(new Set(chaves).size).toBe(chaves.length);
         expect(cods).not.toContain('DAS');              // ativa e conferida
     });
 

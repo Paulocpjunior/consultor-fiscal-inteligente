@@ -1,4 +1,8 @@
-export type RegimeCatalogo = 'SIMPLES' | 'LUCRO_PRESUMIDO' | 'LUCRO_REAL' | 'INDEFINIDO';
+export type RegimeCatalogo =
+    | 'SIMPLES' | 'LUCRO_PRESUMIDO' | 'LUCRO_REAL'
+    /** Imune e isenta ganharam lista PRÓPRIA em 18/08, respondida pelo Paulo. */
+    | 'IMUNE' | 'ISENTA'
+    | 'INDEFINIDO';
 
 export type Esfera = 'federal' | 'estadual' | 'municipal';
 
@@ -20,6 +24,16 @@ export interface ObrigacaoCatalogo {
     status: 'ativa' | 'proposta';
     /** Preenchido quando status='proposta': a condição que o app não avalia. */
     dependeDe?: string;
+    /**
+     * Fim de vigência ESPERADO ('MM/AAAA'), quando há expectativa sem norma
+     * publicada. O app CONTINUA gerando — parar por causa de expectativa faria a
+     * obrigação sumir em silêncio, e sumir da tela é pior que aparecer com
+     * ressalva. Caso 18/08: a EFD-Contribuições da imune, que a reforma
+     * tributária deve encerrar em 12/2026.
+     */
+    vigenciaAteEsperada?: string;
+    /** A frase que acompanha `vigenciaAteEsperada`. */
+    vigenciaRessalva?: string;
     /** Prazo/ajuste ainda não conferido com o Paulo/Alexandre. */
     revisar?: boolean;
 }
