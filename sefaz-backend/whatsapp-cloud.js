@@ -51,12 +51,54 @@ export function faltasDaConfig(cfg) {
 }
 
 /**
+ * 🚨 NÚMERO QUE VEIO DA META JÁ ESTÁ PRONTO — NORMALIZAR É QUE ESTRAGA
+ * (17/08, ao ler o backup da Ultra Fox: entre as conversas há `244922121422`,
+ * `258849044321` e `14074950699`. Paulo confirmou o fato: *"temos clientes
+ * fora do brasil"*).
+ *
+ * O `wa_id` que chega no webhook, o id da conversa e o nome da pasta do
+ * backup são o MESMO identificador, escrito pela própria Meta em E.164 sem
+ * "+". Passar isso pela régua brasileira produzia duas coisas, e a segunda é
+ * a cara:
+ *
+ *  · `244922121422` (Angola) → ganha um 55 na frente, vira 14 dígitos e é
+ *    RECUSADO: o colaborador não consegue responder o cliente. Falha visível.
+ *  · `14074950699` (EUA) → ganha o 55, vira 13 dígitos com DDD 14 **válido**,
+ *    e a mensagem sai para **+55 14 07495-0699**, um número brasileiro de
+ *    OUTRA pessoa — com o app dizendo "enviado". Plausível e errado, que é
+ *    sempre o desfecho mais caro.
+ *
+ * Por isso a régua de ENVIO é esta: dígitos, e o comprimento de E.164 (o
+ * máximo do padrão é 15). Ela não inventa DDI nem julga país — quem escreveu
+ * o identificador foi a Meta.
+ */
+export function numeroCanonicoWhatsapp(numero) {
+    const d = String(numero || '').replace(/\D/g, '');
+    // 8 é o piso de um número nacional curto com DDI; 15 é o teto do E.164.
+    if (d.length < 8 || d.length > 15) return null;
+    return d;
+}
+
+/**
  * Normaliza número BR pro formato E.164 sem "+" (como a Cloud API espera).
  * Aceita com/sem +55, com/sem máscara. Devolve null quando não dá pra
  * afirmar que é um número válido — número torto é ALERTA, nunca chute.
+ *
+ * ⚠️ **É para número DIGITADO POR GENTE** (cadastro do cliente, ✚ Nova
+ * conversa) — nunca para `wa_id`. A conveniência de completar o 55 só existe
+ * porque quem digita "11 99999-0000" quer dizer Brasil; aplicada a um
+ * identificador que já veio pronto, ela reescreve o destino.
+ *
+ * 🌍 **Internacional se declara com "+"**: quem digita `+244 922 121 422`
+ * está dizendo o país, e aí a régua brasileira sai da frente. Sem o "+", 10 e
+ * 11 dígitos continuam sendo lidos como brasileiros — é o que a pessoa quis
+ * dizer, e adivinhar o contrário faria o telefone do cadastro virar outro
+ * país por acidente.
  */
 export function normalizarNumeroBr(numero) {
-    let d = String(numero || '').replace(/\D/g, '');
+    const bruto = String(numero || '').trim();
+    if (bruto.startsWith('+')) return numeroCanonicoWhatsapp(bruto);
+    let d = bruto.replace(/\D/g, '');
     if (!d) return null;
     if (d.startsWith('0')) d = d.replace(/^0+/, '');
     if (!d.startsWith('55')) d = `55${d}`;
@@ -317,7 +359,10 @@ export async function enviarTextoLivre({ para, texto }, deps = {}) {
     if (!cfg.token || !cfg.phoneNumberId) {
         return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
     }
-    const numero = normalizarNumeroBr(para);
+    // `para` chega CANÔNICO (wa_id da Meta / id da conversa). Normalizar aqui
+    // reescreveria o destino de cliente de fora do Brasil — ver a nota de
+    // `numeroCanonicoWhatsapp`. Quem digita normaliza na porta de entrada.
+    const numero = numeroCanonicoWhatsapp(para);
     if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".` };
     const corpo = String(texto ?? '').trim();
     if (!corpo) return { ok: false, erro: 'Mensagem vazia não sai.' };
@@ -397,7 +442,7 @@ export async function enviarMidiaWhatsapp({ para, tipo, mediaId, nomeArquivo, le
     if (faltas.length) {
         return { ok: false, configuracaoIncompleta: true, erro: `Canal do WhatsApp não configurado: ${faltas.join('; ')}.`, acao: 'Configure as credenciais no Cloud Run.' };
     }
-    const numero = normalizarNumeroBr(para);
+    const numero = numeroCanonicoWhatsapp(para);
     if (!numero) return { ok: false, erro: `Número inválido: ${para}`, acao: 'Confira DDD e número.' };
     const doFetch = deps.fetchImpl || fetch;
     const corpoMsg = montarMensagemMidia({ para: numero, tipo, mediaId, nomeArquivo, legenda });

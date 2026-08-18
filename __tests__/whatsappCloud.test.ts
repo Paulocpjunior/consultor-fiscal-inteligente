@@ -11,8 +11,9 @@
  * 4. whatsapp-api COMPROVA envio; whatsapp (wa.me) continua não comprovando.
  */
 import {
-    configWhatsapp, faltasDaConfig, normalizarNumeroBr,
+    configWhatsapp, faltasDaConfig, normalizarNumeroBr, numeroCanonicoWhatsapp,
     montarMensagemTemplate, interpretarRespostaWhatsapp, enviarGuiaWhatsapp,
+    enviarTextoLivre, enviarMidiaWhatsapp,
     interpretarAppsAssinados,
 } from '../sefaz-backend/whatsapp-cloud.js';
 import { canalComprovaEnvio } from '../sefaz-backend/envio-imposto-painel.js';
@@ -143,5 +144,86 @@ describe('assinatura da WABA (a 2ª amarração do webhook)', () => {
         expect(interpretarAppsAssinados({ data: [] })).toEqual([]);
         expect(interpretarAppsAssinados(undefined)).toEqual([]);
         expect(interpretarAppsAssinados({ data: [{}] })).toEqual([{ id: null, nome: null }]);
+    });
+});
+
+// ============================================================================
+// 🚨 CLIENTE DE FORA DO BRASIL — o número que veio da Meta não se normaliza
+//
+// 17/08: o backup da Ultra Fox trouxe conversas com `244922121422` (Angola),
+// `258849044321` (Moçambique) e `14074950699` (EUA). Paulo confirmou o fato:
+// *"temos clientes fora do brasil"*.
+//
+// O envio passava o `wa_id` pela régua brasileira, que prega um 55 na frente
+// de tudo que não começa com 55. Isso produzia DUAS falhas, e a segunda é a
+// que custa caro:
+//
+//  · Angola vira 14 dígitos ⇒ RECUSADO. O colaborador não consegue responder
+//    o cliente — falha visível, ruim mas honesta.
+//  · EUA vira `5514074950699`: 13 dígitos, DDD 14, **válido**. A mensagem sai
+//    para um número brasileiro de OUTRA pessoa e o app diz "enviado".
+//
+// Isto estava em PRODUÇÃO — não é risco da importação, é o atendimento de
+// hoje.
+// ============================================================================
+
+describe('🚨 número internacional: wa_id vai como veio', () => {
+    const env = { WHATSAPP_CLOUD_TOKEN: 'tok', WHATSAPP_PHONE_NUMBER_ID: '999', WHATSAPP_TEMPLATE_GUIA: 't' };
+    const capturar = () => {
+        const chamadas: any[] = [];
+        const fetchImpl = (async (url: any, init: any) => {
+            chamadas.push(JSON.parse(init.body));
+            return { ok: true, status: 200, json: async () => ({ messages: [{ id: 'wamid.OK' }] }) };
+        }) as any;
+        return { chamadas, fetchImpl };
+    };
+
+    test('numeroCanonicoWhatsapp preserva o DDI e recusa o que não é número', () => {
+        expect(numeroCanonicoWhatsapp('244922121422')).toBe('244922121422');
+        expect(numeroCanonicoWhatsapp('14074950699')).toBe('14074950699');
+        expect(numeroCanonicoWhatsapp('5511997377599')).toBe('5511997377599');
+        expect(numeroCanonicoWhatsapp('+244 922 121 422')).toBe('244922121422');
+        expect(numeroCanonicoWhatsapp('1234567')).toBeNull();          // curto demais
+        expect(numeroCanonicoWhatsapp('1'.repeat(16))).toBeNull();     // acima do E.164
+        expect(numeroCanonicoWhatsapp('')).toBeNull();
+    });
+
+    test('responder cliente de Angola SAI — antes era recusado', async () => {
+        const { chamadas, fetchImpl } = capturar();
+        const r = await enviarTextoLivre({ para: '244922121422', texto: 'oi' }, { env, fetchImpl });
+        expect(r.ok).toBe(true);
+        expect(chamadas[0].to).toBe('244922121422');
+    });
+
+    test('🚨 o caso caro: número dos EUA NÃO vira número brasileiro', async () => {
+        // Com a régua antiga, `to` sairia '5514074950699' — um celular real de
+        // outra pessoa, com o app relatando sucesso.
+        const { chamadas, fetchImpl } = capturar();
+        await enviarTextoLivre({ para: '14074950699', texto: 'oi' }, { env, fetchImpl });
+        expect(chamadas[0].to).toBe('14074950699');
+        expect(chamadas[0].to).not.toBe('5514074950699');
+    });
+
+    test('o anexo segue a mesma régua (uma tela não pode acertar e a outra errar)', async () => {
+        const { chamadas, fetchImpl } = capturar();
+        await enviarMidiaWhatsapp({ para: '258849044321', tipo: 'document', mediaId: 'm1', nomeArquivo: 'x.pdf' }, { env, fetchImpl });
+        expect(chamadas[0].to).toBe('258849044321');
+    });
+
+    test('número BRASILEIRO continua idêntico — a correção não muda o caso comum', async () => {
+        const { chamadas, fetchImpl } = capturar();
+        await enviarTextoLivre({ para: '5511997377599', texto: 'oi' }, { env, fetchImpl });
+        expect(chamadas[0].to).toBe('5511997377599');
+    });
+
+    test('DIGITADO segue régua brasileira; internacional se declara com "+"', () => {
+        // Quem digita "11 99999-0000" quer dizer Brasil — adivinhar o
+        // contrário faria o telefone do cadastro virar outro país por acidente.
+        expect(normalizarNumeroBr('(11) 99737-7599')).toBe('5511997377599');
+        expect(normalizarNumeroBr('11997377599')).toBe('5511997377599');
+        // …e o "+" é a declaração explícita do país.
+        expect(normalizarNumeroBr('+244 922 121 422')).toBe('244922121422');
+        expect(normalizarNumeroBr('+1 407 495 0699')).toBe('14074950699');
+        expect(normalizarNumeroBr('abc')).toBeNull();
     });
 });

@@ -7,6 +7,12 @@ export interface ConfigWhatsapp {
 
 export function configWhatsapp(env?: Record<string, string | undefined>): ConfigWhatsapp;
 export function faltasDaConfig(cfg: ConfigWhatsapp): string[];
+/**
+ * Identificador do WhatsApp como a Meta escreveu (E.164 sem "+"). Para
+ * `wa_id`, id de conversa e nome de pasta do backup — NUNCA re-normalizar.
+ */
+export function numeroCanonicoWhatsapp(numero?: string | null): string | null;
+/** Número DIGITADO por gente (régua BR; "+" declara outro país). */
 export function normalizarNumeroBr(numero?: string | null): string | null;
 
 export interface MensagemTemplateInput {
@@ -68,6 +74,20 @@ export interface EnvioGuiaWhatsappResultado extends RespostaWhatsapp {
 }
 export function enviarGuiaWhatsapp(
     p: { para: string; variaveis?: Array<string | number | null | undefined>; pdfBase64?: string | null; nomeArquivo?: string | null },
+    deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
+): Promise<EnvioGuiaWhatsappResultado>;
+
+/**
+ * Texto livre DENTRO da janela de 24h. `para` é CANÔNICO (wa_id / id da
+ * conversa) — quem digita normaliza antes, na porta de entrada.
+ */
+export function enviarTextoLivre(
+    p: { para: string; texto: string },
+    deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
+): Promise<EnvioGuiaWhatsappResultado>;
+/** Anexo na conversa. `para` também é CANÔNICO. */
+export function enviarMidiaWhatsapp(
+    p: { para: string; tipo: string; mediaId: string; nomeArquivo?: string | null; legenda?: string | null },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<EnvioGuiaWhatsappResultado>;
 
