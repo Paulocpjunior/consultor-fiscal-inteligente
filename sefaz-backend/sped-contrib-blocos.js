@@ -64,6 +64,45 @@ function getCstCofins(item, regimeApuracao, direcao) {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
+ * COD_SIT do A100 — situação do documento.
+ *
+ * '00' = documento REGULAR. Aqui ele é AFIRMÁVEL, e isso importa: a cancelada
+ * já sai em `filtrarNotasBlocoA`, então o que chega ao A100 é regular por
+ * CONSTRUÇÃO. Não é default de campo fiscal; é consequência do filtro.
+ */
+const COD_SIT_REGULAR = '00';
+
+/**
+ * IND_PGTO do A100 — 0 à vista · 1 a prazo · 9 sem pagamento.
+ *
+ * ⚠️ ESTE É O ÚNICO CAMPO DESTE PR QUE O DOCUMENTO NÃO RESPONDE. A NFS-e não
+ * traz forma de pagamento em campo nenhum, e o PVA exige o campo preenchido
+ * (37 recusas na MANTOAN 07/2026).
+ *
+ * Ou seja: não dá para deixar vazio, e não dá para saber. A saída da casa nesse
+ * caso não é escolher em silêncio — é escolher e DIZER: o gerador declara "à
+ * vista" e devolve um aviso NOMEADO com a contagem, para quem entrega saber o
+ * que foi afirmado em nome do cliente.
+ *
+ * 📌 Ele NÃO entra em conta nenhuma: base, PIS, COFINS e o bloco M são os
+ * mesmos com qualquer valor aqui. É informação cadastral do documento.
+ */
+const IND_PGTO_PADRAO = '0';
+
+/**
+ * CSTs de aquisição que GERAM crédito (Tabela 4.3.7) — só neles os campos
+ * NAT_BC_CRED e IND_ORIG_CRED do A170 existem.
+ */
+const CSTS_COM_CREDITO = new Set(['50', '51', '52', '53', '54', '55', '56']);
+
+/** Descrição do item quando o documento não traz itens capturados. */
+function descricaoDoServico(nota) {
+    const d = nota?.discriminacao || nota?.descricaoServico || nota?.servico?.discriminacao;
+    if (d && String(d).trim()) return String(d).trim();
+    return 'Prestação de serviços conforme documento fiscal';
+}
+
+/**
  * O VALOR do documento de serviço, nas formas em que ele chega.
  *
  * A NFS-e do portal de SP grava `valorTotal`/`valorServicos` e o espelho
@@ -105,6 +144,8 @@ function filtrarNotasBlocoA(notas) {
 
 export function buildBlocoA(dados) {
     const linhas = [];
+    /** Documentos que o PVA recusaria por VL_DOC = 0 — saem, mas NOMEADOS. */
+    const valorZero = [];
     const notasA = filtrarNotasBlocoA(dados.notas);
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
@@ -141,45 +182,109 @@ export function buildBlocoA(dados) {
             : '';
 
         const vlDoc = valorDoDocumentoServico(nota);
+
+        // 🚨 A100 COM VL_DOC = 0,00 É RECUSADO PELO PVA ("Valor informado deve
+        // ser maior que zero" — MANTOAN 07/2026, 1 ocorrência). O documento não
+        // some calado: ele sai NOMEADO, porque some da conta é o que faz alguém
+        // achar que declarou tudo. Zero não muda base nenhuma, então o número
+        // continua o mesmo — o que muda é o arquivo passar.
+        if (!Number.isFinite(vlDoc) || vlDoc <= 0) {
+            valorZero.push(String(nota.numero || nota.chave || '(sem número)'));
+            continue;
+        }
+
         const vlPis = vlDoc * aliq.pis;
         const vlCofins = vlDoc * aliq.cofins;
 
         linhas.push(fmt.buildLine([
             'A100',
             indOper, indEmit, codPart,
-            '', '',  // COD_SIT, SER
+            // COD_SIT '00' = documento REGULAR. Ele pode ser afirmado porque a
+            // cancelada já sai daqui em `filtrarNotasBlocoA` — o que resta é
+            // regular por construção, não por suposição.
+            COD_SIT_REGULAR,
+            '',      // SER
             '', fmt.sanitizeString(nota.numero || '', 60),
             '',  // CHV_NFSE
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
-            fmt.formatValue(vlDoc), '',
+            fmt.formatValue(vlDoc),
+            IND_PGTO_PADRAO,
             '',  // VL_DESC
             fmt.formatValue(vlDoc), fmt.formatValue(vlPis),
             fmt.formatValue(vlDoc), fmt.formatValue(vlCofins),
             '', '', '',
         ]));
 
-        for (const item of (nota.itens || [])) {
-            const vlItem = parseFloat(item.vProd || item.valor || 0);
-            const cstPis = getCstPis(item, regimeApuracao, direcao);
-            const cstCofins = getCstCofins(item, regimeApuracao, direcao);
+        // 🚨 O A170 É REGISTRO FILHO OBRIGATÓRIO — e ele NUNCA SAÍA.
+        //
+        // Paulo, 18/08, com o 2º recibo do PVA da MANTOAN: **37 ocorrências de
+        // "Registro filho obrigatório não foi informado · A170"**, uma para cada
+        // A100. A causa é a ARMADILHA DAS DUAS FORMAS pela nona vez: a NFS-e do
+        // portal de SP entra SEM `itens` (ela grava `valorTotal`), e este laço
+        // percorre `nota.itens` — então ele nunca rodava.
+        //
+        // ✂️ Documento de serviço sem itens capturados vira UM item, com o valor
+        // do próprio documento. Não é invenção: é a mesma leitura que o A100 ao
+        // lado já faz (`valorDoDocumentoServico`), um registro adiante.
+        const itensDoDoc = (nota.itens || []).length
+            ? nota.itens.map((item, i) => ({
+                nItem: item.nItem || String(i + 1),
+                cod: item.cProd || item.codigo || '',
+                descr: item.xProd || item.descricao || '',
+                valor: parseFloat(item.vProd || item.valor || 0),
+                item,
+            }))
+            : [{ nItem: '1', cod: '', descr: descricaoDoServico(nota), valor: vlDoc, item: {} }];
 
+        for (const it of itensDoDoc) {
+            const cstPis = getCstPis(it.item, regimeApuracao, direcao);
+            const cstCofins = getCstCofins(it.item, regimeApuracao, direcao);
+            // ⚠️ NAT_BC_CRED e IND_ORIG_CRED só existem quando HÁ crédito (CST de
+            // aquisição 50-56). O código antigo cravava NAT_BC_CRED = '0', que
+            // não é sequer um código da tabela (ela vai de 01 a 18) — e ia junto
+            // na saída, onde crédito não existe. Campo fiscal não recebe default.
+            const comCredito = CSTS_COM_CREDITO.has(cstPis);
             linhas.push(fmt.buildLine([
                 'A170',
-                item.nItem || '1',
-                fmt.sanitizeString(item.cProd || item.codigo || '', 60),
-                fmt.sanitizeString(item.xProd || item.descricao || '', 255),
-                fmt.formatValue(vlItem), '',
-                '0', cstPis,
-                fmt.formatValue(vlItem),
+                it.nItem,
+                fmt.sanitizeString(it.cod, 60),
+                fmt.sanitizeString(it.descr, 255),
+                fmt.formatValue(it.valor),
+                '',                                   // VL_DESC
+                comCredito ? '01' : '',               // NAT_BC_CRED
+                comCredito ? '0' : '',                // IND_ORIG_CRED (0 = mercado interno)
+                cstPis,
+                fmt.formatValue(it.valor),
                 fmt.formatValue(aliq.pis * 100, 4),
-                fmt.formatValue(vlItem * aliq.pis),
+                fmt.formatValue(it.valor * aliq.pis),
                 cstCofins,
-                fmt.formatValue(vlItem),
+                fmt.formatValue(it.valor),
                 fmt.formatValue(aliq.cofins * 100, 4),
-                fmt.formatValue(vlItem * aliq.cofins),
-                '', '',
+                fmt.formatValue(it.valor * aliq.cofins),
+                '', '',                               // COD_CTA, COD_CCUS
             ]));
+        }
+    }
+
+    // Nada sai calado deste bloco: o que ficou de fora e o que foi AFIRMADO em
+    // nome do cliente voltam nos warnings da geração.
+    if (Array.isArray(dados.warnings)) {
+        if (valorZero.length) {
+            dados.warnings.push(
+                `Bloco A: ${valorZero.length} documento(s) de serviço ficaram FORA porque o valor é `
+                + `R$ 0,00 e o PVA recusa A100 com VL_DOC zerado — nº ${valorZero.slice(0, 10).join(', ')}`
+                + `${valorZero.length > 10 ? ` e mais ${valorZero.length - 10}` : ''}. `
+                + 'Não muda base nenhuma (zero não soma), mas confira se a nota deveria estar cancelada.',
+            );
+        }
+        const comA100 = linhas.filter(l => l.startsWith('|A100|')).length;
+        if (comA100) {
+            dados.warnings.push(
+                `Bloco A: ${comA100} documento(s) saíram com IND_PGTO = "0" (à vista). A NFS-e não traz `
+                + 'forma de pagamento em campo nenhum e o PVA exige o campo — o app DECLARA à vista e '
+                + 'avisa, em vez de escolher calado. Não afeta base, PIS, COFINS nem o bloco M.',
+            );
         }
     }
 

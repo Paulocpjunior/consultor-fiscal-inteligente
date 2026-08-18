@@ -46,7 +46,22 @@ function buildBloco0Contrib(dados) {
     linhas.push(build0140(dados));
 
     // ── 0150 — Participantes ────────────────────────────────────────────
+    // 🚨 COD_MUN DO PARTICIPANTE — o PVA cobra, e o app tem que cobrar ANTES.
+    //
+    // Paulo, 18/08 (MANTOAN, 30 recusas): *"alguns erros como COD MUN eu
+    // arrumava manual mesmo, pq na nota não tinha mesmo"*. A decisão dele fica:
+    // o app NÃO preenche — inventar município é afirmar domicílio de terceiro, e
+    // o '9999999' que a mensagem do PVA sugere significa "NÃO domiciliado no
+    // Brasil", o que seria FALSO para um paciente de São Paulo.
+    //
+    // O que o app passa a fazer é DENUNCIAR na geração, com a lista e a
+    // contagem, em vez de deixar a descoberta para o PVA depois do upload.
+    // (Regra de 06/08: cadastro faltando é ALERTA, nunca contorno.)
+    const semMunicipio = [];
     for (const p of dados.participantes || []) {
+        if (!String(p?.codMunIBGE || '').replace(/\D/g, '')) {
+            semMunicipio.push(String(p?.nome || p?.codPart || '(sem nome)'));
+        }
         linhas.push(build0150(p));
     }
 
@@ -58,6 +73,17 @@ function buildBloco0Contrib(dados) {
     // ── 0200 — Itens (produtos/servicos) ────────────────────────────────
     for (const item of dados.itens || []) {
         linhas.push(build0200(item));
+    }
+
+    if (semMunicipio.length && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Bloco 0: ${semMunicipio.length} participante(s) sem código de município (COD_MUN) — o PVA `
+            + `recusa cada um: ${semMunicipio.slice(0, 8).join(', ')}`
+            + `${semMunicipio.length > 8 ? ` e mais ${semMunicipio.length - 8}` : ''}. `
+            + 'O app NÃO preenche: inventar município é afirmar o domicílio de terceiro, e o "9999999" '
+            + 'que o PVA sugere significa NÃO domiciliado no Brasil. Complete no cadastro do '
+            + 'participante ou ajuste no arquivo antes de transmitir.',
+        );
     }
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
@@ -167,6 +193,17 @@ function build0110(dados) {
 /**
  * 0140 — Tabela de Cadastro de Estabelecimentos
  */
+/**
+ * A IE como o SPED a quer: só dígitos, ou VAZIO.
+ *
+ * Texto de cadastro ("ISENTO", "NÃO CONTRIBUINTE", "N/A") vira vazio — é o que
+ * eles significam. IE com letra de verdade não existe no leiaute do 0140.
+ */
+export function ieDoArquivo(bruto) {
+    const d = String(bruto == null ? '' : bruto).replace(/\D/g, '');
+    return d.length ? d.slice(0, 14) : '';
+}
+
 function build0140(dados) {
     const { empresa } = dados;
     const df = empresa.dadosFiscais || {};
@@ -176,7 +213,15 @@ function build0140(dados) {
         fmt.sanitizeString(empresa.nome, 100),
         fmt.sanitizeCnpjCpf(empresa.cnpj),
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),
-        fmt.sanitizeString(df.inscricaoEstadual || '', 14),
+        // 🚨 "ISENTO" NÃO É INSCRIÇÃO ESTADUAL — é o texto que o cadastro guarda
+        // para dizer que não há uma. O PVA recusou (MANTOAN 07/2026: "Inscrição
+        // Estadual inválida · Conteúdo ISENTO"), e está certo: a ausência de IE
+        // se declara com o campo VAZIO, não com uma palavra.
+        //
+        // ⚠️ Não é conserto de cadastro (regra de 06/08): o cadastro continua
+        // dizendo ISENTO, que é a verdade para quem lê a tela. O que muda é a
+        // TRADUÇÃO para o arquivo, e traduzir é trabalho do gerador.
+        ieDoArquivo(df.inscricaoEstadual),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
         fmt.sanitizeString(empresa.ccmSp || '', 15),
         fmt.sanitizeString(df.codSuframa || '', 9),
