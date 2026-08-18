@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    captureFromSefaz, getSefazState, getSefazWindow, toggleSefazCapture,
+    captureFromSefaz, captureCteFromSefaz, getSefazState, getSefazWindow, toggleSefazCapture,
     type SefazState, type SefazWindow,
 } from '../services/dfeCaptureService';
 import type { EmpresaXmlOption } from '../services/xmlFiscalService';
@@ -38,6 +38,35 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
     const [ativoAtual, setAtivoAtual] = useState<boolean>(empresa.capturarSefaz !== false);
     const [savingToggle, setSavingToggle] = useState(false);
     const [toggleErr, setToggleErr] = useState<string | null>(null);
+    // CT-e (18/08) — prova de conceito: o webservice CTeDistribuicaoDFe nunca
+    // foi chamado deste app, e a rede da SEFAZ é bloqueada do ambiente de
+    // desenvolvimento. Este botão é a ÚNICA forma de provar em produção antes
+    // de entrar no cron noturno — por isso admin-only e resultado próprio,
+    // nunca misturado com `result` (que é do NF-e).
+    const [runningCte, setRunningCte] = useState(false);
+    const [resultCte, setResultCte] = useState<{ tipo: 'sucesso' | 'erro' | 'aviso'; texto: string } | null>(null);
+
+    const handleSyncCte = async () => {
+        setRunningCte(true);
+        setResultCte(null);
+        try {
+            const r = await captureCteFromSefaz({
+                empresa: { id: empresa.id, cnpj: empresa.cnpj, nome: empresa.nome } as any,
+                user: currentUser,
+            });
+            if (r.sucesso) {
+                setResultCte({ tipo: 'sucesso', texto: r.motivo });
+            } else if (r.rateLimited) {
+                setResultCte({ tipo: 'erro', texto: 'SEFAZ pediu para aguardar 1h (cStat 656).' });
+            } else {
+                setResultCte({ tipo: 'erro', texto: r.motivo });
+            }
+        } catch (e: any) {
+            setResultCte({ tipo: 'erro', texto: e.message || 'Erro inesperado' });
+        } finally {
+            setRunningCte(false);
+        }
+    };
 
     const isAdmin = currentUser.role === 'admin';
 
@@ -161,6 +190,21 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
                         ⚙️
                     </button>
                 )}
+                {isAdmin && (
+                    <button
+                        type="button"
+                        onClick={handleSyncCte}
+                        disabled={runningCte}
+                        title="🚧 Prova de conceito (18/08): busca CT-e desta empresa como TOMADORA. Nunca testado contra a SEFAZ real."
+                        className={`text-xs font-medium px-2 py-1 rounded transition ${
+                            runningCte
+                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                : 'bg-sky-600 hover:bg-sky-500 text-white'
+                        }`}
+                    >
+                        {runningCte ? '⏳…' : '🚚 CT-e (beta)'}
+                    </button>
+                )}
                 {ultimaSync && (
                     <span className="text-xs text-slate-400">
                         Última: {formatRelativeBR(ultimaSync)}
@@ -170,6 +214,15 @@ const SefazSyncButton: React.FC<Props> = ({ empresa, currentUser, onSyncComplete
             </div>
             {result && (
                 <div className={`text-xs border rounded px-2 py-1 ${corResultado}`}>{result.texto}</div>
+            )}
+            {resultCte && (
+                <div className={`text-xs border rounded px-2 py-1 ${
+                    resultCte.tipo === 'sucesso'
+                        ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30'
+                        : 'text-red-300 bg-red-500/10 border-red-500/30'
+                }`}>
+                    CT-e: {resultCte.texto}
+                </div>
             )}
 
             {showSettings && createPortal(

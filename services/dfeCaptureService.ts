@@ -144,6 +144,63 @@ export function isSefazCaptureAvailable(): boolean {
     return true;
 }
 
+/**
+ * Captura de CT-e (18/08) — mesmo contrato de `captureFromSefaz`, mas chama
+ * a rota /sync-cte-one, admin-only e SEM a opção resetNSU (o cursor de CT-e
+ * é próprio e ainda não tem trilho de "recapturar 90d").
+ *
+ * PROVA-DE-CONCEITO: este é o caminho pra Paulo testar em produção antes de
+ * o CT-e entrar no cron noturno — o webservice `CTeDistribuicaoDFe` nunca
+ * foi chamado daqui, e a rede da SEFAZ é bloqueada do ambiente de
+ * desenvolvimento, então a única prova real é este clique.
+ */
+export async function captureCteFromSefaz(req: { empresa: EmpresaXmlConfig; user: User }): Promise<DfeCaptureResult> {
+    try {
+        const token = await getToken();
+        const res = await fetch('/api/admin/sefaz/sync-cte-one', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                empresaId: req.empresa.id,
+                empresaCnpj: String((req.empresa as any).cnpj || '').replace(/\D/g, ''),
+            }),
+        });
+        const data = await res.json();
+        if (res.status === 403) {
+            return { sucesso: false, motivo: data.motivo || 'Fora da janela operacional', itens: [], foraDeJanela: true };
+        }
+        if (res.status === 409) {
+            return { sucesso: false, motivo: data.motivo || 'Já sincronizado recentemente', itens: [] };
+        }
+        if (res.status === 429) {
+            return { sucesso: false, motivo: data.motivo || 'SEFAZ rate limit (cStat 656)', itens: [], rateLimited: true };
+        }
+        if (!res.ok) {
+            return { sucesso: false, motivo: data.error || data.motivo || `Falha HTTP ${res.status}`, itens: [] };
+        }
+        const cStatLabel = data.cStat ? `cStat=${data.cStat}` : '';
+        const xMotivo = data.xMotivo ? ` ${data.xMotivo}` : '';
+        const nsu = data.ultNSU ? ` · NSU agora=${data.ultNSU}` : '';
+        const pag = data.paginas ? ` · ${data.paginas} pág` : '';
+        return {
+            sucesso: true,
+            motivo: `${data.novosXmls || 0} novo(s) CT-e · ${data.duplicados || 0} dup · ${data.erros || 0} erros${cStatLabel ? ` · ${cStatLabel}${xMotivo}` : ''}${nsu}${pag}`,
+            itens: [],
+            novosXmls: data.novosXmls,
+            duplicados: data.duplicados,
+            erros: data.erros,
+            ultNSU: data.ultNSU,
+            cStat: data.cStat,
+            documentosProcessados: data.documentosProcessados,
+            xMotivo: data.xMotivo,
+            paginas: data.paginas,
+            pendenciaNSU: data.pendenciaNSU,
+        };
+    } catch (err: any) {
+        return { sucesso: false, motivo: err.message || 'Erro de rede', itens: [] };
+    }
+}
+
 export async function scheduleAutoCapture(_e: EmpresaXmlConfig): Promise<{ ok: boolean; motivo: string }> {
     return {
         ok: true,
