@@ -24,6 +24,12 @@ describe('fetchFiscalData — CFOP local', () => {
         expect(result.text).toContain('Remessa / retorno');
     });
 
+    // ⚠️ A asserção do trecho "recinto alfandegado" SAIU em 18/08, e é uma
+    // escolha, não uma perda por descuido: o catálogo passou de 2 entradas
+    // digitadas à mão para as 619 da tabela oficial (Ajuste SINIEF 03/24),
+    // carregando a descrição CURTA de cada código. As notas explicativas
+    // inteiras somariam ~250 KB no bundle do navegador, e o que vai na tela ao
+    // lado do número é o título. Quem precisa da nota tem o link da fonte.
     it('responde CFOP 5.106 com descricao especifica do catalogo local', async () => {
         const fetchMock = jest.fn(() => Promise.reject(new Error('fetch nao deveria ser chamado')));
         globalThis.fetch = fetchMock as any;
@@ -33,7 +39,6 @@ describe('fetchFiscalData — CFOP local', () => {
         expect(fetchMock).not.toHaveBeenCalled();
         expect(result.text).toContain('CFOP 5106');
         expect(result.text).toContain('Venda de mercadoria adquirida ou recebida de terceiros, que não deva por ele transitar');
-        expect(result.text).toContain('recinto alfandegado');
         expect(result.text).not.toContain('Descrição específica não cadastrada');
         expect(result.sources?.[0]?.web.uri).toContain('confaz.fazenda.gov.br');
     });
