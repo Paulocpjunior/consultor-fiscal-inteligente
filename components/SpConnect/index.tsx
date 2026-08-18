@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
+    importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
@@ -45,6 +46,8 @@ import {
 } from '../../services/spConnect';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
+import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos } from '../../sefaz-backend/whatsapp-import-lote.js';
+import { interpretarConversaTxt } from '../../sefaz-backend/whatsapp-import-ultrafox.js';
 
 const TOM_TICK: Record<string, string> = {
     ok: 'text-emerald-600 dark:text-emerald-400',
@@ -661,6 +664,78 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [impResultado, setImpResultado] = useState<ImportPreview | null>(null);
     const [impErro, setImpErro] = useState<string | null>(null);
     const [impRodando, setImpRodando] = useState(false);
+
+    // ── 📦 PASTA INTEIRA do backup (o export tem ~800 MB e centenas de pastas)
+    //
+    // O navegador LÊ e INTERPRETA aqui, na máquina de quem importa: o zip
+    // inteiro não passa numa requisição (teto de 20 MB) e a mídia não precisa
+    // sair do computador nesta etapa. Quem decide entrada × saída e quem
+    // calcula o id de cada mensagem é o SERVIDOR — ver a rota do lote.
+    const [loteVarredura, setLoteVarredura] = useState<ReturnType<typeof resumoDaVarredura> | null>(null);
+    const [loteLidas, setLoteLidas] = useState<{ numero: string; mensagens: any[]; descartadas?: any[] }[]>([]);
+    const [lotePrevia, setLotePrevia] = useState<ReturnType<typeof consolidarPrevia> | null>(null);
+    const [loteAutores, setLoteAutores] = useState<string[]>([]);
+    const [loteLendo, setLoteLendo] = useState<string | null>(null);
+    const [loteResultado, setLoteResultado] = useState<{ gravadas: number; conversas: number; recusadas: number } | null>(null);
+    const [loteErro, setLoteErro] = useState<string | null>(null);
+
+    const escolherPastaBackup = async (arquivos: FileList | null) => {
+        setLoteErro(null); setLoteResultado(null); setLotePrevia(null); setLoteLidas([]); setLoteAutores([]);
+        const lista = Array.from(arquivos || []);
+        if (!lista.length) return;
+        // O caminho relativo é o que diz de QUEM é cada arquivo — o nome
+        // sozinho ("_full-chat.txt") é igual em todas as pastas.
+        const porCaminho = new Map(lista.map((f) => [(f as any).webkitRelativePath || f.name, f]));
+        const mapa = mapearArquivosDoBackup([...porCaminho.keys()]);
+        const resumo = resumoDaVarredura(mapa);
+        setLoteVarredura(resumo);
+        if (!resumo.arquivosParaLer) return;
+
+        const lidas: { numero: string; mensagens: any[]; descartadas?: any[] }[] = [];
+        const aLer = [...mapa.conversas, ...mapa.semDono];
+        for (let i = 0; i < aLer.length; i += 1) {
+            const item = aLer[i];
+            setLoteLendo(`Lendo ${i + 1} de ${aLer.length}…`);
+            const f = porCaminho.get(item.caminho);
+            if (!f) continue;
+            try {
+                const r = interpretarConversaTxt(await f.text());
+                lidas.push({ numero: item.numero, mensagens: r.mensagens, descartadas: r.descartadas });
+            } catch {
+                // Arquivo ilegível não derruba a varredura inteira: ele some
+                // da conta e aparece no contador de "sem mensagem".
+                lidas.push({ numero: item.numero, mensagens: [], descartadas: [] });
+            }
+        }
+        setLoteLendo(null);
+        setLoteLidas(lidas);
+        setLotePrevia(consolidarPrevia(lidas));
+    };
+
+    const gravarLote = async () => {
+        if (!lotePrevia || !loteAutores.length) return;
+        setLoteErro(null); setLoteLendo('Gravando…');
+        let gravadas = 0; let conversas = 0; let recusadas = 0;
+        try {
+            const blocos = dividirEmBlocos(loteLidas as any);
+            for (let i = 0; i < blocos.length; i += 1) {
+                setLoteLendo(`Gravando bloco ${i + 1} de ${blocos.length}…`);
+                const r = await importarUltrafoxLote({ conversas: blocos[i] as any, autoresEscritorio: loteAutores });
+                if (!r.ok) {
+                    // PARA no primeiro erro e diz onde parou: seguir em frente
+                    // deixaria metade gravada sem ninguém saber qual metade.
+                    setLoteErro(`${r.error} (parou no bloco ${i + 1} de ${blocos.length}; o que já entrou está gravado e reimportar não duplica)`);
+                    break;
+                }
+                gravadas += r.gravadas || 0;
+                conversas += r.conversas || 0;
+                recusadas += r.totalRecusadas || 0;
+            }
+            setLoteResultado({ gravadas, conversas, recusadas });
+        } finally {
+            setLoteLendo(null);
+        }
+    };
 
     const lerArquivoImport = (f: File | null) => {
         if (!f) return;
@@ -1681,6 +1756,99 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     a leitura, depois a confirmação. Contato que já existe no SP Connect
                                     <strong> não é sobrescrito</strong>, e reimportar o mesmo arquivo não duplica mensagem.
                                 </p>
+                                {/* 📦 PASTA INTEIRA — o caminho normal para o backup de verdade.
+                                    Os botões abaixo continuam para arquivo avulso. */}
+                                <div className="rounded-lg border border-[#0e3bfa]/30 dark:border-[#0e3bfa]/50 bg-[#0e3bfa]/5 p-2.5 space-y-1.5">
+                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">📦 Pasta inteira do backup</p>
+                                    <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
+                                        Escolha a pasta que contém <strong>uma pasta por número</strong> (dentro de
+                                        <code className="mx-1">whatsapp/</code>, a pasta do número do escritório). O navegador lê
+                                        tudo <strong>aqui na sua máquina</strong> — a mídia não sai do computador nesta etapa.
+                                    </p>
+                                    <input type="file" multiple
+                                        // @ts-expect-error atributo de diretório não está no tipo do React
+                                        webkitdirectory=""
+                                        onChange={(e) => escolherPastaBackup(e.target.files)}
+                                        className="text-[11px] text-slate-500" />
+                                    {loteLendo && <p className="text-[11px] text-slate-500">⏳ {loteLendo}</p>}
+                                    {loteVarredura && (
+                                        <div className="space-y-0.5">
+                                            <p className="text-[11px] text-slate-700 dark:text-slate-200">
+                                                {loteVarredura.contatos} contato(s) · {loteVarredura.arquivosParaLer} arquivo(s) de conversa
+                                            </p>
+                                            {loteVarredura.avisos.map((a, i) => (
+                                                <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ {a}</p>
+                                            ))}
+                                            {loteVarredura.foraDoPadrao > 0 && (
+                                                <p className="text-[10px] text-slate-500">{loteVarredura.foraDoPadrao} arquivo(s) fora do padrão do export (ignorados).</p>
+                                            )}
+                                        </div>
+                                    )}
+                                    {lotePrevia && (
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-2 space-y-1.5">
+                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                                {lotePrevia.mensagens} mensagens em {lotePrevia.conversas} conversa(s)
+                                                {lotePrevia.descartadas > 0 ? ` · ${lotePrevia.descartadas} linha(s) descartada(s)` : ''}
+                                            </p>
+                                            {lotePrevia.arquivosSemMensagem > 0 && (
+                                                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                                    ⚠️ {lotePrevia.arquivosSemMensagem} arquivo(s) foram lidos e <strong>nenhuma mensagem foi reconhecida</strong> —
+                                                    sinal de que o formato daqueles é diferente. Me diga se este número for grande.
+                                                </p>
+                                            )}
+                                            {lotePrevia.mensagens === 0 ? (
+                                                <p className="text-[11px] text-red-600 dark:text-red-400">
+                                                    Nenhuma mensagem reconhecida. Não grave — o formato do export não é o que o leitor espera.
+                                                </p>
+                                            ) : (
+                                                <>
+                                                    {/* A DIREÇÃO É ESCOLHA HUMANA e continua sendo: sem saber
+                                                        quem é do escritório, "enviada" e "recebida" seriam chute. */}
+                                                    <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                                                        Quais autores são do ESCRITÓRIO? (viram mensagens ENVIADAS)
+                                                    </p>
+                                                    <div className="flex gap-1.5 flex-wrap max-h-32 overflow-y-auto">
+                                                        {lotePrevia.autores.slice(0, 60).map((a) => (
+                                                            <button key={a.autor}
+                                                                onClick={() => setLoteAutores((l) => (l.includes(a.autor) ? l.filter((x) => x !== a.autor) : [...l, a.autor]))}
+                                                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${loteAutores.includes(a.autor)
+                                                                    ? 'bg-emerald-600 text-white'
+                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
+                                                                {loteAutores.includes(a.autor) ? '🏢 ' : ''}{a.autor} · {a.total}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    {lotePrevia.autores.length > 60 && (
+                                                        <p className="text-[10px] text-slate-500">
+                                                            mostrando 60 de {lotePrevia.autores.length} autores (os de maior volume) — os demais entram como CLIENTE.
+                                                        </p>
+                                                    )}
+                                                    {!loteAutores.length && (
+                                                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                                            Marque ao menos um: sem isso a direção das mensagens seria chute, e o servidor recusa.
+                                                        </p>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                    {loteErro && <p className="text-[11px] text-red-600 dark:text-red-400">{loteErro}</p>}
+                                    {loteResultado && (
+                                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                                            ✓ {loteResultado.gravadas} mensagens gravadas em {loteResultado.conversas} conversa(s)
+                                            {loteResultado.recusadas > 0 ? ` · ${loteResultado.recusadas} recusada(s) por data ou texto ilegível` : ''}
+                                        </p>
+                                    )}
+                                    <div className="flex justify-end">
+                                        <button onClick={gravarLote}
+                                            disabled={Boolean(loteLendo) || !lotePrevia || !lotePrevia.mensagens || !loteAutores.length}
+                                            className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                            Confirmar e gravar o lote
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">Ou um arquivo avulso:</p>
                                 <div className="flex gap-1.5 flex-wrap">
                                     {([['contatos', '👥 Contatos (CSV)'], ['mensagens-csv', '💬 Mensagens (CSV)'], ['mensagens-txt', '📄 Conversa (.txt do WhatsApp)']] as const).map(([id, rotulo]) => (
                                         <button key={id} onClick={() => { setImpTipo(id); setImpPreview(null); setImpResultado(null); }}

@@ -142,6 +142,33 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   está pedindo outro departamento, e manter o dono anterior deixaria a
   conversa na fila nova com atendente da fila velha — o mesmo estado torto
   que a transferência evita limpando a atribuição.
+- 📦 **IMPORTAÇÃO EM LOTE DO BACKUP** (18/08, Paulo: *"pode construir"*). O
+  export chegou com ~800 MB e esta forma, **conferida nos prints, não
+  deduzida**: `whatsapp/<número do escritório>/<contato>/_full-chat.txt`, com
+  subpastas `<protocolo>/_chat.txt` por atendimento e `_files/` achatada com
+  toda a mídia.
+  **O que se importa é o `_full-chat.txt`**: o SP Connect modela UMA conversa
+  por número (o cliente tem um chat no celular), que é exatamente o que o
+  full-chat é. Os `_chat.txt` de protocolo são as MESMAS mensagens recortadas
+  — importar os dois seria a mesma mensagem duas vezes; o id determinístico as
+  colapsaria, mas contar com isso é rede de segurança, não plano. Eles voltam
+  CONTADOS.
+  **DESENHO**: o **navegador lê e interpreta na máquina de quem importa** (zip
+  de 800 MB não passa no corpo de 20 MB do POST, e a mídia não precisa sair do
+  computador nesta etapa) e manda mensagens já lidas em BLOCOS; **quem decide
+  entrada × saída e quem calcula o id é o SERVIDOR** (`prepararMensagensDoTxt`
+  + `gravarMensagensImportadas`, os mesmos da importação avulsa). Id vindo do
+  navegador seria a porta para gravar a mesma mensagem duas vezes.
+  TRÊS DECISÕES: (1) **contato que só tem `_chat.txt` não some** — entra, mas
+  MARCADO, porque é suposição; (2) a leitura do caminho é **a partir do FIM**,
+  senão a varredura devolveria zero em silêncio dependendo de qual pasta a
+  pessoa escolheu; (3) **a direção continua sendo escolha humana**, e num lote
+  de centenas de arquivos os autores vêm **com contagem e ordenados por
+  volume** — sem isso a decisão é impossível.
+  ⚠️ **A gravação PARA no primeiro bloco que falha e diz onde parou**: seguir
+  deixaria metade gravada sem ninguém saber qual metade.
+  ⚠️ E a tela **não importa `idMensagemImportada`**: ela depende do `crypto` do
+  Node e o erro apareceria só no ar, ao abrir a aba. Travado por teste.
 - 🌍 **TEM CLIENTE FORA DO BRASIL — e o envio reescrevia o destino** (17/08,
   ao ler o backup da Ultra Fox: entre as conversas há `244922121422`
   (Angola), `258849044321` (Moçambique) e `14074950699` (EUA); Paulo
