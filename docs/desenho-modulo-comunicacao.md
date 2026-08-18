@@ -142,6 +142,25 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   está pedindo outro departamento, e manter o dono anterior deixaria a
   conversa na fila nova com atendente da fila velha — o mesmo estado torto
   que a transferência evita limpando a atribuição.
+- 🌍 **TEM CLIENTE FORA DO BRASIL — e o envio reescrevia o destino** (17/08,
+  ao ler o backup da Ultra Fox: entre as conversas há `244922121422`
+  (Angola), `258849044321` (Moçambique) e `14074950699` (EUA); Paulo
+  confirmou: *"sim, isso é um fato, temos clientes fora do brasil"*).
+  O `wa_id` do webhook, o id da conversa e o nome da pasta do backup são o
+  MESMO identificador, escrito pela Meta em E.164 sem "+". O envio passava
+  isso por `normalizarNumeroBr`, que prega 55 em tudo que não começa com 55:
+  Angola virava 14 dígitos e era **recusado** (o colaborador não conseguia
+  responder), e os EUA viravam `5514074950699` — 13 dígitos, DDD 14, **válido**
+  — então a mensagem saía para **um celular brasileiro de outra pessoa**, com o
+  app dizendo "enviado". **Isto estava em produção**, não era risco da
+  importação.
+  A régua virou `numeroCanonicoWhatsapp` (dígitos + comprimento de E.164) nas
+  funções de ENVIO, e `normalizarNumeroBr` ficou onde ele sempre pertenceu: a
+  fronteira do que é **digitado por gente** (✚ Nova conversa, cadastro do
+  cliente, contato novo). Lá a conveniência do 55 continua — quem digita
+  "11 99999-0000" quer dizer Brasil —, e **internacional se declara com "+"**,
+  dito na própria tela. Travado por teste de COMPORTAMENTO (o payload que sai
+  tem que ter o mesmo número que entrou), provado revertendo a régua antiga.
 - 🚨 **O MENU PROMETE 8 DEPARTAMENTOS — E O APP PASSOU A PERGUNTAR SE TEM
   GENTE EM CADA UM** (17/08). O bot MOVE a conversa para a fila escolhida, e
   a partir dali quem enxerga é só quem atende aquela fila (`filasVisiveis`),

@@ -886,7 +886,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         <div className="grid grid-cols-2 gap-2">
                             <label className="text-[11px] text-slate-500 col-span-2 sm:col-span-1">
                                 WhatsApp (DDD + número)
-                                <input value={nc.para} onChange={(e) => setNc((f) => ({ ...f, para: e.target.value }))} placeholder="(11) 99999-9999"
+                                {/* 🌍 Cliente de fora do Brasil se declara com "+": sem o sinal,
+                                    10 e 11 dígitos são lidos como brasileiros — que é o que a
+                                    pessoa quis dizer ao digitar "11 99999-0000". */}
+                                <span className="block text-[9px] text-slate-400">fora do Brasil, comece com + e o código do país (+244 …)</span>
+                                <input value={nc.para} onChange={(e) => setNc((f) => ({ ...f, para: e.target.value }))} placeholder="(11) 99999-9999 ou +244 922 121 422"
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100" />
                             </label>
                             <label className="text-[11px] text-slate-500 col-span-2 sm:col-span-1">
@@ -1117,7 +1121,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">➕ Novo contato</p>
                                     <div className="grid grid-cols-2 gap-1.5">
                                         <input value={ctNovo.numero} onChange={(e) => setCtNovo({ ...ctNovo, numero: e.target.value })}
-                                            placeholder="Número com DDD (11 99999-0000)" className={CAMPO} />
+                                            placeholder="(11) 99999-0000 · fora do Brasil: +244 …" className={CAMPO} />
                                         <input value={ctNovo.nome} onChange={(e) => setCtNovo({ ...ctNovo, nome: e.target.value })}
                                             placeholder="Nome" className={CAMPO} />
                                     </div>
