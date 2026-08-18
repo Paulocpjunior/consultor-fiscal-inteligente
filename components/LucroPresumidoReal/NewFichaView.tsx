@@ -103,6 +103,8 @@ interface NewFichaViewProps {
     // Saldos credores
     saldoCredorIcms: number; setSaldoCredorIcms: (v: number) => void;
     saldoCredorIpi: number; setSaldoCredorIpi: (v: number) => void;
+    saldoCredorIcmsTransportar: number | null; setSaldoCredorIcmsTransportar: (v: number | null) => void;
+    saldoCredorIpiTransportar: number | null; setSaldoCredorIpiTransportar: (v: number | null) => void;
     saldoCredorPis: number; setSaldoCredorPis: (v: number) => void;
     saldoCredorCofins: number; setSaldoCredorCofins: (v: number) => void;
 
@@ -492,6 +494,24 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                             value={p.saldoCredorIpi}
                             onChange={p.setSaldoCredorIpi}
                             className="bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600"
+                        />
+                        {/* 🔁 O QUE SOBRA E VAI PRO MÊS SEGUINTE — pedido do Paulo em
+                            18/08 (KROYA). É OUTRO fato: o de cima é o que ENTROU e
+                            abate o imposto; este é o que o cliente leva adiante, e é
+                            o número que ele informa manualmente todo mês hoje.
+                            ⚠️ Em branco NÃO é zero: sem ele o relatório DIZ que não
+                            foi informado, em vez de afirmar que não há crédito. */}
+                        <CurrencyInput
+                            label="Saldo Credor ICMS a TRANSPORTAR (mês seguinte)"
+                            value={p.saldoCredorIcmsTransportar ?? 0}
+                            onChange={(v) => p.setSaldoCredorIcmsTransportar(v)}
+                            className="bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded border border-emerald-200 dark:border-emerald-800"
+                        />
+                        <CurrencyInput
+                            label="Saldo Credor IPI a TRANSPORTAR (mês seguinte)"
+                            value={p.saldoCredorIpiTransportar ?? 0}
+                            onChange={(v) => p.setSaldoCredorIpiTransportar(v)}
+                            className="bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded border border-emerald-200 dark:border-emerald-800"
                         />
                         <CurrencyInput
                             label="Saldo Credor PIS (Mês Anterior)"

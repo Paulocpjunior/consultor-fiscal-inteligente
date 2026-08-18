@@ -533,6 +533,29 @@ export interface FichaFinanceiraRegistro {
     saldoCredorPis?: number;
     saldoCredorCofins?: number;
 
+    /**
+     * SALDO CREDOR QUE SOBRA E VAI PARA O MÊS SEGUINTE.
+     *
+     * Paulo, 18/08 (KROYA): *"o saldo credor de ICMS e IPI está mostrando do mês
+     * anterior, mas preciso que apresente o saldo atual, o que vamos transportar
+     * para o mês seguinte"*.
+     *
+     * São DUAS coisas diferentes e a ficha só tinha uma: o que ENTROU no mês
+     * (`saldoCredorIcms`, que abate o imposto a recolher) e o que SOBRA dele.
+     * Na KROYA 07/2026 o ICMS entrou 486.477,01 e sai 521.793,35 — CRESCEU,
+     * porque o mês gerou mais crédito do que débito. Ou seja NÃO dá para
+     * derivar de `saldoCredorIcms − icmsProprioRecolher`: essa conta ignora o
+     * crédito do próprio mês e devolveria um número MENOR que o real, na
+     * direção que prejudica o cliente.
+     *
+     * ⚠️ Campo vazio NÃO é zero. Zero num campo de saldo é uma AFIRMAÇÃO ("você
+     * não tem crédito a transportar") — a mesma lição do E110 em 17/08, agora
+     * num papel que vai ao CLIENTE. Sem o número, o relatório DIZ que não foi
+     * informado, em vez de imprimir 0,00.
+     */
+    saldoCredorIcmsTransportar?: number;
+    saldoCredorIpiTransportar?: number;
+
     isEquiparacaoHospitalar?: boolean;
     isPresuncaoReduzida16?: boolean;
     issConfig?: IssConfig;
@@ -618,6 +641,37 @@ export interface DetalheImposto {
     cotaInfo?: PlanoCotas;
 }
 
+/**
+ * A MEMÓRIA DA BASE — produzida por QUEM CALCULA, nunca refeita por quem exibe.
+ *
+ * Paulo, 18/08, comparando a ficha da KROYA 07/2026 com a planilha que ele
+ * manda ao cliente: *"a base de cálculo de PIS/COFINS é faturamento bruto − IPI
+ * − ICMS − ICMS ST; aqui na ficha não apresenta a dedução do ICMS ST, o que me
+ * deixaria com a base de cálculo 'errada'"*.
+ *
+ * Ele estava certo, e o defeito era pior do que parecia: o NÚCLEO deduzia o ST
+ * (a base que gerou o PIS impresso era 77.283,57, a dele) — quem não deduzia
+ * era a TELA, que tinha uma segunda conta "pra exibição". Ou seja o relatório
+ * imprimia uma base que NÃO produzia o imposto impresso três linhas abaixo, num
+ * papel que vai ao cliente. É a família do modal de CFOP que mostrava 1405
+ * enquanto o arquivo gravava 1403 (12/08).
+ *
+ * Por isso a memória virou RETORNO do cálculo: quem exibe só imprime.
+ */
+export interface MemoriaBaseLucro {
+    faturamentoBruto: number;
+    deducaoIpi: number;
+    /** ICMS-ST destacado (DL 1.598/77 art. 12 §4º) — não integra a receita bruta. */
+    deducaoIcmsSt: number;
+    deducaoDevolucoes: number;
+    /** Receita bruta efetiva: já líquida de IPI, ST e devoluções. */
+    baseIrpjCsll: number;
+    /** ICMS sobre vendas (tese do STF) — deduz só a base de PIS/COFINS. */
+    deducaoIcmsVendas: number;
+    deducaoMonofasico: number;
+    basePisCofins: number;
+}
+
 export interface LucroResult {
     regime: 'Presumido' | 'Real';
     periodo: 'Mensal' | 'Trimestral';
@@ -628,6 +682,7 @@ export interface LucroResult {
     alertaLc224?: boolean;
     saldoResidualPis?: number;
     saldoResidualCofins?: number;
+    memoriaBase?: MemoriaBaseLucro;
 }
 
 export interface LucroInput {
