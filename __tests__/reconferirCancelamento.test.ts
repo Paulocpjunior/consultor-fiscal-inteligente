@@ -150,3 +150,54 @@ describe('resumo com a CAUSA junto do número', () => {
         expect(s.avisos.join(' ')).toMatch(/Cobertura de Saída/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A PRÉVIA NÃO PODE FALAR NO PASSADO — o caso MV LIDER 639 (18/08)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Paulo: *"fui consultar essas notas da MV LIDER pra ver se estavam mesmo
+// canceladas, realmente estão, mas no consultor não"*. O print mostra a causa:
+// ele clicou em **Quantas seriam consultadas?** — a SIMULAÇÃO — e a tela
+// respondeu, na mesma caixa, *"60 de 215 seriam consultadas"* e *"A rodada
+// parou em 60 de 215 notas"*.
+//
+// Dois tempos verbais sobre o mesmo fato, e o segundo AFIRMA que uma rodada
+// aconteceu. Nenhuma aconteceu: a pergunta à SEFAZ nunca foi feita. Quem lê
+// conclui que a ferramenta já tentou e não achou nada — e para ali, com a
+// competência fechando com nota cancelada dentro do faturamento.
+describe('MV LIDER 639: prévia × rodada de verdade', () => {
+    const selecao = { aConsultar: new Array(60).fill({}), total: 215, cortadas: 155 };
+
+    it('na PRÉVIA, nada é dito no passado — e ela diz que não perguntou nada', () => {
+        const r = resumirReconferencia({ selecao, resultados: [], simulado: true });
+        const texto = r.avisos.join(' | ');
+        expect(texto).not.toMatch(/rodada parou/);
+        expect(texto).toMatch(/Ainda NÃO consultamos nada/);
+        // E a frase que impede a leitura errada do "0 cancelada(s)".
+        expect(texto).toMatch(/o que o app sabe — não o que a SEFAZ diz/);
+    });
+
+    it('a prévia DIZ quantas rodadas faltam — 215 notas em rodadas de 60 são 4', () => {
+        const r = resumirReconferencia({ selecao, resultados: [], simulado: true });
+        expect(r.avisos.join(' ')).toMatch(/São 4 rodadas/);
+    });
+
+    it('na rodada DE VERDADE o passado volta, agora verdadeiro', () => {
+        const r = resumirReconferencia({
+            selecao,
+            resultados: new Array(60).fill({ situacao: 'nao-cancelada' }),
+            simulado: false,
+        });
+        const texto = r.avisos.join(' | ');
+        expect(texto).toMatch(/A rodada parou em 60 de 215/);
+        expect(texto).not.toMatch(/Ainda NÃO consultamos/);
+    });
+
+    it('rodada única (sem corte) não promete rodada nenhuma', () => {
+        const r = resumirReconferencia({
+            selecao: { aConsultar: [{}], total: 1, cortadas: 0 },
+            resultados: [{ situacao: 'nao-cancelada' }],
+        });
+        expect(r.avisos.join(' ')).not.toMatch(/rodada/i);
+    });
+});

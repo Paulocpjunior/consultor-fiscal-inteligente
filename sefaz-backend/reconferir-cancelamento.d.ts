@@ -44,6 +44,8 @@ export function lerRespostaCancelamento(resp: unknown): LeituraCancelamento;
 export function resumirReconferencia(p: {
     selecao: { total: number; cortadas: number; aConsultar: unknown[] } | null | undefined;
     resultados: Array<{ situacao: string; valorTotal?: number }> | null | undefined;
+    /** true na PRÉVIA: nenhuma consulta foi feita, então nada se diz no passado. */
+    simulado?: boolean;
 }): {
     consultadas: number;
     canceladas: number;

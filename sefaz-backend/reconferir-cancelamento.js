@@ -185,7 +185,7 @@ export function lerRespostaCancelamento(resp) {
  *
  * Contagem sem leitura é meio farol: "12 consultadas" não diz se o mês mudou.
  */
-export function resumirReconferencia({ selecao, resultados }) {
+export function resumirReconferencia({ selecao, resultados, simulado = false }) {
     const r = resultados || [];
     const canceladas = r.filter((x) => x.situacao === 'cancelada');
     const indeterminadas = r.filter((x) => x.situacao === 'indeterminado');
@@ -208,10 +208,41 @@ export function resumirReconferencia({ selecao, resultados }) {
         );
     }
     if (selecao?.cortadas) {
+        // 🚨 SIMULAÇÃO NÃO FALA NO PASSADO — foi isso que travou a MV LIDER.
+        //
+        // Paulo, 18/08: *"fui consultar essas notas da MV LIDER pra ver se
+        // estavam mesmo canceladas, realmente estão, mas no consultor não"*. O
+        // print mostra por quê: ele clicou em **Quantas seriam consultadas?**
+        // (a simulação) e a tela respondeu, na MESMA caixa, *"60 de 215 seriam
+        // consultadas"* e *"A rodada parou em 60 de 215"*.
+        //
+        // Dois tempos verbais sobre o mesmo fato, e o segundo AFIRMA que uma
+        // rodada rodou. Nenhuma rodou — a consulta à SEFAZ nunca aconteceu.
+        // Quem lê conclui que a ferramenta já tentou e não achou nada, e para
+        // ali. É a família das "duas leituras do mesmo fato discordando na
+        // mesma tela", agora entre o que o app FEZ e o que ele diz ter feito.
+        const porRodada = Math.max(1, Number(selecao.aConsultar?.length) || 1);
+        const rodadas = Math.ceil((Number(selecao.total) || 0) / porRodada);
+        const quantas = rodadas > 1 ? ` São ${rodadas} rodadas para cobrir as ${selecao.total}.` : '';
         avisos.push(
-            `A rodada parou em ${selecao.aConsultar.length} de ${selecao.total} notas. Rode de novo para `
-            + 'continuar — cada consulta é uma chamada à SEFAZ com o certificado do cliente, e varrer '
-            + 'centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
+            simulado
+                ? `Ainda NÃO consultamos nada — isto é só a prévia. Ao clicar em "Reconferir na SEFAZ", `
+                  + `${porRodada} das ${selecao.total} notas serão perguntadas à SEFAZ nesta rodada.${quantas} `
+                  + 'O teto por rodada existe porque cada consulta é uma chamada com o certificado do '
+                  + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).'
+                : `A rodada parou em ${porRodada} de ${selecao.total} notas. Rode de novo para `
+                  + `continuar.${quantas} Cada consulta é uma chamada à SEFAZ com o certificado do `
+                  + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
+        );
+    }
+
+    // ⚠️ E o "nada encontrado" da SIMULAÇÃO não é resposta sobre cancelamento:
+    // ela não perguntou nada a ninguém. Sem esta frase, prévia com 0 canceladas
+    // lê-se como "a SEFAZ disse que não há" — o oposto do que aconteceu.
+    if (simulado && selecao?.total) {
+        avisos.unshift(
+            'Prévia: mostra QUANTAS notas seriam consultadas, não o resultado. Enquanto a reconferência '
+            + 'não rodar, "0 cancelada(s)" continua sendo o que o app sabe — não o que a SEFAZ diz.',
         );
     }
     if (!r.length && !selecao?.total) {
