@@ -369,6 +369,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emitiu) e **desligar NÃO APAGA** (o parâmetro continua explicando as
   competências que já datou). Falha ao ler os parâmetros devolve `[]`: o cérebro
   é palpite melhor, não trava — sem ele a régua automática segue valendo.
+  🏠 **E A CASA DELE É O MODAL** (Paulo, 18/08: *"pode usar o modal"*). O painel
+  virou COMPONENTE (`CfopCerebroPainel`), montado em DOIS lugares: aba
+  **🧠 Por fornecedor** dentro do 🔗 Correlação de CFOP, e a aba ✏️ CFOP por nota.
+  Duas cópias fariam uma tela listar parâmetro que a outra não conhece. ⚠️ São
+  ABAS separadas de propósito: override **por CFOP** (empresa) e parâmetro **por
+  FORNECEDOR** são réguas diferentes, e na mesma lista pareceriam a mesma coisa.
+  ⚠️ Na aba do cérebro o botão **Salvar SOME** — o parâmetro grava na hora, e
+  botão que não faz nada é pior que botão nenhum (família do "Já importado" sem
+  estado). O painel **não decide CFOP**: só cria, lista e desliga.
   ⚠️ **O QUE ELE DELIBERADAMENTE NÃO FAZ**: aprender por NCM ou pela descrição do
   produto. Acertaria na maioria e erraria EM SILÊNCIO na minoria — e num livro
   fiscal o erro silencioso é o caro. Ele aprende do que uma PESSOA decidiu.

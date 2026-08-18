@@ -192,3 +192,58 @@ describe('🚨 a gravação valida e o desligar não apaga', () => {
         expect(bloco).toMatch(/hasOnly\(\['ativo', 'desligadoPor', 'desligadoEm'\]\)/);
     });
 });
+
+// ============================================================================
+// 🧠 O CÉREBRO TEM UMA CASA SÓ — e ela é o modal (Paulo, 18/08: "pode usar o
+// modal").
+//
+// O painel de parâmetros é um COMPONENTE, usado no modal 🔗 Correlação de CFOP e
+// na aba ✏️ CFOP por nota. Duas cópias fariam uma tela listar parâmetro que a
+// outra não conhece — o defeito que este projeto mais pagou.
+// ============================================================================
+describe('🧠 o painel do cérebro é UM, usado nas duas telas', () => {
+    const ler = (rel: string) => require('fs').readFileSync(
+        require('path').join(__dirname, '..', rel), 'utf8');
+
+    it('o modal 🔗 monta o painel', () => {
+        const f = ler('components/CfopCorrelacaoModal.tsx');
+        expect(f).toMatch(/import CfopCerebroPainel/);
+        expect(f).toMatch(/<CfopCerebroPainel/);
+        // …e numa ABA própria: override por CFOP e parâmetro por fornecedor são
+        // réguas diferentes, e misturá-las faria as duas parecerem a mesma.
+        expect(f).toMatch(/Por fornecedor/);
+        expect(f).toMatch(/Por CFOP \(empresa\)/);
+    });
+
+    it('a aba ✏️ monta o MESMO painel — não uma lista própria', () => {
+        const f = ler('components/Relatorios/index.tsx');
+        expect(f).toMatch(/import CfopCerebroPainel/);
+        expect(f).toMatch(/<CfopCerebroPainel/);
+    });
+
+    it('o painel não decide CFOP — só cria, lista e desliga', () => {
+        const f = ler('components/CfopCerebroPainel.tsx');
+        expect(f).toMatch(/gravarParametroCfop/);
+        expect(f).toMatch(/desligarParametroCfop/);
+        // Quem decide é a régua única. Uma CHAMADA a correlacionarCfop aqui
+        // seria a segunda cópia da decisão — mas o comentário que EXPLICA isso
+        // é documentação, não código (mesma correção da varredura de 17/08).
+        const semComentarios = f
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        expect(semComentarios).not.toMatch(/correlacionarCfop|cfopDoLancamento/);
+    });
+
+    it('e ele mostra a DESCRIÇÃO oficial do CFOP de destino', () => {
+        // É ela que faz o erro aparecer antes de virar livro (caso Kalunga).
+        expect(ler('components/CfopCerebroPainel.tsx')).toMatch(/textoDoCfop/);
+    });
+
+    it('🚨 na aba do cérebro o botão Salvar SOME — parâmetro grava na hora', () => {
+        // Botão que não faz nada é pior que botão nenhum: quem clica acha que
+        // gravou. É a família do "Já importado" sem estado.
+        const f = ler('components/CfopCorrelacaoModal.tsx');
+        expect(f).toMatch(/aba !== 'cerebro' && \(\s*\n\s*<button\s*\n\s*onClick=\{handleSalvar\}/);
+        expect(f).toMatch(/Parâmetros são gravados na hora/);
+    });
+});

@@ -62,7 +62,9 @@ import {
     type ParametroCfopDoc,
 } from '../../services/cfopEscrituradoService';
 // 🧠 O CÉREBRO: o que alguém corrigiu numa nota vira parâmetro do FORNECEDOR.
-import { sugerirParametro, rotuloParametro } from '../../sefaz-backend/cfop-cerebro.js';
+import { sugerirParametro } from '../../sefaz-backend/cfop-cerebro.js';
+// MESMO painel do modal 🔗 — o cérebro tem UMA casa (Paulo, 18/08).
+import CfopCerebroPainel, { type FornecedorOpcao } from '../CfopCerebroPainel';
 // A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
 import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
@@ -605,6 +607,20 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
 
     const comCarimbo = linhas.filter(l => l.informado).length;
 
+    /** Fornecedores do recorte — a mesma leitura que já está na tela. */
+    const fornecedoresDoRecorte: FornecedorOpcao[] = useMemo(() => {
+        const mapa = new Map<string, FornecedorOpcao>();
+        for (const l of linhas) {
+            if (l.direcao !== 'entrada' || !l.cnpjFornecedor) continue;
+            const f = mapa.get(l.cnpjFornecedor)
+                || { cnpj: l.cnpjFornecedor, nome: l.participante, cfops: [] as string[], notas: 0 };
+            f.notas += 1;
+            if (l.cfopCru && !f.cfops.includes(l.cfopCru)) f.cfops.push(l.cfopCru);
+            mapa.set(l.cnpjFornecedor, f);
+        }
+        return Array.from(mapa.values()).sort((a, b) => b.notas - a.notas);
+    }, [linhas]);
+
     // 🚨 CFOP QUE NÃO CONSTA DA TABELA EM VIGOR — a conferência contra a NORMA.
     //
     // Foi assim que apareceram, no Resumo por CFOP da NOVA ERA 07/2026, o 1655
@@ -763,36 +779,15 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 </div>
             )}
             {verParametros && (
-                <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-xs">
-                    <p className="text-slate-500">
-                        O que uma pessoa corrigiu numa nota e mandou aprender. Vale <strong>da competência de
-                        início em diante</strong> — competência anterior não muda. Desligar não apaga: o
-                        parâmetro continua explicando os meses que ele já datou.
-                    </p>
-                    {!parametros.length ? (
-                        <p className="mt-2 text-slate-500">Nenhum parâmetro ainda. Corrija um CFOP na lista abaixo e o app pergunta se deve aprender.</p>
-                    ) : (
-                        <ul className="mt-2 space-y-1">
-                            {parametros.map(p => (
-                                <li key={p.id} className={`flex flex-wrap items-center gap-2 ${p.ativo === false ? 'opacity-50 line-through' : ''}`}>
-                                    <span className="font-mono">{p.cfopOrigem || 'qualquer'} → {p.cfopDestino}</span>
-                                    <span>{p.nomeFornecedor || p.cnpjFornecedor}</span>
-                                    <span className="text-slate-500">desde {p.vigenciaInicio} · {p.criadoPor || '—'}</span>
-                                    {p.ativo !== false && (
-                                        <button
-                                            className="btn-press underline text-red-600 whitespace-nowrap"
-                                            onClick={async () => {
-                                                try {
-                                                    await desligarParametroCfop(p.id!, currentUser?.email || '');
-                                                    setParametros(await lerParametrosCfop(empresa.id));
-                                                } catch (e: any) { setErro(e?.message || 'Falha ao desligar.'); }
-                                            }}
-                                        >desligar</button>
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                    <CfopCerebroPainel
+                        empresaId={empresa.id}
+                        user={currentUser}
+                        fornecedores={fornecedoresDoRecorte}
+                        parametros={parametros}
+                        onMudou={setParametros}
+                        competenciaPadrao={competencia}
+                    />
                 </div>
             )}
             {!linhas.length ? (

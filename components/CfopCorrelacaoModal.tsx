@@ -16,7 +16,12 @@ import { CloseIcon } from './Icons';
 // Ver o comentário de `cfopFinal` logo abaixo: esta tela tinha uma cópia.
 import { correlacionarCfop, resolverNaturezaAtividade } from '../sefaz-backend/cfop-correlacao.js';
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
-import { modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
+import { modeloDoDoc, cnpjEmitente, nomeEmitente } from '../sefaz-backend/participante-doc-helper.js';
+// 🧠 O CÉREBRO mora num componente próprio porque ele é usado AQUI e na aba
+// ✏️ CFOP por nota — duas cópias fariam uma tela listar parâmetro que a outra
+// não conhece (Paulo, 18/08: *"pode usar o modal"*).
+import CfopCerebroPainel, { type FornecedorOpcao } from './CfopCerebroPainel';
+import { lerParametrosCfop, type ParametroCfopDoc } from '../services/cfopEscrituradoService';
 
 interface Props {
     isOpen: boolean;
@@ -75,6 +80,9 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
         valoresAtuais?.naturezaAtividade,
     );
     const [docsLidos, setDocsLidos] = useState<{ total: number; entradas: number; comItem: number } | null>(null);
+    const [aba, setAba] = useState<'cfop' | 'cerebro'>('cfop');
+    const [fornecedores, setFornecedores] = useState<FornecedorOpcao[]>([]);
+    const [parametros, setParametros] = useState<ParametroCfopDoc[]>([]);
 
     /**
      * A natureza QUE VAI VALER no arquivo, com a origem.
@@ -113,6 +121,9 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                 //    a CHAVE sempre traz o modelo nas posições 20-21.
                 // Com o campo cru, nota real sumia da conferência em silêncio.
                 const contagem = new Map<string, number>();
+                // O cérebro é POR FORNECEDOR: a lista sai do dado REAL da
+                // empresa, no MESMO loop — ler duas vezes daria duas listas.
+                const porForn = new Map<string, { nome: string; cfops: Set<string>; notas: number }>();
                 let entradas = 0;
                 let comItem = 0;
                 for (const d of docs as DocumentoFiscal[]) {
@@ -121,10 +132,19 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                     entradas += 1;
                     const itens = d.itens || [];
                     if (itens.length) comItem += 1;
+                    const cnpjF = String(cnpjEmitente(d) || '');
+                    if (cnpjF) {
+                        const f = porForn.get(cnpjF)
+                            || { nome: nomeEmitente(d) || cnpjF, cfops: new Set<string>(), notas: 0 };
+                        f.notas += 1;
+                        if (!f.nome && nomeEmitente(d)) f.nome = nomeEmitente(d);
+                        porForn.set(cnpjF, f);
+                    }
                     for (const item of itens) {
                         const cfop = String(item.cfop || '').trim();
                         if (cfop.length !== 4) continue;
                         contagem.set(cfop, (contagem.get(cfop) || 0) + 1);
+                        if (cnpjF) porForn.get(cnpjF)?.cfops.add(cfop);
                     }
                 }
 
@@ -143,6 +163,10 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                     // Lista vazia não pode ter uma cara só: "não comprou" e
                     // "não capturamos" pedem ações opostas.
                     setDocsLidos({ total: docs.length, entradas, comItem });
+                    setFornecedores(Array.from(porForn.entries())
+                        .map(([cnpj, f]) => ({ cnpj, nome: f.nome, cfops: Array.from(f.cfops).sort(), notas: f.notas }))
+                        .sort((a, b) => b.notas - a.notas));
+                    setParametros(await lerParametrosCfop(empresaId));
                 }
             } catch (e: any) {
                 if (!cancelado) setErro(e?.message || 'Erro ao carregar CFOPs');
@@ -225,8 +249,36 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                     </button>
                 </div>
 
+                {/* Abas — o override POR CFOP (empresa) e o CÉREBRO (por
+                    fornecedor) são réguas diferentes, e misturar as duas na
+                    mesma lista faria as duas parecerem a mesma coisa. */}
+                <div className="flex gap-2 px-6 pt-4 border-b border-slate-200 dark:border-slate-700">
+                    {([
+                        ['cfop', '🔄 Por CFOP (empresa)'],
+                        ['cerebro', `🧠 Por fornecedor (${parametros.filter(p => p.ativo !== false).length})`],
+                    ] as const).map(([id, label]) => (
+                        <button
+                            key={id}
+                            onClick={() => setAba(id as any)}
+                            className={`btn-press px-3 py-2 text-sm font-bold rounded-t-lg whitespace-nowrap ${
+                                aba === id
+                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100'
+                                    : 'text-slate-500'}`}
+                        >{label}</button>
+                    ))}
+                </div>
+
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {aba === 'cerebro' ? (
+                        <CfopCerebroPainel
+                            empresaId={empresaId}
+                            user={user}
+                            fornecedores={fornecedores}
+                            parametros={parametros}
+                            onMudou={setParametros}
+                        />
+                    ) : (<>
                     {/* Natureza */}
                     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -344,12 +396,18 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                             {erro}
                         </div>
                     )}
+                    </>)}
                 </div>
 
                 {/* Footer */}
                 <div className="flex items-center justify-between p-6 border-t border-slate-200 dark:border-slate-700">
                     <div className="text-sm text-slate-500 dark:text-slate-400">
-                        {Object.keys(overridesValidos).length} override(s) configurado(s)
+                        {aba === 'cerebro'
+                            // O parâmetro grava na hora, um a um: não há "salvar"
+                            // pendente, e um botão que não faz nada é pior que
+                            // botão nenhum.
+                            ? 'Parâmetros são gravados na hora — não precisa salvar aqui.'
+                            : `${Object.keys(overridesValidos).length} override(s) configurado(s)`}
                     </div>
                     <div className="flex gap-2">
                         <button
@@ -358,13 +416,15 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                         >
                             Cancelar
                         </button>
-                        <button
-                            onClick={handleSalvar}
-                            disabled={salvando}
-                            className="btn-press px-6 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                        >
-                            {salvando ? 'Salvando...' : 'Salvar'}
-                        </button>
+                        {aba !== 'cerebro' && (
+                            <button
+                                onClick={handleSalvar}
+                                disabled={salvando}
+                                className="btn-press px-6 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                            >
+                                {salvando ? 'Salvando...' : 'Salvar'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
