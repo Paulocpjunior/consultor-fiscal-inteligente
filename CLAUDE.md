@@ -377,6 +377,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   emite 5102 porque para ELA é venda, e o destino do papel não está em campo
   nenhum da nota. O resto (corrigir, ensinar, o que o parâmetro NÃO faz, e o
   "NÃO CONSTA") decorre disso.
+  🚪 **E A ENTREGA FICOU NUMA PORTA QUE NINGUÉM ABRE — o card de CFOP não levava
+  ao CFOP** (Paulo, 18/08, com o print do card 🔄 CFOP aberto: *"n
+  identifiquei"*). Ele procurou no lugar CERTO: **o card se chama CFOP**. O
+  ✏️ CFOP por nota tinha subido horas antes DENTRO de Relatórios (é lá que mora o
+  recorte empresa × competência) e ninguém adivinha isso. **Não foi build velho**
+  — conferido: o deploy 586 estava verde e o `_v` do print dele era posterior.
+  É a família do **"rota sem botão"** (13/08) e do botão no **lugar errado**
+  (17/08, a guia separada que era justamente a certa e não tinha ✉️), na versão
+  mais enganosa: a tela existia, funcionava, e a única pessoa que sabia onde
+  era, era eu.
+  ✂️ O card CFOP passou a **DIZER O QUE ELE É** (*"esta tela consulta a IA sobre
+  CFOP"*) e a levar ao lançamento com um clique. Dizer o que a tela é vale tanto
+  quanto o atalho: sem isso, quem chega ali continua tentando escriturar por um
+  campo de busca. ⚠️ O atalho chega **NA ABA**, não na primeira — cair no Livro
+  de Entradas depois de clicar em "CFOP por nota" faria concluir que o campo
+  sumiu; e ele **NÃO GRUDA** (o `selecionarTipo` limpa o destino), senão um
+  clique deixaria Relatórios abrindo naquela aba para sempre, respondendo a um
+  pedido que ninguém fez.
+  🚨 **REGRA QUE FICA: tela nova nasce com o atalho NO CARD ONDE A PESSOA VAI
+  PROCURAR** — e o nome do card é a pista de onde ela procura. `atalhoCfopPorNota
+  .test.ts` exige que a aba pedida EXISTA na união `AbaId`, que a tela honre o
+  pedido, que a limpeza esteja no `selecionarTipo` e que as DUAS metades do guia
+  digam que o card CFOP é consulta; provado renomeando a aba de propósito.
+  Atalho apontando para aba renomeada envelheceria EM SILÊNCIO, levando ao lugar
+  errado sem nada acusar.
   🏠 **E A CASA DELE É O MODAL** (Paulo, 18/08: *"pode usar o modal"*). O painel
   virou COMPONENTE (`CfopCerebroPainel`), montado em DOIS lugares: aba
   **🧠 Por fornecedor** dentro do 🔗 Correlação de CFOP, e a aba ✏️ CFOP por nota.
@@ -2577,6 +2602,24 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
    deduzir "deve ter alguém" seria inventar trabalho.
 5. **JOAO EVANGELISTA — cadastro duplicado**. Mesma família do WALDESA (24/07):
    excluir é SOFT-DELETE e a lápide precisa aguentar F5 + outro navegador.
+6. **ABERTAS EM 17-18/08, cada uma esperando UM dado dele** — nenhuma é trabalho
+   de código, e enquanto não vierem **o número da tela não é fato**:
+   a) **MV LIDER 639 · 07/2026 — os 3 NÚMEROS das notas canceladas** (R$
+      26.820,44). A régua única da cancelada subiu, mas quem diz se o "0
+      cancelada(s)" era RECORTE (competência/empresa) ou régua divergente é o
+      número da nota. **Não dar a competência por fechada antes.**
+   b) **KROYA × GOLDLOG** — confirmar se `17.390.490/0001-82` é a GOLDLOG e
+      **quais competências**. O lado que falta se lança pelo ✍️ **sem a CHAVE**
+      (com ela cai no mesmo documento) e essas notas **SAEM quando a correção da
+      identidade subir**, senão contam duas vezes.
+   c) **MANTOAN — regerar o EFD-Contribuições e revalidar no PVA**. O 1010 e o
+      M200/M600 zerado foram corrigidos; **arquivo aceito não é arquivo certo**,
+      então o que fecha o caso é o recibo novo.
+   d) **NOVA ERA — as ~144 notas em `1103` (9), `1929` (25) e `2104` (1)**,
+      códigos que o SINIEF 03/24 REMOVEU. O app **DIZ** (`NÃO CONSTA` na linha +
+      resumo vermelho no topo do ✏️) e **não escolhe o substituto** — escolher
+      seria inventar, e inventar é o que produziu o 1405 e o 1655. A decisão é
+      por família, e ela é dele.
 
 ## Pendências operacionais (23/07/2026)
 
