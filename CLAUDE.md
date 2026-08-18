@@ -632,6 +632,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Escopo desta rodada: só ENTRADA (empresa tomadora, caso EDUARDO GUERRA) —
   emissão própria de CT-e e "Manifestação do Destinatário" de CT-e ficam de
   fora, por decisão explícita, até haver caso real que peça.
+  🚨 **E EU OFERECI CHAMAR A API COM CREDENCIAL QUE NÃO TENHO** (Paulo: *"pode
+  chamar por API as CTE"*). Este sandbox não tem `gcloud`, service account nem
+  token de admin da produção — e pedir pra ele colar um token no chat seria
+  repetir a mesma falta de higiene do `sefaz-cron-secret` (vazou 2× em cola de
+  terminal). A saída certa é a de sempre: um BOTÃO na tela, que ele clica já
+  logado, sem token nenhum passando por mim. `🚚 CT-e (beta)` entrou na MESMA
+  linha do `↓ Sincronizar SEFAZ` (aba Empresas → Empresas Monitoradas),
+  admin-only, chamando `POST /sync-cte-one` — resultado em estado PRÓPRIO
+  (`resultCte`/`runningCte`), nunca misturado com o resultado do NF-e.
+  Travado por `sefazSyncButtonCte.test.ts` (mesma família do "rota sem botão"
+  de 13/08: endpoint novo sem caminho na interface é código morto com cara de
+  entrega).
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo
