@@ -554,6 +554,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   documento sem valor em forma nenhuma **sai da base NOMEADO num aviso** ("o
   M200/M600 está a MENOR"), nunca como zero. Provado contra o arquivo real: 33
   prestações = base **43.890,00** · PIS **285,28** · COFINS **1.316,70**.
+  🚨 **RODADA 3 DO PVA (18/08) — 39 recusas, DUAS causas** (Paulo: *"terceira vez
+  sobre os erros da empresa Mantoan"*; as outras 30, COD_MUN, ele resolve na mão
+  — "na nota não tinha mesmo"). (1) **COD_ITEM vazio nos 37 A170 sintéticos**
+  (36 recusas): o item único que representa a NFS-e sem `itens[]` saía com
+  `cod: ''` — não existe cProd numa nota sem discriminação, e inventar um código
+  POR DOCUMENTO seria fingir um catálogo que não existe. Virou
+  `COD_ITEM_SERVICO_GENERICO` ('SERV-GENERICO'), constante ÚNICA, e — porque o
+  A170 não pode apontar pra um item que a Tabela de Identificação não conhece —
+  o coletor (`sped-contrib-orchestrator.js`) passou a registrar esse MESMO
+  código no 0200 sempre que houver documento de serviço sem itens no período,
+  importando a constante em vez de duplicá-la. (2) **IND_ORIG_CRED vazio em 3
+  itens de ENTRADA com CST 70** (sem crédito): o código anterior só preenchia
+  esse campo quando o CST TINHA crédito (50-56) — premissa MINHA, sem prova, da
+  rodada 2. O PVA desmente: *"Campo obrigatório PARA NOTAS FISCAIS DE
+  ENTRADA"* — quem manda é a DIREÇÃO do documento, não o CST. Toda entrada leva
+  IND_ORIG_CRED = '0' (mercado interno), tenha ou não crédito; saída continua
+  SEM o campo (ele descreve a origem da AQUISIÇÃO, que só existe do lado de
+  quem compra). NAT_BC_CRED não mudou — o PVA não acusou ele nestas linhas, e
+  continua só com CST de crédito. **Pendente**: as 2 recusas de M205/M605
+  ("registro filho obrigatório") não entraram nesta rodada — a régua da casa
+  proíbe deduzir leiaute de registro sem o texto exato do PVA na mão, e o
+  recibo desta rodada não detalhou o conteúdo esperado desses dois registros.
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo

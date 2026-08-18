@@ -13,6 +13,7 @@ import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
 import {
     buildBlocoA, buildBlocoC_Contrib, buildBlocoD_Contrib,
     buildBlocoF, buildBlocoM, buildBloco1_Contrib, buildBloco9_Contrib,
+    filtrarNotasBlocoA, COD_ITEM_SERVICO_GENERICO,
 } from './sped-contrib-blocos.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
@@ -148,6 +149,25 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
             }
         }
     }
+    // Documento de serviço sem itens capturados (NFS-e do portal, que grava
+    // `valorTotal` em vez de `itens[]`) vira UM item sintético no A170 — cod
+    // `COD_ITEM_SERVICO_GENERICO` — e ele precisa constar do 0200, senão o
+    // A170 aponta pra um item que a Tabela de Identificação não cadastrou.
+    if (!itensMap.has(COD_ITEM_SERVICO_GENERICO)
+        && filtrarNotasBlocoA(notas).some(n => !(n.itens || []).length)) {
+        itensMap.set(COD_ITEM_SERVICO_GENERICO, {
+            codItem: COD_ITEM_SERVICO_GENERICO,
+            descricao: 'Prestação de serviços sem discriminação de itens no documento',
+            codBarra: '',
+            unidade: 'UN',
+            tipo: '00',
+            ncm: '',
+        });
+        if (!unidadesMap.has('UN')) {
+            unidadesMap.set('UN', { codigo: 'UN', descricao: descreverUnidade('UN') });
+        }
+    }
+
     const itens = Array.from(itensMap.values());
     const unidades = Array.from(unidadesMap.values());
 
