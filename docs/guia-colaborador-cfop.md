@@ -30,6 +30,10 @@ mercadoria, e o cliente usa ou imobiliza.
 com o CFOP que a régua escreveu, o que aquele CFOP significa, e o campo para
 corrigir.
 
+Procurou no card **CFOP** e não achou? É normal — aquele card **consulta a IA**
+sobre legislação, não escritura nota. Ele tem um botão **✏️ CFOP por nota** no
+topo que leva direto para cá.
+
 A mesma lista aparece em **Simples → detalhe da empresa → 🔄 Correlação de CFOP
 → aba 🧠 Por fornecedor**. É o mesmo painel nos dois lugares (componente único —
 duas cópias fariam uma tela listar parâmetro que a outra não conhece).
