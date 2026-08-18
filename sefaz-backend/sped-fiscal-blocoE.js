@@ -261,7 +261,7 @@ function buildE500E520(dados) {
     // re-agregado. A soma do VL_IPI dos E510 de saída bate com o VL_DEB do
     // E520 (amarração da SEFAZ) — os dois saem da mesma varredura de itens.
     const e510 = montarLinhasE510(dados.notas, {
-        convertCfop: (cfop, direcao, notaDados) => convertCfopParaEntrada(cfop, direcao, notaDados),
+        convertCfop: (cfop, direcao, notaDados, nota) => convertCfopParaEntrada(cfop, direcao, notaDados, nota),
     });
     if (Array.isArray(dados.warnings)) dados.warnings.push(...e510.avisos);
 

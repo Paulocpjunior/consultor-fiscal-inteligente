@@ -44,3 +44,31 @@ export const SUFIXOS_ST_VENDA: string[];
  * envia, na entrada o DESTINO de quem recebe. 153 (energia elétrica) fica fora.
  */
 export const SUFIXOS_TRANSFERENCIA_RECEBIDA: string[];
+
+/**
+ * O CFOP que vai para o LANÇAMENTO, com o documento na mão.
+ * Precedência: `doc.cfopEscriturado` (por NF) > `ctx.cfopOverrides` (empresa)
+ * > `correlacionarCfop` (régua automática).
+ */
+export function cfopDoLancamento(
+    doc: any,
+    cfopDoItem: string | undefined,
+    direcao: DirecaoCfop,
+    ctx?: CorrelacaoCtx,
+): string;
+
+/** De onde veio o CFOP do lançamento — número sem origem não se confere. */
+export function origemDoCfopLancamento(
+    doc: any,
+    cfopDoItem: string | undefined,
+    direcao: DirecaoCfop,
+    ctx?: CorrelacaoCtx,
+): { origem: 'nota' | 'empresa' | 'regra'; rotulo: string; por: string | null; em: string | null };
+
+/** Os CFOPs distintos que a nota teria SEM o override — o que o carimbo colapsa. */
+export function cfopsDistintosDaNota(doc: any, direcao: DirecaoCfop, ctx?: CorrelacaoCtx): string[];
+
+/** O CFOP digitado é válido para a DIREÇÃO da nota? Vazio devolve à régua. */
+export function validarCfopEscriturado(
+    cfop: unknown, direcao: DirecaoCfop,
+): { ok: true; cfop: string; motivo?: string } | { ok: false; motivo: string };

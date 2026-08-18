@@ -71,7 +71,7 @@ function cstIpiEscrituracao(cstRaw, direcao) {
  *
  * @param {Array}  notas
  * @param {object} [deps]
- *   · convertCfop(cfopRaw, direcao, notaDados) → CFOP de escrituração. Default
+ *   · convertCfop(cfopRaw, direcao, notaDados, nota) → CFOP de escrituração. Default
  *     identidade (pra teste sem a máquina do Bloco C). Em produção recebe o
  *     MESMO convertCfopParaEntrada que o C190 usa — senão os dois divergiriam.
  * @returns {{ linhas: string[], avisos: string[], grupos: Array }}
@@ -95,7 +95,7 @@ export function montarLinhasE510(notas, deps = {}) {
                 if (vIpi > 0) itensComIpiSemCst += 1;
                 continue;
             }
-            const cfop = String(conv(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados));
+            const cfop = String(conv(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados, nota));
             // CST de ESCRITURAÇÃO: entrada converte o CST de saída do fornecedor.
             const cst = cstIpiEscrituracao(item.cstIpi, nota.direcao);
             if (nota.direcao !== 'entrada' && cst === '99') saidasOutras += 1;

@@ -7,7 +7,7 @@
 import { buildFile, buildRecord, LAYOUT_VERSION } from './iobSageLayout';
 import { LAYOUT } from './iobSageLayoutData';
 // MESMA regra de correlação do backend — CFOP de entrada não se duplica aqui.
-import { correlacionarCfop } from '../sefaz-backend/cfop-correlacao.js';
+import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
 import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
@@ -258,9 +258,11 @@ export interface CfopCtx {
 }
 
 export function cfopParaEscriturar(
-    cfop: string | undefined, direcao: string, ctx?: CfopCtx,
+    cfop: string | undefined, direcao: string, ctx?: CfopCtx, doc?: any,
 ): string {
-    return correlacionarCfop(cfop || '', direcao === 'entrada' ? 'entrada' : 'saida', {
+    // `doc` traz o CFOP informado NA NF — decisão humana naquela nota, que vence
+    // o override da empresa e a régua automática. Sem ele nada muda.
+    return cfopDoLancamento(doc, cfop || '', direcao === 'entrada' ? 'entrada' : 'saida', {
         naturezaAtividade: ctx?.naturezaAtividade ?? null,
         cfopOverrides: ctx?.cfopOverrides ?? null,
     });
@@ -653,7 +655,7 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
     // Agrupa itens por CFOP.
     const porCfop = new Map<string, DocumentoFiscalItem[]>();
     for (const it of d.itens || []) {
-        const cfop = cfopParaEscriturar(it.cfop, d.direcao, ctxCfop) || '0000';
+        const cfop = cfopParaEscriturar(it.cfop, d.direcao, ctxCfop, d) || '0000';
         if (!porCfop.has(cfop)) porCfop.set(cfop, []);
         porCfop.get(cfop)!.push(it);
     }
@@ -761,7 +763,7 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': cfopParaEscriturar(it.cfop, d.direcao, ctxCfop),
+            'CFOP': cfopParaEscriturar(it.cfop, d.direcao, ctxCfop, d),
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,
