@@ -25,7 +25,9 @@
 // 101/102, que a correlação já tratava. Preservá-lo escritura "recebi para
 // industrializar" num comércio de frutas que vai revender.
 // ============================================================================
-import { correlacionarCfop, SUFIXOS_TRANSFERENCIA_RECEBIDA } from '../sefaz-backend/cfop-correlacao.js';
+import {
+    correlacionarCfop, SUFIXOS_TRANSFERENCIA_RECEBIDA, PARES_DEVOLUCAO_RECEBIDA,
+} from '../sefaz-backend/cfop-correlacao.js';
 
 const entrada = (cfop: string, naturezaAtividade?: string, cfopOverrides?: Record<string, string>) =>
     correlacionarCfop(cfop, 'entrada', { naturezaAtividade, cfopOverrides });
@@ -88,5 +90,67 @@ describe('🚨 o que NÃO entra na família — inventar operação é o defeito
 
     it('saída não é tocada — o CFOP da nota própria já é o certo', () => {
         expect(correlacionarCfop('5151', 'saida', { naturezaAtividade: 'comercio' })).toBe('5151');
+    });
+});
+
+// ============================================================================
+// 🚨 DEVOLUÇÃO RECEBIDA — o sufixo espelha O QUE EU VENDI.
+//
+// Paulo, 17/08, confirmando a pergunta que eu tinha deixado aberta: *"a sua
+// questão está correta quanto à devolução — as devoluções de mercadorias devem
+// sempre se basear em COMO FOI DADO ENTRADA na NF"*.
+//
+// O cliente devolve emitindo pelo lado DELE (5201 "devolução de compra para
+// industrialização", 5202 "para comercialização") — isso descreve o destino que
+// ELE tinha dado. Do meu lado o que vale é se eu vendi PRODUÇÃO PRÓPRIA (201) ou
+// MERCADORIA DE TERCEIROS (202). Mesma assimetria de 101/102 e 151/152.
+// ============================================================================
+describe('🚨 devolução: o par fica DENTRO da família', () => {
+    it('devolução de venda — indústria 201, comércio 202', () => {
+        expect(entrada('5201', 'industria')).toBe('1201');
+        expect(entrada('5202', 'industria')).toBe('1201');
+        expect(entrada('5201', 'comercio')).toBe('1202');
+        expect(entrada('5202', 'comercio')).toBe('1202');
+    });
+
+    it('devolução de TRANSFERÊNCIA não vira devolução de venda', () => {
+        // Trocar de família inventaria operação: 208/209 é remessa em
+        // transferência, não venda.
+        expect(entrada('5208', 'comercio')).toBe('1209');
+        expect(entrada('5209', 'industria')).toBe('1208');
+    });
+
+    it('devolução com ST fica na família ST', () => {
+        expect(entrada('5410', 'comercio')).toBe('1411');
+        expect(entrada('5411', 'industria')).toBe('1410');
+    });
+
+    it('interestadual segue igual', () => {
+        expect(entrada('6202', 'comercio')).toBe('2202');
+        expect(entrada('6201', 'industria')).toBe('2201');
+    });
+
+    it('SERVIÇO devolve mercadoria de terceiros — ele não produz', () => {
+        expect(entrada('5201', 'servicos')).toBe('1202');
+    });
+
+    it('misto/indefinido NÃO força — o par mecânico existe', () => {
+        expect(entrada('5201', 'misto')).toBe('1201');
+        expect(entrada('5202')).toBe('1202');
+    });
+
+    it('a tabela de pares é simétrica: os dois sufixos da família apontam para o mesmo par', () => {
+        for (const [suf, par] of Object.entries(PARES_DEVOLUCAO_RECEBIDA as any)) {
+            expect((PARES_DEVOLUCAO_RECEBIDA as any)[(par as any).producao]).toEqual(par);
+            expect((PARES_DEVOLUCAO_RECEBIDA as any)[(par as any).terceiros]).toEqual(par);
+            expect(suf).toMatch(/^\d{3}$/);
+        }
+    });
+
+    it('⚠️ o limite é conhecido: indústria que REVENDE cai em "produção" por default', () => {
+        // Mesmo limite de 101/102 — e é exatamente por isso que o campo por NF
+        // existe. O app erra para o lado do ramo declarado, e a pessoa corrige
+        // na nota; o que não pode é errar em silêncio.
+        expect(entrada('5202', 'industria')).toBe('1201');
     });
 });

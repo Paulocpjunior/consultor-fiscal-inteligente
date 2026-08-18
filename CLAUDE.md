@@ -261,12 +261,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **misto/indefinido NÃO força**, ao contrário da família ST: aqui a conversão
   mecânica produz CFOP que EXISTE, então preservar é honesto (na ST ela inventava
   o 1405).
-  🚧 **O PEDIDO MAIOR CONTINUA ABERTO**: (a) quais outras famílias devem seguir o
-  ramo — a candidata forte é **devolução de venda (201/202, 410/411)**, cujo
-  sufixo espelha a natureza de QUEM VENDEU; e (b) **155/156 (transferência com
-  ST) provavelmente não têm par mecânico** (1155/1156 não existem na tabela de
-  entrada) — é o mesmo desenho do 1405 e precisa de confirmação antes de virar
-  código. Nenhuma das duas se encoda por dedução minha.
+  ✅ **DEVOLUÇÃO FECHADA no mesmo princípio** (Paulo confirmou: *"as devoluções de
+  mercadorias devem sempre se basear em COMO FOI DADO ENTRADA na NF"*). Quando o
+  cliente devolve, ele emite pelo lado DELE (5201/5202 descrevem o destino que
+  ELE dava); do meu lado vale se eu vendi **produção própria** ou **mercadoria de
+  terceiros**. `PARES_DEVOLUCAO_RECEBIDA` com o par ficando DENTRO da família —
+  **201/202** venda, **208/209** transferência, **410/411** com ST —, porque
+  trocar de família inventaria operação. ⚠️ Um teste que dizia *"devolução com ST
+  preserva o sufixo, 1410/1411 existem"* foi TROCADO: existir era metade da
+  pergunta, a outra metade é QUAL DOS DOIS. **408/409 ficaram FORA** (semântica
+  não provada aqui — deduzir é o que produziu o 1405), e **155/156** segue como
+  pergunta aberta.
+  🚨 **E O RAMO É DEFAULT, NÃO VERDADE DA NOTA — o caso KALUNGA** (Paulo, 17/08:
+  *"uma indústria compra da Kalunga material de escritório; ela não usa essa nota
+  para industrialização nem comercialização — usa para uso/consumo ou compra de
+  ativo"*). A régua escreve `1101` para toda compra de indústria; ali o certo é
+  **1556** (uso/consumo) ou **1551** (ativo). **O XML NÃO carrega esse destino** —
+  a Kalunga emite `5102` porque para ELA é revenda —, então o app não tem como
+  saber e a correção é o **campo por NF**. O que dava para melhorar era a
+  VISIBILIDADE: a descrição do CFOP passou a aparecer junto do número.
+  📚 **E A BASE DE CONSULTA ESTAVA VAZIA** (ele achou a incongruência: *"o próprio
+  CFI publica o link do CONFAZ com todos os CFOPs atualizados"*). O app citava a
+  tabela oficial e tinha **DUAS** descrições gravadas, dentro do `geminiService`.
+  Viraram `sefaz-backend/cfop-catalogo.js` (régua única, com a FONTE junto), e
+  código sem descrição sai **NOMEADO** — `descricaoCfop` devolve **null**, nunca
+  frase genérica, senão a tela parece completa quando não está.
+  🚧 **FALTA A TABELA**: `confaz.fazenda.gov.br` é **bloqueado pela rede deste
+  ambiente** (mesma trava da doc do SERPRO e do manual da Receita), então o
+  preenchimento vem por COLAGEM humana — igual ao código 9 do ISS fixo e aos ids
+  de qualificação do PGDAS. **Descrição entra COPIADA, nunca de memória**:
+  descrição errada é pior que descrição nenhuma, porque faz escolher com
+  confiança o CFOP errado.
   ✅ **E O CAMPO DE LANÇAMENTO ENTROU — a decisão dele foi "é por NF"** (perguntei
   se era por nota ou por item). Aba **✏️ CFOP por nota** em Relatórios:
   `documentos_fiscais.cfopEscriturado` + carimbo (`...Por`/`...Em`), com

@@ -58,6 +58,9 @@ type AbaId =
 
 import { livroSemNotaDeProdutorDuplicada } from '../../services/livroNotaProdutor';
 import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
+// A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
+// nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
+import { textoDoCfop, FONTE_CFOP } from '../../sefaz-backend/cfop-catalogo.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -607,12 +610,14 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             { titulo: 'Participante', largura: 26 },
             { titulo: 'CFOP pela régua', largura: 14 },
             { titulo: 'CFOP informado', largura: 12 },
+            { titulo: 'O que esse CFOP é', largura: 30 },
             { titulo: 'Origem', largura: 14 },
             { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
         ],
         linhas: linhas.map(l => [
             l.data, l.numero, l.direcao === 'entrada' ? 'E' : 'S', l.participante,
-            l.daRegua.join(' ') || '—', l.informado || '—', l.origem.rotulo, l.valor,
+            l.daRegua.join(' ') || '—', l.informado || '—',
+            textoDoCfop(l.informado || l.daRegua[0] || '').texto, l.origem.rotulo, l.valor,
         ]),
         identificacao,
         observacoes: [
@@ -642,6 +647,11 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 (C170/C190) e no Exportar SAGE — não só nesta tela. <strong>Campo em branco</strong> devolve a
                 nota à régua automática.
             </p>
+            <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                ⚠️ O catálogo de descrições de CFOP do CFI ainda está incompleto — código sem descrição aparece
+                marcado. A tabela oficial é a do{' '}
+                <a href={FONTE_CFOP.url} target="_blank" rel="noreferrer" className="underline">{FONTE_CFOP.titulo}</a>.
+            </p>
             {erro && (
                 <div className="mt-2 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
                     {erro}
@@ -663,6 +673,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                 <th className="py-1 pr-2">Participante</th>
                                 <th className="py-1 pr-2">CFOP pela régua</th>
                                 <th className="py-1 pr-2">CFOP informado</th>
+                                <th className="py-1 pr-2">O que esse CFOP é</th>
                                 <th className="py-1 pr-2">Origem</th>
                                 <th className="py-1 pr-2 text-right">Vlr. Contábil</th>
                             </tr>
@@ -698,6 +709,18 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                             maxLength={4}
                                             className="w-20 p-1 font-mono text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 disabled:opacity-50"
                                         />
+                                    </td>
+                                    <td className="py-1 pr-2 max-w-[22rem]">
+                                        {(() => {
+                                            const valendo = l.informado || l.daRegua[0] || '';
+                                            const t = textoDoCfop(valendo);
+                                            return (
+                                                <span className={t.temDescricao ? 'text-slate-600 dark:text-slate-300' : 'text-amber-600 dark:text-amber-400'}
+                                                    title={t.texto}>
+                                                    {t.texto.length > 90 ? `${t.texto.slice(0, 90)}…` : t.texto}
+                                                </span>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="py-1 pr-2 text-slate-500">
                                         {l.origem.rotulo}

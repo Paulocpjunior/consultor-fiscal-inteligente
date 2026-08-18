@@ -1,5 +1,6 @@
 
 import { SearchType, type SearchResult, type GroundingSource, type ComparisonResult, type NewsAlert, type SimilarService, type CnaeSuggestion, type SimplesNacionalEmpresa, type SimplesNacionalResumo, CnaeTaxDetail } from '../types';
+import { descricaoCfop, FONTE_CFOP } from '../sefaz-backend/cfop-catalogo.js';
 import { auth } from './firebaseConfig';
 import { classificarCfop, ehCfopDeEntrada } from './cfopClassifier';
 
@@ -80,17 +81,13 @@ const CFOP_CATEGORY_LABEL: Record<string, string> = {
     outro: 'Outra operação',
 };
 
+// A fonte e as descrições moram no CATÁLOGO (régua única). Ter a tabela aqui
+// dentro foi o que produziu a incongruência que o Paulo viu em 17/08: o app
+// citava a tabela oficial e conhecia dois códigos.
 const CFOP_FONTE_OFICIAL: GroundingSource = {
-    web: {
-        uri: 'https://www.confaz.fazenda.gov.br/legislacao/ajustes/sinief/copy_of_cfop_cvsn_70_nova',
-        title: 'CONFAZ - Tabela CFOP vigente',
-    },
+    web: { uri: FONTE_CFOP.url, title: FONTE_CFOP.titulo },
 };
 
-const CFOP_DESCRICOES: Record<string, string> = {
-    '1924': 'Entrada para industrialização por conta e ordem do adquirente da mercadoria, quando esta não transitar pelo estabelecimento do adquirente.',
-    '5106': 'Venda de mercadoria adquirida ou recebida de terceiros, que não deva por ele transitar. Classificam-se neste código as vendas de mercadorias adquiridas ou recebidas de terceiros para industrialização ou comercialização, armazenadas em depósito fechado, armazém geral ou outro, que não tenham sido objeto de qualquer processo industrial no estabelecimento sem que haja retorno ao estabelecimento depositante. Também se aplica às vendas de mercadorias importadas cuja saída ocorra do recinto alfandegado ou repartição alfandegária onde se processou o desembaraço aduaneiro, com destino ao comprador, sem transitar pelo estabelecimento do importador.',
-};
 
 const SERVICO_LC116_DESCRICOES: Record<string, { descricao: string; grupo: string; observacoes?: string[] }> = {
     '1.01': { descricao: 'Análise e desenvolvimento de sistemas.', grupo: 'Serviços de informática e congêneres' },
@@ -168,7 +165,7 @@ function consultaCfopLocal(query: string, context?: SearchResult['context']): Se
 
     const categoria = classificarCfop(codigo) || (ehCfopDeEntrada(codigo) ? 'compra' : 'venda');
     const direcao = ehCfopDeEntrada(codigo) ? 'Entrada' : 'Saída';
-    const descricao = CFOP_DESCRICOES[codigo]
+    const descricao = descricaoCfop(codigo)
         || 'Descrição específica não cadastrada no catálogo local. Use a categoria operacional abaixo como triagem e confirme a descrição oficial na tabela CFOP vigente.';
     const contexto = context && (context.aliquotaIcms || context.aliquotaPisCofins || context.aliquotaIss || context.userNotes)
         ? [
