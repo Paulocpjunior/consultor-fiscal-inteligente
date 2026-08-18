@@ -292,6 +292,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   de qualificação do PGDAS. **Descrição entra COPIADA, nunca de memória**:
   descrição errada é pior que descrição nenhuma, porque faz escolher com
   confiança o CFOP errado.
+  🚨 **E A PRIMEIRA TABELA MANDADA NÃO SERVIA — a página `cfop_cvsn_70_nova` do
+  CONFAZ NÃO é a redação EM VIGOR** (18/08, Paulo mandou o PDF de 59 páginas).
+  Ela se desmente no cabeçalho — *"Nova redação dada ao CFOP pelo Ajuste SINIEF
+  16/20, **sem efeitos**"* e *"Revogado, a partir de 01.06.22, pelo Ajuste SINIEF
+  03/22"* — e a prova prática é maior que a leitura: aquela redação **ELIMINA A
+  FAMÍLIA ST INTEIRA** (a faixa 1.4xx fica só com 1450-1456; não existem 1401,
+  1403, 1406, 1407, 1408, 1409, 1410, 1411, nem o 1655).
+  ⚠️ **E o CFI escritura 1403 HOJE** — ele está no Resumo por CFOP da NOVA ERA
+  07/2026 com 56 notas e R$ 85.553,20, no print DELE. Carregar aquela tabela faria
+  o app dizer *"1403 não cadastrado"* para um código que ele mesmo produz dezenas
+  de vezes por mês, e alguém poderia "corrigir" a escrituração por causa de uma
+  tabela que não vale. **REGRA QUE FICA: antes de carregar qualquer tabela de
+  CFOP, conferir se ela tem a família ST (x401/x403/x407/x410/x411)** — se não
+  tiver, é a redação do 16/20 e NÃO SERVE. Travado em `cfopCatalogo.test.ts`.
+  ✅ **O que o PDF SERVIU para fazer**: corroborar, palavra por palavra, as duas
+  correlações que subiram no mesmo dia — **1151** *"Transferência para
+  industrialização ou produção rural"* × **1152** *"Transferência para
+  comercialização"*; **1201** *"Devolução de venda de produção do
+  estabelecimento"* × **1202** *"Devolução de venda de mercadoria adquirida ou
+  recebida de terceiros"*; e **1208/1209** no mesmo par. Também confirma o caso
+  KALUNGA: **1556** *"Compra de material para uso ou consumo"* e **1551**
+  *"Compra de bem para o ativo imobilizado"*.
   ✅ **E O CAMPO DE LANÇAMENTO ENTROU — a decisão dele foi "é por NF"** (perguntei
   se era por nota ou por item). Aba **✏️ CFOP por nota** em Relatórios:
   `documentos_fiscais.cfopEscriturado` + carimbo (`...Por`/`...Em`), com
