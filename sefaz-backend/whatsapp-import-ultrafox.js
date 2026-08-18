@@ -204,8 +204,27 @@ export function interpretarMensagensCsv(texto) {
 
 // ─── Id determinístico (reimportar NÃO duplica) ─────────────────────────────
 
-export function idMensagemImportada({ numero, em, direcao, texto }) {
-    const h = createHash('sha1').update(`${numero}|${em}|${direcao}|${texto}`).digest('hex');
+/**
+ * 🚨 A CHAVE NÃO PODE LEVAR `direcao` — achado ao ler o print do Paulo
+ * escolhendo autores num lote de 1.851 conversas (18/08). A `direcao` é
+ * DERIVADA de quem foi marcado como escritório; o `autor` é o dado BRUTO do
+ * arquivo, e ele é o que identifica a mensagem de verdade.
+ *
+ * Se a chave levasse `direcao`: marcar um autor errado, confirmar, perceber o
+ * erro e reimportar com a marcação certa não corrigiria nada — mudaria a
+ * `direcao` e, com ela, o próprio id, então a mensagem antiga (com a direção
+ * ERRADA) ficaria PARA SEMPRE na conversa, e uma segunda, com a direção
+ * certa, entraria do lado dela. A pessoa acabaria com a mesma frase duas
+ * vezes, uma "enviada" e outra "recebida" — pior que o erro original, porque
+ * agora ninguém sabe qual das duas é a real.
+ *
+ * A chave usa `autor` quando ele existe (import de .txt, que é onde a
+ * classificação pode ser refeita); sem autor (import de CSV, que já traz a
+ * direção PRONTA da coluna) ela cai em `direcao`, que ali É o dado bruto.
+ */
+export function idMensagemImportada({ numero, em, direcao, texto, autor }) {
+    const chaveVariavel = autor != null ? `autor:${autor}` : `direcao:${direcao}`;
+    const h = createHash('sha1').update(`${numero}|${em}|${chaveVariavel}|${texto}`).digest('hex');
     return `uf_${h}`;
 }
 

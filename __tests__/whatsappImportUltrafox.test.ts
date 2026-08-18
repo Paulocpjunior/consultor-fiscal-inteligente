@@ -109,4 +109,36 @@ describe('idempotência', () => {
         expect(idMensagemImportada(m)).toMatch(/^uf_[0-9a-f]{40}$/);
         expect(idMensagemImportada({ ...m, texto: 'Oi!' })).not.toBe(idMensagemImportada(m));
     });
+
+    // ========================================================================
+    // 🚨 CORRIGIR QUEM É O ESCRITÓRIO NÃO PODE DUPLICAR A MENSAGEM
+    //
+    // Achado ao ler o print do Paulo escolhendo autores num lote de 1.851
+    // conversas / 47.099 mensagens (18/08). A direção é DERIVADA de quem foi
+    // marcado como escritório — se ela estivesse na chave do id, reimportar
+    // com a marcação CORRIGIDA criaria um id NOVO (porque a direção mudou),
+    // deixando a mensagem antiga (com a direção ERRADA) presa na conversa
+    // para sempre, ao lado de uma segunda cópia com a direção certa. A pessoa
+    // acabaria vendo a mesma frase duas vezes — uma "enviada", outra
+    // "recebida" — pior que o erro original.
+    // ========================================================================
+    it('o id NÃO leva a direção quando há autor — ela pode ser corrigida sem duplicar', () => {
+        const base = { numero: '5511964440000', em: '2026-08-16T12:00:00.000Z', texto: 'segue o boleto', autor: 'Juliana Gomes' };
+        // Mesmo autor, direções DIFERENTES (a pessoa mudou de ideia sobre
+        // quem é do escritório) ⇒ MESMO id, então o merge SOBRESCREVE.
+        expect(idMensagemImportada({ ...base, direcao: 'entrada' }))
+            .toBe(idMensagemImportada({ ...base, direcao: 'saida' }));
+    });
+
+    it('autores DIFERENTES continuam gerando ids diferentes — não colapsa tudo', () => {
+        const base = { numero: '5511964440000', em: '2026-08-16T12:00:00.000Z', direcao: 'entrada', texto: 'segue o boleto' };
+        expect(idMensagemImportada({ ...base, autor: 'Juliana Gomes' }))
+            .not.toBe(idMensagemImportada({ ...base, autor: 'Cliente ACME' }));
+    });
+
+    it('import de CSV (sem autor) mantém o comportamento antigo — direção É o dado bruto ali', () => {
+        const base = { numero: '5511964440000', em: '2026-08-16T12:00:00.000Z', texto: 'segue o boleto' };
+        expect(idMensagemImportada({ ...base, direcao: 'entrada' }))
+            .not.toBe(idMensagemImportada({ ...base, direcao: 'saida' }));
+    });
 });
