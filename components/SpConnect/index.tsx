@@ -46,7 +46,7 @@ import {
 } from '../../services/spConnect';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
-import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos } from '../../sefaz-backend/whatsapp-import-lote.js';
+import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
 import { interpretarConversaTxt } from '../../sefaz-backend/whatsapp-import-ultrafox.js';
 
 const TOM_TICK: Record<string, string> = {
@@ -1790,6 +1790,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 {lotePrevia.mensagens} mensagens em {lotePrevia.conversas} conversa(s)
                                                 {lotePrevia.descartadas > 0 ? ` · ${lotePrevia.descartadas} linha(s) descartada(s)` : ''}
                                             </p>
+                                            {(() => {
+                                                const av = avisoDeAnexos({ midias: loteVarredura?.midias || 0, comAnexo: lotePrevia.comAnexo });
+                                                if (!av) return null;
+                                                return (
+                                                    <p className={`text-[10px] ${av.grave ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                        📎 {av.texto}
+                                                    </p>
+                                                );
+                                            })()}
                                             {lotePrevia.arquivosSemMensagem > 0 && (
                                                 <p className="text-[10px] text-amber-700 dark:text-amber-400">
                                                     ⚠️ {lotePrevia.arquivosSemMensagem} arquivo(s) foram lidos e <strong>nenhuma mensagem foi reconhecida</strong> —
@@ -2446,6 +2455,19 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     </div>
                                                 )}
                                                 {m.texto && <p className="whitespace-pre-wrap break-words">{m.texto}</p>}
+                                                {/* 📎 Anexo que ficou no backup (decisão de 18/08: texto no app,
+                                                    arquivo no SharePoint). Sem esta linha a mensagem viraria um
+                                                    "<anexado: x.pdf>" enigmático e alguém procuraria no app um
+                                                    arquivo que ele nunca teve. */}
+                                                {(m as any).anexoNoBackup && (
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                                        📎 anexo <strong>não importado</strong> — está no backup da Ultra Fox
+                                                        guardado no SharePoint
+                                                        {(m as any).anexoNoBackup.arquivo
+                                                            ? <> (pasta <code>{(m as any).anexoNoBackup.pasta || '_files'}</code>, arquivo <code>{(m as any).anexoNoBackup.arquivo}</code>)</>
+                                                            : <> (pasta <code>{(m as any).anexoNoBackup.pasta || '_files'}</code> — o export não trouxe o nome do arquivo)</>}
+                                                    </p>
+                                                )}
                                                 {!m.texto && !midia && (
                                                     <p className="italic text-slate-400 text-[11px]">
                                                         {/* A MESMA régua que o backend usa pra decidir de quem é a

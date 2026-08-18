@@ -55,6 +55,7 @@ import {
     interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
     prepararMensagensDoTxt, idMensagemImportada,
 } from './whatsapp-import-ultrafox.js';
+import { detectarAnexo, PASTA_MIDIA } from './whatsapp-import-lote.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
@@ -456,6 +457,11 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
                 timestamp: x.timestamp || x.recebidoEm || null,
                 statusEntrega: x.statusEntrega || null,
                 erroEntrega: x.erroEntrega || null,
+                // Anexo que ficou no backup do SharePoint (importação). Campo
+                // novo entra na lista de saída no MESMO PR — fora dela ele é
+                // descartado em silêncio e a thread nunca diria que houve
+                // arquivo (a lição da whitelist do #382).
+                anexoNoBackup: x.anexoNoBackup || null,
             };
         }).sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
         return res.json({ ok: true, mensagens });
@@ -1779,9 +1785,15 @@ async function gravarMensagensImportadas(db, mensagens, quem) {
     for (let i = 0; i < mensagens.length; i += 400) {
         const batch = db.batch();
         for (const m of mensagens.slice(i, i + 400)) {
+            // 📎 Decisão do Paulo (18/08): "texto no whatsapp, anexo
+            // SharePoint". A mensagem entra DIZENDO que havia anexo e onde
+            // ele está — linha enigmática faria alguém procurar no app um
+            // arquivo que ele nunca teve.
+            const anexo = detectarAnexo(m.texto);
             batch.set(db.collection('whatsapp_mensagens').doc(idMensagemImportada(m)), {
                 conversaId: m.numero, direcao: m.direcao, tipo: 'text',
                 texto: m.texto, midia: null, timestamp: m.em,
+                ...(anexo.temAnexo ? { anexoNoBackup: { arquivo: anexo.arquivo, pasta: PASTA_MIDIA } } : {}),
                 statusEntrega: null, origem: 'ultrafox-import',
                 ...(m.autor ? { autorImportado: m.autor } : {}),
                 importadoPor: quem, importadoEm: agora,

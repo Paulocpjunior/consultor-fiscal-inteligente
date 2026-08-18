@@ -142,6 +142,26 @@ transferir é trocar o DONO, nunca abrir uma segunda conversa:
   está pedindo outro departamento, e manter o dono anterior deixaria a
   conversa na fila nova com atendente da fila velha — o mesmo estado torto
   que a transferência evita limpando a atribuição.
+- 📎 **"TEXTO NO WHATSAPP, ANEXO SHAREPOINT"** (decisão do Paulo, 18/08). O
+  arquivo NÃO entra no app: o histórico fica legível aqui e o zip do backup
+  vive no SharePoint como arquivo morto. **Menos dado pessoal guardado é menos
+  superfície de LGPD** (art. 18: o que entra aqui vira exportável e
+  eliminável a pedido do titular), e o que a equipe procura no dia a dia é o
+  que foi COMBINADO — isso é texto.
+  ⚠️ **MAS A MENSAGEM QUE TINHA ANEXO ENTRA**, e ela entra DIZENDO. Sem isso a
+  thread mostraria um `<anexado: DOC-…​.pdf>` enigmático e quem lesse
+  procuraria no app um arquivo que ele nunca teve — o "campo vazio sem
+  explicação" de sempre. `detectarAnexo` reconhece os marcadores conhecidos
+  do export; anexo com mídia OCULTA entra sem nome, porque **inventar um nome
+  faria alguém procurar no SharePoint um arquivo que não existe**.
+  🚨 **E A CONFERÊNCIA QUE FECHA A DECISÃO**: a prévia compara o tamanho da
+  pasta `_files` com quantos anexos foram reconhecidos no texto. **Mídia aos
+  milhares e ZERO anexo reconhecido = o marcador deste export é outro**, e a
+  referência estaria se perdendo em silêncio — dito em vermelho ANTES de
+  gravar, porque depois é tarde.
+  Campo novo (`anexoNoBackup`) entrou na LISTAGEM de mensagens no mesmo PR —
+  fora da lista de saída ele é descartado calado e a thread nunca diria que
+  houve arquivo (a lição da whitelist do #382).
 - 📦 **IMPORTAÇÃO EM LOTE DO BACKUP** (18/08, Paulo: *"pode construir"*). O
   export chegou com ~800 MB e esta forma, **conferida nos prints, não
   deduzida**: `whatsapp/<número do escritório>/<contato>/_full-chat.txt`, com
