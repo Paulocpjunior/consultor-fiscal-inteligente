@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-17';
+export const SOBRE_VERSAO = '2026-08-18';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -241,6 +241,16 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-08-18',
+        itens: [
+            '📷 Aba Instagram na ⚙️: pergunta pra Meta se dá pra ligar as DM (não liga nada sozinho). Se achar a conta, ainda falta confirmar a permissão de mensagem antes de valer de verdade.',
+            '📦 Importação em lote do backup inteiro da Ultra Fox — escolhe a pasta, o app lê tudo, mostra quantas mensagens vai gravar e você confirma antes.',
+            '📎 Anexo do backup antigo (fotos, PDFs) fica arquivado no SharePoint — a conversa aqui mostra que existia e onde procurar, sem trazer o arquivo pra dentro do app.',
+            '👤 Contato importado do backup já entra com o nome — o app aprende com as próprias mensagens, sem precisar de planilha separada.',
+            '⏱️ Travas contra travamento: reimportar não duplica mensagem, e se o servidor não responder em 90 segundos a tela avisa em vez de ficar girando pra sempre.',
+        ],
+    },
     {
         data: '2026-08-17',
         itens: [

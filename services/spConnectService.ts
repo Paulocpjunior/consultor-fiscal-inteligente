@@ -269,6 +269,30 @@ export const sondarChamadas = () =>
         antesDeLigar: { titulo: string; texto: string }[];
     }>('/api/admin/whatsapp/chamadas/sondar');
 
+// ── 📷 Sonda do Instagram (Paulo, 18/08) — mesma decisão: só pergunta ───────
+
+export interface SondaInstagram {
+    candidato: string; rotulo: string; hipotese: string;
+    situacao: 'token-ok' | 'conta-encontrada' | 'pagina-sem-instagram' | 'sem-pagina'
+        | 'sem-permissao' | 'nao-reconhecido' | 'indeterminado';
+    motivo: string; acao?: string;
+    pagina?: { id: string; nome: string };
+    instagram?: { id: string; username: string | null };
+    bruto?: unknown;
+}
+
+export const sondarInstagram = () =>
+    req<{
+        conclusao: {
+            veredito: 'conta-encontrada' | 'pagina-sem-instagram' | 'sem-pagina' | 'sem-permissao' | 'indeterminado';
+            motivo: string; acao?: string;
+            pagina?: { id: string; nome: string };
+            instagram?: { id: string; username: string | null };
+        };
+        sondas: SondaInstagram[];
+        sobreRestringirAtendentes: { titulo: string; texto: string };
+    }>('/api/admin/whatsapp/instagram/sondar');
+
 // ─── Atendentes ↔ filas (admin) ─────────────────────────────────────────────
 
 export interface Atendente {
