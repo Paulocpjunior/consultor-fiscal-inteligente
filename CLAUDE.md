@@ -701,6 +701,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Chave também passou a reconhecer `Id="CTe..."` e `<chCTe>`, não só o padrão
   de NF-e. Provado com o XML real que ela mandou (CT-e da TadLog Transportes,
   A CASTELLANO como remetente/tomadora, chave real).
+- **🚨 A IMPORTAÇÃO MANUAL RECUSAVA A NF-e COMPLETA DE UMA NOTA QUE ESTAVA NA
+  BASE COMO RESUMO** (caso PWR, 19/08: quatro notas de fornecedor — GLOBAL
+  COMPANY, BENCO, POXPUR — na tela ✏️ CFOP por nota **sem nº, sem CFOP pela
+  régua e sem CST**, e o colaborador digitando o CFOP no escuro). O XML que
+  Paulo mandou provou que a nota TEM tudo (item, CST 00, base, ICMS destacado):
+  o que estava no banco era o **RESUMO** (resNFe, ~531 bytes, sem itens) que o
+  DistDFe entrega antes da Ciência — e ao importar o XML completo por cima, o
+  caminho manual respondia "já está aqui", recusando exatamente o arquivo que
+  consertaria tudo. **O trilho automático do backend sempre fez esse upgrade**
+  (`decidirGravacaoNFe`); o manual do navegador é que não conhecia a régua.
+  ✂️ A régua MUDOU DE CASA: `decidirGravacaoNFe` (+ os detectores de resumo)
+  saiu de `xml-importer.js` — que puxa firebase-admin e não entra no bundle —
+  para o módulo PURO `sefaz-backend/gravacao-nfe-regua.js`; o importer importa
+  de lá e re-exporta (nada quebra pra quem já usava). `lerDuplicado` ganhou a
+  situação `resumo-pode-completar` (upgrade SEM opt-in — é estritamente MAIS
+  dado do mesmo documento) e a gravação do upgrade usa **MERGE**, senão os
+  eventos que o resumo já recebeu (cancelamento chega antes da completa)
+  seriam apagados. TRÊS TRAVAS: posse vem ANTES (resumo de OUTRA empresa não
+  completa por aqui), CANCELADA vem antes (completar não muda total e
+  reescrever status de cancelada é risco sem ganho), e a tela DIZ "COMPLETADA"
+  — item aparecendo sem explicação é susto.
+  ⚠️ **E a mensagem "CFOP inválido — são 4 dígitos" sobre campo VAZIO era
+  alarme errado**: vazio é AUSÊNCIA (resumo sem itens), não formato — acusar
+  digitação mandava procurar erro onde o problema é de captura. `textoDoCfop`
+  agora separa os dois e manda reimportar o XML completo em vez de digitar.
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo
