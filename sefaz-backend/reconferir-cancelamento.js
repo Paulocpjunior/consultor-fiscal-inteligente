@@ -120,6 +120,30 @@ export function lerRespostaCancelamento(resp) {
     const cStat = String(resp.cStat || '');
     const xmls = Array.isArray(resp.xmls) ? resp.xmls : [];
 
+    // 🚨 cStat 653 — "Rejeição: NF-e Cancelada, arquivo indisponível para
+    // download". Paulo, 18/08 (MV LIDER 639): provou nas 3 chaves suspeitas,
+    // uma a uma, na tela "Consultar NFe por chave" — as três voltaram
+    // `cStat=653 · Rejeicao: NF-e Cancelada, arquivo indisponivel para
+    // download`. É a SEFAZ dizendo, sem ambiguidade, que a nota está
+    // cancelada — e por estar cancelada, ela não entrega mais o docZip (por
+    // isso `xmls` vem VAZIO). Este código caía direto no ramo genérico de
+    // "sem documento ⇒ indeterminado" logo abaixo, que existe pra cobrir
+    // certificado sem autorização/UF errada — e são coisas MUITO diferentes:
+    // ali a SEFAZ não respondeu quem é a nota; aqui ela respondeu que a nota
+    // não vale mais. Corrobora pelo TEXTO (não só o número), porque um cStat
+    // isolado sem a palavra "cancelad" no xMotivo pode ser outra rejeição
+    // reaproveitando o código numa NT futura — nesse caso cai no genérico.
+    if (cStat === '653' && /cancelad/i.test(String(resp.xMotivo || ''))) {
+        return {
+            situacao: 'cancelada',
+            cStat,
+            evento: { tpEvento: '110111', tipo: 'cancelamento', cStat: '653', dhEvento: null, nProt: null, xJust: null },
+            motivo: `SEFAZ recusou a consulta com cStat 653 (${resp.xMotivo}) — a nota está cancelada e por `
+                + 'isso o arquivo não é mais entregue. Sem protocolo/data do evento (a SEFAZ não manda nesta '
+                + 'resposta), só a confirmação do cancelamento.',
+        };
+    }
+
     // cStat 137 = "nenhum documento localizado". Isso NÃO é "não cancelada":
     // costuma ser certificado sem autorização para consultar em nome daquele
     // CNPJ, ou UF errada. Concluir "válida" aqui manteria a receita a maior.
@@ -180,65 +204,6 @@ export function lerRespostaCancelamento(resp) {
     };
 }
 
-// cStat da CONSULTA SITUAÇÃO (NfeConsultaProtocolo4) — vocabulário PRÓPRIO,
-// diferente do cStat de evento (110111) lido acima: aqui é o status
-// consolidado da nota, não o resultado de um evento específico.
-const CSTAT_SITUACAO_CANCELADA = new Set(['101', '151']);
-const CSTAT_SITUACAO_AUTORIZADA = new Set(['100']);
-
-/**
- * Lê a resposta da CONSULTA SITUAÇÃO (fallback quando a empresa não tem A1
- * próprio — usa o certificado do escritório, que essa consulta aceita porque
- * ela só devolve STATUS, nunca o conteúdo do documento).
- *
- * Mesmo contrato de `lerRespostaCancelamento`: 'cancelada' · 'nao-cancelada' ·
- * 'indeterminado', nunca inventando a terceira a partir do silêncio ou de um
- * cStat que este módulo não conhece.
- */
-export function lerRespostaConsultaSituacao(resp) {
-    if (!resp || resp.erro) {
-        return {
-            situacao: 'indeterminado',
-            motivo: `Não foi possível perguntar à SEFAZ (Consulta Situação)${resp?.erro ? `: ${resp.erro}` : '.'} `
-                + 'A nota fica como está — falha de consulta não prova que a nota é válida.',
-        };
-    }
-    if (resp.indisponivel) {
-        return { situacao: 'indeterminado', motivo: resp.motivo };
-    }
-
-    const cStat = String(resp.cStat || '');
-
-    if (CSTAT_SITUACAO_CANCELADA.has(cStat)) {
-        return {
-            situacao: 'cancelada',
-            cStat,
-            evento: {
-                tpEvento: '110111', tipo: 'cancelamento', cStat,
-                dhEvento: resp.dhRecbto || null, nProt: resp.nProt || null, xJust: null,
-            },
-            motivo: `Consulta Situação (certificado do escritório): ${resp.xMotivo || 'cancelamento homologado'} `
-                + `(cStat ${cStat}).`,
-        };
-    }
-    if (CSTAT_SITUACAO_AUTORIZADA.has(cStat)) {
-        return {
-            situacao: 'nao-cancelada',
-            cStat,
-            motivo: 'Consulta Situação: a SEFAZ confirma a NF-e autorizada, sem cancelamento.',
-        };
-    }
-    // Qualquer outro cStat (217/218 "não consta", 110 denegada, desconhecido…)
-    // NÃO se afirma nada — é exatamente esse silêncio que produzia faturamento
-    // a maior antes desta régua existir.
-    return {
-        situacao: 'indeterminado',
-        cStat,
-        motivo: `A Consulta Situação devolveu cStat ${cStat || '—'}`
-            + `${resp.xMotivo ? ` — ${resp.xMotivo}` : ''}. Isso não permite concluir sobre cancelamento.`,
-    };
-}
-
 /**
  * Resumo da rodada, com a CAUSA junto do número.
  *
@@ -252,15 +217,18 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
 
     const avisos = [];
     // 18/08: empresa sem A1 próprio (MV LIDER, cert é A3) cai neste modo — a
-    // pergunta sai com o certificado do ESCRITÓRIO, num webservice diferente
-    // (Consulta Situação, não o DistDFe). O colaborador precisa saber que a
-    // rodada foi por esse caminho, porque é NOVO e a prova real ainda depende
-    // do primeiro resultado em produção.
-    if (modo === 'consulta-situacao' && !simulado && r.length) {
+    // pergunta sai com o certificado do ESCRITÓRIO, consultando COMO
+    // escritório. Provado em produção no mesmo dia: cStat=653 (NF-e
+    // Cancelada) volta mesmo sem o escritório ser parte do documento — mas
+    // nota VÁLIDA da qual o escritório não é parte continua indeterminada,
+    // então a rodada por este caminho é mais fraca em achar "não cancelada"
+    // do que a rodada com o A1 da própria empresa.
+    if (modo === 'cert-escritorio' && !simulado && r.length) {
         avisos.push(
-            'Esta empresa não tem certificado A1 próprio (nem da mesma raiz) — a rodada usou a Consulta '
-            + 'Situação com o certificado do ESCRITÓRIO, que só devolve status (nunca o conteúdo do '
-            + 'documento) e por isso não exige o certificado do emitente.',
+            'Esta empresa não tem certificado A1 próprio (nem da mesma raiz) — a rodada perguntou com o '
+            + 'certificado do ESCRITÓRIO. Cancelamento (cStat 653) a SEFAZ confirma mesmo assim; para nota '
+            + 'válida da qual o escritório não é parte, o resultado fica indeterminado (não é prova de '
+            + 'que está tudo certo).',
         );
     }
     if (canceladas.length) {

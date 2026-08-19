@@ -582,28 +582,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   escrever — corrigido o pai, o filho parou de faltar. **Arquivo aceito >
   leiaute deduzido**, mais uma vez: não escrevi nada para M205/M605, e o
   recibo é quem prova que não havia nada a escrever.
-- **🚨 "CANCELADA DEVERIA PUXAR" — e ele tinha razão: o webservice era outro**
-  (Paulo, MV LIDER 639 · 18/08, clicando em "Reconferir na SEFAZ" e caindo no
-  erro "Empresa sem certificado A1 próprio ou da mesma raiz"). O cert dela é
-  A3 (não assina em nuvem), e a reconferência de cancelamento usava o
-  `NFeDistribuicaoDFe`/`consChNFe` — que ENTREGA o conteúdo do documento, e por
-  isso SEFAZ exige que o CNPJ consultante seja parte dele (emitente/
-  destinatário). Existe um SEGUNDO webservice, a **Consulta Situação**
-  (`NfeConsultaProtocolo4`), que só devolve STATUS (autorizada/cancelada/
-  denegada) — nunca o conteúdo — e por isso é PÚBLICA: qualquer A1 válido
-  pergunta, inclusive o do ESCRITÓRIO. `consultaSituacaoNFe` (sefaz-client.js) +
-  `lerRespostaConsultaSituacao` (reconferir-cancelamento.js) entram como
-  FALLBACK em `/reconferir-cancelamento`: só quando a empresa não tem A1
-  próprio/da raiz, E só se a UF tiver o host cadastrado (hoje só **SP** — UF
-  sem host RECUSA com a causa, nunca tenta endereço chutado). Mesmo
-  vocabulário de saída de sempre (cancelada/não-cancelada/indeterminado, falha
-  de rede NUNCA virando "não cancelada").
-  🚧 **O HOST NÃO FOI PROVADO CONTRA RESPOSTA REAL** — a rede da SEFAZ é
-  bloqueada deste ambiente (mesma cegueira que já vale pro DistDFe, nunca
-  testado daqui, só em produção). `nfe.fazenda.sp.gov.br/ws/
-  nfeconsultaprotocolo4.asmx` segue a convenção estável do autorizador de SP;
-  a prova real é rodar contra uma das 3 chaves da MV LIDER que o Paulo já
-  confirmou canceladas no portal.
+- **🚨 "CANCELADA DEVERIA PUXAR" — e ele tinha razão, E a prova veio no mesmo
+  dia** (Paulo, MV LIDER 639 · 18/08). Primeira tentativa: eu inventei um
+  SEGUNDO webservice (Consulta Situação, `NfeConsultaProtocolo4`) pra resolver
+  a empresa sem A1 próprio — código escrito, mergeado, **host nunca provado**.
+  Paulo não esperou: abriu a tela "🔎 Consultar NFe por chave" que JÁ EXISTE em
+  produção (`consulta-nfe-por-chave`, cert do ESCRITÓRIO) e consultou as 3
+  chaves suspeitas da MV LIDER uma a uma. **As três voltaram
+  `cStat=653 · Rejeicao: NF-e Cancelada, arquivo indisponivel para
+  download`** — mesmo o escritório não sendo parte de nenhuma delas.
+  ✂️ **Isso desmonta a premissa que eu tinha escrito**: eu assumia que o
+  `NFeDistribuicaoDFe`/`consChNFe` recusa qualquer resposta pra quem não é
+  parte do documento. Falso PARA REJEIÇÃO — só é verdade pro CONTEÚDO. cStat
+  653 é a SEFAZ dizendo "essa nota não existe mais" sem entregar nada, e isso
+  ela conta pra qualquer certificado válido. Ou seja: **o webservice que já
+  está em produção resolvia sozinho** — não precisava do segundo.
+  🗑️ **A Consulta Situação foi REMOVIDA** (`consultaSituacaoNFe`,
+  `ufTemConsultaSituacao`, `lerRespostaConsultaSituacao`, host
+  `nfe.fazenda.sp.gov.br` nunca provado) — código morto que ninguém ia chamar,
+  e mantê-lo seria a isca certa pra alguém reativar um caminho não testado
+  contra produção. Deletar código não-testado > deixar "por via das dúvidas".
+  ✅ **O QUE FICOU, PROVADO**: `lerRespostaCancelamento` (reconferir-
+  cancelamento.js) ganhou o caso `cStat === '653'` — corroborado pelo TEXTO
+  ("cancelad" no `xMotivo`, não só o número, porque a NT seguinte pode
+  reaproveitar o código pra outra coisa. E a rota `/reconferir-cancelamento`
+  passou a cair no cert do ESCRITÓRIO (consultando COMO escritório,
+  `cnpjInteressado = CNPJ_ESCRITORIO`) quando a empresa não tem A1 — o MESMO
+  caminho da tela de diagnóstico, não um novo. Nota válida da qual o
+  escritório não é parte continua `indeterminado` (honesto: não é prova de
+  "tudo certo"), só nota CANCELADA agora é encontrada mesmo sem A1 próprio.
+  **LIÇÃO QUE FICA**: antes de escrever um webservice novo pra contornar uma
+  restrição, testar se a restrição é real com a ferramenta que já existe. Eu
+  deduzi a regra do DistDFe; ele testou. O teste venceu.
 - **🚨 CT-e NUNCA TEVE CAPTURA AUTOMÁTICA — o NFe DistDFe nunca pergunta por
   CT-e** (Paulo, 18/08, EDUARDO GUERRA — tomadora de frete, 0 documento
   capturado apesar dela ser a DESTINATÁRIA: *"o consultor não está fazendo a

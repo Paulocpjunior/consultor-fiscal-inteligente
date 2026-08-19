@@ -14,13 +14,13 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { extrairChaves, classificarChaves } from './conferencia-chaves.js';
-import { consultaNFePorChave, consultaSituacaoNFe, ufTemConsultaSituacao } from './sefaz-client.js';
+import { consultaNFePorChave } from './sefaz-client.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
-import { carregarFlagsEmpresa } from './empresa-flags.js';
+import { carregarFlagsEmpresa, CNPJ_ESCRITORIO } from './empresa-flags.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import {
-    selecionarParaReconferir, lerRespostaCancelamento, lerRespostaConsultaSituacao, resumirReconferencia,
+    selecionarParaReconferir, lerRespostaCancelamento, resumirReconferencia,
 } from './reconferir-cancelamento.js';
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
@@ -259,8 +259,7 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
         if (!uf) return res.status(400).json({ error: 'UF não cadastrada para a empresa — preencha em Completar cadastro.' });
 
         // O cert é o da PRÓPRIA empresa (ou da raiz): a consulta por CHAVE
-        // (DistDFe) é feita em nome dela, e o do escritório não autoriza
-        // outra raiz nesse webservice.
+        // (DistDFe) entregando o CONTEÚDO do documento é feita em nome dela.
         let cert = null;
         try { cert = await loadCertEmpresa(emp.empresaId); } catch { /* tenta raiz */ }
         if (!cert) {
@@ -268,41 +267,32 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
         }
 
         // 🚨 SEM A1 PRÓPRIO/DA RAIZ (caso MV LIDER, cert é A3 — não assina em
-        // nuvem): a consulta por chave (DistDFe) não pode ser feita, mas a
-        // CONSULTA SITUAÇÃO pode — ela só devolve status, não o conteúdo do
-        // documento, e por isso aceita o certificado do ESCRITÓRIO. Só cai
-        // neste modo quando a UF tem o webservice cadastrado (hoje só SP);
-        // sem os dois caminhos, RECUSA com a causa — nunca finge que perguntou.
-        const usaConsultaSituacao = !cert;
-        if (usaConsultaSituacao && !ufTemConsultaSituacao(uf)) {
-            return res.status(400).json({
-                error: 'Empresa sem certificado A1 próprio ou da mesma raiz, e a Consulta Situação (que '
-                    + `dispensa o certificado do emitente) ainda não está cadastrada para a UF ${uf}. Sem `
-                    + 'nenhum dos dois caminhos, não dá para perguntar à SEFAZ nem afirmar que as notas '
-                    + 'estão válidas.',
-            });
-        }
+        // nuvem): cai no certificado do ESCRITÓRIO, consultando COMO
+        // escritório (cnpjInteressado = CNPJ_ESCRITORIO, não o da empresa) —
+        // é o MESMO caminho que a tela "Consultar NFe por chave" já usa em
+        // produção. Paulo provou em 18/08, nota a nota, que a SEFAZ responde
+        // `cStat=653` (NF-e Cancelada, arquivo indisponível) mesmo sem o
+        // escritório ser parte do documento: 653 é REJEIÇÃO, não CONTEÚDO, e
+        // por isso não tem a mesma restrição de "interessado" que o docZip
+        // completo tem. Não promete achar TUDO (nota válida que o escritório
+        // não é parte continua vindo 137/indeterminado, honesto) — só deixa
+        // de recusar de cara e sempre pergunta de algum jeito.
+        const usaCertEscritorio = !cert;
 
         const resultados = [];
         let abortou656 = false;
         for (const alvo of selecao.aConsultar) {
             let leitura;
             try {
-                if (usaConsultaSituacao) {
-                    const r = await consultaSituacaoNFe({ chave: alvo.chave, uf, certOverride: null });
-                    if (r.rateLimited) { abortou656 = true; break; }
-                    leitura = lerRespostaConsultaSituacao(r);
-                } else {
-                    const r = await consultaNFePorChave({
-                        chave: alvo.chave, cnpjInteressado: cnpjEmpresa, uf, certOverride: cert,
-                    });
-                    if (r.rateLimited) { abortou656 = true; break; }
-                    leitura = lerRespostaCancelamento(r);
-                }
+                const r = await consultaNFePorChave({
+                    chave: alvo.chave,
+                    cnpjInteressado: usaCertEscritorio ? CNPJ_ESCRITORIO : cnpjEmpresa,
+                    uf, certOverride: usaCertEscritorio ? null : cert,
+                });
+                if (r.rateLimited) { abortou656 = true; break; }
+                leitura = lerRespostaCancelamento(r);
             } catch (e) {
-                leitura = usaConsultaSituacao
-                    ? lerRespostaConsultaSituacao({ erro: e.message })
-                    : lerRespostaCancelamento({ erro: e.message });
+                leitura = lerRespostaCancelamento({ erro: e.message });
             }
 
             if (leitura.situacao === 'cancelada') {
@@ -314,7 +304,7 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
                         status: 'cancelado',
                         eventos: fa().firestore.FieldValue.arrayUnion({
                             ...leitura.evento,
-                            origem: usaConsultaSituacao ? 'reconferencia-sefaz-consulta-situacao' : 'reconferencia-sefaz',
+                            origem: usaCertEscritorio ? 'reconferencia-sefaz-cert-escritorio' : 'reconferencia-sefaz',
                             reconferidoPor: req.user.email || req.user.uid,
                             reconferidoEm: Date.now(),
                         }),
@@ -328,7 +318,7 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
         }
 
         const resumo = resumirReconferencia({
-            selecao, resultados, modo: usaConsultaSituacao ? 'consulta-situacao' : 'distdfe',
+            selecao, resultados, modo: usaCertEscritorio ? 'cert-escritorio' : 'distdfe',
         });
         if (abortou656) {
             resumo.avisos.unshift('A SEFAZ pediu pausa (cStat 656) e a rodada parou aqui. O que não foi '
