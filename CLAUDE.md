@@ -582,6 +582,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   escrever — corrigido o pai, o filho parou de faltar. **Arquivo aceito >
   leiaute deduzido**, mais uma vez: não escrevi nada para M205/M605, e o
   recibo é quem prova que não havia nada a escrever.
+  🚨 **E O F600 NUNCA EXISTIU — `buildBlocoF` era um STUB permanente** (Paulo,
+  19/08, HS PROJETOS 0304: *"ela é retido de PIS/COFINS, então quando eu
+  informo no EFD CONTRIBUIÇÕES ele me dá o F600 para preencher, na SAGE ele já
+  puxava essas informações"*). Toda empresa com retenção na fonte saía com
+  `F001|1` (bloco sem dados) — e sem F600 o `VL_RET_CUM` do M200/M600 não
+  abate nada: o arquivo declararia **a recolher MAIOR que o devido**. Fiquei
+  bloqueado de propósito (IND_NAT_RET é tabela oficial, não se chuta) até ele
+  mandar **o EFD antigo do E-Fiscal da própria HS (05/2026, assinado) com 5
+  F600 reais** — e o arquivo destravou tudo de uma vez:
+  `|F600|03|02052026|5200|189,8|5952|1|47252373000113|33,8|156|0|` ⇒
+  IND_NAT_RET=03 (PJ direito privado) · COD_REC=5952 (CSRF) · IND_NAT_REC=1
+  (cumulativa) · **VL_RET = SÓ PIS+COFINS** (a CSLL retida existe no DARF mas
+  NÃO entra nesta escrituração — somá-la declararia retenção a maior). E os
+  totais fecham centavo a centavo: Σ dos 5 F600 = PIS 114,40 e COFINS 528,00
+  = `VL_RET_CUM` do M200/M600 do MESMO arquivo.
+  🚨 **E O ARQUIVO ACEITO DESMENTIU NOSSO M200/M600**: a contribuição do
+  regime CUMULATIVO mora nos campos 8-12 (`|M200|0|0|0|0|0|0|0|114,4|114,4|0|0|0|`);
+  o gerador punha a BASE no campo 1 e a contribuição espalhada na seção do
+  NÃO-cumulativo. O PVA ACEITAVA (não cruza esses campos — a MANTOAN passou
+  assim), mas "aceito não é certo": declarava a apuração na seção do regime
+  errado. Corrigidos os dois no mesmo PR; os testes antigos que travavam o
+  leiaute deduzido foram TROCADOS (premissa derrubada por arquivo aceito).
+  ⚠️ **A régua do R-4020 vale no F600 na direção mais cara**: nota cujos
+  campos de PIS/COFINS têm a assinatura 1,65%+7,60% (tributo da OPERAÇÃO do
+  prestador, caso ATLAS SCHINDLER) fica FORA, nomeada — declará-la inflaria o
+  abatimento com retenção que ninguém reteve. Quem decide é
+  `conferirRetencaoFederal`, nunca uma cópia. `coletarRetencoesF600` é UMA
+  coleta para o bloco F e o M (duas divergiriam); F600 entrou em
+  `DETALHES_VIGIADOS` no mesmo PR. **Falta a prova**: regerar o EFD da HS no
+  CFI e validar no PVA.
 - **🚨 "CANCELADA DEVERIA PUXAR" — e ele tinha razão, E a prova veio no mesmo
   dia** (Paulo, MV LIDER 639 · 18/08). Primeira tentativa: eu inventei um
   SEGUNDO webservice (Consulta Situação, `NfeConsultaProtocolo4`) pra resolver

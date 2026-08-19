@@ -15,6 +15,9 @@ import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
 import { docCancelado } from './xml-metadata-helper.js';
+// A assinatura de alíquota que separa RETENÇÃO (0,65%+3%) de tributo da
+// OPERAÇÃO (1,65%+7,60%) — a régua do R-4020, reusada pelo F600.
+import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -494,12 +497,149 @@ export function buildBlocoD_Contrib(dados) {
 // ═══════════════════════════════════════════════════════════════════════
 // BLOCO F — Demais Documentos e Operacoes
 // ═══════════════════════════════════════════════════════════════════════
+//
+// F600 — Contribuição Retida na Fonte. Era um STUB permanente (F001|1) e o
+// Paulo pegou pelo caso HS PROJETOS (19/08): *"ela é retido de PIS/COFINS,
+// então quando eu informo no EFD CONTRIBUIÇÕES ele me dá o F600 para
+// preencher, na SAGE ele já puxava essas informações"*.
+//
+// 🚨 LEIAUTE PROVADO CONTRA ARQUIVO ACEITO — o EFD do E-Fiscal da própria HS
+// (0304, 05/2026, assinado) que ele mandou no mesmo dia:
+//
+//   |F600|03|02052026|5200|189,8|5952|1|47252373000113|33,8|156|0|
+//    REG  ↑    ↑       ↑     ↑    ↑  ↑        ↑          ↑   ↑  ↑
+//         │  DT_RET VL_BC_RET│ COD_REC│     CNPJ      VL_RET VL_RET IND_DEC
+//   IND_NAT_RET          VL_RET  IND_NAT_REC (fonte     _PIS _COFINS
+//   (03 = PJ dir.privado) (PIS+COFINS)  1=cumulativa)  pagadora)
+//
+// E os totais fecham: os 5 F600 daquele arquivo somam PIS 114,40 e COFINS
+// 528,00 — exatamente o VL_RET_CUM do M200 e do M600 do MESMO arquivo.
+// ⚠️ VL_RET é SÓ PIS+COFINS (3,65% da base): a CSLL retida existe no DARF
+// 5952 mas NÃO entra nesta escrituração — somá-la declararia retenção a
+// maior. IR/INSS idem: outros tributos, outras declarações.
 
-export function buildBlocoF(_dados) {
-    return [
-        fmt.buildLine(['F001', '1']),
-        fmt.buildLine(['F990', '2']),
-    ];
+/**
+ * Coleta os eventos de retenção na fonte (F600) das notas do período.
+ *
+ * Só serviço PRESTADO (direcao 'saida'): a retenção que abate a contribuição
+ * da declarante é a que ELA sofreu. Cada nota com PIS/COFINS retidos vira UM
+ * evento — o desenho do arquivo aceito (5 notas → 5 F600).
+ *
+ * ⚠️ A régua do R-4020 vale aqui na direção mais cara: nota cujos campos de
+ * PIS/COFINS são o TRIBUTO DA OPERAÇÃO do prestador (assinatura 1,65%+7,60%,
+ * não-cumulativo) NÃO entra — declararia como retenção um imposto que ninguém
+ * reteve, inflando o abatimento do M200/M600. Quem decide é a régua que já
+ * existe (`conferirRetencaoFederal`), nunca uma cópia.
+ *
+ * @param {Array}      notas     documentos da competência
+ * @param {Array|null} warnings  onde nomear o que ficou de fora (null = mudo,
+ *                               para releitura idempotente pelo bloco M)
+ */
+export function coletarRetencoesF600(notas, warnings) {
+    const eventos = [];
+    const daOperacao = [];
+    const semBase = [];
+    const semCnpjFonte = [];
+    const foraDaAliquota = [];
+
+    for (const notaCrua of (notas || [])) {
+        if (docCancelado(notaCrua) || notaCrua.status === 'denegado') continue;
+        if (notaCrua.direcao !== 'saida') continue;
+        const v = notaCrua.valores || {};
+        const pis = parseFloat(v.pis) || 0;
+        const cofins = parseFloat(v.cofins) || 0;
+        if (pis + cofins <= 0) continue;   // sem retenção federal gravada — caso normal
+
+        const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
+        const base = parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorTotal) || 0;
+        const diag = conferirRetencaoFederal({ base, pis, cofins, csll: v.csll, ir: v.ir, inss: v.inss });
+        if (diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
+        if (!base) { semBase.push(rotulo); continue; }
+        if (diag.situacao === 'aliquota-fora') foraDaAliquota.push(rotulo);
+
+        // A fonte pagadora é o TOMADOR — mesma leitura das duas formas do
+        // documento que o 0150 usa (portal grava achatado, XML aninhado).
+        const nota = normalizarParticipantesDoc(notaCrua);
+        const cnpjFonte = String(nota.destinatario?.cnpjCpf || nota.destinatario?.cnpj || '').replace(/\D/g, '');
+        if (cnpjFonte.length !== 14) { semCnpjFonte.push(rotulo); continue; }
+
+        eventos.push({
+            data: notaCrua.dataEmissao || notaCrua.dhEmi || null,
+            base, pis, cofins, cnpjFonte, numero: rotulo,
+        });
+    }
+
+    if (Array.isArray(warnings)) {
+        if (daOperacao.length) {
+            warnings.push(
+                `F600: ${daOperacao.length} nota(s) ficaram FORA porque os campos de PIS/COFINS são o tributo `
+                + `da OPERAÇÃO do prestador (assinatura 1,65%+7,60%), não retenção — nº ${daOperacao.slice(0, 8).join(', ')}. `
+                + 'Se houve retenção real (CSRF), ela não está rateada no documento: confira antes de declarar.',
+            );
+        }
+        if (semBase.length) {
+            warnings.push(
+                `F600: ${semBase.length} nota(s) com retenção gravada e SEM base de cálculo legível — `
+                + `nº ${semBase.slice(0, 8).join(', ')}. Ficaram fora (campo de valor não recebe default); `
+                + 'o abatimento do M200/M600 está a MENOR até corrigir.',
+            );
+        }
+        if (semCnpjFonte.length) {
+            warnings.push(
+                `F600: ${semCnpjFonte.length} nota(s) sem CNPJ da fonte pagadora (tomador) legível — `
+                + `nº ${semCnpjFonte.slice(0, 8).join(', ')}. Ficaram fora; o abatimento está a MENOR.`,
+            );
+        }
+        if (foraDaAliquota.length) {
+            warnings.push(
+                `F600: ${foraDaAliquota.length} nota(s) com retenção fora da alíquota legal (0,65%+3%) — `
+                + `nº ${foraDaAliquota.slice(0, 8).join(', ')}. Entraram com o valor do documento; confira `
+                + '(pode ser base com dedução ou digitação).',
+            );
+        }
+    }
+
+    const totalPis = eventos.reduce((t, e) => t + e.pis, 0);
+    const totalCofins = eventos.reduce((t, e) => t + e.cofins, 0);
+    return { eventos, totalPis, totalCofins };
+}
+
+export function buildBlocoF(dados) {
+    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings);
+    const eventos = ret.eventos || [];
+    const linhas = [];
+    // IND_MOV sai do que foi PRODUZIDO, nunca de constante (regra do 1001).
+    linhas.push(fmt.buildLine(['F001', eventos.length ? '0' : '1']));
+
+    if (eventos.length) {
+        // F010 — estabelecimento. O arquivo aceito traz só o CNPJ.
+        linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
+        // IND_NAT_REC acompanha o regime da apuração: cumulativa (Presumido)=1,
+        // não-cumulativa=0 — o arquivo aceito da HS (Presumido) traz 1.
+        const indNatRec = String(dados.regimeApuracao || '2') === '2' ? '1' : '0';
+        for (const e of eventos) {
+            linhas.push(fmt.buildLine([
+                'F600',
+                // IND_NAT_RET 03 = retenção por PJ de direito privado — o caso
+                // destas notas (tomador PJ retendo CSRF) e o do arquivo aceito.
+                // Retenção por órgão público (01/02) não está distinguida no
+                // documento; se um dia aparecer, é cadastro, não dedução.
+                '03',
+                fmt.formatDate(e.data),
+                fmt.formatValue(e.base),
+                fmt.formatValue(e.pis + e.cofins),   // VL_RET = SÓ PIS+COFINS
+                '5952',                              // COD_REC da CSRF (DARF) — fonte: arquivo aceito
+                indNatRec,
+                e.cnpjFonte,
+                fmt.formatValue(e.pis),
+                fmt.formatValue(e.cofins),
+                '0',                                 // IND_DEC — fonte: arquivo aceito
+            ]));
+        }
+    }
+
+    linhas.push(fmt.buildLine(['F990', linhas.length + 1]));
+    return linhas;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -584,6 +724,15 @@ export function buildBlocoM(dados) {
 
     const isNaoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
 
+    // Retenções na fonte (F600) abatem a contribuição — a MESMA coleta do
+    // bloco F (warnings mudos aqui: o F já nomeou o que ficou de fora; nomear
+    // duas vezes é ruído). Os totais têm que fechar com os F600 emitidos: no
+    // arquivo aceito da HS (05/2026), Σ VL_RET_PIS = 114,40 = VL_RET_CUM do
+    // M200 e Σ VL_RET_COFINS = 528,00 = VL_RET_CUM do M600, centavo a centavo.
+    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null);
+    const retPis = ret.totalPis || 0;
+    const retCofins = ret.totalCofins || 0;
+
     // M100 — Credito PIS (nao-cumulativo)
     if (isNaoCumulativo && totalPisEntrada > 0) {
         linhas.push(fmt.buildLine([
@@ -603,24 +752,41 @@ export function buildBlocoM(dados) {
     }
 
     // M200 — Contribuicao PIS do periodo
+    //
+    // 🚨 LEIAUTE PROVADO CONTRA ARQUIVO ACEITO (E-Fiscal da HS PROJETOS,
+    // 05/2026, regime cumulativo):
+    //   |M200|0|0|0|0|0|0|0|114,4|114,4|0|0|0|
+    // Os 12 campos após REG são: VL_TOT_CONT_NC_PER · VL_TOT_CRED_DESC ·
+    // VL_TOT_CRED_DESC_ANT · VL_TOT_CONT_NC_DEV · VL_RET_NC · VL_OUT_DED_NC ·
+    // VL_CONT_NC_REC · VL_TOT_CONT_CUM_PER · VL_RET_CUM · VL_OUT_DED_CUM ·
+    // VL_CONT_CUM_REC · VL_TOT_CONT_REC. Ou seja: a contribuição do regime
+    // CUMULATIVO mora nos campos 8-12, e os 1-7 (não-cumulativo) saem zerados.
+    // A versão anterior punha a BASE no campo 1 e a contribuição espalhada
+    // pelos campos do NC — o PVA ACEITAVA (não cruza esses campos), mas
+    // "aceito não é certo": declarava a apuração na seção do regime errado, e
+    // sem VL_RET_CUM a retenção do F600 não abateria nada — a recolher MAIOR
+    // que o devido para toda empresa com retenção na fonte.
     const vlContribPis = totalPisSaida;
     const vlCredDescontPis = isNaoCumulativo ? Math.min(totalPisEntrada, vlContribPis) : 0;
-    const vlContribARecolherPis = Math.max(vlContribPis - vlCredDescontPis, 0);
+    // A retenção declarada é a REAL (soma dos F600); o "a recolher" é que não
+    // desce de zero. Cap na retenção esconderia o saldo a compensar.
+    const vlRecNcPis = isNaoCumulativo ? Math.max(vlContribPis - vlCredDescontPis - retPis, 0) : 0;
+    const vlRecCumPis = isNaoCumulativo ? 0 : Math.max(vlContribPis - retPis, 0);
 
     linhas.push(fmt.buildLine([
         'M200',
-        fmt.formatValue(totalBcSaida),
-        fmt.formatValue(0),
-        fmt.formatValue(vlContribARecolherPis),
-        fmt.formatValue(vlContribPis),
-        fmt.formatValue(0),
-        fmt.formatValue(0),
-        fmt.formatValue(vlContribARecolherPis),
-        fmt.formatValue(0),
-        fmt.formatValue(0),
-        fmt.formatValue(0),
-        fmt.formatValue(vlContribARecolherPis),
-        fmt.formatValue(vlContribARecolherPis),
+        fmt.formatValue(isNaoCumulativo ? vlContribPis : 0),      // VL_TOT_CONT_NC_PER
+        fmt.formatValue(vlCredDescontPis),                        // VL_TOT_CRED_DESC
+        fmt.formatValue(0),                                       // VL_TOT_CRED_DESC_ANT
+        fmt.formatValue(0),                                       // VL_TOT_CONT_NC_DEV
+        fmt.formatValue(isNaoCumulativo ? retPis : 0),            // VL_RET_NC
+        fmt.formatValue(0),                                       // VL_OUT_DED_NC
+        fmt.formatValue(vlRecNcPis),                              // VL_CONT_NC_REC
+        fmt.formatValue(isNaoCumulativo ? 0 : vlContribPis),      // VL_TOT_CONT_CUM_PER
+        fmt.formatValue(isNaoCumulativo ? 0 : retPis),            // VL_RET_CUM
+        fmt.formatValue(0),                                       // VL_OUT_DED_CUM
+        fmt.formatValue(vlRecCumPis),                             // VL_CONT_CUM_REC
+        fmt.formatValue(vlRecNcPis + vlRecCumPis),                // VL_TOT_CONT_REC
     ]));
 
     // M210 — Detalhamento PIS por CST
@@ -683,25 +849,27 @@ export function buildBlocoM(dados) {
         ]));
     }
 
-    // M600 — Contribuicao COFINS do periodo
+    // M600 — Contribuicao COFINS do periodo. Mesmo leiaute do M200 (provado no
+    // mesmo arquivo aceito: |M600|0|0|0|0|0|0|0|528|528|0|0|0|).
     const vlContribCofins = totalCofinsSaida;
     const vlCredDescontCofins = isNaoCumulativo ? Math.min(totalCofinsEntrada, vlContribCofins) : 0;
-    const vlContribARecolherCofins = Math.max(vlContribCofins - vlCredDescontCofins, 0);
+    const vlRecNcCofins = isNaoCumulativo ? Math.max(vlContribCofins - vlCredDescontCofins - retCofins, 0) : 0;
+    const vlRecCumCofins = isNaoCumulativo ? 0 : Math.max(vlContribCofins - retCofins, 0);
 
     linhas.push(fmt.buildLine([
         'M600',
-        fmt.formatValue(totalBcSaida),
-        fmt.formatValue(0),
-        fmt.formatValue(vlContribARecolherCofins),
-        fmt.formatValue(vlContribCofins),
-        fmt.formatValue(0),
-        fmt.formatValue(0),
-        fmt.formatValue(vlContribARecolherCofins),
-        fmt.formatValue(0),
-        fmt.formatValue(0),
-        fmt.formatValue(0),
-        fmt.formatValue(vlContribARecolherCofins),
-        fmt.formatValue(vlContribARecolherCofins),
+        fmt.formatValue(isNaoCumulativo ? vlContribCofins : 0),   // VL_TOT_CONT_NC_PER
+        fmt.formatValue(vlCredDescontCofins),                     // VL_TOT_CRED_DESC
+        fmt.formatValue(0),                                       // VL_TOT_CRED_DESC_ANT
+        fmt.formatValue(0),                                       // VL_TOT_CONT_NC_DEV
+        fmt.formatValue(isNaoCumulativo ? retCofins : 0),         // VL_RET_NC
+        fmt.formatValue(0),                                       // VL_OUT_DED_NC
+        fmt.formatValue(vlRecNcCofins),                           // VL_CONT_NC_REC
+        fmt.formatValue(isNaoCumulativo ? 0 : vlContribCofins),   // VL_TOT_CONT_CUM_PER
+        fmt.formatValue(isNaoCumulativo ? 0 : retCofins),         // VL_RET_CUM
+        fmt.formatValue(0),                                       // VL_OUT_DED_CUM
+        fmt.formatValue(vlRecCumCofins),                          // VL_CONT_CUM_REC
+        fmt.formatValue(vlRecNcCofins + vlRecCumCofins),          // VL_TOT_CONT_REC
     ]));
 
     // M610 — Detalhamento COFINS por CST. Mesmo defeito, mesma correção: o PVA

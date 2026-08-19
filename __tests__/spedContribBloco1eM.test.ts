@@ -85,22 +85,33 @@ describe('🚨 M200/M600 saíam ZERADOS com 37 documentos no arquivo', () => {
     ].map((v, i) => nfse(7800 + i, v, 'saida'));
     const aquisicoes = [109.89, 42.88, 180, 0].map((v, i) => nfse(57000 + i, v, 'entrada'));
 
-    it('a base é a soma das PRESTAÇÕES, e bate com o arquivo do Paulo', () => {
+    it('a contribuição bate com o arquivo do Paulo — nos campos do regime CUMULATIVO', () => {
+        // 🚨 POSIÇÕES PROVADAS CONTRA ARQUIVO ACEITO (E-Fiscal da HS PROJETOS,
+        // 05/2026, cumulativo): |M200|0|0|0|0|0|0|0|114,4|114,4|0|0|0|.
+        // A contribuição do cumulativo mora no campo 8 (VL_TOT_CONT_CUM_PER);
+        // os campos 1-7 são do NÃO-cumulativo e saem zerados. A base NÃO
+        // aparece no M200 — ela mora no M210 (VL_REC_BRT). A versão anterior
+        // deste teste travava o leiaute DEDUZIDO (base no campo 1, contribuição
+        // no 4) — o PVA aceitava, mas declarava a apuração na seção errada.
         const linhas: string[] = buildBlocoM({
             notas: [...notas, ...aquisicoes], regimeApuracao: '2', warnings: [],
         });
         const m200 = campos(linhas.find((l) => l.startsWith('|M200|'))!);
         const m600 = campos(linhas.find((l) => l.startsWith('|M600|'))!);
-        // A linha começa com '|', então o REG é [1] e o primeiro valor é [2].
-        expect(m200[2]).toBe('43890,00');     // base
-        expect(m200[5]).toBe('285,28');       // contribuição PIS (0,65%)
-        expect(m600[2]).toBe('43890,00');
-        expect(m600[5]).toBe('1316,70');      // contribuição COFINS (3%)
+        // A linha começa com '|', então o REG é [1] e o campo N é [N+1].
+        expect(m200[2]).toBe('0,00');         // VL_TOT_CONT_NC_PER (não-cumulativo: zero)
+        expect(m200[9]).toBe('285,28');       // VL_TOT_CONT_CUM_PER — contribuição PIS (0,65%)
+        expect(m600[2]).toBe('0,00');
+        expect(m600[9]).toBe('1316,70');      // contribuição COFINS (3%)
+        // E a BASE continua no arquivo, no registro certo: M210/M610.
+        const m210 = campos(linhas.find((l) => l.startsWith('|M210|'))!);
+        expect(m210[3]).toBe('43890,00');     // VL_REC_BRT
     });
 
     it('e o valor a recolher deixa de ser 0,00 — era isso que ia à Receita', () => {
         const linhas: string[] = buildBlocoM({ notas, regimeApuracao: '2', warnings: [] });
         const m200 = campos(linhas.find((l) => l.startsWith('|M200|'))!);
+        // Campo 12 = VL_TOT_CONT_REC. Sem retenção na fonte, é a contribuição.
         expect(m200[13]).not.toBe('0,00');
         expect(m200[13]).toBe('285,28');
     });
@@ -111,8 +122,8 @@ describe('🚨 M200/M600 saíam ZERADOS com 37 documentos no arquivo', () => {
             notas: [nfse(1, 1000, 'saida'), { tipo: 'NFSe', direcao: 'saida', numero: '999' }],
             regimeApuracao: '2', warnings,
         });
-        const m200 = campos(linhas.find((l) => l.startsWith('|M200|'))!);
-        expect(m200[2]).toBe('1000,00');
+        const m210 = campos(linhas.find((l) => l.startsWith('|M210|'))!);
+        expect(m210[3]).toBe('1000,00');   // só a nota com valor entra na base
         expect(warnings.join('\n')).toMatch(/nº 999/);
         expect(warnings.join('\n')).toMatch(/M200\/M600 está a MENOR/);
     });
