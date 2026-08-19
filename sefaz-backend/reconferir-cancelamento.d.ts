@@ -12,6 +12,7 @@ export interface SelecaoReconferencia {
     jaCanceladas: number;
     semChave: number;
     naoSaida: number;
+    naoMod55: number;
 }
 
 export function selecionarParaReconferir(
