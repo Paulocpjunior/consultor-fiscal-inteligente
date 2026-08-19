@@ -10,7 +10,6 @@
  * Perguntar "isso vale também no export CSV?" não precisa de outro arquivo: as
  * alíquotas são fixas em lei e a assinatura está no próprio dado.
  */
-// @ts-expect-error — módulo .js puro (sem tipos)
 import { conferirRetencaoFederal, varrerRetencaoFederal, aliquotaEfetiva, ALIQ_CSRF } from '../sefaz-backend/retencao-federal-coerencia';
 
 /** A nota REAL do print do IOB, como o portal a entrega hoje. */

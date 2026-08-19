@@ -21,6 +21,15 @@ import { correlacionarCfop, cfopDoLancamento } from '../sefaz-backend/cfop-corre
 // LEITURA olhando também eventos[]/cStat — bug 11/08, MV LIDER 639: cancelada
 // contada no Livro de Saídas e no fechamento.
 import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
+// RÉGUA ÚNICA das retenções federais nas DUAS formas (achatada do portal ×
+// objeto do XML): o CSV do portal grava `valorIr`/`valorInss`/`valorCsll` na
+// RAIZ, e este relatório só lia `valores.*` — 67 notas da CLUDE com IR/INSS
+// gravados imprimiam "?" (19/08). Quem lê é o dono, nunca uma segunda cópia.
+import { lerRetencoesFederaisDoDoc } from '../sefaz-backend/reinf-retencoes-pj.js';
+// A assinatura de alíquota decide o que o campo É: "CSLL" que vale 4,65% da
+// base é o TOTAL das três (CSRF); PIS 1,65% + COFINS 7,60% é o tributo da
+// OPERAÇÃO do prestador, não retenção (casos CLINIPAR e ATLAS, 07/08).
+import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coerencia.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -192,6 +201,18 @@ export interface LinhaServico {
     liquido: number;
     /** Doc gravado antes de 01/08 não tem IR/INSS/CSLL — ausente ≠ zero retido. */
     retencoesFederaisGravadas: boolean;
+    /**
+     * As três contribuições retidas NUM CAMPO SÓ (assinatura CSRF 4,65%) — o
+     * documento não traz o rateio. Fica FORA da coluna CSLL e dos totais por
+     * tributo (somar como CSLL contaria PIS e COFINS em dobro); a tela mostra
+     * o valor marcado.
+     */
+    csrfSemRateio: number;
+    /**
+     * PIS+COFINS nas alíquotas do NÃO-CUMULATIVO (1,65% + 7,60%) — tributo da
+     * OPERAÇÃO do prestador, não retenção (caso ATLAS). Fora dos totais.
+     */
+    pisCofinsOperacao: number;
     /** Código de serviço MUNICIPAL da nota (NFS-e SP); vazio quando o trilho não traz. */
     codigoServico: string;
     /** Discriminação da nota — texto livre, usado só como EXEMPLO no agrupamento. */
@@ -204,22 +225,38 @@ export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'sa
         .map(d => {
             const parte: any = direcao === 'saida' ? (d.tomador || d.destinatario) : (d.prestador || d.emitente);
             const v = d.valores || {};
+            const base = v.baseCalculo ?? d.valorTotal ?? 0;
+            // As duas formas de gravação, lidas pelo DONO da régua.
+            const fed = lerRetencoesFederaisDoDoc(d);
+            // A assinatura de alíquota separa o que o campo É: CSLL de verdade,
+            // total CSRF sem rateio, ou tributo da operação do prestador.
+            const coer = conferirRetencaoFederal({ base, pis: fed.pis, cofins: fed.cofins, csll: fed.csllOuTotal });
+            const csllEhTotal = coer.situacao === 'csll-e-o-total';
+            const daOperacao = coer.situacao === 'campos-sao-totais-da-operacao';
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                 numero: d.numero || '—',
                 participante: parte?.nome || '—',
                 doc: String(parte?.cnpjCpf || '').replace(/\D/g, ''),
                 municipio: parte?.municipio || '',
-                base: v.baseCalculo ?? d.valorTotal ?? 0,
+                base,
                 iss: v.iss || 0,
                 issRetido: v.valorIssRetido || 0,
-                pis: v.pis || 0,
-                cofins: v.cofins || 0,
-                ir: v.ir || 0,
-                inss: v.inss || 0,
-                csll: v.csll || 0,
+                // PIS/COFINS da OPERAÇÃO não são retenção: fora das colunas e
+                // dos totais, mostrados à parte (senão o relatório afirma
+                // retenção que ninguém reteve — o erro que o R-4020 já barra).
+                pis: daOperacao ? 0 : (fed.pis ?? 0),
+                cofins: daOperacao ? 0 : (fed.cofins ?? 0),
+                ir: fed.ir ?? 0,
+                inss: fed.inss ?? 0,
+                // "CSLL" com assinatura de 4,65% é o TOTAL das três — somar
+                // como CSLL contaria PIS e COFINS em dobro (caso CLINIPAR).
+                csll: (csllEhTotal || daOperacao) ? 0 : (fed.csllOuTotal ?? 0),
                 liquido: v.liquido ?? d.valorTotal ?? 0,
-                retencoesFederaisGravadas: v.ir !== undefined || v.inss !== undefined || v.csll !== undefined,
+                retencoesFederaisGravadas:
+                    fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined,
+                csrfSemRateio: (csllEhTotal || daOperacao) ? (fed.csllOuTotal ?? 0) : 0,
+                pisCofinsOperacao: daOperacao ? r2((fed.pis ?? 0) + (fed.cofins ?? 0)) : 0,
                 codigoServico: String((d as any).codigoServico || '').trim(),
                 descricaoNota: String((d as any).discriminacao || (d as any).descricao || '').trim(),
             };
@@ -248,11 +285,13 @@ export interface GrupoServicoCodigo {
     cofins: number;
     csll: number;
     inss: number;
-    /** Soma de TODAS as retenções do grupo (ISS retido + federais). */
+    /** Soma de TODAS as retenções do grupo (ISS retido + federais + CSRF sem rateio). */
     totalRetido: number;
     liquido: number;
     /** Notas do grupo sem IR/INSS/CSLL gravados — ausente ≠ zero retido. */
     semCamposGravados: number;
+    /** Retenção CSRF sem rateio (o campo traz as três juntas) — no total, fora das colunas. */
+    csrfSemRateio: number;
 }
 
 /**
@@ -273,7 +312,7 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
                 rotulo: codigo ? `Cód. ${codigo}` : 'Sem código de serviço',
                 descricaoExemplo: '',
                 notas: 0, bruto: 0, issRetido: 0, ir: 0, pis: 0, cofins: 0, csll: 0, inss: 0,
-                totalRetido: 0, liquido: 0, semCamposGravados: 0,
+                totalRetido: 0, liquido: 0, semCamposGravados: 0, csrfSemRateio: 0,
                 _descricoes: new Map(),
             });
         }
@@ -286,7 +325,8 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
         g.cofins += l.cofins;
         g.csll += l.csll;
         g.inss += l.inss;
-        g.totalRetido += l.issRetido + l.ir + l.pis + l.cofins + l.csll + l.inss;
+        g.csrfSemRateio += l.csrfSemRateio;
+        g.totalRetido += l.issRetido + l.ir + l.pis + l.cofins + l.csll + l.inss + l.csrfSemRateio;
         g.liquido += l.liquido;
         if (!l.retencoesFederaisGravadas) g.semCamposGravados += 1;
         const desc = l.descricaoNota.slice(0, 80);
@@ -319,7 +359,11 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
  */
 export function linhasRetencoes(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
     return linhasServicos(docs, direcao)
-        .filter(l => !l.retencoesFederaisGravadas || l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll > 0);
+        // csrfSemRateio conta como retenção: a nota da ATLAS tem 158,72 retidos
+        // num campo só — sumir da lista porque as colunas individuais zeraram
+        // seria esconder justamente a retenção que existe.
+        .filter(l => !l.retencoesFederaisGravadas
+            || l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll + l.csrfSemRateio > 0);
 }
 
 export interface DiagnosticoRetencoes {
@@ -358,7 +402,7 @@ export function diagnosticoRetencoes(
 ): DiagnosticoRetencoes {
     const todas = linhasServicos(docs, direcao);
     const comRetencao = todas.filter(
-        l => l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll > 0,
+        l => l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll + l.csrfSemRateio > 0,
     ).length;
     const semCamposGravados = todas.filter(l => !l.retencoesFederaisGravadas).length;
     const podeAfirmarZero = todas.length > 0 && semCamposGravados === 0;

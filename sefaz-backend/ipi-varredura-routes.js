@@ -23,7 +23,7 @@ import {
 } from './ipi-varredura.js';
 import { getDctfwebProvider, pickIdApuracao, mitPeriodoLabel } from './dctfweb-provider.js';
 import { extrairModeloDebitosMit } from './mit-debitos-builder.js';
-import { relerItensFiscais } from './xml-importer.js';
+import { relerItensFiscais, relerNotasVazias } from './xml-importer.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 
 const router = express.Router();
@@ -195,6 +195,26 @@ router.post('/reler-itens-fiscais', requireAdmin, express.json(), async (req, re
     } catch (e) {
         console.error('[ipi-varredura/reler-itens-fiscais]', e);
         return res.status(500).json({ ok: false, error: e?.message || 'Falha ao reler os itens.' });
+    }
+});
+
+// ♻️ NOTAS "VAZIAS" — sem itens/nº na tela ✏️ CFOP por nota (Paulo, 19/08).
+// Diferente do reler-itens-fiscais (que melhora campos de item em nota que JÁ
+// TEM itens), este cria os itens do zero quando o XML completo está guardado —
+// e separa por CAUSA o que a releitura não alcança (resumo × sem arquivo).
+// requireAdmin porque ESCREVE em documento fiscal.
+router.post('/reler-notas-vazias', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const empresaId = String(req.body?.empresaId || '').trim();
+        const competencia = normalizarCompetencia(req.body?.competencia);
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Escolha a empresa.' });
+        if (!competencia) return res.status(400).json({ ok: false, error: 'Informe a competência (AAAA-MM).' });
+
+        const r = await relerNotasVazias({ empresaId, competencia, limit: 5000 });
+        return res.json({ ok: true, competencia, ...r });
+    } catch (e) {
+        console.error('[ipi-varredura/reler-notas-vazias]', e);
+        return res.status(500).json({ ok: false, error: e?.message || 'Falha ao reler as notas.' });
     }
 });
 

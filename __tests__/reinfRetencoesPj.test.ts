@@ -10,7 +10,6 @@
  * O que este teste protege acima de tudo: NOME DE CAMPO QUE MENTE é pior que
  * campo faltando — o outro lado usa e ninguém descobre até a declaração.
  */
-// @ts-expect-error — módulo .js puro (sem tipos)
 import { montarPayloadReinfPJ, normalizarNotaTomada } from '../sefaz-backend/reinf-retencoes-pj';
 
 const TOMADOR = '51227692000146';

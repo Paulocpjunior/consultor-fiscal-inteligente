@@ -54,6 +54,31 @@ const primeiro = (...cands) => {
 };
 
 /**
+ * RETENÇÕES FEDERAIS DO DOCUMENTO, NAS DUAS FORMAS — a régua ÚNICA.
+ *
+ * O importador do CSV do portal grava ACHATADO na raiz (`valorIr`,
+ * `valorInss`, `valorCsll`…); o trilho do XML grava em OBJETO (`valores.*`).
+ * Ler só uma forma foi o que fez o Relatório de Retenções da CLUDE imprimir
+ * "?" em 67 notas cujo IR/INSS estava GRAVADO — na outra forma (19/08).
+ *
+ * ⚠️ O campo de CSLL sai como `csllOuTotal` de propósito: no export do portal
+ * ele é o TOTAL das três contribuições (CSRF), não a CSLL — quem separa é a
+ * assinatura de alíquota (`conferirRetencaoFederal`), nunca este leitor.
+ *
+ * Ausente ≠ zero: campo que não existe em NENHUMA forma volta undefined.
+ */
+export function lerRetencoesFederaisDoDoc(d) {
+    const v = d?.valores || {};
+    return {
+        ir: primeiro(d?.valorIr, v.ir),
+        pis: primeiro(d?.valorPis, v.pis),
+        cofins: primeiro(d?.valorCofins, v.cofins),
+        csllOuTotal: primeiro(d?.valorCsll, v.csll),
+        inss: primeiro(d?.valorInss, v.inss),
+    };
+}
+
+/**
  * Uma NFS-e tomada → uma linha do payload do R-4020.
  *
  * Lê as DUAS formas do documento (achatada do portal e objeto do XML), que é
@@ -62,6 +87,7 @@ const primeiro = (...cands) => {
 export function normalizarNotaTomada(d) {
     const v = d?.valores || {};
     const base = primeiro(d?.valorServicos, v.valorServicos, d?.valorTotal);
+    const fed = lerRetencoesFederaisDoDoc(d);
     return {
         numero: texto(d?.numero) || null,
         chave: texto(d?.chave) || null,
@@ -74,14 +100,14 @@ export function normalizarNotaTomada(d) {
         tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
 
         base: base === undefined ? null : r2(base),
-        ir: r2(primeiro(d?.valorIr, v.ir) ?? 0),
-        pis: r2(primeiro(d?.valorPis, v.pis) ?? 0),
-        cofins: r2(primeiro(d?.valorCofins, v.cofins) ?? 0),
+        ir: r2(fed.ir ?? 0),
+        pis: r2(fed.pis ?? 0),
+        cofins: r2(fed.cofins ?? 0),
         // NOME HONESTO: no export do portal este campo é o TOTAL das três
         // contribuições, não a CSLL. Chamar de `csll` faria o outro lado
         // declarar o total como CSLL — e ninguém veria.
-        csllOuTotal: r2(primeiro(d?.valorCsll, v.csll) ?? 0),
-        inss: r2(primeiro(d?.valorInss, v.inss) ?? 0),
+        csllOuTotal: r2(fed.csllOuTotal ?? 0),
+        inss: r2(fed.inss ?? 0),
 
         // Código MUNICIPAL de serviço (SP), não item da LC 116. O de-para não
         // existe neste app — mandar rotulado evita que o outro lado o use como

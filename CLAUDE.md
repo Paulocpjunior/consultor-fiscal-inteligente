@@ -756,6 +756,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   alarme errado**: vazio é AUSÊNCIA (resumo sem itens), não formato — acusar
   digitação mandava procurar erro onde o problema é de captura. `textoDoCfop`
   agora separa os dois e manda reimportar o XML completo em vez de digitar.
+- **♻️ A NOTA "VAZIA" GANHOU O BOTÃO DE RELEITURA — e a régua separa o que ele
+  RESOLVE do que ele NÃO resolve** (Paulo, 19/08, depois do procedimento "não
+  digitem nada, aguardem o botão": *"esse botão ainda não construído né, tenho
+  outra empresa que puxou sem NF, SEM CST E CFOP"*). Botão **♻️ Reler XMLs
+  guardados** na aba ✏️ CFOP por nota (admin — a rota ESCREVE em documento
+  fiscal), `POST /api/admin/sefaz/reler-notas-vazias` → `relerNotasVazias` no
+  xml-importer. A classificação é PURA (`releitura-notas-vazias.js`, na
+  `REGUAS_VIGIADAS`) e o resultado responde **POR CAUSA**, porque cada uma tem
+  ação própria: **preenchidas** (XML completo guardado, itens/nº relidos) ·
+  **só o RESUMO na base** (o arquivo guardado É o resNFe de ~531 bytes — reler
+  não cria item; a ação é importar o XML COMPLETO, que desde o caso PWR
+  completa a nota por cima) · **sem arquivo** (buraco de captura, 📊 Status) ·
+  **fora do escopo** (NFS-e/CT-e — item não vem de `<det>`). Fundir tudo num
+  número só seria o "0 recuperadas · 664 já tinham" de 13/08 outra vez.
+  📌 **O Nº SAI DA CHAVE quando falta** (posições 26-34 — a chave não mente):
+  até o resumo, que não tem `<nNF>`, deixa de ficar cego na tela antes de o
+  XML completo chegar. Carimbo `numeroOrigem: 'chave-de-acesso'`.
+  ⚠️ **SEM carimbo de versão, de propósito**: a condição-alvo (sem itens/nº) se
+  limpa sozinha no preenchimento; carimbar os "só resumo" esconderia justamente
+  os que ainda esperam o XML completo. Backfill continua NÃO apagando nada
+  (`patchDaReleitura` só preenche vazio). Difere do `relerItensFiscais` (que
+  melhora CAMPOS de item em nota que JÁ TEM itens): este cria os itens do zero.
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo
@@ -904,6 +926,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   nas abas Serviços tomados/prestados/Retenções igualmente (a mesma lacuna
   vale nas três). PIS/COFINS/ISS retido não levam "?" — o flag só cobre os
   federais que o e-Fiscal antigo não capturava.
+  🚨 **E A SEGUNDA METADE ERA A ARMADILHA DAS DUAS FORMAS, PELA NONA VEZ**
+  (mesmo dia, ao construir o ♻️): o importador do CSV do portal grava
+  `valorIr`/`valorInss`/`valorCsll` ACHATADOS na raiz e o relatório só lia
+  `valores.*` — nota com IR **gravado** imprimia "?". A leitura virou do DONO
+  (`lerRetencoesFederaisDoDoc` em `reinf-retencoes-pj.js`, o mesmo que alimenta
+  o R-4020; na `REGUAS_VIGIADAS`), nunca uma segunda cópia. ⚠️ **E a assinatura
+  de alíquota passou a decidir NA TELA o que o campo É** (a régua de 07/08,
+  `conferirRetencaoFederal`): "CSLL" valendo 4,65% da base é o **TOTAL das três
+  (CSRF)** — sai da coluna e vai **marcado com †**, fora da soma, senão PIS e
+  COFINS contam em dobro (caso CLINIPAR); PIS 1,65% + COFINS 7,60% é **tributo
+  da OPERAÇÃO do prestador** — fora das colunas e dos totais, dito na legenda
+  (caso ATLAS). A nota com CSRF sem rateio **não some da aba Retenções**: a
+  retenção existe, só não tem rateio no documento.
 - **🚨 O EFD-CONTRIBUIÇÕES DE SERVIÇO SAÍA DECLARANDO ZERO — e o arquivo mentia
   sobre si mesmo em três lugares** (Paulo, 17/08: *"fui testar um EFD
   Contribuições de prestação de serviço e puxou zerado alguns blocos"*, depois
