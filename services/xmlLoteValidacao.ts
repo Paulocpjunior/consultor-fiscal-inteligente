@@ -35,18 +35,29 @@ export interface DadosXml {
  */
 export function extrairDadosXml(xml: string): DadosXml {
     const txt = String(xml || '');
-    const bloco = (tag: 'emit' | 'dest'): string | null => {
+    const bloco = (tag: 'emit' | 'dest' | 'rem'): string | null => {
         const m = txt.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
         if (!m) return null;
         const doc = m[1].match(/<(CNPJ|CPF)>\s*([\d.\-/]+)\s*<\/\1>/i);
         return doc ? soDigitos(doc[2]) : null;
     };
-    const chaveMatch = txt.match(/(?:Id\s*=\s*"?NFe|<chNFe>\s*)(\d{44})/i);
+    const chaveMatch = txt.match(/(?:Id\s*=\s*"?(?:NFe|CTe)|<ch(?:NFe|CTe)>\s*)(\d{44})/i);
     const chave = chaveMatch ? chaveMatch[1] : null;
     // Sem bloco <emit> (resumo/evento), o emitente ainda sai da chave:
     // posições 7-20 (índices 6..20) são o CNPJ de quem emitiu.
     const emit = bloco('emit') || (chave ? chave.slice(6, 20) : null);
-    return { emit, dest: bloco('dest'), chave };
+    // 🚨 CT-e: o REMETENTE é a contraparte principal, não o <dest> — o mesmo
+    // backend que importa o arquivo (parseCTeXml, services/xmlParserService.ts)
+    // já faz essa troca ("CT-e usa remetente como contraparte principal no
+    // campo destinatário"). Esta era uma SEGUNDA leitura do mesmo XML, sem essa
+    // regra — a A CASTELLANO aparecia como "0 de 6 XMLs desta empresa" na
+    // tela de confirmação, e o botão Importar nem chegava a existir, mesmo o
+    // backend estando pronto pra aceitar (caso real, 19/08: ela é a `<rem>`
+    // do CT-e, não o `<dest>`, que é o destinatário FINAL da mercadoria — só
+    // o transportador e o pagador do frete têm a ver com o cliente). Para
+    // NF-e a tag `<rem>` não existe, então isto nunca muda nada nela.
+    const dest = bloco('rem') || bloco('dest');
+    return { emit, dest, chave };
 }
 
 export interface ResumoLote {

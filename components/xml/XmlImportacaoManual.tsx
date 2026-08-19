@@ -202,7 +202,7 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                 )}
                 {empresaSelecionada ? (
                     <p className="text-[11px] text-slate-500 mt-2">
-                        Apenas XMLs em que <strong>{formatCnpjCpf(empresaSelecionada.cnpj)}</strong> apareça como emitente ou destinatário serão aceitos.
+                        Apenas XMLs em que <strong>{formatCnpjCpf(empresaSelecionada.cnpj)}</strong> apareça como emitente ou destinatário serão aceitos (em CT-e, conta como remetente da carga).
                     </p>
                 ) : empresas.length > 0 && (
                     <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
