@@ -85,7 +85,7 @@
 
     <div class="contagem">
         <div class="c crit"><b>4</b><span>Impacto fiscal ativo</span></div>
-        <div class="c warn"><b>4</b><span>Bloqueiam entrega/migração</span></div>
+        <div class="c warn"><b>3</b><span>Bloqueiam entrega/migração</span></div>
         <div class="c low"><b>4</b><span>Quando der</span></div>
     </div>
 
@@ -101,8 +101,8 @@
 
         <div class="item">
             <h3>MV LIDER 639 — notas canceladas somando no faturamento</h3>
-            <div class="achado">Achado por você, 18/08: as 3 chaves suspeitas, consultadas uma a uma em "Consultar NFe por chave", voltaram <code>cStat=653 · Cancelada</code> mesmo sem certificado próprio — provando que a SEFAZ responde cancelamento pra quem não é parte da nota. Corrigido e no ar (deploy #606, verde).</div>
-            <p>Falta reabrir a empresa, aba Canceladas/Faltantes, clicar em "📡 Reconferir na SEFAZ" e confirmar que as canceladas saem do total sozinhas.</p>
+            <div class="achado">Achado por você, 18/08: as 3 chaves suspeitas voltaram <code>cStat=653 · Cancelada</code> mesmo sem certificado próprio — corrigido (deploy #606). Testado de novo em 19/08, achou um SEGUNDO buraco: a fila ia direto nas notas NFC-e (mod 65), que a SEFAZ recusa com <code>cStat 618</code> — não é o mesmo documento, é modelo errado. Corrigido também (deploy #608, verde).</div>
+            <p>Falta reabrir a empresa, aba Canceladas/Faltantes, clicar em "📡 Reconferir na SEFAZ" de novo — agora a fila deve ir direto nas notas mod 55.</p>
             <p class="why">Enquanto não rodar de novo, o faturamento de julho está inflado pelas notas canceladas.</p>
             <span class="quem">quem cuida da MV LIDER</span>
         </div>
@@ -127,7 +127,8 @@
 
         <div class="item">
             <h3>Testar a captura automática de CT-e</h3>
-            <p>Na EDUARDO GUERRA (Empresas → Empresas Monitoradas), clicar em "🚚 CT-e (beta)" e ver o resultado. Se der erro, mandar o texto exato do erro.</p>
+            <div class="achado">Testado 19/08: voltou <code>cStat 239 · versão do XML não suportada</code> — rejeição estruturada (prova que host/certificado/envelope estão certos), causada pela versão errada no envelope (copiada da NF-e por engano). Corrigido (deploy #609, verde).</div>
+            <p>Falta clicar de novo em "🚚 CT-e (beta)" na EDUARDO GUERRA (Empresas → Empresas Monitoradas) e ver se agora vem <code>ok:true</code> com documentos.</p>
             <p class="why">Se funcionar, todo cliente que recebe frete por CT-e passa a ter isso capturado sozinho — hoje ninguém tem.</p>
             <span class="quem">quem cuida da EDUARDO GUERRA</span>
         </div>
@@ -144,11 +145,6 @@
             <span class="quem">quem cuida da EXPERTE</span>
         </div>
 
-        <div class="item">
-            <h3>KROYA × GOLDLOG — mesma nota, duas empresas da carteira</h3>
-            <p>Confirmar se o CNPJ 17.390.490/0001-82 é mesmo a GOLDLOG, e quais competências têm essa mistura.</p>
-            <span class="quem">quem cuida da KROYA</span>
-        </div>
     </section>
 
     <section class="low">
@@ -182,7 +178,7 @@
 
 </main>
 <footer>
-    Gerado a partir da sessão de 18/08/2026 — 12 itens · 0 dependem de código novo
+    Gerado a partir da sessão de 18/08/2026 (atualizado 19/08) — 11 itens · 0 dependem de código novo
 </footer>
 </body>
 </html>

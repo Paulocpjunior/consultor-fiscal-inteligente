@@ -773,6 +773,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   dois lados.** Enquanto isso o lado que falta se lança pelo ✍️ **sem preencher
   a CHAVE** (com a chave ele cai no mesmo documento), e essas notas SAEM quando
   a correção subir, senão contam duas vezes.
+  ✅ **CASO REAL CONFIRMADO 19/08 — o desenho funcionou** (Paulo: *"esse CNPJ é
+  da GOLDLOG. Nas capturas, foi escriturado pelo consultor o movimento de
+  entrada na GOLDLOG (nota+chave de acesso), sua contrapartida que foi a SAÍDA
+  da KROYA foi lançada manualmente, conforme orientado"*). `17.390.490/0001-82`
+  É a GOLDLOG — a captura automática trouxe a entrada dela pela chave
+  (`contraparte-legitima`, sem reatribuir), e a saída correspondente da KROYA
+  entrou pelo ✍️ sem chave, exatamente o contorno que a `RAIZ CONTINUA ABERTA`
+  pede. **Pendência FECHADA** — os dois lados estão escriturados, cada um no
+  contribuinte certo, sem duplicidade e sem nota trocando de dono.
 - **🚨 O EFD-CONTRIBUIÇÕES DE SERVIÇO SAÍA DECLARANDO ZERO — e o arquivo mentia
   sobre si mesmo em três lugares** (Paulo, 17/08: *"fui testar um EFD
   Contribuições de prestação de serviço e puxou zerado alguns blocos"*, depois
@@ -2831,10 +2840,11 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
       26.820,44). A régua única da cancelada subiu, mas quem diz se o "0
       cancelada(s)" era RECORTE (competência/empresa) ou régua divergente é o
       número da nota. **Não dar a competência por fechada antes.**
-   b) **KROYA × GOLDLOG** — confirmar se `17.390.490/0001-82` é a GOLDLOG e
-      **quais competências**. O lado que falta se lança pelo ✍️ **sem a CHAVE**
-      (com ela cai no mesmo documento) e essas notas **SAEM quando a correção da
-      identidade subir**, senão contam duas vezes.
+   b) ✅ **RESOLVIDO 19/08 — KROYA × GOLDLOG.** `17.390.490/0001-82` é a
+      GOLDLOG; a captura automática escriturou a entrada dela pela chave e a
+      saída correspondente da KROYA foi lançada manualmente pelo ✍️ sem chave,
+      exatamente como orientado. Os dois lados estão certos, sem duplicidade.
+      Ver o "🚨 A MESMA NF-e É SAÍDA DE UMA EMPRESA E ENTRADA DA OUTRA" acima.
    c) **MANTOAN — regerar o EFD-Contribuições e revalidar no PVA**. O 1010 e o
       M200/M600 zerado foram corrigidos; **arquivo aceito não é arquivo certo**,
       então o que fecha o caso é o recibo novo.
