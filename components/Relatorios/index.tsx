@@ -1635,7 +1635,16 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
             { titulo: 'CSLL', largura: 7, alinhamento: 'direita' },
             { titulo: 'Líquido', largura: 9, alinhamento: 'direita' },
         ],
-        linhas: linhas.map(l => [l.data, l.numero, l.participante, l.base, l.iss, l.issRetido, l.pis, l.cofins, l.ir, l.inss, l.csll, l.liquido]),
+        // IR/INSS/CSLL de nota sem os campos gravados imprime "?", nunca 0,00 —
+        // 0,00 na coluna leria como "confirmado sem retenção" linha a linha,
+        // desmentindo o próprio aviso do rodapé (ausência ≠ zero retido).
+        linhas: linhas.map(l => [
+            l.data, l.numero, l.participante, l.base, l.iss, l.issRetido, l.pis, l.cofins,
+            l.retencoesFederaisGravadas ? l.ir : '?',
+            l.retencoesFederaisGravadas ? l.inss : '?',
+            l.retencoesFederaisGravadas ? l.csll : '?',
+            l.liquido,
+        ]),
         totais: ['', '', `TOTAIS (${linhas.length})`, tot.base, tot.iss, tot.issRetido, tot.pis, tot.cofins, tot.ir, tot.inss, tot.csll, tot.liquido],
         identificacao,
         observacoes: [

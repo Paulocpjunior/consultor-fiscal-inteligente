@@ -303,10 +303,23 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
         });
 }
 
-/** Só as notas com ALGUMA retenção (federal ou ISS retido). */
+/**
+ * As notas com ALGUMA retenção (federal ou ISS retido) — E as que não dá pra
+ * afirmar que não têm.
+ *
+ * Paulo, 19/08 (CLUDE, "Serviços tomados" 07/2026): o relatório voltava 0
+ * NFS-e/R$ 0,00 com 67 notas no recorte inteiro — o filtro exigia
+ * `soma > 0`, e nota sem IR/INSS/CSLL gravado (importada antes de 01/08)
+ * soma exatamente ZERO, então CONFIRMADA-sem-retenção e
+ * NÃO-SABEMOS ficavam no mesmo balde: sumido. O relatório existe pra listar
+ * "as notas com os devidos impostos retidos" — sumir a nota é a forma mais
+ * silenciosa de errar essa pergunta, pior que listar com o campo em branco.
+ * Só fica de fora quem tem os campos GRAVADOS e a soma deu zero — aí "sem
+ * retenção" é fato, não lacuna de captura.
+ */
 export function linhasRetencoes(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
     return linhasServicos(docs, direcao)
-        .filter(l => l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll > 0);
+        .filter(l => !l.retencoesFederaisGravadas || l.issRetido + l.pis + l.cofins + l.ir + l.inss + l.csll > 0);
 }
 
 export interface DiagnosticoRetencoes {

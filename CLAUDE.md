@@ -782,6 +782,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   entrou pelo ✍️ sem chave, exatamente o contorno que a `RAIZ CONTINUA ABERTA`
   pede. **Pendência FECHADA** — os dois lados estão escriturados, cada um no
   contribuinte certo, sem duplicidade e sem nota trocando de dono.
+- **🚨 O RELATÓRIO DE RETENÇÕES SUMIA JUSTAMENTE AS NOTAS QUE PRECISAVA MOSTRAR**
+  (Paulo, 19/08, CLUDE 07/2026: *"Relatório de Retenções, onde deve conter as
+  notas com os devidos impostos retidos"* — a tela mostrava **0 NFS-e · base
+  R$ 0,00** para uma competência com **67 notas tomadas**, todas capturadas
+  antes de 01/08 e sem IR/INSS/CSLL gravados). `linhasRetencoes` filtrava por
+  **soma > 0** — e nota sem os campos gravados soma exatamente ZERO, igual a
+  nota CONFIRMADA sem retenção (campos presentes, valor 0). As duas caíam no
+  MESMO balde: sumidas. O aviso "ausência ≠ zero retido" continuava escrito no
+  rodapé, mas sobre uma lista vazia — o alerta nunca tinha nota nenhuma pra
+  apontar.
+  ✂️ A régua virou **"exclui só quem tem CERTEZA de zero"**: fica de fora
+  apenas quem tem `retencoesFederaisGravadas` (IR/INSS/CSLL presentes no
+  documento, não `undefined`) **e** soma zero — aí "sem retenção" é fato, não
+  lacuna de captura. Nota sem os campos entra na lista, marcada.
+  ⚠️ **E CADA LINHA VIROU HONESTA POR SI SÓ**: incluir a nota sem marcar nada
+  faria o PDF imprimir "IR 0,00 · INSS 0,00 · CSLL 0,00" linha a linha,
+  desmentindo o próprio aviso do rodapé — alarme geral e dado por linha
+  discordando na mesma folha é a armadilha de sempre. As três colunas (IR,
+  INSS, CSLL) saem com **"?"** em vez de 0,00 quando `!retencoesFederaisGravadas`,
+  nas abas Serviços tomados/prestados/Retenções igualmente (a mesma lacuna
+  vale nas três). PIS/COFINS/ISS retido não levam "?" — o flag só cobre os
+  federais que o e-Fiscal antigo não capturava.
 - **🚨 O EFD-CONTRIBUIÇÕES DE SERVIÇO SAÍA DECLARANDO ZERO — e o arquivo mentia
   sobre si mesmo em três lugares** (Paulo, 17/08: *"fui testar um EFD
   Contribuições de prestação de serviço e puxou zerado alguns blocos"*, depois

@@ -151,10 +151,26 @@ describe('serviços e retenções', () => {
         expect(l[0].retencoesFederaisGravadas).toBe(true);
     });
 
-    it('retenções lista só quem reteve algo', () => {
+    it('retenções lista só quem reteve algo — mas exclui só quem tem CERTEZA de zero (campos gravados)', () => {
         const semRet = nfse({ id: 'n2', valores: { baseCalculo: 500, iss: 25, valorIssRetido: 0, pis: 0, cofins: 0, ir: 0, inss: 0, csll: 0, liquido: 500 } });
         const l = linhasRetencoes([nfse(), semRet] as any, 'entrada');
         expect(l).toHaveLength(1);
+        expect(l[0].ir).toBe(30);   // a que reteve (default da fábrica), não a semRet
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 CASO CLUDE (Paulo, 19/08) — o relatório sumia justamente as notas que
+    // precisava mostrar. "0 NFS-e" para uma competência com 67 notas tomadas,
+    // porque nota sem IR/INSS/CSLL gravado soma ZERO igual a nota CONFIRMADA
+    // sem retenção — e o filtro só olhava a soma. As duas foram pro mesmo
+    // balde: sumido. "Deve conter as notas com os devidos impostos retidos" —
+    // sumir a nota é o jeito mais silencioso de errar essa promessa.
+    // ═══════════════════════════════════════════════════════════════════════
+    it('nota SEM os campos gravados entra na lista (não sabemos se reteve, não afirmamos que não)', () => {
+        const antiga = nfse({ id: 'old', valores: { baseCalculo: 900, iss: 45, pis: 6, cofins: 27, liquido: 867 } }); // sem ir/inss/csll
+        const l = linhasRetencoes([antiga] as any, 'entrada');
+        expect(l).toHaveLength(1);
+        expect(l[0].retencoesFederaisGravadas).toBe(false);
     });
 
     it('doc antigo sem ir/inss/csll gravados é sinalizado (ausente ≠ zero retido)', () => {
