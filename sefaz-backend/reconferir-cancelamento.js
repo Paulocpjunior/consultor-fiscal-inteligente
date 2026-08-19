@@ -46,7 +46,21 @@
 //    o certificado do cliente. O painel diz quantas serão consultadas antes de
 //    começar — varredura silenciosa de 700 notas é o tipo de coisa que derruba
 //    o acesso da empresa por excesso (cStat 656).
+// 4. **SÓ NF-e (modelo 55) — a própria SEFAZ que provou isso.** Paulo, MV
+//    LIDER 639 · 18/08, rodou a reconferência e voltou 20 de 20
+//    "[indeterminado] ... cStat 618 — Rejeicao: Chave de Acesso invalida
+//    (modelo diferente de 55)". A seleção ordena por `numero` e não separava
+//    por modelo — a série de NFC-e (mod 65) daquela empresa tem numeração
+//    BAIXA (293-345) e ficava na FRENTE da fila, ordenada antes da série de
+//    NF-e (mod 55, 3736-3897) que era o alvo de verdade. Rodada após rodada
+//    consultava NFC-e, que este webservice (NFeDistribuicaoDFe) **nunca**
+//    responde — não é falha de rede nem de certificado, é modelo errado, e a
+//    SEFAZ diz isso na cara. `modeloDoDoc` filtra mod 65 pra fora ANTES da
+//    fila, e a contagem some pelo motivo, nunca em silêncio (senão pareceria
+//    "20 indeterminadas" outra vez, sem dizer que 20/20 nem podiam responder).
 // ============================================================================
+
+import { modeloDoDoc } from './participante-doc-helper.js';
 
 /** Chave de NF-e/NFC-e: 44 dígitos, nada além disso serve para consultar. */
 const chaveValida = (v) => /^\d{44}$/.test(String(v || '').replace(/\D/g, ''));
@@ -74,12 +88,18 @@ export function selecionarParaReconferir(docs, { jaCancelado, direcaoEfetiva, li
     let jaCanceladas = 0;
     let semChave = 0;
     let naoSaida = 0;
+    let naoMod55 = 0;
 
     for (const d of docs || []) {
         if (direcaoEfetiva(d) !== 'saida') { naoSaida += 1; continue; }
         if (jaCancelado(d)) { jaCanceladas += 1; continue; }
         const chave = String(d?.chave || '').replace(/\D/g, '');
         if (!chaveValida(chave)) { semChave += 1; continue; }
+        // Este webservice (NFeDistribuicaoDFe) só responde por NF-e mod 55 — a
+        // própria SEFAZ confirmou (cStat 618, MV LIDER 18/08): NFC-e (mod 65)
+        // volta sempre "Chave de Acesso invalida (modelo diferente de 55)",
+        // gastando a conta da consulta sem nunca poder resolver nada.
+        if (modeloDoDoc({ ...d, chave }) !== '55') { naoMod55 += 1; continue; }
         aConsultar.push({ id: d.id, chave, numero: d.numero ?? null, valorTotal: Number(d.valorTotal) || 0 });
     }
 
@@ -99,6 +119,10 @@ export function selecionarParaReconferir(docs, { jaCancelado, direcaoEfetiva, li
         // caso normal disso (não tem chave); NF-e sem chave é buraco de captura.
         semChave,
         naoSaida,
+        // NFC-e (mod 65) e qualquer outro modelo ≠ 55 saem daqui NOMEADOS —
+        // este webservice não os consulta, e silêncio faria a próxima leitura
+        // achar que "sobrou pouco" quando na verdade sobrou o de sempre.
+        naoMod55,
     };
 }
 
@@ -288,6 +312,14 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         avisos.push(
             'Nenhuma nota de saída para reconferir nesta competência. Se a empresa emitiu no mês, o '
             + 'problema é de CAPTURA (cofre/autXML), não de cancelamento — veja a Cobertura de Saída.',
+        );
+    }
+    if (selecao?.naoMod55) {
+        avisos.push(
+            `${selecao.naoMod55} nota(s) ficaram de fora por não serem NF-e (modelo 55) — este `
+            + 'webservice só consulta modelo 55; NFC-e (modelo 65) e outros modelos não são perguntados '
+            + 'aqui, e não têm como ser: a SEFAZ recusa com "Chave de Acesso inválida (modelo diferente '
+            + 'de 55)".',
         );
     }
 

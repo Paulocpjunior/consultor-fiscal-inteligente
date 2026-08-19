@@ -16,7 +16,7 @@ const CHAVE = '3526085857853200019155001000000123100000012';   // 43 — inváli
 const chaveDe = (n: number) => String(n).padStart(44, '3');
 
 const saida = (over: any = {}) => ({
-    id: 'd1', direcao: 'saida', status: 'autorizado', chave: chaveDe(1),
+    id: 'd1', direcao: 'saida', status: 'autorizado', chave: chaveDe(1), modelo: '55',
     numero: 10, valorTotal: 100, ...over,
 });
 
@@ -41,6 +41,34 @@ describe('seleção do que reconferir', () => {
         const s = selecionarParaReconferir([saida({ tpNF: '0' })], REGUAS);
         expect(s.aConsultar).toHaveLength(0);
         expect(s.naoSaida).toBe(1);
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 SÓ NF-e (modelo 55) — caso MV LIDER 639, 18/08 (rodada seguinte ao
+    // cStat 653). A rodada voltou 20 de 20 "[indeterminado] ... cStat 618 —
+    // Rejeicao: Chave de Acesso invalida (modelo diferente de 55)". A
+    // ordenação por número colocava a série de NFC-e (numeração baixa,
+    // 293-345) na FRENTE da série de NF-e (3736-3897, o alvo de verdade) —
+    // rodada após rodada gastava a conta consultando NFC-e, que este
+    // webservice nunca vai conseguir responder.
+    // ═══════════════════════════════════════════════════════════════════════
+    it('modelo 65 (NFC-e) nunca entra na fila — a própria SEFAZ recusa (cStat 618)', () => {
+        const s = selecionarParaReconferir([
+            saida({ id: 'nfce', modelo: '65', numero: 300 }),
+            saida({ id: 'nfe', modelo: '55', numero: 3800 }),
+        ], REGUAS);
+        expect(s.aConsultar.map((x: any) => x.id)).toEqual(['nfe']);
+        expect(s.naoMod55).toBe(1);
+    });
+
+    it('modelo derivado da CHAVE (sem campo `modelo` gravado) também filtra — NFC-e não some sem contagem', () => {
+        // posições 21-22 da chave (índice 0-based 20-22) são o modelo.
+        const chaveMod65 = `35260858578532000191${'65'}001000000123100000012`.padEnd(44, '0').slice(0, 44);
+        const s = selecionarParaReconferir([
+            saida({ id: 'semCampoModelo', modelo: undefined, chave: chaveMod65 }),
+        ], REGUAS);
+        expect(s.aConsultar).toHaveLength(0);
+        expect(s.naoMod55).toBe(1);
     });
 
     it('trunca com o total à vista — lista cortada em silêncio é lida como "conferi tudo"', () => {

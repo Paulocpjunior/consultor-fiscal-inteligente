@@ -1297,6 +1297,7 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                                     : `${reconf.resumo?.consultadas} consultada(s) · ${reconf.resumo?.canceladas} cancelada(s) · `
                                       + `${reconf.resumo?.indeterminadas} indeterminada(s)`}
                                 {reconf.selecao?.jaCanceladas ? ` · ${reconf.selecao.jaCanceladas} já constavam canceladas` : ''}
+                                {reconf.selecao?.naoMod55 ? ` · ${reconf.selecao.naoMod55} fora (não é NF-e mod 55)` : ''}
                             </p>
                             {(reconf.resumo?.avisos || []).map((a: string, i: number) => (
                                 <p key={i} className="text-amber-700 dark:text-amber-400">{a}</p>

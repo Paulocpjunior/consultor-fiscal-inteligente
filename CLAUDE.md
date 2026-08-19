@@ -614,6 +614,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **LIÇÃO QUE FICA**: antes de escrever um webservice novo pra contornar uma
   restrição, testar se a restrição é real com a ferramenta que já existe. Eu
   deduzi a regra do DistDFe; ele testou. O teste venceu.
+  🐛 **E A RODADA SEGUINTE ACHOU O SEGUNDO BURACO — a fila nem chegava nas
+  notas certas** (Paulo, 19/08, rodando a correção acima na MV LIDER: 20 de 20
+  voltaram `[indeterminado] ... cStat 618 — Rejeicao: Chave de Acesso invalida
+  (modelo diferente de 55)`). `selecionarParaReconferir` ordena por `numero`
+  sem separar por MODELO — e naquela empresa a série de NFC-e (mod 65,
+  numeração 293-345) é mais BAIXA que a série de NF-e (mod 55, 3736-3897, o
+  alvo de verdade). Rodada após rodada, a fila consultava NFC-e primeiro, que
+  o `NFeDistribuicaoDFe` **nunca** vai conseguir responder — não é falha de
+  rede nem de certificado, é modelo errado, e a própria SEFAZ diz isso na
+  cara (cStat 618). `modeloDoDoc` (régua já existente em
+  `participante-doc-helper.js`, nunca uma leitura nova) filtra mod ≠ 55 pra
+  FORA da fila, contado em `naoMod55` — nunca em silêncio, senão "20
+  indeterminadas" voltaria a parecer resposta da SEFAZ quando na verdade
+  nenhuma das 20 podia responder.
 - **🚨 CT-e NUNCA TEVE CAPTURA AUTOMÁTICA — o NFe DistDFe nunca pergunta por
   CT-e** (Paulo, 18/08, EDUARDO GUERRA — tomadora de frete, 0 documento
   capturado apesar dela ser a DESTINATÁRIA: *"o consultor não está fazendo a
