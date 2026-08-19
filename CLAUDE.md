@@ -807,11 +807,50 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `modeloDoDoc` **cai em '55'** quando não há modelo nem chave legível (armadilha
   já registrada em 13/08), então uma NFS-e entraria no bloco C como se fosse
   NF-e. Rótulo com CTe/MDFe/NFSe, ou blocos de prestador/tomador, saem antes.
+  🐛 **E A PRIMEIRA VERSÃO DESSA RÉGUA TIROU NOTA BOA — defeito MEU, pego pelo
+  PVA no mesmo dia**: eu excluía pelo RÓTULO (`schema`/`tipoDoc` = resNFe), e o
+  import pelo NAVEGADOR **não grava esses dois campos** — então a nota
+  COMPLETADA por cima de um resumo continua rotulada `resNFe` **com itens,
+  modelo e número**. Três notas inteiras (GLOBAL COMPANY, POXPUR, BENCO) saíram
+  do bloco C da PWR, e o PVA acusou na hora: participante e item declarados no
+  0150/0200 **sem C100 que os referencie**, e o crédito do E110/E520 sem origem
+  documental. **Quem decide é o ITEM; o rótulo só EXPLICA a ausência dele.**
   📌 **RESUMO NÃO SE ESCRITURA, e agora sai NOMEADO**: o resNFe não tem itens,
   então não produz C170/C190 — e C100 solto o PVA recusa. Ele vira aviso com a
   ação certa (importar o XML completo ou rodar o ♻️), em vez de sumir calado.
   **Nota CANCELADA é a exceção que ENTRA**: o Guia Prático manda escriturar só o
   C100, sem filhos.
+  🚨 **E O PVA COBROU A SEGUNDA METADE NA MESMA HORA — três erros, três causas
+  da MESMA família** (PS VIDROS, 187 erros; PWR, 12). (1) **`COD_MOD` do C100
+  saía `String(nota.modelo || '55')`** ⇒ NFC-e capturada era declarada como
+  modelo 55 *com uma chave que diz 65* (*"O modelo da chave não confere com o
+  modelo do documento"*, 35×). Corrigi o FILTRO e esqueci o ESCRITOR — o campo
+  cru estava nos dois. (2) **NFC-e tem leiaute PRÓPRIO no C100**: `COD_PART`,
+  ST, IPI, PIS e COFINS **não podem ser informados** (86×) — é venda de balcão,
+  não há participante a declarar. (3) **E500/E520 em quem NÃO é contribuinte de
+  IPI**: com o bloco C consertado, as compras entraram e o crédito de IPI da
+  nota do FORNECEDOR passou a gerar o bloco — mas em comércio aquilo é
+  **CUSTO**, não crédito. A prova positiva é o IPI destacado na **SAÍDA** (só
+  contribuinte destaca) ou saldo credor na ficha; crédito de compra não prova
+  nada. Cadastro (`contribuinteIpi`) vence os dois, e a falta vira aviso com a
+  ação.
+  🚨 **E O SALDO DE IPI CONTINUOU 0,00 DEPOIS DA "CORREÇÃO" — a ficha não mora
+  em coleção nenhuma.** A leitura que subiu de manhã consultava
+  `db.collection('lucro_fichas')`, que **NÃO EXISTE**: a ficha é EMBUTIDA no
+  documento da empresa (`fichaFinanceira[]`, competência em `mesReferencia`).
+  A query voltava vazia SEMPRE — e o ICMS, que já lia assim antes, **nunca
+  transportou saldo nenhum**. Consulta que só devolve vazio é indistinguível de
+  "não tem saldo": a ausência plausível, agora do lado da LEITURA. Agora lê a
+  ficha embutida e prefere o **`saldoCredor*Transportar` da competência
+  ANTERIOR** (o que SOBROU, calculado — 18/08, KROYA), com o campo antigo de
+  reserva e a ORIGEM carimbada no aviso; isso também fecha a defasagem do ICMS
+  registrada em 17/08.
+  📌 **E O 0002 NÃO SE INVENTA**: o PVA recusa o arquivo do contribuinte de IPI
+  sem o registro *Classificação do estabelecimento industrial* — cujo código é
+  de TABELA OFICIAL. Ele só sai CADASTRADO (`classEstabIpi`, campo novo no
+  modal Dados Fiscais + whitelist no mesmo PR, regra do #382), e a falta vira
+  aviso nomeando o erro exato do PVA e onde preencher. Mesmo desenho do código
+  9 do ISS fixo: o número vem do cadastro, nunca de dedução minha.
   🐛 **E a varredura achou DUAS leituras cruas na mesma linha da apuração**: ao
   lado do modelo estava `status !== 'autorizado'` — o cancelamento chega por
   EVENTO e o campo continua 'autorizado', então **cancelada ENTRAVA no E110** (a

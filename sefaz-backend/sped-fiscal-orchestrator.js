@@ -269,50 +269,57 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         warnings.push(`Não consegui ler a contagem do inventário (${e.message}) — o bloco H pode sair incompleto.`);
     }
 
-    // ─── 7. Saldo credor ICMS do mes anterior (so pra Lucro) ───
-    // Leitura da ficha mensal anterior em lucro_fichas.
+    // ─── 7. Saldos credores que vêm de trás (E110 c.10 e E520 VL_SD_ANT) ────
+    //
+    // 🚨 A FICHA NÃO MORA EM COLEÇÃO NENHUMA — ela é EMBUTIDA no documento da
+    // empresa, em `fichaFinanceira[]`, com a competência em `mesReferencia`
+    // ('AAAA-MM'). Este trecho consultava `db.collection('lucro_fichas')`, que
+    // NÃO EXISTE: a query voltava vazia SEMPRE e os dois saldos saíam 0,00,
+    // calados. Foi por isso que o E520 da PWR 07/2026 continuou 0,00 depois da
+    // correção de 19/08 — o campo passou a ser passado, mas com o valor de uma
+    // leitura que nunca achava nada. Consulta que só devolve vazio é
+    // indistinguível de "não tem saldo": o defeito da ausência plausível outra
+    // vez, agora do lado da leitura.
+    //
+    // ⚠️ E TRANSPORTAR é o campo do MÊS ANTERIOR: `saldoCredor*Transportar` é o
+    // que SOBROU dele (calculado, 18/08 — caso KROYA), enquanto `saldoCredor*`
+    // é o que ENTROU. Preferir o "transportar" da anterior corrige a defasagem
+    // registrada em 17/08; o outro fica de reserva, carimbado na origem.
     let saldoCredorIcmsAnterior = 0;
-    if (regime === 'lucro') {
-        try {
-            const competenciaAnterior = computarCompetenciaAnterior(periodoInicio);
-            const fichaSnap = await db.collection('lucro_fichas')
-                .where('empresaId', '==', empresaId)
-                .where('competencia', '==', competenciaAnterior)
-                .limit(1)
-                .get();
-            if (!fichaSnap.empty) {
-                const ficha = fichaSnap.docs[0].data();
-                saldoCredorIcmsAnterior = parseFloat(ficha.saldoCredorIcms || 0);
-            }
-        } catch (err) {
-            console.warn(`[sped-fiscal] saldoCredorIcmsAnterior falhou: ${err.message}`);
-        }
-    }
-
-    // ─── 7a. Saldo credor de IPI anterior (E520 campo VL_SD_ANT_IPI) ────────
-    // Caso PWR 07/2026 (Paulo, 19/08): a ficha dizia "Cred. IPI do mês anterior
-    // (compensado): R$ 2.547,39" e o E520 saía 0,00 — o gerador sempre leu
-    // `saldoCredorIpiAnterior` e nada o alimentava (registro de 17/08).
-    // ⚠️ A fonte é a ficha da PRÓPRIA competência, não a anterior: na ficha,
-    // `saldoCredorIpi` já É "o que entrou neste mês" — exatamente a semântica
-    // do VL_SD_ANT_IPI. (No ICMS a leitura é da ficha ANTERIOR e por isso
-    // transporta defasado — defeito conhecido, não copiar aquele desenho.)
     let saldoCredorIpiAnterior = 0;
+    let origemSaldoIcms = '';
+    let origemSaldoIpi = '';
     if (regime === 'lucro') {
         try {
-            const fichaAtualSnap = await db.collection('lucro_fichas')
-                .where('empresaId', '==', empresaId)
-                .where('competencia', '==', periodoInicio)
-                .limit(1)
-                .get();
-            if (!fichaAtualSnap.empty) {
-                const fichaAtual = fichaAtualSnap.docs[0].data();
-                saldoCredorIpiAnterior = parseFloat(fichaAtual.saldoCredorIpi || 0);
+            const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
+            const daComp = (comp) => fichas.find(f => String(f?.mesReferencia || '') === comp) || null;
+            const anterior = daComp(computarCompetenciaAnterior(periodoInicio));
+            const atual = daComp(periodoInicio);
+
+            const num = (v) => {
+                const n = parseFloat(v);
+                return Number.isFinite(n) && n > 0 ? n : 0;
+            };
+            if (num(anterior?.saldoCredorIcmsTransportar)) {
+                saldoCredorIcmsAnterior = num(anterior.saldoCredorIcmsTransportar);
+                origemSaldoIcms = 'saldo A TRANSPORTAR da ficha da competência anterior';
+            } else if (num(anterior?.saldoCredorIcms)) {
+                saldoCredorIcmsAnterior = num(anterior.saldoCredorIcms);
+                origemSaldoIcms = 'campo "Saldo Credor ICMS (mês anterior)" da ficha da competência ANTERIOR '
+                    + '— é o que ENTROU naquele mês, não o que sobrou dele';
+            }
+
+            if (num(anterior?.saldoCredorIpiTransportar)) {
+                saldoCredorIpiAnterior = num(anterior.saldoCredorIpiTransportar);
+                origemSaldoIpi = 'saldo de IPI A TRANSPORTAR da ficha da competência anterior';
+            } else if (num(atual?.saldoCredorIpi)) {
+                saldoCredorIpiAnterior = num(atual.saldoCredorIpi);
+                origemSaldoIpi = 'campo "Cred. IPI do mês anterior (compensado)" da ficha desta competência';
             }
         } catch (err) {
-            console.warn(`[sped-fiscal] saldoCredorIpiAnterior falhou: ${err.message}`);
+            console.warn(`[sped-fiscal] saldos anteriores falharam: ${err.message}`);
             warnings.push(
-                `Não consegui ler o saldo credor de IPI da ficha (${err.message}) — o E520 sai com `
+                `Não consegui ler os saldos credores da ficha (${err.message}) — o E110 e o E520 saem com `
                 + 'saldo anterior 0,00. Confira a ficha antes de transmitir.',
             );
         }
@@ -420,6 +427,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         unidades,
         saldoCredorIcmsAnterior,
         saldoCredorIpiAnterior,
+        origemSaldoIcms,
+        origemSaldoIpi,
         ajustesApuracao,
         difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
         difalCodObservacao: difalCfg.difalCodObservacao || '',
@@ -533,6 +542,23 @@ function listarCompetenciasPeriodo(inicio, fim) {
     return out;
 }
 
+/**
+ * Dados do CONTABILISTA para o 0100.
+ *
+ * 🚨 EMAIL e COD_MUN são OBRIGATÓRIOS e saíam VAZIOS (PVA da PWR 07/2026, 19/08:
+ * *"Campo obrigatório · 13 - EMAIL"* e *"14 - COD_MUN"*). O `codMunIBGE` nem
+ * existia neste objeto — o 0100 lia `c.codMunIBGE` e ninguém o entregava, então
+ * TODO arquivo saía com os dois campos em branco.
+ *
+ * O padrão vem do 0100 do EFD do E-Fiscal **ACEITO** do próprio escritório
+ * (HS PROJETOS 05/2026, assinado): e-mail spcontabil@… e COD_MUN 3550308 (São
+ * Paulo capital, onde o escritório fica). É dado do ESCRITÓRIO, não do cliente
+ * — não é chute, é o mesmo dado que já foi aceito pela Receita. O env continua
+ * vencendo, para o dia em que o contabilista mudar.
+ */
+const CONTADOR_EMAIL_PADRAO = 'spcontabil@spassessoriacontabil.com.br';
+const CONTADOR_COD_MUN_PADRAO = '3550308';
+
 function getContadorPadrao() {
     return {
         nome: process.env.CONTADOR_NOME || '',
@@ -545,6 +571,7 @@ function getContadorPadrao() {
         uf: process.env.CONTADOR_UF || '',
         cep: process.env.CONTADOR_CEP || '',
         telefone: process.env.CONTADOR_TELEFONE || '',
-        email: process.env.CONTADOR_EMAIL || '',
+        email: process.env.CONTADOR_EMAIL || CONTADOR_EMAIL_PADRAO,
+        codMunIBGE: process.env.CONTADOR_COD_MUN || CONTADOR_COD_MUN_PADRAO,
     };
 }

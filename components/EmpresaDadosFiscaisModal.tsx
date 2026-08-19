@@ -326,6 +326,35 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('codSuframa', v)}
                                 placeholder="Opcional — só se em zona franca"
                             />
+                            {/* 🏭 IPI — o PVA recusa o SPED nos dois sentidos: bloco
+                                E500 em quem não é contribuinte (PS VIDROS, 19/08) e
+                                registro 0002 ausente em quem é (PWR, 19/08). O código
+                                é de TABELA OFICIAL e o app não deduz. */}
+                            <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-slate-500 dark:text-slate-400">
+                                    Contribuinte de IPI
+                                </label>
+                                <select
+                                    value={dados.contribuinteIpi || ''}
+                                    onChange={e => handleField('contribuinteIpi', e.target.value)}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                >
+                                    <option value="">Não informado — o app decide pelo IPI destacado na saída</option>
+                                    <option value="sim">Sim — indústria ou equiparado</option>
+                                    <option value="nao">Não — comércio/serviço (IPI da compra é custo)</option>
+                                </select>
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Decide o bloco E500/E520 do SPED Fiscal. O PVA recusa o bloco de quem não é
+                                    contribuinte — e comprar com IPI destacado na nota do fornecedor não faz ninguém
+                                    contribuinte.
+                                </p>
+                            </div>
+                            <Field
+                                label="Classificação do estab. industrial (IPI)"
+                                value={dados.classEstabIpi || ''}
+                                onChange={v => handleField('classEstabIpi', v)}
+                                placeholder="Só p/ contribuinte de IPI — código do registro 0002"
+                            />
                         </div>
                     </Section>
 

@@ -64,7 +64,10 @@ describe('E520 — saldo credor anterior de IPI (caso PWR 07/2026)', () => {
     });
 
     it('o aviso sai CARIMBADO com a origem quando o saldo existe — e não acusa mais 0,00', () => {
-        const dados = dadosBase({ notas: [notaEntradaComIpi], saldoCredorIpiAnterior: 2547.39 });
+        const dados = dadosBase({
+            notas: [notaEntradaComIpi], saldoCredorIpiAnterior: 2547.39,
+            origemSaldoIpi: 'campo "Cred. IPI do mês anterior (compensado)" da ficha desta competência',
+        });
         buildBlocoE(dados as never);
         const w = (dados.warnings as string[]).join('\n');
         expect(w).toMatch(/Saldo credor de IPI do período anterior: 2547\.39/);
@@ -73,22 +76,99 @@ describe('E520 — saldo credor anterior de IPI (caso PWR 07/2026)', () => {
     });
 });
 
-describe('🚨 e o ORQUESTRADOR alimenta o campo — gerador que lê campo que ninguém passa é o defeito original', () => {
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A FICHA NÃO MORA EM COLEÇÃO NENHUMA — premissa MINHA, derrubada pelo PVA.
+//
+// A primeira correção (19/08) passou a ler `db.collection('lucro_fichas')`.
+// Essa coleção NÃO EXISTE: a ficha é EMBUTIDA no documento da empresa, em
+// `fichaFinanceira[]`, com a competência em `mesReferencia`. A query voltava
+// vazia SEMPRE, então o E520 da PWR continuou 0,00 depois da "correção" — e o
+// ICMS (que já lia assim antes) nunca transportou saldo nenhum.
+//
+// Consulta que só devolve vazio é indistinguível de "não tem saldo": a
+// ausência plausível outra vez, agora do lado da leitura. Os testes que
+// travavam a coleção foram TROCADOS — eles descreviam a fonte errada.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 o ORQUESTRADOR lê a ficha EMBUTIDA na empresa, não uma coleção', () => {
     const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/sped-fiscal-orchestrator.js'), 'utf8');
 
-    it('lê o saldoCredorIpi da ficha da PRÓPRIA competência (periodoInicio), nunca da anterior', () => {
-        // A ficha da competência M já guarda "o que entrou em M" — ler a
-        // anterior repetiria a defasagem conhecida do ICMS.
-        expect(fonte).toMatch(/saldoCredorIpiAnterior = parseFloat\(fichaAtual\.saldoCredorIpi \|\| 0\)/);
-        const secao = fonte.slice(fonte.indexOf('7a. Saldo credor de IPI'), fonte.indexOf('7b. Ajustes'));
-        expect(secao).toMatch(/where\('competencia', '==', periodoInicio\)/);
+    it('nenhuma leitura da coleção fantasma sobrou (o comentário que a explica pode ficar)', () => {
+        const codigo = fonte.split('\n').filter(l => !l.trim().startsWith('//'));
+        expect(codigo.filter(l => /collection\('lucro_fichas'\)/.test(l))).toEqual([]);
     });
 
-    it('e o campo viaja no retorno para o buildBlocoE', () => {
+    it('lê `empresa.fichaFinanceira` casando por `mesReferencia`', () => {
+        expect(fonte).toMatch(/empresa\.fichaFinanceira/);
+        expect(fonte).toMatch(/mesReferencia/);
+    });
+
+    it('prefere o saldo A TRANSPORTAR da ficha ANTERIOR (o que sobrou), com o outro de reserva', () => {
+        expect(fonte).toMatch(/anterior\?\.saldoCredorIpiTransportar/);
+        expect(fonte).toMatch(/atual\?\.saldoCredorIpi\b/);
+        expect(fonte).toMatch(/anterior\?\.saldoCredorIcmsTransportar/);
+    });
+
+    it('os campos viajam no retorno, com a ORIGEM junto', () => {
         expect(fonte).toMatch(/^\s*saldoCredorIpiAnterior,$/m);
+        expect(fonte).toMatch(/^\s*origemSaldoIpi,$/m);
     });
 
     it('falha na leitura vira AVISO nomeado, nunca "não tem saldo" calado', () => {
-        expect(fonte).toMatch(/Não consegui ler o saldo credor de IPI da ficha/);
+        expect(fonte).toMatch(/Não consegui ler os saldos credores da ficha/);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E500/E520 EM QUEM NÃO É CONTRIBUINTE DE IPI — o PVA recusa.
+//
+// PS VIDROS 07/2026 (19/08): *"Se não for contribuinte do IPI, não deve
+// apresentar os registros E500 e filhos"*. Todo comércio compra com IPI
+// destacado na nota do fornecedor; para ele aquilo é CUSTO, não crédito.
+// A prova positiva é o IPI destacado na SAÍDA, ou o saldo credor da ficha.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('E500/E520 — crédito de compra não prova contribuinte de IPI', () => {
+    const soCredito = {
+        direcao: 'entrada', status: 'autorizado', modelo: '55', tipo: 'NFe',
+        itens: [{ cfop: '1101', cstIpi: '00', vProd: 1000, vBcIpi: 1000, vIPI: 100 }],
+    };
+
+    it('comércio (só IPI de compra, sem saldo na ficha) NÃO gera o bloco — e o aviso diz onde marcar', () => {
+        const dados = dadosBase({ notas: [soCredito] });
+        const linhas = limpo(buildBlocoE(dados as never));
+        expect(linhas.some((l) => l.startsWith('|E500|') || l.startsWith('|E520|'))).toBe(false);
+        const w = (dados.warnings as string[]).join('\n');
+        expect(w).toMatch(/E500\/E520 NÃO gerados/);
+        expect(w).toMatch(/Contribuinte de IPI/);
+    });
+
+    it('cadastro marcado SIM gera o bloco mesmo só com crédito', () => {
+        const dados = dadosBase({
+            notas: [soCredito],
+            empresa: { _regime: 'lucro', dadosFiscais: { uf: 'SP', contribuinteIpi: 'sim' } },
+        });
+        expect(limpo(buildBlocoE(dados as never)).some((l) => l.startsWith('|E520|'))).toBe(true);
+    });
+
+    it('cadastro marcado NÃO tira o bloco mesmo com saldo na ficha', () => {
+        const dados = dadosBase({
+            notas: [soCredito], saldoCredorIpiAnterior: 500,
+            empresa: { _regime: 'lucro', dadosFiscais: { uf: 'SP', contribuinteIpi: 'nao' } },
+        });
+        expect(limpo(buildBlocoE(dados as never)).some((l) => l.startsWith('|E500|'))).toBe(false);
+    });
+
+    it('PWR: saldo credor na ficha PROVA o contribuinte — o bloco sai sem cadastro nenhum', () => {
+        const dados = dadosBase({ notas: [soCredito], saldoCredorIpiAnterior: 2547.39 });
+        const e520 = limpo(buildBlocoE(dados as never)).find((l) => l.startsWith('|E520|'));
+        expect(e520).toBe('|E520|2547,39|0,00|100,00|0,00|0,00|2647,39|0,00|');
+    });
+
+    it('IPI destacado na SAÍDA prova sozinho (só contribuinte destaca)', () => {
+        const comDebito = {
+            direcao: 'saida', status: 'autorizado', modelo: '55', tipo: 'NFe',
+            itens: [{ cfop: '5101', cstIpi: '50', vProd: 1000, vBcIpi: 1000, vIPI: 50 }],
+        };
+        expect(limpo(buildBlocoE(dadosBase({ notas: [comDebito] }) as never))
+            .some((l) => l.startsWith('|E520|'))).toBe(true);
     });
 });

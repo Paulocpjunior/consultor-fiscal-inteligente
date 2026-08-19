@@ -233,9 +233,9 @@ export function buildBlocoE(dados) {
     if (regime === 'lucro' && Array.isArray(dados.warnings)) {
         dados.warnings.push(...avisosDeSaldoAnterior({
             icmsAnterior: parseFloat(dados.saldoCredorIcmsAnterior || 0),
-            origemIcms: 'ficha da competência anterior',
+            origemIcms: dados.origemSaldoIcms || 'ficha da competência anterior',
             ipiAnterior: parseFloat(dados.saldoCredorIpiAnterior || 0),
-            origemIpi: 'campo "Cred. IPI do mês anterior" da ficha desta competência',
+            origemIpi: dados.origemSaldoIpi || 'ficha (origem não registrada)',
             geraIpi,
             geraSt,
         }));
@@ -269,6 +269,27 @@ function buildE500E520(dados) {
     // campo teve até 19/08 (caso PWR: ficha com 2.547,39 e arquivo com 0,00).
     const vlSdAnt = parseFloat(dados.saldoCredorIpiAnterior || 0);
     if (vlDeb <= 0 && vlCred <= 0 && vlSdAnt <= 0) return [];
+
+    // 🚨 CRÉDITO DE COMPRA NÃO PROVA CONTRIBUINTE DE IPI (PVA da PS VIDROS
+    // 07/2026, 19/08: *"Se não for contribuinte do IPI, não deve apresentar os
+    // registros E500 e filhos"*). TODO comércio compra com IPI destacado na
+    // nota do fornecedor — para ele aquilo é CUSTO, não crédito, e o bloco não
+    // existe. O que prova é o IPI DESTACADO NA SAÍDA (só contribuinte destaca)
+    // ou o saldo credor que alguém declarou na ficha (caso PWR).
+    // Cadastro explícito vence os dois — é a resposta de quem sabe.
+    const marcado = String(dados?.empresa?.dadosFiscais?.contribuinteIpi || '').toLowerCase();
+    if (marcado === 'nao' || marcado === 'não') return [];
+    if (marcado !== 'sim' && vlDeb <= 0 && vlSdAnt <= 0) {
+        if (Array.isArray(dados.warnings)) {
+            dados.warnings.push(
+                `E500/E520 NÃO gerados: há ${fmt.formatValue(vlCred, 2)} de IPI nas ENTRADAS, mas nenhum IPI `
+                + 'destacado em saída e nenhum saldo credor na ficha — em comércio isso é CUSTO, não crédito, e '
+                + 'o PVA recusa o bloco de quem não é contribuinte de IPI. Se esta empresa É contribuinte '
+                + '(indústria/equiparado), marque em Empresas → Dados Fiscais ("Contribuinte de IPI") e gere de novo.',
+            );
+        }
+        return [];
+    }
     const saldo = vlDeb - vlCred - vlSdAnt;
     const vlSdIpi = saldo >= 0 ? saldo : 0;   // saldo devedor a recolher
     const vlScIpi = saldo < 0 ? -saldo : 0;   // saldo credor a transportar

@@ -25,6 +25,7 @@ import { cstDoLancamento } from './cst-correlacao.js';
 // Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
 // campo cru `n.modelo`, que o importer principal não grava.
 import { selecionarNotasBlocoC, avisosDaSelecao } from './sped-selecao-documentos.js';
+import { modeloDoDoc } from './participante-doc-helper.js';
 import { docCancelado } from './xml-metadata-helper.js';
 
 
@@ -275,19 +276,35 @@ function buildC100(nota, dados) {
     // Identifica participante e direcao
     const indOper = nota.direcao === 'saida' ? '1' : '0';
     const participante = nota.direcao === 'saida' ? nota.destinatario : nota.emitente;
-    const codPart = (participante && (participante.cnpjCpf || participante.cnpj))
+
+    // 🚨 O COD_MOD SAI DA RÉGUA (PVA da PS VIDROS 07/2026, 19/08: *"O modelo da
+    // chave do documento eletrônico não confere com o modelo do documento"* —
+    // 35 ocorrências). Aqui estava `String(nota.modelo || '55')`: NFC-e
+    // capturada, que não tem o campo gravado, saía declarada como modelo 55
+    // com uma chave que diz 65. Mesmo campo cru, mesma causa do filtro.
+    const codMod = modeloDoDoc(nota);
+
+    // 🚨 NFC-e (65) TEM LEIAUTE PRÓPRIO NO C100 (86 ocorrências no mesmo PVA):
+    // *"Para NF Eletrônica para consumidor final (COD_MOD = 65) não devem ser
+    // informados os campos COD_PART, VL_BC_ICMS_ST, VL_ICMS_ST, VL_IPI,
+    // VL_PIS, VL_COFINS, VL_PIS_ST e VL_COFINS_ST"*. É venda de balcão: não há
+    // participante a declarar, e os tributos vão só no C190/C170.
+    const ehNfce = codMod === '65';
+    const codPart = (!ehNfce && participante && (participante.cnpjCpf || participante.cnpj))
         ? String(participante.cnpjCpf || participante.cnpj).replace(/\D/g, '')
         : '';
 
     // IND_EMIT: 0=Emissao propria (saida), 1=Terceiros (entrada)
     const indEmit = nota.direcao === 'saida' ? '0' : '1';
+    /** Campo que a NFC-e não pode informar — vazio, nunca 0,00. */
+    const soNfe = (valor) => (ehNfce ? '' : valor);
 
     return fmt.buildLine([
         'C100',
         indOper,
         indEmit,
         codPart,
-        String(nota.modelo || '55'),
+        codMod,
         codSit,
         fmt.sanitizeString(nota.serie || '1', 3),
         fmt.sanitizeString(String(nota.numero || ''), 9),
@@ -305,11 +322,11 @@ function buildC100(nota, dados) {
         fmt.formatValue(t.vOutro, 2),
         fmt.formatValue(pick(i.vBC, 'vBC'), 2),       // VL_BC_ICMS — bate com ΣC190
         fmt.formatValue(pick(i.vICMS, 'vICMS'), 2),   // VL_ICMS
-        fmt.formatValue(pick(i.vBCST, 'vBCST'), 2),
-        fmt.formatValue(pick(i.vICMSST, 'vST'), 2),
-        fmt.formatValue(pick(i.vIPI, 'vIPI'), 2),
-        fmt.formatValue(pick(i.vPIS, 'vPIS'), 2),
-        fmt.formatValue(pick(i.vCOFINS, 'vCOFINS'), 2),
+        soNfe(fmt.formatValue(pick(i.vBCST, 'vBCST'), 2)),
+        soNfe(fmt.formatValue(pick(i.vICMSST, 'vST'), 2)),
+        soNfe(fmt.formatValue(pick(i.vIPI, 'vIPI'), 2)),
+        soNfe(fmt.formatValue(pick(i.vPIS, 'vPIS'), 2)),
+        soNfe(fmt.formatValue(pick(i.vCOFINS, 'vCOFINS'), 2)),
         '',   // VL_PIS_ST
         '',   // VL_COFINS_ST
     ]);
