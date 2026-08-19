@@ -49,6 +49,12 @@ export const DETALHES_VIGIADOS = {
     // legítimo nenhum, é leitura que não achou o campo.
     A100: { rotulo: 'documentos de serviço (Contribuições)', campos: { 12: 'VL_DOC' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
+    // F600 — retenção na fonte (Contribuições, 19/08 · caso HS PROJETOS).
+    // Posições provadas contra arquivo aceito do E-Fiscal:
+    // |F600|03|DT|VL_BC_RET|VL_RET|5952|1|CNPJ|VL_RET_PIS|VL_RET_COFINS|0|
+    // VL_BC_RET e VL_RET zerados em 100% das linhas não têm caso legítimo —
+    // retenção declarada sem base ou sem valor é leitura que não achou o campo.
+    F600: { rotulo: 'retenção na fonte (Contribuições)', campos: { 4: 'VL_BC_RET', 5: 'VL_RET' } },
     G110: { rotulo: 'CIAP — apuração', campos: { 4: 'VL_ICMS_APROP' } },
 };
 
