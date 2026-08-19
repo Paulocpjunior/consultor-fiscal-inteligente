@@ -43,6 +43,31 @@ function buildBloco0(dados) {
     // ── 0001 — Abertura do Bloco 0 ──────────────────────────────────────
     linhas.push(fmt.buildLine(['0001', '0']));
 
+    // ── 0002 — Classificação do estabelecimento INDUSTRIAL ──────────────
+    //
+    // 🚨 PVA da PWR 07/2026 (19/08): *"Registro filho obrigatório não foi
+    // informado · 0002"*. Ele é exigido do contribuinte de IPI — e o gerador
+    // nunca o produziu.
+    //
+    // ⚠️ O CÓDIGO NÃO SE INVENTA: `CLAS_ESTAB_IND` é tabela oficial (Guia
+    // Prático / Ato COTEPE) e diz o que o estabelecimento É perante o IPI.
+    // Chutar aqui seria declarar uma classificação industrial em nome do
+    // cliente — a família do 1405, num campo que a fiscalização lê. Então o
+    // registro só sai CADASTRADO, e a falta vira aviso NOMEADO com a ação
+    // (mesmo desenho do código 9 do ISS fixo, que veio do cadastro).
+    const clasEstab = String(dados?.empresa?.dadosFiscais?.classEstabIpi || '').trim();
+    if (clasEstab) {
+        linhas.push(fmt.buildLine(['0002', fmt.sanitizeString(clasEstab, 2)]));
+    } else if (Array.isArray(dados?.warnings)) {
+        dados.warnings.push(
+            'Registro 0002 (Classificação do estabelecimento industrial) NÃO foi gerado: o código não está '
+            + 'cadastrado. Se esta empresa é contribuinte de IPI, o PVA vai recusar com "Registro filho '
+            + 'obrigatório não foi informado · 0002". O código é da tabela oficial e não pode ser deduzido pelo '
+            + 'app — pegue o do cadastro do cliente no E-Fiscal e preencha em Empresas → Dados Fiscais '
+            + '("Classificação do estab. industrial - IPI").',
+        );
+    }
+
     // ── 0005 — Dados Complementares ─────────────────────────────────────
     linhas.push(build0005(dados));
 

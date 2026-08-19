@@ -157,3 +157,80 @@ describe('🚨 varredura — filtro de bloco não lê `String(n.modelo)` direto'
         }
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O RÓTULO NÃO DECIDE — defeito MEU, pego pelo PVA da PWR no mesmo dia.
+//
+// O import pelo NAVEGADOR não grava `schema` nem `tipoDoc`: a nota COMPLETADA
+// por cima de um resumo continua rotulada `resNFe` — com itens, modelo e
+// número. Excluí-la pelo rótulo tirou três notas inteiras do bloco C, e o PVA
+// acusou na hora: participante e item declarados no 0150/0200 sem C100 que os
+// referencie, e o crédito do E110/E520 sem origem documental.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('nota completada por cima do resumo entra — quem decide é o ITEM', () => {
+    it('rótulo resNFe + itens presentes = escriturada (casos GLOBAL COMPANY/POXPUR/BENCO)', () => {
+        const completada = capturada({
+            tipoDoc: 'resNFe', schema: 'resNFe_v1.01', numero: '34853', direcao: 'entrada',
+            itens: [{ cfop: '2101', vProd: 1000, vICMS: 120 }],
+        });
+        const sel = selecionarNotasBlocoC([completada]);
+        expect(sel.notas).toHaveLength(1);
+        expect(sel.soResumo).toHaveLength(0);
+    });
+
+    it('rótulo resNFe SEM itens continua fora e nomeado (o resumo de verdade)', () => {
+        const resumo = capturada({ tipoDoc: 'resNFe', schema: 'resNFe_v1.01', itens: [], numero: '999' });
+        expect(selecionarNotasBlocoC([resumo]).soResumo).toEqual(['999']);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O C100 DECLARAVA MODELO 55 COM CHAVE DE 65 — e informava campos que a
+// NFC-e não pode ter. PVA da PS VIDROS 07/2026 (19/08): "O modelo da chave do
+// documento eletrônico não confere com o modelo do documento" (35×) e "Para NF
+// Eletrônica para consumidor final (COD_MOD = 65) não devem ser informados os
+// campos COD_PART, VL_BC_ICMS_ST, VL_ICMS_ST, VL_IPI, VL_PIS, VL_COFINS…" (86×).
+// ═══════════════════════════════════════════════════════════════════════════
+// @ts-expect-error — módulo .js do backend (sem tipos)
+import { buildBlocoC } from '../sefaz-backend/sped-fiscal-blocoC.js';
+
+const dadosBlocoC = (notas: any[]) => ({
+    empresa: { _regime: 'lucro', cnpj: '07590894000166', dadosFiscais: { uf: 'SP', codMunIBGE: '3550308' } },
+    competenciaInicio: '2026-07', competenciaFim: '2026-07',
+    notas, warnings: [] as string[],
+});
+
+describe('C100 — o COD_MOD sai da chave e a NFC-e respeita o leiaute dela', () => {
+    const nfce = capturada({
+        numero: '787', itens: [{ cfop: '5102', vProd: 17.90, vBC: 17.90, vICMS: 3.22, aliqIcms: 18, cst: '00', vIPI: 1.5, vPIS: 0.3 }],
+        destinatario: { cnpjCpf: '12345678909', nome: 'CONSUMIDOR' },
+        totais: { vNF: 17.90, vIPI: 1.5, vPIS: 0.3 },
+    });
+
+    it('NFC-e capturada sem `modelo` sai como COD_MOD 65, não 55', () => {
+        const c100 = buildBlocoC(dadosBlocoC([nfce])).find((l: string) => l.startsWith('|C100|'));
+        expect(c100.split('|')[5]).toBe('65');
+    });
+
+    it('e NÃO informa COD_PART nem os campos de ST/IPI/PIS/COFINS', () => {
+        const campos = buildBlocoC(dadosBlocoC([nfce])).find((l: string) => l.startsWith('|C100|')).split('|');
+        expect(campos[4]).toBe('');           // COD_PART vazio
+        expect(campos[24]).toBe('');          // VL_BC_ICMS_ST
+        expect(campos[25]).toBe('');          // VL_ICMS_ST
+        expect(campos[26]).toBe('');          // VL_IPI
+        expect(campos[27]).toBe('');          // VL_PIS
+        expect(campos[28]).toBe('');          // VL_COFINS
+    });
+
+    it('NF-e (55) continua com COD_PART e os campos preenchidos', () => {
+        const nfe = capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', numero: '3',
+            destinatario: { cnpjCpf: '15438711000110', nome: 'CLIENTE' },
+            totais: { vNF: 8562.54 },
+            itens: [{ cfop: '5101', vProd: 8562.54, vBC: 8562.54, vICMS: 1541.26, aliqIcms: 18, cst: '00' }],
+        });
+        const campos = buildBlocoC(dadosBlocoC([nfe])).find((l: string) => l.startsWith('|C100|')).split('|');
+        expect(campos[5]).toBe('55');
+        expect(campos[4]).toBe('15438711000110');
+    });
+});

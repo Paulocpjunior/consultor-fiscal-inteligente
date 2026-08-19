@@ -92,9 +92,17 @@ export function selecionarNotasBlocoC(notas) {
         // Cancelada entra COM C100 e sem filhos (Guia Prático) — ela não
         // precisa de item, e tirá-la esconderia a numeração do talão.
         if (docCancelado(n)) { escrituradas.push(n); continue; }
+        // 🚨 QUEM DECIDE É O ITEM, NUNCA O RÓTULO (defeito MEU, pego pelo PVA da
+        // PWR 07/2026 no mesmo dia): o import pelo NAVEGADOR não grava `schema`
+        // nem `tipoDoc`, então a nota COMPLETADA por cima de um resumo continua
+        // rotulada `resNFe` — com itens, modelo e número. Excluí-la pelo rótulo
+        // tirou do bloco C três notas inteiras (GLOBAL COMPANY, POXPUR, BENCO) e
+        // o PVA acusou na hora: participante e item declarados no 0150/0200 sem
+        // C100 que os referencie, e o crédito do E110/E520 sem origem.
+        // O rótulo de resumo só serve para EXPLICAR a ausência de item.
+        if (Array.isArray(n.itens) && n.itens.length > 0) { escrituradas.push(n); continue; }
         if (ehResumoSefaz(n)) { soResumo.push(rotuloDoDoc(n)); continue; }
-        if (!Array.isArray(n.itens) || n.itens.length === 0) { semItens.push(rotuloDoDoc(n)); continue; }
-        escrituradas.push(n);
+        semItens.push(rotuloDoDoc(n));
     }
     return { notas: escrituradas, soResumo, semItens };
 }

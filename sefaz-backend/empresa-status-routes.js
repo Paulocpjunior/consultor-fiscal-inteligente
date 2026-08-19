@@ -551,6 +551,12 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // UMA vez, não a cada competência (Paulo, 04/08: "em alguns casos vamos nos
     // deparar com empresas que não colocam o CPF ou CNPJ no cupom fiscal").
     'codigoParticipanteConsumidor',
+    // Classificação do estabelecimento industrial (CLAS_ESTAB_IND do registro
+    // 0002 do EFD ICMS/IPI). É TABELA OFICIAL e o app NÃO deduz: sem ela o
+    // registro não sai e o PVA recusa o arquivo do contribuinte de IPI
+    // ("Registro filho obrigatório não foi informado · 0002" — PWR 07/2026).
+    // Mesmo desenho do código 9 do ISS fixo: o número mora no cadastro.
+    'classEstabIpi', 'contribuinteIpi',
     // Cod.Cliente — o código da empresa no E-Fiscal (Paulo, 04/08): CHAVE da
     // migração do PG12 (schema e{código} ↔ CNPJ). 4 dígitos com zero à
     // esquerda, 0001–9999, ÚNICO na carteira — validação em cod-cliente.js e

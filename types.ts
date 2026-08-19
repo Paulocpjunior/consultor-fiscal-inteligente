@@ -1491,6 +1491,18 @@ export interface EmpresaDadosFiscais {
     /** Codigo Suframa (opcional, so se zona franca). */
     codSuframa?: string;
     /**
+     * 🏭 IPI — dois campos que o PVA cobra em sentidos OPOSTOS (19/08):
+     * bloco E500/E520 em quem NÃO é contribuinte é recusado (PS VIDROS, um
+     * comércio que compra com IPI destacado — para ele aquilo é custo), e o
+     * registro 0002 AUSENTE é recusado em quem É (PWR, indústria).
+     *
+     * ⚠️ `classEstabIpi` é código de TABELA OFICIAL e o app NÃO o deduz: sem
+     * cadastro o 0002 não sai e a falta vira aviso nomeado (mesmo desenho do
+     * código 9 do ISS fixo, que veio do cadastro).
+     */
+    contribuinteIpi?: 'sim' | 'nao' | '';
+    classEstabIpi?: string;
+    /**
      * CNAE principal e data de abertura nasceram na tela de CRIAÇÃO da empresa
      * (top-level do doc) e não tinham onde ser editados depois — a conferência
      * de cadastro cobrava um campo sem tela (31/07). O modal Dados Fiscais
