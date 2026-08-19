@@ -116,6 +116,33 @@ describe('leitura da resposta da SEFAZ', () => {
         expect(lerRespostaCancelamento(null).situacao).toBe('indeterminado');
         expect(lerRespostaCancelamento({ cStat: '138', xmls: [] }).situacao).toBe('indeterminado');
     });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 cStat 653 — "cancelada deveria puxar", e ele tinha razão (18/08)
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // Paulo, MV LIDER 639: consultou 3 chaves suspeitas uma a uma na tela
+    // "Consultar NFe por chave" (com o certificado do ESCRITÓRIO, que não é
+    // parte de nenhuma delas) e a SEFAZ respondeu nas três:
+    //   cStat=653 · Rejeicao: NF-e Cancelada, arquivo indisponivel p/ download
+    // Sem xmls (não entrega o conteúdo — é rejeição, não distribuição), o
+    // código antigo caía no genérico "sem documento ⇒ indeterminado", que
+    // existe pra cobrir certificado sem autorização/UF errada. São coisas
+    // diferentes: ali a SEFAZ não disse quem é a nota; aqui ela disse que a
+    // nota não vale mais.
+    it('cStat 653 com xMotivo "Cancelada" ⇒ cancelada, mesmo sem xmls', () => {
+        const r = lerRespostaCancelamento({
+            cStat: '653', xMotivo: 'Rejeicao: NF-e Cancelada, arquivo indisponivel para download', xmls: [],
+        });
+        expect(r.situacao).toBe('cancelada');
+        expect(r.evento!.cStat).toBe('653');
+        expect(r.motivo).toMatch(/653/);
+    });
+
+    it('cStat 653 SEM a palavra "cancelad" no xMotivo não afirma nada — corroboração, não só o número', () => {
+        const r = lerRespostaCancelamento({ cStat: '653', xMotivo: 'Rejeicao: outro motivo qualquer', xmls: [] });
+        expect(r.situacao).toBe('indeterminado');
+    });
 });
 
 describe('resumo com a CAUSA junto do número', () => {
