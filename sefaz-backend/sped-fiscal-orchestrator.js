@@ -26,6 +26,10 @@ import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
+// Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
+// senão o PVA acusa participante que nenhum registro referencia.
+import { selecionarNotasBlocoC, selecionarCtesBlocoD } from './sped-selecao-documentos.js';
+import { modeloDoDoc } from './participante-doc-helper.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -109,8 +113,31 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     notas = notas.filter(n => !n._merged_into);
 
     // ─── 4. Extrai participantes unicos (entrada + saida) ───
-    const participantesMap = new Map();
+    //
+    // 🚨 SÓ ENTRA QUEM ALGUM REGISTRO REFERENCIA (PVA da PWR e da PS VIDROS,
+    // 19/08: *"Não informar participante, se não referenciado em pelo menos um
+    // dos demais blocos"*). Duas fontes de participante órfão:
+    //
+    //   · NFC-e — o C100 dela NÃO PODE ter COD_PART (venda de balcão), então
+    //     nenhum consumidor de cupom é referenciado. Declará-lo no 0150 é erro
+    //     garantido, e ainda arrasta o "campo obrigatório para contribuintes
+    //     domiciliados no Brasil" (o cupom não traz endereço do comprador).
+    //   · Nota que NÃO foi escriturada (só o resumo na base, ou sem itens) —
+    //     ela sai do bloco C nomeada, e o participante dela vai junto.
+    //
+    // Mesma régua do 0200 logo abaixo, que já fazia isso pelos itens.
+    const nfceOuNaoEscriturada = (() => {
+        const escrituradas = new Set(
+            selecionarNotasBlocoC(notas)
+                .notas.filter(n => modeloDoDoc(n) !== '65')
+                .map(n => n.id || n.chave),
+        );
+        for (const c of selecionarCtesBlocoD(notas)) escrituradas.add(c.id || c.chave);
+        return (n) => !escrituradas.has(n.id || n.chave);
+    })();
+    let participantesOrfaos = 0;
     for (const nota of notas) {
+        if (nfceOuNaoEscriturada(nota)) { participantesOrfaos += 1; continue; }
         // Identifica o "outro lado" da nota (nao a empresa).
         const direcao = nota.direcao;  // 'entrada' | 'saida'
         const participanteRaw = direcao === 'saida'

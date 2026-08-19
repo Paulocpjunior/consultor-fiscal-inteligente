@@ -37,6 +37,7 @@ import { reconferirCancelamento } from '../../services/reconferirCancelamentoSer
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
 import { relerNotasVazias } from '../../services/ipiVarreduraService';
+import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
@@ -565,6 +566,10 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
     const [verParametros, setVerParametros] = useState(false);
     /** Gravado nesta sessão — o recorte não é relido a cada tecla. */
     const [gravado, setGravado] = useState<Record<string, string>>({});
+    /** Idem para o CST informado por nota (Paulo, 19/08). */
+    const [cstGravado, setCstGravado] = useState<Record<string, string>>({});
+    const [cstRascunho, setCstRascunho] = useState<Record<string, string>>({});
+    const [salvandoCst, setSalvandoCst] = useState<string | null>(null);
     const [erro, setErro] = useState<string | null>(null);
 
     const natureza = useMemo(
@@ -604,6 +609,11 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     id: d.id,
                     data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                     numero: d.numero || '—',
+                    // A CHAVE é o que permite ver a nota (DANFE/consulta) — o
+                    // pedido de 19/08: "colocar ao lado de Nº NF a opção de
+                    // visualizar a nota (chave de acesso, pdf da nota)".
+                    chave: String(d.chave || ''),
+                    cstInformado: cstGravado[d.id] !== undefined ? cstGravado[d.id] : String(d.cstEscriturado || ''),
                     participante: parte?.nome || '—',
                     // O cérebro é POR FORNECEDOR: sem CNPJ e sem competência ele
                     // não tem chave nem data de início, e a sugestão não nasce.
@@ -623,12 +633,13 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     cst: cstDoLancamento(
                         d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || '',
                         informado || daRegua[0] || '',
+                        cstGravado[d.id] !== undefined ? cstGravado[d.id] : d.cstEscriturado,
                     ),
                     valor: d.totais?.vNF || d.valorTotal || 0,
                 };
             })
             .sort((a, b) => a.data.localeCompare(b.data) || String(a.numero).localeCompare(String(b.numero)));
-    }, [docs, ctx, gravado]);
+    }, [docs, ctx, gravado, cstGravado]);
 
     const comCarimbo = linhas.filter(l => l.informado).length;
 
@@ -698,6 +709,25 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         }
     };
 
+    const salvarCst = async (l: { id: string; numero: string }, valor: string) => {
+        setErro(null);
+        setSalvandoCst(l.id);
+        try {
+            const r = await gravarCstEscriturado({
+                documentoId: l.id, cst: valor, porEmail: currentUser?.email || '',
+            });
+            setCstGravado(g => ({ ...g, [l.id]: r.cst }));
+            setCstRascunho(x => { const n = { ...x }; delete n[l.id]; return n; });
+            onShowToast?.(r.cst
+                ? `NF ${l.numero}: CST ${r.cst} informado (a origem da mercadoria é preservada).`
+                : `NF ${l.numero}: CST voltou para a régua automática.`, 'success');
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao gravar o CST.');
+        } finally {
+            setSalvandoCst(null);
+        }
+    };
+
     /** Notas "vazias" do recorte — sem itens (CFOP/CST em branco) ou sem nº. */
     const vazias = linhas.filter(l => !l.cfopCru || l.numero === '—').length;
 
@@ -738,6 +768,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             { titulo: 'CFOP informado', largura: 12 },
             { titulo: 'O que esse CFOP é', largura: 26 },
             { titulo: 'CST', largura: 8 },
+            { titulo: 'CST inf.', largura: 7 },
             { titulo: 'Origem', largura: 12 },
             { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
         ],
@@ -745,7 +776,9 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             l.data, l.numero, l.direcao === 'entrada' ? 'E' : 'S', l.participante,
             l.daRegua.join(' ') || '—', l.informado || '—',
             textoDoCfop(l.informado || l.daRegua[0] || '').texto,
-            l.cst.situacao === 'convertido' ? `${l.cst.original}→${l.cst.cst}` : (l.cst.cst || '—'),
+            l.cst.situacao === 'convertido' || l.cst.situacao === 'informado'
+                ? `${l.cst.original}→${l.cst.cst}` : (l.cst.cst || '—'),
+            l.cstInformado || '—',
             l.origem.rotulo, l.valor,
         ]),
         identificacao,
@@ -761,6 +794,11 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 `${resumoCst.convertidos} item(ns) de uso/consumo ou ativo tiveram o CST convertido para 90 (Outras): o `
                 + 'CST que vem no XML é o do FORNECEDOR, para quem a operação foi venda. A origem da mercadoria '
                 + '(1º dígito) é preservada.',
+            ] : []),
+            ...(linhas.some(l => l.cstInformado) ? [
+                `${linhas.filter(l => l.cstInformado).length} nota(s) com CST informado à mão: vale a TRIBUTAÇÃO `
+                + 'digitada e a ORIGEM da mercadoria é preservada do próprio item (o 1º dígito é fato da '
+                + 'mercadoria, não da operação).',
             ] : []),
             ...resumoCst.avisos,
             ...(linhas.some(l => l.mista) ? [
@@ -915,6 +953,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                 <th className="py-1 pr-2">CFOP informado</th>
                                 <th className="py-1 pr-2">O que esse CFOP é</th>
                                 <th className="py-1 pr-2">CST</th>
+                                <th className="py-1 pr-2" title="Tributação do CST (2 dígitos). A ORIGEM da mercadoria é preservada do próprio item.">CST informado</th>
                                 <th className="py-1 pr-2">Origem</th>
                                 <th className="py-1 pr-2 text-right">Vlr. Contábil</th>
                             </tr>
@@ -923,7 +962,34 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                             {linhas.map(l => (
                                 <tr key={l.id} className="border-b border-slate-100 dark:border-slate-800">
                                     <td className="py-1 pr-2 whitespace-nowrap">{l.data}</td>
-                                    <td className="py-1 pr-2 font-mono">{l.numero}</td>
+                                    <td className="py-1 pr-2 font-mono whitespace-nowrap">
+                                        {l.numero}
+                                        {/* 🔎 VER A NOTA — pedido de 19/08. O link é o
+                                            portal NACIONAL da NF-e (consulta pela chave),
+                                            não um PDF nosso: o CFI não emite DANFE, e
+                                            prometer "pdf da nota" seria promessa que a
+                                            tela não cumpre. Sem chave (nota digitada,
+                                            NFS-e) o botão não aparece — botão que não
+                                            faz nada é pior que botão nenhum. */}
+                                        {l.chave.length === 44 && (
+                                            <>
+                                                <a
+                                                    href={`https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=&nfe=${l.chave}`}
+                                                    target="_blank" rel="noreferrer"
+                                                    title="Consultar esta NF-e no portal nacional (abre em outra aba — o portal pede o captcha)"
+                                                    className="ml-1 text-blue-600 dark:text-blue-400 hover:underline"
+                                                >🔎</a>
+                                                <button
+                                                    onClick={() => {
+                                                        void navigator.clipboard?.writeText(l.chave);
+                                                        onShowToast?.(`Chave da NF ${l.numero} copiada.`, 'success');
+                                                    }}
+                                                    title={`Copiar a chave de acesso: ${l.chave}`}
+                                                    className="ml-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                                >⧉</button>
+                                            </>
+                                        )}
+                                    </td>
                                     <td className="py-1 pr-2">{l.direcao === 'entrada' ? 'E' : 'S'}</td>
                                     <td className="py-1 pr-2 max-w-[16rem] truncate" title={l.participante}>{l.participante}</td>
                                     <td className="py-1 pr-2 font-mono">
@@ -969,7 +1035,11 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                         conferência ver o de-para, que é o pedido:
                                         "adiciona o CST para validarmos a operação". */}
                                     <td className="py-1 pr-2 font-mono whitespace-nowrap" title={l.cst.motivo}>
-                                        {l.cst.situacao === 'convertido' ? (
+                                        {l.cst.situacao === 'informado' ? (
+                                            <span className="text-blue-700 dark:text-blue-400">
+                                                {l.cst.original}→<strong>{l.cst.cst}</strong> ✍
+                                            </span>
+                                        ) : l.cst.situacao === 'convertido' ? (
                                             <span className="text-emerald-700 dark:text-emerald-400">
                                                 {l.cst.original}→<strong>{l.cst.cst}</strong>
                                             </span>
@@ -980,6 +1050,23 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                         ) : (
                                             <span className="text-slate-500">{l.cst.cst || '—'}</span>
                                         )}
+                                    </td>
+                                    <td className="py-1 pr-2">
+                                        <input
+                                            value={cstRascunho[l.id] !== undefined ? cstRascunho[l.id] : l.cstInformado}
+                                            onChange={e => setCstRascunho(x => ({ ...x, [l.id]: e.target.value }))}
+                                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                            onBlur={e => {
+                                                const v = e.target.value.trim();
+                                                if (v === (l.cstInformado || '')) return;
+                                                void salvarCst(l, v);
+                                            }}
+                                            disabled={salvandoCst === l.id}
+                                            placeholder="—"
+                                            maxLength={3}
+                                            title="Tributação do CST (ex.: 90 para Outras). A origem da mercadoria (1º dígito) vem do item e não se digita. Vazio devolve à régua."
+                                            className="w-16 p-1 font-mono text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 disabled:opacity-50"
+                                        />
                                     </td>
                                     <td className="py-1 pr-2 text-slate-500">
                                         {l.origem.rotulo}

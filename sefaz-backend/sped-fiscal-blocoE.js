@@ -210,6 +210,27 @@ export function buildBlocoE(dados) {
         linhas.push(...st.linhas);
         if (Array.isArray(dados.warnings)) dados.warnings.push(...st.avisos);
         geraSt = st.linhas.length > 0;
+
+        // 🚨 ST NO ARQUIVO SEM E200 É RECUSA (PVA da PS VIDROS 07/2026, 19/08:
+        // *"O registro E200 e filhos são obrigatórios sempre que houver
+        // lançamento de valor do ICMS-ST…"*). O gerador de ST monta as linhas
+        // a partir do que a EMPRESA reteve como substituta; quando ela é apenas
+        // SUBSTITUÍDA (CST 60), não há o que apurar — mas se algum documento
+        // carrega valor de ST, o PVA cobra o bloco assim mesmo.
+        // ⚠️ NÃO se inventa a apuração: o app DIZ, com o número, e a pessoa
+        // decide (a UF de destino e o código de receita da GNRE não estão aqui).
+        if (!geraSt && Array.isArray(dados.warnings)) {
+            const stNoArquivo = somarImpostoPorDirecao(dados.notas, 'saida', 'vICMSST', 'vST');
+            if (stNoArquivo > 0) {
+                dados.warnings.push(
+                    `Há ${fmt.formatValue(stNoArquivo, 2)} de ICMS-ST nas saídas e o bloco E200/E210 NÃO foi `
+                    + 'gerado — o PVA recusa com "O registro E200 e filhos são obrigatórios sempre que houver '
+                    + 'lançamento de valor do ICMS-ST". O CFI só apura ST de quem RETÉM como substituto; se for '
+                    + 'este o caso, confira a UF de destino e o código de receita da GNRE na aba de ajustes '
+                    + 'antes de transmitir.',
+                );
+            }
+        }
     }
 
     // ── IPI (E500/E520) — só para Lucro COM atividade de IPI (indústria/

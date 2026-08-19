@@ -845,6 +845,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ANTERIOR** (o que SOBROU, calculado — 18/08, KROYA), com o campo antigo de
   reserva e a ORIGEM carimbada no aviso; isso também fecha a defasagem do ICMS
   registrada em 17/08.
+  📌 **E O 0150 PASSOU A CASAR COM A RÉGUA DO BLOCO C**: *"Não informar
+  participante, se não referenciado em pelo menos um dos demais blocos"* — duas
+  fontes de órfão, e as duas apareceram nos dois PVAs do dia. A **NFC-e** nunca
+  referencia participante (o C100 dela não pode ter COD_PART), então consumidor
+  de cupom no 0150 é erro garantido — e arrasta o *"campo obrigatório para
+  contribuintes domiciliados no Brasil"*, porque o cupom não traz endereço do
+  comprador. E a nota **não escriturada** (só resumo/sem itens) leva o
+  participante dela junto. É a mesma régua que o 0200 já aplicava aos itens.
   📌 **E O 0002 NÃO SE INVENTA**: o PVA recusa o arquivo do contribuinte de IPI
   sem o registro *Classificação do estabelecimento industrial* — cujo código é
   de TABELA OFICIAL. Ele só sai CADASTRADO (`classEstabIpi`, campo novo no
@@ -857,6 +865,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   régua de 11/08 não tinha chegado aqui, e a varredura do `canceladaReguaUnica`
   não pega a forma negada). O `COD_SIT` do C100 tinha o mesmo defeito: cancelada
   saía como **00 (regular)**, voltando ao livro pela porta do SPED.
+- **✍️ O CST VIROU CAMPO POR NOTA — e o campo é a TRIBUTAÇÃO, nunca o CST
+  inteiro** (Paulo, 19/08: *"teria a possibilidade de ajustarmos o CST e
+  visualizar o CST que vem na nota do fornecedor?"*). Coluna **CST informado**
+  na aba ✏️ CFOP por nota, `documentos_fiscais.cstEscriturado` + carimbo, com a
+  precedência **NF > régua automática** — a mesma do CFOP (17/08).
+  🚨 **A ARMADILHA QUE OBRIGOU O RECORTE**: a ORIGEM da mercadoria mora no 1º
+  dígito e é fato da MERCADORIA, não da operação — aceitar "090" cru faria todo
+  produto IMPORTADO (`100`) virar NACIONAL dentro do SPED. Então só a
+  TRIBUTAÇÃO é informada (2 dígitos) e a origem vem SEMPRE do item; digitar 3
+  dígitos vale a tributação, e a tela diz isso. `validarCstEscriturado` recusa
+  o que não está na **Tabela B** (00/10/20/30/40/41/50/51/60/70/90) — campo
+  fiscal digitado sem trava vira dado que só a fiscalização acha.
+  ⚠️ **A precedência mora no DONO** (`cstDoLancamento` ganhou o 3º parâmetro),
+  nunca na tela: C170 e C190 chamam a MESMA função e um `if` na tela faria o
+  detalhe e o consolidado do mesmo item divergirem. A função local do bloco C
+  foi RENOMEADA para `cstDoItemNoArquivo` — dar a ela o nome do CAMPO
+  (`cstEscriturado`) é o começo de duas respostas divergentes (lição de 18/08,
+  a porta do frontend que virou `perguntarDebitosJaEnviados`).
+  🔎 **E "ver a nota" entrou junto**: o Nº NF ganhou o link de consulta no
+  **portal NACIONAL da NF-e** (pela chave) e o ⧉ de copiar a chave. **NÃO é
+  "PDF da nota"**: o CFI não emite DANFE, e prometer o PDF seria promessa que a
+  tela não cumpre (a lição do ✕ de 14/08). Sem chave de 44 dígitos o botão não
+  aparece — botão que não faz nada é pior que botão nenhum.
 - **♻️ A NOTA "VAZIA" GANHOU O BOTÃO DE RELEITURA — e a régua separa o que ele
   RESOLVE do que ele NÃO resolve** (Paulo, 19/08, depois do procedimento "não
   digitem nada, aguardem o botão": *"esse botão ainda não construído né, tenho

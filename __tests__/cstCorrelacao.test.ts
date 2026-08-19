@@ -11,6 +11,7 @@
 // @ts-ignore — módulo JS do backend
 import {
     cstDoLancamento, partesDoCst, resumirCst, CST_POR_DESTINO, DESTINOS_SEM_DECISAO,
+    validarCstEscriturado,
 // @ts-ignore
 } from '../sefaz-backend/cst-correlacao.js';
 
@@ -173,13 +174,127 @@ describe('o SPED honra o CST escriturado', () => {
 
     it('C170 e C190 passam pela régua — 2 chamadas, nenhuma a menos', () => {
         // A DEFINIÇÃO da função casa com o mesmo texto — só as CHAMADAS contam.
-        const chamadas = blocoC.match(/(?<!function )cstEscriturado\(item, /g) || [];
+        // ⚠️ A função local chama-se `cstDoItemNoArquivo` de propósito: dar a
+        // ela o mesmo nome do CAMPO do documento (`cstEscriturado`) é o começo
+        // de duas respostas divergentes — a lição de 18/08.
+        const chamadas = blocoC.match(/(?<!function )cstDoItemNoArquivo\(item, /g) || [];
         expect(chamadas).toHaveLength(2);
         expect(blocoC).toContain("import { cstDoLancamento } from './cst-correlacao.js'");
+    });
+
+    it('e as duas recebem o DOCUMENTO — sem ele o CST informado na NF não seria honrado', () => {
+        // Campo que só a tela honra é pior que não ter campo: a conferência
+        // daria certo e o SPED sairia com o CST velho (trava dos LEITORES).
+        // A definição casa com o mesmo texto — o lookbehind deixa só as CHAMADAS.
+        const chamadas = blocoC.match(/(?<!function )cstDoItemNoArquivo\(item, [^)]*, nota\)/g) || [];
+        expect(chamadas).toHaveLength(2);
+        expect(blocoC).toMatch(/cstDoLancamento\(cru, cfopLancado, nota\?\.cstEscriturado\)/);
     });
 
     it('nenhum dos dois volta a formatar o CST cru por conta própria', () => {
         // Era esta linha, duplicada, que existia antes em C170 e C190.
         expect(blocoC).not.toMatch(/const cstFmt = cst\.length === 2/);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O CST INFORMADO NA NOTA — e a armadilha da ORIGEM.
+//
+// Paulo, 19/08: *"teria a possibilidade de ajustarmos o CST…?"*. O campo é a
+// TRIBUTAÇÃO (2 dígitos): a origem mora no 1º dígito e é fato da MERCADORIA.
+// Gravar "090" cru faria todo produto IMPORTADO virar NACIONAL no SPED.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('CST informado por nota', () => {
+    it('vence a régua e PRESERVA a origem do item', () => {
+        // Item importado (origem 1) com tributação 00; a pessoa informa 90.
+        const r = cstDoLancamento('100', '1102', '90');
+        expect(r.cst).toBe('190');           // origem 1 preservada
+        expect(r.situacao).toBe('informado');
+        expect(r.motivo).toMatch(/origem 1 preservada/);
+    });
+
+    it('nacional idem — 000 + informado 40 = 040', () => {
+        expect(cstDoLancamento('000', '1102', '40').cst).toBe('040');
+    });
+
+    it('3 dígitos digitados valem a TRIBUTAÇÃO, nunca a origem digitada', () => {
+        // Digitar "090" num item IMPORTADO não pode nacionalizar o produto.
+        expect(cstDoLancamento('100', '1102', '090').cst).toBe('190');
+    });
+
+    it('sem CST no item não dá para montar o informado (a origem não se deduz)', () => {
+        const r = cstDoLancamento(null, '1102', '90');
+        expect(r.cst).toBeNull();
+        expect(r.situacao).toBe('sem-cst');
+        expect(r.motivo).toMatch(/origem é o 1º dígito e não se deduz/);
+    });
+
+    it('vazio devolve a nota à régua automática', () => {
+        expect(cstDoLancamento('000', '1556', '').situacao).toBe('convertido');
+    });
+});
+
+describe('validarCstEscriturado — campo fiscal digitado tem trava', () => {
+    it('aceita tributação da Tabela B', () => {
+        expect(validarCstEscriturado('90')).toEqual({ ok: true, cst: '90' });
+        expect(validarCstEscriturado('090')).toEqual({ ok: true, cst: '90' });
+        expect(validarCstEscriturado('00')).toEqual({ ok: true, cst: '00' });
+    });
+
+    it('vazio é RESPOSTA (volta para a régua), não erro', () => {
+        expect(validarCstEscriturado('')).toEqual({ ok: true, cst: '' });
+    });
+
+    it('recusa tributação que não existe, dizendo quais valem', () => {
+        const r = validarCstEscriturado('99') as any;
+        expect(r.ok).toBe(false);
+        expect(r.motivo).toMatch(/não existe na Tabela B/);
+        expect(r.motivo).toMatch(/00, 10, 20/);
+    });
+
+    it('recusa tamanho torto explicando que a origem não se digita', () => {
+        const r = validarCstEscriturado('9') as any;
+        expect(r.ok).toBe(false);
+        expect(r.motivo).toMatch(/ORIGEM da mercadoria/);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A TELA E O ARQUIVO PELA MESMA RÉGUA — e o caminho na interface no mesmo PR.
+// Campo novo sem tela é código morto; tela que recalcula é a divergência de
+// 12/08 (o modal mostrando 1405 enquanto o arquivo gravava 1403).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 o CST informado tem caminho na tela e nenhuma conta própria', () => {
+    const tela = fs.readFileSync(
+        path.resolve(__dirname, '../components/Relatorios/index.tsx'), 'utf8',
+    );
+    const service = fs.readFileSync(
+        path.resolve(__dirname, '../services/cstEscrituradoService.ts'), 'utf8',
+    );
+
+    it('a aba ✏️ CFOP por nota grava pelo service e mostra o campo', () => {
+        expect(tela).toMatch(/gravarCstEscriturado\(\{/);
+        expect(tela).toMatch(/CST informado/);
+    });
+
+    it('a tela passa o informado para a MESMA régua do arquivo', () => {
+        expect(tela).toMatch(/cstDoLancamento\(/);
+        expect(tela).toMatch(/cstEscriturado/);
+    });
+
+    it('a gravação valida pela régua do backend, não por regex da tela', () => {
+        expect(service).toMatch(/validarCstEscriturado/);
+        expect(service).toMatch(/cst-correlacao\.js/);
+    });
+
+    it('e o carimbo de quem informou é obrigatório', () => {
+        expect(service).toMatch(/cstEscrituradoPor/);
+        expect(service).toMatch(/cstEscrituradoEm/);
+        expect(service).toMatch(/Sessão sem usuário identificado/);
+    });
+
+    it('🔎 ver a nota: link só aparece com chave de 44 dígitos', () => {
+        expect(tela).toMatch(/l\.chave\.length === 44/);
+        expect(tela).toMatch(/nfe\.fazenda\.gov\.br/);
     });
 });
