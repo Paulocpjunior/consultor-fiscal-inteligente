@@ -5,6 +5,7 @@ export type SituacaoCst =
     | 'preservado'
     | 'preservado-por-situacao'
     | 'nao-decidido'
+    | 'informado'
     | 'sem-cst';
 
 export interface CstDoLancamento {
@@ -21,7 +22,22 @@ export interface CstDoLancamento {
 
 export function partesDoCst(cst: unknown): { origem: string; tributacao: string } | null;
 
-export function cstDoLancamento(cstDoItem: unknown, cfopEscriturado: unknown): CstDoLancamento;
+/**
+ * @param cstInformado Tributação informada NAQUELA nota (2 dígitos). Vence a
+ * régua; a ORIGEM continua vindo do item, porque ela é fato da mercadoria.
+ */
+export function cstDoLancamento(
+    cstDoItem: unknown,
+    cfopEscriturado: unknown,
+    cstInformado?: unknown,
+): CstDoLancamento;
+
+/** Trava do campo digitado: vazio é resposta, fora da Tabela B é recusado. */
+export function validarCstEscriturado(
+    valor: unknown,
+): { ok: true; cst: string } | { ok: false; motivo: string };
+
+export const TRIBUTACOES_ICMS: Set<string>;
 
 export function resumirCst(
     itens: Array<{ cst?: unknown; cfop?: unknown }> | null | undefined,

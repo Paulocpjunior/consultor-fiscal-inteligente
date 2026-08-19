@@ -234,3 +234,25 @@ describe('C100 — o COD_MOD sai da chave e a NFC-e respeita o leiaute dela', ()
         expect(campos[4]).toBe('15438711000110');
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 PARTICIPANTE QUE NENHUM REGISTRO REFERENCIA É RECUSA (PVA, 19/08).
+//
+// Duas fontes de órfão: a NFC-e (cujo C100 não pode ter COD_PART) e a nota que
+// não foi escriturada (só resumo / sem itens). O 0150 tem que casar com a
+// MESMA régua do bloco C — é o que o 0200 já fazia pelos itens.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 o 0150 casa com a régua do bloco C', () => {
+    const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/sped-fiscal-orchestrator.js'), 'utf8');
+
+    it('a coleta de participantes usa a régua, não varre todas as notas', () => {
+        expect(fonte).toMatch(/selecionarNotasBlocoC\(notas\)/);
+        expect(fonte).toMatch(/modeloDoDoc\(n\) !== '65'/);
+        expect(fonte).toMatch(/selecionarCtesBlocoD\(notas\)/);
+    });
+
+    it('CT-e conta como referência (o D100 tem COD_PART)', () => {
+        const trecho = fonte.slice(fonte.indexOf('4. Extrai participantes'), fonte.indexOf('4b.'));
+        expect(trecho).toMatch(/selecionarCtesBlocoD/);
+    });
+});

@@ -87,9 +87,11 @@ function statusParaCodSit(status) {
  * Sempre 3 dígitos (origem + tributação), como o SPED exige. Quando a régua não
  * converte, ele é o do fornecedor — que é o comportamento de sempre.
  */
-function cstEscriturado(item, cfopLancado) {
+function cstDoItemNoArquivo(item, cfopLancado, nota) {
     const cru = getCstIcms(item);
-    const r = cstDoLancamento(cru, cfopLancado);
+    // O CST informado NAQUELA NOTA vence a régua — a precedência mora no DONO
+    // (cstDoLancamento), nunca aqui, senão C170 e C190 divergiriam.
+    const r = cstDoLancamento(cru, cfopLancado, nota?.cstEscriturado);
     const escolhido = r.cst || cru;
     return escolhido.length === 2 ? '0' + escolhido : String(escolhido).padStart(3, '0').slice(-3);
 }
@@ -381,7 +383,7 @@ function buildC170(item, nItem, nota) {
     // fornecedor vai vir como 00, temos que indicar 90 para essas operações".
     // A régua mora em cst-correlacao.js e PRESERVA a origem (1º dígito), que é
     // fato da mercadoria e não da operação.
-    const cstFmt = cstEscriturado(item, cfopLancado);
+    const cstFmt = cstDoItemNoArquivo(item, cfopLancado, nota);
 
     const aliqIcms = item.aliqIcms || (
         item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0
@@ -458,7 +460,7 @@ function buildC190sFromNota(nota) {
         // O C190 agrupa por CST+CFOP: usar o CST cru aqui e o convertido no
         // C170 faria os dois registros do MESMO item discordarem — e é o C190
         // que a apuração soma.
-        const cstFmt = cstEscriturado(item, cfop);
+        const cstFmt = cstDoItemNoArquivo(item, cfop, nota);
 
         const aliqIcms = item.aliqIcms || (
             item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0

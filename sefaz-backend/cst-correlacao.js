@@ -133,16 +133,87 @@ export const DESTINOS_SEM_DECISAO = {};
 export const SITUACOES_CONVERTIVEIS = new Set(['00', '20']);
 
 /**
+ * Tabela B da Tabela de Situação Tributária do ICMS — as tributações que
+ * EXISTEM. Campo fiscal digitado sem trava vira dado que só a fiscalização
+ * acha (a lição do 1405), então o que não está aqui é RECUSADO na gravação.
+ */
+export const TRIBUTACOES_ICMS = new Set([
+    '00', '10', '20', '30', '40', '41', '50', '51', '60', '70', '90',
+]);
+
+/** A tributação informada (2 dígitos), ou null quando não há valor válido. */
+function tributacaoInformada(v) {
+    const d = digitos(v);
+    if (!d) return null;
+    // 3 dígitos: quem digitou pensou no CST inteiro — vale a TRIBUTAÇÃO, e a
+    // origem continua a do item (a régua de conversão faz o mesmo).
+    const trib = d.length >= 3 ? d.slice(-2) : d.padStart(2, '0');
+    return TRIBUTACOES_ICMS.has(trib) ? trib : null;
+}
+
+/**
+ * Trava do campo de CST informado por nota.
+ *
+ * Vazio é resposta ("volta para a régua automática"); valor fora da Tabela B é
+ * RECUSADO com o motivo escrito — nunca gravado torto.
+ */
+export function validarCstEscriturado(valor) {
+    const d = digitos(valor);
+    if (!d) return { ok: true, cst: '' };
+    if (d.length < 2 || d.length > 3) {
+        return {
+            ok: false,
+            motivo: 'Informe a TRIBUTAÇÃO do CST com 2 dígitos (ex.: 90 para "Outras"). A ORIGEM da mercadoria '
+                + '(1º dígito) é preservada do próprio item e não se digita aqui.',
+        };
+    }
+    const trib = d.length === 3 ? d.slice(-2) : d;
+    if (!TRIBUTACOES_ICMS.has(trib)) {
+        return {
+            ok: false,
+            motivo: `CST ${trib} não existe na Tabela B do ICMS. Válidos: `
+                + `${Array.from(TRIBUTACOES_ICMS).join(', ')}.`,
+        };
+    }
+    return { ok: true, cst: trib };
+}
+
+/**
  * O CST que a escrituração deve usar para o item.
  *
  * @param {string} cstDoItem   CST como veio do XML do fornecedor ('00' ou '000')
  * @param {string} cfopEscriturado CFOP com que a nota está sendo escriturada
  * @returns {{cst: string|null, original: string|null, situacao: string, motivo: string, destino: string|null}}
  */
-export function cstDoLancamento(cstDoItem, cfopEscriturado) {
+export function cstDoLancamento(cstDoItem, cfopEscriturado, cstInformado) {
     const partes = partesDoCst(cstDoItem);
     const cfop = digitos(cfopEscriturado);
     const original = partes ? `${partes.origem}${partes.tributacao}` : null;
+
+    // ── O QUE UMA PESSOA INFORMOU NAQUELA NOTA VENCE A RÉGUA ────────────────
+    //
+    // Paulo, 19/08: *"teria a possibilidade de ajustarmos o CST…?"*. Mesma
+    // precedência do CFOP por nota (17/08): quem olhou a nota decide.
+    //
+    // ⚠️ O CAMPO É A TRIBUTAÇÃO (2 dígitos), NÃO o CST inteiro — a ORIGEM mora
+    // no 1º dígito e é fato da MERCADORIA, não da operação. Aceitar "090" cru
+    // faria todo produto IMPORTADO (origem 1) virar NACIONAL dentro do SPED.
+    // Por isso a origem vem sempre do item, e só a tributação é informada.
+    const informada = tributacaoInformada(cstInformado);
+    if (informada) {
+        if (!partes) {
+            return {
+                cst: null, original: null, destino: null, situacao: 'sem-cst',
+                motivo: 'O item não trouxe CST de ICMS, e sem a ORIGEM da mercadoria não dá para montar o CST '
+                    + 'informado — a origem é o 1º dígito e não se deduz. Reimporte o XML completo desta nota.',
+            };
+        }
+        return {
+            cst: `${partes.origem}${informada}`, original, destino: null, situacao: 'informado',
+            motivo: `CST informado nesta nota: tributação ${informada}, com a origem ${partes.origem} preservada `
+                + 'do próprio item (ela é fato da mercadoria). Vence a correlação automática.',
+        };
+    }
 
     // Sem CST não se INVENTA um: campo fiscal não recebe default (regra de 06/08).
     if (!partes) {
