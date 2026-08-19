@@ -20,7 +20,7 @@ import {
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
-    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada,
+    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
@@ -287,7 +287,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas'>('bot');
+    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram'>('bot');
 
     // ── ☎️ Sonda de voz/vídeo: PERGUNTA à Meta, não liga nada.
     const [sonda, setSonda] = useState<{
@@ -302,6 +302,21 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setSondando(false);
         if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar });
         else setSondaErro(r.error || 'A sonda não respondeu.');
+    };
+
+    // ── 📷 Sonda do Instagram: PERGUNTA à Meta, não linka nada.
+    const [sondaIg, setSondaIg] = useState<{
+        conclusao: { veredito: string; motivo: string; acao?: string; pagina?: { id: string; nome: string }; instagram?: { id: string; username: string | null } };
+        sondas: SondaInstagram[]; sobreRestringirAtendentes: { titulo: string; texto: string };
+    } | null>(null);
+    const [sondandoIg, setSondandoIg] = useState(false);
+    const [sondaIgErro, setSondaIgErro] = useState<string | null>(null);
+    const rodarSondaIg = async () => {
+        setSondandoIg(true); setSondaIgErro(null);
+        const r = await sondarInstagram();
+        setSondandoIg(false);
+        if (r.ok) setSondaIg({ conclusao: r.conclusao, sondas: r.sondas, sobreRestringirAtendentes: r.sobreRestringirAtendentes });
+        else setSondaIgErro(r.error || 'A sonda não respondeu.');
     };
     const [atendentes, setAtendentes] = useState<Atendente[]>([]);
     const [atdErro, setAtdErro] = useState<string | null>(null);
@@ -1529,7 +1544,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -1681,6 +1696,71 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 {s.acao && <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{s.acao}</p>}
                                                 {/* A resposta CRUA vai junto: é dela que sai a régua no dia em
                                                     que a Meta mudar o formato — nunca de suposição. */}
+                                                {s.bruto != null && (
+                                                    <pre className="mt-1 text-[9px] bg-slate-900 text-slate-200 rounded p-2 overflow-x-auto max-h-40">
+                                                        {JSON.stringify(s.bruto, null, 2)}
+                                                    </pre>
+                                                )}
+                                            </details>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── aba 📷 Instagram (SONDA — não linka nada) ───── */}
+                        {cfgAba === 'instagram' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Esta aba <strong>pergunta à Meta</strong> se o token que já usamos no WhatsApp
+                                    também enxerga uma Página do Facebook com o Instagram vinculado — e{' '}
+                                    <strong>não linka nada</strong>. O token do WhatsApp foi concedido só pras
+                                    permissões do WhatsApp; DM do Instagram é outro produto da Graph API, com
+                                    permissão própria.
+                                </p>
+
+                                <button onClick={rodarSondaIg} disabled={sondandoIg}
+                                    className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                    {sondandoIg ? 'Perguntando à Meta…' : '🔎 Sondar o estado na Meta'}
+                                </button>
+                                {sondaIgErro && <p className="text-[11px] text-red-600 dark:text-red-400">{sondaIgErro}</p>}
+
+                                {sondaIg && (
+                                    <>
+                                        {/* "conta-encontrada" prova IDENTIDADE, não prova MENSAGEM — o
+                                            texto da ação já diz isso, então a cor não pode gritar "pronto". */}
+                                        <div className={`rounded-lg border px-3 py-2 ${sondaIg.conclusao.veredito === 'conta-encontrada'
+                                            ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+                                            : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'}`}>
+                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
+                                                {sondaIg.conclusao.veredito === 'conta-encontrada'
+                                                    ? `✅ Achei: Página "${sondaIg.conclusao.pagina?.nome}" · Instagram @${sondaIg.conclusao.instagram?.username || sondaIg.conclusao.instagram?.id}`
+                                                    : `⚠️ ${sondaIg.conclusao.veredito}`}
+                                            </p>
+                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">{sondaIg.conclusao.motivo}</p>
+                                            {sondaIg.conclusao.acao && (
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{sondaIg.conclusao.acao}</p>
+                                            )}
+                                        </div>
+
+                                        <div className="rounded-lg border-l-4 border-sky-400 bg-sky-50 dark:bg-sky-900/20 px-3 py-1.5">
+                                            <p className="text-[11px] font-bold text-sky-900 dark:text-sky-200">{sondaIg.sobreRestringirAtendentes.titulo}</p>
+                                            <p className="text-[10.5px] text-sky-800 dark:text-sky-300 leading-snug">{sondaIg.sobreRestringirAtendentes.texto}</p>
+                                        </div>
+
+                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
+                                            O que cada caminho respondeu
+                                        </p>
+                                        {sondaIg.sondas.map((s) => (
+                                            <details key={s.candidato} className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                                                <summary className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                    {s.rotulo} — <span className="font-normal">{s.situacao}</span>
+                                                </summary>
+                                                <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-1">
+                                                    <strong>Hipótese:</strong> {s.hipotese}
+                                                </p>
+                                                <p className="text-[10.5px] text-slate-600 dark:text-slate-300 mt-0.5">{s.motivo}</p>
+                                                {s.acao && <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{s.acao}</p>}
                                                 {s.bruto != null && (
                                                     <pre className="mt-1 text-[9px] bg-slate-900 text-slate-200 rounded p-2 overflow-x-auto max-h-40">
                                                         {JSON.stringify(s.bruto, null, 2)}
