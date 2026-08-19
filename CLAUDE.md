@@ -626,11 +626,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ Os erros do print do PVA ("VL_RET_CUM > Σ F600") vieram de a colaboradora
   ter preenchido o M200 NA MÃO dentro do PVA com o F600 vazio — o arquivo cru
   nem acusava, porque nele a retenção sumia dos DOIS lados de uma vez.
-  **Falta a prova**: regerar o EFD da HS 07/2026 no CFI e validar no PVA —
-  um F600 por saída retida; se as 9 saídas forem retidas, VL_RET_CUM
-  295,23/1.362,60 e a recolher 0,00. Se o F600 ainda sair vazio, os documentos
-  não têm a retenção gravada em NENHUMA forma: reimportar o CSV do portal da
-  competência (o merge preenche sem duplicar).
+  ✅ **PROVADO EM PRODUÇÃO no mesmo dia** (Paulo, 19/08, depois de regerar:
+  *"passa o mata burro, 0304 - HS PROJETOS"*). O F600 subiu com a retenção que
+  o documento já tinha na forma achatada — o arquivo saía `F001|1` sobre a
+  MESMA base de dados, ou seja não faltava dado nenhum, faltava LEITURA.
+  📌 **A LIÇÃO QUE FICA É A DA FORMA, NÃO A DO F600**: em dez ocorrências, a
+  armadilha das duas formas nunca apareceu como erro — ela aparece como
+  **ausência plausível** ("sem retenção gravada", "sem participante", "valor
+  0,00"), que é indistinguível do caso normal. Por isso leitor novo de campo de
+  documento não escolhe uma forma: chama o DONO da régua. E quando não existe
+  dono, ele nasce ali — foi o que aconteceu neste PR e no do Relatório de
+  Retenções, horas antes, com o MESMO leitor.
+  ⚠️ **E o sintoma no PVA acusava o lugar errado**: os erros eram
+  "VL_RET_CUM > Σ F600", que faz procurar defeito no M200 — quando o M200
+  estava certo e o vazio era o F600. Recibo do PVA aponta o CAMPO que não
+  fecha, nunca a CAUSA; foi o arquivo aceito de 05/2026 que disse onde olhar.
 - **🚨 "CANCELADA DEVERIA PUXAR" — e ele tinha razão, E a prova veio no mesmo
   dia** (Paulo, MV LIDER 639 · 18/08). Primeira tentativa: eu inventei um
   SEGUNDO webservice (Consulta Situação, `NfeConsultaProtocolo4`) pra resolver
