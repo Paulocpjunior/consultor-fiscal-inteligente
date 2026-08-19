@@ -18,6 +18,9 @@ import { docCancelado } from './xml-metadata-helper.js';
 // A assinatura de alíquota que separa RETENÇÃO (0,65%+3%) de tributo da
 // OPERAÇÃO (1,65%+7,60%) — a régua do R-4020, reusada pelo F600.
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
+// A leitura das retenções federais nas DUAS formas (achatada × objeto) é do
+// DONO — o mesmo leitor que alimenta o R-4020. Segunda cópia divergiria.
+import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -176,6 +179,14 @@ export function buildBlocoA(dados) {
     linhas.push(fmt.buildLine(['A001', '0']));
     linhas.push(fmt.buildLine(['A010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
 
+    // VL_PIS_RET/VL_COFINS_RET do A100 saem da MESMA coleta do F600 e do M
+    // (caso HS 07/2026 — o arquivo aceito de 05/2026 preenche esses campos em
+    // toda saída retida). Uma segunda leitura aqui faria o A100 e o F600
+    // contarem retenções diferentes no MESMO arquivo. Warnings mudos: quem
+    // nomeia o que ficou de fora é o bloco F, uma vez só.
+    const retF600 = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null);
+    const retPorNota = new Map((retF600.eventos || []).map(e => [String(e.numero), e]));
+
     for (const notaCrua of notasA) {
         // 🚨 O DOCUMENTO CHEGA EM DUAS FORMAS — e ler só a ANINHADA zerou tudo.
         //
@@ -212,6 +223,7 @@ export function buildBlocoA(dados) {
 
         const vlPis = vlDoc * aliq.pis;
         const vlCofins = vlDoc * aliq.cofins;
+        const retido = retPorNota.get(String(nota.numero || nota.chave || '(sem número)'));
 
         linhas.push(fmt.buildLine([
             'A100',
@@ -230,7 +242,11 @@ export function buildBlocoA(dados) {
             '',  // VL_DESC
             fmt.formatValue(vlDoc), fmt.formatValue(vlPis),
             fmt.formatValue(vlDoc), fmt.formatValue(vlCofins),
-            '', '', '',
+            // VL_PIS_RET · VL_COFINS_RET — só quando a coleta do F600 aceitou a
+            // nota como retenção (mesma régua); ausência fica em branco, nunca 0.
+            retido ? fmt.formatValue(retido.pis) : '',
+            retido ? fmt.formatValue(retido.cofins) : '',
+            '',  // VL_ISS
         ]));
 
         // 🚨 O A170 É REGISTRO FILHO OBRIGATÓRIO — e ele NUNCA SAÍA.
@@ -545,14 +561,22 @@ export function coletarRetencoesF600(notas, warnings) {
     for (const notaCrua of (notas || [])) {
         if (docCancelado(notaCrua) || notaCrua.status === 'denegado') continue;
         if (notaCrua.direcao !== 'saida') continue;
+        // 🚨 AS DUAS FORMAS, PELA DÉCIMA VEZ — caso HS PROJETOS 07/2026 (19/08):
+        // esta coleta lia só `valores.pis/cofins` (forma ANINHADA) e a NFS-e do
+        // portal grava `valorPis`/`valorCofins` ACHATADOS na raiz. Resultado:
+        // toda nota retida era pulada como "sem retenção gravada", o F600 saía
+        // `F001|1` e o M200/M600 declarava a recolher SEM o abatimento — a
+        // conta MAIOR que a devida, num arquivo aceito. Quem lê as duas formas
+        // é o DONO da régua (o mesmo leitor do R-4020), nunca uma cópia.
         const v = notaCrua.valores || {};
-        const pis = parseFloat(v.pis) || 0;
-        const cofins = parseFloat(v.cofins) || 0;
+        const fed = lerRetencoesFederaisDoDoc(notaCrua);
+        const pis = fed.pis ?? 0;
+        const cofins = fed.cofins ?? 0;
         if (pis + cofins <= 0) continue;   // sem retenção federal gravada — caso normal
 
         const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
-        const base = parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorTotal) || 0;
-        const diag = conferirRetencaoFederal({ base, pis, cofins, csll: v.csll, ir: v.ir, inss: v.inss });
+        const base = parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorServicos) || parseFloat(notaCrua.valorTotal) || 0;
+        const diag = conferirRetencaoFederal({ base, pis, cofins, csll: fed.csllOuTotal, ir: fed.ir, inss: fed.inss });
         if (diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
         if (!base) { semBase.push(rotulo); continue; }
         if (diag.situacao === 'aliquota-fora') foraDaAliquota.push(rotulo);

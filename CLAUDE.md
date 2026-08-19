@@ -610,8 +610,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   abatimento com retenção que ninguém reteve. Quem decide é
   `conferirRetencaoFederal`, nunca uma cópia. `coletarRetencoesF600` é UMA
   coleta para o bloco F e o M (duas divergiriam); F600 entrou em
-  `DETALHES_VIGIADOS` no mesmo PR. **Falta a prova**: regerar o EFD da HS no
-  CFI e validar no PVA.
+  `DETALHES_VIGIADOS` no mesmo PR.
+  🚨 **E A PROVA REPROVOU NO MESMO DIA — a coleta lia SÓ a forma ANINHADA**
+  (Paulo, 19/08, com o recibo do PVA: *"0304 - HS PROJETOS, não subiu o
+  F600"*). A NFS-e do portal grava `valorPis`/`valorCofins` ACHATADOS na raiz
+  e `coletarRetencoesF600` lia só `valores.*` — toda nota retida era pulada
+  como "sem retenção gravada" (o `continue` do caso normal), o bloco saía
+  `F001|1` e o M200/M600 declarava **295,23 + 1.362,60 a recolher SEM o
+  abatimento** num mês em que a retenção zera a conta. É a armadilha das duas
+  formas pela DÉCIMA vez, e a régua já tinha nascido HORAS antes para o
+  Relatório de Retenções: a coleta passou a ler pelo DONO
+  (`lerRetencoesFederaisDoDoc`), e o **A100 ganhou VL_PIS_RET/VL_COFINS_RET da
+  MESMA coleta** (o arquivo aceito de 05/2026 preenche esses campos; segunda
+  leitura faria A100 e F600 contarem retenções diferentes no mesmo arquivo).
+  ⚠️ Os erros do print do PVA ("VL_RET_CUM > Σ F600") vieram de a colaboradora
+  ter preenchido o M200 NA MÃO dentro do PVA com o F600 vazio — o arquivo cru
+  nem acusava, porque nele a retenção sumia dos DOIS lados de uma vez.
+  **Falta a prova**: regerar o EFD da HS 07/2026 no CFI e validar no PVA —
+  um F600 por saída retida; se as 9 saídas forem retidas, VL_RET_CUM
+  295,23/1.362,60 e a recolher 0,00. Se o F600 ainda sair vazio, os documentos
+  não têm a retenção gravada em NENHUMA forma: reimportar o CSV do portal da
+  competência (o merge preenche sem duplicar).
 - **🚨 "CANCELADA DEVERIA PUXAR" — e ele tinha razão, E a prova veio no mesmo
   dia** (Paulo, MV LIDER 639 · 18/08). Primeira tentativa: eu inventei um
   SEGUNDO webservice (Consulta Situação, `NfeConsultaProtocolo4`) pra resolver
