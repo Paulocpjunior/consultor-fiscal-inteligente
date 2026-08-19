@@ -680,6 +680,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Travado por `sefazSyncButtonCte.test.ts` (mesma família do "rota sem botão"
   de 13/08: endpoint novo sem caminho na interface é código morto com cara de
   entrega).
+- **🚨 IMPORTAÇÃO MANUAL DE CT-e BLOQUEADA — DUAS LEITURAS DO MESMO XML,
+  DIVERGINDO** (Sandra via Paulo, 19/08, A CASTELLANO: um CT-e que o cliente
+  manda dava *"Arquivo não é desta empresa — nenhum dos 6 XMLs é desta
+  empresa"*, com o botão Importar nem aparecendo — só Cancelar). O backend que
+  de fato importa (`parseCTeXml`, `services/xmlParserService.ts`) já sabia a
+  regra desde sempre: no CT-e o **REMETENTE** é a contraparte principal (é ele
+  quem manda a carga, e no XML da A CASTELLANO `toma=0` diz que o remetente
+  também é quem PAGA o frete) — o `<dest>` cru é só o destinatário FINAL da
+  mercadoria, sem nada a ver com o cliente. Mas a TELA de confirmação (que
+  roda ANTES do backend, só pra mostrar de quem são os arquivos) usava
+  `extrairDadosXml` (`services/xmlLoteValidacao.ts`) — uma SEGUNDA leitura,
+  por regex, que só conhecia `<emit>`/`<dest>` e nunca soube da regra do
+  remetente. Resultado: a tela bloqueava um arquivo que o backend já aceitava
+  — a régua duplicada divergindo da régua real, e a duplicada é que decidia se
+  a pessoa via o botão de importar.
+  ✂️ `extrairDadosXml` passou a ler `<rem>` também e, quando presente, usá-lo
+  no lugar do `<dest>` — a MESMA substituição que `parseCTeXml` já faz, nunca
+  uma regra nova. Para NF-e a tag `<rem>` não existe, então nada muda nela.
+  Chave também passou a reconhecer `Id="CTe..."` e `<chCTe>`, não só o padrão
+  de NF-e. Provado com o XML real que ela mandou (CT-e da TadLog Transportes,
+  A CASTELLANO como remetente/tomadora, chave real).
 - **🚨 O SALDO CREDOR ANTERIOR SAÍA ZERO — e zero num campo de saldo é uma
   AFIRMAÇÃO à SEFAZ** (Paulo, 17/08: *"essa empresa possui saldos acumulados de
   meses anteriores… a apuração não está considerando o saldo que já vinha sendo

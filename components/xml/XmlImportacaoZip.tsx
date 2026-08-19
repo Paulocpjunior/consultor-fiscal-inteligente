@@ -292,7 +292,7 @@ const XmlImportacaoZip: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 <EmpresaAtivaFixa />
                 {empresa ? (
                     <p className="text-[11px] text-slate-400 mt-1">
-                        Só entram XMLs em que a raiz do CNPJ {formatCnpjCpf(empresa.cnpj)} apareça como emitente ou destinatário.
+                        Só entram XMLs em que a raiz do CNPJ {formatCnpjCpf(empresa.cnpj)} apareça como emitente ou destinatário (em CT-e, conta como remetente da carga).
                     </p>
                 ) : (
                     <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
