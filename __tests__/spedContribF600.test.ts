@@ -151,3 +151,69 @@ describe('a régua do R-4020 vale no F600 — tributo da operação NÃO é rete
         expect(warnings.join(' ')).toMatch(/sem CNPJ da fonte pagadora/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A FORMA ACHATADA DO PORTAL — o caso que FALHOU em produção (HS 07/2026).
+//
+// Paulo, 19/08, com o recibo do PVA: *"0304 - HS PROJETOS, não subiu o F600"*.
+// A coleta lia só `valores.pis/cofins` (aninhado) e a NFS-e do portal grava
+// `valorPis`/`valorCofins` ACHATADOS na raiz — toda nota retida era pulada
+// como "sem retenção gravada": F001|1, e o M200/M600 declarava a recolher SEM
+// o abatimento. As duas formas se leem pelo DONO (lerRetencoesFederaisDoDoc).
+// ═══════════════════════════════════════════════════════════════════════════
+// @ts-ignore — módulo JS do backend
+import { buildBlocoA } from '../sefaz-backend/sped-contrib-blocos.js';
+
+/** NFS-e prestada como o TRILHO DO PORTAL grava: tudo achatado na raiz. */
+const nfsePortal = (numero: number, base: number, cnpjTomador: string) => ({
+    tipo: 'NFSe', direcao: 'saida', status: 'autorizado', numero: String(numero),
+    dhEmi: '2026-07-06T10:00:00-03:00', valorTotal: base,
+    cnpjDest: cnpjTomador, xNomeDest: 'FONTE PAGADORA',
+    valorPis: +(base * 0.0065).toFixed(2), valorCofins: +(base * 0.03).toFixed(2),
+});
+
+// Três notas reais do arquivo da HS 07/2026 (nº, base, tomador).
+const NOTAS_HS_07 = [
+    nfsePortal(2901, 3500, '03954927000159'),
+    nfsePortal(2894, 6100, '19164554000152'),
+    nfsePortal(2893, 10580, '66829189000138'),
+];
+
+describe('🚨 HS 07/2026 — retenção gravada na forma ACHATADA gera o F600', () => {
+    it('a coleta enxerga valorPis/valorCofins da raiz (22,75+39,65+68,77 = 131,17)', () => {
+        const { eventos, totalPis, totalCofins } = coletarRetencoesF600(NOTAS_HS_07 as any, null);
+        expect(eventos).toHaveLength(3);
+        expect(+totalPis.toFixed(2)).toBe(131.17);
+        expect(+totalCofins.toFixed(2)).toBe(605.4);
+    });
+
+    it('o bloco F sai COM dados (era F001|1 no arquivo recusado)', () => {
+        const linhas: string[] = buildBlocoF({
+            empresa: { cnpj: '05.147.016/0001-45' }, regimeApuracao: '2',
+            notas: NOTAS_HS_07, warnings: [],
+        });
+        expect(linhas[0].trim()).toBe('|F001|0|');
+        expect(linhas.filter(l => l.startsWith('|F600|'))).toHaveLength(3);
+    });
+
+    it('o M200 abate a retenção no campo CUMULATIVO (regra do PVA: VL_RET ≤ Σ F600)', () => {
+        const linhas: string[] = buildBlocoM({
+            empresa: { cnpj: '05.147.016/0001-45' }, regimeApuracao: '2',
+            notas: NOTAS_HS_07, warnings: [],
+        });
+        const m200 = campos(linhas.find(l => l.startsWith('|M200|'))!);
+        expect(m200[9]).toBe('131,17');   // VL_RET_CUM = Σ VL_RET_PIS dos F600
+        const m600 = campos(linhas.find(l => l.startsWith('|M600|'))!);
+        expect(m600[9]).toBe('605,40');   // VL_RET_CUM = Σ VL_RET_COFINS dos F600
+    });
+
+    it('o A100 leva VL_PIS_RET/VL_COFINS_RET da MESMA coleta (o arquivo aceito os preenche)', () => {
+        const linhas: string[] = buildBlocoA({
+            empresa: { cnpj: '05.147.016/0001-45' }, regimeApuracao: '2',
+            notas: NOTAS_HS_07, warnings: [],
+        });
+        const a2901 = campos(linhas.find(l => l.includes('|2901|'))!);
+        expect(a2901[19]).toBe('22,75');   // VL_PIS_RET
+        expect(a2901[20]).toBe('105,00');  // VL_COFINS_RET
+    });
+});
