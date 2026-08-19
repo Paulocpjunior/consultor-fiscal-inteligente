@@ -289,6 +289,35 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
     }
 
+    // ─── 7a. Saldo credor de IPI anterior (E520 campo VL_SD_ANT_IPI) ────────
+    // Caso PWR 07/2026 (Paulo, 19/08): a ficha dizia "Cred. IPI do mês anterior
+    // (compensado): R$ 2.547,39" e o E520 saía 0,00 — o gerador sempre leu
+    // `saldoCredorIpiAnterior` e nada o alimentava (registro de 17/08).
+    // ⚠️ A fonte é a ficha da PRÓPRIA competência, não a anterior: na ficha,
+    // `saldoCredorIpi` já É "o que entrou neste mês" — exatamente a semântica
+    // do VL_SD_ANT_IPI. (No ICMS a leitura é da ficha ANTERIOR e por isso
+    // transporta defasado — defeito conhecido, não copiar aquele desenho.)
+    let saldoCredorIpiAnterior = 0;
+    if (regime === 'lucro') {
+        try {
+            const fichaAtualSnap = await db.collection('lucro_fichas')
+                .where('empresaId', '==', empresaId)
+                .where('competencia', '==', periodoInicio)
+                .limit(1)
+                .get();
+            if (!fichaAtualSnap.empty) {
+                const fichaAtual = fichaAtualSnap.docs[0].data();
+                saldoCredorIpiAnterior = parseFloat(fichaAtual.saldoCredorIpi || 0);
+            }
+        } catch (err) {
+            console.warn(`[sped-fiscal] saldoCredorIpiAnterior falhou: ${err.message}`);
+            warnings.push(
+                `Não consegui ler o saldo credor de IPI da ficha (${err.message}) — o E520 sai com `
+                + 'saldo anterior 0,00. Confira a ficha antes de transmitir.',
+            );
+        }
+    }
+
     // ─── 7b. Ajustes da apuração (Registro E111) — lançados na aba do card ──
     // Coleção sped_ajustes_apuracao, doc {empresaId}_{competencia}. No modo
     // trimestral concatena os meses do período. Erro de código NÃO entra
@@ -390,6 +419,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         participantes,
         unidades,
         saldoCredorIcmsAnterior,
+        saldoCredorIpiAnterior,
         ajustesApuracao,
         difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
         difalCodObservacao: difalCfg.difalCodObservacao || '',
