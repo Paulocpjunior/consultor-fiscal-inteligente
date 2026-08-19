@@ -178,6 +178,60 @@ describe('serviços e retenções', () => {
         const l = linhasServicos([antigo] as any, 'entrada');
         expect(l[0].retencoesFederaisGravadas).toBe(false);
     });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 A SEGUNDA METADE DO CASO CLUDE (19/08): o documento TEM as retenções —
+    // na OUTRA forma. O importador do CSV do portal grava `valorIr`/`valorInss`
+    // ACHATADOS na raiz, e o relatório só lia `valores.*`: nota com IR gravado
+    // imprimia "?". A leitura agora é do DONO (lerRetencoesFederaisDoDoc),
+    // nunca uma segunda cópia.
+    // ═══════════════════════════════════════════════════════════════════════
+    it('forma ACHATADA do portal (valorIr/valorInss na raiz) aparece — e sem "?"', () => {
+        const csv = nfse({
+            id: 'csv', valores: undefined,
+            valorTotal: 1000, valorPis: 6.5, valorCofins: 30, valorIr: 15, valorInss: 0, valorCsll: 10,
+        });
+        const l = linhasServicos([csv] as any, 'entrada');
+        expect(l[0].ir).toBe(15);
+        expect(l[0].inss).toBe(0);
+        expect(l[0].csll).toBe(10); // 1% da base — CSLL de verdade
+        expect(l[0].retencoesFederaisGravadas).toBe(true);
+        expect(l[0].csrfSemRateio).toBe(0);
+    });
+
+    // Caso CLINIPAR (07/08, conferido contra o print do IOB): base 590,10 e a
+    // coluna "CSLL" do export = 27,44 = PIS 3,84 + COFINS 17,70 + CSLL 5,90 —
+    // o TOTAL das três. Somar como CSLL contaria PIS e COFINS em dobro.
+    it('CSLL com assinatura de 4,65% é o TOTAL (CSRF): sai da coluna, vai marcada', () => {
+        const clinipar = nfse({
+            id: 'clinipar', valores: undefined,
+            valorTotal: 590.10, valorPis: 3.84, valorCofins: 17.70, valorCsll: 27.44,
+        });
+        const l = linhasServicos([clinipar] as any, 'entrada');
+        expect(l[0].csll).toBe(0);
+        expect(l[0].csrfSemRateio).toBe(27.44);
+        expect(l[0].pis).toBe(3.84);    // PIS/COFINS individuais são de verdade
+        expect(l[0].cofins).toBe(17.70);
+        // E a nota NÃO some da aba Retenções — a retenção existe, sem rateio.
+        expect(linhasRetencoes([clinipar] as any, 'entrada')).toHaveLength(1);
+    });
+
+    // Caso ATLAS SCHINDLER (07/08, NFS-e 00375235): PIS 56,32 (1,65%) e COFINS
+    // 259,41 (7,60%) são o tributo da OPERAÇÃO do prestador (não-cumulativo),
+    // não retenção; a retenção real é a CSRF 158,72 (4,65%).
+    it('PIS/COFINS da OPERAÇÃO (1,65%/7,60%) não viram retenção; a CSRF vai marcada', () => {
+        const atlas = nfse({
+            id: 'atlas', valores: undefined,
+            valorTotal: 3413.24, valorPis: 56.32, valorCofins: 259.41, valorCsll: 158.72,
+        });
+        const l = linhasServicos([atlas] as any, 'entrada');
+        expect(l[0].pis).toBe(0);
+        expect(l[0].cofins).toBe(0);
+        expect(l[0].pisCofinsOperacao).toBe(315.73);
+        expect(l[0].csll).toBe(0);
+        expect(l[0].csrfSemRateio).toBe(158.72);
+        expect(linhasRetencoes([atlas] as any, 'entrada')).toHaveLength(1);
+    });
 });
 
 describe('servicosPorCodigo (colaborador via Paulo, 10/08)', () => {

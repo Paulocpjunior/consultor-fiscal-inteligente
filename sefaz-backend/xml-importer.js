@@ -13,6 +13,7 @@ import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancel
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 import { decidirPosseDocumento } from './documento-posse.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
+import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from './releitura-notas-vazias.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 // CNPJ do escritório — é ele que o cliente põe no autXML da nota dele.
@@ -1241,6 +1242,101 @@ export async function relerItensFiscais({ limit = 200, empresaId = null, compete
     return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, erro: e.message };
   }
   return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe };
+}
+
+/**
+ * ♻️ RELEITURA DAS NOTAS "VAZIAS" — sem itens/nº na tela ✏️ CFOP por nota
+ * (Paulo, 19/08: notas sem número, sem CFOP pela régua e sem CST; o
+ * colaborador digitava o CFOP no escuro).
+ *
+ * Quem decide o destino de cada documento é a régua PURA
+ * `releitura-notas-vazias.js` (classificarParaReleitura) — aqui é só o I/O.
+ * O resultado responde POR CAUSA, porque cada uma tem ação própria:
+ *   preenchidas         XML completo guardado, itens/nº relidos e gravados
+ *   soResumo            só o resNFe na base — a ação é importar o XML COMPLETO
+ *   semArquivo          sem storagePath — buraco de captura
+ *   ganharamNumero      só o nº entrou (derivado da CHAVE — ela não mente)
+ *   foraDoEscopo        NFS-e/CT-e — itens não vêm de <det>
+ *
+ * SEM carimbo de versão, de propósito: a condição-alvo (sem itens/nº) se
+ * LIMPA sozinha quando o preenchimento acontece — documento preenchido deixa
+ * de ser alvo. Carimbar os "só resumo" esconderia justamente os que ainda
+ * precisam do XML completo. (A lição de 13/08 é "sentinela nunca é campo de
+ * DADO alheio" — aqui o campo julgado é o próprio campo a preencher.)
+ */
+export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } = {}) {
+  const db = fa().firestore();
+  const res = {
+    examinadas: 0, preenchidas: 0, ganharamNumero: 0, soResumo: 0,
+    semArquivo: 0, foraDoEscopo: 0, jaCompletas: 0, semItemNoXml: 0, falhas: 0,
+  };
+  let q = db.collection('documentos_fiscais');
+  if (empresaId) q = q.where('empresaId', '==', String(empresaId));
+  if (competencia) q = q.where('competencia', '==', String(competencia));
+  const snap = await q.limit(Math.max(limit, 1)).get();
+
+  const bucket = storage.bucket(STORAGE_BUCKET);
+  for (const docSnap of snap.docs) {
+    const d = docSnap.data() || {};
+    if (d._merged_into || d._deleted) continue;
+    res.examinadas++;
+
+    const causa = classificarParaReleitura(d);
+    if (causa === 'fora-do-escopo') { res.foraDoEscopo++; continue; }
+    if (causa === 'completa') { res.jaCompletas++; continue; }
+
+    // Resumo/sem-arquivo: a releitura não cria item, mas o Nº sai da CHAVE —
+    // a linha da tela deixa de ficar cega mesmo antes do XML completo chegar.
+    if (causa === 'resumo-gravado' || causa === 'sem-arquivo') {
+      if (causa === 'resumo-gravado') res.soResumo++; else res.semArquivo++;
+      const numero = numeroDaChave(d.chave);
+      if (!d.numero && numero) {
+        try {
+          await docSnap.ref.update({ numero, numeroOrigem: 'chave-de-acesso' });
+          res.ganharamNumero++;
+        } catch (e) {
+          console.warn(`[relerNotasVazias] nº pela chave falhou em ${docSnap.id}:`, e.message);
+          res.falhas++;
+        }
+      }
+      continue;
+    }
+
+    // alvo: XML guardado — reler da FONTE.
+    try {
+      const [buf] = await bucket.file(d.storagePath).download();
+      const xml = buf.toString('utf8');
+      if (/<res(NFe|NFCe)[\s>]/i.test(xml)) {
+        // O doc não se declarava resumo mas o ARQUIVO é: mesma ação do resumo.
+        res.soResumo++;
+        const numero = numeroDaChave(d.chave);
+        if (!d.numero && numero) {
+          await docSnap.ref.update({ numero, numeroOrigem: 'chave-de-acesso' });
+          res.ganharamNumero++;
+        }
+        continue;
+      }
+      const itens = extrairItens(xml);
+      let numero = null;
+      try { numero = extrairMetadados(xml, d.schema || 'procNFe')?.numero || null; } catch { /* nº cai na chave */ }
+      const patch = patchDaReleitura(d, { itens, numero });
+      if (patch.itens) {
+        patch.itensRelidosDoStorageEm = new Date().toISOString();
+        await docSnap.ref.update(patch);
+        res.preenchidas++;
+      } else if (patch.numero) {
+        await docSnap.ref.update({ ...patch, numeroOrigem: 'xml-relido' });
+        res.ganharamNumero++;
+      } else {
+        // XML completo sem <det> legível — esquisito de verdade, e NOMEADO.
+        res.semItemNoXml++;
+      }
+    } catch (e) {
+      console.warn(`[relerNotasVazias] falha em ${docSnap.id}:`, e.message);
+      res.falhas++;
+    }
+  }
+  return res;
 }
 
 export async function registrarErroSefaz({ empresaId, empresaCnpj, motivo, contexto, capturadoPor }) {

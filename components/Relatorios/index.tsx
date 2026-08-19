@@ -34,6 +34,9 @@ import {
     contraparteDoc, docValido, lerFaltantes,
 } from '../../services/relatoriosAgregacoes';
 import { reconferirCancelamento } from '../../services/reconferirCancelamentoService';
+// ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
+// Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
+import { relerNotasVazias } from '../../services/ipiVarreduraService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
@@ -306,7 +309,8 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
             {aba === 'cfop-nota' && docsRecorte && empresa && (
-                <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast} />
+                <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast}
+                    onRebuscar={() => buscar(empresa.id)} />
             )}
             {aba === 'canceladas' && docsRecorte && empresa && (
                 <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado}
@@ -546,11 +550,14 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
  * (livro, Resumo por CFOP, C170/C190 do SPED e Exportar SAGE) — por isso o que
  * for corrigido aqui aparece nos quatro, e não só nesta tela.
  */
-const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?: (m: string, t?: any) => void }> = ({
-    docs, empresa, competencia, truncado, identificacao, cadastroFiscal, currentUser, onShowToast,
+const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?: (m: string, t?: any) => void; onRebuscar?: () => void }> = ({
+    docs, empresa, competencia, truncado, identificacao, cadastroFiscal, currentUser, onShowToast, onRebuscar,
 }) => {
     const { gerando, rodar } = usePdf();
     const [salvando, setSalvando] = useState<string | null>(null);
+    /** ♻️ Releitura das notas vazias — resultado POR CAUSA, nunca um número só. */
+    const [relendo, setRelendo] = useState(false);
+    const [resultadoReler, setResultadoReler] = useState<string | null>(null);
     const [rascunho, setRascunho] = useState<Record<string, string>>({});
     /** 🧠 Parâmetros do cérebro — o palpite melhor, entre a NF e o override. */
     const [parametros, setParametros] = useState<ParametroCfopDoc[]>([]);
@@ -691,6 +698,35 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         }
     };
 
+    /** Notas "vazias" do recorte — sem itens (CFOP/CST em branco) ou sem nº. */
+    const vazias = linhas.filter(l => !l.cfopCru || l.numero === '—').length;
+
+    const reler = async () => {
+        setRelendo(true);
+        setResultadoReler(null);
+        try {
+            const r = await relerNotasVazias(empresa.id, competencia);
+            // POR CAUSA, nunca um número só: resumo e sem-arquivo pedem ações
+            // diferentes de "preenchida" — fundir foi o erro do "0 recuperadas".
+            const partes = [
+                r.preenchidas ? `${r.preenchidas} preenchida(s) do XML guardado` : '',
+                r.ganharamNumero ? `${r.ganharamNumero} ganharam o nº pela chave de acesso` : '',
+                r.soResumo ? `${r.soResumo} só têm o RESUMO da SEFAZ na base — o arquivo guardado não tem itens; importe o XML completo (Central de XMLs → Importar) e a linha dirá "COMPLETADA"` : '',
+                r.semArquivo ? `${r.semArquivo} sem arquivo guardado (buraco de captura — confira o 📊 Status por Empresa)` : '',
+                r.semItemNoXml ? `${r.semItemNoXml} com XML guardado sem itens legíveis — mande o caso ao time` : '',
+                r.falhas ? `${r.falhas} falha(s) de leitura` : '',
+            ].filter(Boolean);
+            setResultadoReler(partes.length
+                ? `♻️ ${r.examinadas} examinada(s): ${partes.join(' · ')}.`
+                : `♻️ ${r.examinadas} examinada(s) — nada a preencher: as NF-e do recorte já estão completas.`);
+            if (r.preenchidas || r.ganharamNumero) onRebuscar?.();
+        } catch (e: any) {
+            setResultadoReler(`♻️ Falha ao reler: ${e?.message || 'erro inesperado'}.`);
+        } finally {
+            setRelendo(false);
+        }
+    };
+
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `CFOP por nota — ${fmtComp(competencia)}`,
         subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} nota(s) · ${comCarimbo} com CFOP informado`,
@@ -753,10 +789,24 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     rel="noreferrer"
                     className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 whitespace-nowrap"
                 >📗 Guia do colaborador</a>
+                {/* ♻️ Releitura dos XMLs guardados (Paulo, 19/08): nota "vazia"
+                    é dado NÃO CAPTURADO, não erro de quem digita. Admin-only
+                    porque a rota ESCREVE em documento fiscal. */}
+                {currentUser?.role === 'admin' && (
+                    <button
+                        onClick={reler}
+                        disabled={relendo}
+                        title="Relê os XMLs guardados no sistema e preenche itens, CFOP, CST e nº das notas vazias — sem redigitar nada."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{relendo ? '♻️ Relendo os XMLs…' : `♻️ Reler XMLs guardados${vazias ? ` (${vazias} vazia${vazias > 1 ? 's' : ''})` : ''}`}</button>
+                )}
                 <span className="text-xs text-slate-500">
                     {linhas.length} nota(s) · {comCarimbo} com CFOP informado
                 </span>
             </div>
+            {resultadoReler && (
+                <p className="mt-2 text-[11px] font-semibold text-blue-700 dark:text-blue-300">{resultadoReler}</p>
+            )}
             <p className="mt-2 text-[11px] text-slate-500">
                 O CFOP informado aqui vence a correlação automática e o override da empresa, e vale para{' '}
                 <strong>todos os itens daquela nota</strong>. Ele aparece no Livro, no Resumo por CFOP, no SPED
@@ -1616,8 +1666,11 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
     const tot = useMemo(() => linhas.reduce((t, l) => ({
         base: t.base + l.base, iss: t.iss + l.iss, issRetido: t.issRetido + l.issRetido,
         pis: t.pis + l.pis, cofins: t.cofins + l.cofins, ir: t.ir + l.ir, inss: t.inss + l.inss, csll: t.csll + l.csll,
+        csrf: t.csrf + l.csrfSemRateio, operacao: t.operacao + l.pisCofinsOperacao,
         liquido: t.liquido + l.liquido,
-    }), { base: 0, iss: 0, issRetido: 0, pis: 0, cofins: 0, ir: 0, inss: 0, csll: 0, liquido: 0 }), [linhas]);
+    }), { base: 0, iss: 0, issRetido: 0, pis: 0, cofins: 0, ir: 0, inss: 0, csll: 0, csrf: 0, operacao: 0, liquido: 0 }), [linhas]);
+    const comCsrf = linhas.filter(l => l.csrfSemRateio > 0).length;
+    const comOperacao = linhas.filter(l => l.pisCofinsOperacao > 0).length;
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `${titulos[modo]} — ${fmtComp(competencia)}`,
@@ -1642,13 +1695,17 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
             l.data, l.numero, l.participante, l.base, l.iss, l.issRetido, l.pis, l.cofins,
             l.retencoesFederaisGravadas ? l.ir : '?',
             l.retencoesFederaisGravadas ? l.inss : '?',
-            l.retencoesFederaisGravadas ? l.csll : '?',
+            // CSRF sem rateio: o valor É retenção, mas somá-lo como CSLL
+            // contaria PIS e COFINS em dobro — sai marcado, fora da soma.
+            l.csrfSemRateio > 0 ? `${l.csrfSemRateio.toFixed(2)}†` : (l.retencoesFederaisGravadas ? l.csll : '?'),
             l.liquido,
         ]),
         totais: ['', '', `TOTAIS (${linhas.length})`, tot.base, tot.iss, tot.issRetido, tot.pis, tot.cofins, tot.ir, tot.inss, tot.csll, tot.liquido],
         identificacao,
         observacoes: [
             ...(semRetGravada > 0 ? [`${semRetGravada} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
+            ...(comCsrf > 0 ? [`† ${comCsrf} nota(s) trazem as três contribuições retidas num campo só (CSRF 4,65% — assinatura da alíquota): o valor aparece na coluna CSLL marcado com † e NÃO entra na soma da coluna, porque somá-lo como CSLL contaria PIS e COFINS em dobro. Retenção CSRF sem rateio no período: ${tot.csrf.toFixed(2)}. O rateio individual não está no documento.`] : []),
+            ...(comOperacao > 0 ? [`${comOperacao} nota(s) com PIS/COFINS nas alíquotas do regime não-cumulativo (1,65% / 7,60%) — é o tributo da OPERAÇÃO do prestador, não retenção; ficou fora das colunas e dos totais (soma: ${tot.operacao.toFixed(2)}).`] : []),
             ...(modo === 'retencoes' ? [diag.mensagem] : []),
         ],
         fileName: `${modo}-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
@@ -1667,12 +1724,23 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
                 <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
                 <span className="text-xs text-slate-500">
                     {linhas.length} NFS-e · base {fmtBRL(tot.base)} · ISS {fmtBRL(tot.iss)}
-                    {modo === 'retencoes' && ` · retenções ${fmtBRL(tot.issRetido + tot.pis + tot.cofins + tot.ir + tot.inss + tot.csll)}`}
+                    {modo === 'retencoes' && ` · retenções ${fmtBRL(tot.issRetido + tot.pis + tot.cofins + tot.ir + tot.inss + tot.csll + tot.csrf)}`}
                 </span>
             </div>
             {semRetGravada > 0 && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
                     ⚠ {semRetGravada} nota(s) antigas sem IR/INSS/CSLL gravados — ausência não significa zero retido (reimporte o XML pra completar).
+                </p>
+            )}
+            {comCsrf > 0 && (
+                <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                    † {comCsrf} nota(s) com as três contribuições retidas num campo só (CSRF 4,65% — total {fmtBRL(tot.csrf)}):
+                    o valor aparece na coluna CSLL marcado com †, fora da soma da coluna — somá-lo como CSLL contaria PIS e COFINS em dobro.
+                </p>
+            )}
+            {comOperacao > 0 && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    ⚠ {comOperacao} nota(s) com PIS/COFINS nas alíquotas da OPERAÇÃO do prestador (1,65% / 7,60% — não é retenção): {fmtBRL(tot.operacao)} fora dos totais.
                 </p>
             )}
             {linhas.length === 0 && (

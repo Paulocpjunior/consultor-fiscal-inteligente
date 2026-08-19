@@ -81,3 +81,24 @@ export function relerItensFiscais(p?: {
     naoPareadasDetalhe: Array<{ chave: string; numero: string | null; motivo: string }>;
     erro?: string;
 }>;
+
+/**
+ * ♻️ Releitura das notas "VAZIAS" (sem itens/nº) a partir do XML guardado.
+ * Quem classifica é a régua pura `releitura-notas-vazias.js`; o resultado
+ * responde POR CAUSA (resumo ≠ sem arquivo ≠ preenchida).
+ */
+export function relerNotasVazias(p?: {
+    empresaId?: string | null;
+    competencia?: string | null;
+    limit?: number;
+}): Promise<{
+    examinadas: number;
+    preenchidas: number;
+    ganharamNumero: number;
+    soResumo: number;
+    semArquivo: number;
+    foraDoEscopo: number;
+    jaCompletas: number;
+    semItemNoXml: number;
+    falhas: number;
+}>;

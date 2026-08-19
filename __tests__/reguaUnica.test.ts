@@ -71,6 +71,34 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A releitura das notas VAZIAS — quando o XML guardado resolve e quando não',
+        dono: 'sefaz-backend/releitura-notas-vazias.js',
+        comoUsar: "import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from 'sefaz-backend/releitura-notas-vazias.js'",
+        porque: 'Paulo, 19/08 (PWR/GLOBAL COMPANY): nota sem nº/CFOP/CST na tela e o colaborador digitando no '
+            + 'escuro. A régua separa CAUSAS com ações opostas — resumo gravado (reler não cria item; importe o '
+            + 'XML completo) × XML completo guardado (a releitura resolve) × sem arquivo (buraco de captura). '
+            + 'Uma segunda cópia dessa classificação faria o botão responder uma coisa e a gravação fazer outra. '
+            + 'E o nº sai da CHAVE (posições 26-34) — segunda cópia desse recorte é o 1405 de outro jeito.',
+        assinaturas: [
+            /function classificarParaReleitura\s*\(/,
+            /function numeroDaChave\s*\(/,
+            /function patchDaReleitura\s*\(/,
+        ],
+    },
+    {
+        nome: 'As retenções federais nas DUAS formas de gravação (achatada × objeto)',
+        dono: 'sefaz-backend/reinf-retencoes-pj.js',
+        comoUsar: "import { lerRetencoesFederaisDoDoc } from 'sefaz-backend/reinf-retencoes-pj.js'",
+        porque: 'CLUDE, 19/08: o CSV do portal grava valorIr/valorInss/valorCsll na RAIZ e o Relatório de '
+            + 'Retenções só lia valores.* — 67 notas com IR/INSS gravados imprimiam "?". É a armadilha das duas '
+            + 'formas, que já mordeu 8 vezes. Quem lê as duas é o DONO (o mesmo que alimenta o R-4020); uma '
+            + 'segunda leitura divergiria — e o campo de CSLL só sai como csllOuTotal, porque no export do '
+            + 'portal ele é o TOTAL das três contribuições (caso CLINIPAR).',
+        assinaturas: [
+            /function lerRetencoesFederaisDoDoc\s*\(/,
+        ],
+    },
+    {
         nome: 'O CÉREBRO do CFOP — parâmetro por fornecedor, com vigência',
         dono: 'sefaz-backend/cfop-cerebro.js',
         comoUsar: "import { parametroAplicavel, sugerirParametro } from 'sefaz-backend/cfop-cerebro.js'",

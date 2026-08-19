@@ -103,6 +103,47 @@ export interface RelerItensResposta {
     error?: string;
 }
 
+export interface RelerNotasVaziasResposta {
+    ok: boolean;
+    competencia: string;
+    examinadas: number;
+    /** XML completo guardado: itens/nº relidos e gravados. */
+    preenchidas: number;
+    /** Só o número entrou (derivado da chave de acesso ou do XML). */
+    ganharamNumero: number;
+    /** Só o RESUMO (resNFe) na base — a ação é importar o XML completo. */
+    soResumo: number;
+    /** Sem storagePath — buraco de captura, não de leitura. */
+    semArquivo: number;
+    /** NFS-e/CT-e — itens não vêm de <det>. */
+    foraDoEscopo: number;
+    jaCompletas: number;
+    /** XML completo sem <det> legível — esquisito de verdade, conferir. */
+    semItemNoXml: number;
+    falhas: number;
+    error?: string;
+}
+
+/**
+ * ♻️ Relê os XMLs guardados das notas "vazias" (sem itens/nº) e preenche o que
+ * está em branco. O resultado responde POR CAUSA — resumo e sem-arquivo têm
+ * ações diferentes de "preenchida".
+ */
+export async function relerNotasVazias(
+    empresaId: string,
+    competencia: string,
+): Promise<RelerNotasVaziasResposta> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/reler-notas-vazias', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId, competencia }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+}
+
 /** Relê do XML-fonte os campos de item que o extrator aprendeu depois. */
 export async function relerItensFiscais(
     empresaId: string,
