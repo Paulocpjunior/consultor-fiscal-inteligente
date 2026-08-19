@@ -14,12 +14,12 @@
 // as CTeS então" — a captura de NF-e nunca perguntou por CT-e porque não
 // existe webservice compartilhado; o CT-e tem o dele próprio.
 //
-// 🚧 ENDEREÇO AINDA NÃO PROVADO CONTRA RESPOSTA REAL — este ambiente de
-// desenvolvimento não alcança a rede da SEFAZ (mesma cegueira de sempre, que
-// já vale pro DistDFe de NF-e: nunca foi testado daqui, só em produção). O
-// host abaixo segue a MESMA convenção de nome do endpoint de NF-e
-// (`www1.[doc].fazenda.gov.br/[Serviço]/[Serviço].asmx`) — a prova real só
-// vem de rodar em produção contra um CNPJ que recebe CT-e (a EDUARDO GUERRA).
+// ✅ HOST E ESTRUTURA DO ENVELOPE PROVADOS EM PRODUÇÃO (19/08, botão 🚚 CT-e
+// beta na EDUARDO GUERRA): a SEFAZ respondeu com um cStat estruturado
+// (239 — versão do XML não suportada), não com erro de rede/TLS/schema. Isso
+// prova o host, a porta, o handshake mTLS e o envelope SOAP — só a VERSÃO do
+// `distDFeInt` estava errada (ver comentário na constante `VERSAO` abaixo).
+// Ainda falta provar uma rodada com `ok: true` de verdade.
 // ============================================================================
 
 import https from 'https';
@@ -31,7 +31,21 @@ const CTE_PATH = '/CTeDistribuicaoDFe/CTeDistribuicaoDFe.asmx';
 const SOAP_ACTION = 'http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe/cteDistDFeInteresse';
 
 const TP_AMB = 1;
-const VERSAO = '1.01';
+// 🚨 NÃO É "1.01" DA NF-e — o CTeDistribuicaoDFe tem VERSÃO PRÓPRIA (NT
+// 2015.002), e usar a versão da NF-e aqui foi exatamente o defeito da 1ª
+// tentativa: Paulo testou em produção (EDUARDO GUERRA, 19/08) e a SEFAZ
+// recusou com cStat 239 "Cabecalho — A versao do arquivo xml nao e
+// suportada". O host RESPONDEU (TLS ok, SOAP entendido) — só a versão do
+// envelope estava errada, o que já prova que o resto do envelope (mesma
+// estrutura provada do NFe DistDFe) está certo.
+// "1.00" vem CORROBORADO por múltiplas implementações independentes
+// (PySPED, PyNFe, e um script de terceiro com o comentário explícito
+// "NAO e a 1.35 da NF-e — o layout de distribuicao do CT-e tem versao
+// PROPRIA") — não é documentação oficial (rede da SEFAZ/gov.br segue
+// bloqueada deste ambiente), mas é a MESMA técnica de corroboração por
+// fonte externa já usada nesta casa. Se a SEFAZ recusar de novo, o cStat
+// da resposta real vale mais que qualquer fonte externa.
+const VERSAO = '1.00';
 const HTTP_TIMEOUT_MS = 60_000;
 
 // Mesmo mapa UF → código IBGE do cliente NFe (cUFAutor exige o código IBGE

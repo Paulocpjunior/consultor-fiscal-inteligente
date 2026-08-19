@@ -653,6 +653,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   🚧 **HOST NÃO PROVADO CONTRA RESPOSTA REAL** — mesma cegueira de rede do item
   acima; `www1.cte.fazenda.gov.br/CTeDistribuicaoDFe/...` segue a convenção de
   nome do NF-e (mesma infraestrutura nacional), mas só produção confirma.
+  ✅ **E O TESTE VEIO NO MESMO DIA — o host RESPONDEU** (Paulo, 19/08, botão
+  🚚 CT-e beta na EDUARDO GUERRA: `cStat=239 Rejeicao: Cabecalho — A versao do
+  arquivo xml nao e suportada`). Isso prova TLS, host, SOAP e o resto do
+  envelope de uma vez — 239 é a SEFAZ RECUSANDO um campo específico, não uma
+  falha de rede/schema. A causa era a constante `VERSAO`: copiei o `'1.01'` da
+  NF-e sem checar, e o CT-e tem versão PRÓPRIA do `distDFeInt` (NT 2015.002).
+  Rede da SEFAZ segue bloqueada deste ambiente, então a correção não veio de
+  doc oficial — veio de CORROBORAÇÃO por múltiplas implementações
+  independentes no GitHub (PySPED, PyNFe, e um script de terceiro com o
+  comentário *"NAO e a 1.35 da NF-e — o layout de distribuicao do CT-e tem
+  versao PROPRIA"*), todas concordando em `'1.00'`. Corrigido; falta a PROVA
+  de verdade — uma rodada que volte `ok:true`.
   Escopo desta rodada: só ENTRADA (empresa tomadora, caso EDUARDO GUERRA) —
   emissão própria de CT-e e "Manifestação do Destinatário" de CT-e ficam de
   fora, por decisão explícita, até haver caso real que peça.

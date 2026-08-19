@@ -3,10 +3,11 @@
  * as CTeS então"). Espelha o cliente NFeDistribuicaoDFe que já funciona em
  * produção, trocando o namespace/host pro webservice próprio do CT-e.
  *
- * 🚧 O host (`www1.cte.fazenda.gov.br`) segue a convenção de nome do NF-e mas
- * NÃO foi provado contra resposta real — a rede da SEFAZ é bloqueada deste
- * ambiente (mesma cegueira que já vale pro NFe DistDFe). A prova é produção,
- * contra um CNPJ tomador real (EDUARDO GUERRA).
+ * ✅ Host, TLS e estrutura do envelope PROVADOS em produção 19/08 (a SEFAZ
+ * respondeu com cStat 239 — "versão do XML não suportada" — que é uma
+ * REJEIÇÃO estruturada, não erro de rede/schema). A causa era a versão do
+ * `distDFeInt`: CT-e tem versão PRÓPRIA (NT 2015.002), "1.00", nunca a
+ * "1.01" da NF-e. Ainda falta provar uma rodada com `ok: true` de verdade.
  */
 // @ts-ignore — módulo JS do backend
 import { montaEnvelopeCte } from '../sefaz-backend/cte-client.js';
@@ -15,7 +16,7 @@ describe('montaEnvelopeCte — mesma estrutura do NFe, namespace do CT-e', () =>
     it('leva tpAmb, cUFAutor, CNPJ e distNSU dentro de distDFeInt', () => {
         const env = montaEnvelopeCte({ cnpj: '13344638000191', ultNSU: '000000000000123', uf: 'SP' });
         expect(env).toContain('xmlns="http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe"');
-        expect(env).toContain('<distDFeInt versao="1.01" xmlns="http://www.portalfiscal.inf.br/cte">');
+        expect(env).toContain('<distDFeInt versao="1.00" xmlns="http://www.portalfiscal.inf.br/cte">');
         expect(env).toContain('<CNPJ>13344638000191</CNPJ>');
         expect(env).toContain('<cUFAutor>35</cUFAutor>'); // SP = 35
         expect(env).toContain('<ultNSU>000000000000123</ultNSU>');
