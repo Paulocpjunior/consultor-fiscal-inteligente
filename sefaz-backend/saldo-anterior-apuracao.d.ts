@@ -12,6 +12,10 @@ export function avisosDeSaldoAnterior(p?: {
     icmsAnterior?: number;
     /** De onde ele veio — número sem origem não se confere depois. */
     origemIcms?: string;
+    /** O que foi para o E520 VL_SD_ANT_IPI (ligado 19/08, caso PWR). */
+    ipiAnterior?: number;
+    /** De onde ele veio. */
+    origemIpi?: string;
     /** O bloco E500/E520 saiu de fato? (nunca "a empresa tem IPI no cadastro") */
     geraIpi?: boolean;
     /** O bloco E200/E210 saiu de fato? */

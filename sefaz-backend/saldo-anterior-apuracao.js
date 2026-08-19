@@ -18,9 +18,12 @@
 //                                  ENTROU naquele mês, não o que SOBROU dele —
 //                                  ou seja, transporta o saldo DEFASADO e
 //                                  ignora a movimentação do próprio mês.
-//   IPI (E520 VL_SC_ANT_IPI)       o gerador lê `saldoCredorIpiAnterior` e o
-//                                  orquestrador NUNCA passa esse campo ⇒ sai
-//                                  SEMPRE 0,00.
+//   IPI (E520 VL_SD_ANT_IPI)       o gerador lê `saldoCredorIpiAnterior` e o
+//                                  orquestrador NUNCA passava esse campo ⇒ saía
+//                                  SEMPRE 0,00. ✅ LIGADO 19/08 (caso PWR): o
+//                                  orquestrador passa o `saldoCredorIpi` da
+//                                  ficha DESTA competência — que já significa
+//                                  "o que entrou neste mês".
 //   ICMS-ST (E210 VL_SLD_CRED_ANT_ST)  `apurarStDaUf` aceita `saldoCredorAnterior`
 //                                  e ninguém passa ⇒ SEMPRE 0,00.
 //
@@ -53,11 +56,13 @@ export const temMovimento = (deb, cred) => num(deb) > 0 || num(cred) > 0;
  * @param {object} p
  * @param {number} [p.icmsAnterior]     o que foi para o E110 campo 10
  * @param {string} [p.origemIcms]       de onde ele veio ('ficha-anterior' | '')
+ * @param {number} [p.ipiAnterior]      o que foi para o E520 VL_SD_ANT_IPI
+ * @param {string} [p.origemIpi]        de onde ele veio
  * @param {boolean} [p.geraIpi]         o bloco E500/E520 vai sair?
  * @param {boolean} [p.geraSt]          o bloco E200/E210 vai sair?
  * @returns {string[]}
  */
-export function avisosDeSaldoAnterior({ icmsAnterior = 0, origemIcms = '', geraIpi = false, geraSt = false } = {}) {
+export function avisosDeSaldoAnterior({ icmsAnterior = 0, origemIcms = '', ipiAnterior = 0, origemIpi = '', geraIpi = false, geraSt = false } = {}) {
     const avisos = [];
 
     if (num(icmsAnterior) > 0) {
@@ -77,11 +82,20 @@ export function avisosDeSaldoAnterior({ icmsAnterior = 0, origemIcms = '', geraI
         );
     }
 
-    if (geraIpi) {
+    if (geraIpi && num(ipiAnterior) > 0) {
+        // Ligado em 19/08 (caso PWR 07/2026): o valor sai do campo "Cred. IPI
+        // do mês anterior" da ficha DESTA competência — na ficha, esse campo
+        // já é "o que entrou neste mês", exatamente o VL_SD_ANT_IPI.
         avisos.push(
-            'O E520 está declarando saldo credor anterior de IPI = 0,00 — o CFI ainda não transporta saldo de '
-            + 'IPI entre competências (o campo existe no gerador e nada o alimenta). Empresa com crédito de IPI '
-            + 'acumulado precisa conferir no último SPED entregue antes de transmitir.',
+            `Saldo credor de IPI do período anterior: ${num(ipiAnterior).toFixed(2)} `
+            + `(origem: ${origemIpi || 'não registrada'}). O valor foi digitado na ficha, não calculado — `
+            + 'confira contra o VL_SC_IPI do E520 do último SPED entregue antes de transmitir.',
+        );
+    } else if (geraIpi) {
+        avisos.push(
+            'O E520 está declarando saldo credor anterior de IPI = 0,00. Isso é uma AFIRMAÇÃO à SEFAZ: '
+            + 'empresa com crédito de IPI acumulado recolhe a MAIOR. O valor sai do campo "Cred. IPI do mês '
+            + 'anterior (compensado)" da ficha desta competência — lance-o lá antes de transmitir.',
         );
     }
 

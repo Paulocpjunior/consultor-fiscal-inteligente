@@ -53,6 +53,28 @@ describe('zero declarado é dito, não engolido', () => {
         expect(juntou(avisosDeSaldoAnterior({ geraIpi: true }))).toMatch(/E520.*IPI = 0,00/s);
     });
 
+    it('IPI COM saldo (caso PWR 19/08): sai carimbado com a ORIGEM e a ação de conferência', () => {
+        const a = juntou(avisosDeSaldoAnterior({
+            geraIpi: true,
+            ipiAnterior: 2547.39,
+            origemIpi: 'campo "Cred. IPI do mês anterior" da ficha desta competência',
+        }));
+        expect(a).toMatch(/2547\.39/);
+        expect(a).toMatch(/origem: campo "Cred\. IPI do mês anterior" da ficha desta competência/);
+        // Digitado ≠ calculado: quem confere precisa saber que ninguém somou isso.
+        expect(a).toMatch(/digitado na ficha, não calculado/);
+        expect(a).toMatch(/VL_SC_IPI do E520 do último SPED entregue/);
+        // E o aviso de zero NÃO aparece junto — seriam duas leituras discordando.
+        expect(a).not.toMatch(/IPI = 0,00/);
+    });
+
+    it('IPI sem saldo: a ação diz ONDE lançar (o campo da ficha DESTA competência)', () => {
+        const a = juntou(avisosDeSaldoAnterior({ geraIpi: true, ipiAnterior: 0 }));
+        expect(a).toMatch(/AFIRMAÇÃO à SEFAZ/);
+        expect(a).toMatch(/Cred\. IPI do mês\s+anterior \(compensado\)/);
+        expect(a).toMatch(/ficha desta competência/);
+    });
+
     it('ST só avisa quando o bloco E200/E210 SAI', () => {
         expect(juntou(avisosDeSaldoAnterior({ geraSt: false }))).not.toMatch(/E210/);
         const a = juntou(avisosDeSaldoAnterior({ geraSt: true }));

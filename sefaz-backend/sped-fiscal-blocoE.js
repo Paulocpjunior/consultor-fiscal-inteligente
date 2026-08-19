@@ -223,6 +223,8 @@ export function buildBlocoE(dados) {
         dados.warnings.push(...avisosDeSaldoAnterior({
             icmsAnterior: parseFloat(dados.saldoCredorIcmsAnterior || 0),
             origemIcms: 'ficha da competência anterior',
+            ipiAnterior: parseFloat(dados.saldoCredorIpiAnterior || 0),
+            origemIpi: 'campo "Cred. IPI do mês anterior" da ficha desta competência',
             geraIpi,
             geraSt,
         }));
@@ -238,9 +240,10 @@ export function buildBlocoE(dados) {
  * E500 — Período de Apuração do IPI
  * E520 — Apuração do IPI
  *
- * Só emite se houver atividade de IPI (débito ou crédito > 0). Empresas
- * não-contribuintes de IPI (a maioria do comércio/serviço) não recebem o
- * bloco — replicar zerado geraria registro indevido no PVA.
+ * Só emite se houver atividade de IPI (débito, crédito ou saldo credor
+ * anterior > 0). Empresas não-contribuintes de IPI (a maioria do comércio/
+ * serviço) não recebem o bloco — replicar zerado geraria registro indevido
+ * no PVA.
  *
  * E210 (Guia Prático 3.2.2 / Leiaute 020):
  *   IND_APUR_IPI(0=mensal), VL_SD_ANT_IPI, VL_DEB_IPI, VL_CRED_IPI,
@@ -249,9 +252,12 @@ export function buildBlocoE(dados) {
 function buildE500E520(dados) {
     const vlDeb = somarImpostoPorDirecao(dados.notas, 'saida', 'vIPI', 'vIPI');
     const vlCred = somarImpostoPorDirecao(dados.notas, 'entrada', 'vIPI', 'vIPI');
-    if (vlDeb <= 0 && vlCred <= 0) return [];
-
+    // Saldo anterior TAMBÉM segura o bloco de pé: mês sem movimento de IPI mas
+    // com crédito vindo da competência anterior precisa do E520 para o saldo
+    // não SUMIR da corrente de transporte — sumir calado é o defeito que este
+    // campo teve até 19/08 (caso PWR: ficha com 2.547,39 e arquivo com 0,00).
     const vlSdAnt = parseFloat(dados.saldoCredorIpiAnterior || 0);
+    if (vlDeb <= 0 && vlCred <= 0 && vlSdAnt <= 0) return [];
     const saldo = vlDeb - vlCred - vlSdAnt;
     const vlSdIpi = saldo >= 0 ? saldo : 0;   // saldo devedor a recolher
     const vlScIpi = saldo < 0 ? -saldo : 0;   // saldo credor a transportar

@@ -789,6 +789,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   estado) contra E100/E110/E111 do próprio. Hoje o demonstrativo 📊 ICMS·IPI·ISS
   não mostra ST — e o que falta ali não é somar, é **DIZER** que não mostra
   (quem lê não distingue "não teve ST" de "o app não olha ST").
+  ✅ **O IPI FECHOU EM 19/08 — caso PWR 07/2026** (Paulo, com o PVA e a ficha
+  lado a lado: *"só o valor do saldo credor anterior de IPI não está puxando,
+  só isso para eu transmitir o SPED dela"*). A ficha dizia **Cred. IPI do mês
+  anterior R$ 2.547,39** e o E520 saía 0,00. O orquestrador passou a alimentar
+  `saldoCredorIpiAnterior` — e a conta prova o fio: 2.547,39 + 2.200,45
+  (créditos do mês) = **4.747,84**, exatamente o "IPI a transportar p/ 08/2026"
+  da mesma ficha.
+  ⚠️ **A FONTE É A FICHA DA PRÓPRIA COMPETÊNCIA, não a anterior**: na ficha, o
+  campo `saldoCredorIpi` de M já significa "o que ENTROU em M" — a semântica
+  exata do VL_SD_ANT_IPI. Copiar o desenho do ICMS (que lê a ficha ANTERIOR)
+  repetiria a defasagem que este mesmo registro denuncia. O aviso do
+  `saldo-anterior-apuracao` agora carimba a origem quando o valor existe — e
+  diz que ele foi **digitado, não calculado**, com a conferência (VL_SC_IPI do
+  último SPED entregue) na frase.
+  ⚠️ **E o saldo anterior passou a SEGURAR o E500/E520 de pé**: mês sem
+  movimento de IPI mas com crédito vindo de trás gera o bloco mesmo assim,
+  senão o saldo some da corrente de transporte em silêncio — que é o defeito
+  original com outra roupa. Sem movimento E sem saldo, o bloco continua não
+  saindo (comércio sem IPI não ganha registro indevido). Travado em
+  `spedE520SaldoAnterior.test.ts` com a linha real da PWR
+  (`|E520|2547,39|0,00|2200,45|0,00|0,00|4747,84|0,00|`) e varredura do
+  orquestrador (gerador que lê campo que ninguém passa era o defeito — o teste
+  exige quem passa, de onde, e que falha de leitura vire aviso nomeado).
+  ICMS (defasado) e ST (0,00) continuam como estavam, ditos pelo aviso.
 - **🚨 "CANCELADA" TINHA SEIS RÉGUAS — e o campo cru MENTE justamente no caminho
   NORMAL** (17/08, ao conferir a MV LIDER 639 07/2026 para o Paulo: a aba 🚫
   Canceladas/Faltantes dizia *"✓ numeração contínua · 0 cancelada(s)"*). A régua
