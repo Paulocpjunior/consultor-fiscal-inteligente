@@ -361,6 +361,8 @@ export interface ImportXmlSuccess {
     documento: DocumentoFiscal;
     /** true quando REESCREVEU um documento que já existia (opt-in na tela). */
     substituiu?: boolean;
+    /** true quando COMPLETOU um resumo/incompleto com a NF-e inteira (upgrade). */
+    completou?: boolean;
 }
 
 export interface ImportXmlSkipped {
@@ -444,7 +446,12 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
         // por importação — sem ninguém decidir isso, e sem deixar rastro na
         // empresa que a perdeu. Essa continua recusada, com a causa na tela.
         const podeSubstituir = substituir && leitura.situacao !== 'em-outra-empresa';
-        if (existing && existing.exists() && !leitura.permiteReincluir && !podeSubstituir) {
+        // UPGRADE resumo→completa (caso PWR, 19/08): o que está na base não tem
+        // itens/nº/CST e o arquivo é a NF-e inteira. Não precisa de opt-in — é
+        // estritamente MAIS dado do mesmo documento, a mesma decisão que o
+        // trilho automático do backend sempre tomou (decidirGravacaoNFe).
+        const podeCompletar = leitura.permiteCompletar === true;
+        if (existing && existing.exists() && !leitura.permiteReincluir && !podeSubstituir && !podeCompletar) {
             await registrarCaptura({
                 chave,
                 empresaId: empresa.id,
@@ -502,7 +509,11 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
                 paraGravar._reincluidoEm = new Date().toISOString();
                 paraGravar._reincluidoPorEmail = user.email || null;
             }
-            await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), paraGravar);
+            // UPGRADE grava com MERGE — o resumo pode já ter recebido eventos
+            // (cancelamento chega antes da completa) e um set sem merge os
+            // apagaria. É o mesmo desenho do importer do backend.
+            await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), paraGravar,
+                podeCompletar ? { merge: true } : {});
         } catch (err) {
             // Rollback do storage se o Firestore falhar para não deixar lixo.
             await deleteXml(upload.storagePath).catch(() => {});
@@ -520,7 +531,11 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             documentoId: docId,
         });
 
-        return { status: 'ok', documento, substituiu: podeSubstituir && !leitura.permiteReincluir };
+        return {
+            status: 'ok', documento,
+            substituiu: podeSubstituir && !leitura.permiteReincluir && !podeCompletar,
+            completou: podeCompletar,
+        };
     } catch (err: any) {
         await registrarErro({
             fileName,

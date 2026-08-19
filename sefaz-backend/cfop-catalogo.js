@@ -711,6 +711,19 @@ export function tamanhoDoCatalogo() {
  */
 export function textoDoCfop(codigo) {
     const c = so(codigo);
+    // VAZIO não é "inválido" — é AUSENTE, e a causa mais comum é a nota estar
+    // gravada como RESUMO (resNFe, sem itens). Acusar formato ("são 4 dígitos")
+    // sobre um campo que nunca existiu mandava a pessoa procurar erro de
+    // digitação onde o problema é de captura (caso PWR, 19/08: 4 notas de
+    // fornecedor sem nº/CFOP/CST — eram resumos aguardando a NF-e completa).
+    if (!c) {
+        return {
+            temDescricao: false,
+            texto: 'Nota sem CFOP capturado — provavelmente é um RESUMO (sem itens). '
+                + 'Reimporte o XML completo; não digite o CFOP no escuro.',
+            fonte: null,
+        };
+    }
     if (c.length !== 4) return { temDescricao: false, texto: 'CFOP inválido — são 4 dígitos.', fonte: null };
     const d = descricaoCfop(c);
     if (d) return { temDescricao: true, texto: d, fonte: FONTE_CFOP };

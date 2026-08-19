@@ -28,59 +28,14 @@ function fa() {
 }
 
 // ── Decisao de gravacao (NFe/NFCe/CTe/MDFe, caminho nao-evento) ─────────────
-// resNFe (resumo, ~531 bytes, SEM itens/valor) x procNFe (NFe COMPLETA). Vale
-// tambem pra NFCe (modelo 65). O DistDFe entrega PRIMEIRO o resumo; a completa
-// so e liberada apos a Manifestacao e chega numa DistDFe posterior — quando a
-// chave JA EXISTE (gravada como resumo). Se o que esta na base e RESUMO e o que
-// chega e COMPLETA, faz UPGRADE (sobrescreve com itens/totais, preservando
-// eventos ja anexados via merge).
-const isResumoSchema = (sch) => /^res(NFe|NFCe|CTe|MDFe)/.test(String(sch || ''));
-const isResumoTipoDoc = (td) => td === 'resNFe' || td === 'resNFCe' || td === 'resCTe' || td === 'resMDFe';
-// Modelo da chave (posicoes 20-21). Modelos 55/65 tem <det> quando COMPLETOS;
-// 57 (CTe)/58 (MDFe) NUNCA tem itens. Por isso temItens=false so indica "resumo"
-// para 55/65 — senao um resCTe de 531 bytes "atualizaria" uma CTe COMPLETA.
-const modeloComItens = (ch) => { const m = String(ch || '').slice(20, 22); return m === '55' || m === '65'; };
-
-// Decide, a partir do doc existente e do que esta chegando, se e duplicado,
-// upgrade resumo->completa, e se a escrita deve ser merge (preserva eventos).
-// Funcao PURA — reutilizada no fast-path (get pre-storage) E dentro da transacao
-// de escrita, garantindo que a decisao final seja atomica mesmo com captura
-// concorrente (DistDFe + autXML + SharePoint podem tocar a mesma chave juntos).
-export function decidirGravacaoNFe({ existingData, tipoDoc, schema, chave }) {
-  const incomingResumo = isResumoTipoDoc(tipoDoc) || isResumoSchema(schema);
-  const exData = existingData || null;
-  const exResumo = exData
-    ? (isResumoSchema(exData.schema) || isResumoTipoDoc(exData.tipoDoc) ||
-       (exData.temItens === false && modeloComItens(chave)))
-    : false;
-  const exists = !!exData;
-  // Doc INCOMPLETO: existe na base mas sem os campos que o painel usa pra
-  // achar a nota — sem competência, sem data de emissão ou sem valor. É uma
-  // casca: aparece na contagem, some de qualquer filtro. Caso GUARANI 27/07 —
-  // 30 das 36 notas do ZIP estavam assim e o importer as chamava de
-  // "duplicadas", recusando-se a completá-las com o XML inteiro em mãos.
-  const exIncompleto = exists && (!exData.competencia || !exData.dhEmi || exData.valorTotal == null);
-  // NOTA DIGITADA: lançada à mão, sem XML (15/08 — "importação automática ou
-  // manual tem a mesma finalidade"). Ela é o RETRATO que a pessoa fez do
-  // documento; o XML é o documento. Quando o XML chega, ele SUBSTITUI — sem
-  // isto, a digitada de hoje travaria como "duplicado" o XML verdadeiro de
-  // amanhã, a mesma família da lápide que travava a reimportação (14/08).
-  // Resumo não rebaixa digitada: resumo tem MENOS que o lançamento completo.
-  const exDigitada = exists && exData.origem === 'digitada';
-  // Upgrade = a base tem menos do que está chegando. Nunca o contrário: o
-  // `!incomingResumo` impede que um resumo rebaixe uma nota completa.
-  const upgrade = exists && (exResumo || exIncompleto || exDigitada) && !incomingResumo;
-  return {
-    exists,
-    upgrade,
-    incompleto: exIncompleto,
-    // Duplicidade só quando NÃO é stub-de-evento E NÃO é upgrade
-    // (resumo→completa ou incompleto→completa).
-    duplicado: exists && !exData.eventosBeforeNFe && !upgrade,
-    // Merge preserva o array de eventos quando já existia stub OU no upgrade.
-    merge: exists && (exData.eventosBeforeNFe || upgrade),
-  };
-}
+// A régua MUDOU DE CASA (19/08): ela é pura e a importação manual do
+// NAVEGADOR também precisa dela — e este arquivo puxa firebase-admin, que não
+// entra no bundle. Mora em `gravacao-nfe-regua.js`; aqui só se importa e
+// RE-EXPORTA, para quem já importava daqui continuar funcionando.
+import {
+  decidirGravacaoNFe, isResumoSchema, isResumoTipoDoc, modeloComItens,
+} from './gravacao-nfe-regua.js';
+export { decidirGravacaoNFe };
 
 function pickTag(xml, tag) {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));

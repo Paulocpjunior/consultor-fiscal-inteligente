@@ -38,10 +38,18 @@ export type SituacaoDuplicado =
     | 'contraparte-na-carteira'
     /** Tem lápide de exclusão: invisível no app e bloqueando a reentrada. */
     | 'excluido-pode-reincluir'
+    /**
+     * O que está no banco é RESUMO/incompleto e o arquivo é a NF-e COMPLETA —
+     * importar aqui é UPGRADE, não duplicidade (caso PWR, 19/08).
+     */
+    | 'resumo-pode-completar'
     /** Documento cancelado — está aqui, mas fora dos totais por natureza. */
     | 'ja-esta-cancelado';
 
 import { decidirPosseDocumento } from '../sefaz-backend/documento-posse.js';
+// A régua de upgrade mora no módulo PURO (não no xml-importer, que puxa
+// firebase-admin e não entra no bundle do navegador).
+import { decidirGravacaoNFe } from '../sefaz-backend/gravacao-nfe-regua.js';
 
 export interface DocumentoExistente {
     empresaId?: string | null;
@@ -58,12 +66,28 @@ export interface DocumentoExistente {
     importadoPorEmail?: string | null;
     _deleted?: boolean;
     _merged_into?: string | null;
+    /** Campos que a régua de upgrade lê (resumo × completa × incompleto). */
+    schema?: string | null;
+    tipoDoc?: string | null;
+    temItens?: boolean | null;
+    chave?: string | null;
+    competencia?: string | null;
+    dhEmi?: string | null;
+    valorTotal?: number | null;
+    eventosBeforeNFe?: boolean | null;
 }
 
 export interface LeituraDuplicado {
     situacao: SituacaoDuplicado;
     /** Deve o app GRAVAR mesmo assim? Só a lápide libera. */
     permiteReincluir: boolean;
+    /**
+     * O que está no banco é RESUMO/incompleto — gravar a COMPLETA é upgrade,
+     * com MERGE (preserva os eventos que o resumo já recebeu). Decidido pela
+     * MESMA régua do importer do backend (`decidirGravacaoNFe`), nunca por
+     * uma cópia local.
+     */
+    permiteCompletar?: boolean;
     /** Vermelho quando alguém precisa fazer alguma coisa. */
     exigeAcao: boolean;
     /** Uma frase, com os três dados que faltavam: onde, quando, por qual trilho. */
@@ -221,7 +245,41 @@ export function lerDuplicado(
             exigeAcao: false,
             // Cancelada fora dos totais é o comportamento CERTO — dizer isso
             // evita que alguém reimporte tentando "fazer o valor aparecer".
+            // E cancelada VEM ANTES do upgrade de propósito: completar uma
+            // cancelada não muda total nenhum, e reescrever o status dela pelo
+            // caminho manual é risco sem ganho.
             mensagem: `Já está aqui (${dono}, ${carimbo}) e está CANCELADA — por isso fica fora dos totais.`,
+            acao: null,
+        };
+    }
+
+    // ═══ RESUMO × COMPLETA — o caso PWR (19/08) ═════════════════════════════
+    //
+    // O DistDFe entrega PRIMEIRO um resumo (resNFe, ~531 bytes, sem itens/nº);
+    // a completa só vem depois da Ciência. Se a completa nunca veio, a nota
+    // fica na base sem itens, sem CST, sem número — e quando a colaboradora
+    // importava o XML completo por cima, este módulo respondia "já está aqui",
+    // recusando exatamente o arquivo que consertaria tudo. O trilho automático
+    // do backend SEMPRE fez esse upgrade (decidirGravacaoNFe); o manual do
+    // navegador é que não conhecia a régua. Mesma régua, um lugar só.
+    //
+    // O que chega pela importação manual é sempre um XML completo parseado
+    // (nfeProc/procCTe) — nunca um resumo —, então tipoDoc/schema de entrada
+    // não são de resumo por construção.
+    const dec = decidirGravacaoNFe({
+        existingData: d,
+        tipoDoc: 'NFe',
+        schema: null,
+        chave: texto(d.chave),
+    });
+    if (dec.upgrade) {
+        return {
+            situacao: 'resumo-pode-completar',
+            permiteReincluir: false,
+            permiteCompletar: true,
+            exigeAcao: false,
+            mensagem: `Estava na base como RESUMO/incompleto (${dono}, ${carimbo}) — sem itens, CST nem número. `
+                + 'COMPLETADA agora a partir deste arquivo; os eventos já recebidos foram preservados.',
             acao: null,
         };
     }

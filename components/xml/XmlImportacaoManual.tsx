@@ -127,11 +127,14 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                         status: 'ok',
                         // Substituir é reescrita de dado fiscal: a tela DIZ que
                         // reescreveu, senão fica igual a uma importação nova e
-                        // ninguém sabe o que mudou.
+                        // ninguém sabe o que mudou. Completar (resumo→completa)
+                        // também é dito — é o que explica os itens "aparecendo".
                         substituiu: res.substituiu,
-                        mensagem: res.substituiu
-                            ? `NF ${res.documento.numero} SUBSTITUÍDA pelo conteúdo deste arquivo (${res.documento.direcao}).`
-                            : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
+                        mensagem: res.completou
+                            ? `NF ${res.documento.numero} COMPLETADA — estava na base como resumo, sem itens/CST; agora tem tudo.`
+                            : res.substituiu
+                                ? `NF ${res.documento.numero} SUBSTITUÍDA pelo conteúdo deste arquivo (${res.documento.direcao}).`
+                                : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
                     });
                     onImported?.(res.documento);
                 } else {

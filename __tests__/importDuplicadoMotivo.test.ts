@@ -24,6 +24,10 @@ import { lerDuplicado, ocultoDoApp } from '../services/importDuplicadoMotivo';
 
 const EMPRESA = { id: 'emp-1', nome: 'NOVA ERA', cnpj: '29.240.822/0001-21' };
 
+// Fixture de documento COMPLETO — com os campos que a régua de upgrade
+// (`decidirGravacaoNFe`) usa pra distinguir completa × resumo/incompleto.
+// Sem eles o doc "completo" do teste seria classificado como incompleto e
+// todo caso viraria upgrade, mascarando o que cada teste quer provar.
 const doc = (over: Record<string, unknown> = {}) => ({
     empresaId: 'emp-1',
     empresaNome: 'NOVA ERA',
@@ -31,6 +35,11 @@ const doc = (over: Record<string, unknown> = {}) => ({
     origem: 'sefaz',
     status: 'autorizado',
     importadoEm: '2026-07-10T13:00:00.000Z',
+    dhEmi: '2026-07-10T10:00:00-03:00',
+    competencia: '2026-07',
+    valorTotal: 1000,
+    temItens: true,
+    chave: '3'.repeat(44),
     ...over,
 });
 
@@ -233,5 +242,62 @@ describe('a TELA usa a leitura, e não volta a inventar frase própria', () => {
     it('a auditoria guarda a MESMA frase que a pessoa leu', () => {
         // Log que diz menos que a tela não reconstrói o caso depois.
         expect(servico).toMatch(/mensagem: leitura\.mensagem/);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 RESUMO × COMPLETA — o caso PWR (19/08). Quatro notas de fornecedor na
+// tela sem nº, sem CFOP e sem CST: eram RESUMOS (resNFe) cuja completa nunca
+// veio, e a importação manual do XML completo respondia "já está aqui" —
+// recusando exatamente o arquivo que consertaria tudo. O trilho automático do
+// backend sempre fez esse upgrade (decidirGravacaoNFe); o manual não conhecia
+// a régua. A correção importa a MESMA régua, nunca uma cópia.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('resumo → completa: importar o XML inteiro é UPGRADE, não duplicidade', () => {
+    const servico = readFileSync(join(__dirname, '..', 'services/xmlFiscalService.ts'), 'utf8');
+    const painel = readFileSync(join(__dirname, '..', 'components/xml/XmlImportacaoManual.tsx'), 'utf8');
+
+    it('doc gravado como resumo (schema resNFe) libera completar', () => {
+        const r = lerDuplicado(doc({ schema: 'resNFe_v1.01.xsd', temItens: false }), EMPRESA);
+        expect(r.situacao).toBe('resumo-pode-completar');
+        expect(r.permiteCompletar).toBe(true);
+        expect(r.permiteReincluir).toBe(false);
+        expect(r.mensagem).toMatch(/RESUMO/);
+    });
+
+    it('temItens=false num modelo 55 também é resumo — mesmo sem schema gravado', () => {
+        const r = lerDuplicado(doc({ temItens: false, chave: `35260702235305000108${'55'}${'0'.repeat(22)}` }), EMPRESA);
+        expect(r.situacao).toBe('resumo-pode-completar');
+        expect(r.permiteCompletar).toBe(true);
+    });
+
+    it('doc COMPLETO continua "já está aqui" — upgrade não vira porta pra reescrever tudo', () => {
+        const r = lerDuplicado(doc(), EMPRESA);
+        expect(r.situacao).toBe('ja-esta-nesta-empresa');
+        expect(r.permiteCompletar).toBeUndefined();
+    });
+
+    it('resumo em OUTRA empresa NÃO completa por aqui — posse vem antes de upgrade', () => {
+        const r = lerDuplicado(
+            doc({ schema: 'resNFe_v1.01.xsd', temItens: false, empresaId: 'outra', empresaCnpj: '99999999000191' }),
+            EMPRESA,
+        );
+        expect(r.permiteCompletar).toBeUndefined();
+        expect(['em-outra-empresa', 'contraparte-na-carteira']).toContain(r.situacao);
+    });
+
+    it('resumo CANCELADO não é completado — cancelada já está fora dos totais', () => {
+        const r = lerDuplicado(doc({ schema: 'resNFe_v1.01.xsd', temItens: false, status: 'cancelado' }), EMPRESA);
+        expect(r.situacao).toBe('ja-esta-cancelado');
+        expect(r.permiteCompletar).toBeUndefined();
+    });
+
+    it('o serviço grava o upgrade com MERGE — eventos que o resumo recebeu não somem', () => {
+        expect(servico).toMatch(/podeCompletar \? \{ merge: true \} : \{\}/);
+        expect(servico).toMatch(/leitura\.permiteCompletar === true/);
+    });
+
+    it('a tela DIZ que completou — itens "aparecendo" sem explicação é susto', () => {
+        expect(painel).toMatch(/COMPLETADA/);
     });
 });
