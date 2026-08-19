@@ -71,6 +71,22 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'QUAL documento entra em QUAL bloco do SPED (o modelo pela régua, não pelo campo)',
+        dono: 'sefaz-backend/sped-selecao-documentos.js',
+        comoUsar: "import { ehNotaDeMercadoria, selecionarNotasBlocoC, selecionarCtesBlocoD } from 'sefaz-backend/sped-selecao-documentos.js'",
+        porque: 'Paulo, 19/08 (PRONTO SOCORRO 0896): 131 notas no recorte e DOIS CFOPs no SPED. Os filtros liam '
+            + 'o campo cru `n.modelo`, que o importer principal NUNCA gravou — o modelo mora na chave. Ficavam '
+            + 'fora o bloco C, o bloco D, o C do EFD-Contribuições e a SOMA do E110/E520, ou seja a apuração '
+            + 'inteira. A régua carrega duas travas que uma segunda cópia perderia: o tipo é julgado ANTES do '
+            + 'modelo (o fallback do modeloDoDoc é 55, e uma NFS-e entraria como NF-e) e o resumo/sem-itens sai '
+            + 'NOMEADO em vez de sumir (C100 sem C190 o PVA recusa).',
+        assinaturas: [
+            /function ehNotaDeMercadoria\s*\(/,
+            /function selecionarNotasBlocoC\s*\(/,
+            /function ehConhecimentoDeTransporte\s*\(/,
+        ],
+    },
+    {
         nome: 'A releitura das notas VAZIAS — quando o XML guardado resolve e quando não',
         dono: 'sefaz-backend/releitura-notas-vazias.js',
         comoUsar: "import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from 'sefaz-backend/releitura-notas-vazias.js'",

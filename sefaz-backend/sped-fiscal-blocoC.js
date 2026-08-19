@@ -22,6 +22,10 @@ import * as fmt from './sped-fiscal-format.js';
 import { montarC197Difal } from './sped-difal-c197.js';
 import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
 import { cstDoLancamento } from './cst-correlacao.js';
+// Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
+// campo cru `n.modelo`, que o importer principal não grava.
+import { selecionarNotasBlocoC, avisosDaSelecao } from './sped-selecao-documentos.js';
+import { docCancelado } from './xml-metadata-helper.js';
 
 
 /**
@@ -118,15 +122,14 @@ export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
 
 /**
  * Filtra notas que entram no Bloco C.
+ *
+ * 🚨 O MODELO SAI DA RÉGUA, NÃO DO CAMPO CRU (caso PS VIDROS 0896, 19/08):
+ * o importer principal nunca gravou `modelo`, então `String(n.modelo)` era
+ * 'undefined' e TODA nota capturada automaticamente ficava fora do arquivo —
+ * 131 no recorte, 2 CFOPs no SPED. Quem decide é `selecionarNotasBlocoC`.
  */
 function filtrarNotasBlocoC(notas) {
-    return (notas || []).filter(n => {
-        // Modelo 55 ou 65
-        if (!MODELOS_BLOCO_C.includes(String(n.modelo))) return false;
-        // Tipo NFe ou NFCe (defensivo - se modelo bate, tipo ja deve estar ok)
-        if (!['NFe', 'NFCe'].includes(n.tipo)) return false;
-        return true;
-    });
+    return selecionarNotasBlocoC(notas).notas;
 }
 
 /**
@@ -137,7 +140,11 @@ function filtrarNotasBlocoC(notas) {
  */
 export function buildBlocoC(dados) {
     const linhas = [];
-    const notas = filtrarNotasBlocoC(dados.notas);
+    const selecao = selecionarNotasBlocoC(dados.notas);
+    const notas = selecao.notas;
+    // O que NÃO entrou sai NOMEADO: nota que some do arquivo sem ninguém saber
+    // é livro a menor — foi o defeito que a PS VIDROS denunciou.
+    if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecao));
 
     // C001 — Abertura
     // Indicador de movimento: 0 = Bloco com dados, 1 = Bloco sem dados
@@ -174,7 +181,7 @@ export function buildBlocoC(dados) {
 
             // C170s — apenas se a nota nao for cancelada/denegada/inutilizada
             // (Guia Pratico: notas canceladas vao apenas com C100, sem C170)
-            if (nota.status === 'autorizado') {
+            if (!docCancelado(nota) && nota.status !== 'denegado' && nota.status !== 'inutilizado') {
                 // Regra Guia Pratico: NF-e de emissao propria (IND_EMIT=0)
                 // NAO leva C170 — basta C100+C190. So gera C170 quando a
                 // nota foi emitida por terceiros (entrada).
@@ -248,7 +255,11 @@ export function buildBlocoC(dados) {
  */
 function buildC100(nota, dados) {
     const t = nota.totais || {};
-    const codSit = statusParaCodSit(nota.status);
+    // 🚨 O CAMPO `status` MENTE no caminho NORMAL do cancelamento: ele chega por
+    // EVENTO e o campo continua 'autorizado' (régua de 11/08, MV LIDER). Quem
+    // responde é `docCancelado` — senão a nota cancelada saía COD_SIT 00
+    // (regular) e voltava ao livro pela porta do SPED.
+    const codSit = docCancelado(nota) ? '02' : statusParaCodSit(nota.status);
 
     // Soma dos itens — fonte primária pros campos que precisam bater com C190.
     // Fallback pra nota.totais.X apenas se os itens não tiverem (nota sem itens).

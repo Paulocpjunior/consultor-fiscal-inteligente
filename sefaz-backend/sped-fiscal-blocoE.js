@@ -30,6 +30,10 @@ import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './
 import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
 import { montarLinhasE510 } from './sped-bloco-ipi-e510.js';
 import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
+// Régua ÚNICA: o modelo vem dela (o campo cru não existe em nota capturada) e
+// o cancelamento vem de `docCancelado` (o campo `status` mente por evento).
+import { ehNotaDeMercadoria } from './sped-selecao-documentos.js';
+import { docCancelado } from './xml-metadata-helper.js';
 import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 
 const ZERO = '0,00';
@@ -51,8 +55,15 @@ function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
     let total = 0;
     for (const nota of notas || []) {
         if (nota.direcao !== direcao) continue;
-        if (nota.status !== 'autorizado') continue;
-        if (!['55', '65'].includes(String(nota.modelo))) continue;
+        // 🚨 DUAS LEITURAS CRUAS QUE MENTIAM, as duas nesta linha (19/08):
+        //  (1) `status !== 'autorizado'` — o cancelamento chega por EVENTO e o
+        //      campo continua 'autorizado', então cancelada ENTRAVA na apuração;
+        //  (2) `String(nota.modelo)` — o importer principal não grava o campo,
+        //      então TODA nota capturada automaticamente ficava fora do E110 e
+        //      do E520. Era o caso PS VIDROS: 131 notas, apuração quase zerada.
+        if (docCancelado(nota)) continue;
+        if (nota.status === 'denegado' || nota.status === 'inutilizado') continue;
+        if (!ehNotaDeMercadoria(nota)) continue;
         let fromItens = 0;
         for (const item of (nota.itens || [])) {
             fromItens += parseFloat(item[campoItem] || 0);

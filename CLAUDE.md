@@ -775,6 +775,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   alarme errado**: vazio é AUSÊNCIA (resumo sem itens), não formato — acusar
   digitação mandava procurar erro onde o problema é de captura. `textoDoCfop`
   agora separa os dois e manda reimportar o XML completo em vez de digitar.
+- **🚨 O SPED PERDIA AS NOTAS CAPTURADAS — o filtro lia um campo que o importer
+  NUNCA GRAVOU** (Paulo, 19/08, PRONTO SOCORRO 0896 · 07/2026: *"no consultor
+  está puxando 131 notas de saída NF-e e NFC-e; quando gerei o SPED me dá isso
+  aqui apenas"* — o relatório do PVA trazia **DOIS CFOPs e R$ 30.833,16** contra
+  **R$ 74.213,10** do recorte). A linha era
+  `if (!['55','65'].includes(String(n.modelo))) return false` — e o
+  `xml-importer.js` (captura SEFAZ, cofre de e-mail, XML manual do backend)
+  **grava `tipo`, `tipoDoc` e `chave`, mas NÃO grava `modelo`**. O modelo mora
+  na CHAVE (posições 21-22). Só o import pelo NAVEGADOR (`xmlParserService`) e o
+  `sync-routes` gravam o campo — eram essas as poucas notas que sobravam.
+  🔴 **E O ALCANCE ERA MUITO MAIOR QUE "faltam notas no livro"**: a MESMA
+  leitura estava no **bloco D** (CT-e), no **bloco C do EFD-Contribuições** e —
+  o pior — em **`somarImpostoPorDirecao`**, que é quem soma o **débito e o
+  crédito de ICMS do E110** e o **IPI do E520**. Nota fora do bloco é nota fora
+  da **APURAÇÃO**: o arquivo saía declarando imposto a MENOR, e o PVA aceita.
+  ✂️ `sped-selecao-documentos.js` (na `REGUAS_VIGIADAS`) — família de
+  `docCancelado` e `direcaoEfetivaDoc`: **o campo gravado pode não existir, e
+  quem responde é a régua na LEITURA**.
+  ⚠️ **O TIPO É JULGADO ANTES DO MODELO**, e isso é trava, não ordem: o
+  `modeloDoDoc` **cai em '55'** quando não há modelo nem chave legível (armadilha
+  já registrada em 13/08), então uma NFS-e entraria no bloco C como se fosse
+  NF-e. Rótulo com CTe/MDFe/NFSe, ou blocos de prestador/tomador, saem antes.
+  📌 **RESUMO NÃO SE ESCRITURA, e agora sai NOMEADO**: o resNFe não tem itens,
+  então não produz C170/C190 — e C100 solto o PVA recusa. Ele vira aviso com a
+  ação certa (importar o XML completo ou rodar o ♻️), em vez de sumir calado.
+  **Nota CANCELADA é a exceção que ENTRA**: o Guia Prático manda escriturar só o
+  C100, sem filhos.
+  🐛 **E a varredura achou DUAS leituras cruas na mesma linha da apuração**: ao
+  lado do modelo estava `status !== 'autorizado'` — o cancelamento chega por
+  EVENTO e o campo continua 'autorizado', então **cancelada ENTRAVA no E110** (a
+  régua de 11/08 não tinha chegado aqui, e a varredura do `canceladaReguaUnica`
+  não pega a forma negada). O `COD_SIT` do C100 tinha o mesmo defeito: cancelada
+  saía como **00 (regular)**, voltando ao livro pela porta do SPED.
 - **♻️ A NOTA "VAZIA" GANHOU O BOTÃO DE RELEITURA — e a régua separa o que ele
   RESOLVE do que ele NÃO resolve** (Paulo, 19/08, depois do procedimento "não
   digitem nada, aguardem o botão": *"esse botão ainda não construído né, tenho

@@ -14,6 +14,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { selecionarCtesBlocoD } from './sped-selecao-documentos.js';
 
 const MODELOS_BLOCO_D = ['57'];  // Apenas CTe
 
@@ -37,11 +38,10 @@ function statusParaCodSit(status) {
  * - Tipo 'CTe' (defensivo - se modelo bate, tipo ja deve estar ok)
  */
 function filtrarNotasBlocoD(notas) {
-    return (notas || []).filter(n => {
-        if (!MODELOS_BLOCO_D.includes(String(n.modelo))) return false;
-        if (n.tipo !== 'CTe') return false;
-        return true;
-    });
+    // O modelo sai da RÉGUA, não do campo cru: o importer principal não grava
+    // `modelo`, e ler o campo deixava todo CT-e capturado fora do bloco (mesma
+    // causa do caso PS VIDROS no bloco C, 19/08).
+    return selecionarCtesBlocoD(notas);
 }
 
 /**

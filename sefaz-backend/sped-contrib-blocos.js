@@ -21,6 +21,8 @@ import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 // A leitura das retenções federais nas DUAS formas (achatada × objeto) é do
 // DONO — o mesmo leitor que alimenta o R-4020. Segunda cópia divergiria.
 import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
+// Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
+import { selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao } from './sped-selecao-documentos.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -346,12 +348,17 @@ export function buildBlocoA(dados) {
 const MODELOS_BLOCO_C = ['55', '65'];
 
 function filtrarNotasBlocoC(notas) {
-    return (notas || []).filter(n => MODELOS_BLOCO_C.includes(String(n.modelo)));
+    // Modelo pela RÉGUA, nunca pelo campo cru — o importer principal não grava
+    // `modelo`, e ler o campo tirava do arquivo toda nota capturada
+    // automaticamente (caso PS VIDROS 0896, 19/08, no EFD ICMS/IPI).
+    return selecionarNotasBlocoC(notas).notas;
 }
 
 export function buildBlocoC_Contrib(dados) {
     const linhas = [];
-    const notasC = filtrarNotasBlocoC(dados.notas);
+    const selecaoC = selecionarNotasBlocoC(dados.notas);
+    const notasC = selecaoC.notas;
+    if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecaoC));
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
 
@@ -455,9 +462,8 @@ export function buildBlocoC_Contrib(dados) {
 
 export function buildBlocoD_Contrib(dados) {
     const linhas = [];
-    const notasD = (dados.notas || []).filter(n =>
-        String(n.modelo) === '57' && n.tipo === 'CTe'
-    );
+    // Modelo pela RÉGUA (o campo cru não existe em documento capturado).
+    const notasD = selecionarCtesBlocoD(dados.notas);
 
     if (notasD.length === 0) {
         linhas.push(fmt.buildLine(['D001', '1']));
