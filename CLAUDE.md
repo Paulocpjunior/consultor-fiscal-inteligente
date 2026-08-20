@@ -977,6 +977,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   despesa por CST/CFOP seria inventar — e inventar é o que produziu o 1405.
   📌 O `vFCPST` passou a ser capturado **por item** (só existia nos totais, e
   total não serve num registro que é por CST+CFOP+alíquota).
+  ✅ **CASO FECHADO EM PRODUÇÃO no mesmo dia** (Paulo, 20/08, depois do deploy
+  626: *"SPED ICMS/IPI - 1364 - PWR - OK"*). É a **primeira empresa do Lucro a
+  fechar o EFD ICMS/IPI inteiro** neste projeto — e ela vinha de quatro rodadas
+  seguidas de recusa (bloco C perdendo nota pelo campo `modelo` cru · resumo
+  excluído por RÓTULO · saldo credor de IPI 0,00 · `VL_OPR` sem o IPI). O que
+  fechou foi sempre a MESMA disciplina: **arquivo aceito > leiaute deduzido**, e
+  regra nova só com a citação do Guia do lado.
+  📌 **E O QUE ISSO DIZ SOBRE O GARGALO** (a queixa de 20/08, *"evitando o vai e
+  vem o dia todo"*): as quatro rodadas custaram um dia cada porque os erros
+  apareciam **um round-trip do PVA por vez**. As 14 regras do PVA de bolso
+  existem para que a próxima empresa gaste UMA volta — e a régua que fica é que
+  **regra aprendida numa recusa entra no `sped-prevalidacao.js` no MESMO PR**,
+  com o cliente e a data. Recusa que só conserta a instância volta no mês
+  seguinte com outro CNPJ.
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava
@@ -3298,6 +3312,18 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
       escolher seria inventar, e inventar é o que produziu o 1405 e o 1655.
       ⚠️ **NÃO ressuscitar como "pendência do app"**: a correção nota a nota é
       decisão dele, não lacuna minha. O que o CFI deve é continuar denunciando.
+   e) ✅ **RESOLVIDO 20/08 — PWR 1364 · SPED ICMS/IPI OK** (Paulo, depois do
+      deploy 626: *"SPED ICMS/IPI - 1364 - PWR - OK"*). Primeira empresa do
+      Lucro com o EFD ICMS/IPI fechado ponta a ponta. **Não reabrir por
+      dedução**: o cadastro de IPI dela (contribuinte + classificação do
+      estabelecimento do 0002) deixou de ser bloqueio porque o arquivo passou —
+      quem prova é o recibo, não este arquivo.
+   f) 🚩 **PS VIDROS 0896 CONTINUA ABERTA — e a pendência é de CADASTRO, não de
+      código**: *Contribuinte de IPI = **Não*** em Empresas → Dados Fiscais.
+      Sem isso o E500/E520 continua saindo em comércio, onde o IPI da nota do
+      fornecedor é **CUSTO**, não crédito — e o PVA recusa (*"Se não for
+      contribuinte do IPI, não deve apresentar os registros E500 e filhos"*).
+      A pré-validação já acusa isso antes do PVA, com a ação na frase.
 
 ## Pendências operacionais (23/07/2026)
 
