@@ -212,6 +212,12 @@ export function configPadraoAtendimento() {
         },
         // Menu numérico → fila. Espelha o menu de 8 opções em uso hoje.
         menu: FILAS_ATENDIMENTO.map((f, i) => ({ opcao: String(i + 1), fila: f.id, rotulo: f.rotulo })),
+        // 🖼️ Imagem enviada junto da confirmação do departamento (Paulo,
+        // 20/08, olhando a Ultra Fox: a arte "GESTÃO DE PESSOAS" que ela
+        // manda depois do cliente escolher "3"). Mapa fila→URL; fila sem
+        // entrada aqui continua só com o texto — nada quebra sem imagem
+        // cadastrada. Nasce vazio: imagem é a admin quem sobe, nunca chute.
+        imagensPorFila: {},
     };
 }
 
@@ -279,6 +285,13 @@ export function resolverConfig(gravada) {
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,
+        // Entrada com fila inválida ou URL vazia é DESCARTADA, não gravada —
+        // mesma régua do menu: dado torto não vira "imagem quebrada" na
+        // conversa do cliente.
+        imagensPorFila: gravada.imagensPorFila && typeof gravada.imagensPorFila === 'object'
+            ? Object.fromEntries(Object.entries(gravada.imagensPorFila)
+                .filter(([fila, url]) => filaValida(fila) && typeof url === 'string' && url.trim()))
+            : p.imagensPorFila,
     };
 }
 
@@ -475,6 +488,11 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
         const escolha = interpretarEscolha(texto, config);
         if (escolha) {
             acoes.push({ tipo: 'definirFila', fila: escolha.fila });
+            // Imagem ANTES do texto — é a ordem que a Ultra Fox usa (a arte
+            // do departamento, depois o "aguarde"). Fila sem imagem
+            // cadastrada pula esta ação, sem falha nem substituto genérico.
+            const imagem = config.imagensPorFila?.[escolha.fila];
+            if (imagem) acoes.push({ tipo: 'enviarImagem', url: imagem, fila: escolha.fila });
             acoes.push({ tipo: 'responder', texto: renderMensagem(config.mensagens.confirmacaoFila, { fila: escolha.rotulo }) });
         } else {
             // 1º contato ganha protocolo + saudação; sempre reapresenta o menu.

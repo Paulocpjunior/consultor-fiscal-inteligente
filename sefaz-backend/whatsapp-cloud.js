@@ -432,11 +432,14 @@ export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
 }
 
 /**
- * Envia MÍDIA já subida (media id) dentro da janela de 24h. Mesma régua do
- * `enviarTextoLivre`: falha de REDE é indeterminado (a mensagem pode ter
- * saído) e NUNCA se repete sozinho — duplicar anexo no cliente é pior.
+ * Envia MÍDIA já subida (media id) OU por LINK público, dentro da janela de
+ * 24h — exceto `link`, que a Meta busca sob demanda e por isso vale também
+ * fora da janela (é o caso do banner de departamento, mandado pelo BOT antes
+ * de qualquer atendente responder). Mesma régua do `enviarTextoLivre`: falha
+ * de REDE é indeterminado (a mensagem pode ter saído) e NUNCA se repete
+ * sozinho — duplicar anexo no cliente é pior.
  */
-export async function enviarMidiaWhatsapp({ para, tipo, mediaId, nomeArquivo, legenda }, deps = {}) {
+export async function enviarMidiaWhatsapp({ para, tipo, mediaId, link, nomeArquivo, legenda }, deps = {}) {
     const cfg = deps.cfg || configWhatsapp(deps.env);
     const faltas = faltasDaConfig(cfg);
     if (faltas.length) {
@@ -444,8 +447,9 @@ export async function enviarMidiaWhatsapp({ para, tipo, mediaId, nomeArquivo, le
     }
     const numero = numeroCanonicoWhatsapp(para);
     if (!numero) return { ok: false, erro: `Número inválido: ${para}`, acao: 'Confira DDD e número.' };
+    if (!mediaId && !link) return { ok: false, erro: 'Anexo sem mediaId nem link.', acao: 'Erro interno — avise o suporte antes de tentar de novo.' };
     const doFetch = deps.fetchImpl || fetch;
-    const corpoMsg = montarMensagemMidia({ para: numero, tipo, mediaId, nomeArquivo, legenda });
+    const corpoMsg = montarMensagemMidia({ para: numero, tipo, mediaId, link, nomeArquivo, legenda });
     try {
         const resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
             method: 'POST',

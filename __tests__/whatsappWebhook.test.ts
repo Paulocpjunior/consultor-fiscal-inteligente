@@ -6,7 +6,7 @@ import { createHmac } from 'crypto';
 import {
     configWebhook, faltasDaConfigWebhook, responderVerificacao,
     assinaturaValida, extrairEventos, traduzirStatusEntrega,
-    interpretarErroEntrega, saiuPorOutraPlataforma, janela24hAte, resumoParaConversa,
+    interpretarErroEntrega, saiuPorOutraPlataforma, mensagemDoStatus, janela24hAte, resumoParaConversa,
     caminhoStorageMidia,
 } from '../sefaz-backend/whatsapp-webhook.js';
 
@@ -292,5 +292,50 @@ describe('🚨 falha de mensagem que saiu pela OUTRA plataforma', () => {
         expect(interpretarErroEntrega(0, '', daOutra)).toMatch(/OUTRA plataforma/);
         // Nossa mensagem não carrega ressalva nenhuma.
         expect(interpretarErroEntrega(131049)).not.toMatch(/OUTRA plataforma/);
+    });
+});
+
+// ============================================================================
+// 🚨 DOCUMENTO AUSENTE NÃO É DÚVIDA — É PROVA (caso P. Leal, 20/08)
+//
+// Print do Paulo: o balão já mostrava "mensagem enviada por outra
+// plataforma" e, logo abaixo, o 131053 mandava o colaborador converter um
+// arquivo que ele nunca enviou — o MESMO defeito do caso Agatha (17/08), que
+// esta suíte já cobria. A diferença: aqui `saiuPorOutraPlataforma(null)`
+// estava correto EM ISOLAMENTO (na dúvida, não afirma) — o defeito era a
+// rota tratar "documento não existe" como a MESMA dúvida de "documento
+// existe mas está incompleto". As duas são diferentes: nosso envio grava o
+// documento ANTES de responder, então documento ausente prova que não é
+// nosso.
+// ============================================================================
+describe('🚨 mensagemDoStatus — documento ausente é OUTRA plataforma, não dúvida', () => {
+    it('doc existe: devolve os dados como estão (inclusive null, se vier vazio)', () => {
+        expect(mensagemDoStatus(true, { direcao: 'saida', enviadoPor: 'ju@sp.com.br' }))
+            .toEqual({ direcao: 'saida', enviadoPor: 'ju@sp.com.br' });
+        expect(mensagemDoStatus(true, undefined)).toBeNull();
+    });
+
+    it('doc NÃO existe: sintetiza {direcao:"saida"} — nunca null', () => {
+        expect(mensagemDoStatus(false, undefined)).toEqual({ direcao: 'saida' });
+        // O 2º parâmetro é ignorado quando o doc não existe: se ele não
+        // existe, `dadosDoDoc` também não pode vir de lugar nenhum de verdade.
+        expect(mensagemDoStatus(false, { enviadoPor: 'nao deveria existir' })).toEqual({ direcao: 'saida' });
+    });
+
+    it('encadeado: vira "outra plataforma" pro resto da régua, sem afirmação incerta', () => {
+        expect(saiuPorOutraPlataforma(mensagemDoStatus(false, undefined))).toBe(true);
+    });
+
+    it('🚨 O CASO REAL: 131053 sem documento nenhum NÃO manda converter arquivo', () => {
+        const f = interpretarErroEntrega(131053, '', mensagemDoStatus(false, undefined));
+        expect(f).toMatch(/NÃO saiu pelo SP Connect|outra plataforma/i);
+        expect(f).not.toMatch(/PDF → imagem/);
+    });
+
+    it('doc EXISTE mas incompleto continua sendo dúvida de verdade (não regride)', () => {
+        // Aqui a ambiguidade original da suíte de 17/08 segue valendo: o
+        // documento existe, só não tem os campos — não é o caso do P. Leal.
+        expect(mensagemDoStatus(true, null)).toBeNull();
+        expect(saiuPorOutraPlataforma(mensagemDoStatus(true, null))).toBe(false);
     });
 });

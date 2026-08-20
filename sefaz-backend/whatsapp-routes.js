@@ -706,6 +706,72 @@ router.post('/atendimento-config', requireAdmin, async (req, res) => {
     }
 });
 
+// 🖼️ Imagem por fila (20/08, olhando a Ultra Fox): a admin sobe a arte do
+// departamento UMA vez; ela fica no Storage e é servida por uma rota PÚBLICA
+// (`GET /api/whatsapp/publico/imagem-fila/:fila`, em whatsapp-webhook-routes)
+// — é preciso que a META alcance a URL sem token nenhum. O que o app grava é
+// SÓ o link (banner de departamento, sem dado de cliente); nada aqui muda a
+// leitura/gravação de anexo de conversa, que continua com mediaId e cofre
+// gated por fila.
+router.post('/atendimento-config/imagem-fila', requireAdmin, async (req, res) => {
+    try {
+        const fila = String(req.body?.fila || '').trim().toLowerCase();
+        if (!filaValida(fila)) return res.status(400).json({ ok: false, error: `Fila inválida. Válidas: ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}` });
+        const base64 = String(req.body?.base64 || '');
+        if (!base64) return res.status(400).json({ ok: false, error: 'Escolha a imagem antes de enviar.' });
+        const mime = req.body?.mime;
+        const tamanhoBytes = Buffer.byteLength(base64, 'base64');
+        const v = validarAnexo({ mime, tamanhoBytes, nomeArquivo: `banner-${fila}` });
+        if (!v.ok) return res.status(422).json({ ok: false, error: v.erro, acao: v.acao });
+        if (v.tipo !== 'image') return res.status(422).json({ ok: false, error: `Isso não é uma imagem (${mime || 'tipo desconhecido'}).`, acao: 'Envie JPG, PNG ou WEBP.' });
+
+        // Caminho DETERMINÍSTICO por fila — subir de novo SUBSTITUI o banner
+        // anterior daquela fila, não empilha arquivo velho no bucket.
+        const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[String(mime).split(';')[0].trim().toLowerCase()] || 'jpg';
+        const caminho = `whatsapp/config/imagem-fila/${fila}.${ext}`;
+        await storage.bucket(STORAGE_BUCKET).file(caminho).save(Buffer.from(base64, 'base64'), {
+            contentType: mime || 'application/octet-stream', resumable: false,
+        });
+
+        // A URL é do NOSSO app (rota pública própria), não do bucket direto —
+        // não depende de o bucket aceitar objeto público (política do GCP
+        // costuma bloquear isso), e o app controla o que serve.
+        const url = `${req.protocol}://${req.get('host')}/api/whatsapp/publico/imagem-fila/${fila}`;
+
+        const db = getDb();
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+        const atual = resolverConfig(cfgDoc.data());
+        const limpa = resolverConfig({ ...atual, imagensPorFila: { ...atual.imagensPorFila, [fila]: url } });
+        await db.collection('whatsapp_config').doc('atendimento').set({
+            ...limpa, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user?.email || null,
+        });
+        return res.json({ ok: true, config: limpa, url });
+    } catch (e) {
+        console.error('[whatsapp/atendimento-config/imagem-fila]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Tirar a imagem de uma fila (volta a mandar só texto).
+router.delete('/atendimento-config/imagem-fila/:fila', requireAdmin, async (req, res) => {
+    try {
+        const fila = String(req.params.fila || '').trim().toLowerCase();
+        if (!filaValida(fila)) return res.status(400).json({ ok: false, error: 'fila inválida' });
+        const db = getDb();
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+        const atual = resolverConfig(cfgDoc.data());
+        const semEla = { ...atual.imagensPorFila };
+        delete semEla[fila];
+        const limpa = resolverConfig({ ...atual, imagensPorFila: semEla });
+        await db.collection('whatsapp_config').doc('atendimento').set({
+            ...limpa, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user?.email || null,
+        });
+        return res.json({ ok: true, config: limpa });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 /** Helper das ações: atualiza a conversa e responde o novo estado. */
 async function acaoConversa(req, res, patch, extra = {}) {
     const numero = String(req.params.numero || '').replace(/\D/g, '');

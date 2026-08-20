@@ -583,6 +583,84 @@ Instagram seria um) amarra numa fila, e só quem tem aquela fila enxerga —
 igual já funciona hoje pra Recepção, Fiscal, RH etc. `SOBRE_RESTRINGIR_ATENDENTES`
 diz isso na tela, sempre, independente do que a sonda encontrar.
 
+### 5.13 🖼️ Imagem por fila (Paulo, 20/08)
+
+Paulo mandou prints reais da Ultra Fox — entre eles, o menu de triagem
+mandando uma arte de departamento ("GESTÃO DE PESSOAS") logo depois da
+confirmação da fila escolhida. Perguntado se valia portar algo daquelas
+telas, a resposta foi: NÃO ao "bot por departamento" (cada um com avatar e
+nota própria — é a mesma colcha de retalhos que o catálogo único de filas já
+evita) e SIM à imagem, que é ganho de branding puro sem mexer na
+arquitetura.
+
+`config.imagensPorFila: Record<fila, url>` — mapa opcional, fila sem entrada
+segue só com o texto. Em `decidirAutomacao`, a escolha de fila agora pode
+empilhar `{tipo:'enviarImagem', url, fila}` **antes** da ação `responder` da
+confirmação, na mesma ordem observada na Ultra Fox (imagem, depois texto).
+
+🚨 **A DECISÃO QUE MANDA: LINK, NÃO mediaId.** O anexo de CLIENTE (janela de
+24h, um envio, um clique) já usa `mediaId` — upload prévio à Meta, reusado
+uma vez. O banner de fila é o oposto: a MESMA imagem, reenviada toda vez que
+alguém escolhe aquele departamento, potencialmente por meses. Depender de
+`mediaId` apostaria em quanto tempo a Meta mantém um upload válido — coisa
+que este app nunca testou e a Graph API não garante por escrito. `link`
+evita a pergunta inteira: a Meta busca a URL sob demanda, sempre fresca.
+`montarMensagemMidia`/`enviarMidiaWhatsapp` ganharam o parâmetro `link` como
+ALTERNATIVA a `mediaId` (nunca os dois — `mediaId` vence se vier, mas o bot
+nunca manda os dois juntos).
+
+A URL é da CASA, não do bucket: `POST /api/admin/whatsapp/atendimento-config/imagem-fila`
+(admin) sobe o arquivo pro Storage num caminho determinístico por fila
+(`whatsapp/config/imagem-fila/{fila}.{ext}` — subir de novo SUBSTITUI, não
+empilha) e grava em `imagensPorFila[fila]` a URL da PRÓPRIA rota pública
+`GET /api/whatsapp/publico/imagem-fila/:fila` (calculada de
+`req.protocol`+`req.get('host')` no momento do upload — sem env novo, o
+Cloud Run já expõe `trust proxy`). Apontar pro bucket direto exigiria o
+objeto PÚBLICO no GCS, que a política do projeto costuma bloquear; a rota
+própria também dá controle sobre o que é servido.
+
+⚠️ **A rota pública é PÚBLICA DE PROPÓSITO — e é a exceção correta**: a Meta
+busca o link de fora, sem token nosso. Ela não vaza dado de cliente porque
+não é dado de cliente: é banner cadastrado pelo admin, mesma natureza do
+logo do app. O anexo de conversa (dado do cliente) continua exigindo login e
+checagem de fila — as duas rotas não se confundem porque servem coisas
+diferentes.
+
+Na tela: seção "🖼️ Imagem por fila" na aba 🤖, uma linha por fila (miniatura
++ trocar/tirar), gravando NA HORA — não fica pendente do botão "Salvar
+configuração" (perderia o upload já feito no Storage se a pessoa trocasse de
+aba sem salvar). No balão da conversa, mensagem com `midia.link` abre a
+imagem DIRETO (`<img src>`), sem o clique de "abrir anexo" que existe pro
+anexo do cliente — não tem por que exigir esse passo extra pra uma imagem
+que já é pública.
+
+### 5.14 🚨 "Converta o arquivo" numa mensagem que não é nossa (caso P. Leal, 20/08)
+
+Paulo mandou print de uma conversa real (fila Financeiro): o balão já dizia
+*"mensagem enviada por outra plataforma"* e, logo abaixo, o 131053 mandava o
+colaborador *"converter PDF → imagem, áudio → mp3"* — o MESMO defeito que o
+caso Agatha (17/08) já tinha corrigido: ação impossível (o colaborador nunca
+enviou aquele arquivo, e este app nem o tem).
+
+A causa não era a régua `saiuPorOutraPlataforma`/`interpretarErroEntrega` —
+ela continua certa, testada desde 17/08. Era a CHAMADA em `gravarStatus`
+(whatsapp-webhook-routes.js): quando o status/erro chega e o documento da
+mensagem AINDA NÃO EXISTE no Firestore para aquele `metaMessageId`, a rota
+lia `null` e `saiuPorOutraPlataforma(null)` devolve `false` de propósito
+("na dúvida, não afirma que é de outro") — só que aqui **não havia dúvida**.
+
+🚨 **A PROVA ESTRUTURAL**: as 9 rotas de envio deste app gravam o documento
+da mensagem (`enviadoPor`, texto/mídia) **antes** de responder — ou seja,
+antes de a Meta poder sequer chamar nosso webhook com um status daquele
+`metaMessageId`. Documento ausente não é "não sei" — é "não fui eu". A
+distinção entra em `mensagemDoStatus(existeDoc, dados)`, um helper PURO
+novo em `whatsapp-webhook.js`: doc ausente sintetiza `{direcao:'saida'}`
+(cai automaticamente em "outra plataforma" pela régua já existente); doc
+presente mas incompleto continua sendo a dúvida de verdade de 17/08, sem
+regressão. `saiuPorOutraPlataforma(null)` **não mudou** — a régua pura
+continua conservadora; quem passou a distinguir os dois casos foi a rota,
+na fronteira com o Firestore, que é onde a informação "o doc existe?" vive.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

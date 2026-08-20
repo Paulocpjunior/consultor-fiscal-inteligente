@@ -93,10 +93,17 @@ export function validarAnexo({ mime, tamanhoBytes, nomeArquivo }) {
  * Corpo da mensagem de mídia da Cloud API. `legenda` só existe em image,
  * video e document — em áudio a Meta IGNORA, então o app avisa em vez de
  * mandar texto que some (mensagem que some é pior que mensagem recusada).
+ *
+ * `mediaId` (upload prévio à Meta) OU `link` (URL pública que a Meta busca
+ * na hora) — as duas formas documentadas do mesmo objeto de mídia da Graph
+ * API. `mediaId` é o caminho do anexo do CLIENTE (upload único, mensagem
+ * única); `link` é o caminho certo pra imagem FIXA reenviada sempre (o
+ * banner de departamento) — sem depender de quanto tempo um mediaId
+ * permanece válido na Meta, que este app nunca testou.
  */
-export function montarMensagemMidia({ para, tipo, mediaId, nomeArquivo, legenda }) {
+export function montarMensagemMidia({ para, tipo, mediaId, link, nomeArquivo, legenda }) {
     const corpo = { messaging_product: 'whatsapp', to: para, type: tipo };
-    const bloco = { id: mediaId };
+    const bloco = mediaId ? { id: mediaId } : { link };
     if (tipo === 'document') bloco.filename = nomeSeguroDeArquivo(nomeArquivo, tipo);
     if (legenda && tipo !== 'audio') bloco.caption = String(legenda).slice(0, 1024);
     corpo[tipo] = bloco;
