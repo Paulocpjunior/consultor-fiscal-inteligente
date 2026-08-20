@@ -21,6 +21,8 @@ export interface ConfigAtendimento {
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
     menu: { opcao: string; fila: string; rotulo: string }[];
+    /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
+    imagensPorFila: Record<string, string>;
 }
 
 /** Rótulo curto pras fichas/chips (o rótulo cheio é o que o CLIENTE vê no menu). */
@@ -58,7 +60,8 @@ export interface MensagemInbox {
     direcao: 'entrada' | 'saida' | 'interna' | null;
     tipo: string | null;
     texto: string | null;
-    midia: { nomeArquivo: string | null; mime: string | null; baixada: boolean } | null;
+    /** `link`: banner de fila (URL pública própria) — abre direto, sem o clique de baixar da Meta. */
+    midia: { nomeArquivo: string | null; mime: string | null; baixada: boolean; link?: string | null } | null;
     timestamp: string | null;
     statusEntrega: string | null;
     erroEntrega: { codigo: number | null; detalhe: string | null; acao: string } | null;

@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
     importarUltrafoxLote,
-    atendimentoConfig, salvarAtendimentoConfig, transferirFila, assumirConversa,
+    atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
@@ -285,6 +285,40 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
     const setMsgCfg = (chave: string, valor: string) =>
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
+
+    // ── 🖼️ Imagem por fila: sobe/grava na hora (não fica pendente do
+    // "Salvar configuração" — senão trocar de aba sem salvar perderia o
+    // upload que já foi pro Storage).
+    const [imgFilaEnviando, setImgFilaEnviando] = useState<string | null>(null);
+    const [imgFilaErro, setImgFilaErro] = useState<string | null>(null);
+    const subirImgFila = async (fila: string, arquivo: File | null) => {
+        if (!arquivo || imgFilaEnviando) return;
+        setImgFilaEnviando(fila);
+        setImgFilaErro(null);
+        try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const leitor = new FileReader();
+                leitor.onload = () => resolve(String(leitor.result || '').split(',')[1] || '');
+                leitor.onerror = () => reject(new Error('não deu pra ler o arquivo'));
+                leitor.readAsDataURL(arquivo);
+            });
+            const r = await subirImagemFila(fila, base64, arquivo.type || 'application/octet-stream');
+            if (!r.ok) { setImgFilaErro(`${fila}: ${r.error}`); return; }
+            setCfg(r.config);
+        } catch (e: any) {
+            setImgFilaErro(`${fila}: ${e.message || 'falha ao ler o arquivo'}`);
+        } finally { setImgFilaEnviando(null); }
+    };
+    const tirarImgFila = async (fila: string) => {
+        if (imgFilaEnviando) return;
+        setImgFilaEnviando(fila);
+        setImgFilaErro(null);
+        try {
+            const r = await removerImagemFila(fila);
+            if (!r.ok) { setImgFilaErro(`${fila}: ${r.error}`); return; }
+            setCfg(r.config);
+        } finally { setImgFilaEnviando(null); }
+    };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
     const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram'>('bot');
@@ -2275,6 +2309,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     } : c)} className="text-[11px] text-[#0e3bfa] font-bold">＋ opção</button>
                                     <p className="text-[10px] text-slate-400">Menu vazio ou só com fila inválida volta ao padrão na gravação — triagem morta em silêncio não passa.</p>
                                 </div>
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🖼️ Imagem por fila (opcional)</p>
+                                    <p className="text-[10px] text-slate-400">Enviada JUNTO da confirmação, quando o cliente escolhe a opção — a arte do departamento, como a Ultra Fox manda hoje. Sobe/troca na hora (não depende de "Salvar configuração"). Fila sem imagem segue só com o texto.</p>
+                                    {filas.map((f) => {
+                                        const url = cfg.imagensPorFila?.[f.id];
+                                        return (
+                                            <div key={f.id} className="flex items-center gap-2">
+                                                {url ? (
+                                                    <img src={url} alt={f.rotulo} className="w-9 h-9 rounded object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
+                                                ) : (
+                                                    <span className="w-9 h-9 rounded bg-slate-100 dark:bg-slate-700 shrink-0" />
+                                                )}
+                                                <span className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-0 truncate">{f.rotulo}</span>
+                                                <label className={`text-[10px] font-bold px-2 py-1 rounded cursor-pointer ${imgFilaEnviando === f.id ? 'opacity-40 pointer-events-none' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                    {imgFilaEnviando === f.id ? 'enviando…' : url ? 'trocar' : 'subir'}
+                                                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                                                        onChange={(e) => { subirImgFila(f.id, e.target.files?.[0] || null); e.target.value = ''; }} />
+                                                </label>
+                                                {url && (
+                                                    <button onClick={() => tirarImgFila(f.id)} disabled={imgFilaEnviando === f.id}
+                                                        className="text-slate-400 hover:text-red-600 px-1 disabled:opacity-40">✕</button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    {imgFilaErro && <p className="text-[11px] text-red-600 dark:text-red-400">{imgFilaErro}</p>}
+                                </div>
                                 {cfgErro && <p className="text-[11px] text-red-600 dark:text-red-400">{cfgErro}</p>}
                                 {cfgOk && <p className="text-[11px] text-emerald-600 dark:text-emerald-400">✓ Configuração salva.</p>}
                                 <div className="flex items-center justify-end gap-2">
@@ -2505,7 +2566,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 : 'mr-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-sm'}`}>
                                                 {midia && (
                                                     <div className="mb-1">
-                                                        {midias[m.id] ? (
+                                                        {m.midia?.link ? (
+                                                            // Banner de fila: URL PÚBLICA nossa — abre direto, sem o
+                                                            // clique de baixar da Meta (que nem se aplica aqui, não
+                                                            // veio da Meta pra este app baixar).
+                                                            <a href={m.midia.link} target="_blank" rel="noreferrer">
+                                                                <img src={m.midia.link} alt="imagem" className="rounded-lg max-h-64 w-auto" />
+                                                            </a>
+                                                        ) : midias[m.id] ? (
                                                             midias[m.id].mime.startsWith('image/') ? (
                                                                 <a href={midias[m.id].url} target="_blank" rel="noreferrer">
                                                                     <img src={midias[m.id].url} alt={m.midia?.nomeArquivo || 'imagem'}

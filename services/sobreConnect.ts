@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-18';
+export const SOBRE_VERSAO = '2026-08-20';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -229,6 +229,14 @@ export const MANUAL: PassoManual[] = [
         atencao: 'Esses comandos só funcionam com o bot ligado na ⚙️. Enquanto o bot estiver desligado, quem encaminha é a equipe. Fora esses dois comandos, o bot NÃO fala em conversa que já tem atendente — nada de saudação ou menu por cima do seu atendimento.',
     },
     {
+        titulo: '13. A imagem do departamento (opcional, ⚙️ → 🤖)',
+        passos: [
+            'Se o admin cadastrar uma imagem para uma fila (aba 🤖, seção "Imagem por fila"), o bot manda essa arte JUNTO da confirmação, quando o cliente escolhe a opção do menu.',
+            'Fila sem imagem cadastrada segue como sempre — só o texto de confirmação.',
+        ],
+        atencao: 'É só a imagem que muda; a fila e a confirmação continuam funcionando do mesmo jeito com ou sem ela.',
+    },
+    {
         titulo: '12. Quem pode o quê',
         passos: [
             'Colaborador: atende as filas ligadas ao seu nome, transfere e encerra o atendimento que ele conduz.',
@@ -241,6 +249,12 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-08-20',
+        itens: [
+            '🖼️ Imagem por fila (⚙️ → 🤖): quando cadastrada, o bot manda a arte do departamento junto da confirmação, do jeito que a Ultra Fox faz hoje. Fila sem imagem segue só com o texto.',
+        ],
+    },
     {
         data: '2026-08-18',
         itens: [

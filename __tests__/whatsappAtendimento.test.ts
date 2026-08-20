@@ -201,6 +201,52 @@ describe('decidirAutomacao — o cérebro, puro', () => {
 });
 
 // ============================================================================
+// 🖼️ IMAGEM POR FILA (20/08) — a arte do departamento que a Ultra Fox manda
+// junto da confirmação. Fila sem imagem cadastrada segue só com o texto.
+// ============================================================================
+
+describe('🖼️ imagensPorFila — o banner que acompanha a confirmação da fila', () => {
+    const cfg = { ...configPadraoAtendimento(), botAtivo: true, botAlcance: 'todos' as const };
+    const dentroDoExpediente = new Date('2026-08-17T09:00:00-03:00');
+
+    it('config nasce sem nenhuma imagem — nada muda pra quem não cadastrou', () => {
+        expect(configPadraoAtendimento().imagensPorFila).toEqual({});
+    });
+
+    it('resolverConfig guarda a URL da fila válida', () => {
+        const r = resolverConfig({ imagensPorFila: { rh: 'https://exemplo.com/rh.jpg' } });
+        expect(r.imagensPorFila).toEqual({ rh: 'https://exemplo.com/rh.jpg' });
+    });
+
+    it('🚨 fila inválida ou URL vazia são DESCARTADAS na gravação, nunca a mensagem quebrada', () => {
+        const r = resolverConfig({ imagensPorFila: { 'nao-existe': 'https://x', rh: '', fiscal: 42 } });
+        expect(r.imagensPorFila).toEqual({});
+    });
+
+    it('escolha com imagem cadastrada: a imagem sai ANTES do texto de confirmação', () => {
+        const comImagem = { ...cfg, imagensPorFila: { contabil: 'https://exemplo.com/contabil.jpg' } };
+        const acoes = decidirAutomacao({
+            conversa: { protocolo: '2077' }, textoMensagem: '5',
+            config: comImagem, agora: dentroDoExpediente,
+        });
+        expect(acoes[0]).toEqual({ tipo: 'definirFila', fila: 'contabil' });
+        expect(acoes[1]).toEqual({ tipo: 'enviarImagem', url: 'https://exemplo.com/contabil.jpg', fila: 'contabil' });
+        expect(acoes[2].tipo).toBe('responder');
+        expect(acoes[2].texto).toContain('Gestão - Departamento Contábil');
+    });
+
+    it('escolha SEM imagem cadastrada pra aquela fila: nenhuma ação enviarImagem', () => {
+        const comOutraFila = { ...cfg, imagensPorFila: { rh: 'https://exemplo.com/rh.jpg' } };
+        const acoes = decidirAutomacao({
+            conversa: { protocolo: '2077' }, textoMensagem: '5', // 5 = contabil
+            config: comOutraFila, agora: dentroDoExpediente,
+        });
+        expect(acoes.some((a: any) => a.tipo === 'enviarImagem')).toBe(false);
+        expect(acoes).toHaveLength(2);
+    });
+});
+
+// ============================================================================
 // 🚨 ALCANCE DO BOT — o que torna a CONVIVÊNCIA possível.
 //
 // Paulo, 17/08: *"temos que permanecer com os 2 apps ativos, não faz sentido
@@ -592,5 +638,33 @@ describe('🚨 farol de fila órfã tem que aparecer ONDE a decisão é tomada',
         // O efeito só existe porque o carregamento deixou de ser exclusivo da
         // aba 👥; sem isto, o aviso ficaria em "conferindo…" para sempre.
         expect(tela).toMatch(/cfgAba === 'atendentes' \|\| cfgAba === 'bot'/);
+    });
+});
+
+describe('🖼️ imagensPorFila — ação produzida pelo núcleo tem que ter QUEM EXECUTA', () => {
+    // O cérebro (decidirAutomacao) empilha {tipo:'enviarImagem'} — se o
+    // executor do webhook não conhecer o tipo, a ação cai no chão em
+    // silêncio (nenhum `else if` bate, nada acontece, ninguém percebe).
+    // Mesma família da rota-sem-botão de 13/08, do lado do BACKEND.
+    const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+    const rotasAdmin = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it("o executor do bot (rodarBot) trata 'enviarImagem' e manda por LINK", () => {
+        expect(rotas).toMatch(/acao\.tipo === 'enviarImagem'/);
+        expect(rotas).toMatch(/enviarMidiaWhatsapp\(\{ para: msg\.de, tipo: 'image', link: acao\.url \}\)/);
+    });
+
+    it('existe rota PÚBLICA que serve o banner (a Meta busca sem token nosso)', () => {
+        expect(rotas).toMatch(/router\.get\('\/publico\/imagem-fila\/:fila'/);
+    });
+
+    it('existe rota admin de upload — sem ela o painel não teria como gravar a imagem', () => {
+        expect(rotasAdmin).toMatch(/router\.post\('\/atendimento-config\/imagem-fila'/);
+    });
+
+    it('a aba do bot chama o upload (não é rota morta)', () => {
+        expect(tela).toMatch(/subirImagemFila\(/);
+        expect(tela).toMatch(/removerImagemFila\(/);
     });
 });

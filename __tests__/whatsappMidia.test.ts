@@ -86,4 +86,15 @@ describe('corpo da mensagem de mídia', () => {
         expect(resumoDoAnexo('image', 'foto.jpg', null)).toBe('🖼️ foto.jpg');
         expect(resumoDoAnexo('document', 'guia.pdf', 'segue')).toBe('📎 guia.pdf — segue');
     });
+
+    it('🖼️ sem mediaId, usa LINK — o caminho do banner de fila (imagem fixa reenviada)', () => {
+        const img = montarMensagemMidia({ para: '5511964440000', tipo: 'image', link: 'https://app/imagem-fila/rh' });
+        expect(img.image).toEqual({ link: 'https://app/imagem-fila/rh' });
+        expect(img.image.id).toBeUndefined();
+    });
+
+    it('mediaId presente VENCE link (não faz sentido mandar os dois; mediaId é o caminho já provado)', () => {
+        const img = montarMensagemMidia({ para: '5511964440000', tipo: 'image', mediaId: 'M9', link: 'https://ignorado' });
+        expect(img.image).toEqual({ id: 'M9' });
+    });
 });
