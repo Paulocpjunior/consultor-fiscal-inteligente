@@ -983,7 +983,33 @@ router.post('/conversas/:numero/vincular', requireAuth, async (req, res) => {
 // template, vínculo) e LIDO por nenhuma tela. Importar 800 contatos os
 // deixava invisíveis até alguém escrever pro número.
 
-const LIMITE_CONTATOS = 2000;
+// 🚨 O teto de 2000 (leitura de UM `.get()` só) foi ultrapassado em produção
+// (Paulo, 20/08 — a carteira de contatos passou de 2000 depois do backup da
+// Ultra Fox + uso normal, e a tela avisava "há mais no banco" mas os contatos
+// além do teto ficavam INVISÍVEIS pra busca/etiqueta, não só cortados da
+// exibição). Virou PAGINAÇÃO de verdade (cursor por documentId, que a
+// coleção já tem por natureza — o número é o id) até um teto de SEGURANÇA
+// bem acima de qualquer carteira real, não mais um teto pensado pro volume
+// de um dia.
+const PAGINA_CONTATOS = 1000;
+const TETO_LEITURA_CONTATOS = 50000;
+
+async function lerTodosContatos(db) {
+    const colecao = db.collection('whatsapp_contatos');
+    let cursor = null;
+    let docs = [];
+    while (docs.length < TETO_LEITURA_CONTATOS) {
+        let q = colecao.orderBy(admin.firestore.FieldPath.documentId()).limit(PAGINA_CONTATOS);
+        if (cursor) q = q.startAfter(cursor);
+        // eslint-disable-next-line no-await-in-loop
+        const pagina = await q.get();
+        if (pagina.empty) break;
+        docs = docs.concat(pagina.docs);
+        cursor = pagina.docs[pagina.docs.length - 1];
+        if (pagina.docs.length < PAGINA_CONTATOS) break; // última página
+    }
+    return docs;
+}
 
 async function lerCatalogoEtiquetas(db) {
     const snap = await db.collection('whatsapp_etiquetas').limit(200).get();
@@ -1019,11 +1045,11 @@ router.post('/etiquetas', requireAdmin, async (req, res) => {
 router.get('/contatos', requireAuth, async (req, res) => {
     try {
         const db = getDb();
-        const [snap, catalogo] = await Promise.all([
-            db.collection('whatsapp_contatos').limit(LIMITE_CONTATOS).get(),
+        const [docsContatos, catalogo] = await Promise.all([
+            lerTodosContatos(db),
             lerCatalogoEtiquetas(db),
         ]);
-        const todos = snap.docs.map((d) => {
+        const todos = docsContatos.map((d) => {
             const c = d.data() || {};
             return {
                 numero: d.id,
@@ -1058,9 +1084,10 @@ router.get('/contatos', requireAuth, async (req, res) => {
             totalFiltrado: filtrados.length,
             // Lista cortada SEMPRE diz que foi cortada (farol honesto vale pra contagem).
             truncado: filtrados.length > 500,
-            // E o teto da leitura também: 2000 contatos lidos com 2500 no banco
-            // faria a contagem por etiqueta mentir para baixo, calada.
-            limiteLeitura: snap.size >= LIMITE_CONTATOS ? LIMITE_CONTATOS : null,
+            // E o teto da leitura também: contagem por etiqueta sobre uma leitura
+            // truncada mentiria para baixo, calada. Agora só truncado no TETO de
+            // segurança (50000) — bem acima de qualquer carteira real de hoje.
+            limiteLeitura: docsContatos.length >= TETO_LEITURA_CONTATOS ? TETO_LEITURA_CONTATOS : null,
             semEtiquetaTotal: todos.filter((c) => !(c.etiquetas || []).length).length,
             porEtiqueta, etiquetas: catalogo,
         });
