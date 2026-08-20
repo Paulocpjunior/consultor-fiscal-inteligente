@@ -935,6 +935,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **REGRA QUE FICA: corrigir a linha fecha a INSTÂNCIA; a trava fecha a
   CLASSE.** Provada removendo a declaração de propósito — ela acusou as três
   linhas exatas do defeito real.
+- **🚨 RODAR O GATE ANTES DO ÚLTIMO ARQUIVO É NÃO RODAR O GATE** (20/08, deploy
+  634 — defeito MEU, e quem pegou foi o Paulo). O PR da fila da reconferência
+  (#845) estendeu `reconferir-cancelamento.js` e **não tocou o
+  `reconferir-cancelamento.d.ts` escrito à mão ao lado**. O `tsc --noEmit` do
+  deploy travou; o #847 consertou o tipo.
+  🔴 **O QUE ASSUSTA É A ORDEM, NÃO O TIPO**: eu rodei `npm run lint` e ele
+  passou — **antes de criar o arquivo de teste**, que era justamente quem
+  referenciava os campos novos. Depois rodei `jest` (ts-jest não reprova por
+  erro de tipo do jeito que o `tsc` reprova) e `build` (o Vite não faz
+  typecheck). Ou seja: os três verdes eram verdadeiros e **nenhum deles tinha
+  olhado o último arquivo tocado**.
+  ✂️ **REGRA QUE FICA: o gate é a ÚLTIMA coisa antes do commit, sempre depois do
+  último arquivo escrito.** `lint → escrever mais um arquivo → commit` é a
+  mesma família do "trava escrita como LISTA" (13/08): a verificação existe,
+  passa, e não cobre o que entrou depois dela.
+  ⚠️ **E `.d.ts` À MÃO É A ARMADILHA DAS DUAS FORMAS com outra roupa**: o tipo e
+  a implementação são duas declarações do MESMO fato, e divergem em silêncio —
+  o `.js` não reclama. Campo novo em módulo com `.d.ts` vizinho ⇒ os dois no
+  MESMO PR, igual à whitelist do #382.
 - **🚦 O GARGALO DO SPED NÃO ERA SÓ O LEIAUTE — ERA O ROUND-TRIP** (Paulo,
   20/08: *"um dos maiores gargalos que vem consumindo tempo e retrabalho é o
   EFD-ICMS/IPI e SPED Fiscal… corrija evitando o vai e vem o dia todo"*, com o
