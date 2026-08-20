@@ -684,6 +684,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **LIÇÃO QUE FICA**: antes de escrever um webservice novo pra contornar uma
   restrição, testar se a restrição é real com a ferramenta que já existe. Eu
   deduzi a regra do DistDFe; ele testou. O teste venceu.
+  🚨 **E A TERCEIRA RODADA ACHOU O DEFEITO QUE FAZIA TUDO PARECER PARADO: A
+  FILA NÃO ANDAVA** (Paulo, 20/08: *"639 - MV LIDER, não mudou! já tínhamos
+  dado como ajustada"*). A tela trazia 20 notas `[indeterminado]` com cStat 640
+  e, embaixo, *"a rodada parou em 60 de 162 — rode de novo para continuar, são
+  3 rodadas"*. **Rodar de novo NÃO continuava**: só a nota CANCELADA era
+  carimbada, então `selecionarParaReconferir` não tinha como saber quem já
+  havia sido perguntada — ordenava por número, cortava no teto e devolvia
+  exatamente as MESMAS 60, rodada após rodada. As 102 do fim nunca foram
+  perguntadas, e a promessa de progresso era do próprio app.
+  ✂️ Agora a rota **carimba TODA nota perguntada** (`reconferenciaSefazEm`) e a
+  seleção ordena por **antiguidade da pergunta** — nunca perguntada primeiro,
+  depois a mais antiga. ⚠️ **Não é "perguntou uma vez, nunca mais"**: o
+  cancelamento tem prazo legal e nota válida hoje pode ser cancelada amanhã, então
+  a fila GIRA em vez de excluir. E o campo entrou no `.select()` no MESMO PR —
+  campo fora da projeção some da leitura, e a fila voltaria a repetir em silêncio.
+  🚨 **E `cStat 640` NÃO É SILÊNCIO, É RESPOSTA — o app chamava de
+  "indeterminado"**, que se lê como *"a ferramenta não conseguiu"*. Ela
+  conseguiu: a SEFAZ respondeu. O que 640 significa sai da PROVA de 18/08, na
+  MESMA empresa e com o MESMO certificado do escritório (que não é parte de
+  nenhum daqueles documentos): as três chaves canceladas voltaram **653**. Ou
+  seja, a SEFAZ informa o cancelamento ANTES de barrar por permissão — se ela
+  barrou por permissão, **não havia cancelamento a informar**. Situação
+  `nao-cancelada-por-recusa`, contada À PARTE do `nao-cancelada` normal: lá a
+  prova é POSITIVA (ela entregou o documento e não há evento), aqui é NEGATIVA
+  (ela não disse 653), e fundir as duas apagaria a diferença justo onde importa.
+  Corrobora pelo TEXTO, como o 653 — cStat isolado pode ser reaproveitado por NT
+  futura.
+  ⚠️ **E O SELO VERDE ERA A OUTRA METADE**: o cabeçalho dizia *"✓ numeração
+  contínua · 0 cancelada(s)"* em VERDE com 20 notas sem resposta embaixo. Para a
+  saída o cancelamento só chega por evento e a SEFAZ não entrega ao emitente
+  (Rej. 641), então aquele número é o das canceladas que CHEGARAM. Agora ele diz
+  **"0 cancelada(s) conhecida(s) · N não conferida(s) na SEFAZ"** e sai do verde
+  enquanto N > 0.
   🐛 **E A RODADA SEGUINTE ACHOU O SEGUNDO BURACO — a fila nem chegava nas
   notas certas** (Paulo, 19/08, rodando a correção acima na MV LIDER: 20 de 20
   voltaram `[indeterminado] ... cStat 618 — Rejeicao: Chave de Acesso invalida

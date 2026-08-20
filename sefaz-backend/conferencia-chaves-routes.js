@@ -228,7 +228,10 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
             .where('competencia', '==', competencia)
             // eventos/cStat entram no select porque é neles que o cancelamento
             // pode estar — sem eles, docCancelado erra para MAIS consultas.
-            .select('chave', 'numero', 'direcao', 'tpNF', 'status', 'cStat', 'eventos', 'valorTotal')
+            // ⚠️ `reconferenciaSefazEm` PRECISA estar aqui: campo fora do select some
+            // da leitura, e a fila voltaria a repetir as mesmas notas toda rodada.
+            .select('chave', 'numero', 'direcao', 'tpNF', 'status', 'cStat', 'eventos', 'valorTotal',
+                'reconferenciaSefazEm')
             .get();
         const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 
@@ -236,6 +239,9 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
             jaCancelado: docCancelado,
             direcaoEfetiva: direcaoEfetivaDoc,
             limite: MAX_RECONFERIR,
+            // Quem nunca foi perguntada entra primeiro; quem já foi volta pela
+            // mais antiga. Sem isto a rodada repetia as mesmas 60 (MV LIDER).
+            conferidaEm: (d) => Number(d?.reconferenciaSefazEm) || 0,
         });
 
         if (simular) {
@@ -312,6 +318,21 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
                 } catch (e) {
                     leitura = { situacao: 'indeterminado', motivo: `A SEFAZ disse CANCELADA, mas a gravação falhou: ${e.message}` };
                 }
+            }
+            // 🚨 CARIMBA TODA NOTA PERGUNTADA — não só a cancelada.
+            // Antes, só a cancelada era gravada, então a seleção não tinha como
+            // saber quem já havia sido perguntada e refazia a mesma fatia a cada
+            // rodada, enquanto a tela prometia progresso (MV LIDER, 20/08).
+            // Falha ao carimbar NÃO derruba a rodada: no pior caso a nota volta
+            // na fila, que é o comportamento antigo — nunca perder o resultado.
+            try {
+                await db.collection('documentos_fiscais').doc(alvo.id).set({
+                    reconferenciaSefazEm: Date.now(),
+                    reconferenciaSefazSituacao: leitura.situacao,
+                    reconferenciaSefazCStat: leitura.cStat || null,
+                }, { merge: true });
+            } catch (e) {
+                console.warn(`[reconferir-cancelamento] carimbo falhou em ${alvo.id}: ${e.message}`);
             }
             resultados.push({ ...alvo, ...leitura });
             await sleep(PACING_MS);

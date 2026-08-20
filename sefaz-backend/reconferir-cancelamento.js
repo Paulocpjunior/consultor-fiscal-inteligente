@@ -83,12 +83,15 @@ const CSTAT_NOTA_CANCELADA = new Set(['101', '151']);
  * @param {(d:any)=>string}  opts.direcaoEfetiva régua da casa
  * @param {number} [opts.limite]  teto de chamadas nesta rodada
  */
-export function selecionarParaReconferir(docs, { jaCancelado, direcaoEfetiva, limite = 200 } = {}) {
+export function selecionarParaReconferir(
+    docs, { jaCancelado, direcaoEfetiva, limite = 200, conferidaEm = () => null } = {},
+) {
     const aConsultar = [];
     let jaCanceladas = 0;
     let semChave = 0;
     let naoSaida = 0;
     let naoMod55 = 0;
+    let nuncaConferidas = 0;
 
     for (const d of docs || []) {
         if (direcaoEfetiva(d) !== 'saida') { naoSaida += 1; continue; }
@@ -100,17 +103,38 @@ export function selecionarParaReconferir(docs, { jaCancelado, direcaoEfetiva, li
         // volta sempre "Chave de Acesso invalida (modelo diferente de 55)",
         // gastando a conta da consulta sem nunca poder resolver nada.
         if (modeloDoDoc({ ...d, chave }) !== '55') { naoMod55 += 1; continue; }
-        aConsultar.push({ id: d.id, chave, numero: d.numero ?? null, valorTotal: Number(d.valorTotal) || 0 });
+        const em = Number(conferidaEm(d)) || 0;
+        if (!em) nuncaConferidas += 1;
+        aConsultar.push({
+            id: d.id, chave, numero: d.numero ?? null, valorTotal: Number(d.valorTotal) || 0, conferidaEm: em,
+        });
     }
 
-    // Ordem por número: a conferência humana acompanha o talão, e um recorte
-    // cortado no meio de uma sequência é mais fácil de retomar.
-    aConsultar.sort((a, b) => (Number(a.numero) || 0) - (Number(b.numero) || 0));
+    // 🚨 QUEM NUNCA FOI PERGUNTADA VEM PRIMEIRO — senão "rode de novo" não anda.
+    //
+    // Paulo, 20/08 (MV LIDER 639): *"não mudou! já tínhamos dado como
+    // ajustada"*. A fila era ordenada só por NÚMERO e cortada no teto da
+    // rodada, e **só a nota CANCELADA era carimbada**. Resultado: rodada após
+    // rodada o app consultava exatamente as MESMAS 60 primeiras, enquanto a
+    // própria tela prometia *"rode de novo para continuar — são 3 rodadas para
+    // cobrir as 162"*. Promessa que a ferramenta não cumpria: a 2ª rodada
+    // refazia a 1ª, e as 102 do fim nunca eram perguntadas.
+    //
+    // ⚠️ E NÃO É "PERGUNTOU UMA VEZ, NUNCA MAIS": o cancelamento tem prazo
+    // legal e uma nota válida hoje pode ser cancelada amanhã. Por isso a ordem
+    // é por ANTIGUIDADE da pergunta (nunca perguntada primeiro, depois a mais
+    // antiga) em vez de exclusão — a fila gira sozinha e nenhuma nota fica
+    // fora para sempre. Empate desempata pelo número, que é como a conferência
+    // humana acompanha o talão.
+    aConsultar.sort((a, b) => (a.conferidaEm - b.conferidaEm)
+        || ((Number(a.numero) || 0) - (Number(b.numero) || 0)));
 
     const cortadas = Math.max(0, aConsultar.length - limite);
     return {
         aConsultar: aConsultar.slice(0, limite),
         total: aConsultar.length,
+        /** Quantas ainda não foram perguntadas NENHUMA vez — o que falta de verdade. */
+        nuncaConferidas,
         // Truncamento NUNCA é silencioso: lista cortada sem dizer o quanto é
         // lida como "conferi tudo".
         cortadas,
@@ -129,8 +153,14 @@ export function selecionarParaReconferir(docs, { jaCancelado, direcaoEfetiva, li
 /**
  * Lê a resposta da SEFAZ para UMA chave.
  *
- * Devolve sempre uma das três: 'cancelada', 'nao-cancelada' ou 'indeterminado'.
- * Nunca inventa a terceira a partir do silêncio.
+ * Devolve sempre uma de QUATRO:
+ *   · `cancelada`                — a SEFAZ disse (evento 110111, cStat legado ou 653);
+ *   · `nao-cancelada`            — ela ENTREGOU o documento e não há evento (prova positiva);
+ *   · `nao-cancelada-por-recusa` — ela recusou por permissão (640), e não disse 653 (prova negativa);
+ *   · `indeterminado`            — ela não respondeu, ou respondeu algo que não decide.
+ *
+ * Nunca inventa "não cancelada" a partir do SILÊNCIO — mas 640 não é silêncio,
+ * é resposta, e essa diferença é o que separa a 2ª e a 3ª da 4ª.
  */
 export function lerRespostaCancelamento(resp) {
     if (!resp || resp.erro) {
@@ -165,6 +195,41 @@ export function lerRespostaCancelamento(resp) {
             motivo: `SEFAZ recusou a consulta com cStat 653 (${resp.xMotivo}) — a nota está cancelada e por `
                 + 'isso o arquivo não é mais entregue. Sem protocolo/data do evento (a SEFAZ não manda nesta '
                 + 'resposta), só a confirmação do cancelamento.',
+        };
+    }
+
+    // 🚨 cStat 640 — "CNPJ/CPF do interessado não possui permissão para
+    // consultar esta NF-e". ISTO É RESPOSTA, e o app estava chamando de
+    // silêncio.
+    //
+    // Paulo, 20/08 (MV LIDER 639 · 07/2026): *"não mudou! já tínhamos dado
+    // como ajustada"* — a tela trazia **20 notas, todas [indeterminado] com
+    // cStat 640**, e "indeterminado" lê-se como "a ferramenta não conseguiu".
+    // Ela conseguiu: a SEFAZ respondeu.
+    //
+    // O que 640 significa aqui sai da PROVA de 18/08, na MESMA empresa, com o
+    // MESMO certificado (o do escritório, que não é parte de nenhum desses
+    // documentos): as três chaves canceladas voltaram **653 (NF-e Cancelada)**.
+    // Ou seja, a SEFAZ informa o CANCELAMENTO antes de barrar por permissão —
+    // se ela barrou por permissão, é porque não havia cancelamento a informar.
+    //
+    // ⚠️ POR QUE NÃO É O MESMO `nao-cancelada` DO CAMINHO NORMAL: lá a SEFAZ
+    // ENTREGOU o documento e nós lemos que não há evento — prova positiva.
+    // Aqui a prova é NEGATIVA (ela não disse 653), então a situação tem nome
+    // próprio e é contada à parte. Fundir as duas apagaria a diferença
+    // justamente onde ela importa.
+    //
+    // ⚠️ E corrobora pelo TEXTO, como o 653: um cStat isolado pode ser
+    // reaproveitado por uma NT futura para outra coisa.
+    if (cStat === '640' && /permiss|interessad/i.test(String(resp.xMotivo || ''))) {
+        return {
+            situacao: 'nao-cancelada-por-recusa',
+            cStat,
+            motivo: `A SEFAZ recusou a consulta por PERMISSÃO (cStat 640 — ${resp.xMotivo}). Isso responde `
+                + 'sobre cancelamento: nota cancelada ela informa com cStat 653 mesmo a quem não é parte '
+                + '(provado na MV LIDER em 18/08, três chaves, com este mesmo certificado). Como não veio '
+                + '653, a nota NÃO está cancelada. O documento em si continua indisponível — o que não se '
+                + 'sabe é o conteúdo, não a validade.',
         };
     }
 
@@ -237,6 +302,10 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
     const r = resultados || [];
     const canceladas = r.filter((x) => x.situacao === 'cancelada');
     const indeterminadas = r.filter((x) => x.situacao === 'indeterminado');
+    // Prova NEGATIVA: a SEFAZ recusou por permissão (640) em vez de informar
+    // cancelamento (653). Conta à parte da prova positiva — ver
+    // `lerRespostaCancelamento`.
+    const porRecusa = r.filter((x) => x.situacao === 'nao-cancelada-por-recusa');
     const valorRemovido = canceladas.reduce((t, x) => t + (Number(x.valorTotal) || 0), 0);
 
     const avisos = [];
@@ -250,9 +319,10 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
     if (modo === 'cert-escritorio' && !simulado && r.length) {
         avisos.push(
             'Esta empresa não tem certificado A1 próprio (nem da mesma raiz) — a rodada perguntou com o '
-            + 'certificado do ESCRITÓRIO. Cancelamento (cStat 653) a SEFAZ confirma mesmo assim; para nota '
-            + 'válida da qual o escritório não é parte, o resultado fica indeterminado (não é prova de '
-            + 'que está tudo certo).',
+            + 'certificado do ESCRITÓRIO. A SEFAZ confirma o CANCELAMENTO mesmo assim (cStat 653) e, para '
+            + 'nota válida da qual o escritório não é parte, recusa a entrega por permissão (cStat 640) — '
+            + 'que é resposta, não silêncio: se houvesse cancelamento, ela teria dito 653. O que este '
+            + 'caminho NÃO dá é o conteúdo do documento.',
         );
     }
     if (canceladas.length) {
@@ -260,6 +330,14 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
             `${canceladas.length} nota(s) estavam canceladas na SEFAZ e contavam como faturamento aqui — `
             + `R$ ${valorRemovido.toFixed(2)} saem da apuração. Se a competência já teve guia emitida, `
             + 'o valor mudou: confira antes de concluir o mês.',
+        );
+    }
+    if (porRecusa.length) {
+        avisos.push(
+            `${porRecusa.length} nota(s) a SEFAZ recusou por PERMISSÃO (cStat 640) — e isso as dá como NÃO `
+            + 'CANCELADAS: nota cancelada ela informa com cStat 653 mesmo a quem não é parte do documento. '
+            + 'A prova aqui é negativa (ela não disse 653), então elas contam separadas das que foram '
+            + 'conferidas pelo próprio XML.',
         );
     }
     if (indeterminadas.length) {
@@ -287,6 +365,12 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         const porRodada = Math.max(1, Number(selecao.aConsultar?.length) || 1);
         const rodadas = Math.ceil((Number(selecao.total) || 0) / porRodada);
         const quantas = rodadas > 1 ? ` São ${rodadas} rodadas para cobrir as ${selecao.total}.` : '';
+        // Quantas NUNCA foram perguntadas — é este número que mede o que falta.
+        // "Rodadas" sozinho já prometeu progresso que não acontecia (MV LIDER).
+        const faltam = Number(selecao.nuncaConferidas) || 0;
+        const nunca = faltam ? ` Hoje ${faltam} nota(s) nunca foram perguntadas — são elas que a próxima `
+            + 'rodada pega primeiro.' : ' Todas já foram perguntadas ao menos uma vez; a rodada volta nas '
+            + 'mais antigas, porque nota válida hoje pode ser cancelada amanhã.';
         avisos.push(
             simulado
                 ? `Ainda NÃO consultamos nada — isto é só a prévia. Ao clicar em "Reconferir na SEFAZ", `
@@ -294,7 +378,7 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
                   + 'O teto por rodada existe porque cada consulta é uma chamada com o certificado do '
                   + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).'
                 : `A rodada parou em ${porRodada} de ${selecao.total} notas. Rode de novo para `
-                  + `continuar.${quantas} Cada consulta é uma chamada à SEFAZ com o certificado do `
+                  + `continuar.${quantas}${nunca} Cada consulta é uma chamada à SEFAZ com o certificado do `
                   + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
         );
     }
@@ -327,6 +411,7 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         consultadas: r.length,
         canceladas: canceladas.length,
         naoCanceladas: r.filter((x) => x.situacao === 'nao-cancelada').length,
+        naoCanceladasPorRecusa: porRecusa.length,
         indeterminadas: indeterminadas.length,
         valorRemovido: Math.round(valorRemovido * 100) / 100,
         avisos,
