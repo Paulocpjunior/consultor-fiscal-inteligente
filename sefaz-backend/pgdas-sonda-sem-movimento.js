@@ -36,12 +36,32 @@
 
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
-/** Base comum: o que já é certo em qualquer declaração do PGDAS-D. */
-function baseDeclaracao({ cnpj, filiais = [] }) {
+/**
+ * Base comum: o que já é certo em qualquer declaração do PGDAS-D.
+ *
+ * 🚨 `tipoDeclaracao` É OBRIGATÓRIO E FALTAVA — foi ele que invalidou a rodada
+ * inteira de 20/08 (ELS COMERCIO DE BANANAS, PA 07/2026). Os 6 candidatos
+ * voltaram com o MESMO erro e o SERPRO disse o campo na cara:
+ *
+ *   [EntradaIncorreta-PGDASD-MSG_ISN_036] - O Json contém dados inválidos -
+ *   Required property 'TipoDeclaracao' not found in JSON. Path 'declaracao'.
+ *
+ * A sonda chamava `validarDeclaracaoPgdas` DIRETO, e quem preenche esse campo
+ * no caminho real é o `transmitirPgdasD` (1 = Original, 2 = Retificadora,
+ * decidido consultando se a competência já foi declarada). Resultado: as 6
+ * formas nunca chegaram a ser avaliadas — a recusa foi de SCHEMA, antes de
+ * qualquer leitura de conteúdo.
+ *
+ * ⚠️ REGRA QUE FICA: **a sonda tem que perguntar com o MESMO payload que o
+ * caminho real enviaria.** Sonda que monta um payload próprio responde sobre
+ * uma forma que ninguém vai transmitir — e o "não" dela não vale nada.
+ */
+function baseDeclaracao({ cnpj, filiais = [], tipoDeclaracao = 1 }) {
     const matriz = soDigitos(cnpj);
     const todos = [matriz, ...filiais.map(soDigitos)].filter((c) => c.length === 14);
     const unicos = [...new Set(todos)];
     return {
+        tipoDeclaracao,
         // Os estabelecimentos são exigência conhecida (MSG_ISN_018, caso BRISKA
         // 09/07): o SN-Entregar quer TODOS, mesmo sem receita.
         estabelecimentos: unicos.map((cnpjCompleto) => ({ cnpjCompleto, atividades: [] })),
@@ -65,8 +85,8 @@ function baseDeclaracao({ cnpj, filiais = [] }) {
  * "sem movimento" não se expressa por lista vazia), ou existe uma marcação
  * própria que desliga a checagem.
  */
-export function candidatosSemMovimento({ cnpj, filiais = [] } = {}) {
-    const base = baseDeclaracao({ cnpj, filiais });
+export function candidatosSemMovimento({ cnpj, filiais = [], tipoDeclaracao = 1 } = {}) {
+    const base = baseDeclaracao({ cnpj, filiais, tipoDeclaracao });
     const semEstab = { ...base, estabelecimentos: [] };
 
     return [
@@ -131,6 +151,21 @@ export function assertSondaNaoTransmite(dados) {
     return true;
 }
 
+/**
+ * O CAMPO que o SERPRO disse estar faltando, quando ele diz.
+ *
+ * *"Required property 'TipoDeclaracao' not found in JSON. Path 'declaracao'"* é
+ * o oposto de mensagem opaca: ela nomeia o defeito. Antes disto, a sonda lia
+ * "seis recusas com o mesmo código" e concluía *"a estrutura não foi avaliada,
+ * leve ao SERPRO"* — conselho errado, porque o erro É de estrutura e o campo
+ * estava escrito na resposta. Mesma lição do cStat 640 da SEFAZ no mesmo dia:
+ * resposta que o app chama de silêncio manda a pessoa para o lugar errado.
+ */
+export function campoObrigatorioAusente(mensagem) {
+    const m = String(mensagem ?? '').match(/Required property '([^']+)' not found/i);
+    return m ? m[1] : null;
+}
+
 /** Código MSG_ISN_xxx da mensagem do SN-Entregar, quando houver. */
 export function codigoDaResposta(mensagem) {
     const m = String(mensagem ?? '').match(/MSG_[A-Z]+_\d+/);
@@ -165,6 +200,9 @@ export function lerResultadoCandidato({ nome, hipotese, erro, resposta } = {}) {
     }
     return {
         nome, hipotese, situacao: 'recusada', codigo,
+        // Quando a resposta NOMEIA o campo que falta, isso é o achado — e vale
+        // mais que o código, que é genérico ("Json contém dados inválidos").
+        campoAusente: campoObrigatorioAusente(texto),
         mensagem: texto,
         // Código novo é informação: sem saber traduzir, o retorno CRU vale mais
         // que um rótulo inventado (lição do localErroAviso do Reinf).
@@ -224,6 +262,35 @@ export function vereditoDaSonda(resultados = []) {
     // exatamente o caminho errado. Mesmo padrão do farol honesto: a causa
     // dominante vale mais que a contagem.
     const recusadas = resultados.filter((r) => r.situacao === 'recusada');
+    // 🚨 CAMPO NOMEADO VENCE "MESMO CÓDIGO" — e a ordem aqui é a correção.
+    //
+    // Paulo, 20/08 (ELS 07/2026, segunda rodada): as 6 formas voltaram com o
+    // mesmo MSG_ISN_036, e o veredito abaixo mandou *"pare de procurar
+    // estrutura, leve ao SERPRO"*. Estava errado: a mensagem dizia
+    // *"Required property 'TipoDeclaracao' not found in JSON"* — o erro ERA de
+    // estrutura, e o campo estava escrito na resposta. A sonda mandava abrir
+    // chamado sobre um defeito NOSSO.
+    //
+    // Quando todas as recusas apontam o MESMO campo ausente, isso não é
+    // "condição da empresa": é o payload da sonda incompleto, e a ação é do
+    // app. É a mesma lição do cStat 640 no mesmo dia — resposta que o app
+    // chama de silêncio manda a pessoa para o lugar errado.
+    const camposAusentes = [...new Set(recusadas.map((r) => r.campoAusente).filter(Boolean))];
+    if (camposAusentes.length === 1 && recusadas.length === resultados.length && resultados.length > 1) {
+        return {
+            destravou: false,
+            forma: null,
+            aEstruturaFoiAvaliada: false,
+            codigoUnico: codigos[0] || null,
+            campoAusente: camposAusentes[0],
+            resumo: `As ${resultados.length} formas foram recusadas pelo MESMO motivo, e o SN-Entregar `
+                + `NOMEOU o campo: **${camposAusentes[0]} não veio no JSON**. Isso não é condição da `
+                + 'empresa nem assunto de chamado — é o payload da sonda incompleto, e a recusa aconteceu '
+                + 'na validação do schema, ANTES de qualquer leitura de "sem movimento". Nenhuma das seis '
+                + 'formas chegou a ser avaliada: corrija o campo e rode a sonda de novo.',
+        };
+    }
+
     const mesmoCodigo = codigos.length === 1 && recusadas.length === resultados.length && resultados.length > 1;
     if (mesmoCodigo) {
         return {

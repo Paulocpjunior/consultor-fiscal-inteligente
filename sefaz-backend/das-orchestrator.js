@@ -404,7 +404,28 @@ export async function sondarFormaSemMovimento(req) {
 
     const cnpjLimpo = String(empresaCnpj).replace(/\D/g, '');
     const pa = Number(String(competencia).replace(/\D/g, '').slice(0, 6));
-    const candidatos = candidatosSemMovimento({ cnpj: cnpjLimpo, filiais });
+
+    // 🚨 A SONDA PERGUNTA COM O PAYLOAD DO CAMINHO REAL — inclusive o
+    // `tipoDeclaracao`, que é OBRIGATÓRIO e faltava (ELS 07/2026, 20/08: as 6
+    // formas voltaram "Required property 'TipoDeclaracao' not found in JSON",
+    // ou seja nenhuma chegou a ser avaliada). Quem preenche esse campo no
+    // caminho real é `transmitirPgdasD`, consultando se a competência já foi
+    // declarada: 1 = Original, 2 = Retificadora.
+    //
+    // ⚠️ CONSULTA CAÍDA NÃO PARA A SONDA: ela cai em Original e DIZ qual usou.
+    // Bloquear aqui trocaria um beco por outro — e a sonda não transmite nada.
+    let tipoDeclaracao = 1;
+    let origemTipo = 'padrao-original';
+    if (typeof provider.consultarDeclaracaoPa === 'function') {
+        try {
+            const consulta = await provider.consultarDeclaracaoPa({ empresaCnpj: cnpjLimpo, competencia: pa });
+            tipoDeclaracao = consulta?.existe ? 2 : 1;
+            origemTipo = consulta?.existe ? 'consulta-retificadora' : 'consulta-original';
+        } catch (e) {
+            console.warn('[das/sonda] consulta do tipo de declaração falhou:', e?.message);
+        }
+    }
+    const candidatos = candidatosSemMovimento({ cnpj: cnpjLimpo, filiais, tipoDeclaracao });
 
     const resultados = [];
     for (const c of candidatos) {
@@ -430,6 +451,7 @@ export async function sondarFormaSemMovimento(req) {
         await fa().firestore().collection('pgdas_sonda_sem_movimento').add({
             empresaCnpj: cnpjLimpo, competencia, rodadoEm: Date.now(),
             rodadoPor: req?.rodadoPor || null,
+            tipoDeclaracao, origemTipo,
             resultados, veredito,
         });
     } catch (e) {
@@ -441,6 +463,11 @@ export async function sondarFormaSemMovimento(req) {
         competencia,
         // Sempre verdade, em qualquer desfecho: nenhum candidato transmite.
         nadaFoiTransmitido: true,
+        // Qual tipo a sonda usou, e de onde ele veio — o número que vai no
+        // payload precisa aparecer, senão a próxima leitura não sabe o que foi
+        // perguntado de verdade.
+        tipoDeclaracao,
+        origemTipo,
         candidatos: resultados,
         veredito,
     };
