@@ -71,6 +71,24 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A receita que NÃO tem documento (aluguel) — o F550 e o IND_REG_CUM do 0110',
+        dono: 'sefaz-backend/receita-sem-documento-f550.js',
+        comoUsar: "import { receitaDeLocacao, montarF550, indRegCumDoArquivo } from 'sefaz-backend/receita-sem-documento-f550.js'",
+        porque: 'Paulo, 20/08 (AFFITTARE 1139): *"o faturamento dela é aluguel, então não tem captura de '
+            + 'notas… a informação vai no bloco F550"*. O CFI monta o EFD-Contribuições a partir dos '
+            + 'DOCUMENTOS, e numa administradora de imóveis não existe documento de receita — o arquivo saiu '
+            + 'com M200/M600 ZERADOS numa empresa que fatura ~R$ 21 mil/mês, declarando à Receita que não há '
+            + 'contribuição a pagar. A régua carrega três coisas que uma segunda cópia perderia: só a '
+            + 'LOCAÇÃO entra (as outras receitas têm documento e entrariam em DOBRO), o IND_REG_CUM do 0110 '
+            + 'DERIVA do que foi gerado (2 consolidada com F550, 9 detalhada sem) e o centavo sai da '
+            + 'coerência interna, não do arquivo do e-Fiscal — que se desmente entre o F550 e o M200 dele.',
+        assinaturas: [
+            /function receitaDeLocacao\s*\(/,
+            /function montarF550\s*\(/,
+            /function indRegCumDoArquivo\s*\(/,
+        ],
+    },
+    {
         nome: 'O contabilista do registro 0100 (os dois SPEDs falam pelo mesmo)',
         dono: 'sefaz-backend/contador-escrituracao.js',
         comoUsar: "import { getContadorPadrao } from 'sefaz-backend/contador-escrituracao.js'",

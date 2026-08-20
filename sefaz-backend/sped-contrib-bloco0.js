@@ -18,6 +18,8 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+// IND_REG_CUM sai do que o arquivo PRODUZIU (F550 × blocos A/C/D).
+import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
 
 const COD_VER = '006';  // Versao 006 vigente desde 01/01/2026
 
@@ -180,7 +182,15 @@ function build0110(dados) {
     //
     // Se um dia existir o caminho consolidado, o valor passa a DEPENDER do que
     // foi gerado — nunca a ser cravado, que é o defeito de origem aqui.
-    const indRegCum = (regimeApuracao === '2' || regimeApuracao === '3') ? '9' : '';
+    // ✅ O DIA CHEGOU: o valor agora DEPENDE do que foi gerado. Quando a receita
+    // do período vem do **F550** (aluguel — não há documento), a escrituração é
+    // CONSOLIDADA e o campo é **2**; quando vem dos blocos A/C/D, é detalhada e
+    // continua **9**. Os dois saem de arquivo ACEITO: AFFITTARE 05/2026 traz 2
+    // com F550, HS PROJETOS 05/2026 traz 9 escriturando documento a documento.
+    const indRegCum = indRegCumDoArquivo({
+        regimeApuracao,
+        receitaConsolidada: dados.receitaSemDocumento || 0,
+    });
     return fmt.buildLine([
         '0110',
         regimeApuracao,
