@@ -1995,6 +1995,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   of undefined (reading 'slice')` num print virou caça com 261 candidatos no
   código. Agora toda fronteira leva `modulo="<nome>"` (10 arquivos), e o nome
   vai também pro Sentry. Módulo novo com ErrorBoundary DEVE nomear.
+- **🚨 O TOAST VENDIA FALHA COMO SUCESSO — nos DOIS apps** (20/08, print da
+  colaboradora na Legalização: *"Falha na análise: IA indisponível: Your
+  prepayment credits are depleted"* com **✓ VERDE** do lado). `Toast.tsx` era
+  verde com check SEMPRE, qualquer que fosse a mensagem: o farol honesto valia
+  pro painel e não valia pro AVISO, que é justamente o que a pessoa lê na hora
+  do erro. ✂️ `services/toastTone.ts` (puro, nos dois repos, IDÊNTICO): o tom
+  sai da MENSAGEM — erro vermelho com ⛔, alerta âmbar, sucesso verde; erro fica
+  **15s** (era 3s), porque a mensagem carrega a AÇÃO e 3s não dá pra ler.
+  ⚠️ **Classificar pelo TEXTO foi decisão, não preguiça**: mudar as ~40 chamadas
+  de `setToastMessage`/`onShowToast` uma a uma conserta as de hoje e deixa a
+  próxima nascer verde — é a lição da "trava escrita como LISTA" (13/08).
+  🚨 **E A REGRA QUE FICA É A DO INVARIANTE**: dois defeitos apareceram só
+  quando o teste rodou, e os dois eram do MESMO tipo — mensagem de falha **sem
+  palavra de falha** sai VERDE. (1) a minha própria frase nova *"Os créditos da
+  IA acabaram"*; (2) o fallback do `getFriendlyErrorMessage`, que devolvia o
+  erro CRU. Por isso o teste não confere frases: exige que **TODA saída do
+  tradutor seja classificada como erro pelo toast**. Mensagem nova sem palavra
+  de erro quebra a build em vez de chegar verde no usuário.
+  ⚠️ **E O CONSELHO ESTAVA ERRADO NO CASO MAIS CARO**: crédito esgotado volta
+  como **429**, igual a cota estourada, e o tradutor mandava *"aguarde alguns
+  instantes"* — esperar NÃO recarrega saldo. O caso de billing passou a ser
+  testado ANTES do 429 e manda recarregar no AI Studio; entrou também a chave
+  **irrestrita** (a API Gemini não aceita desde 19/06/2026). Toda mensagem diz
+  que o ARQUIVO NÃO SE PERDEU — era a dúvida imediata de quem viu o erro.
+  📌 **CONTEXTO OPERACIONAL**: a `GEMINI_API_KEY` é a MESMA nos dois apps
+  (espelhada do CFI), então saldo zerado derruba Contratos IA **e** o CFI de
+  uma vez. O billing é POR PROJETO — conferir em qual projeto a chave vive
+  (`aistudio.google.com/apikey`) antes de recarregar, senão o crédito entra no
+  projeto errado. Mudar para pré-pago NÃO adiciona saldo: é preciso COMPRAR.
 - **Farol honesto vale pra TODO painel** (não só o Diagnóstico): all-failed
   (0 ok + N falhas) nunca é verde; falha sempre com o MOTIVO dominante ao
   lado. Lições 23/07: "Saúde dos crons" dizia OK com 0/500; NFe ficou
