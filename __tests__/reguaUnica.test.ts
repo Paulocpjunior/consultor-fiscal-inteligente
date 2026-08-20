@@ -71,6 +71,23 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A base do PIS/COFINS — desconto incondicional fora da receita e ICMS fora da base (Tema 69)',
+        dono: 'sefaz-backend/base-pis-cofins.js',
+        comoUsar: "import { receitaDoItem, baseDoItem, receitaEBaseDoDocumento } from 'sefaz-backend/base-pis-cofins.js'",
+        porque: 'Paulo, 20/08 (PWR 07/2026): *"não deduziu o ICMS da base do PIS/COFINS e também não considerou '
+            + 'o desconto no valor total da nota"*. O M210 declarava base 38.316,84 — a soma crua dos vProd. As '
+            + 'duas deduções faltavam no MESMO campo e as duas na direção mais cara: o SPED declarava mais '
+            + 'contribuição que a guia paga. A régua é lida pelo C170 e pelo bloco M; uma segunda cópia faria o '
+            + 'detalhe e a apuração do mesmo mês discordarem. E ela guarda o que uma cópia perderia: receita e '
+            + 'base são campos DIFERENTES do M210 (VL_REC_BRT × VL_BC_CONT), na entrada a exclusão NÃO se aplica '
+            + 'por analogia, e documento sem itens (NFS-e) tem receita = base porque serviço não destaca ICMS.',
+        assinaturas: [
+            /function receitaDoItem\s*\(/,
+            /function baseDoItem\s*\(/,
+            /function receitaEBaseDoDocumento\s*\(/,
+        ],
+    },
+    {
         nome: 'O VALOR DA OPERAÇÃO do C190 (VL_OPR) — que NÃO é a soma dos vProd/VL_ITEM',
         dono: 'sefaz-backend/valor-operacao-c190.js',
         comoUsar: "import { valorOperacaoDoItem, pisoDoValorOperacaoDoC170, acessoriasDoC100, faixaDoValorOperacao } "

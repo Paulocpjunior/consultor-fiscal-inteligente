@@ -29,6 +29,15 @@ import { modeloDoDoc } from './participante-doc-helper.js';
 // declarando códigos diferentes para o mesmo item é a divergência de sempre.
 import { cstDoLancamento } from './cst-correlacao.js';
 import { convertCfopParaEntrada, serieDoC100 } from './sped-fiscal-blocoC.js';
+// Régua ÚNICA da base do PIS/COFINS — desconto incondicional fora da receita e
+// ICMS fora da base (Tema 69). Estava faltando nos DOIS lugares que a usam (o
+// C170 e o bloco M), e nos dois na direção mais cara.
+import {
+    receitaDoItem, baseDoItem, receitaEBaseDoDocumento, codigosReceitaM205,
+} from './base-pis-cofins.js';
+// O valor total do documento (mercadorias + acessórias + ST + IPI − desconto) —
+// o mesmo que o VL_OPR do C190 usa no EFD ICMS/IPI.
+import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -127,6 +136,20 @@ function cstIcmsDoItemContrib(item, cfopLancado, nota) {
  * ⚠️ Com CST sem crédito, base e valor saem ZERO — e aqui zero É a resposta
  * ("não há crédito a apropriar"), não default de campo em branco.
  */
+/**
+ * VL_DOC do C100 — o valor TOTAL do documento.
+ *
+ * O `vNF` da própria nota vence quando existe: é o número que a DANFE imprime e
+ * que o destinatário paga. Sem ele, deriva pelos itens com a MESMA régua do
+ * VL_OPR do C190 (mercadorias + frete/seguro/outras + ST + IPI − desconto),
+ * para os dois arquivos não declararem totais diferentes do mesmo documento.
+ */
+function valorTotalDoDocumento(nota, totais) {
+    const vNF = parseFloat((totais || {}).vNF || 0);
+    if (Number.isFinite(vNF) && vNF > 0) return vNF;
+    return (nota.itens || []).reduce((s, i) => s + valorOperacaoDoItem(i), 0);
+}
+
 function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq) {
     const vlItem = parseFloat(item.vProd || item.valor || 0) || 0;
     if (direcao === 'saida') {
@@ -134,13 +157,23 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq) {
         const cstCofins = getCstCofins(item, regimeApuracao, 'saida');
         const aliqPis = parseFloat(item.aliqPIS || item.pAliquotaPis || 0) || aliq.pis * 100;
         const aliqCofins = parseFloat(item.aliqCOFINS || item.pAliquotaCofins || 0) || aliq.cofins * 100;
+        // 🚨 A BASE NÃO É O `vBcPis` DO XML NEM O `vProd` (Paulo, 20/08: *"não
+        // deduziu o ICMS da base do PIS/COFINS e também não considerou o
+        // desconto"*). O XML traz a base do EMITENTE, calculada sobre a
+        // mercadoria cheia; do lado de cá vale a receita líquida do desconto
+        // MENOS o ICMS destacado (Tema 69). O arquivo ACEITO desta mesma
+        // empresa prova: VL_BC_PIS 16.055,60 = VL_ITEM 19.580 − ICMS 3.524,40.
+        const base = baseDoItem(item);
+        // ⚠️ E O VALOR SEGUE A BASE, nunca o destacado no documento: no aceito,
+        // o C170 traz 104,36 (0,65% da base reduzida) enquanto o C100 traz
+        // 127,27 (o que o emitente destacou). Manter o destacado aqui faria o
+        // próprio registro se desmentir — base × alíquota ≠ valor declarado.
         return {
             cstPis, cstCofins,
-            basePis: parseFloat(item.vBcPis || item.vBCPIS || 0) || vlItem,
-            baseCofins: parseFloat(item.vBcCofins || item.vBCCOFINS || 0) || vlItem,
+            basePis: base, baseCofins: base,
             aliqPis, aliqCofins,
-            vlPis: parseFloat(item.vPIS || 0) || vlItem * aliq.pis,
-            vlCofins: parseFloat(item.vCOFINS || 0) || vlItem * aliq.cofins,
+            vlPis: base * (aliqPis / 100),
+            vlCofins: base * (aliqCofins / 100),
         };
     }
     const naoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
@@ -532,7 +565,13 @@ export function buildBlocoC_Contrib(dados) {
             fmt.sanitizeString(chave, 44),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
             fmt.formatDate(nota.dataEntradaSaida || nota.dhEmi),
-            fmt.formatValue(doDoc(vProd, 'vNF')),          // 12 VL_DOC
+            // 🚨 VL_DOC É O VALOR TOTAL DO DOCUMENTO, e ele DESCONTA (Paulo,
+            // 20/08). Aqui saía `Σ vProd`: a NF 7 da PWR ia com 18.741,24
+            // enquanto a própria DANFE diz `V. TOTAL DA NOTA 18.179,00` —
+            // 18.741,24 menos o desconto de 562,24. A régua é a mesma do VL_OPR
+            // do C190 (mercadorias + acessórias + ST + IPI − desconto); o vNF do
+            // documento vence quando existe, porque é o que a nota declara.
+            fmt.formatValue(valorTotalDoDocumento(nota, t)),  // 12 VL_DOC
             IND_PGTO_PADRAO,                               // 13 IND_PGTO
             fmt.formatValue(vDesc),                        // 14 VL_DESC
             '',                                            // 15 VL_ABAT_NT
@@ -850,8 +889,15 @@ export function buildBlocoM(dados) {
 
     linhas.push(fmt.buildLine(['M001', '0']));
 
-    let totalPisSaida = 0, totalCofinsSaida = 0, totalBcSaida = 0;
+    // 🚨 RECEITA E BASE SÃO CAMPOS DIFERENTES DO M210, e o gerador punha o
+    // MESMO número nos dois. O arquivo ACEITO da PWR (03/2026) traz
+    // `VL_REC_BRT 19.580` e `VL_BC_CONT 16.055,60` — a diferença é o ICMS.
+    // Juntar os dois apaga a exclusão do Tema 69 de dentro do registro que
+    // deveria mostrá-la.
+    let totalPisSaida = 0, totalCofinsSaida = 0, totalBcSaida = 0, totalReceitaSaida = 0;
     let totalPisEntrada = 0, totalCofinsEntrada = 0, totalBcEntrada = 0;
+    /** Quanto de ICMS saiu da base — vai no aviso, para o número ser conferível. */
+    let icmsExcluido = 0;
     /** Documento sem valor legível em nenhuma das formas — sai do total e é DITO. */
     const semValor = [];
 
@@ -866,42 +912,52 @@ export function buildBlocoM(dados) {
         // 37 documentos e PIS/COFINS destacados no A100 (MANTOAN 07/2026).
         // Ou seja, o arquivo declarava à Receita que não havia contribuição a
         // pagar. A régua já existe num lugar só.
-        let vlDoc = 0;
-        for (const item of (nota.itens || [])) {
-            vlDoc += parseFloat(item.vProd || item.valor || 0);
+        // A régua da base mora num lugar só (`base-pis-cofins.js`): receita é
+        // mercadoria MENOS desconto incondicional, e a base é a receita MENOS o
+        // ICMS destacado (Tema 69). Documento sem itens (a NFS-e do portal) não
+        // tem ICMS destacado — ali receita e base coincidem, e é o próprio
+        // módulo que diz isso, em vez de este laço adivinhar.
+        const semItens = !(nota.itens || []).length;
+        const doDocumento = semItens ? valorDoDocumentoServico(nota) : 0;
+        if (semItens && !Number.isFinite(doDocumento)) {
+            // Ausência NÃO vira zero — foi o zero silencioso que produziu o
+            // M200 zerado. A nota sai NOMEADA e fora da conta.
+            semValor.push(String(nota.numero || nota.chave || '(sem número)'));
+            continue;
         }
-        if (vlDoc === 0) {
-            const doDocumento = valorDoDocumentoServico(nota);
-            if (Number.isFinite(doDocumento)) {
-                vlDoc = doDocumento;
-            } else {
-                // Ausência NÃO vira zero — foi o zero silencioso que produziu o
-                // M200 zerado. A nota sai NOMEADA e fora da conta.
-                semValor.push(String(nota.numero || nota.chave || '(sem número)'));
-                continue;
-            }
+        const rb = receitaEBaseDoDocumento(nota, doDocumento);
+        if (rb.receita === 0 && rb.base === 0) {
+            semValor.push(String(nota.numero || nota.chave || '(sem número)'));
+            continue;
         }
 
         if (nota.direcao === 'saida') {
-            totalBcSaida += vlDoc;
-            let pis = 0, cofins = 0;
-            for (const item of (nota.itens || [])) {
-                pis += parseFloat(item.vPIS || 0);
-                cofins += parseFloat(item.vCOFINS || 0);
-            }
-            if (pis === 0) pis = vlDoc * aliq.pis;
-            if (cofins === 0) cofins = vlDoc * aliq.cofins;
-            totalPisSaida += pis;
-            totalCofinsSaida += cofins;
+            totalBcSaida += rb.base;
+            totalReceitaSaida += rb.receita;
+            icmsExcluido += rb.icms;
+            // ⚠️ O VALOR APURADO SEGUE A BASE, não o destacado no documento. O
+            // `vPIS` do XML foi calculado pelo emitente sobre a mercadoria
+            // cheia; somá-lo aqui declararia contribuição sobre uma base que o
+            // próprio registro diz ser menor. No aceito de 03/2026 o M210 traz
+            // 104,36 = 0,65% de 16.055,60 — e não os 127,27 do C100.
+            totalPisSaida += rb.base * aliq.pis;
+            totalCofinsSaida += rb.base * aliq.cofins;
         } else {
-            totalBcEntrada += vlDoc;
+            // ⚠️ NA ENTRADA A EXCLUSÃO DO ICMS **NÃO** SE APLICA POR ANALOGIA.
+            // O Tema 69 trata da RECEITA de quem vende; a base do CRÉDITO de
+            // quem compra é o valor da aquisição, e o ICMS ali é custo. Ninguém
+            // decidiu o contrário neste app, e decidir por simetria seria
+            // inventar crédito. O que muda aqui é só o DESCONTO, que reduz o
+            // valor da aquisição em qualquer leitura.
+            const vlEntrada = rb.receita;
+            totalBcEntrada += vlEntrada;
             let pis = 0, cofins = 0;
             for (const item of (nota.itens || [])) {
                 pis += parseFloat(item.vPIS || 0);
                 cofins += parseFloat(item.vCOFINS || 0);
             }
-            if (pis === 0) pis = vlDoc * aliq.pis;
-            if (cofins === 0) cofins = vlDoc * aliq.cofins;
+            if (pis === 0) pis = vlEntrada * aliq.pis;
+            if (cofins === 0) cofins = vlEntrada * aliq.cofins;
             totalPisEntrada += pis;
             totalCofinsEntrada += cofins;
         }
@@ -910,6 +966,19 @@ export function buildBlocoM(dados) {
     // Documento que não teve valor lido não some calado: ele estaria FORA do
     // M200/M600, e um total a menor num arquivo entregue à Receita não tem como
     // ser percebido depois.
+    // A EXCLUSÃO DO ICMS VAI DITA, com o número. Ela muda a contribuição
+    // declarada, e mudança de valor sem causa escrita é o que faz alguém
+    // desconfiar do número certo — a mesma régua do FUNRURAL que "some da
+    // conta, não da tela".
+    if (icmsExcluido > 0 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Base do PIS/COFINS (Tema 69 · RE 574.706): o ICMS destacado nas saídas foi EXCLUÍDO da base — `
+            + `receita ${totalReceitaSaida.toFixed(2)} − ICMS ${icmsExcluido.toFixed(2)} = base `
+            + `${totalBcSaida.toFixed(2)}. É a mesma exclusão que a ficha do Lucro já fazia; antes desta `
+            + 'competência o SPED declarava a base CHEIA, maior que a da guia.',
+        );
+    }
+
     if (semValor.length && Array.isArray(dados.warnings)) {
         dados.warnings.push(
             `Apuração PIS/COFINS (bloco M): ${semValor.length} documento(s) ficaram FORA da base porque o valor `
@@ -1019,10 +1088,34 @@ export function buildBlocoM(dados) {
     //
     // Campo de ajuste/diferimento que esta empresa não tem sai VAZIO, nunca
     // 0,00 inventado: campo de valor não recebe default (regra de 06/08).
+    // M205 — Detalhamento por código de receita (visão DCTF).
+    //
+    // Paulo, 20/08: *"esse registro nós preenchemos manual, tem a possibilidade
+    // de já puxar preenchido?"*. Dá — mas SÓ com código provado: os dois pares
+    // vêm do EFD-Contribuições aceito da própria PWR (03/2026), e o regime
+    // não-cumulativo, cujo código eu não tenho de arquivo aceito, fica de fora
+    // NOMEADO em vez de sair com um número deduzido. Código errado aqui declara
+    // o débito na receita errada da DCTF.
+    const m205 = codigosReceitaM205(isNaoCumulativo);
+    if (m205 && vlRecCumPis > 0) {
+        linhas.push(fmt.buildLine(['M205', m205.numCampo, m205.pis, fmt.formatValue(vlRecCumPis)]));
+    } else if (!m205 && vlRecNcPis > 0 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            'M205/M605 (detalhamento por código de receita, visão DCTF) NÃO foi gerado: o código de receita do '
+            + 'regime NÃO-CUMULATIVO não está provado contra nenhum arquivo aceito, e este app não deduz código '
+            + 'de tabela oficial. Preencha os dois registros no PVA, ou mande um EFD-Contribuições não-cumulativo '
+            + 'já aceito para o código entrar no gerador.',
+        );
+    }
+
     if (totalPisSaida > 0) {
         linhas.push(fmt.buildLine([
             'M210', codCont,
-            fmt.formatValue(totalBcSaida),      // VL_REC_BRT
+            // 🚨 RECEITA BRUTA ≠ BASE. Aqui os dois campos recebiam o MESMO
+            // número, o que apagava a exclusão do ICMS de dentro do registro
+            // que deveria mostrá-la. No aceito de 03/2026: VL_REC_BRT 19.580 ×
+            // VL_BC_CONT 16.055,60.
+            fmt.formatValue(totalReceitaSaida),  // VL_REC_BRT
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT  ← recebia a alíquota
             '', '',                             // ajustes de BC (acréscimo/redução)
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT_AJUS (sem ajuste = a própria BC)
@@ -1076,13 +1169,20 @@ export function buildBlocoM(dados) {
         fmt.formatValue(vlRecNcCofins + vlRecCumCofins),          // VL_TOT_CONT_REC
     ]));
 
+    // M605 — o par do M205, do lado da COFINS. Mesmo código provado, mesma
+    // recusa em deduzir o do não-cumulativo (o aviso já saiu no M205; repetir
+    // aqui seria ruído).
+    if (m205 && vlRecCumCofins > 0) {
+        linhas.push(fmt.buildLine(['M605', m205.numCampo, m205.cofins, fmt.formatValue(vlRecCumCofins)]));
+    }
+
     // M610 — Detalhamento COFINS por CST. Mesmo defeito, mesma correção: o PVA
     // recusou com "esperado 16, veio 8" e "VL_BC_CONT · Conteúdo 3,0000" — a
     // alíquota da COFINS ocupando a casa da base.
     if (totalCofinsSaida > 0) {
         linhas.push(fmt.buildLine([
             'M610', codCont,
-            fmt.formatValue(totalBcSaida),         // VL_REC_BRT
+            fmt.formatValue(totalReceitaSaida),    // VL_REC_BRT — receita ≠ base
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT
             '', '',                                // ajustes de BC
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT_AJUS

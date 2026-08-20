@@ -1055,6 +1055,44 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   entrou neste PR porque muda VALOR (o C100 leva o PIS DESTACADO no documento e
   o C170/M210 o APURADO sobre a base reduzida, como o aceito mostra), e valor
   se fecha com o número na frente do dono.
+  ✅ **FECHADA NO MESMO DIA — e o dono pediu junto a SEGUNDA dedução que faltava**
+  (Paulo, 20/08, com a DANFE da NF 7 na mão: *"ele não deduziu o ICMS da base do
+  PIS/COFINS e também não considerou o desconto no valor total da nota, só
+  isso"*). Eram **duas** deduções faltando no MESMO campo, as duas na direção
+  mais cara — o M210 declarava base **38.316,84**, que é a soma CRUA dos `vProd`
+  das saídas. ✂️ `sefaz-backend/base-pis-cofins.js` (na `REGUAS_VIGIADAS`), lido
+  pelo C170 e pelo bloco M.
+  📌 **A PROVA DO DESCONTO É A PRÓPRIA DANFE**: `V. TOTAL PRODUTOS 18.741,24` ·
+  `DESCONTO 562,24` · **`V. TOTAL DA NOTA 18.179,00`** — e a `BASE DE CÁLC. DO
+  ICMS` é justamente 18.179,00, ou seja o ICMS já é calculado sobre a receita
+  líquida. Com o ICMS de 3.272,22 fora, a base do PIS/COFINS daquela nota é
+  **14.906,78**, não 18.741,24.
+  🚨 **RECEITA E BASE SÃO CAMPOS DIFERENTES DO M210, e o gerador punha o MESMO
+  número nos dois** — o aceito traz `VL_REC_BRT 19.580` × `VL_BC_CONT 16.055,60`.
+  Juntar os dois apaga a exclusão de dentro do registro que deveria mostrá-la.
+  ⚠️ **E O VALOR SEGUE A BASE, nunca o destacado**: o `vPIS` do XML foi
+  calculado pelo emitente sobre a mercadoria cheia. No aceito, o C100 leva
+  127,27 (o que o documento destacou) e o C170/M210 levam 104,36 (o que se
+  apura) — dois FATOS diferentes, não duas versões do mesmo.
+  ⚠️ **NA ENTRADA A EXCLUSÃO NÃO SE APLICA POR ANALOGIA**: o Tema 69 é sobre a
+  RECEITA de quem vende; a base do crédito de quem compra é o valor da
+  aquisição, e ali o ICMS é custo. Decidir por simetria seria inventar crédito.
+  O que muda na entrada é só o DESCONTO.
+  📌 **E o número vai DITO no aviso da geração** (receita − ICMS = base): valor
+  que muda sozinho é o que faz desconfiar do número certo.
+  ✅ **E O M205/M605 PASSOU A SAIR PREENCHIDO** (Paulo, na mesma mensagem: *"esse
+  registro nós preenchemos manual, tem a possibilidade de já puxar preenchido?
+  O ICMS na parte de obrigação veio preenchido"*). Dá — com o código PROVADO: os
+  dois pares vêm do EFD-Contribuições aceito da própria PWR (03/2026),
+  `|M205|12|810902|...|` e `|M605|12|217201|...|`, com `NUM_CAMPO 12` = *valor da
+  contribuição CUMULATIVA a recolher*, que é o que o próprio PVA lista como
+  valor válido. 🚨 **O regime NÃO-CUMULATIVO fica de FORA, nomeado**: o código de
+  receita dele não está provado por arquivo aceito nenhum, e código errado no
+  M205 declara o débito na receita errada da DCTF — mesmo desenho do 0002 e do
+  código 9 do ISS fixo. M205/M605 entraram em `CAMPOS_POR_REGISTRO` no mesmo PR.
+  ⚠️ Um teste MEU que exigia `VL_BC_PIS = vProd` foi TROCADO (premissa derrubada
+  por arquivo aceito + decisão do dono), e a trava da FONTE passou a aceitar
+  "arquivo ACEITO" além de "recusa do PVA" — as duas são fonte; memória não é.
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava

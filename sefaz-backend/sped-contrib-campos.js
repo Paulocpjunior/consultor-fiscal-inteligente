@@ -71,6 +71,15 @@ export const CAMPOS_POR_REGISTRO = {
             + 'Valor Esperado 37 · Conteúdo do Campo 23" (23 ocorrências). Corroborado pelo '
             + 'EFD-Contribuições ACEITO da mesma empresa (03/2026), que traz os 37.',
     },
+    M205: {
+        campos: 4,
+        fonte: 'EFD-Contribuições ACEITO da PWR 31947349000169 · 03/2026 (e-Fiscal, assinado): '
+            + '|M205|12|810902|104,36| — REG · NUM_CAMPO · COD_REC · VL_DEBITO.',
+    },
+    M605: {
+        campos: 4,
+        fonte: 'EFD-Contribuições ACEITO da PWR 31947349000169 · 03/2026: |M605|12|217201|481,66|.',
+    },
     1010: {
         campos: 7,
         fonte: 'Recibo do PVA — MANTOAN 13344638000191 07/2026, 17/08/2026: '
