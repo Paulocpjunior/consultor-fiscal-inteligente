@@ -23,6 +23,8 @@ export interface SelecaoBlocoC<T = any> {
     soResumo: string[];
     /** Válidas sem itens — produziriam C100 sem C190, que o PVA recusa. */
     semItens: string[];
+    /** NFC-e marcadas como entrada — o Guia Prático proíbe escriturá-las. */
+    nfceEmEntrada: string[];
 }
 
 export function selecionarNotasBlocoC<T = any>(notas: T[] | null | undefined): SelecaoBlocoC<T>;
@@ -30,4 +32,6 @@ export function selecionarNotasBlocoC<T = any>(notas: T[] | null | undefined): S
 export function selecionarCtesBlocoD<T = any>(notas: T[] | null | undefined): T[];
 
 /** O que ficou de fora do arquivo, dito com a ação — nunca calado. */
-export function avisosDaSelecao(p?: { soResumo?: string[]; semItens?: string[] }): string[];
+export function avisosDaSelecao(p?: {
+    soResumo?: string[]; semItens?: string[]; nfceEmEntrada?: string[];
+}): string[];

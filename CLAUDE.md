@@ -887,6 +887,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   confere o **ARQUIVO, não a intenção** — a entrada são as LINHAS, o mesmo
   texto que o PVA lê. Auditar o objeto em memória foi o que deixou o C100 sair
   com modelo 55 e chave 65 por meses sem nenhum teste acusar.
+  ✅ **E O MANUAL CHEGOU NO MESMO DIA — em WORD** (Paulo: *"vou te mandar em
+  WORD"*, depois de o Adobe também bloquear). É a versão **3.2.3**, mais nova
+  que a 3.2.2 do link, mais a Nota Técnica do leiaute **020**. Os dois estão
+  extraídos em `docs/sped/` para a próxima sessão não depender de reenvio.
+  ✅ **O LEIAUTE 2026 É UM NÃO-EVENTO PARA O CFI**: as mudanças do 020 são o
+  `COD_DOC_IMP` do **C120** (DUIMP) e o `CAP_TANQUE` do **1310** — dois
+  registros que não geramos; e o `COD_VER` que o app escreve (`020`) é o certo
+  para 2026. Preocupação legítima dele, respondida com a fonte na mão.
+  ✅ **E O MANUAL CONFIRMOU, PALAVRA POR PALAVRA, DUAS REGRAS QUE EU TINHA
+  DEDUZIDO** das recusas do PVA na véspera: o 0150 não leva participante citado
+  só em C100 de NFC-e, e a Exceção 9 do C100 lista exatamente os oito campos
+  que a NFC-e não pode informar. Dedução a partir de recusa REAL se sustentou.
+  🐛 **E REVELOU QUATRO DEFEITOS QUE NINGUÉM TINHA VISTO**: (1) **NFC-e
+  escriturada na ENTRADA** (*"as NFC-e não devem ser escrituradas nas
+  entradas"*); (2) **C100 de CANCELADA saindo com os valores** — a Exceção 1
+  manda preencher SÓ REG, IND_OPER, IND_EMIT, COD_MOD, COD_SIT, SER, NUM_DOC e
+  CHV_NFE, *"demais campos com conteúdo VAZIO"*; (3) **`SER` sem as três
+  posições** — e o PVA confere a série contra a que está DENTRO da chave, então
+  o zero à esquerda é o que faz os dois baterem (`000` quando não há série);
+  (4) **nota em substituição ao cupom fiscal (CFOP 5929/6929) saindo como
+  COD_SIT 00** quando a Exceção 4 diz **08** — com a ressalva do próprio manual
+  de que o **PARANÁ** escritura por outra regra, que virou condição no código.
+  📌 **REGRA QUE FICA: fonte oficial que chega vira ARQUIVO NO REPO, não
+  conhecimento de sessão.** O manual em `docs/sped/` é grep-ável, e regra nova
+  entra citando o item — mesma disciplina do catálogo de CFOP.
   📌 As 13 regras da 1ª leva: COD_MOD × chave · campos proibidos da NFC-e ·
   0150/0200/0190 órfãos · C100 sem C190 (cancelada é exceção) · **E110 c.6 =
   Σ VL_ICMS dos C190 de entrada** (com a exceção do 1605 e a inclusão do 5605,

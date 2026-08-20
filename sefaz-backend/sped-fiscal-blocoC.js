@@ -96,6 +96,38 @@ function cstDoItemNoArquivo(item, cfopLancado, nota) {
     return escolhido.length === 2 ? '0' + escolhido : String(escolhido).padStart(3, '0').slice(-3);
 }
 
+/**
+ * SER do C100 — TRÊS posições, e '000' quando a nota não tem série.
+ *
+ * Guia Prático 3.2.3, C100 campo 07: *"campo de preenchimento obrigatório com
+ * três posições … Se não existir Série … informar 000"*. O PVA ainda confere a
+ * série contra a que está DENTRO da chave (3 dígitos), então o zero à esquerda
+ * é justamente o que faz os dois baterem.
+ */
+function serieDoC100(serie) {
+    const d = String(serie ?? '').replace(/\D/g, '');
+    if (!d) return '000';
+    return d.padStart(3, '0').slice(-3);
+}
+
+/**
+ * COD_SIT '08' para a nota emitida em SUBSTITUIÇÃO AO CUPOM FISCAL.
+ *
+ * Guia Prático 3.2.3, C100, Exceção 4: documentos emitidos por regime especial
+ * ou norma específica são COD_SIT 08, e o manual dá o exemplo explícito —
+ * *"Nota fiscal emitida em substituição ao cupom fiscal – CFOP igual a 5.929 ou
+ * 6.929"*. O gerador mandava 00 (documento regular) nessas notas.
+ * ⚠️ A ressalva do próprio manual: o contribuinte do PARANÁ escritura por outra
+ * regra — por isso a UF entra na decisão em vez de a régua valer para todos.
+ */
+const CFOPS_SUBSTITUICAO_CUPOM = new Set(['5929', '6929']);
+function ehNotaEmSubstituicaoACupom(nota, uf) {
+    if (String(uf || '').toUpperCase() === 'PR') return false;
+    return (nota?.itens || []).some(
+        (i) => CFOPS_SUBSTITUICAO_CUPOM.has(String(i?.cfop || i?.CFOP || '').replace(/\D/g, '')),
+    );
+}
+
 function getCstIcms(item) {
     return (
         item.cstIcms || item.cst || item.CST || item.CSTICMS ||
@@ -262,7 +294,10 @@ function buildC100(nota, dados) {
     // EVENTO e o campo continua 'autorizado' (régua de 11/08, MV LIDER). Quem
     // responde é `docCancelado` — senão a nota cancelada saía COD_SIT 00
     // (regular) e voltava ao livro pela porta do SPED.
-    const codSit = docCancelado(nota) ? '02' : statusParaCodSit(nota.status);
+    let codSit = docCancelado(nota) ? '02' : statusParaCodSit(nota.status);
+    if (codSit === '00' && ehNotaEmSubstituicaoACupom(nota, dados?.empresa?.dadosFiscais?.uf)) {
+        codSit = '08';
+    }
 
     // Soma dos itens — fonte primária pros campos que precisam bater com C190.
     // Fallback pra nota.totais.X apenas se os itens não tiverem (nota sem itens).
@@ -292,6 +327,15 @@ function buildC100(nota, dados) {
     // VL_PIS, VL_COFINS, VL_PIS_ST e VL_COFINS_ST"*. É venda de balcão: não há
     // participante a declarar, e os tributos vão só no C190/C170.
     const ehNfce = codMod === '65';
+
+    // 🚨 CANCELADA SAI QUASE VAZIA — Guia Prático 3.2.3, C100, Exceção 1:
+    // *"Para documentos com código de situação cancelado (02), cancelado
+    // extemporâneo (03) … preencher SOMENTE os campos REG, IND_OPER, IND_EMIT,
+    // COD_MOD, COD_SIT, SER, NUM_DOC e CHV_NFe. Demais campos deverão ser
+    // apresentados com conteúdo VAZIO. Não informar registros filhos."*
+    // O gerador mandava a nota cancelada com todos os valores preenchidos.
+    const ehCancelada = ['02', '03'].includes(codSit);
+    const soCancelavel = (valor) => (ehCancelada ? '' : valor);
     const codPart = (!ehNfce && participante && (participante.cnpjCpf || participante.cnpj))
         ? String(participante.cnpjCpf || participante.cnpj).replace(/\D/g, '')
         : '';
@@ -308,27 +352,31 @@ function buildC100(nota, dados) {
         codPart,
         codMod,
         codSit,
-        fmt.sanitizeString(nota.serie || '1', 3),
+        // Guia Prático 3.2.3, C100 campo 07 (SER): *"campo de preenchimento
+        // obrigatório com TRÊS POSIÇÕES … Se não existir Série … informar 000"*.
+        // E o PVA confere a série contra a que está DENTRO da chave (3 dígitos),
+        // então o zero à esquerda é o que faz os dois baterem.
+        serieDoC100(nota.serie),
         fmt.sanitizeString(String(nota.numero || ''), 9),
         fmt.sanitizeString(nota.chave || '', 44),
-        fmt.formatDate(nota.dhEmi),
-        fmt.formatDate(nota.dhSaiEnt || nota.dhEmi),
-        fmt.formatValue(t.vNF, 2),
-        '0',  // IND_PGTO: assume A vista (default conservador)
-        fmt.formatValue(t.vDesc, 2),
+        soCancelavel(fmt.formatDate(nota.dhEmi)),
+        soCancelavel(fmt.formatDate(nota.dhSaiEnt || nota.dhEmi)),
+        soCancelavel(fmt.formatValue(t.vNF, 2)),
+        soCancelavel('0'),  // IND_PGTO: assume A vista (default conservador)
+        soCancelavel(fmt.formatValue(t.vDesc, 2)),
         '',   // VL_ABAT_NT
-        fmt.formatValue(pick(i.vProd, 'vProd'), 2),
-        '9',  // IND_FRT: 9=Sem cobranca frete (default conservador)
-        fmt.formatValue(t.vFrete, 2),
-        fmt.formatValue(t.vSeg, 2),
-        fmt.formatValue(t.vOutro, 2),
-        fmt.formatValue(pick(i.vBC, 'vBC'), 2),       // VL_BC_ICMS — bate com ΣC190
-        fmt.formatValue(pick(i.vICMS, 'vICMS'), 2),   // VL_ICMS
-        soNfe(fmt.formatValue(pick(i.vBCST, 'vBCST'), 2)),
-        soNfe(fmt.formatValue(pick(i.vICMSST, 'vST'), 2)),
-        soNfe(fmt.formatValue(pick(i.vIPI, 'vIPI'), 2)),
-        soNfe(fmt.formatValue(pick(i.vPIS, 'vPIS'), 2)),
-        soNfe(fmt.formatValue(pick(i.vCOFINS, 'vCOFINS'), 2)),
+        soCancelavel(fmt.formatValue(pick(i.vProd, 'vProd'), 2)),
+        soCancelavel('9'),  // IND_FRT: 9=Sem cobranca frete (default conservador)
+        soCancelavel(fmt.formatValue(t.vFrete, 2)),
+        soCancelavel(fmt.formatValue(t.vSeg, 2)),
+        soCancelavel(fmt.formatValue(t.vOutro, 2)),
+        soCancelavel(fmt.formatValue(pick(i.vBC, 'vBC'), 2)),       // VL_BC_ICMS — bate com ΣC190
+        soCancelavel(fmt.formatValue(pick(i.vICMS, 'vICMS'), 2)),   // VL_ICMS
+        soNfe(soCancelavel(fmt.formatValue(pick(i.vBCST, 'vBCST'), 2))),
+        soNfe(soCancelavel(fmt.formatValue(pick(i.vICMSST, 'vST'), 2))),
+        soNfe(soCancelavel(fmt.formatValue(pick(i.vIPI, 'vIPI'), 2))),
+        soNfe(soCancelavel(fmt.formatValue(pick(i.vPIS, 'vPIS'), 2))),
+        soNfe(soCancelavel(fmt.formatValue(pick(i.vCOFINS, 'vCOFINS'), 2))),
         '',   // VL_PIS_ST
         '',   // VL_COFINS_ST
     ]);

@@ -87,8 +87,16 @@ export function selecionarNotasBlocoC(notas) {
     const escrituradas = [];
     const soResumo = [];
     const semItens = [];
+    const nfceEmEntrada = [];
     for (const n of notas || []) {
         if (!ehNotaDeMercadoria(n)) continue;
+        // 📖 Guia Prático 3.2.3, C100: *"As NFC-e (código 65) não devem ser
+        // escrituradas nas ENTRADAS"*. Cupom é venda ao consumidor — recebê-lo
+        // como documento de entrada não é operação que se escritura no bloco C.
+        if (modeloDoDoc(n) === '65' && n.direcao === 'entrada') {
+            nfceEmEntrada.push(rotuloDoDoc(n));
+            continue;
+        }
         // Cancelada entra COM C100 e sem filhos (Guia Prático) — ela não
         // precisa de item, e tirá-la esconderia a numeração do talão.
         if (docCancelado(n)) { escrituradas.push(n); continue; }
@@ -104,7 +112,7 @@ export function selecionarNotasBlocoC(notas) {
         if (ehResumoSefaz(n)) { soResumo.push(rotuloDoDoc(n)); continue; }
         semItens.push(rotuloDoDoc(n));
     }
-    return { notas: escrituradas, soResumo, semItens };
+    return { notas: escrituradas, soResumo, semItens, nfceEmEntrada };
 }
 
 /** CT-e do período (bloco D), sem os resumos. */
@@ -116,8 +124,16 @@ export function selecionarCtesBlocoD(notas) {
  * Avisos do que ficou de FORA do arquivo — nota que some sem ninguém saber é
  * livro a menor, e foi assim que a PS VIDROS perdeu 100 das 131.
  */
-export function avisosDaSelecao({ soResumo = [], semItens = [] } = {}) {
+export function avisosDaSelecao({ soResumo = [], semItens = [], nfceEmEntrada = [] } = {}) {
     const avisos = [];
+    if (nfceEmEntrada.length) {
+        avisos.push(
+            `SPED: ${nfceEmEntrada.length} NFC-e ficaram fora por estarem como ENTRADA — `
+            + `nº ${nfceEmEntrada.slice(0, 8).join(', ')}${nfceEmEntrada.length > 8 ? '…' : ''}. `
+            + 'O Guia Prático diz que "as NFC-e (código 65) não devem ser escrituradas nas entradas". '
+            + 'Se a direção estiver errada no cadastro do documento, corrija na Central de XMLs.',
+        );
+    }
     if (soResumo.length) {
         avisos.push(
             `SPED: ${soResumo.length} nota(s) ficaram FORA do arquivo porque a base só tem o RESUMO da SEFAZ `
