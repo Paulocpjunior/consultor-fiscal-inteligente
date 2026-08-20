@@ -991,6 +991,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **regra aprendida numa recusa entra no `sped-prevalidacao.js` no MESMO PR**,
   com o cliente e a data. Recusa que só conserta a instância volta no mês
   seguinte com outro CNPJ.
+  🏁 **O PLACAR DE 20/08 — TRÊS CLIENTES FECHADOS NO MESMO DIA** (Paulo, no fim
+  do dia: *"0040 - MANTOAN - OK · 0304 - HS PROJETOS - OK (APURAÇÃO / EFD
+  CONTRIBUIÇÕES) · 1364 - PWR (APURAÇÃO ENTRADA/SAÍDA / SPED ICMS IPI) OK"*).
+  O que isso muda para o projeto, e não é pouco: **as DUAS obrigações do Lucro
+  passaram a ter cliente fechado ponta a ponta** — EFD-Contribuições (MANTOAN e
+  HS) e EFD ICMS/IPI (PWR). Até 19/08 nenhuma tinha. Sai do campo do "gera o
+  arquivo" e entra no do **recibo**, que é a única prova que a casa aceita.
+  ⚠️ **E ISSO NÃO GENERALIZA SOZINHO**: três clientes fechados não são a
+  carteira fechada, e a régua de 05/08 continua valendo — quem diz quem pode
+  migrar é a 🏁 Fila de migração, cliente a cliente, com a captura provada. O
+  que mudou é que o LEIAUTE deixou de ser o gargalo; o gargalo volta a ser
+  captura e cadastro (é o que segura PS VIDROS e EXPERTE hoje).
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava
@@ -3318,9 +3330,11 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
       saída correspondente da KROYA foi lançada manualmente pelo ✍️ sem chave,
       exatamente como orientado. Os dois lados estão certos, sem duplicidade.
       Ver o "🚨 A MESMA NF-e É SAÍDA DE UMA EMPRESA E ENTRADA DA OUTRA" acima.
-   c) **MANTOAN — regerar o EFD-Contribuições e revalidar no PVA**. O 1010 e o
-      M200/M600 zerado foram corrigidos; **arquivo aceito não é arquivo certo**,
-      então o que fecha o caso é o recibo novo.
+   c) ✅ **RESOLVIDO 20/08 — MANTOAN 0040 · EFD-Contribuições OK** (Paulo:
+      *"0040 - MANTOAN - OK"*). O 1010 (que declarava ação judicial com os
+      campos preenchidos com 'N'), o M200/M600 zerado, o COD_ITEM vazio dos
+      A170 sintéticos e o IND_ORIG_CRED das entradas com CST 70 saíram todos.
+      **O que fecha o caso é o recibo, não o arquivo** — e ele veio.
    d) ✅ **RESOLVIDO 18/08 — as ~144 notas da NOVA ERA em `1103`/`1929`/`2104`
       saem NA MÃO** (Paulo: *"decidimos que os demais ajustes faremos
       manualmente"*). O app continua fazendo o que faz: **DIZ** (`NÃO CONSTA` na
@@ -3328,18 +3342,26 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
       escolher seria inventar, e inventar é o que produziu o 1405 e o 1655.
       ⚠️ **NÃO ressuscitar como "pendência do app"**: a correção nota a nota é
       decisão dele, não lacuna minha. O que o CFI deve é continuar denunciando.
-   e) ✅ **RESOLVIDO 20/08 — PWR 1364 · SPED ICMS/IPI OK** (Paulo, depois do
-      deploy 626: *"SPED ICMS/IPI - 1364 - PWR - OK"*). Primeira empresa do
-      Lucro com o EFD ICMS/IPI fechado ponta a ponta. **Não reabrir por
-      dedução**: o cadastro de IPI dela (contribuinte + classificação do
-      estabelecimento do 0002) deixou de ser bloqueio porque o arquivo passou —
-      quem prova é o recibo, não este arquivo.
+   e) ✅ **RESOLVIDO 20/08 — PWR 1364 · APURAÇÃO (entrada/saída) + SPED ICMS/IPI
+      OK** (Paulo, depois do deploy 626: *"SPED ICMS/IPI - 1364 - PWR - OK"* e,
+      no fechamento do dia, *"1364 - PWR (APURAÇÃO ENTRADA/SAÍDA / SPED ICMS
+      IPI) OK"*). Primeira empresa do Lucro com o EFD ICMS/IPI fechado ponta a
+      ponta. **Não reabrir por dedução**: o cadastro de IPI dela (contribuinte +
+      classificação do estabelecimento do 0002) deixou de ser bloqueio porque o
+      arquivo passou — quem prova é o recibo, não este arquivo.
    f) 🚩 **PS VIDROS 0896 CONTINUA ABERTA — e a pendência é de CADASTRO, não de
       código**: *Contribuinte de IPI = **Não*** em Empresas → Dados Fiscais.
       Sem isso o E500/E520 continua saindo em comércio, onde o IPI da nota do
       fornecedor é **CUSTO**, não crédito — e o PVA recusa (*"Se não for
       contribuinte do IPI, não deve apresentar os registros E500 e filhos"*).
       A pré-validação já acusa isso antes do PVA, com a ação na frase.
+   g) ✅ **RESOLVIDO 20/08 — HS PROJETOS 0304 · APURAÇÃO + EFD-Contribuições
+      OK** (Paulo: *"0304 - HS PROJETOS - OK (APURAÇÃO / EFD CONTRIBUIÇÕES)"*).
+      Fecha o caso do **F600**, que era um `buildBlocoF` STUB desde sempre: sem
+      ele o `VL_RET_CUM` do M200/M600 não abatia nada e o arquivo declarava **a
+      recolher MAIOR que o devido**. Fechou junto a correção do M200/M600, que
+      punha a apuração CUMULATIVA na seção do não-cumulativo — e que o PVA
+      **aceitava**.
 
 ## Pendências operacionais (23/07/2026)
 
