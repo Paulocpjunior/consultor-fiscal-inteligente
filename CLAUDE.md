@@ -1004,6 +1004,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   DIZ o que falta**, com as duas causas separadas (escolher fornecedor × os 4
   dígitos do CFOP), porque elas pedem ações diferentes. Travado por varredura em
   `cfopCerebro.test.ts`: placeholder de 4 dígitos neste campo é barrado.
+  🚨 **E A CORREÇÃO NÃO BASTOU — ele voltou com outro print: *"o componente
+  Escriturar como continua desabilitado"*.** O campo **NÃO estava**: montei o
+  painel num teste de RENDER, digitei nele e o botão ligou (`cfopCerebroPainel
+  Campo.test.tsx`). O que engana é a **VIZINHANÇA** — os dois campos ao lado são
+  `<select>` COM valor, e um input de texto com um `—` cinza no meio deles lê-se
+  como célula de SAÍDA, não como campo. **Para quem usa, "parece desabilitado" e
+  "está desabilitado" são a mesma coisa: nos dois casos ele não digita.**
+  ✂️ Vazio passou a vir **destacado** (anel azul, que sai quando preenche) e a
+  linha de baixo — a MESMA que mostra a descrição oficial do CFOP — passa a
+  DIZER que ali se digita, com exemplos (1556 uso/consumo · 1551 ativo · 1102
+  revenda) **FORA do campo**: dentro dele já foi o `1556` cinza lido como valor.
+  📌 **REGRA QUE FICA: varredura de fonte prova o CÓDIGO, não a TELA.** A trava
+  anterior conferia o placeholder e a mensagem no texto do arquivo — e não
+  conferia o que o dedo dele encontrou. Campo que a pessoa PRECISA preencher se
+  prova RENDERIZANDO e digitando (`@testing-library/react` já está no projeto);
+  é a régua de sempre — validação por RESULTADO, não por status.
 - **✍️ O CST VIROU CAMPO POR NOTA — e o campo é a TRIBUTAÇÃO, nunca o CST
   inteiro** (Paulo, 19/08: *"teria a possibilidade de ajustarmos o CST e
   visualizar o CST que vem na nota do fornecedor?"*). Coluna **CST informado**
