@@ -58,9 +58,12 @@ describe('a trava pega o arquivo real que o PVA recusou', () => {
         expect(m610.mensagem).toContain('3,0000');
     });
 
+    // As DUAS fontes legítimas desta tabela são a recusa do PVA e o arquivo
+    // ACEITO — "arquivo aceito > leiaute deduzido" é a régua da casa, e foi um
+    // aceito que fixou o M205/M605. O que nunca vale é memória.
     it('cada contagem carrega a FONTE — nenhuma foi escrita de memória', () => {
         for (const reg of Object.keys(CAMPOS_POR_REGISTRO)) {
-            expect(String((CAMPOS_POR_REGISTRO as any)[reg].fonte)).toMatch(/PVA/);
+            expect(String((CAMPOS_POR_REGISTRO as any)[reg].fonte)).toMatch(/PVA|ACEITO/);
         }
     });
 

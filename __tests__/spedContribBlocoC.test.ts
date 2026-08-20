@@ -125,14 +125,22 @@ describe('as posições do C170 casam com o arquivo aceito', () => {
         expect(c[14]).toBe('1213,76');        // 15 VL_ICMS
     });
 
+    // ⚠️ ESTE TESTE MUDOU DE NÚMERO EM 20/08, e a premissa antiga é que caiu:
+    // ele exigia VL_BC_PIS = 6.743,10 (o vProd cheio) e VL_PIS = 43,83 (o
+    // DESTACADO no documento). Paulo: *"não deduziu o ICMS da base do
+    // PIS/COFINS"* — e o EFD-Contribuições ACEITO da mesma empresa (03/2026)
+    // traz VL_BC_PIS 16.055,60 para um item de 19.580 com ICMS 3.524,40.
+    // A base é a receita MENOS o ICMS (Tema 69): 6.743,10 − 1.213,76 = 5.529,34.
+    // E o VALOR segue a base, senão o registro se desmente sozinho.
+    // As POSIÇÕES, que é o que este bloco vigia, seguem as mesmas.
     it('e o PIS/COFINS ficam nas casas 25-36, onde o leiaute os põe', () => {
         const c = f(acha(linhasDe([saida()]), 'C170')[0]);
         expect(c[24]).toBe('01');             // 25 CST_PIS
-        expect(c[25]).toBe('6743,10');        // 26 VL_BC_PIS
+        expect(c[25]).toBe('5529,34');        // 26 VL_BC_PIS — receita − ICMS
         expect(c[26]).toBe('0,6500');         // 27 ALIQ_PIS
-        expect(c[29]).toBe('43,83');          // 30 VL_PIS
+        expect(c[29]).toBe('35,94');          // 30 VL_PIS = base × alíquota
         expect(c[30]).toBe('01');             // 31 CST_COFINS
-        expect(c[35]).toBe('202,29');         // 36 VL_COFINS
+        expect(c[35]).toBe('165,88');         // 36 VL_COFINS
     });
 
     it('o C100 leva o modelo da RÉGUA e a SÉRIE com três posições', () => {
