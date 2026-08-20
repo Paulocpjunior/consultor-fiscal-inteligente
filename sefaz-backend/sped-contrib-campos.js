@@ -59,6 +59,18 @@ export const CAMPOS_POR_REGISTRO = {
             + '"13 - IND_PGTO" sobre a linha do A100, o que fixa as posições, e NÃO acusou '
             + 'contagem de campos nessa linha (21 como ela saiu).',
     },
+    C100: {
+        campos: 29,
+        fonte: 'Recibo do PVA — PWR INDUSTRIA METALURGICA 31947349000169 07/2026, 20/08/2026: '
+            + '"Número de Campos · Valor Esperado 29 · Conteúdo do Campo 24" (9 ocorrências). '
+            + 'Corroborado pelo EFD-Contribuições ACEITO da mesma empresa (03/2026, e-Fiscal).',
+    },
+    C170: {
+        campos: 37,
+        fonte: 'Recibo do PVA — PWR 31947349000169 07/2026, 20/08/2026: "Número de Campos · '
+            + 'Valor Esperado 37 · Conteúdo do Campo 23" (23 ocorrências). Corroborado pelo '
+            + 'EFD-Contribuições ACEITO da mesma empresa (03/2026), que traz os 37.',
+    },
     1010: {
         campos: 7,
         fonte: 'Recibo do PVA — MANTOAN 13344638000191 07/2026, 17/08/2026: '
@@ -75,6 +87,10 @@ export const CAMPOS_POR_REGISTRO = {
 export const CAMPO_NOMEADO = {
     M210: { 4: 'VL_BC_CONT' },
     M610: { 4: 'VL_BC_CONT' },
+    // O PVA da PWR nomeou estas posições sobre o C170 truncado — é por elas que
+    // se enxerga o deslocamento: com a seção de ICMS/IPI pulada, a BASE do PIS
+    // caiu na casa do CFOP e a ALÍQUOTA na do VL_ICMS_ST.
+    C170: { 10: 'CST_ICMS', 11: 'CFOP', 18: 'VL_ICMS_ST', 21: 'COD_ENQ' },
 };
 
 /** Divide a linha do SPED em campos, do jeito que o PVA conta. */
