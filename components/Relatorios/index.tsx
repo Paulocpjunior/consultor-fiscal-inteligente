@@ -27,7 +27,9 @@ import {
     origemDoCfopLancamento, cfopsDistintosDaNota, validarCfopEscriturado,
 } from '../../sefaz-backend/cfop-correlacao.js';
 import { alocarTributacaoIcms } from '../../services/iobSageExportService';
-import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
+// O modelo vem da RÉGUA (mora na chave), nunca do campo cru `modelo`.
+import { modeloDoDoc } from '../../sefaz-backend/participante-doc-helper.js';
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, diagnosticoRetencoes, resumoPorUf, servicosPorCodigo,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
@@ -1282,6 +1284,19 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
     const semSaidaCapturada = linhas.length === 0 && docs.length > 0;
     const totalFaltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
     const totalCanceladas = linhas.reduce((s, l) => s + l.canceladas.length, 0);
+    // 🚨 QUANTAS NOTAS DE SAÍDA A SEFAZ NUNCA FOI PERGUNTADA SOBRE.
+    // Para a saída o cancelamento só chega por evento, e a SEFAZ não entrega ao
+    // emitente (Rej. 641) — então "0 cancelada(s)" é o que o app SABE. Enquanto
+    // este número for > 0, o selo não pode ser verde (Paulo, MV LIDER 20/08:
+    // *"não mudou! já tínhamos dado como ajustada"*, com o selo verde em cima
+    // de 20 notas sem resposta).
+    const naoConferidas = useMemo(
+        () => docs.filter((d: any) => direcaoEfetivaDoc(d) === 'saida'
+            && !docCancelado(d)
+            && modeloDoDoc(d) === '55'
+            && !Number(d?.reconferenciaSefazEm)).length,
+        [docs],
+    );
     // Lista de números sozinha é alarme sem ação — caso LAV (759 faltantes
     // contra 137 capturadas: era captura, não numeração).
     const leitura = useMemo(() => lerFaltantes(linhas), [linhas]);
@@ -1362,10 +1377,19 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
             <div className="flex items-center gap-3 flex-wrap">
                 <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
                 {linhas.length > 0 && (
-                    <span className={`text-xs font-bold ${totalFaltantes > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    /* 🚨 "0 cancelada(s)" É O QUE O APP SABE, NÃO O QUE A SEFAZ DIZ.
+                       Paulo, 20/08 (MV LIDER 639): *"não mudou! já tínhamos dado como
+                       ajustada"* — o selo vinha VERDE dizendo "0 cancelada(s)" enquanto
+                       a reconferência logo abaixo mostrava 20 notas sem resposta. Para
+                       a SAÍDA o cancelamento chega por evento, e a SEFAZ não entrega
+                       ao emitente (Rej. 641): o número aqui é o das canceladas que
+                       CHEGARAM. O selo passa a dizer isso, e a cor deixa de ser verde
+                       enquanto houver nota que ninguém conferiu. */
+                    <span className={`text-xs font-bold ${totalFaltantes > 0 || naoConferidas > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                         {totalFaltantes > 0
                             ? `⚠ ${totalFaltantes} número(s) faltante(s) · ${totalCanceladas} cancelada(s)`
-                            : `✓ numeração contínua · ${totalCanceladas} cancelada(s)`}
+                            : `${naoConferidas > 0 ? '⚠' : '✓'} numeração contínua · ${totalCanceladas} cancelada(s) conhecida(s)`}
+                        {naoConferidas > 0 && ` · ${naoConferidas} não conferida(s) na SEFAZ`}
                     </span>
                 )}
             </div>
@@ -1432,6 +1456,7 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                                 {reconf.simulado
                                     ? `${reconf.selecao?.aConsultar} de ${reconf.selecao?.total} nota(s) de saída seriam consultadas`
                                     : `${reconf.resumo?.consultadas} consultada(s) · ${reconf.resumo?.canceladas} cancelada(s) · `
+                                      + `${(reconf.resumo?.naoCanceladas || 0) + (reconf.resumo?.naoCanceladasPorRecusa || 0)} não cancelada(s) · `
                                       + `${reconf.resumo?.indeterminadas} indeterminada(s)`}
                                 {reconf.selecao?.jaCanceladas ? ` · ${reconf.selecao.jaCanceladas} já constavam canceladas` : ''}
                                 {reconf.selecao?.naoMod55 ? ` · ${reconf.selecao.naoMod55} fora (não é NF-e mod 55)` : ''}
@@ -1439,7 +1464,13 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                             {(reconf.resumo?.avisos || []).map((a: string, i: number) => (
                                 <p key={i} className="text-amber-700 dark:text-amber-400">{a}</p>
                             ))}
-                            {(reconf.resultados || []).filter((r: any) => r.situacao !== 'nao-cancelada').map((r: any) => (
+                            {/* Linha a linha só o que PEDE leitura. As não canceladas
+                                (pelo XML ou pela recusa 640) já estão contadas na
+                                frase acima — 20 linhas dizendo "está tudo bem" é o
+                                que faz ninguém ler as que importam. */}
+                            {(reconf.resultados || [])
+                                .filter((r: any) => !['nao-cancelada', 'nao-cancelada-por-recusa'].includes(r.situacao))
+                                .map((r: any) => (
                                 <p key={r.id} className="font-mono">
                                     <span className={r.situacao === 'cancelada' ? 'text-red-600 font-bold' : 'text-slate-500'}>
                                         [{r.situacao}]
