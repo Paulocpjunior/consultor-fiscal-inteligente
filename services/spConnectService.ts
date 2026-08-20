@@ -90,7 +90,7 @@ export const enviarAnexo = (numero: string, p: { base64: string; nomeArquivo: st
 // ─── F3: config do atendimento + ações de conversa ──────────────────────────
 // O escopo (quem vê o quê, quem grava) é do BACKEND; aqui é só a chamada.
 
-const post = <T>(url: string, body?: unknown, metodo: 'POST' | 'PATCH' = 'POST') =>
+const post = <T>(url: string, body?: unknown, metodo: 'POST' | 'PATCH' | 'DELETE' = 'POST') =>
     req<T>(url, {
         method: metodo,
         headers: { 'Content-Type': 'application/json' },
@@ -107,6 +107,18 @@ export const atendimentoConfig = () =>
 /** Gravação SÓ admin (o backend recusa o resto). */
 export const salvarAtendimentoConfig = (config: ConfigAtendimento) =>
     post<{ config: ConfigAtendimento }>('/api/admin/whatsapp/atendimento-config', { config });
+
+/**
+ * Sobe a imagem enviada junto da confirmação de UMA fila (a arte do
+ * departamento — Paulo, 20/08, olhando a Ultra Fox). Substitui a anterior
+ * daquela fila; sem imagem cadastrada o bot segue mandando só o texto.
+ */
+export const subirImagemFila = (fila: string, base64: string, mime: string) =>
+    post<{ config: ConfigAtendimento; url: string }>('/api/admin/whatsapp/atendimento-config/imagem-fila', { fila, base64, mime });
+
+/** Tira a imagem de uma fila — volta a mandar só o texto de confirmação. */
+export const removerImagemFila = (fila: string) =>
+    post<{ config: ConfigAtendimento }>(`/api/admin/whatsapp/atendimento-config/imagem-fila/${encodeURIComponent(fila)}`, undefined, 'DELETE');
 
 /** Transferir de fila: limpa o dono, grava nota automática (recado opcional)
  *  e — se a chave estiver ligada — avisa o cliente (só com janela aberta). */

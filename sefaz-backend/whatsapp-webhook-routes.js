@@ -34,8 +34,8 @@ import {
     interpretarErroEntrega, janela24hAte, resumoParaConversa,
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
-import { configWhatsapp, GRAPH_BASE, enviarTextoLivre } from './whatsapp-cloud.js';
-import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota } from './whatsapp-atendimento.js';
+import { configWhatsapp, GRAPH_BASE, enviarTextoLivre, enviarMidiaWhatsapp } from './whatsapp-cloud.js';
+import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaValida } from './whatsapp-atendimento.js';
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 
@@ -59,6 +59,40 @@ router.get('/webhook', (req, res) => {
     }
     // A Meta espera o challenge CRU (texto), não JSON.
     return res.status(200).send(r.challenge);
+});
+
+// ─── GET: banner de departamento, PÚBLICO de propósito ─────────────────────
+// A Meta busca `image.link` sob demanda, de fora — não tem token nosso. É
+// por isso que esta rota é aberta e a de anexo de CLIENTE (gated por fila,
+// em whatsapp-routes.js) continua exigindo login: são dados de natureza
+// diferente — banner é marketing da casa, anexo é conteúdo do cliente.
+router.get('/publico/imagem-fila/:fila', async (req, res) => {
+    try {
+        const fila = String(req.params.fila || '').trim().toLowerCase();
+        if (!filaValida(fila)) return res.sendStatus(404);
+        const db = getDb();
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+        const config = resolverConfig(cfgDoc.data());
+        const url = config.imagensPorFila?.[fila];
+        if (!url) return res.sendStatus(404);
+        // A extensão é a mesma gravada no upload (whatsapp-routes.js) — o
+        // caminho é determinístico por fila, então listar o bucket resolve
+        // qual arquivo existe sem precisar guardar o mime à parte.
+        const bucket = storage.bucket(STORAGE_BUCKET);
+        const [arquivos] = await bucket.getFiles({ prefix: `whatsapp/config/imagem-fila/${fila}.` });
+        const arquivo = arquivos[0];
+        if (!arquivo) return res.sendStatus(404);
+        const [meta] = await arquivo.getMetadata();
+        res.setHeader('Content-Type', meta.contentType || 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        arquivo.createReadStream()
+            .on('error', (e) => { console.error('[whatsapp/imagem-fila] stream falhou:', e.message); if (!res.headersSent) res.sendStatus(500); else res.end(); })
+            .pipe(res);
+        return undefined;
+    } catch (e) {
+        console.error('[whatsapp/imagem-fila]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 /** Grava UMA mensagem recebida + contato + conversa. Idempotente pelo wamid. */
@@ -327,6 +361,26 @@ async function rodarBot(db, msg) {
                 await convRef.set({ status: 'resolvida', resolvidaPor: acao.por || 'cliente', atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'marcarAguardandoAvaliacao') {
                 await convRef.set({ aguardandoAvaliacao: true }, { merge: true });
+            } else if (acao.tipo === 'enviarImagem') {
+                // Banner do departamento: URL PÚBLICA nossa (gravada na ⚙️),
+                // nunca mediaId — é a imagem FIXA reenviada sempre, e a Meta
+                // busca por link sob demanda, sem depender de upload prévio
+                // nem de quanto tempo um mediaId permanece válido lá.
+                const envio = await enviarMidiaWhatsapp({ para: msg.de, tipo: 'image', link: acao.url });
+                if (envio.ok) {
+                    await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+                        conversaId: msg.de, direcao: 'saida', tipo: 'image',
+                        texto: null,
+                        midia: { nomeArquivo: null, mime: 'image/*', baixada: true, link: acao.url },
+                        timestamp: agora, statusEntrega: 'enviado', enviadoPor: 'bot',
+                    }, { merge: true });
+                    await convRef.set({
+                        ultimaMensagem: { resumo: '🖼️ Imagem', direcao: 'saida', em: agora },
+                        atualizadoEm: agora,
+                    }, { merge: true });
+                } else {
+                    console.warn('[whatsapp/bot] imagem de fila não saiu:', envio.erro);
+                }
             } else if (acao.tipo === 'responder') {
                 const envio = await enviarTextoLivre({ para: msg.de, texto: acao.texto });
                 if (envio.ok) {

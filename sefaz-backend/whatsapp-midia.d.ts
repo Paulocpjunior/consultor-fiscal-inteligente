@@ -10,7 +10,7 @@ export function validarAnexo(p: { mime?: unknown; tamanhoBytes?: unknown; nomeAr
     { ok: true; tipo: TipoMidia; nome: string } | { ok: false; erro: string; acao: string };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function montarMensagemMidia(p: {
-    para: string; tipo: TipoMidia; mediaId: string; nomeArquivo?: string; legenda?: string;
+    para: string; tipo: TipoMidia; mediaId?: string; link?: string; nomeArquivo?: string; legenda?: string;
 }): Record<string, any>;
 export function legendaSeraIgnorada(tipo: string, legenda?: string): boolean;
 export function resumoDoAnexo(tipo: string, nome: string, legenda?: string | null): string;

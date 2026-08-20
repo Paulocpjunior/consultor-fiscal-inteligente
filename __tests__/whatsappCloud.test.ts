@@ -227,3 +227,28 @@ describe('🚨 número internacional: wa_id vai como veio', () => {
         expect(normalizarNumeroBr('abc')).toBeNull();
     });
 });
+
+describe('🖼️ enviarMidiaWhatsapp por LINK — o caminho do banner de fila (20/08)', () => {
+    const env = { WHATSAPP_CLOUD_TOKEN: 'tok', WHATSAPP_PHONE_NUMBER_ID: '999', WHATSAPP_TEMPLATE_GUIA: 't' };
+    const capturar = () => {
+        const chamadas: any[] = [];
+        const fetchImpl = (async (url: any, init: any) => {
+            chamadas.push(JSON.parse(init.body));
+            return { ok: true, status: 200, json: async () => ({ messages: [{ id: 'wamid.OK' }] }) };
+        }) as any;
+        return { chamadas, fetchImpl };
+    };
+
+    test('manda {image:{link}} quando não há mediaId', async () => {
+        const { chamadas, fetchImpl } = capturar();
+        const r = await enviarMidiaWhatsapp({ para: '5511997377599', tipo: 'image', link: 'https://app/imagem-fila/rh' }, { env, fetchImpl });
+        expect(r.ok).toBe(true);
+        expect(chamadas[0].image).toEqual({ link: 'https://app/imagem-fila/rh' });
+    });
+
+    test('🚨 sem mediaId E sem link é recusa própria, nunca corpo inventado', async () => {
+        const r = await enviarMidiaWhatsapp({ para: '5511997377599', tipo: 'image' }, { env, fetchImpl: (async () => { throw new Error('não devia chamar a Meta'); }) as any });
+        expect(r.ok).toBe(false);
+        expect((r as any).erro).toContain('mediaId nem link');
+    });
+});

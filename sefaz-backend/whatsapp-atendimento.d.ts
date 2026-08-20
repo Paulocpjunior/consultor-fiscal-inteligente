@@ -13,16 +13,19 @@ export interface ConfigAtendimento {
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
     menu: { opcao: string; fila: string; rotulo: string }[];
+    /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
+    imagensPorFila: Record<string, string>;
 }
 
 export interface AcaoBot {
     tipo: 'responder' | 'definirFila' | 'gravarProtocolo' | 'marcarAusenciaEnviada' | 'resetarTriagem'
-        | 'resolverConversa' | 'marcarAguardandoAvaliacao' | 'liberarConducao';
+        | 'resolverConversa' | 'marcarAguardandoAvaliacao' | 'liberarConducao' | 'enviarImagem';
     texto?: string;
     fila?: string;
     protocolo?: string;
     dia?: string;
     por?: string;
+    url?: string;
 }
 
 export const PAPEIS_ATENDIMENTO: string[];

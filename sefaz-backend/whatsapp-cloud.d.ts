@@ -85,9 +85,12 @@ export function enviarTextoLivre(
     p: { para: string; texto: string },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<EnvioGuiaWhatsappResultado>;
-/** Anexo na conversa. `para` também é CANÔNICO. */
+/**
+ * Anexo na conversa. `para` também é CANÔNICO. `mediaId` OU `link` — ao
+ * menos um dos dois.
+ */
 export function enviarMidiaWhatsapp(
-    p: { para: string; tipo: string; mediaId: string; nomeArquivo?: string | null; legenda?: string | null },
+    p: { para: string; tipo: string; mediaId?: string; link?: string; nomeArquivo?: string | null; legenda?: string | null },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<EnvioGuiaWhatsappResultado>;
 
