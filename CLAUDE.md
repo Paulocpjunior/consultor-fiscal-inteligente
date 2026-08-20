@@ -865,6 +865,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   régua de 11/08 não tinha chegado aqui, e a varredura do `canceladaReguaUnica`
   não pega a forma negada). O `COD_SIT` do C100 tinha o mesmo defeito: cancelada
   saía como **00 (regular)**, voltando ao livro pela porta do SPED.
+- **🚦 O GARGALO DO SPED NÃO ERA SÓ O LEIAUTE — ERA O ROUND-TRIP** (Paulo,
+  20/08: *"um dos maiores gargalos que vem consumindo tempo e retrabalho é o
+  EFD-ICMS/IPI e SPED Fiscal… corrija evitando o vai e vem o dia todo"*, com o
+  link do Guia Prático 3.2.2 e o do leiaute 2026).
+  🚧 **OS DOIS LINKS NÃO ABREM DAQUI, E A CAUSA NÃO É O SITE**: o proxy de saída
+  deste container recusa o CONNECT com **403 (policy denial)** — provado com
+  `curl` e com o `/__agentproxy/status`, que lista só npm/pypi e afins. Paulo
+  estranhou com razão (*"o domínio não bloqueia link, ainda mais
+  governamental"*): o bloqueio é da MINHA rede, não do gov.br. É o mesmo caso
+  do CONFAZ, da doc do SERPRO e do manual da Receita — e a saída é a que já
+  funcionou: **ele cola o PDF** (foi assim que entraram os 619 CFOPs).
+  ✂️ **O QUE DEU PARA FAZER SEM O MANUAL, e ataca a causa real**: o vai-e-vem
+  vem de os erros aparecerem **um round-trip do PVA por vez** — gera, valida,
+  print, conserta um grupo, recomeça. `sped-prevalidacao.js` ("PVA de bolso")
+  roda as recusas que o PVA JÁ NOS DEU sobre o **arquivo gerado**, na hora, e
+  sai nos warnings e no header `X-SPED-Prevalidacao`. Uma volta em vez de N.
+  🚨 **DUAS REGRAS DE OURO DESSE MÓDULO**: (1) **cada regra carrega a FONTE** —
+  a recusa LITERAL do PVA, com cliente e data; regra sem fonte é chute com cara
+  de validação, e validação errada manda consertar o que está certo; (2) ele
+  confere o **ARQUIVO, não a intenção** — a entrada são as LINHAS, o mesmo
+  texto que o PVA lê. Auditar o objeto em memória foi o que deixou o C100 sair
+  com modelo 55 e chave 65 por meses sem nenhum teste acusar.
+  📌 As 13 regras da 1ª leva: COD_MOD × chave · campos proibidos da NFC-e ·
+  0150/0200/0190 órfãos · C100 sem C190 (cancelada é exceção) · **E110 c.6 =
+  Σ VL_ICMS dos C190 de entrada** (com a exceção do 1605 e a inclusão do 5605,
+  literal) · **Σ IPI dos C190 = Σ crédito dos E520** · 0002 ausente com E500 ·
+  E500 em não-contribuinte · ST sem E200 · CFOP fora do catálogo · 0100 sem
+  EMAIL/COD_MUN. Regra nova do Guia Prático entra AQUI, com a citação do manual
+  como fonte.
 - **✍️ O CST VIROU CAMPO POR NOTA — e o campo é a TRIBUTAÇÃO, nunca o CST
   inteiro** (Paulo, 19/08: *"teria a possibilidade de ajustarmos o CST e
   visualizar o CST que vem na nota do fornecedor?"*). Coluna **CST informado**

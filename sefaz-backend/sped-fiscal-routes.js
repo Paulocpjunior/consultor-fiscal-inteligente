@@ -12,6 +12,10 @@ import { requireAdmin, requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { validarSpedFiscal } from './sped-fiscal-validador.js';
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
+// 🚦 O "PVA DE BOLSO" — as recusas que o validador já nos deu, conferidas AQUI,
+// sobre o arquivo, antes de alguém abrir o PVA (Paulo, 20/08: o gargalo é o
+// vai-e-vem). Cada regra carrega a recusa LITERAL como fonte.
+import { prevalidarSpedFiscal, resumoPrevalidacao } from './sped-prevalidacao.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
@@ -145,8 +149,17 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // RESULTADO: coluna de valor zerada em 100% das linhas, total que nao
         // bate com os detalhes, bloco que promete conteudo e entrega vazio.
         // E a familia de defeito que passou pelos testes unitarios 3x.
-        const auditoria = auditarSaidaSped(txt.split('\r\n').filter(Boolean));
+        const linhasDoArquivo = txt.split('\r\n').filter(Boolean);
+        const auditoria = auditarSaidaSped(linhasDoArquivo);
         for (const s of auditoria.suspeitas) dados.warnings.push(`[auditoria] ${s.detalhe}`);
+
+        // Pré-validação: confere o ARQUIVO (o mesmo texto que o PVA lê), não a
+        // intenção do gerador — foi por auditar a intenção que o C100 saiu com
+        // modelo 55 e chave 65 sem nenhum teste acusar.
+        const prevalidacao = prevalidarSpedFiscal(linhasDoArquivo, {
+            contribuinteIpi: dados.empresa?.dadosFiscais?.contribuinteIpi || '',
+        });
+        for (const linha of resumoPrevalidacao(prevalidacao)) dados.warnings.push(linha);
 
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
@@ -174,6 +187,11 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         res.setHeader('X-SPED-Validation', encodeURIComponent(JSON.stringify(validacao)));
         res.setHeader('X-SPED-Auditoria', encodeURIComponent(JSON.stringify({
             ok: auditoria.ok, resumo: resumoAuditoria(auditoria), suspeitas: auditoria.suspeitas,
+        })));
+        res.setHeader('X-SPED-Prevalidacao', encodeURIComponent(JSON.stringify({
+            ok: prevalidacao.erros.length === 0,
+            resumo: prevalidacao.resumo,
+            erros: prevalidacao.erros,
         })));
         return res.send(buffer);
     } catch (e) {
