@@ -56,6 +56,7 @@ import {
     prepararMensagensDoTxt, idMensagemImportada,
 } from './whatsapp-import-ultrafox.js';
 import { detectarAnexo, PASTA_MIDIA } from './whatsapp-import-lote.js';
+import { CANDIDATOS_SONDA as CANDIDATOS_SONDA_IG, interpretarSondaInstagram, concluirSondaInstagram, SOBRE_RESTRINGIR_ATENDENTES } from './instagram-sonda.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
 
 const router = Router();
@@ -2013,6 +2014,55 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
         return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🔎 SONDA DO INSTAGRAM — READ-ONLY, mesma decisão do ☎️ (não linka nada).
+ *
+ * Paulo, 18/08: *"Conseguimos linkar as DM do nosso Instagram? E se sim
+ * somente para alguns atendentes?"*. O token do WhatsApp foi concedido só
+ * pras permissões do WhatsApp — a API de Mensagens do Instagram é outro
+ * produto da Graph API, com permissões PRÓPRIAS. A sonda pergunta com o
+ * MESMO token e mostra o que a Meta responde de verdade, em vez de supor.
+ */
+router.get('/instagram/sondar', requireAdmin, async (_req, res) => {
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token) {
+            return res.json({
+                ok: true,
+                conclusao: {
+                    veredito: 'indeterminado',
+                    motivo: 'O canal do WhatsApp não está configurado neste ambiente.',
+                    acao: 'Sem token não dá pra perguntar à Meta — e não perguntar não é resposta.',
+                },
+                sondas: [], sobreRestringirAtendentes: SOBRE_RESTRINGIR_ATENDENTES,
+            });
+        }
+
+        const sondas = [];
+        for (const c of CANDIDATOS_SONDA_IG) {
+            let status = null; let corpo = null;
+            try {
+                const r = await fetch(`${GRAPH_BASE}/${c.caminho()}`, {
+                    headers: { Authorization: `Bearer ${cfg.token}` },
+                });
+                status = r.status;
+                corpo = await r.json().catch(() => ({}));
+            } catch (e) {
+                corpo = { error: { message: e.message } };
+            }
+            sondas.push({
+                candidato: c.id, rotulo: c.rotulo, hipotese: c.hipotese,
+                ...interpretarSondaInstagram(c.id, status, corpo),
+            });
+        }
+
+        return res.json({ ok: true, conclusao: concluirSondaInstagram(sondas), sondas, sobreRestringirAtendentes: SOBRE_RESTRINGIR_ATENDENTES });
+    } catch (e) {
+        console.error('[whatsapp/instagram/sondar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

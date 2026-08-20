@@ -545,6 +545,44 @@ Config nova nasce em `piloto`. Emudecer em silêncio seria pior que o defeito
 que o campo evita: o efeito só apareceria no cliente sem resposta, e ninguém
 ligaria uma coisa à outra.
 
+### 5.12 📷 Instagram — SONDA antes de prometer (18/08)
+
+Paulo: *"Conseguimos linkar as DM do nosso Instagram? E se sim somente para
+alguns atendentes?"*. Mesma decisão de desenho do ☎️ Voz e vídeo: o app
+**não linka nada** — pergunta pra Meta e mostra a resposta crua.
+
+**Por que sonda, não implementação direta**: o token do WhatsApp
+(`WHATSAPP_CLOUD_TOKEN`) foi concedido só pras permissões do WhatsApp
+(`whatsapp_business_management`, `whatsapp_business_messaging`). Mensagens
+do Instagram é OUTRO produto da Graph API — exige Página do Facebook
+vinculada ao mesmo Business Manager, conta profissional do Instagram
+conectada a ela, e permissões próprias (`pages_show_list`,
+`instagram_basic`, `instagram_manage_messages`, `pages_messaging`). Nada
+disso se sabe sem perguntar com o token de verdade — é a mesma lição do
+MSG_ISN_023 e do MS0030: payload/capacidade de API externa não se deduz.
+
+`sefaz-backend/instagram-sonda.js` testa dois CAMINHOS (não nomes de
+permissão cravados à toa): um controle (`me?fields=id,name` — o token
+responde a qualquer coisa fora do WhatsApp?) e o caminho que revela Página +
+Instagram vinculado (`me/accounts?fields=id,name,instagram_business_account`).
+
+🚨 **"ACHOU A CONTA" ≠ "PRONTO PRA MENSAGEM"** — a trava que mais importa
+aqui. `me/accounts` pode responder e mostrar a Página com o Instagram
+vinculado mesmo que o token só tenha permissão de LEITURA
+(`pages_show_list`/`instagram_basic`), sem a permissão de MENSAGEM
+(`instagram_manage_messages`/`pages_messaging`). São escopos diferentes na
+Graph API. Por isso o veredito `conta-encontrada` vem com a ação dizendo
+isso explicitamente — dizer "apto" seria prometer o que a sonda não testou.
+Só assinando o webhook e recebendo uma DM real (ou olhando as permissões do
+App no Meta for Developers) se prova mensagem de verdade — próxima fase,
+gated no resultado desta sonda.
+
+✅ **"Só pra alguns atendentes" já está resolvido — e não depende da
+sonda.** É a mesma peça que já existe pro WhatsApp: um canal novo (o
+Instagram seria um) amarra numa fila, e só quem tem aquela fila enxerga —
+igual já funciona hoje pra Recepção, Fiscal, RH etc. `SOBRE_RESTRINGIR_ATENDENTES`
+diz isso na tela, sempre, independente do que a sonda encontrar.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente
