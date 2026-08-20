@@ -132,6 +132,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   misturar pendência do CFI (envs, robô de auditoria, fila do FUNRURAL) com
   pendência do Connect na mesma lista. Dividir CFI × Connect, e dentro de
   cada uma, o que é dele × o que é meu.
+  🚨 **SEGUNDA VEZ EM 20/08 — e a regra ficou mais dura**: no meio de uma
+  conversa inteira sobre SPED eu enfiei o Connect num "status geral"
+  (*"não era p trazer aqui"* … *"n vamos misturar projetos"*). Dividir em
+  seções NÃO basta. **O relatório responde SÓ o projeto da conversa**; o outro
+  entra quando ele perguntar pelo outro, nunca por iniciativa minha. O custo
+  não é estético: ele estava decidindo sobre arquivo fiscal e recebeu de volta
+  uma lista com chave de push e ensaio de atendimento no meio.
+  ⚠️ **E não carimbar pendência do outro projeto sem CONFERIR**: eu listei a
+  `VITE_FIREBASE_VAPID_KEY` como "falta" lendo o de-para, quando o workflow já
+  a carrega (`deploy-app.yml`, secret + build-arg) — repetir texto velho como
+  fato é o erro do "0/388", agora atravessando de casa.
 - **A RAZÃO SOCIAL JÁ RESPONDE: LTDA/S.A./EIRELI É PESSOA JURÍDICA** (13/08,
   fila da NOVA ERA). Metade das pendências de *"consulte o CADESP"* era de
   fornecedor cujo nome DIZ o que ele é — MIXTER … LTDA, PONTUAL COMERCIAL
