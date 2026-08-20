@@ -153,7 +153,17 @@ const CfopCerebroPainel: React.FC<Props> = ({
                                família do "botão que não faz nada": a pessoa lê como feito. */
                             placeholder="—"
                             title="Os 4 dígitos do CFOP de ENTRADA que passa a valer para este fornecedor."
-                            className="w-full p-2 font-mono rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+                            /* 🚨 VAZIO NÃO PODE PARECER DESLIGADO (Paulo, 20/08, segundo print:
+                               "o componente Escriturar como continua desabilitado"). Ele NÃO está
+                               — um teste de render digita nele e o botão liga. O que engana é a
+                               VIZINHANÇA: os dois campos ao lado são <select> com valor, e um
+                               input de texto com um `—` cinza no meio deles lê-se como célula de
+                               saída, não como campo. O anel marca o que espera digitação. */
+                            className={`w-full p-2 font-mono rounded border bg-white dark:bg-slate-700 ${
+                                cfopDestino
+                                    ? 'border-slate-300 dark:border-slate-600'
+                                    : 'border-blue-400 dark:border-blue-600 ring-1 ring-blue-300 dark:ring-blue-700'
+                            }`}
                         />
                     </label>
                     <label className="block">
@@ -169,10 +179,23 @@ const CfopCerebroPainel: React.FC<Props> = ({
             )}
 
             {/* A descrição oficial junto do número — é ela que faz o erro
-                aparecer antes de virar livro (caso Kalunga, 17/08). */}
-            {descricaoDestino && (
+                aparecer antes de virar livro (caso Kalunga, 17/08). E, ENQUANTO
+                O CAMPO ESTÁ VAZIO, o mesmo lugar diz que ali se DIGITA: é a
+                pergunta que o campo em branco deixou em aberto. O exemplo fica
+                FORA do campo de propósito — dentro dele viraria o `1556` cinza
+                que já foi lido como valor preenchido. */}
+            {descricaoDestino ? (
                 <p className={`mt-2 ${descricaoDestino.temDescricao ? 'text-slate-500' : 'text-red-600 dark:text-red-400'}`}>
                     {descricaoDestino.texto}
+                </p>
+            ) : !!fornecedores.length && (
+                <p className="mt-2 text-slate-500">
+                    <strong>Escriturar como</strong> é campo de digitação: informe os <strong>4 dígitos</strong> do
+                    CFOP de entrada que passa a valer para este fornecedor — por exemplo{' '}
+                    <span className="font-mono">1556</span> (uso ou consumo),{' '}
+                    <span className="font-mono">1551</span> (ativo imobilizado) ou{' '}
+                    <span className="font-mono">1102</span> (revenda). A descrição oficial aparece aqui assim que
+                    você digitar.
                 </p>
             )}
 
