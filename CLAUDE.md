@@ -1191,6 +1191,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   exatamente o que o próprio código dizia, e os dois "funcionavam" — a família
   do IPI em E200/E210 e do Bloco H zerado. E dois arquivos do MESMO mês
   declarando contabilistas diferentes é divergência que ninguém vai procurar.
+- **🚨 A RECEITA DE ALUGUEL NÃO TEM DOCUMENTO — e o arquivo declarava
+  CONTRIBUIÇÃO ZERO** (Paulo, 20/08, AFFITTARE 1139: *"o faturamento dela é
+  aluguel, então não tem captura de notas, apenas a informação do valor em
+  Locação de Bens na ficha financeira; para efeito de EFD CONTRIBUIÇÕES a
+  informação vai no bloco F550"*). O CFI monta o EFD-Contribuições a partir dos
+  DOCUMENTOS, e numa administradora de imóveis não existe documento de receita:
+  o arquivo de 07/2026 saiu com **M200 e M600 ZERADOS** numa empresa que fatura
+  ~R$ 21 mil/mês. Mesma classe do M200 zerado da MANTOAN e do Bloco H inteiro
+  zerado — **campo de valor recebendo o default de quem não achou o dado**.
+  ✂️ `sefaz-backend/receita-sem-documento-f550.js` (na `REGUAS_VIGIADAS`), com o
+  EFD-Contribuições **ACEITO da própria AFFITTARE (05/2026)** fixando o registro
+  campo a campo: `|F550|21811,34|01|0|21811,34|0,65|141,76|01|0|21811,34|3|654,33|||||`
+  — CST **01**, base = receita, e os quatro últimos campos VAZIOS.
+  ✅ **E O `IND_REG_CUM` DO 0110 FINALMENTE DERIVA DO QUE FOI GERADO**: o aceito
+  declara **2** (competência, escrituração CONSOLIDADA) porque é o F550 que
+  carrega a receita; quem escritura documento a documento continua **9**. O
+  comentário do nosso `build0110` já previa este dia — *"se um dia existir o
+  caminho consolidado, o valor passa a DEPENDER do que foi gerado, nunca a ser
+  cravado"*. Um teste MEU que travava o `'9'` no TEXTO do arquivo foi TROCADO
+  para provar pelo COMPORTAMENTO: travar a fonte impediria a própria correção.
+  🚨 **A TRAVA QUE MANDA É A DUPLA CONTAGEM**: se a receita entrar pelo F550 E
+  por um documento de saída, a contribuição sai declarada em DOBRO. Por isso só
+  a **LOCAÇÃO** da ficha entra (as outras receitas têm documento e já vêm pelos
+  blocos A/C/D — trazê-las "por garantia" seria criar a duplicidade), e período
+  com saída junto vira **aviso nomeado com os dois números**. O app não escolhe.
+  ⚠️ **E O CENTAVO É ONDE O E-FISCAL DEIXA DE SER GABARITO**: o arquivo aceito
+  traz F550 = 141,76 e **M200 = 141,77** no MESMO arquivo (COFINS 654,33 ×
+  654,34) — ele se desmente, porque calculou documento a documento (o 1900 dele
+  declara `QUANT_DOC 3`) e somou arredondamentos. Nós não temos esses 3
+  documentos — é por isso que a receita vem da ficha —, então reproduzir o
+  141,76 exigiria inventar o rateio. **F550 e M200 nossos saem do MESMO
+  número**: um centavo contra o e-Fiscal é aceitável, arquivo que se contradiz
+  não é (régua de 11/08: referência, nunca gabarito; VALOR de lá não é verdade).
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava

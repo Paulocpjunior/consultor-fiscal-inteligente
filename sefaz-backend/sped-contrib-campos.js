@@ -43,6 +43,12 @@
  * 16" para uma linha que começa em M210).
  */
 export const CAMPOS_POR_REGISTRO = {
+    F550: {
+        campos: 16,
+        fonte: 'EFD-Contribuições ACEITO da AFFITTARE 17213641000127 · 05/2026 (e-Fiscal, assinado): '
+            + '|F550|21811,34|01|0|21811,34|0,65|141,76|01|0|21811,34|3|654,33||||| — 11 valores + os '
+            + 'quatro últimos campos (COD_MOD, CFOP, COD_CTA, INFO_COMPL) vazios.',
+    },
     M210: {
         campos: 16,
         fonte: 'Recibo do PVA — MANTOAN 13344638000191 07/2026, 18/08/2026: '

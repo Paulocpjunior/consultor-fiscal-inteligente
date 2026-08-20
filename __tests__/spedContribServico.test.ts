@@ -148,14 +148,28 @@ describe('🚨 a AUDITORIA DE SAÍDA tinha um buraco: o A100 não era vigiado', 
     });
 });
 
+// @ts-expect-error módulo JS puro sem tipos
+import { buildBloco0Contrib } from '../sefaz-backend/sped-contrib-bloco0.js';
+
 describe('🚨 o 0110 não pode mentir sobre o que o arquivo faz', () => {
     const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/sped-contrib-bloco0.js'), 'utf8');
 
-    it('IND_REG_CUM = 9 (detalhado A/C/D/F), não 1 (caixa/F500)', () => {
+    // ⚠️ TESTE TROCADO EM 20/08, e o motivo é o de sempre: ele travava o valor
+    // CRAVADO ('9') no TEXTO do arquivo, e o campo passou a ser DERIVADO do que
+    // o gerador produziu — 2 quando a receita vem do F550 (AFFITTARE, aluguel),
+    // 9 quando vem dos blocos A/C/D. O comentário do próprio código já previa
+    // este dia. Travar a fonte impediria a correção; agora se prova pelo
+    // COMPORTAMENTO, que é o que o arquivo carrega.
+    it('IND_REG_CUM = 9 quando a escrituração é DETALHADA (A/C/D/F), nunca 1 (caixa/F500)', () => {
         // O gerador NUNCA produz F500, então declarar 1 era afirmar sobre si
         // mesmo uma coisa que não fazia. 9 é o que o arquivo ACEITO do E-Fiscal
         // usa para o mesmo cliente.
-        expect(fonte).toMatch(/\?\s*'9'\s*:\s*''/);
+        const linhas = buildBloco0Contrib({
+            empresa: { cnpj: '13344638000191', nome: 'X', dadosFiscais: {} },
+            competencia: '2026-07', competenciaInicio: '2026-07', competenciaFim: '2026-07',
+            regimeApuracao: '2', notas: [], itens: [], participantes: [], unidades: [], warnings: [],
+        });
+        expect(linhas.find((l: string) => l.startsWith('|0110|'))!.trim()).toBe('|0110|2||1|9|');
         const semComentarios = fonte
             .replace(/\/\*[\s\S]*?\*\//g, '')
             .replace(/^\s*\/\/.*$/gm, '');

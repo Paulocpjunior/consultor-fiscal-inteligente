@@ -38,6 +38,9 @@ import {
 // O valor total do documento (mercadorias + acessórias + ST + IPI − desconto) —
 // o mesmo que o VL_OPR do C190 usa no EFD ICMS/IPI.
 import { valorOperacaoDoItem } from './valor-operacao-c190.js';
+// A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
+// arquivo aceito da AFFITTARE 05/2026 como fonte.
+import { montarF550, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -843,13 +846,47 @@ export function coletarRetencoesF600(notas, warnings) {
 export function buildBlocoF(dados) {
     const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings);
     const eventos = ret.eventos || [];
+    const aliq = getAliquotas(dados.regimeApuracao || '2');
+    // 🚨 A RECEITA SEM DOCUMENTO (aluguel) — sem ela o M200/M600 sai ZERADO
+    // numa empresa que fatura todo mês (AFFITTARE 1139, 20/08). A régua e a
+    // fonte moram em `receita-sem-documento-f550.js`.
+    const f550 = montarF550({
+        receita: dados.receitaSemDocumento || 0,
+        aliqPis: aliq.pis, aliqCofins: aliq.cofins,
+    });
     const linhas = [];
     // IND_MOV sai do que foi PRODUZIDO, nunca de constante (regra do 1001).
-    linhas.push(fmt.buildLine(['F001', eventos.length ? '0' : '1']));
+    linhas.push(fmt.buildLine(['F001', (eventos.length || f550) ? '0' : '1']));
+
+    if (f550) {
+        linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
+        linhas.push(fmt.buildLine([
+            'F550',
+            fmt.formatValue(f550.receita),      // VL_REC_COMP
+            CST_F550_TRIBUTADA,                 // CST_PIS
+            fmt.formatValue(0),                 // VL_DESC_PIS
+            fmt.formatValue(f550.receita),      // VL_BC_PIS
+            fmt.formatValue(aliq.pis * 100, 2), // ALIQ_PIS
+            fmt.formatValue(f550.pis),          // VL_PIS
+            CST_F550_TRIBUTADA,                 // CST_COFINS
+            fmt.formatValue(0),                 // VL_DESC_COFINS
+            fmt.formatValue(f550.receita),      // VL_BC_COFINS
+            fmt.formatValue(aliq.cofins * 100, 2), // ALIQ_COFINS
+            fmt.formatValue(f550.cofins),       // VL_COFINS
+            '',  // COD_MOD    — vazios no arquivo aceito
+            '',  // CFOP
+            '',  // COD_CTA
+            '',  // INFO_COMPL
+        ]));
+    }
 
     if (eventos.length) {
-        // F010 — estabelecimento. O arquivo aceito traz só o CNPJ.
-        linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
+        // F010 — estabelecimento. O arquivo aceito traz só o CNPJ. Se o F550 já
+        // abriu o estabelecimento, não abre de novo: dois F010 para o mesmo
+        // CNPJ é o tipo de duplicidade que o PVA recusa.
+        if (!f550) {
+            linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
+        }
         // IND_NAT_REC acompanha o regime da apuração: cumulativa (Presumido)=1,
         // não-cumulativa=0 — o arquivo aceito da HS (Presumido) traz 1.
         const indNatRec = String(dados.regimeApuracao || '2') === '2' ? '1' : '0';
@@ -970,6 +1007,20 @@ export function buildBlocoM(dados) {
     // declarada, e mudança de valor sem causa escrita é o que faz alguém
     // desconfiar do número certo — a mesma régua do FUNRURAL que "some da
     // conta, não da tela".
+    // 🚨 A RECEITA SEM DOCUMENTO ENTRA NA APURAÇÃO (AFFITTARE, 20/08).
+    // Sem isto o F550 sairia declarando receita e o M200/M600 continuaria
+    // ZERADO — o arquivo se desmentindo dentro de si mesmo, que é exatamente o
+    // defeito que o M210 com COD_CONT do outro regime tinha.
+    // ⚠️ Não há ICMS a excluir aqui: aluguel não tem ICMS destacado, então
+    // receita e base coincidem — e é o valor da FICHA, não um derivado.
+    const receitaSemDoc = Math.max(0, parseFloat(dados.receitaSemDocumento || 0) || 0);
+    if (receitaSemDoc > 0) {
+        totalReceitaSaida += receitaSemDoc;
+        totalBcSaida += receitaSemDoc;
+        totalPisSaida += receitaSemDoc * aliq.pis;
+        totalCofinsSaida += receitaSemDoc * aliq.cofins;
+    }
+
     if (icmsExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
             `Base do PIS/COFINS (Tema 69 · RE 574.706): o ICMS destacado nas saídas foi EXCLUÍDO da base — `

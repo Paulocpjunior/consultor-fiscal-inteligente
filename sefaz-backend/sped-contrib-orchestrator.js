@@ -22,6 +22,9 @@ import {
 } from './sped-contrib-blocos.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
+// A receita de aluguel não tem documento — ela entra pelo F550.
+import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-documento-f550.js';
+import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -176,10 +179,44 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const itens = Array.from(itensMap.values());
     const unidades = Array.from(unidadesMap.values());
 
+    // ─── 5b. A RECEITA QUE NÃO TEM DOCUMENTO (aluguel) ───
+    //
+    // 🚨 Paulo, 20/08 (AFFITTARE 1139): *"o faturamento dela é aluguel, então
+    // não tem captura de notas, apenas a informação do valor em Locação de Bens
+    // na ficha financeira; para efeito de EFD CONTRIBUIÇÕES a informação vai no
+    // bloco F550"*. Sem ler a ficha, o arquivo saía com M200/M600 ZERADOS numa
+    // empresa que fatura todo mês — declarando à Receita que não há contribuição
+    // a pagar. Mesma classe do M200 zerado da MANTOAN.
+    //
+    // ⚠️ A ficha é EMBUTIDA no documento da empresa (`fichaFinanceira[]`, chave
+    // `mesReferencia`) — não existe coleção `lucro_fichas`, e consultá-la
+    // devolvia vazio SEMPRE (lição de 19/08, saldo credor de IPI).
+    const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
+    const fichaDaComp = fichas.find(f => String(f?.mesReferencia || '') === competencia) || null;
+    const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
+
     // ─── 6. Warnings ───
     const warnings = [];
-    if (notas.length === 0) {
+    if (notas.length === 0 && !receitaSemDocumento) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo ${competencia}. Arquivo sera gerado com estrutura minima.`);
+    }
+    if (receitaSemDocumento > 0) {
+        const doc = receitaDeDocumentosNoPeriodo(notas, direcaoEfetivaDoc);
+        warnings.push(
+            `Receita de LOCAÇÃO da ficha (R$ ${receitaSemDocumento.toFixed(2)}) entrou no F550 — aluguel não `
+            + 'gera documento fiscal, e sem isto o M200/M600 sairia ZERADO. O 0110 acompanha: escrituração '
+            + 'CONSOLIDADA (IND_REG_CUM 2).',
+        );
+        if (doc.quantidade > 0) {
+            // ⚠️ DUPLA CONTAGEM É O RISCO DESTE CAMINHO, e o app não escolhe:
+            // se a locação também virou documento de saída, a contribuição sai
+            // declarada duas vezes. Quem decide é quem olha a ficha.
+            warnings.push(
+                `⚠ O período tem ${doc.quantidade} documento(s) de SAÍDA além da receita de locação da ficha. `
+                + 'Se algum deles for da própria locação, a contribuição vai DUPLICADA (uma vez no F550, outra '
+                + 'no bloco A/C). Confira antes de transmitir — o app não tem como saber.',
+            );
+        }
     }
     if (regime === 'simples') {
         warnings.push('Empresas do Simples Nacional geralmente NAO entregam EFD Contribuicoes. Verifique a obrigatoriedade.');
@@ -196,6 +233,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         itens,
         participantes,
         unidades,
+        receitaSemDocumento,
         warnings,
     };
 }
