@@ -1109,6 +1109,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   quando eles o trazem, então ele só entra quando NENHUM item declarou desconto
   — travado com fixture nas três formas (no item · só no total · nos dois), as
   três fechando em **37.754,60 / 30.958,77** com os números reais das 5 saídas.
+  ✅ **PROVADO NO ARQUIVO em 20/08** — `|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|…`
+  —, e o desconto da PWR morava mesmo SÓ no total do documento, que era a
+  hipótese. 📌 **Ler o ARQUIVO GERADO é o que fecha; print de tela não fecha**:
+  eu tinha ficado duas rodadas deduzindo de onde vinha o 38.316,84, e a linha
+  do M210 respondeu na primeira leitura.
+  🐛 **E O MESMO ARQUIVO ENTREGOU O DEFEITO SEGUINTE, que ninguém tinha pedido:
+  o `0100` saía `|0100|nome|cpf|crc|||||||||||`** — tudo depois do CRC vazio. É
+  a MESMA recusa que o PVA já tinha dado no EFD ICMS/IPI da PWR em 19/08
+  (*"Campo obrigatório · 13 - EMAIL"* e *"14 - COD_MUN"*), esperando no arquivo
+  seguinte: eu corrigi o `getContadorPadrao` do orquestrador do FISCAL e o do
+  EFD-CONTRIBUIÇÕES era a **SEGUNDA CÓPIA** — sem o e-mail padrão e **sem o
+  campo `codMunIBGE` sequer existir**. Dono único em
+  `sefaz-backend/contador-escrituracao.js` (na `REGUAS_VIGIADAS`), com os
+  padrões vindos do 0100 do EFD **aceito** do próprio escritório (HS PROJETOS
+  05/2026) e o env continuando a vencer.
+  ⚠️ **Nenhum teste pegava, e não por falta de teste**: cada orquestrador fazia
+  exatamente o que o próprio código dizia, e os dois "funcionavam" — a família
+  do IPI em E200/E210 e do Bloco H zerado. E dois arquivos do MESMO mês
+  declarando contabilistas diferentes é divergência que ninguém vai procurar.
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava
