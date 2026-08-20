@@ -49,7 +49,7 @@ describe('a régua: receita ≠ base, e as duas ≠ vProd', () => {
 
     it('documento SEM itens (NFS-e do portal) tem receita = base — serviço não destaca ICMS', () => {
         const r = receitaEBaseDoDocumento({}, 2500);
-        expect(r).toEqual({ receita: 2500, base: 2500, icms: 0, temItens: false });
+        expect(r).toEqual({ receita: 2500, base: 2500, icms: 0, temItens: false, descontoDoDocumento: 0 });
     });
 });
 
@@ -189,5 +189,77 @@ describe('M205/M605 — o detalhamento por código de receita sai preenchido', (
         expect(acha(linhas, 'M205')).toHaveLength(0);
         expect(acha(linhas, 'M605')).toHaveLength(0);
         expect(w.some((x) => /M205\/M605/.test(x) && /não está provado/.test(x))).toBe(true);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O DESCONTO CHEGA EM DUAS FORMAS — 11ª vez da mesma armadilha.
+//
+// Paulo, 20/08, com o M210 do PVA na tela: *"apenas ajustar o desconto do VALOR
+// DA RECEITA, ai mata essa pendência, valor correto tem que ser R$ 37.754,60"*.
+//
+// A NF-e traz `<prod><vDesc>` POR ITEM, mas há emissor que só preenche o
+// `<ICMSTot><vDesc>` do documento — e o importer guarda as duas casas. Quem lê
+// uma só vê a ausência PLAUSÍVEL ("esta nota não tem desconto"), que é
+// indistinguível do caso normal; aqui o efeito é declarar receita a MAIOR.
+//
+// Os números são os das 5 saídas da PWR 07/2026: receita 37.754,60 e base
+// 30.958,77 (o ICMS excluído soma 6.795,83).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 desconto no ITEM × só no TOTAL — as duas formas dão o mesmo número', () => {
+    /** As quatro saídas sem desconto + a NF 7, que é a que tem. */
+    const OUTRAS = [
+        { direcao: 'saida', itens: [{ vProd: 6743.10, vICMS: 1213.76 }, { vProd: 1819.44, vICMS: 327.50 }] },
+        { direcao: 'saida', itens: [{ vProd: 2105.60, vICMS: 379.01 }] },
+        { direcao: 'saida', itens: [{ vProd: 4485.51, vICMS: 807.39 }] },
+        { direcao: 'saida', itens: [{ vProd: 4421.95, vICMS: 795.95 }] },
+    ];
+    const somar = (notas: any[]) => notas.reduce((acc, nota) => {
+        const r = receitaEBaseDoDocumento(nota, 0);
+        return { receita: acc.receita + r.receita, base: acc.base + r.base, icms: acc.icms + r.icms };
+    }, { receita: 0, base: 0, icms: 0 });
+
+    const nf7 = (over: any) => ({ direcao: 'saida', ...over });
+    const NO_ITEM = nf7({ itens: [{ vProd: 18741.24, vDesc: 562.24, vICMS: 3272.22 }] });
+    const SO_NO_TOTAL = nf7({ totais: { vDesc: 562.24 }, itens: [{ vProd: 18741.24, vICMS: 3272.22 }] });
+    const NOS_DOIS = nf7({ totais: { vDesc: 562.24 }, itens: [{ vProd: 18741.24, vDesc: 562.24, vICMS: 3272.22 }] });
+
+    it('desconto no ITEM: receita 37.754,60 e base 30.958,77', () => {
+        const t = somar([...OUTRAS, NO_ITEM]);
+        expect(t.receita).toBeCloseTo(37754.60, 2);
+        expect(t.base).toBeCloseTo(30958.77, 2);
+        expect(t.icms).toBeCloseTo(6795.83, 2);
+    });
+
+    it('desconto SÓ no total do documento: o MESMO número', () => {
+        const t = somar([...OUTRAS, SO_NO_TOTAL]);
+        expect(t.receita).toBeCloseTo(37754.60, 2);
+        expect(t.base).toBeCloseTo(30958.77, 2);
+    });
+
+    it('🚨 nas DUAS casas NÃO desconta duas vezes — o total é a soma dos itens', () => {
+        const t = somar([...OUTRAS, NOS_DOIS]);
+        expect(t.receita).toBeCloseTo(37754.60, 2);
+        expect(t.base).toBeCloseTo(30958.77, 2);
+    });
+
+    it('o desconto do documento é NOMEADO no resultado, não some na conta', () => {
+        expect(receitaEBaseDoDocumento(SO_NO_TOTAL, 0).descontoDoDocumento).toBeCloseTo(562.24, 2);
+        expect(receitaEBaseDoDocumento(NO_ITEM, 0).descontoDoDocumento).toBe(0);
+    });
+
+    it('desconto do total maior que a receita não vira receita negativa', () => {
+        const r = receitaEBaseDoDocumento(
+            { direcao: 'saida', totais: { vDesc: 9999 }, itens: [{ vProd: 100, vICMS: 18 }] } as never, 0,
+        );
+        expect(r.receita).toBe(0);
+        expect(r.base).toBe(0);
+    });
+
+    it('e o M210 sai com a receita LÍQUIDA — 37.754,60, não 38.316,84', () => {
+        const linhas = buildBlocoM(dados([...OUTRAS, SO_NO_TOTAL] as any[]));
+        const m210 = campos(acha(linhas, 'M210')[0]);
+        expect(brl(m210[3])).toBeCloseTo(37754.60, 2);   // VL_REC_BRT
+        expect(brl(m210[4])).toBeCloseTo(30958.77, 2);   // VL_BC_CONT
     });
 });

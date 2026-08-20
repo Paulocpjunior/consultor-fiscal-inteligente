@@ -98,15 +98,33 @@ export function receitaEBaseDoDocumento(nota, valorSemItens) {
     const itens = Array.isArray(nota?.itens) ? nota.itens : [];
     if (!itens.length) {
         const v = Math.max(0, n(valorSemItens));
-        return { receita: v, base: v, icms: 0, temItens: false };
+        return { receita: v, base: v, icms: 0, temItens: false, descontoDoDocumento: 0 };
     }
-    let receita = 0, base = 0, icms = 0;
+    let receita = 0, base = 0, icms = 0, descontoNosItens = 0;
     for (const item of itens) {
         receita += receitaDoItem(item);
         base += baseDoItem(item);
         icms += icmsDestacadoDoItem(item);
+        descontoNosItens += n(item?.vDesc);
     }
-    return { receita, base, icms, temItens: true };
+
+    // 🚨 O DESCONTO CHEGA EM DUAS FORMAS — e ler só uma é a armadilha que este
+    // projeto mais pagou (11ª vez). A NF-e traz `<prod><vDesc>` POR ITEM, mas há
+    // emissor que só preenche o `<ICMSTot><vDesc>` do documento; o importer
+    // guarda as duas casas (`itens[].vDesc` e `totais.vDesc`), e quem lê uma só
+    // vê a ausência PLAUSÍVEL — "esta nota não tem desconto" — que é
+    // indistinguível do caso normal. Aqui o efeito é declarar receita a MAIOR.
+    //
+    // ⚠️ E NÃO SE DESCONTA DUAS VEZES: o total é a SOMA dos itens quando eles o
+    // trazem, então ele só entra quando NENHUM item declarou desconto.
+    const doTotal = n(nota?.totais?.vDesc);
+    let descontoDoDocumento = 0;
+    if (descontoNosItens === 0 && doTotal > 0) {
+        descontoDoDocumento = Math.min(doTotal, receita);
+        receita -= descontoDoDocumento;
+        base = Math.max(0, base - descontoDoDocumento);
+    }
+    return { receita, base, icms, temItens: true, descontoDoDocumento };
 }
 
 /**

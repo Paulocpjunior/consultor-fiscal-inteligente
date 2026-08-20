@@ -1093,6 +1093,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ Um teste MEU que exigia `VL_BC_PIS = vProd` foi TROCADO (premissa derrubada
   por arquivo aceito + decisão do dono), e a trava da FONTE passou a aceitar
   "arquivo ACEITO" além de "recusa do PVA" — as duas são fonte; memória não é.
+  ✅ **RODADA 2 — a BASE e o M205/M605 fecharam; sobrou o `VL_REC_BRT`** (Paulo,
+  20/08, com o M210 do PVA: *"deu certo a BASE DO PIS/COFINS sem o ICMS,
+  M205/M605 já preenchidos tbm deu certo, apenas ajustar o desconto do VALOR DA
+  RECEITA… valor correto tem que ser R$ 37.754,60"*). O registro mostrava
+  **receita 38.316,84 × base 30.958,77** — ou seja o desconto saía da BASE e não
+  saía da RECEITA, dentro do MESMO registro.
+  🚨 **A CAUSA É A ARMADILHA DAS DUAS FORMAS, PELA 11ª VEZ, agora no DESCONTO**:
+  a NF-e traz `<prod><vDesc>` **por item**, mas há emissor que só preenche o
+  `<ICMSTot><vDesc>` do documento — e o importer guarda as DUAS casas
+  (`itens[].vDesc` e `totais.vDesc`). Quem lê uma só vê a ausência **plausível**
+  ("esta nota não tem desconto"), indistinguível do caso normal; aqui o efeito é
+  declarar receita a MAIOR. `receitaEBaseDoDocumento` passou a ler as duas.
+  ⚠️ **E NÃO DESCONTA DUAS VEZES**: o total do documento é a SOMA dos itens
+  quando eles o trazem, então ele só entra quando NENHUM item declarou desconto
+  — travado com fixture nas três formas (no item · só no total · nos dois), as
+  três fechando em **37.754,60 / 30.958,77** com os números reais das 5 saídas.
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava
