@@ -44,9 +44,13 @@ describe('getFriendlyErrorMessage', () => {
         expect(r).toContain('filtro de segurança');
     });
 
-    it('mensagem desconhecida cai no fallback (retorna a propria)', () => {
+    it('mensagem desconhecida preserva o motivo cru, mas com a acao', () => {
+        // Mudou em 20/08: antes devolvia a frase crua e sem acao — e uma frase
+        // neutra ("Falhou o passo X") o toast pintava de VERDE.
         const r = getFriendlyErrorMessage(new Error('Erro absurdo nao mapeado'));
-        expect(r).toBe('Erro absurdo nao mapeado');
+        expect(r).toContain('Erro absurdo nao mapeado');
+        expect(r).toContain('Não foi possível concluir');
+        expect(r).toContain('avise o administrador');
     });
 
     it('error sem message usa fallback generico', () => {
@@ -57,5 +61,51 @@ describe('getFriendlyErrorMessage', () => {
     it('error null nao quebra', () => {
         const r = getFriendlyErrorMessage(null);
         expect(r).toContain('inesperado');
+    });
+});
+
+describe('IA: crédito esgotado e chave recusada (casos reais de 20/08)', () => {
+    it('crédito esgotado NÃO manda esperar — manda recarregar', () => {
+        const msg = getFriendlyErrorMessage(new Error('429 Your prepayment credits are depleted. Please go to AI Studio to manage your project and billing.'));
+        expect(msg).toContain('créditos da IA acabaram');
+        expect(msg).toContain('recarregar');
+        expect(msg).not.toContain('aguarde alguns instantes');
+    });
+
+    it('cota de verdade (sem billing) continua mandando aguardar', () => {
+        expect(getFriendlyErrorMessage(new Error('429 Quota exceeded')))
+            .toContain('aguarde alguns instantes');
+    });
+
+    it('chave irrestrita/recusada aponta o painel de chaves', () => {
+        for (const m of ['API key not valid', 'API_KEY_INVALID', 'unrestricted API key']) {
+            expect(getFriendlyErrorMessage(new Error(m))).toContain('aistudio.google.com/apikey');
+        }
+    });
+
+    // INVARIANTE: tudo que o tradutor produz é falha, então o toast tem que
+    // pintar de vermelho. Sem isto, uma mensagem nova sem palavra de erro
+    // volta a sair com ✓ verde (foi o que aconteceu com "créditos acabaram").
+    it('TODA saída do tradutor é classificada como ERRO pelo toast', () => {
+        const { tomDoToast } = require('../services/toastTone');
+        const entradas = [
+            'Your prepayment credits are depleted.',
+            'API key not valid',
+            '429 Quota exceeded',
+            '503 Service Unavailable',
+            '400 Invalid argument',
+            '405 Not Allowed',
+            '500',
+            'Failed to fetch',
+            'DOMException pattern',
+            'API Key contains invalid characters',
+            'API Key must be set',
+            'bloqueada pelo filtro de segurança SAFETY',
+            'coisa totalmente desconhecida',
+        ];
+        for (const e of entradas) {
+            const msg = getFriendlyErrorMessage(new Error(e));
+            expect([msg, tomDoToast(msg)]).toEqual([msg, 'erro']);
+        }
     });
 });
