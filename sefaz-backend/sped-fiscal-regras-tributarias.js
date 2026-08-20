@@ -19,6 +19,11 @@
 // ============================================================================
 
 // CST_ICMS valido = origem(1: 0-8) + CST(2). Lista oficial de CST ICMS.
+// O VL_OPR do C190 tem DONO — ele não é a soma dos VL_ITEM (Guia 3.2.3, C190
+// campo 05). Esta regra exigia a igualdade e passou a acusar o arquivo certo
+// depois da correção do gerador (PWR, 20/08).
+import { pisoDoValorOperacaoDoC170, acessoriasDoC100, faixaDoValorOperacao } from './valor-operacao-c190.js';
+
 const CST_ICMS_VALIDOS = new Set([
     '00', '10', '20', '30', '40', '41', '50', '51', '60', '70', '90',
 ]);
@@ -189,6 +194,9 @@ function verificarTotalizadoresC190(linhas, add) {
     let docNum = null;
     let c170Por = null;  // Map<chaveCombinacao, { vlOpr, vlBc, vlIcms, count }>
     let c190Por = null;  // Map<chaveCombinacao, { idx, vlOpr, vlBc, vlIcms, count }>
+    // Frete/seguro/outras despesas do C100 pai: entram no VL_OPR mas NÃO
+    // existem no C170, então lendo só o arquivo o derivado é um piso.
+    let acessoriasDoDoc = 0;
 
     const flush = () => {
         if (!c170Por || !c190Por) return;
@@ -200,9 +208,21 @@ function verificarTotalizadoresC190(linhas, add) {
                     `Doc ${docNum}: combinacao ${k} aparece em ${t170.count} C170 mas nao tem C190 totalizador.`);
                 continue;
             }
-            if (Math.abs(t190.vlOpr - t170.vlOpr) > TOL) {
+            // 🚨 VL_OPR NÃO É A SOMA DOS VL_ITEM (Guia 3.2.3, C190 campo 05):
+            // ele inclui ICMS-ST, FCP-ST e o IPI destacado, menos o desconto
+            // incondicional — e ainda frete/seguro/outras, que só existem no
+            // C100. Esta regra exigia a igualdade com Σ VL_ITEM e, depois da
+            // correção do gerador (PWR, 20/08), acusaria o arquivo CERTO.
+            // O que o arquivo prova é uma FAIXA; quem a calcula é o dono.
+            const faixa = faixaDoValorOperacao(t170.vlOpr, acessoriasDoDoc);
+            if (t190.vlOpr < faixa.piso - TOL || t190.vlOpr > faixa.teto + TOL) {
+                const esperado = faixa.exato
+                    ? `esperado ${faixa.piso.toFixed(2)}`
+                    : `esperado entre ${faixa.piso.toFixed(2)} e ${faixa.teto.toFixed(2)} (frete/seguro/outras despesas do C100)`;
                 add('C190_VL_OPR_DIVERGE', 'erro', 'C190', t190.idx,
-                    `Doc ${docNum} ${k}: C190 VL_OPR=${t190.vlOpr.toFixed(2)} != soma C170 VL_ITEM=${t170.vlOpr.toFixed(2)}.`);
+                    `Doc ${docNum} ${k}: C190 VL_OPR=${t190.vlOpr.toFixed(2)}, ${esperado}. `
+                    + 'VL_OPR = VL_ITEM - VL_DESC + ICMS-ST + IPI destacado + despesas acessorias '
+                    + '(Guia Pratico 3.2.3, C190 campo 05) — nao e a soma dos VL_ITEM.');
             }
             if (Math.abs(t190.vlBc - t170.vlBc) > TOL) {
                 add('C190_VL_BC_DIVERGE', 'erro', 'C190', t190.idx,
@@ -231,6 +251,7 @@ function verificarTotalizadoresC190(linhas, add) {
             flush();
             docIdx = l.idx;
             docNum = l.campos[7] || '?';
+            acessoriasDoDoc = acessoriasDoC100(l.campos);
             c170Por = new Map();
             c190Por = new Map();
             continue;
@@ -242,7 +263,8 @@ function verificarTotalizadoresC190(linhas, add) {
             const aliq = aliqNum(c[13]);
             const key = `${cst}|${cfop}|${aliq != null ? aliq.toFixed(2) : '0.00'}`;
             const acc = c170Por.get(key) || { vlOpr: 0, vlBc: 0, vlIcms: 0, count: 0 };
-            acc.vlOpr += num(c[6]);   // VL_ITEM
+            // PISO do VL_OPR — VL_ITEM − VL_DESC + ICMS-ST + IPI. Régua única.
+            acc.vlOpr += pisoDoValorOperacaoDoC170(c);
             acc.vlBc += num(c[12]);   // VL_BC_ICMS
             acc.vlIcms += num(c[14]); // VL_ICMS
             acc.count++;

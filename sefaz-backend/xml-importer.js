@@ -168,6 +168,10 @@ export function extrairItens(xml) {
       vBCST: num(pickTag(icmsInner, 'vBCST')),
       aliqST: num(pickTag(icmsInner, 'pICMSST')),
       vICMSST: num(pickTag(icmsInner, 'vICMSST')),
+      // FCP retido por ST, POR ITEM — entra no VL_OPR do C190 junto do ICMS_ST
+      // (Guia 3.2.3, C190 campo 05). Só existia nos totais, e total não serve:
+      // o C190 é por CST+CFOP+alíquota.
+      vFCPST: num(pickTag(icmsInner, 'vFCPST')),
       modBC: pickTag(icmsInner, 'modBC'),
       pRedBC: num(pickTag(icmsInner, 'pRedBC')),
       vIPI: num(pickTag(ipiTribInner, 'vIPI')),

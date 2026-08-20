@@ -332,3 +332,79 @@ describe('Guia Prático 3.2.3 — C100, as três regras que o manual corrigiu', 
         expect(c100De(buildBlocoC(dados([nf5929], 'PR') as never))[6]).toBe('00');
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O VL_OPR DO C190 NÃO É A SOMA DOS vProd — e o livro saía a MENOR.
+//
+// Paulo, 20/08, teste da PWR: o Livro de Entradas do CFI dizia
+// `TOTAIS (4 notas) 71.960,81` e o relatório "Registros fiscais dos documentos
+// de entradas" do PVA, sobre o arquivo recém-gerado, dizia `TOTAL 69.760,36`.
+// A diferença é 2.200,45 — EXATAMENTE o "Total de IPI" do mesmo relatório.
+//
+// Guia Prático 3.2.3, C190 Campo 05 (VL_OPR): *"informar neste campo o valor
+// das mercadorias somadas aos valores de fretes, seguros e outras despesas
+// acessórias e os valores de ICMS_ST, FCP_ST e IPI (somente quando o IPI está
+// destacado na NF), subtraídos o desconto incondicional e o abatimento não
+// tributado e não comercial"*.
+//
+// É a MESMA lição do VL_CONT_IPI do E510 (11/08): o "valor contábil" do SPED
+// inclui o IPI. E o PVA NÃO recusa por isso — só imprime um total menor.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 C190 · VL_OPR — o valor da OPERAÇÃO (caso PWR, 20/08)', () => {
+    const dados = (notas: any[]) => ({
+        empresa: { _regime: 'lucro', cnpj: '31947349000169', dadosFiscais: { uf: 'SP', codMunIBGE: '3550308' } },
+        competenciaInicio: '2026-07', competenciaFim: '2026-07', notas, warnings: [] as string[],
+    });
+    const c190sDe = (linhas: string[]) => linhas.filter((l) => l.startsWith('|C190|')).map((l) => l.split('|'));
+    const brl = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.'));
+
+    /** O agregado real da PWR 07/2026, numa nota só (os totais são os do PVA). */
+    const entrada = (over: any = {}) => capturada({
+        chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada', numero: '3',
+        emitente: { cnpjCpf: '15438711000110', nome: 'FORNECEDOR' },
+        totais: { vNF: 71960.81, vIPI: 2200.45 },
+        itens: [{
+            cfop: '1102', vProd: 69760.36, vBC: 69760.36, vICMS: 3459.19, aliqIcms: 4.96,
+            cst: '00', vIPI: 2200.45,
+        }],
+        ...over,
+    });
+
+    it('o IPI destacado ENTRA no VL_OPR — 69.760,36 + 2.200,45 = 71.960,81', () => {
+        const [c190] = c190sDe(buildBlocoC(dados([entrada()]) as never));
+        expect(brl(c190[5])).toBeCloseTo(71960.81, 2);
+    });
+
+    it('e o VL_OPR passa a fechar com o VL_DOC do C100 (é a regra do campo 12)', () => {
+        const linhas = buildBlocoC(dados([entrada()]) as never);
+        const c100 = linhas.find((l: string) => l.startsWith('|C100|'))!.split('|');
+        const soma = c190sDe(linhas).reduce((s, f) => s + brl(f[5]), 0);
+        expect(soma).toBeCloseTo(brl(c100[12]), 2);
+    });
+
+    it('VL_MERC (campo 16) continua sendo só a mercadoria — não é o mesmo campo', () => {
+        const c100 = buildBlocoC(dados([entrada()]) as never)
+            .find((l: string) => l.startsWith('|C100|'))!.split('|');
+        expect(brl(c100[16])).toBeCloseTo(69760.36, 2);
+    });
+
+    it('frete, seguro, outras despesas e ICMS-ST/FCP-ST entram; desconto sai', () => {
+        const nota = entrada({
+            totais: { vNF: 113 },
+            itens: [{
+                cfop: '1102', vProd: 100, vBC: 100, vICMS: 18, aliqIcms: 18, cst: '00',
+                vFrete: 5, vSeg: 1, vOutro: 2, vICMSST: 4, vFCPST: 1, vIPI: 2, vDesc: 2,
+            }],
+        });
+        // 100 + (5+1+2) + (4+1) + 2 − 2 = 113
+        expect(brl(c190sDe(buildBlocoC(dados([nota]) as never))[0][5])).toBeCloseTo(113, 2);
+    });
+
+    it('item SEM IPI destacado não muda nada (não se deduz destaque por CST)', () => {
+        const nota = entrada({
+            totais: { vNF: 100 },
+            itens: [{ cfop: '1102', vProd: 100, vBC: 100, vICMS: 18, aliqIcms: 18, cst: '00' }],
+        });
+        expect(brl(c190sDe(buildBlocoC(dados([nota]) as never))[0][5])).toBeCloseTo(100, 2);
+    });
+});

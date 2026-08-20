@@ -226,6 +226,68 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         fecha();
     })();
 
+    // ── R14. VL_DOC do C100 = Σ VL_OPR dos C190 filhos ──────────────────────
+    // Guia Prático 3.2.3, C100 Campo 12 (VL_DOC): *"o valor informado neste
+    // campo deve corresponder ao valor total da nota fiscal. Quando houver CBS,
+    // IBS ou IS incidentes na operação, o valor deste campo não corresponderá à
+    // soma do campo VL_OPR dos registros C190 ('filhos' deste registro C100),
+    // EXCETO PARA O EXERCÍCIO 2026"* — ou seja, em 2026 os dois têm que bater.
+    //
+    // Foi esta igualdade que denunciou o VL_OPR sem o IPI (PWR, 20/08): livro
+    // 71.960,81 × PVA 69.760,36, diferença = o IPI. O PVA não RECUSA por isso —
+    // ele só imprime um total menor, que é o jeito silencioso de o valor
+    // contábil do livro sair a menor.
+    //
+    // ⚠️ Tolerância de 2 centavos: o VL_OPR é somado item a item e depois
+    // arredondado por grupo de CST+CFOP+alíquota, então uma nota com muitos
+    // grupos pode fechar com centavo de arredondamento. Diferença MAIOR que
+    // isso é sempre componente faltando, nunca arredondamento.
+    (() => {
+        let atual = null;
+        let soma = 0;
+        let filhos = 0;
+        const fecha = () => {
+            // Nota sem nenhum C190 é a R6, que já diz a causa certa (resumo/sem
+            // itens). Acusar aqui também daria DOIS alarmes para UM defeito.
+            if (!atual || !filhos) return;
+            const f = campos(atual);
+            const declarado = num(f[12]);
+            if (Math.abs(centavos(declarado) - centavos(soma)) > 2) {
+                add(erros, {
+                    regra: 'c100-x-c190-vl-opr', registro: 'C100', campo: '12 - VL_DOC',
+                    valor: declarado.toFixed(2), esperado: soma.toFixed(2), linha: atual,
+                    mensagem: `A nota nº ${f[8] || '?'} declara VL_DOC ${declarado.toFixed(2)} e os C190 dela somam `
+                        + `${soma.toFixed(2)} de VL_OPR (diferença de ${Math.abs(declarado - soma).toFixed(2)}).`,
+                    acao: 'O VL_OPR não é a soma dos vProd: ele inclui frete, seguro, outras despesas, ICMS-ST, '
+                        + 'FCP-ST e o IPI destacado, menos o desconto incondicional. Diferença igual ao IPI da nota '
+                        + 'é o defeito clássico deste campo.',
+                    fonte: 'Guia Prático EFD ICMS/IPI 3.2.3, C100 Campo 12 (VL_DOC) e C190 Campo 05 (VL_OPR) '
+                        + '— caso PWR 31947349000169 · 07/2026, 20/08.',
+                });
+            }
+        };
+        for (const l of lista) {
+            const reg = registroDe(l);
+            if (reg === 'C100') {
+                fecha();
+                const f = campos(l);
+                // Cancelada não tem filhos e sai com VL_DOC vazio (Exceção 1) —
+                // comparar ali acusaria "0,00 ≠ 0,00" sobre uma nota correta.
+                const cancelada = ['02', '03'].includes(f[6] || '');
+                atual = (cancelada || !String(f[12] ?? '').trim()) ? null : l;
+                soma = 0;
+                filhos = 0;
+            } else if (reg === 'C190' && atual) {
+                soma += num(campos(l)[5]);
+                filhos += 1;
+            } else if (reg === 'C990' || reg === 'D001') {
+                fecha();
+                atual = null;
+            }
+        }
+        fecha();
+    })();
+
     // ── R7. E110 campo 6 = Σ VL_ICMS dos C190 de ENTRADA ────────────────────
     // Regra LITERAL do PVA, com a exceção do 1605 e a inclusão do 5605.
     const c190Entrada = c190s.filter((l) => {

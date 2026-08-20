@@ -139,3 +139,97 @@ describe('corrigirC190', () => {
         expect(corrigirC190({ linhas: [] } as any).edicoes).toHaveLength(0);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O VL_OPR NÃO É A SOMA DOS VL_ITEM — e este autofix DESFARIA a correção.
+//
+// Paulo, 20/08, teste da PWR: livro 71.960,81 × PVA 69.760,36, diferença =
+// o IPI. O gerador foi corrigido (Guia 3.2.3, C190 campo 05), e este módulo,
+// que reescreve o VL_OPR a partir dos C170, teria devolvido o valor SEM o IPI
+// em qualquer arquivo que passasse pelo editor. Três leituras do mesmo campo,
+// as três discordando do manual — por isso a régua ganhou dono.
+//
+// ⚠️ E o arquivo não prova tudo: frete/seguro/outras despesas moram no C100,
+// não no C170. Aí o autofix NÃO reescreve — ele DIZ. Ratear despesa por
+// CST/CFOP seria inventar, que é o oposto da régua da casa.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 VL_OPR — o valor da OPERAÇÃO (caso PWR, 20/08)', () => {
+    /** C170 completo até o VL_IPI (campo 24 → índice 23). */
+    function c170Full({ vlItem, vlDesc = '', cst, cfop, vlBc, aliq, vlIcms, vlIcmsSt = '', vlIpi = '' }: any) {
+        const campos = new Array(30).fill('');
+        campos[5] = vlItem;    // [6] VL_ITEM
+        campos[6] = vlDesc;    // [7] VL_DESC
+        campos[8] = cst;       // [9] CST_ICMS
+        campos[9] = cfop;      // [10] CFOP
+        campos[11] = vlBc;     // [12] VL_BC_ICMS
+        campos[12] = aliq;     // [13] ALIQ_ICMS
+        campos[13] = vlIcms;   // [14] VL_ICMS
+        campos[16] = vlIcmsSt; // [17] VL_ICMS_ST
+        campos[22] = vlIpi;    // [23] VL_IPI
+        return { tipo: 'C170', campos };
+    }
+    /** C100 com VL_FRT/VL_SEG/VL_OUT_DA nos índices 17/18/19. */
+    function c100({ num = '3', frt = '', seg = '', out = '' } = {}) {
+        const campos = new Array(29).fill('');
+        campos[6] = num;   // [7] NUM_DOC
+        campos[16] = frt;  // [17] VL_FRT
+        campos[17] = seg;  // [18] VL_SEG
+        campos[18] = out;  // [19] VL_OUT_DA
+        return { tipo: 'C100', campos };
+    }
+
+    it('C190 sem o IPI é corrigido PARA CIMA — 69.760,36 + 2.200,45', () => {
+        const parsed = mkParsed([
+            c100(),
+            c170Full({ vlItem: '69760,36', cst: '000', cfop: '1102', vlBc: '69760,36', aliq: '4,96', vlIcms: '3459,19', vlIpi: '2200,45' }),
+            c190({ cst: '000', cfop: '1102', aliq: '4,96', vlOpr: '69760,36', vlBc: '69760,36', vlIcms: '3459,19' }),
+        ]);
+        const r = corrigirC190(parsed);
+        expect(r.edicoes[0].campos[4]).toBe('71960,81');
+    });
+
+    it('e o C190 JÁ CERTO (com o IPI dentro) não é mexido', () => {
+        const parsed = mkParsed([
+            c100(),
+            c170Full({ vlItem: '69760,36', cst: '000', cfop: '1102', vlBc: '69760,36', aliq: '4,96', vlIcms: '3459,19', vlIpi: '2200,45' }),
+            c190({ cst: '000', cfop: '1102', aliq: '4,96', vlOpr: '71960,81', vlBc: '69760,36', vlIcms: '3459,19' }),
+        ]);
+        expect(corrigirC190(parsed).resumo.c190Corrigidos).toBe(0);
+    });
+
+    it('ICMS-ST entra e desconto incondicional sai', () => {
+        // 100 − 5 + 20 + 10 = 125
+        const parsed = mkParsed([
+            c100(),
+            c170Full({ vlItem: '100,00', vlDesc: '5,00', cst: '010', cfop: '1403', vlBc: '100,00', aliq: '18,00', vlIcms: '18,00', vlIcmsSt: '20,00', vlIpi: '10,00' }),
+            c190({ cst: '010', cfop: '1403', aliq: '18,00', vlOpr: '100,00', vlBc: '100,00', vlIcms: '18,00' }),
+        ]);
+        expect(corrigirC190(parsed).edicoes[0].campos[4]).toBe('125,00');
+    });
+
+    it('⚠️ com frete/seguro no C100 o VL_OPR NÃO é reescrito — o motivo vai escrito', () => {
+        const parsed = mkParsed([
+            c100({ frt: '50,00', seg: '10,00' }),
+            c170Full({ vlItem: '100,00', cst: '000', cfop: '1102', vlBc: '100,00', aliq: '18,00', vlIcms: '18,00' }),
+            // 999 está fora da faixa 100..160 — acusa, mas não reescreve.
+            c190({ cst: '000', cfop: '1102', aliq: '18,00', vlOpr: '999,00', vlBc: '100,00', vlIcms: '18,00' }),
+        ]);
+        const r = corrigirC190(parsed);
+        expect(r.edicoes).toHaveLength(0);
+        const aviso = r.ajustes.find((a: any) => a.campo === 'VL_OPR');
+        expect(aviso.de).toBe(aviso.para);                       // nada mudou
+        expect(aviso.mensagem).toMatch(/NAO corrigido/);
+        expect(aviso.mensagem).toMatch(/frete\/seguro/);
+    });
+
+    it('e um VL_OPR DENTRO da faixa (135 = 100 + parte do frete) não vira alarme', () => {
+        const parsed = mkParsed([
+            c100({ frt: '50,00', seg: '10,00' }),
+            c170Full({ vlItem: '100,00', cst: '000', cfop: '1102', vlBc: '100,00', aliq: '18,00', vlIcms: '18,00' }),
+            c190({ cst: '000', cfop: '1102', aliq: '18,00', vlOpr: '135,00', vlBc: '100,00', vlIcms: '18,00' }),
+        ]);
+        const r = corrigirC190(parsed);
+        expect(r.edicoes).toHaveLength(0);
+        expect(r.ajustes).toHaveLength(0);
+    });
+});

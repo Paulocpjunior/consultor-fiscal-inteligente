@@ -29,6 +29,13 @@ reenviar.
   a nota em substituição ao cupom fiscal (CFOP 5929/6929) saindo como
   `COD_SIT 00` em vez de **08** (Exceção 4) — com a ressalva do próprio manual
   de que o contribuinte do **Paraná** escritura por outra regra.
+- 🐛 **E o quinto, achado no teste da PWR no mesmo dia: o `VL_OPR` do C190 não
+  é a soma dos `vProd`.** Campo 05 do C190: ele soma frete, seguro, outras
+  despesas acessórias, ICMS-ST, FCP-ST e o **IPI destacado**, menos o desconto
+  incondicional. O livro do CFI dizia 71.960,81 e o relatório do PVA sobre o
+  arquivo dizia 69.760,36 — a diferença era o IPI. E o Campo 12 do C100
+  (`VL_DOC`) fecha a conta: em **2026** ele tem que ser igual à Σ `VL_OPR` dos
+  C190 filhos. ⚠️ **O PVA não recusa por isso** — só imprime um total menor.
 
 ## Como usar
 

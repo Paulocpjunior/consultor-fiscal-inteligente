@@ -945,6 +945,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   E500 em não-contribuinte · ST sem E200 · CFOP fora do catálogo · 0100 sem
   EMAIL/COD_MUN. Regra nova do Guia Prático entra AQUI, com a citação do manual
   como fonte.
+- **🚨 O `VL_OPR` DO C190 NÃO É A SOMA DOS `vProd` — o livro saía a MENOR e o
+  PVA ACEITAVA** (Paulo, 20/08, teste da PWR: *"2 erros, e o teste da PWR"*,
+  com o Livro de Entradas do CFI dizendo **TOTAIS (4 notas) 71.960,81** e o
+  relatório "Registros fiscais dos documentos de entradas" do PVA, sobre o
+  arquivo recém-gerado, dizendo **TOTAL 69.760,36**). A diferença —
+  **2.200,45** — é exatamente o *Total de IPI* do mesmo relatório.
+  O manual é literal (Guia Prático **3.2.3, C190, Campo 05**): *"informar neste
+  campo o valor das mercadorias somadas aos valores de fretes, seguros e outras
+  despesas acessórias e os valores de ICMS_ST, FCP_ST e IPI (somente quando o
+  IPI está destacado na NF), subtraídos o desconto incondicional e o abatimento
+  não tributado e não comercial"*. E o C100 fecha pelo outro lado — **Campo 12
+  (VL_DOC)**: em 2026 ele **tem que ser igual à Σ VL_OPR dos C190 filhos**.
+  ⚠️ **É A MESMA LIÇÃO DO `VL_CONT_IPI` DO E510** (11/08, provada contra arquivo
+  aceito): o "valor contábil" do SPED **inclui o IPI**. Um registro adiante, a
+  mesma armadilha — e aqui **o PVA nem recusa**: ele só imprime um total menor.
+  Erro que o validador aceita é o que sai do escritório e só aparece na
+  fiscalização, então a trava tem que ser NOSSA (virou a regra **R14** do PVA de
+  bolso, com a citação do Guia como fonte).
+  ✂️ **E A CORREÇÃO NÃO CABIA NUMA LINHA — a regra estava em TRÊS lugares e os
+  três discordavam do manual**: o gerador somava `vProd`; o validador do editor
+  (R8) exigia `VL_OPR == Σ VL_ITEM dos C170`; e o **autofix do C190
+  REESCREVIA** o campo com essa soma. Consertar só o gerador faria o editor
+  acusar o arquivo CERTO e o autofix **desfazer a correção** na primeira nota
+  que passasse por lá. Dono único: `sefaz-backend/valor-operacao-c190.js` (na
+  `REGUAS_VIGIADAS`).
+  ⚠️ **E O ARQUIVO NÃO PROVA TUDO**: frete, seguro e outras despesas acessórias
+  moram no **C100**, não no C170 — lendo só as linhas, o derivado é um **PISO**,
+  nunca o número exato. Por isso o dono devolve **piso e teto**: com despesa na
+  nota o validador confere a FAIXA e o autofix **não reescreve, DIZ**. Ratear
+  despesa por CST/CFOP seria inventar — e inventar é o que produziu o 1405.
+  📌 O `vFCPST` passou a ser capturado **por item** (só existia nos totais, e
+  total não serve num registro que é por CST+CFOP+alíquota).
+- **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
+  segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
+  e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava
+  **VAZIO** — o `1556` que aparecia ali era o **placeholder**. Ele leu como
+  preenchido, clicou, e nada aconteceu: **a única saída que sobra para quem não
+  vê efeito é repetir o clique** (a família do "Já importado" sem estado, 14/08,
+  e do botão que não faz nada).
+  ✂️ Duas correções, e a segunda vale mais que a primeira: (1) campo de CFOP
+  nesta casa tem **UM** placeholder — o mesmo `—` da aba ✏️ CFOP por nota;
+  exemplo com cara de valor preenchido é mentira barata; (2) **botão desligado
+  DIZ o que falta**, com as duas causas separadas (escolher fornecedor × os 4
+  dígitos do CFOP), porque elas pedem ações diferentes. Travado por varredura em
+  `cfopCerebro.test.ts`: placeholder de 4 dígitos neste campo é barrado.
 - **✍️ O CST VIROU CAMPO POR NOTA — e o campo é a TRIBUTAÇÃO, nunca o CST
   inteiro** (Paulo, 19/08: *"teria a possibilidade de ajustarmos o CST e
   visualizar o CST que vem na nota do fornecedor?"*). Coluna **CST informado**

@@ -239,10 +239,72 @@ describe('o resultado é acionável, não um número solto', () => {
             expect(e.campo).toBeTruthy();
             expect(e.mensagem.length).toBeGreaterThan(20);
             expect(e.acao.length).toBeGreaterThan(20);
-            // Regra sem fonte é chute com cara de validação.
-            expect(e.fonte).toMatch(/PVA:/);
+            // Regra sem fonte é chute com cara de validação. As duas fontes
+            // legítimas são a recusa LITERAL do PVA e a citação do Guia Prático
+            // — nunca memória.
+            expect(e.fonte).toMatch(/PVA:|Guia Prático/);
         }
         expect(resumoPrevalidacao(r)[0]).toMatch(/Pré-validação/);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R14 — VL_DOC do C100 tem que fechar com a Σ VL_OPR dos C190 filhos.
+//
+// Guia Prático 3.2.3, C100 Campo 12: em 2026 os dois têm que bater. Foi esta
+// igualdade que denunciou o VL_OPR sem o IPI (PWR, 20/08): o livro somava
+// 71.960,81 e o relatório do PVA, 69.760,36 — a diferença era o IPI.
+//
+// ⚠️ O PVA NÃO RECUSA por isso, só imprime um total menor. É por isso que a
+// regra tem que morar aqui: erro que o validador aceita é o que sai do
+// escritório e só aparece na fiscalização.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('R14 — C100 VL_DOC × Σ VL_OPR dos C190', () => {
+    /** Os números reais da PWR 07/2026, agregados. */
+    const c100 = (vlDoc: string, codSit = '00') =>
+        L(`|C100|0|1|15438711000110|55|${codSit}|001|3|${CH55}|13072026|13072026|${vlDoc}|0|0,00||69760,36|9|0,00|0,00|0,00|69760,36|3459,19|0,00|0,00|2200,45|0,00|0,00|||`);
+    const c190 = (vlOpr: string) => L(`|C190|000|1102|4,96|${vlOpr}|69760,36|3459,19|0,00|0,00|0,00|2200,45||`);
+
+    it('acusa quando o VL_OPR esquece o IPI — e nomeia a diferença', () => {
+        const r = prevalidarSpedFiscal([c100('71960,81'), c190('69760,36')]);
+        const e = acha(r, 'c100-x-c190-vl-opr');
+        expect(e).toHaveLength(1);
+        expect(e[0].valor).toBe('71960.81');
+        expect(e[0].esperado).toBe('69760.36');
+        expect(e[0].mensagem).toMatch(/2200\.45/);
+        expect(e[0].acao).toMatch(/não é a soma dos vProd/);
+        expect(e[0].fonte).toMatch(/Guia Prático EFD ICMS\/IPI 3\.2\.3/);
+    });
+
+    it('com o IPI dentro, não acusa nada', () => {
+        expect(acha(prevalidarSpedFiscal([c100('71960,81'), c190('71960,81')]), 'c100-x-c190-vl-opr'))
+            .toHaveLength(0);
+    });
+
+    it('centavo de arredondamento entre grupos não vira alarme', () => {
+        const r = prevalidarSpedFiscal([c100('71960,81'), c190('71960,80')]);
+        expect(acha(r, 'c100-x-c190-vl-opr')).toHaveLength(0);
+    });
+
+    it('CANCELADA não é comparada — ela sai sem filhos e com VL_DOC vazio', () => {
+        const r = prevalidarSpedFiscal([L(`|C100|0|1||55|02|001|9|${CH55}|||||||||||||||||||`)]);
+        expect(acha(r, 'c100-x-c190-vl-opr')).toHaveLength(0);
+    });
+
+    it('nota SEM nenhum C190 é a R6 — um defeito não gera dois alarmes', () => {
+        const r = prevalidarSpedFiscal([c100('71960,81')]);
+        expect(acha(r, 'c100-x-c190-vl-opr')).toHaveLength(0);
+        expect(acha(r, 'c100-sem-c190')).toHaveLength(1);
+    });
+
+    it('os C190 são somados por NOTA, não no arquivo inteiro', () => {
+        // Duas notas: a primeira fecha, a segunda não. Somar tudo junto faria
+        // as duas se compensarem e o defeito passaria.
+        const r = prevalidarSpedFiscal([
+            c100('71960,81'), c190('71960,81'),
+            c100('69760,36'), c190('67559,91'),
+        ]);
+        expect(acha(r, 'c100-x-c190-vl-opr')).toHaveLength(1);
     });
 });
 
