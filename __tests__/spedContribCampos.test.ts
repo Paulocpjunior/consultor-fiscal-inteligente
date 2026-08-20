@@ -65,9 +65,13 @@ describe('a trava pega o arquivo real que o PVA recusou', () => {
     });
 
     it('registro sem contagem provada NÃO é acusado — mas volta NOMEADO', () => {
-        const s = conferirContagemDeCampos(['|C100|0|1|', '|M210|01|1|2|3|4|5|6|7|8|9|10|11|12|13|14|']);
+        // ⚠️ O exemplo era o C100, e ele DEIXOU de servir em 20/08: o recibo do
+        // PVA da PWR deu a contagem dele (29), então ele saiu da lista dos não
+        // provados. Trocar a FIXTURE é o certo — trocar a régua para manter o
+        // teste verde seria desligar a trava que acabou de pegar um defeito.
+        const s = conferirContagemDeCampos(['|0150|X|Y|', '|M210|01|1|2|3|4|5|6|7|8|9|10|11|12|13|14|']);
         expect(s.erros).toHaveLength(0);      // o M210 acima tem os 16
-        expect(s.naoConferidos).toContain('C100');
+        expect(s.naoConferidos).toContain('0150');
         // Silêncio não é aprovação: quem lê precisa saber o que ficou de fora.
         expect(s.naoConferidos).not.toContain('M210');
     });

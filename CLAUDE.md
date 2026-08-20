@@ -1003,6 +1003,58 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   migrar é a 🏁 Fila de migração, cliente a cliente, com a captura provada. O
   que mudou é que o LEIAUTE deixou de ser o gargalo; o gargalo volta a ser
   captura e cadastro (é o que segura PS VIDROS e EXPERTE hoje).
+- **🚨 O BLOCO C DO EFD-CONTRIBUIÇÕES NUNCA TINHA PASSADO PELO PVA — 157
+  recusas de IMPORTAÇÃO, todas em C100 e C170** (Paulo, 20/08, PWR 1364 ·
+  07/2026: *"são erros diferentes dos outros, agora estamos falando do PIS e
+  COFINS de INDÚSTRIA"*). Ele nomeou a causa sem saber: **MANTOAN e HS PROJETOS
+  são de SERVIÇO e fecham pelo bloco A** (A100/A170) — a PWR é a primeira
+  INDÚSTRIA, ou seja a primeira a passar pelo bloco C deste arquivo.
+  🔴 **O C100 saía com 24 campos onde o leiaute tem 29, e o C170 com 23 onde
+  tem 37** — e não era campo faltando no fim: o gerador **PULOU a seção de
+  ICMS/IPI**, então o CST_PIS caiu na casa do CST_ICMS, a base do PIS na do
+  CFOP e a alíquota na de COD_NAT. Os outros 125 erros (*"Conteúdo do campo
+  inválido · CFOP 4765,00"*, *"Tamanho do campo inválido · COD_ENQ 318,68"*)
+  são TODOS consequência de um defeito único de forma. É a **quarta vez** da
+  mesma classe (1010 em 17/08, M210/M610 em 18/08, agora C100/C170).
+  ✂️ **O GABARITO É O ARQUIVO ACEITO DA PRÓPRIA EMPRESA** — o
+  EFD-Contribuições de **03/2026** que o e-Fiscal transmitiu e a Receita
+  aceitou. Ele fixa os 29 e os 37 campo a campo, e o C170 dele mostra a seção
+  de ICMS preenchida (`...|000|5101||19580|18|3524,4|...`) antes do PIS.
+  ⚠️ **E O CST E O CFOP SAEM DAS MESMAS RÉGUAS DO EFD ICMS/IPI**
+  (`cstDoLancamento`, `convertCfopParaEntrada`, `serieDoC100`, `modeloDoDoc`):
+  dois arquivos declarando CFOP diferente para o MESMO item seria a divergência
+  que este projeto mais paga.
+  🚨 **E FALTAVA UMA QUE O PVA AINDA NÃO TINHA COBRADO — o CST de PIS/COFINS da
+  ENTRADA é o do FORNECEDOR.** O importer captura `cstPis` do XML desde #563 e
+  o gerador o copiava, então a COMPRA saía com **01** — código que **nem existe
+  na Tabela 4.3.7**, que é a das AQUISIÇÕES (50-56 com crédito, 70-75 sem, 98,
+  99). Terceira vez da MESMA lição (CST do ICMS 00→90 em 18/08; IPI da IN RFB
+  932/2009 em 11/08): **o CST do XML descreve a operação de quem EMITIU**. Na
+  entrada quem decide é o REGIME de quem escritura — não-cumulativo 50, e
+  cumulativo **70 com base e valor ZERO**, onde zero É a resposta ("não há
+  crédito"). Na saída o documento é NOSSO e o CST do item continua vencendo.
+  🚨 **E O `COD_CONT` DO M210/M610 ESTAVA CRAVADO EM `01`, que é o código do
+  NÃO-CUMULATIVO** (Tabela 4.3.5; cumulativo é **51**). A PWR declarava `0110`
+  com COD_INC_TRIB=2, o M200 preenchido nos campos do cumulativo… e o M210 com
+  o código do outro regime: **o arquivo se desmentia dentro de si mesmo**. O
+  aceito de 03/2026 traz `|M210|51|` e `|M610|51|`.
+  📌 **C100 e C170 entraram em `CAMPOS_POR_REGISTRO` com a citação do recibo** —
+  a trava de contagem existia desde 18/08 e ficou MUDA porque esses dois nunca
+  tinham sido provados (eles voltavam em `naoConferidos`, que é o desenho
+  certo: silêncio ali não é aprovação). ⚠️ Um teste que usava o C100 como
+  exemplo de "registro não provado" foi TROCADO de fixture — trocar a régua
+  para manter o teste verde seria desligar a trava que acabou de pegar o
+  defeito.
+  🚩 **PENDÊNCIA ABERTA, NOMEADA: a EXCLUSÃO DO ICMS DA BASE (Tema 69).** O
+  arquivo aceito de 03/2026 declara `VL_BC_PIS` = **16.055,60** para um item de
+  **19.580,00** — a diferença é exatamente o ICMS destacado (3.524,40). E o
+  **próprio CFI já exclui** na ficha do Lucro (`basePisCofins =
+  receitaBrutaEfetiva − icmsVendas − monofásico`, com o RE 574.706 citado na
+  memória de cálculo). Ou seja: **a guia que o cliente paga sai de uma base e o
+  SPED declara outra, MAIOR** — duas leituras do mesmo fato dentro do app. Não
+  entrou neste PR porque muda VALOR (o C100 leva o PIS DESTACADO no documento e
+  o C170/M210 o APURADO sobre a base reduzida, como o aceito mostra), e valor
+  se fecha com o número na frente do dono.
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava

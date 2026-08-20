@@ -108,7 +108,7 @@ function cstDoItemNoArquivo(item, cfopLancado, nota) {
  * série contra a que está DENTRO da chave (3 dígitos), então o zero à esquerda
  * é justamente o que faz os dois baterem.
  */
-function serieDoC100(serie) {
+export function serieDoC100(serie) {
     const d = String(serie ?? '').replace(/\D/g, '');
     if (!d) return '000';
     return d.padStart(3, '0').slice(-3);

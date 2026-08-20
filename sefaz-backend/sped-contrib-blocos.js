@@ -23,6 +23,12 @@ import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import { selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao } from './sped-selecao-documentos.js';
+// O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
+import { modeloDoDoc } from './participante-doc-helper.js';
+// CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
+// declarando códigos diferentes para o mesmo item é a divergência de sempre.
+import { cstDoLancamento } from './cst-correlacao.js';
+import { convertCfopParaEntrada, serieDoC100 } from './sped-fiscal-blocoC.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -65,6 +71,92 @@ function getCstCofins(item, regimeApuracao, direcao) {
     if (direcao === 'saida') return '01';
     if (regimeApuracao === '1' || regimeApuracao === '3') return '50';
     return '70';
+}
+
+// ─── Constantes do C100/C170 do bloco C ─────────────────────────────────
+/** IND_FRT 9 = sem cobrança de frete — o mesmo que o EFD ICMS/IPI declara. */
+const IND_FRT_SEM_COBRANCA = '9';
+/** IND_MOV 0 = houve movimentação física. Mercadoria em NF-e sempre tem. */
+const IND_MOV_COM_MOVIMENTACAO = '0';
+/** IND_APUR 0 = apuração mensal do IPI. */
+const IND_APUR_MENSAL = '0';
+/**
+ * COD_CONT do M210/M610 (Tabela 4.3.5 — Códigos de Contribuição Social Apurada).
+ *   01 = Contribuição NÃO-cumulativa apurada a alíquota básica
+ *   51 = Contribuição CUMULATIVA apurada a alíquota básica
+ * Provado no EFD-Contribuições ACEITO da PWR (03/2026): |M210|51|19580|...|0,65|
+ */
+const COD_CONT_NAO_CUMULATIVO = '01';
+const COD_CONT_CUMULATIVO = '51';
+
+/**
+ * CST_ICMS do C170 do EFD-Contribuições — a MESMA régua do EFD ICMS/IPI.
+ *
+ * Três dígitos (origem + tributação) e correlacionado com o CFOP escriturado.
+ * Reimplementar aqui faria os DOIS arquivos declararem CST diferente para o
+ * mesmo item — a divergência que este projeto mais paga.
+ */
+function cstIcmsDoItemContrib(item, cfopLancado, nota) {
+    const cru = String(
+        item.cstIcms || item.cst || item.CST || item.CSTICMS || item.cst_icms || item.icmsCst || '',
+    ).replace(/\D/g, '');
+    if (!cru) return '';   // item sem CST não recebe CST deduzido do CFOP
+    const r = cstDoLancamento(cru, cfopLancado, nota?.cstEscriturado);
+    const escolhido = String(r.cst || cru);
+    return escolhido.length === 2 ? `0${escolhido}` : escolhido.padStart(3, '0').slice(-3);
+}
+
+/**
+ * 🚨 NA ENTRADA, O CST DE PIS/COFINS DO XML É O DO FORNECEDOR — e ele descreve
+ * a operação DELE.
+ *
+ * O importer captura `cstPis`/`cstCofins` do XML desde #563, e o gerador os
+ * usava direto. Numa nota de COMPRA isso escreve `01` (*Operação Tributável com
+ * Alíquota Básica*) no C170 do comprador — código que **nem existe na Tabela
+ * 4.3.7**, que é a das AQUISIÇÕES (50-56 com crédito, 70-75 sem, 98, 99).
+ *
+ * É a MESMA lição, terceira vez: o CST do ICMS 00 → 90 na entrada de
+ * uso/consumo (18/08) e a correspondência do IPI da IN RFB 932/2009 (11/08).
+ * Quem decide na entrada é o REGIME de quem escritura:
+ *   · não-cumulativo → 50 (aquisição COM direito a crédito)
+ *   · cumulativo     → 70 (aquisição SEM direito a crédito)
+ *
+ * Na SAÍDA vale o contrário: o documento é NOSSO, então o CST do item é o
+ * nosso e continua vencendo.
+ *
+ * ⚠️ Com CST sem crédito, base e valor saem ZERO — e aqui zero É a resposta
+ * ("não há crédito a apropriar"), não default de campo em branco.
+ */
+function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq) {
+    const vlItem = parseFloat(item.vProd || item.valor || 0) || 0;
+    if (direcao === 'saida') {
+        const cstPis = getCstPis(item, regimeApuracao, 'saida');
+        const cstCofins = getCstCofins(item, regimeApuracao, 'saida');
+        const aliqPis = parseFloat(item.aliqPIS || item.pAliquotaPis || 0) || aliq.pis * 100;
+        const aliqCofins = parseFloat(item.aliqCOFINS || item.pAliquotaCofins || 0) || aliq.cofins * 100;
+        return {
+            cstPis, cstCofins,
+            basePis: parseFloat(item.vBcPis || item.vBCPIS || 0) || vlItem,
+            baseCofins: parseFloat(item.vBcCofins || item.vBCCOFINS || 0) || vlItem,
+            aliqPis, aliqCofins,
+            vlPis: parseFloat(item.vPIS || 0) || vlItem * aliq.pis,
+            vlCofins: parseFloat(item.vCOFINS || 0) || vlItem * aliq.cofins,
+        };
+    }
+    const naoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
+    const cst = naoCumulativo ? '50' : '70';
+    if (!naoCumulativo) {
+        return {
+            cstPis: cst, cstCofins: cst,
+            basePis: 0, baseCofins: 0, aliqPis: 0, aliqCofins: 0, vlPis: 0, vlCofins: 0,
+        };
+    }
+    return {
+        cstPis: cst, cstCofins: cst,
+        basePis: vlItem, baseCofins: vlItem,
+        aliqPis: aliq.pis * 100, aliqCofins: aliq.cofins * 100,
+        vlPis: vlItem * aliq.pis, vlCofins: vlItem * aliq.cofins,
+    };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -400,53 +492,128 @@ export function buildBlocoC_Contrib(dados) {
         if (vCofins === 0) vCofins = vProd * aliq.cofins;
 
         const chave = nota.chaveAcesso || nota.chave || '';
+        const t = nota.totais || {};
+        const somaItem = (campo) => (nota.itens || [])
+            .reduce((s, i) => s + (parseFloat(i[campo] || 0) || 0), 0);
+        const doDoc = (soma, chaveTotal) => (soma > 0 ? soma : (parseFloat(t[chaveTotal] || 0) || 0));
 
+        // ═══════════════════════════════════════════════════════════════════
+        // 🚨 C100 — 29 CAMPOS, e este gerador emitia 24 (PWR 1364 · 07/2026).
+        //
+        // O PVA recusou o arquivo inteiro na IMPORTAÇÃO: 157 erros, todos em
+        // C100 e C170, começando por *"O número de campos informado no registro
+        // difere do número de campos especificado no leiaute do arquivo"*.
+        //
+        // A causa não era um campo faltando no fim: o bloco C do
+        // EFD-Contribuições foi escrito PULANDO a seção de ICMS/IPI, então o
+        // PIS e a COFINS caíam nas casas de VL_BC_ICMS/VL_ICMS. O arquivo
+        // declarava PIS onde a Receita lê ICMS.
+        //
+        // O gabarito é o EFD-Contribuições ACEITO desta MESMA empresa (03/2026,
+        // e-Fiscal, assinado) — a régua "arquivo aceito > leiaute deduzido":
+        //   |C100|1|0|7FX0YC9FP|55|00|001|1|<chave>|28032026|28032026|19580|0|0|
+        //    0|19580|1|0|0|0|19580|3524,4|0|0|0|127,27|587,4|0|0|
+        //
+        // ⚠️ E POR QUE ISTO SÓ APARECEU AGORA: MANTOAN e HS PROJETOS são de
+        // SERVIÇO e fecham pelo bloco A (A100/A170). A PWR é INDÚSTRIA — é a
+        // primeira a passar pelo bloco C do EFD-Contribuições. Paulo disse
+        // exatamente isso: *"agora estamos falando do PIS e COFINS de
+        // Indústria"*.
+        // ═══════════════════════════════════════════════════════════════════
         linhas.push(fmt.buildLine([
             'C100',
             indOper, indEmit, codPart,
-            String(nota.modelo || '55'), '00',
-            fmt.sanitizeString(nota.serie || '1', 3),
+            // O modelo sai da RÉGUA, nunca do campo cru — o importer principal
+            // não grava `modelo` (lição da PS VIDROS 0896, 19/08).
+            modeloDoDoc(nota),
+            '00',                                          // COD_SIT (cancelada já saiu acima)
+            serieDoC100(nota.serie),                       // SER — três posições
             fmt.sanitizeString(nota.numero || '', 9),
             fmt.sanitizeString(chave, 44),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
             fmt.formatDate(nota.dataEntradaSaida || nota.dhEmi),
-            fmt.formatValue(vProd), '',
-            fmt.formatValue(vDesc),
-            '', '', '', '', '', '',
-            fmt.formatValue(vProd), fmt.formatValue(vPis),
-            fmt.formatValue(vProd), fmt.formatValue(vCofins),
+            fmt.formatValue(doDoc(vProd, 'vNF')),          // 12 VL_DOC
+            IND_PGTO_PADRAO,                               // 13 IND_PGTO
+            fmt.formatValue(vDesc),                        // 14 VL_DESC
+            '',                                            // 15 VL_ABAT_NT
+            fmt.formatValue(vProd),                        // 16 VL_MERC
+            IND_FRT_SEM_COBRANCA,                          // 17 IND_FRT
+            fmt.formatValue(t.vFrete || 0),                // 18 VL_FRT
+            fmt.formatValue(t.vSeg || 0),                  // 19 VL_SEG
+            fmt.formatValue(t.vOutro || 0),                // 20 VL_OUT_DA
+            fmt.formatValue(doDoc(somaItem('vBC'), 'vBC')),          // 21 VL_BC_ICMS
+            fmt.formatValue(doDoc(somaItem('vICMS'), 'vICMS')),      // 22 VL_ICMS
+            fmt.formatValue(doDoc(somaItem('vBCST'), 'vBCST')),      // 23 VL_BC_ICMS_ST
+            fmt.formatValue(doDoc(somaItem('vICMSST'), 'vST')),      // 24 VL_ICMS_ST
+            fmt.formatValue(doDoc(somaItem('vIPI'), 'vIPI')),        // 25 VL_IPI
+            fmt.formatValue(vPis),                         // 26 VL_PIS
+            fmt.formatValue(vCofins),                      // 27 VL_COFINS
+            '',                                            // 28 VL_PIS_ST
+            '',                                            // 29 VL_COFINS_ST
         ]));
 
+        // ═══════════════════════════════════════════════════════════════════
+        // 🚨 C170 — 37 CAMPOS, e este gerador emitia 23.
+        //
+        // Mesmo defeito, mesma causa: a seção de ICMS/IPI (campos 10 a 24) foi
+        // pulada, e o CST_PIS foi parar na casa do CST_ICMS, a base do PIS na
+        // do CFOP, a alíquota na de COD_NAT. Daí os 79 *"Tamanho do campo
+        // inválido"* e os 46 *"Conteúdo do campo inválido"* — todos derivados,
+        // um único defeito de forma.
+        //
+        // ⚠️ O CST_ICMS e o CFOP saem das MESMAS RÉGUAS do EFD ICMS/IPI. Dois
+        // arquivos declarando CFOP diferente para o mesmo item seria a
+        // divergência que este projeto mais paga.
+        // ═══════════════════════════════════════════════════════════════════
         for (const item of (nota.itens || [])) {
             const vlItem = parseFloat(item.vProd || item.valor || 0);
-            const cstPis = getCstPis(item, regimeApuracao, direcao);
-            const cstCofins = getCstCofins(item, regimeApuracao, direcao);
-            const itemAliqPis = parseFloat(item.aliqPIS || item.pAliquotaPis || 0) || (aliq.pis * 100);
-            const itemAliqCofins = parseFloat(item.aliqCOFINS || item.pAliquotaCofins || 0) || (aliq.cofins * 100);
-            const itemVlPis = parseFloat(item.vPIS || 0) || (vlItem * aliq.pis);
-            const itemVlCofins = parseFloat(item.vCOFINS || 0) || (vlItem * aliq.cofins);
+            const cfopLancado = convertCfopParaEntrada(
+                item.cfop || item.CFOP || '0000', direcao, dados, nota,
+            );
+            const cstIcms = cstIcmsDoItemContrib(item, cfopLancado, nota);
+            const aliqIcmsItem = parseFloat(item.aliqIcms || 0)
+                || (item.vICMS && item.vBC ? (item.vICMS / item.vBC) * 100 : 0);
+
+            const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq);
 
             linhas.push(fmt.buildLine([
                 'C170',
-                item.nItem || '1',
-                fmt.sanitizeString(item.cProd || item.codigo || '', 60),
-                fmt.sanitizeString(item.xProd || item.descricao || '', 255),
-                fmt.formatValue(item.qCom || item.quantidade || 1, 5),
-                fmt.sanitizeString((item.uCom || item.unidade || 'UN').toUpperCase(), 6),
-                fmt.formatValue(vlItem),
-                fmt.formatValue(item.vDesc || 0),
-                '0', cstPis,
-                fmt.formatValue(vlItem),
-                fmt.formatValue(itemAliqPis, 4),
-                '', '',
-                fmt.formatValue(itemVlPis),
-                cstCofins,
-                fmt.formatValue(vlItem),
-                fmt.formatValue(itemAliqCofins, 4),
-                '', '',
-                fmt.formatValue(itemVlCofins),
-                fmt.sanitizeString(item.CFOP || item.cfop || '', 4),
-                '',
+                item.nItem || '1',                                    //  2 NUM_ITEM
+                fmt.sanitizeString(item.cProd || item.codigo || '', 60), //  3 COD_ITEM
+                fmt.sanitizeString(item.xProd || item.descricao || '', 255), // 4 DESCR_COMPL
+                fmt.formatValue(item.qCom || item.quantidade || 1, 5), //  5 QTD
+                fmt.sanitizeString((item.uCom || item.unidade || 'UN').toUpperCase(), 6), // 6 UNID
+                fmt.formatValue(vlItem),                              //  7 VL_ITEM
+                fmt.formatValue(item.vDesc || 0),                     //  8 VL_DESC
+                IND_MOV_COM_MOVIMENTACAO,                             //  9 IND_MOV
+                cstIcms,                                              // 10 CST_ICMS
+                fmt.sanitizeString(cfopLancado, 4),                   // 11 CFOP
+                '',                                                   // 12 COD_NAT
+                fmt.formatValue(item.vBC || 0),                       // 13 VL_BC_ICMS
+                fmt.formatValue(aliqIcmsItem, 2),                     // 14 ALIQ_ICMS
+                fmt.formatValue(item.vICMS || 0),                     // 15 VL_ICMS
+                fmt.formatValue(item.vBCST || 0),                     // 16 VL_BC_ICMS_ST
+                fmt.formatValue(item.aliqST || 0, 2),                 // 17 ALIQ_ST
+                fmt.formatValue(item.vICMSST || 0),                   // 18 VL_ICMS_ST
+                IND_APUR_MENSAL,                                      // 19 IND_APUR
+                '',                                                   // 20 CST_IPI
+                '',                                                   // 21 COD_ENQ
+                fmt.formatValue(item.vBCIPI || item.vBcIpi || 0),     // 22 VL_BC_IPI
+                fmt.formatValue(item.aliqIPI || 0, 2),                // 23 ALIQ_IPI
+                fmt.formatValue(item.vIPI || 0),                      // 24 VL_IPI
+                p.cstPis,                                             // 25 CST_PIS
+                fmt.formatValue(p.basePis),                           // 26 VL_BC_PIS
+                fmt.formatValue(p.aliqPis, 4),                        // 27 ALIQ_PIS
+                '',                                                   // 28 QUANT_BC_PIS
+                '',                                                   // 29 ALIQ_PIS_QUANT
+                fmt.formatValue(p.vlPis),                             // 30 VL_PIS
+                p.cstCofins,                                          // 31 CST_COFINS
+                fmt.formatValue(p.baseCofins),                        // 32 VL_BC_COFINS
+                fmt.formatValue(p.aliqCofins, 4),                     // 33 ALIQ_COFINS
+                '',                                                   // 34 QUANT_BC_COFINS
+                '',                                                   // 35 ALIQ_COFINS_QUANT
+                fmt.formatValue(p.vlCofins),                          // 36 VL_COFINS
+                '',                                                   // 37 COD_CTA
             ]));
         }
     }
@@ -753,6 +920,13 @@ export function buildBlocoM(dados) {
     }
 
     const isNaoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
+    // 🚨 COD_CONT DO M210/M610 — 01 é NÃO-CUMULATIVO, 51 é CUMULATIVO
+    // (Tabela 4.3.5). O gerador cravava '01' para todo mundo, então o arquivo da
+    // PWR (cumulativa, 0110 COD_INC_TRIB=2, M200 preenchido nos campos do
+    // cumulativo) declarava a apuração com o CÓDIGO do regime errado — e se
+    // desmentia dentro de si mesmo. O EFD-Contribuições ACEITO da mesma empresa
+    // (03/2026) traz |M210|51|... e |M610|51|..., com as alíquotas de 0,65% e 3%.
+    const codCont = isNaoCumulativo ? COD_CONT_NAO_CUMULATIVO : COD_CONT_CUMULATIVO;
 
     // Retenções na fonte (F600) abatem a contribuição — a MESMA coleta do
     // bloco F (warnings mudos aqui: o F já nomeou o que ficou de fora; nomear
@@ -847,7 +1021,7 @@ export function buildBlocoM(dados) {
     // 0,00 inventado: campo de valor não recebe default (regra de 06/08).
     if (totalPisSaida > 0) {
         linhas.push(fmt.buildLine([
-            'M210', '01',
+            'M210', codCont,
             fmt.formatValue(totalBcSaida),      // VL_REC_BRT
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT  ← recebia a alíquota
             '', '',                             // ajustes de BC (acréscimo/redução)
@@ -907,7 +1081,7 @@ export function buildBlocoM(dados) {
     // alíquota da COFINS ocupando a casa da base.
     if (totalCofinsSaida > 0) {
         linhas.push(fmt.buildLine([
-            'M610', '01',
+            'M610', codCont,
             fmt.formatValue(totalBcSaida),         // VL_REC_BRT
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT
             '', '',                                // ajustes de BC
