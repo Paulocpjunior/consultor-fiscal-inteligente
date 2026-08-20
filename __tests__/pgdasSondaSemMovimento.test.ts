@@ -303,3 +303,104 @@ describe('o painel da sonda ocupa a largura da tela', () => {
         expect(trecho).toMatch(/<\/label>[\s\S]*<\/div>[\s\S]*<\/div>/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A SONDA PERGUNTAVA COM UM PAYLOAD INVÁLIDO — as 6 formas nunca foram
+// avaliadas.
+//
+// Paulo, 20/08 (ELS COMERCIO DE BANANAS, PA 07/2026): rodou a sonda e os seis
+// candidatos voltaram com o MESMO erro, e o SERPRO disse o campo na cara:
+//
+//   [EntradaIncorreta-PGDASD-MSG_ISN_036] - O Json contém dados inválidos -
+//   Required property 'TipoDeclaracao' not found in JSON. Path 'declaracao'.
+//
+// `tipoDeclaracao` é obrigatório e quem o preenche no caminho real é o
+// `transmitirPgdasD` — a sonda chamava `validarDeclaracaoPgdas` direto e o
+// deixava de fora. A recusa foi de SCHEMA, antes de qualquer leitura de "sem
+// movimento".
+//
+// E o veredito piorava o estrago: lia "seis recusas com o mesmo código" e
+// mandava *"pare de procurar estrutura, leve ao SERPRO"* — chamado sobre um
+// defeito NOSSO, com o campo escrito na própria resposta.
+// ═══════════════════════════════════════════════════════════════════════════
+// @ts-expect-error módulo JS puro sem tipos
+import { candidatosSemMovimento as candidatos2, campoObrigatorioAusente, lerResultadoCandidato as ler2, vereditoDaSonda as veredito2 } from '../sefaz-backend/pgdas-sonda-sem-movimento.js';
+
+const ERRO_036 = "SERPRO 400: [EntradaIncorreta-PGDASD-MSG_ISN_036] - O Json contém dados inválidos - "
+    + "Required property 'TipoDeclaracao' not found in JSON. Path 'declaracao', line 1, position 380.";
+
+describe('🚨 a sonda manda o payload do caminho REAL', () => {
+    it('TODO candidato leva tipoDeclaracao — era ele que faltava', () => {
+        const cs = candidatos2({ cnpj: '48967340000112' });
+        expect(cs.length).toBeGreaterThan(1);
+        for (const c of cs) expect(c.declaracao.tipoDeclaracao).toBe(1);
+    });
+
+    it('e ele acompanha o que o caminho real decidiria (2 = Retificadora)', () => {
+        const cs = candidatos2({ cnpj: '48967340000112', tipoDeclaracao: 2 });
+        for (const c of cs) expect(c.declaracao.tipoDeclaracao).toBe(2);
+    });
+
+    it('o candidato "sem-estabelecimentos" continua sem estabelecimento — a variação é OUTRA', () => {
+        const c = candidatos2({ cnpj: '48967340000112' }).find((x: any) => x.nome === 'sem-estabelecimentos');
+        expect(c.declaracao.estabelecimentos).toEqual([]);
+        expect(c.declaracao.tipoDeclaracao).toBe(1);
+    });
+});
+
+describe('🚨 mensagem que NOMEIA o campo é achado, não beco', () => {
+    it('extrai o campo do "Required property ... not found"', () => {
+        expect(campoObrigatorioAusente(ERRO_036)).toBe('TipoDeclaracao');
+        expect(campoObrigatorioAusente('qualquer outra coisa')).toBeNull();
+    });
+
+    it('o candidato recusado carrega o campo ausente junto do código', () => {
+        const r = ler2({ nome: 'atual', hipotese: 'h', erro: new Error(ERRO_036) });
+        expect(r.situacao).toBe('recusada');
+        expect(r.codigo).toBe('MSG_ISN_036');
+        expect(r.campoAusente).toBe('TipoDeclaracao');
+    });
+
+    it('🚨 e o veredito para de mandar abrir chamado — o defeito é do app', () => {
+        const rs = ['atual', 'sem-estabelecimentos', 'flag-semMovimento']
+            .map((nome) => ler2({ nome, hipotese: 'h', erro: new Error(ERRO_036) }));
+        const v = veredito2(rs);
+        expect(v.destravou).toBe(false);
+        expect(v.campoAusente).toBe('TipoDeclaracao');
+        expect(v.aEstruturaFoiAvaliada).toBe(false);
+        expect(v.resumo).toMatch(/não veio no JSON/);
+        expect(v.resumo).toMatch(/payload da sonda incompleto/);
+        // O conselho velho não pode sobreviver: ele mandava para o lugar errado.
+        expect(v.resumo).not.toMatch(/leve ESTE código ao SERPRO/);
+    });
+
+    it('mesmo código SEM campo nomeado continua caindo no veredito antigo', () => {
+        // Aquele veredito não estava errado — estava incompleto. Mensagem
+        // opaca com o mesmo código segue sendo sinal de condição da empresa.
+        const opaco = 'SERPRO 400: [EntradaIncorreta-PGDASD-MSG_ISN_023] - O valor da atividade deve ser maior que zero.';
+        const rs = ['atual', 'sem-estabelecimentos', 'flag-semMovimento']
+            .map((nome) => ler2({ nome, hipotese: 'h', erro: new Error(opaco) }));
+        const v = veredito2(rs);
+        expect(v.campoAusente).toBeUndefined();
+        expect(v.resumo).toMatch(/MESMO código/);
+    });
+});
+
+// ─── A TRAVA: a sonda tem que PERGUNTAR o tipo, não cravar ───────────────────
+describe('🚨 o orquestrador consulta o tipo antes de sondar', () => {
+    const fonte = require('fs').readFileSync(
+        require('path').resolve(__dirname, '../sefaz-backend/das-orchestrator.js'), 'utf8',
+    );
+    const trecho = fonte.slice(fonte.indexOf('export async function sondarFormaSemMovimento'),
+        fonte.indexOf('export async function declararPgdasSemMovimento'));
+
+    it('usa consultarDeclaracaoPa — a mesma decisão do caminho real', () => {
+        expect(trecho).toMatch(/consultarDeclaracaoPa/);
+        expect(trecho).toMatch(/candidatosSemMovimento\(\{ cnpj: cnpjLimpo, filiais, tipoDeclaracao \}\)/);
+    });
+
+    it('consulta caída NÃO para a sonda — cai em Original e diz qual usou', () => {
+        expect(trecho).toMatch(/origemTipo = 'padrao-original'/);
+        expect(trecho).toMatch(/tipoDeclaracao,\s*\n\s*origemTipo,/);
+    });
+});

@@ -2372,6 +2372,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   enquanto isso — a competência continua vencendo. **DESTRAVA COM** o extrato
   de um PGDAS-D sem movimento já transmitido (o e-CAC mostra o XML), igual ao
   que destravou o R-4020: arquivo aceito vale mais que leiaute deduzido.
+  🚨 **A SONDA ESTAVA PERGUNTANDO COM UM PAYLOAD INVÁLIDO — as 6 formas nunca
+  foram avaliadas** (Paulo, 20/08, ELS 07/2026: *"fui testar mais uma vez o
+  SIMPLES SM, testei essa aba e deu essas msg"*). Os seis candidatos voltaram
+  com o MESMO erro, e o SERPRO **disse o campo na cara**:
+  *"[EntradaIncorreta-PGDASD-MSG_ISN_036] — Required property **'TipoDeclaracao'**
+  not found in JSON. Path 'declaracao'"*. `tipoDeclaracao` é obrigatório e quem
+  o preenche no caminho real é o `transmitirPgdasD` (1 Original / 2
+  Retificadora, decidido por `consultarDeclaracaoPa`) — a sonda chamava
+  `validarDeclaracaoPgdas` DIRETO e o deixava de fora. A recusa foi de SCHEMA,
+  antes de qualquer leitura de "sem movimento".
+  ✂️ **REGRA QUE FICA: a sonda pergunta com o MESMO payload que o caminho real
+  enviaria.** Sonda que monta payload próprio responde sobre uma forma que
+  ninguém vai transmitir — e o "não" dela não vale nada. Consulta do tipo caída
+  não para a sonda: cai em Original e **diz** qual usou.
+  🚨 **E O VEREDITO PIORAVA O ESTRAGO**: ele lia "seis recusas com o mesmo
+  código" e concluía *"pare de procurar estrutura, leve ESTE código ao SERPRO"*
+  — mandando abrir chamado sobre um defeito NOSSO, com o campo escrito na
+  própria resposta. Agora **campo nomeado VENCE "mesmo código"**: quando todas
+  as recusas apontam o mesmo `Required property`, a ação é do app. É a mesma
+  lição do `cStat 640` da SEFAZ no MESMO dia — **resposta que o app chama de
+  silêncio manda a pessoa para o lugar errado**. O veredito antigo continua
+  valendo para mensagem OPACA com o mesmo código: ele não estava errado, estava
+  incompleto.
   🚨 **A TRAVA QUE MANDA**: "sem movimento" é uma AFIRMAÇÃO À RECEITA, e a
   diferença entre "não faturou" e "não capturamos" NÃO está no zero — está na
   SAÚDE DA CAPTURA (mesma lição da NFS-e SP, semanas verde com zero notas). O
