@@ -77,6 +77,17 @@ const CfopCerebroPainel: React.FC<Props> = ({
         }
     };
 
+    /**
+     * O que ainda falta para o botão funcionar — dito NA TELA, nunca só no
+     * `disabled`. Paulo tentou criar o parâmetro da POXPUR (5101 → 1556) e o
+     * botão estava apagado porque o "Escriturar como" continuava VAZIO: o
+     * placeholder cinza `1556` parecia valor preenchido.
+     */
+    const falta = [
+        !cnpj && 'escolher o fornecedor',
+        cfopDestino.replace(/\D/g, '').length !== 4 && 'preencher "Escriturar como" com os 4 dígitos do CFOP',
+    ].filter(Boolean) as string[];
+
     const descricaoDestino = cfopDestino.replace(/\D/g, '').length === 4
         ? textoDoCfop(cfopDestino) as { temDescricao: boolean; texto: string }
         : null;
@@ -134,7 +145,14 @@ const CfopCerebroPainel: React.FC<Props> = ({
                             value={cfopDestino}
                             onChange={e => setCfopDestino(e.target.value)}
                             maxLength={4}
-                            placeholder="1556"
+                            /* 🚨 O PLACEHOLDER ERA `1556` E PARECIA VALOR PREENCHIDO (Paulo,
+                               20/08, no teste da PWR: POXPUR 5101 → o campo mostrava um 1556
+                               cinza e o botão ficava apagado, sem dizer por quê). Campo de
+                               CFOP tem UM placeholder nesta casa — o mesmo "—" da aba ✏️ CFOP
+                               por nota. Exemplo em cinza dentro de campo obrigatório é a
+                               família do "botão que não faz nada": a pessoa lê como feito. */
+                            placeholder="—"
+                            title="Os 4 dígitos do CFOP de ENTRADA que passa a valer para este fornecedor."
                             className="w-full p-2 font-mono rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
                         />
                     </label>
@@ -159,11 +177,21 @@ const CfopCerebroPainel: React.FC<Props> = ({
             )}
 
             {!!fornecedores.length && (
-                <button
-                    onClick={criar}
-                    disabled={salvando || !cnpj || cfopDestino.replace(/\D/g, '').length !== 4}
-                    className="btn-press mt-2 px-4 py-2 rounded-lg bg-blue-700 text-white font-bold disabled:opacity-40 whitespace-nowrap"
-                >{salvando ? 'Gravando…' : '🧠 Criar parâmetro'}</button>
+                <>
+                    <button
+                        onClick={criar}
+                        disabled={salvando || !!falta.length}
+                        className="btn-press mt-2 px-4 py-2 rounded-lg bg-blue-700 text-white font-bold disabled:opacity-40 whitespace-nowrap"
+                    >{salvando ? 'Gravando…' : '🧠 Criar parâmetro'}</button>
+                    {/* 🚨 BOTÃO DESLIGADO DIZ POR QUÊ. Sem esta linha o painel vira
+                        beco: o clique não faz nada e a única saída que sobra é
+                        clicar de novo (a família do "Já importado" sem estado). */}
+                    {!!falta.length && !salvando && (
+                        <p className="mt-1 text-amber-600 dark:text-amber-400">
+                            Falta {falta.join(' e ')} para criar o parâmetro.
+                        </p>
+                    )}
+                </>
             )}
 
             {/* ── Listar ────────────────────────────────────────────────── */}

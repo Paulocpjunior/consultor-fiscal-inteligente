@@ -247,3 +247,43 @@ describe('🧠 o painel do cérebro é UM, usado nas duas telas', () => {
         expect(f).toMatch(/Parâmetros são gravados na hora/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO — e botão desligado
+// DIZ POR QUÊ.
+//
+// Paulo, 20/08, no teste da PWR: ele escolheu POXPUR, CFOP de origem 5101, e o
+// "Escriturar como" mostrava um `1556` CINZA — o placeholder. O campo estava
+// VAZIO, o botão 🧠 Criar parâmetro ficava apagado, e nada na tela dizia isso.
+// A única saída que sobra para quem lê é clicar de novo.
+//
+// É a família do "Já importado" sem estado (14/08) e do botão que não faz nada:
+// a tela precisa DIZER o que falta, não só recusar o clique. E o placeholder de
+// campo de CFOP nesta casa é o mesmo "—" da aba ✏️ CFOP por nota — exemplo com
+// cara de valor preenchido é mentira barata.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 o painel do cérebro não deixa a pessoa no escuro', () => {
+    const fonte = require('fs').readFileSync(
+        require('path').resolve(__dirname, '../components/CfopCerebroPainel.tsx'), 'utf8',
+    );
+    const semComentarios = fonte
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+
+    it('o "Escriturar como" NÃO usa um CFOP de exemplo como placeholder', () => {
+        // Qualquer placeholder de 4 dígitos aqui volta a parecer valor gravado.
+        expect(semComentarios).not.toMatch(/placeholder="\d{4}"/);
+        expect(semComentarios).toMatch(/placeholder="—"/);
+    });
+
+    it('e o botão desligado nomeia o que falta, na tela', () => {
+        expect(semComentarios).toMatch(/const falta = \[/);
+        expect(semComentarios).toMatch(/disabled=\{salvando \|\| !!falta\.length\}/);
+        expect(semComentarios).toMatch(/Falta \{falta\.join/);
+    });
+
+    it('as duas causas aparecem separadas — fornecedor e CFOP pedem ações diferentes', () => {
+        expect(semComentarios).toMatch(/escolher o fornecedor/);
+        expect(semComentarios).toMatch(/Escriturar como.*4 dígitos|4 dígitos do CFOP/);
+    });
+});

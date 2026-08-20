@@ -27,6 +27,10 @@ import { cstDoLancamento } from './cst-correlacao.js';
 import { selecionarNotasBlocoC, avisosDaSelecao } from './sped-selecao-documentos.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { docCancelado } from './xml-metadata-helper.js';
+// Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
+// 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
+// leem daqui; eram três leituras, e as três discordavam do manual.
+import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 
 
 /**
@@ -490,7 +494,9 @@ function buildC170(item, nItem, nota) {
  *  02 CST_ICMS      CST ICMS (3 chars)
  *  03 CFOP          CFOP
  *  04 ALIQ_ICMS     Aliquota ICMS
- *  05 VL_OPR        Valor da operacao (soma dos vProd)
+ *  05 VL_OPR        Valor da OPERAÇÃO — mercadorias + frete/seguro/outras +
+ *                   ICMS_ST + FCP_ST + IPI destacado − desconto incondicional
+ *                   (Guia 3.2.3, C190 campo 05). NÃO é a soma dos vProd.
  *  06 VL_BC_ICMS    Soma das BCs ICMS
  *  07 VL_ICMS       Soma dos ICMS
  *  08 VL_BC_ICMS_ST Soma das BCs ICMS-ST
@@ -534,7 +540,10 @@ function buildC190sFromNota(nota) {
         }
 
         const g = grupos.get(key);
-        g.vlOpr += parseFloat(item.vProd || item.valor || 0);
+        // VL_OPR ≠ Σ vProd. A régua está em `valor-operacao-c190.js`, com a
+        // citação do Guia 3.2.3 (C190, Campo 05) — foi o IPI faltando aqui que
+        // fez o PVA da PWR somar 69.760,36 contra os 71.960,81 do livro.
+        g.vlOpr += valorOperacaoDoItem(item);
         g.vlBcIcms += parseFloat(item.vBC || 0);
         g.vlIcms += parseFloat(item.vICMS || 0);
         g.vlBcIcmsSt += parseFloat(item.vBCST || 0);

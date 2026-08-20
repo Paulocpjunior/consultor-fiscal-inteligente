@@ -4,9 +4,16 @@
 // AUTO-CORRECAO do totalizador C190 do SPED Fiscal (EFD ICMS/IPI).
 //
 // O C190 agrupa as linhas C170 do MESMO documento (mesmo C100 pai) por
-// (CST_ICMS, CFOP, ALIQ_ICMS). VL_OPR/VL_BC_ICMS/VL_ICMS do C190 DEVEM ser a
-// soma dos C170 daquela combinacao. Quando o contador edita um C170 a mao
-// (corrige um VL_ITEM, por ex) e esquece de refazer o C190, o PVA rejeita.
+// (CST_ICMS, CFOP, ALIQ_ICMS). VL_BC_ICMS/VL_ICMS do C190 sao a soma dos C170
+// daquela combinacao. Quando o contador edita um C170 a mao (corrige um
+// VL_ITEM, por ex) e esquece de refazer o C190, o PVA rejeita.
+//
+// 🚨 O VL_OPR E A EXCECAO, e este arquivo dizia o contrario (corrigido 20/08,
+// caso PWR): ele NAO e a soma dos VL_ITEM — inclui ICMS-ST, IPI destacado e as
+// despesas acessorias, menos o desconto incondicional (Guia Pratico 3.2.3,
+// C190 campo 05). A regua mora em `valor-operacao-c190.js`. E como frete,
+// seguro e outras despesas moram no C100 e nao no C170, o derivado aqui e um
+// PISO: com despesas na nota este modulo NAO reescreve o VL_OPR, so DIZ.
 //
 // O validador (sped-fiscal-regras-tributarias.js R8) so APONTA a divergencia.
 // Este modulo CORRIGE: recalcula os 3 valores do C190 a partir dos C170 e
@@ -26,6 +33,9 @@
 // Layout C170:
 //   6=VL_ITEM 9=CST_ICMS 10=CFOP 12=VL_BC_ICMS 13=ALIQ_ICMS 14=VL_ICMS
 // ============================================================================
+
+// O VL_OPR tem DONO (Guia 3.2.3, C190 campo 05): ele NÃO é a soma dos VL_ITEM.
+import { pisoDoValorOperacaoDoC170, acessoriasDoC100, faixaDoValorOperacao } from './valor-operacao-c190.js';
 
 const TOL = 0.02; // 2 centavos — mesmo do validador R8.
 
@@ -65,6 +75,8 @@ export function corrigirC190(parsed) {
     let c190Linhas = null; // Array<{idx, campos, chave}>
     let lastC170Idx = null;
     let lastC190Idx = null;
+    /** Despesas acessórias do C100 pai — elas entram no VL_OPR e não no C170. */
+    let acessoriasDoDoc = 0;
 
     const flush = () => {
         if (!c170Por || !c190Linhas) return;
@@ -96,7 +108,11 @@ export function corrigirC190(parsed) {
                 campo: 'REGISTRO',
                 de: '',
                 para: campos.join('|'),
-                mensagem: `Doc ${docNum} ${chave}: C190 faltante criado a partir da soma dos C170.`,
+                mensagem: `Doc ${docNum} ${chave}: C190 faltante criado a partir dos C170.`
+                    + (acessoriasDoDoc > 0
+                        ? ' ⚠️ O VL_OPR saiu SEM as despesas acessorias do C100 (frete/seguro/outras), que nao '
+                          + 'existem no C170 e nao se rateiam por CST/CFOP — confira esse campo a mao.'
+                        : ''),
             });
         }
 
@@ -110,9 +126,32 @@ export function corrigirC190(parsed) {
             const atualIcms = num(campos[6]);
 
             const mudancas = [];
+            // ⚠️ SÓ SE REESCREVE O QUE SE CONSEGUE PROVAR. Frete, seguro e
+            // outras despesas acessórias entram no VL_OPR e moram no C100, não
+            // no C170 — não dá para saber quanto delas cabe a ESTA combinação
+            // de CST/CFOP/alíquota, e ratear seria inventar. Com despesas na
+            // nota o campo fica INTACTO e o motivo vai escrito; sem elas, o
+            // valor é exato e a correção é segura.
+            const faixa = faixaDoValorOperacao(t170.vlOpr, acessoriasDoDoc);
             if (Math.abs(atualOpr - t170.vlOpr) > TOL) {
-                mudancas.push({ campo: 'VL_OPR', de: campos[4], para: fmtValor(t170.vlOpr) });
-                campos[4] = fmtValor(t170.vlOpr);
+                if (faixa.exato) {
+                    mudancas.push({ campo: 'VL_OPR', de: campos[4], para: fmtValor(t170.vlOpr) });
+                    campos[4] = fmtValor(t170.vlOpr);
+                } else if (atualOpr < faixa.piso - TOL || atualOpr > faixa.teto + TOL) {
+                    out.ajustes.push({
+                        registro: 'C190',
+                        idx: c190.idx,
+                        doc: docNum || '?',
+                        combinacao: c190.chave,
+                        campo: 'VL_OPR',
+                        de: campos[4],
+                        para: campos[4],
+                        mensagem: `Doc ${docNum} ${c190.chave}: VL_OPR=${atualOpr.toFixed(2)} fora do esperado `
+                            + `(${faixa.piso.toFixed(2)} a ${faixa.teto.toFixed(2)}). NAO corrigido: a nota tem `
+                            + 'frete/seguro/outras despesas, que sao do C100 e nao se rateiam por CST/CFOP. '
+                            + 'Confira a mao.',
+                    });
+                }
             }
             if (Math.abs(atualBc - t170.vlBc) > TOL) {
                 mudancas.push({ campo: 'VL_BC_ICMS', de: campos[5], para: fmtValor(t170.vlBc) });
@@ -147,6 +186,7 @@ export function corrigirC190(parsed) {
         if (l.tipo === 'C100') {
             flush();
             docNum = l.campos[7] || '?';
+            acessoriasDoDoc = acessoriasDoC100(l.campos);
             c170Por = new Map();
             c190Linhas = [];
             lastC170Idx = null;
@@ -170,7 +210,11 @@ export function corrigirC190(parsed) {
                 vlIcmsSt: 0,
                 vlIpi: 0,
             };
-            acc.vlOpr += num(c[6]);   // VL_ITEM
+            // 🚨 VL_OPR NÃO É VL_ITEM. Régua única em valor-operacao-c190.js
+            // (Guia 3.2.3, C190 campo 05). Aqui era `num(c[6])`, e depois da
+            // correção do gerador (PWR, 20/08) este autofix DESFARIA a correção
+            // — reescrevendo o VL_OPR certo com um valor sem o IPI.
+            acc.vlOpr += pisoDoValorOperacaoDoC170(c);
             acc.vlBc += num(c[12]);   // VL_BC_ICMS
             acc.vlIcms += num(c[14]); // VL_ICMS
             acc.vlBcSt += num(c[15]); // VL_BC_ICMS_ST

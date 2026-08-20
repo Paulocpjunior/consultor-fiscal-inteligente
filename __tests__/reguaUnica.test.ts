@@ -71,6 +71,25 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O VALOR DA OPERAÇÃO do C190 (VL_OPR) — que NÃO é a soma dos vProd/VL_ITEM',
+        dono: 'sefaz-backend/valor-operacao-c190.js',
+        comoUsar: "import { valorOperacaoDoItem, pisoDoValorOperacaoDoC170, acessoriasDoC100, faixaDoValorOperacao } "
+            + "from 'sefaz-backend/valor-operacao-c190.js'",
+        porque: 'Paulo, 20/08 (PWR 07/2026): o Livro de Entradas somava 71.960,81 e o relatório do PVA sobre o '
+            + 'arquivo recém-gerado somava 69.760,36 — a diferença era exatamente o IPI. O Guia Prático 3.2.3 '
+            + '(C190, campo 05) é literal: o VL_OPR inclui frete, seguro, outras despesas, ICMS-ST, FCP-ST e o '
+            + 'IPI destacado, menos o desconto incondicional. A regra estava em TRÊS lugares e os três '
+            + 'discordavam do manual: o gerador somava vProd, o validador R8 exigia Σ VL_ITEM e o autofix '
+            + 'REESCREVIA o campo com essa soma — ou seja, consertar só o gerador faria o editor acusar o '
+            + 'arquivo certo e o autofix desfazer a correção. E o PVA não recusa por isso: só imprime um total '
+            + 'menor, que é o jeito silencioso de o livro sair a menor.',
+        assinaturas: [
+            /function valorOperacaoDoItem\s*\(/,
+            /function pisoDoValorOperacaoDoC170\s*\(/,
+            /function faixaDoValorOperacao\s*\(/,
+        ],
+    },
+    {
         nome: 'QUAL documento entra em QUAL bloco do SPED (o modelo pela régua, não pelo campo)',
         dono: 'sefaz-backend/sped-selecao-documentos.js',
         comoUsar: "import { ehNotaDeMercadoria, selecionarNotasBlocoC, selecionarCtesBlocoD } from 'sefaz-backend/sped-selecao-documentos.js'",
