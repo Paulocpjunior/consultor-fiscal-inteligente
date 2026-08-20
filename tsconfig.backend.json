@@ -1,0 +1,33 @@
+{
+    "//": [
+        "TYPE-CHECK DO BACKEND FISCAL (.js) — nasceu em 20/08, do defeito que",
+        "derrubou a geração do SPED da PWR: uma reescrita minha apagou a linha",
+        "`const participantesMap = new Map()` e o app respondeu 'Falha interna'",
+        "na primeira empresa que gerou o arquivo.",
+        "",
+        "POR QUE NADA PEGOU: `npm run lint` é `tsc --noEmit`, e o tsconfig do",
+        "app tem `allowJs: false` — ou seja, TODO o sefaz-backend (que é quem",
+        "gera imposto) não passava por verificação nenhuma. `node --check` só vê",
+        "sintaxe, e o jest não carrega o orquestrador porque ele puxa",
+        "firebase-admin.",
+        "",
+        "O QUE ESTE ARQUIVO FAZ: liga `checkJs` só para achar NOME NÃO",
+        "DECLARADO (TS2304/TS2552). O resto do ruído de tipo é ignorado pelo",
+        "script `scripts/check-backend-nomes.mjs` — travar 520 TS2339 de código",
+        "legado seria trava que ninguém consegue manter verde, e trava que a",
+        "equipe desliga não protege nada."
+    ],
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "skipLibCheck": true,
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "types": []
+    },
+    "include": ["sefaz-backend/**/*.js"]
+}

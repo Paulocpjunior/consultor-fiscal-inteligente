@@ -135,6 +135,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         for (const c of selecionarCtesBlocoD(notas)) escrituradas.add(c.id || c.chave);
         return (n) => !escrituradas.has(n.id || n.chave);
     })();
+    const participantesMap = new Map();
     let participantesOrfaos = 0;
     for (const nota of notas) {
         if (nfceOuNaoEscriturada(nota)) { participantesOrfaos += 1; continue; }

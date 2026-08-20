@@ -865,6 +865,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   régua de 11/08 não tinha chegado aqui, e a varredura do `canceladaReguaUnica`
   não pega a forma negada). O `COD_SIT` do C100 tinha o mesmo defeito: cancelada
   saía como **00 (regular)**, voltando ao livro pela porta do SPED.
+- **🚨 O BACKEND FISCAL NÃO PASSAVA POR VERIFICAÇÃO NENHUMA — e derrubou a
+  geração do SPED** (Paulo, 20/08, com o print: *"Erro ao gerar SPED · Falha
+  interna — este erro é de hoje de manhã, tem que ser sanado"*). A causa era uma
+  reescrita MINHA da coleta de participantes que **apagou a linha
+  `const participantesMap = new Map()`**. O arquivo continuava usando o nome
+  TRÊS vezes, e a primeira empresa que gerasse SPED batia num ReferenceError.
+  🔴 **O QUE ASSUSTA NÃO É O ERRO, É NADA TER PEGO**, por três motivos que se
+  somam: (1) `npm run lint` era só `tsc --noEmit`, e o `tsconfig.json` do app
+  tem **`allowJs: false`** — ou seja, **todo o `sefaz-backend/`, que é quem GERA
+  IMPOSTO, não era verificado por nada**; (2) `node --check` enxerga sintaxe,
+  não escopo; (3) o jest não carrega o orquestrador, porque ele puxa
+  firebase-admin. Deploy verde, testes verdes, app quebrado.
+  ✂️ `tsconfig.backend.json` (checkJs) + `scripts/check-backend-nomes.mjs`,
+  ligado no **`lint`** — que é o comando do passo "Typecheck + testes" do
+  deploy. Agora nome usado sem declaração **para a esteira**.
+  ⚠️ **O FILTRO É CIRÚRGICO DE PROPÓSITO**: ligar `checkJs` no backend legado
+  acusa **~520 TS2339** ("propriedade não existe") que são ruído de código
+  dinâmico. A trava vigia só **TS2304/TS2552 — "usou um nome que não existe"**,
+  que é sempre defeito de verdade. Trava que nasce vermelha é trava que a
+  equipe desliga, e aí ela não protege nada.
+  ⚠️ **E JSDoc NÃO CONTA**: `@returns { statusCode, body }` faz o TS ler as
+  chaves como tipo e acusar um nome que é só documentação — eram 5 falsos
+  positivos, todos em comentário. Linha de comentário é descartada.
+  📌 **REGRA QUE FICA: corrigir a linha fecha a INSTÂNCIA; a trava fecha a
+  CLASSE.** Provada removendo a declaração de propósito — ela acusou as três
+  linhas exatas do defeito real.
 - **🚦 O GARGALO DO SPED NÃO ERA SÓ O LEIAUTE — ERA O ROUND-TRIP** (Paulo,
   20/08: *"um dos maiores gargalos que vem consumindo tempo e retrabalho é o
   EFD-ICMS/IPI e SPED Fiscal… corrija evitando o vai e vem o dia todo"*, com o
