@@ -209,6 +209,29 @@ export function saiuPorOutraPlataforma(mensagem) {
 }
 
 /**
+ * 🚨 O DOCUMENTO QUE `interpretarErroEntrega` DEVE ENXERGAR, dado o que a
+ * rota leu do Firestore para este `metaMessageId` (caso real, print do
+ * Paulo, 20/08: mensagem da P. Leal — o balão já dizia "outra plataforma" e
+ * o erro 131053 mandava o colaborador converter um arquivo que ele nunca
+ * enviou, o MESMO defeito que o caso Agatha de 17/08 tinha corrigido).
+ *
+ * A causa era esta: todo envio NOSSO grava o documento (com `enviadoPor` e
+ * texto/mídia) ANTES de a rota responder — ou seja, antes que a Meta
+ * pudesse sequer chamar nosso webhook com um status daquele `metaMessageId`
+ * (as 9 rotas de envio seguem essa ordem, varridas por
+ * `whatsappWebhookDocAusente.test.ts`). Se o documento SIMPLESMENTE NÃO
+ * EXISTE quando o status chega, a mensagem não pode ser nossa — é uma
+ * certeza ESTRUTURAL, mais forte que "campos vazios": aqui não sobrou nem o
+ * documento. `saiuPorOutraPlataforma(null)` continua devolvendo `false` de
+ * propósito (é a resposta certa quando a dúvida é de verdade); quem decide
+ * que aqui a dúvida NÃO existe é este helper, na FRONTEIRA com o Firestore.
+ */
+export function mensagemDoStatus(existeDoc, dadosDoDoc) {
+    if (existeDoc) return dadosDoDoc || null;
+    return { direcao: 'saida' };
+}
+
+/**
  * Falha de entrega → frase COM AÇÃO (padrão interpretarCstat). O 131049 é o
  * protagonista: é o filtro que hoje faz o escritório LIGAR pro cliente sem
  * saber por quê.

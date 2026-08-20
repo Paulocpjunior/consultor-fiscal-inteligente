@@ -31,7 +31,7 @@ import { Storage } from '@google-cloud/storage';
 import {
     configWebhook, faltasDaConfigWebhook, responderVerificacao,
     assinaturaValida, extrairEventos, traduzirStatusEntrega,
-    interpretarErroEntrega, janela24hAte, resumoParaConversa,
+    interpretarErroEntrega, mensagemDoStatus, janela24hAte, resumoParaConversa,
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre, enviarMidiaWhatsapp } from './whatsapp-cloud.js';
@@ -209,7 +209,11 @@ async function gravarStatus(db, st) {
     // O DOCUMENTO inteiro, não só a mídia: é dele que sai também a resposta
     // de QUEM mandou — com os dois apps na WABA, boa parte das falhas que
     // chegam aqui é de mensagem que saiu pela outra plataforma.
-    const msgDoc = atualMsg.data() || null;
+    //
+    // 🚨 Documento AUSENTE não é dúvida — é prova (caso P. Leal, 20/08): todo
+    // envio nosso grava o doc antes de responder, antes de a Meta poder nos
+    // chamar com um status. `mensagemDoStatus` é quem faz essa distinção.
+    const msgDoc = mensagemDoStatus(atualMsg.exists, atualMsg.data());
     const patch = {
         statusEntrega: statusPt,
         statusEm: st.timestamp || agora,
