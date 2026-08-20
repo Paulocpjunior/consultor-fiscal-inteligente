@@ -253,6 +253,8 @@ export const REVISOES: Revisao[] = [
         data: '2026-08-20',
         itens: [
             '🖼️ Imagem por fila (⚙️ → 🤖): quando cadastrada, o bot manda a arte do departamento junto da confirmação, do jeito que a Ultra Fox faz hoje. Fila sem imagem segue só com o texto.',
+            '📇 Contatos: a lista parava de ler em 2000 e a carteira já tinha crescido além disso — quem passava do teto ficava fora da busca e da contagem por etiqueta. Agora lê até 50 mil.',
+            '🎤 Gravação de áudio muito curta (menos de 1,5s) passa a ser recusada NA HORA, com o motivo — antes o arquivo ia pro WhatsApp e falhava só lá (erro 131053), sem dizer por quê.',
         ],
     },
     {

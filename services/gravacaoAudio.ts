@@ -33,6 +33,24 @@ export const FORMATOS_AUDIO = [
 /** Teto da gravação (o mesmo do anexo de áudio da Meta: 16 MB ≈ 20 min). */
 export const LIMITE_SEGUNDOS = 5 * 60;
 
+/**
+ * 🚨 PISO da gravação — caso real, Paulo 20/08: clique de teste de ~1s no
+ * Safari virou um `audio-....m4a` que a Meta aceitou no upload e recusou no
+ * PROCESSAMENTO (131053), com o arquivo mostrando "0,0 MB". O Safari só sabe
+ * gravar em `audio/mp4` (não tem ogg/opus), e o MediaRecorder dele produz um
+ * MP4 que o WhatsApp não processa quando a gravação é curta demais — mesmo
+ * com bytes não-zero, então o guard de "blob vazio" que já existia não pega
+ * este caso.
+ *
+ * Barrar ANTES do envio evita o round-trip até a Meta falhar: a pessoa sabe
+ * na hora, com a causa, em vez do áudio "sumir" depois de mandado.
+ */
+export const DURACAO_MINIMA_SEGUNDOS = 1.5;
+
+export function duracaoSuficiente(segundos: number): boolean {
+    return segundos >= DURACAO_MINIMA_SEGUNDOS;
+}
+
 export interface SuporteGravacao {
     suportado: boolean;
     mime?: string;
