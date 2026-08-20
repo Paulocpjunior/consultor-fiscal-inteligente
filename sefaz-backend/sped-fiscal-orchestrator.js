@@ -29,6 +29,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import { selecionarNotasBlocoC, selecionarCtesBlocoD } from './sped-selecao-documentos.js';
+import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 
 function fa() {
@@ -570,36 +571,3 @@ function listarCompetenciasPeriodo(inicio, fim) {
     return out;
 }
 
-/**
- * Dados do CONTABILISTA para o 0100.
- *
- * 🚨 EMAIL e COD_MUN são OBRIGATÓRIOS e saíam VAZIOS (PVA da PWR 07/2026, 19/08:
- * *"Campo obrigatório · 13 - EMAIL"* e *"14 - COD_MUN"*). O `codMunIBGE` nem
- * existia neste objeto — o 0100 lia `c.codMunIBGE` e ninguém o entregava, então
- * TODO arquivo saía com os dois campos em branco.
- *
- * O padrão vem do 0100 do EFD do E-Fiscal **ACEITO** do próprio escritório
- * (HS PROJETOS 05/2026, assinado): e-mail spcontabil@… e COD_MUN 3550308 (São
- * Paulo capital, onde o escritório fica). É dado do ESCRITÓRIO, não do cliente
- * — não é chute, é o mesmo dado que já foi aceito pela Receita. O env continua
- * vencendo, para o dia em que o contabilista mudar.
- */
-const CONTADOR_EMAIL_PADRAO = 'spcontabil@spassessoriacontabil.com.br';
-const CONTADOR_COD_MUN_PADRAO = '3550308';
-
-function getContadorPadrao() {
-    return {
-        nome: process.env.CONTADOR_NOME || '',
-        cpf: process.env.CONTADOR_CPF || '',
-        cnpj: process.env.CONTADOR_CNPJ || '',
-        crc: process.env.CONTADOR_CRC || '',
-        endereco: process.env.CONTADOR_ENDERECO || '',
-        bairro: process.env.CONTADOR_BAIRRO || '',
-        cidade: process.env.CONTADOR_CIDADE || '',
-        uf: process.env.CONTADOR_UF || '',
-        cep: process.env.CONTADOR_CEP || '',
-        telefone: process.env.CONTADOR_TELEFONE || '',
-        email: process.env.CONTADOR_EMAIL || CONTADOR_EMAIL_PADRAO,
-        codMunIBGE: process.env.CONTADOR_COD_MUN || CONTADOR_COD_MUN_PADRAO,
-    };
-}

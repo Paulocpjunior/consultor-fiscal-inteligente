@@ -71,6 +71,19 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O contabilista do registro 0100 (os dois SPEDs falam pelo mesmo)',
+        dono: 'sefaz-backend/contador-escrituracao.js',
+        comoUsar: "import { getContadorPadrao } from 'sefaz-backend/contador-escrituracao.js'",
+        porque: 'O PVA recusou o EFD ICMS/IPI da PWR em 19/08 com "Campo obrigatório · 13 - EMAIL" e '
+            + '"14 - COD_MUN". Corrigi no orquestrador do Fiscal — e o do EFD-Contribuições tinha a SEGUNDA '
+            + 'CÓPIA da mesma função, que ficou sem o e-mail padrão e sem o campo codMunIBGE sequer existir. '
+            + 'O arquivo da PWR de 20/08 saiu com |0100|nome|cpf|crc||||||||| — tudo depois do CRC vazio, ou '
+            + 'seja a MESMA recusa esperando no arquivo seguinte. Nenhum teste pegava: cada orquestrador fazia '
+            + 'exatamente o que o próprio código dizia. E dois arquivos do mesmo mês declarando contabilistas '
+            + 'diferentes é divergência que ninguém vai procurar.',
+        assinaturas: [/function getContadorPadrao\s*\(/],
+    },
+    {
         nome: 'A base do PIS/COFINS — desconto incondicional fora da receita e ICMS fora da base (Tema 69)',
         dono: 'sefaz-backend/base-pis-cofins.js',
         comoUsar: "import { receitaDoItem, baseDoItem, receitaEBaseDoDocumento } from 'sefaz-backend/base-pis-cofins.js'",

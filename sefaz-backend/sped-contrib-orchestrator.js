@@ -10,6 +10,11 @@
 
 import admin from 'firebase-admin';
 import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
+// 🚨 O CONTABILISTA DO 0100 TEM DONO. Este arquivo tinha a SEGUNDA CÓPIA da
+// função — sem o e-mail padrão e sem o `codMunIBGE` sequer existir —, e por
+// isso o EFD-Contribuições da PWR saiu com o 0100 vazio depois do CRC, que é
+// a MESMA recusa que o PVA já tinha dado no EFD ICMS/IPI dela (19/08).
+import { getContadorPadrao } from './contador-escrituracao.js';
 import {
     buildBlocoA, buildBlocoC_Contrib, buildBlocoD_Contrib,
     buildBlocoF, buildBlocoM, buildBloco1_Contrib, buildBloco9_Contrib,
@@ -253,18 +258,3 @@ function descreverUnidade(codigo) {
     return UNIDADES_PADRAO[codigo.toUpperCase()] || codigo.toUpperCase();
 }
 
-function getContadorPadrao() {
-    return {
-        nome: process.env.CONTADOR_NOME || '',
-        cpf: process.env.CONTADOR_CPF || '',
-        cnpj: process.env.CONTADOR_CNPJ || '',
-        crc: process.env.CONTADOR_CRC || '',
-        endereco: process.env.CONTADOR_ENDERECO || '',
-        bairro: process.env.CONTADOR_BAIRRO || '',
-        cidade: process.env.CONTADOR_CIDADE || '',
-        uf: process.env.CONTADOR_UF || '',
-        cep: process.env.CONTADOR_CEP || '',
-        telefone: process.env.CONTADOR_TELEFONE || '',
-        email: process.env.CONTADOR_EMAIL || '',
-    };
-}
