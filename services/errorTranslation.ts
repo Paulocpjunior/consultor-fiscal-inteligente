@@ -11,6 +11,18 @@
 export function getFriendlyErrorMessage(error: unknown): string {
     const message = (error instanceof Error ? error.message : '') || String((error as { message?: string } | null | undefined)?.message ?? '');
 
+    // ANTES do 429: crédito esgotado também volta como 429, e mandar
+    // "aguarde alguns instantes" é conselho ERRADO — esperar não recarrega
+    // saldo. Caso real de 20/08 (Contratos IA da Legalização).
+    if (message.includes('prepayment') || message.includes('credits are depleted') || message.includes('billing')) {
+        return 'Os créditos da IA acabaram — esperar não resolve. É preciso recarregar o saldo do projeto no Google AI Studio (ai.studio/projects → Billing). Seus dados NÃO foram perdidos: refaça a consulta depois da recarga.';
+    }
+    // Chave de API irrestrita deixou de ser aceita pela API Gemini (19/06/2026):
+    // sem restringir a chave, o acesso fica bloqueado.
+    if (message.includes('API key not valid') || message.includes('API_KEY_INVALID')
+        || message.includes('restricted') || message.includes('unrestricted')) {
+        return 'A chave da IA foi recusada (chave inválida ou sem as restrições exigidas pelo Google). Avise o administrador para conferir a chave em aistudio.google.com/apikey — desde 19/06/2026 a API Gemini não aceita chave irrestrita.';
+    }
     if (message.includes('429') || message.includes('Quota exceeded')) {
         return 'Limite de consultas excedido (Erro 429). A IA está sobrecarregada ou sua cota acabou. Por favor, aguarde alguns instantes antes de tentar novamente.';
     }
@@ -42,5 +54,11 @@ export function getFriendlyErrorMessage(error: unknown): string {
         return 'A consulta foi bloqueada pelo filtro de segurança da IA. Tente reformular sua pergunta.';
     }
 
-    return message || 'Ocorreu um erro inesperado ao comunicar com a API.';
+    // Erro sem tradução conhecida: preserva o motivo cru (é o que ajuda a
+    // diagnosticar) mas SEMPRE enquadrado como falha e com a ação — senão
+    // volta uma frase neutra que o toast pinta de verde.
+    if (message) {
+        return `Não foi possível concluir a operação: ${message}. Tente novamente; se repetir, avise o administrador.`;
+    }
+    return 'Ocorreu um erro inesperado ao comunicar com a API. Tente novamente; se repetir, avise o administrador.';
 }
