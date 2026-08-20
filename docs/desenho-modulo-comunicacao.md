@@ -634,6 +634,33 @@ imagem DIRETO (`<img src>`), sem o clique de "abrir anexo" que existe pro
 anexo do cliente — não tem por que exigir esse passo extra pra uma imagem
 que já é pública.
 
+### 5.14 🚨 "Converta o arquivo" numa mensagem que não é nossa (caso P. Leal, 20/08)
+
+Paulo mandou print de uma conversa real (fila Financeiro): o balão já dizia
+*"mensagem enviada por outra plataforma"* e, logo abaixo, o 131053 mandava o
+colaborador *"converter PDF → imagem, áudio → mp3"* — o MESMO defeito que o
+caso Agatha (17/08) já tinha corrigido: ação impossível (o colaborador nunca
+enviou aquele arquivo, e este app nem o tem).
+
+A causa não era a régua `saiuPorOutraPlataforma`/`interpretarErroEntrega` —
+ela continua certa, testada desde 17/08. Era a CHAMADA em `gravarStatus`
+(whatsapp-webhook-routes.js): quando o status/erro chega e o documento da
+mensagem AINDA NÃO EXISTE no Firestore para aquele `metaMessageId`, a rota
+lia `null` e `saiuPorOutraPlataforma(null)` devolve `false` de propósito
+("na dúvida, não afirma que é de outro") — só que aqui **não havia dúvida**.
+
+🚨 **A PROVA ESTRUTURAL**: as 9 rotas de envio deste app gravam o documento
+da mensagem (`enviadoPor`, texto/mídia) **antes** de responder — ou seja,
+antes de a Meta poder sequer chamar nosso webhook com um status daquele
+`metaMessageId`. Documento ausente não é "não sei" — é "não fui eu". A
+distinção entra em `mensagemDoStatus(existeDoc, dados)`, um helper PURO
+novo em `whatsapp-webhook.js`: doc ausente sintetiza `{direcao:'saida'}`
+(cai automaticamente em "outra plataforma" pela régua já existente); doc
+presente mas incompleto continua sendo a dúvida de verdade de 17/08, sem
+regressão. `saiuPorOutraPlataforma(null)` **não mudou** — a régua pura
+continua conservadora; quem passou a distinguir os dois casos foi a rota,
+na fronteira com o Firestore, que é onde a informação "o doc existe?" vive.
+
 ## 6. Regras de horário e auto-resposta
 
 - A régua é `horario-acesso.js` — o expediente do ATENDIMENTO é o expediente

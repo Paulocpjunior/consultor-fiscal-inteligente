@@ -69,6 +69,14 @@ export interface MensagemParaErro {
  */
 export function saiuPorOutraPlataforma(mensagem: MensagemParaErro | null | undefined): boolean;
 /**
+ * O documento que `interpretarErroEntrega` deve enxergar para este
+ * `metaMessageId`: quando `existeDoc` é false, sintetiza `{direcao:'saida'}`
+ * — nosso envio SEMPRE grava o doc antes de a Meta poder chamar o webhook,
+ * então documento ausente é prova estrutural de "outra plataforma", não
+ * dúvida. Ver whatsapp-webhook.js para o caso real que motivou isto.
+ */
+export function mensagemDoStatus(existeDoc: boolean, dadosDoDoc: MensagemParaErro | null | undefined): MensagemParaErro;
+/**
  * `mensagem` é o DOCUMENTO da mensagem que falhou: dele saem o ARQUIVO (o
  * 131053 sem isso é beco) e a resposta de QUEM mandou — prescrever conversão
  * de arquivo a quem não enviou nada é ação impossível.
