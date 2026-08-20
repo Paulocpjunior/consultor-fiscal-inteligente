@@ -170,6 +170,10 @@ describe('🚨 varredura — filtro de bloco não lê `String(n.modelo)` direto'
 describe('nota completada por cima do resumo entra — quem decide é o ITEM', () => {
     it('rótulo resNFe + itens presentes = escriturada (casos GLOBAL COMPANY/POXPUR/BENCO)', () => {
         const completada = capturada({
+            // NF-e (mod 55) de ENTRADA — é o caso real (compra de fornecedor).
+            // A fixture usava a chave de NFC-e por descuido, e a régua nova
+            // ("NFC-e não se escritura nas entradas", Guia Prático) pegou.
+            chave: CHAVE_NFE, tipo: 'NFe',
             tipoDoc: 'resNFe', schema: 'resNFe_v1.01', numero: '34853', direcao: 'entrada',
             itens: [{ cfop: '2101', vProd: 1000, vICMS: 120 }],
         });
@@ -254,5 +258,77 @@ describe('🚨 o 0150 casa com a régua do bloco C', () => {
     it('CT-e conta como referência (o D100 tem COD_PART)', () => {
         const trecho = fonte.slice(fonte.indexOf('4. Extrai participantes'), fonte.indexOf('4b.'));
         expect(trecho).toMatch(/selecionarCtesBlocoD/);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📖 REGRAS QUE VIERAM DO MANUAL (Guia Prático EFD ICMS/IPI 3.2.3, 20/08).
+// O Paulo mandou o Guia em WORD depois de o link não abrir desta rede. O que
+// era dedução a partir das recusas do PVA virou regra com CITAÇÃO.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Guia Prático 3.2.3 — NFC-e não se escritura nas entradas', () => {
+    it('NFC-e marcada como entrada fica FORA e sai nomeada', () => {
+        const sel = selecionarNotasBlocoC([capturada({ direcao: 'entrada', numero: '55' })]);
+        expect(sel.notas).toHaveLength(0);
+        expect(sel.nfceEmEntrada).toEqual(['55']);
+        expect(avisosDaSelecao(sel).join(' ')).toMatch(/não devem ser escrituradas nas entradas/);
+    });
+
+    it('NFC-e de SAÍDA continua entrando normalmente', () => {
+        expect(selecionarNotasBlocoC([capturada()]).notas).toHaveLength(1);
+    });
+
+    it('NF-e de entrada não é afetada', () => {
+        const nfe = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada' });
+        expect(selecionarNotasBlocoC([nfe]).notas).toHaveLength(1);
+    });
+});
+
+describe('Guia Prático 3.2.3 — C100, as três regras que o manual corrigiu', () => {
+    const dados = (notas: any[], uf = 'SP') => ({
+        empresa: { _regime: 'lucro', cnpj: '07590894000166', dadosFiscais: { uf, codMunIBGE: '3550308' } },
+        competenciaInicio: '2026-07', competenciaFim: '2026-07', notas, warnings: [] as string[],
+    });
+    const c100De = (linhas: string[]) => linhas.find((l: string) => l.startsWith('|C100|'))!.split('|');
+
+    // Exceção 1: "preencher SOMENTE REG, IND_OPER, IND_EMIT, COD_MOD, COD_SIT,
+    // SER, NUM_DOC e CHV_NFe. Demais campos … com conteúdo VAZIO."
+    it('CANCELADA sai com os demais campos VAZIOS', () => {
+        const cancelada = capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', numero: '9', status: 'cancelado',
+            totais: { vNF: 500 }, itens: [{ cfop: '5102', vProd: 500, vBC: 500, vICMS: 90 }],
+        });
+        const f = c100De(buildBlocoC(dados([cancelada]) as never));
+        expect(f[6]).toBe('02');       // COD_SIT preenchido
+        expect(f[8]).toBe('9');        // NUM_DOC preenchido
+        expect(f[9]).toBe(CHAVE_NFE);  // CHV_NFE preenchida
+        expect(f[12]).toBe('');        // VL_DOC vazio
+        expect(f[21]).toBe('');        // VL_BC_ICMS vazio
+        expect(f[22]).toBe('');        // VL_ICMS vazio
+    });
+
+    // Campo 07 (SER): "obrigatório com TRÊS posições … Se não existir, 000."
+    it('SER sai com três posições, e 000 quando a nota não tem série', () => {
+        const comSerie = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', serie: '1' });
+        expect(c100De(buildBlocoC(dados([comSerie]) as never))[7]).toBe('001');
+        const semSerie = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', serie: '' });
+        expect(c100De(buildBlocoC(dados([semSerie]) as never))[7]).toBe('000');
+    });
+
+    // Exceção 4: nota em substituição ao cupom (CFOP 5929/6929) é COD_SIT 08.
+    it('nota com CFOP 5929 sai como COD_SIT 08, não 00', () => {
+        const nf5929 = capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', numero: '77',
+            itens: [{ cfop: '5929', vProd: 3459.63, vBC: 0, vICMS: 0, cst: '60' }],
+        });
+        expect(c100De(buildBlocoC(dados([nf5929]) as never))[6]).toBe('08');
+    });
+
+    it('⚠️ no PARANÁ a régua NÃO vale — o próprio manual abre a exceção', () => {
+        const nf5929 = capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', numero: '77',
+            itens: [{ cfop: '5929', vProd: 100, vBC: 0, vICMS: 0, cst: '60' }],
+        });
+        expect(c100De(buildBlocoC(dados([nf5929], 'PR') as never))[6]).toBe('00');
     });
 });
