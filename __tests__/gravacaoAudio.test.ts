@@ -7,6 +7,7 @@
 import {
     FORMATOS_AUDIO, LIMITE_SEGUNDOS, suporteDeGravacao, nomeDoAudio,
     duracaoLegivel, traduzirErroDeMicrofone, atingiuLimite,
+    DURACAO_MINIMA_SEGUNDOS, duracaoSuficiente,
 } from '../services/gravacaoAudio';
 
 describe('formato — o que a Meta aceita, na ordem', () => {
@@ -68,5 +69,21 @@ describe('cronômetro e nome do arquivo', () => {
     it('o teto para a gravação antes de virar arquivo que o envio recusa', () => {
         expect(atingiuLimite(LIMITE_SEGUNDOS - 1)).toBe(false);
         expect(atingiuLimite(LIMITE_SEGUNDOS)).toBe(true);
+    });
+});
+
+// 🚨 Caso real, Paulo 20/08: clique de teste (~1s) no Safari virou um
+// audio/mp4 que a Meta aceitou no upload e recusou no processamento
+// (131053, "0,0 MB") — o guard de blob vazio não pega isso, porque o
+// arquivo tinha bytes, só era curto demais.
+describe('piso de duração — grava curto demais falha DEPOIS, no WhatsApp', () => {
+    it('abaixo do piso não é suficiente', () => {
+        expect(duracaoSuficiente(0)).toBe(false);
+        expect(duracaoSuficiente(0.9)).toBe(false);
+        expect(duracaoSuficiente(DURACAO_MINIMA_SEGUNDOS - 0.01)).toBe(false);
+    });
+    it('no piso ou acima já basta', () => {
+        expect(duracaoSuficiente(DURACAO_MINIMA_SEGUNDOS)).toBe(true);
+        expect(duracaoSuficiente(5)).toBe(true);
     });
 });

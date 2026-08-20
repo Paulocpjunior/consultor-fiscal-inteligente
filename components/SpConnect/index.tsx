@@ -28,7 +28,7 @@ import {
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
     suporteDeGravacao, nomeDoAudio, duracaoLegivel, traduzirErroDeMicrofone,
-    atingiuLimite, LIMITE_SEGUNDOS,
+    atingiuLimite, LIMITE_SEGUNDOS, duracaoSuficiente, DURACAO_MINIMA_SEGUNDOS,
 } from '../../services/gravacaoAudio';
 import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, faltaNosAvisos,
@@ -444,6 +444,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const recorderRef = useRef<MediaRecorder | null>(null);
     const pedacosRef = useRef<BlobPart[]>([]);
     const timerRef = useRef<number | null>(null);
+    // Duração REAL por timestamp, não pelo state `segundos` — o `onstop` é
+    // fechado no início da gravação e leria um `segundos` congelado em 0.
+    const iniciadoEmRef = useRef<number | null>(null);
     const suporte = suporteDeGravacao();
 
     const pararCronometro = () => {
@@ -469,13 +472,23 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             rec.onstop = () => {
                 stream.getTracks().forEach((t) => t.stop());   // solta o microfone
                 pararCronometro();
+                const duracaoReal = iniciadoEmRef.current ? (Date.now() - iniciadoEmRef.current) / 1000 : 0;
                 const blob = new Blob(pedacosRef.current, { type: suporte.mime });
                 // Gravação vazia (clique sem falar) NÃO vira arquivo de 0 byte.
                 if (!blob.size) { setGravando(false); setSegundos(0); return; }
+                // 🚨 Curta demais produz um .m4a que a Meta aceita no upload e
+                // recusa no processamento (131053) — caso real, 20/08 (ver
+                // gravacaoAudio.ts). Barrar aqui poupa o round-trip até falhar lá.
+                if (!duracaoSuficiente(duracaoReal)) {
+                    setGravando(false); setSegundos(0);
+                    setErroEnvio(`Gravação muito curta (${duracaoReal.toFixed(1)}s) — grave por pelo menos ${DURACAO_MINIMA_SEGUNDOS}s. Áudios muito curtos costumam falhar no envio pelo WhatsApp.`);
+                    return;
+                }
                 setPrevia({ url: URL.createObjectURL(blob), blob, nome: nomeDoAudio(new Date(), suporte.extensao) });
                 setGravando(false);
             };
             recorderRef.current = rec;
+            iniciadoEmRef.current = Date.now();
             rec.start();
             setGravando(true);
             setSegundos(0);
