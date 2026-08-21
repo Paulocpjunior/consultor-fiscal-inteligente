@@ -25,6 +25,21 @@ export interface ConfigAtendimento {
     imagensPorFila: Record<string, string>;
 }
 
+/**
+ * O app está rodando DENTRO de um iframe (Teams)? Instrução de navegador
+ * ("clique no cadeado ao lado do endereço") não serve lá — não há barra de
+ * endereço, e quem manda na permissão é o PACOTE do app do Teams. Toda
+ * mensagem de permissão (microfone, avisos) pergunta aqui antes de aconselhar.
+ * O try/catch cobre webview que recusa até a comparação com window.top.
+ */
+export function dentroDeIframe(): boolean {
+    try {
+        return typeof window !== 'undefined' && window.self !== window.top;
+    } catch {
+        return true; // acesso negado a window.top só acontece emoldurado
+    }
+}
+
 /** Rótulo curto pras fichas/chips (o rótulo cheio é o que o CLIENTE vê no menu). */
 export function rotuloCurtoFila(id: string | null): string {
     const m: Record<string, string> = {

@@ -43,7 +43,7 @@ import {
 import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
-    rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
+    rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila, dentroDeIframe,
 } from '../../services/spConnect';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
@@ -533,7 +533,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 });
             }, 1000);
         } catch (e) {
-            const t = traduzirErroDeMicrofone(e as { name?: string; message?: string });
+            const t = traduzirErroDeMicrofone(e as { name?: string; message?: string }, dentroDeIframe());
             setErroEnvio(`${t.erro} ${t.acao}`);
             setGravando(false);
         }
@@ -1016,6 +1016,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         somOk,
         pushDisponivel: pushConfigurado().ok,
         pushLigado: push.ligado,
+        emIframe: dentroDeIframe(),
     });
     // Chips por fila: só as que o usuário ENXERGA (o backend já filtrou as
     // conversas; os chips seguem o MESMO recorte, senão é leitura dupla).

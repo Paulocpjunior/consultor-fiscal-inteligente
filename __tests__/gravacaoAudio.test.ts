@@ -45,6 +45,15 @@ describe('recusa do microfone tem CAMINHO', () => {
         expect(r.erro).toContain('bloqueou');
         expect(r.acao).toContain('cadeado');
     });
+    it('dentro do Teams NÃO fala em cadeado — lá não existe barra de endereço (Paulo, 21/08)', () => {
+        const r = traduzirErroDeMicrofone({ name: 'NotAllowedError' }, true);
+        expect(r.erro).toContain('Teams');
+        expect(r.acao).not.toContain('cadeado');
+        // O conselho tem que apontar o que resolve de verdade: o pacote do
+        // app (devicePermissions) e o Permitir do próprio Teams.
+        expect(r.acao).toContain('1.0.1');
+        expect(r.acao).toContain('navegador');
+    });
     it('microfone ocupado aponta o suspeito (Teams/HitPhone), não um erro genérico', () => {
         expect(traduzirErroDeMicrofone({ name: 'NotReadableError' }).acao).toContain('HitPhone');
     });
