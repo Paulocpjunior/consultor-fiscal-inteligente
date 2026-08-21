@@ -81,7 +81,36 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         .where('empresaId', '==', empresaId)
         .where('competencia', '==', competencia);
     const snap = await notasQuery.get();
-    const notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // ─── 3b. A RECEITA SEM DOCUMENTO decide o PERFIL — e o perfil decide quem
+    //         entra (por isso ela é lida AQUI, antes de coletar participante e
+    //         item; a coleta de quem vai sair deixaria 0150/0200 órfãos). ───
+    //
+    // 🚨 PVA da AFFITTARE 1139 · 07/2026 (21/08, Paulo: *"está puxando a NFS
+    // de serviços tomados… tem que ter a opção apenas para o que gera
+    // receita"*): com o arquivo CONSOLIDADO (F550 + IND_REG_CUM 2), o A010/
+    // A100 do serviço TOMADO volta com *"O registro não deve ser informado
+    // para esse perfil e/ou tipo de operação"*. No regime CUMULATIVO o serviço
+    // tomado não gera crédito nenhum — tirá-lo não muda um centavo da apuração
+    // — e o aceito de 05/2026 da própria empresa tem o bloco A VAZIO.
+    // ⚠️ Só o caminho CONSOLIDADO exclui: no detalhado (MANTOAN, IND_REG_CUM
+    // 9) o PVA ACEITOU as entradas — mudar arquivo aceito sem recusa que mande
+    // é inventar leiaute. E documento de SAÍDA nunca é excluído aqui: se ele
+    // convive com o F550, quem avisa é a trava de dupla contagem, abaixo.
+    const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
+    // A competência casa NORMALIZADA (régua existente do ipi-varredura):
+    // mesReferencia aparece como 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a
+    // época do lançamento, e igualdade estrita perderia a ficha em silêncio.
+    const compNorm = normalizarCompetencia(competencia) || String(competencia || '');
+    const fichaDaComp = fichas.find(f => normalizarCompetencia(f?.mesReferencia) === compNorm) || null;
+    const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
+    let entradasForaDaConsolidada = 0;
+    if (receitaSemDocumento > 0 && regimeApuracao === '2') {
+        const antes = notas.length;
+        notas = notas.filter(n => direcaoEfetivaDoc(n) === 'saida');
+        entradasForaDaConsolidada = antes - notas.length;
+    }
 
     // ─── 4. Extrai participantes unicos ───
     const participantesMap = new Map();
@@ -182,7 +211,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const itens = Array.from(itensMap.values());
     const unidades = Array.from(unidadesMap.values());
 
-    // ─── 5b. A RECEITA QUE NÃO TEM DOCUMENTO (aluguel) ───
+    // ─── 5b. (A receita sem documento é lida na seção 3b — ela decide o
+    //         PERFIL do arquivo e por isso vem antes da coleta.) ───
     //
     // 🚨 Paulo, 20/08 (AFFITTARE 1139): *"o faturamento dela é aluguel, então
     // não tem captura de notas, apenas a informação do valor em Locação de Bens
@@ -194,16 +224,17 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // ⚠️ A ficha é EMBUTIDA no documento da empresa (`fichaFinanceira[]`, chave
     // `mesReferencia`) — não existe coleção `lucro_fichas`, e consultá-la
     // devolvia vazio SEMPRE (lição de 19/08, saldo credor de IPI).
-    const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
-    // A competência casa NORMALIZADA (régua existente do ipi-varredura):
-    // mesReferencia aparece como 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a
-    // época do lançamento, e igualdade estrita perderia a ficha em silêncio.
-    const compNorm = normalizarCompetencia(competencia) || String(competencia || '');
-    const fichaDaComp = fichas.find(f => normalizarCompetencia(f?.mesReferencia) === compNorm) || null;
-    const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
 
     // ─── 6. Warnings ───
     const warnings = [];
+    if (entradasForaDaConsolidada > 0) {
+        warnings.push(
+            `${entradasForaDaConsolidada} documento(s) de ENTRADA (serviço tomado/aquisição) ficaram FORA da `
+            + 'escrituração: o arquivo sai CONSOLIDADO (F550 + IND_REG_CUM 2) e o PVA recusa documento nesse '
+            + 'perfil ("O registro não deve ser informado para esse perfil e/ou tipo de operação"). No regime '
+            + 'cumulativo o serviço tomado não gera crédito — nada deixa de ser apurado.',
+        );
+    }
     if (notas.length === 0 && !receitaSemDocumento) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo ${competencia}. Arquivo sera gerado com estrutura minima.`);
     }
