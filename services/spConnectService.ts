@@ -365,3 +365,18 @@ export const importarUltrafoxLote = (p: {
 }) => post<{ gravadas?: number; conversas?: number; totalRecusadas?: number; recusadas?: { numero: string; motivo: string }[] }>(
     '/api/admin/whatsapp/importar-ultrafox/lote', p,
 );
+
+/**
+ * 🗄 Arquiva AGORA a mídia das conversas no SharePoint (o cron faz o mesmo
+ * sozinho, de carona no ciclo do arquivo fiscal). Regra do manual: tudo que
+ * não for texto vai pro SharePoint — árvore genérica "SP Connect/", porque
+ * muito contato (currículo, lead) não é cliente cadastrado.
+ */
+export interface ResultadoArquivoSp {
+    escopo?: string; lidos?: number; candidatos?: number; arquivados?: number;
+    semMidia?: number; notasInternas?: number; outrosSkip?: number;
+    erros?: number; errosDetalhe?: string[];
+    cicloCompleto?: boolean; pausadoPorTeto?: boolean; duracaoMs?: number;
+}
+export const arquivarMidiasNoSharePoint = (maxDocs?: number) =>
+    post<ResultadoArquivoSp>('/api/admin/whatsapp/arquivo-sp', maxDocs ? { maxDocs } : {});

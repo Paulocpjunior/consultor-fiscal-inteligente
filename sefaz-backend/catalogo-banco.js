@@ -125,6 +125,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'whatsapp_push_tokens', grupo: 'Comunicação', funcionalidade: 'Token do celular de cada atendente (push de mensagem nova) + preferências de aviso — 1 doc por uid; quem recebe o quê é decidido pela fila, não pelo token' },
     { colecao: 'whatsapp_canais', grupo: 'Comunicação', funcionalidade: 'Canais do WhatsApp (2º número / 2ª WABA): rótulo, phoneNumberId e o NOME da variável do Cloud Run que guarda o token — o VALOR do token nunca entra no banco' },
     { colecao: 'whatsapp_avaliacoes', grupo: 'Comunicação', funcionalidade: 'Notas 1-5 da pesquisa de satisfação pós-encerramento (número, nota, atendente, fila, protocolo) — admin/gestor veem todas, colaborador as próprias' },
+    { colecao: 'whatsapp_sp_arquivo_state', grupo: 'Comunicação', funcionalidade: 'Cursor do arquivador de mídia do SP Connect no SharePoint (doc "estado") — backfill progressivo retomável, mesmo desenho do sefaz_sp_arquivo_state do fiscal' },
 
     { colecao: 'auditoria_permissoes', grupo: 'Sistema', funcionalidade: 'Trilha de mudança de PODER (role, departamentos, filas, papel do atendimento): quem mudou, de quê para quê e quando — lida pelo relatório 🔐 de auditoria do dono' },
 
