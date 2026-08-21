@@ -18,6 +18,21 @@ function digitos(v: string): string {
     return v.replace(/\D/g, '');
 }
 
+/**
+ * A régua do CCM SÓ-ZEROS, num lugar só (#311): '', '0', '00000000'… NÃO é
+ * inscrição — é o contorno que a equipe digitava num campo que parecia
+ * obrigatório, e vale como VAZIO em TODO leitor. Em 21/08 (Paulo: *"coloco uma
+ * sequência de 8 zeros… e o erro segue"*) a regra existia na gravação e na
+ * captura de NFS-e, mas a régua de PENDÊNCIAS não a conhecia — e acusava
+ * "CCM preenchido fora de SP capital" sobre zeros que significam "não tem".
+ * Devolve null para vazio/só-zeros; senão o valor original (sem reformatar).
+ */
+export function soZerosComoVazio(v: unknown): string | null {
+    const s = String(v ?? '').trim();
+    if (!s) return null;
+    return /^0*$/.test(digitos(s)) && !/[1-9]/.test(s) ? null : s;
+}
+
 export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosFiscais {
     const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
     const trim = (v: unknown): string | undefined => {
