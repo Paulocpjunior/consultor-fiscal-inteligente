@@ -7,6 +7,12 @@ export function acharFichaCompetencia<T extends { mesReferencia?: string }>(
     competencia: string,
 ): T | null;
 
+/** As fichas de UMA OU MAIS competências — a mesma régua, no plural. */
+export function fichasDasCompetencias<T extends { mesReferencia?: string }>(
+    fichaFinanceira: T[] | null | undefined,
+    competencias: string | string[],
+): T[];
+
 export interface ClassificacaoIpiEmpresa {
     status: 'pronta' | 'precisa_lancamento' | 'erro_consulta' | 'sem_ipi';
     titulo: string;

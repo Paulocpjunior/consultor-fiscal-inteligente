@@ -177,3 +177,71 @@ export function conferirContagemDeCampos(linhas) {
 export function avisosDeContagemDeCampos(linhas) {
     return conferirContagemDeCampos(linhas).erros.map(e => `🚨 ${e.mensagem}`);
 }
+
+// ═══ O PERFIL DO ARQUIVO — recusa REAL do PVA, 21/08 ════════════════════════
+//
+// AFFITTARE 1139 · 07/2026 (Paulo: *"está puxando a NFS de serviços tomados…
+// tem que ter a opção apenas para o que gera receita"*). Com a receita
+// escriturada de forma CONSOLIDADA (F550 ⇒ 0110 com IND_REG_CUM = 2), o
+// documento no arquivo volta recusado, literalmente:
+//
+//   "O registro não deve ser informado para esse perfil e/ou tipo de operação.
+//    Consulte o guia prático da EFD-Contribuições e verifique a obrigatoriedade
+//    dos registros na Seção 4 - Obrigatoriedade dos Registros"
+//
+// Corroborado pelo EFD-Contribuições ACEITO da própria empresa (05/2026): F550
+// preenchido e os blocos A/C/D **vazios**.
+//
+// ⚠️ Confere o ARQUIVO, não a intenção do gerador — a entrada são as LINHAS, o
+// mesmo texto que o PVA lê. Auditar o objeto em memória foi o que deixou o
+// C100 sair com modelo 55 e chave 65 por meses sem nenhum teste acusar.
+
+/** Registros de DOCUMENTO que o perfil consolidado não admite. */
+const REGISTROS_DE_DOCUMENTO = ['A010', 'A100', 'A170', 'C010', 'C100', 'C170', 'D010', 'D100'];
+
+/** O IND_REG_CUM declarado no 0110 (campo 5), ou '' quando não há 0110. */
+export function indRegCumDoArquivoGerado(linhas) {
+    for (const linha of (Array.isArray(linhas) ? linhas : [])) {
+        const campos = camposDaLinha(linha);
+        if (String(campos[0] || '').trim() === '0110') return String(campos[4] || '').trim();
+    }
+    return '';
+}
+
+/**
+ * O arquivo se contradiz? (consolidado declarando documento)
+ *
+ * Devolve `{ erros }` — nunca lança, e fica em silêncio quando o arquivo é
+ * DETALHADO (IND_REG_CUM 9): ali o PVA ACEITOU os documentos (MANTOAN,
+ * 18/08), e mexer em arquivo aceito sem recusa que mande é inventar leiaute.
+ */
+export function conferirPerfilConsolidado(linhas) {
+    const erros = [];
+    if (indRegCumDoArquivoGerado(linhas) !== '2') return { erros };
+
+    const porRegistro = new Map();
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const reg = String(camposDaLinha(linha)[0] || '').trim();
+        if (!REGISTROS_DE_DOCUMENTO.includes(reg)) return;
+        if (!porRegistro.has(reg)) porRegistro.set(reg, { registro: reg, linha: i + 1, quantidade: 0 });
+        porRegistro.get(reg).quantidade += 1;
+    });
+
+    for (const item of porRegistro.values()) {
+        erros.push({
+            ...item,
+            fonte: 'PVA: "O registro não deve ser informado para esse perfil e/ou tipo de operação" '
+                + '(AFFITTARE 1139 · 07/2026, 21/08).',
+            mensagem: `${item.registro}: o arquivo é CONSOLIDADO (0110 com IND_REG_CUM 2, porque a receita `
+                + `vem do F550) e mesmo assim declara ${item.quantidade} registro(s) de documento — o PVA `
+                + 'recusa a importação com "O registro não deve ser informado para esse perfil". No regime '
+                + 'cumulativo o serviço TOMADO não gera crédito: tirá-lo não muda a apuração.',
+        });
+    }
+    return { erros };
+}
+
+/** Avisos prontos para a lista que a geração já devolve. */
+export function avisosDePerfilConsolidado(linhas) {
+    return conferirPerfilConsolidado(linhas).erros.map(e => `🚨 ${e.mensagem}`);
+}

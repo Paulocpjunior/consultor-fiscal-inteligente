@@ -23,6 +23,7 @@ import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LAB
 import { docCancelado } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
+import { acharFichaCompetencia } from './ipi-varredura.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -86,7 +87,11 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
     if (!empresa || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) return null;
     const [ano, mes] = String(competencia).split('-');
 
-    const ficha = (empresa.fichaFinanceira || []).find((f) => f?.mesReferencia === competencia);
+    // RÉGUA ÚNICA (`acharFichaCompetencia`): `mesReferencia` aparece em
+    // 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a época do lançamento —
+    // igualdade estrita faz a Rotina do Mês dizer "sem apuração" com a ficha
+    // lançada, que é o zero silencioso de sempre (caso F550, 21/08).
+    const ficha = acharFichaCompetencia(empresa.fichaFinanceira, competencia);
     if (ficha) {
         return {
             fonte: 'lucro',

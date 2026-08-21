@@ -39,11 +39,37 @@ export function calcularIpiApuradoFicha(ficha) {
     return round2(Math.max(0, ipiRecolher - saldo));
 }
 
-/** Acha a ficha da competência-alvo ('YYYY-MM') na fichaFinanceira. */
+/**
+ * Acha a ficha da competência-alvo ('YYYY-MM') na fichaFinanceira.
+ *
+ * 🚨 É A RÉGUA ÚNICA DA LEITURA DA FICHA POR COMPETÊNCIA. O campo
+ * `mesReferencia` aparece em 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a
+ * época do lançamento, e comparar com `===` na mão não devolve erro: devolve
+ * NADA — indistinguível de "a ficha não foi lançada". Esse zero silencioso já
+ * zerou o M200/M600 (F550 da AFFITTARE, 21/08), o saldo credor do SPED Fiscal
+ * e a etapa de apuração da Rotina do Mês.
+ */
 export function acharFichaCompetencia(fichaFinanceira, competencia) {
     const alvo = normalizarCompetencia(competencia);
     if (!alvo) return null;
     return (fichaFinanceira || []).find((f) => normalizarCompetencia(f?.mesReferencia) === alvo) || null;
+}
+
+/**
+ * As fichas de UMA OU MAIS competências — mesma régua, no plural.
+ *
+ * Existe porque o trimestral junta os 3 meses do trimestre (emissão de DARF) e
+ * o mensal pega um só: fazer isso com `filter(=== )` na tela reabriria a mesma
+ * porta que `acharFichaCompetencia` fecha.
+ */
+export function fichasDasCompetencias(fichaFinanceira, competencias) {
+    const alvos = new Set(
+        (Array.isArray(competencias) ? competencias : [competencias])
+            .map(normalizarCompetencia)
+            .filter(Boolean),
+    );
+    if (!alvos.size) return [];
+    return (fichaFinanceira || []).filter((f) => alvos.has(normalizarCompetencia(f?.mesReferencia)));
 }
 
 /**

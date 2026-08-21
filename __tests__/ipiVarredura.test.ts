@@ -4,7 +4,7 @@
  * "precisa_lancamento" (1º IPI da empresa → lançar 1x no e-CAC).
  */
 import {
-    normalizarCompetencia, calcularIpiApuradoFicha, acharFichaCompetencia,
+    normalizarCompetencia, calcularIpiApuradoFicha, acharFichaCompetencia, fichasDasCompetencias,
     classificarIpiEmpresa, resumirVarreduraIpi,
 } from '../sefaz-backend/ipi-varredura';
 
@@ -85,5 +85,42 @@ describe('resumirVarreduraIpi', () => {
             erroConsulta: 1, semIpi: 2,
             ipiTotalApurado: 1700, ipiTotalEmRisco: 700,
         });
+    });
+});
+
+// ═══ A RÉGUA ÚNICA DA LEITURA DA FICHA — a classe do defeito do F550 ════════
+//
+// 21/08 (AFFITTARE 1139): o F550 saiu vazio porque a régua lia a ficha pela
+// forma do INPUT do cálculo. Ao varrer os OUTROS leitores apareceu a segunda
+// metade do mesmo defeito: quatro deles comparavam `f.mesReferencia === comp`
+// na mão, e o campo aparece em três formatos. Igualdade estrita não devolve
+// erro — devolve NADA, indistinguível de "a ficha não foi lançada".
+describe('🚨 fichasDasCompetencias — a régua no plural (trimestral e mensal)', () => {
+    const fichas = [
+        { mesReferencia: '2026-01', v: 1 },
+        { mesReferencia: '02/2026', v: 2 },        // formato antigo
+        { mesReferencia: '2026-03-01', v: 3 },     // com dia
+        { mesReferencia: '2026-04', v: 4 },
+    ];
+
+    it('acha o trimestre inteiro apesar dos três formatos', () => {
+        const r = fichasDasCompetencias(fichas, ['2026-01', '2026-02', '2026-03']);
+        expect(r.map((f: any) => f.v)).toEqual([1, 2, 3]);
+    });
+
+    it('aceita competência única (mensal) e normaliza os DOIS lados', () => {
+        expect(fichasDasCompetencias(fichas, '02/2026').map((f: any) => f.v)).toEqual([2]);
+        expect(fichasDasCompetencias(fichas, '2026-02').map((f: any) => f.v)).toEqual([2]);
+    });
+
+    it('competência ilegível devolve lista VAZIA — nunca a lista inteira', () => {
+        expect(fichasDasCompetencias(fichas, 'junho/26')).toEqual([]);
+        expect(fichasDasCompetencias(fichas, [])).toEqual([]);
+        expect(fichasDasCompetencias(null, '2026-01')).toEqual([]);
+    });
+
+    it('acharFichaCompetencia continua devolvendo UMA — e pelas três formas', () => {
+        expect((acharFichaCompetencia(fichas, '2026-03') as any)?.v).toBe(3);
+        expect((acharFichaCompetencia(fichas, '01/2026') as any)?.v).toBe(1);
     });
 });

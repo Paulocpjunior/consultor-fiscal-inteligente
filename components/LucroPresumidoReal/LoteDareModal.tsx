@@ -13,6 +13,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import * as lucroPresumidoService from '../../services/lucroPresumidoService';
+import { acharFichaCompetencia } from '../../sefaz-backend/ipi-varredura.js';
 
 interface Props {
     /**
@@ -73,7 +74,10 @@ const LoteDareModal: React.FC<Props> = ({ currentUser, onClose }) => {
         for (const emp of (empresas || [])) {
             const cnpj = String(emp.cnpj || '').replace(/\D/g, '');
             if (cnpj.length !== 14) continue;
-            const ficha = (emp.fichaFinanceira || []).find(f => f.mesReferencia === competencia);
+            // RÉGUA ÚNICA (`acharFichaCompetencia`): `mesReferencia` aparece em
+            // 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' — igualdade estrita deixaria
+            // a empresa FORA do lote sem dizer por quê (guia que não sai).
+            const ficha = acharFichaCompetencia(emp.fichaFinanceira, competencia);
             if (!ficha) continue;
             if ((ficha.icmsProprioRecolher || 0) > 0) {
                 achados.push({

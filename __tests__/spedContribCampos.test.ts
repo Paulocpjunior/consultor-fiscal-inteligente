@@ -16,6 +16,7 @@
 // @ts-ignore — módulo JS do backend, sem tipos
 import {
     conferirContagemDeCampos, camposDaLinha, CAMPOS_POR_REGISTRO, avisosDeContagemDeCampos,
+    conferirPerfilConsolidado, indRegCumDoArquivoGerado,
 // @ts-ignore
 } from '../sefaz-backend/sped-contrib-campos.js';
 // @ts-ignore
@@ -140,5 +141,52 @@ describe('o gerador corrigido produz o leiaute que o PVA aceita', () => {
         expect(avisos).toHaveLength(1);
         expect(avisos[0]).toContain('M210');
         expect(avisos[0]).toContain('PVA recusa');
+    });
+});
+
+// ═══ O PERFIL DO ARQUIVO — a recusa da AFFITTARE, conferida ANTES do PVA ════
+//
+// 21/08: o arquivo consolidado (F550 ⇒ IND_REG_CUM 2) saiu com o A010/A100 da
+// NFS-e TOMADA e o PVA recusou: "O registro não deve ser informado para esse
+// perfil e/ou tipo de operação". As linhas abaixo são as do arquivo real.
+describe('🚨 perfil CONSOLIDADO não leva documento (PVA da AFFITTARE, 21/08)', () => {
+    const consolidado = [
+        '|0000|006|0|||01072026|31072026|AFFITTARE IMOVEIS ADMINISTRACAO LTDA|17213641000127|SP|3550308||00|1|',
+        '|0110|2||1|2|',
+        '|A010|17213641000127|',
+        '|A100|0|1|55402564000142|00|||5584||30072026|30072026|1391,58|0||1391,58|9,05|1391,58|41,75||||',
+        '|F550|21811,34|01|0,00|21811,34|0,65|141,77|01|0,00|21811,34|3,00|654,34|||||',
+    ];
+
+    it('acusa o A010 e o A100 com a recusa literal como fonte', () => {
+        const { erros } = conferirPerfilConsolidado(consolidado);
+        expect(erros.map((e: any) => e.registro).sort()).toEqual(['A010', 'A100']);
+        expect(erros[0].fonte).toMatch(/não deve ser informado para esse perfil/);
+        expect(erros.find((e: any) => e.registro === 'A100')!.mensagem).toMatch(/CONSOLIDADO/);
+    });
+
+    it('o arquivo LIMPO (bloco A vazio) passa — é o desenho do aceito de 05/2026', () => {
+        const limpo = consolidado.filter((l) => !l.startsWith('|A010|') && !l.startsWith('|A100|'));
+        expect(conferirPerfilConsolidado(limpo).erros).toEqual([]);
+    });
+
+    it('⚠️ arquivo DETALHADO (IND_REG_CUM 9) NÃO é acusado — o PVA aceitou a MANTOAN', () => {
+        const detalhado = consolidado.map((l) => (l.startsWith('|0110|') ? '|0110|2||1|9|' : l));
+        expect(conferirPerfilConsolidado(detalhado).erros).toEqual([]);
+    });
+
+    it('sem 0110 no arquivo, nada se afirma sobre o perfil', () => {
+        const semPerfil = consolidado.filter((l) => !l.startsWith('|0110|'));
+        expect(conferirPerfilConsolidado(semPerfil).erros).toEqual([]);
+        expect(indRegCumDoArquivoGerado(semPerfil)).toBe('');
+    });
+
+    it('a rota confere o ARQUIVO gerado, não a intenção do gerador', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const rota = fs.readFileSync(
+            path.resolve(__dirname, '../sefaz-backend/sped-contrib-routes.js'), 'utf8',
+        );
+        expect(rota).toMatch(/conferirPerfilConsolidado\(linhasDoArquivo\)/);
     });
 });

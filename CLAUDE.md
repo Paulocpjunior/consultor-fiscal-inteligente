@@ -5,6 +5,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A FICHA SE LÊ PELA RÉGUA, NUNCA POR `===` — e a varredura achou MAIS
+  QUATRO leitores quebrados** (21/08, à noite, depois do F550). O defeito da
+  AFFITTARE tinha DUAS metades: os CAMPOS (forma do input × forma gravada,
+  corrigida na hora) e a COMPETÊNCIA. `mesReferencia` aparece em `YYYY-MM`,
+  `YYYY-MM-DD` e `MM/YYYY` conforme a época do lançamento, e **igualdade
+  estrita não devolve erro: devolve NADA** — indistinguível de "a ficha não foi
+  lançada". Varrendo os leitores, quatro comparavam na mão: a **Rotina do Mês**
+  (diria "sem apuração" com a ficha lançada), o **saldo credor do SPED Fiscal**,
+  o **Lote DARE** (empresa sumindo do lote sem dizer por quê) e a **emissão de
+  DARF** (`taxEmissionService`, mensal E trimestral) — mais a cópia que **EU
+  criei no PR do F550 horas antes**, normalizando inline em vez de usar o dono.
+  ✂️ Dono único `acharFichaCompetencia` (+ `fichasDasCompetencias` para o
+  trimestral, que precisa de 3 meses) em `ipi-varredura.js`, e a régua entrou
+  em `REGUAS_VIGIADAS` — a assinatura barra `mesReferencia ===` fora do dono.
+  **Provada revertendo um leitor de propósito.** Exceções declaradas COM o
+  motivo: dedup na GRAVAÇÃO e merge de cadastros comparam ficha com ficha da
+  MESMA origem, não competência vinda de fora.
+  📌 **REGRA QUE FICA: leitor novo de FICHA passa pelo dono, igual ao leitor de
+  DOCUMENTO** (`normalizarParticipantesDoc`, `docCancelado`, `modeloDoDoc`). A
+  ficha era o único lado sem trava — em 13 mordidas da armadilha das duas
+  formas, essa foi a primeira que fechou a CLASSE em vez da instância.
 - **🚨 A TELA QUE VÊ A RESPOSTA E NÃO GRAVA — o 🔎 via o cStat 653 e o
   conhecimento EVAPORAVA** (21/08, MV LIDER 639, *"erro persistente"* — e
   ✅ **FECHADA NO MESMO DIA**: *"639 - MV LIDER - ok"*). O print mostrava a
@@ -1327,6 +1348,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   MANTOAN (IND_REG_CUM 9), e mexer em arquivo aceito sem recusa que mande é
   inventar leiaute. Documento de SAÍDA nunca é excluído: convivendo com o
   F550, quem fala é a trava de dupla contagem.
+  🚦 **E A RECUSA VIROU REGRA NO MESMO PR** (`conferirPerfilConsolidado`, em
+  `sped-contrib-campos.js`): o arquivo consolidado que declarar A010/A100/C100/
+  D100 sai com aviso ANTES do PVA, com a recusa literal como fonte. Ela lê as
+  LINHAS do arquivo gerado (nunca o objeto em memória — foi auditar a intenção
+  que deixou o C100 sair com modelo 55 e chave 65 por meses) e fica MUDA no
+  arquivo detalhado. É a mesma disciplina do PVA de bolso do ICMS/IPI: **recusa
+  aprendida entra na prevalidação no MESMO PR**, senão volta no mês seguinte
+  com outro CNPJ.
 - **🚨 O CAMPO DE VALOR COMIA A VÍRGULA ENQUANTO A PESSOA DIGITAVA — e o
   documento ASSINADO saiu 100× maior** (colaboradora via Paulo, 21/08, APATEL
   0371: *"os valores do consultor não estão puxando ponto e vírgula"*). Ela
