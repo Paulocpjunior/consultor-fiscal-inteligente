@@ -45,6 +45,7 @@ import {
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
+import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
 import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
@@ -1842,6 +1843,21 @@ router.get('/avaliacoes', requireAuth, async (req, res) => {
             avaliacoes: visiveis.slice(0, 50),
         });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── 🗄 ARQUIVO DE MÍDIA NO SHAREPOINT (manual — o cron roda sozinho) ───────
+// Regra do manual da casa (Paulo, 21/08): tudo que não for texto vai pro
+// SharePoint, árvore genérica "SP Connect/" (currículo de não-cliente também).
+// O automático pega carona no cron do arquivo fiscal; este botão existe pra
+// rodar AGORA e pra ver o resultado sem esperar o próximo ciclo.
+router.post('/arquivo-sp', requireAdmin, async (req, res) => {
+    try {
+        const r = await arquivarMidiasWhatsappNoSharePoint({ maxDocs: Number(req.body?.maxDocs) || undefined });
+        return res.json(r);
+    } catch (e) {
+        console.error('[whatsapp/arquivo-sp]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 // ─── 📥 IMPORTAR BACKUP DA ULTRA FOX (contatos e mensagens) ─────────────────
