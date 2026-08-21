@@ -41,7 +41,15 @@ function getIe(data) {
 }
 
 function getCcmSp(data) {
-    return data.dadosFiscais?.ccmSp || data.ccmSp || undefined;
+    // CCM SÓ-ZEROS ('00000000') vale como VAZIO (#311 — contorno da equipe num
+    // campo que parecia obrigatório; 21/08, caso LAV: os zeros voltavam para a
+    // tela do modal e alimentavam a pendência "CCM fora de SP capital").
+    // Espelho em JS da régua de services/empresaDadosFiscaisSanitize
+    // (soZerosComoVazio) — o backend não importa TS; mudar uma é mudar a outra.
+    const bruto = data.dadosFiscais?.ccmSp || data.ccmSp || '';
+    const soDigitos = String(bruto).replace(/\D/g, '');
+    if (!String(bruto).trim() || /^0*$/.test(soDigitos)) return undefined;
+    return bruto;
 }
 
 // Campos que a conferência de cadastro (services/cadastroClientePendencias)

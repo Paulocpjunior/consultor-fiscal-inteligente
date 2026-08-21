@@ -94,6 +94,24 @@ describe('CCM só existe em SP capital', () => {
         expect(p.some((x) => x.campo.includes('CCM'))).toBe(false);
         expect(p.some((x) => x.campo.includes('Código do município'))).toBe(true);
     });
+
+    // 21/08, caso LAV (colaborador via Paulo: *"ali onde deveria colocar o de
+    // ccm de SP coloco uma sequência de 8 zeros"*): CCM só-zeros é o contorno
+    // antigo da equipe num campo que parecia obrigatório — vale como VAZIO
+    // (#311), nunca como inscrição. Fora da capital, zeros NÃO são "CCM
+    // preenchido"; na capital, zeros são CCM FALTANDO (a captura não roda com
+    // eles).
+    it('CCM "00000000" fora da capital NÃO acusa nada — zeros valem como vazio', () => {
+        const p = conferirCadastroCliente({ ...completo, codMunIBGE: '3502754', ccmSp: '00000000' } as any);
+        expect(p.some((x) => x.campo.includes('CCM'))).toBe(false);
+    });
+
+    it('CCM "00000000" NA capital é CCM faltando (bloqueia), não CCM preenchido', () => {
+        const p = conferirCadastroCliente({ ...completo, ccmSp: '00000000' } as any);
+        const ccm = p.find((x) => x.campo.startsWith('CCM'))!;
+        expect(ccm.gravidade).toBe('bloqueia');
+        expect(ccm.campo).toContain('Inscrição Municipal de SP capital');
+    });
 });
 
 describe('farol do cadastro', () => {

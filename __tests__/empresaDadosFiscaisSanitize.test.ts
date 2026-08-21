@@ -108,3 +108,19 @@ describe('sanitizarDadosFiscais — apagar × não mexer', () => {
         expect(sanitizarDadosFiscais({ inscricaoMunicipal: ' 12345/001-A ' }).inscricaoMunicipal).toBe('12345/001-A');
     });
 });
+
+// ─── A régua do CCM só-zeros na LEITURA (21/08, caso LAV) ────────────────────
+import { soZerosComoVazio } from '../services/empresaDadosFiscaisSanitize';
+
+describe('soZerosComoVazio — CCM "00000000" vale como VAZIO em todo leitor', () => {
+    it('zeros, vazio e zero solto viram null', () => {
+        expect(soZerosComoVazio('00000000')).toBeNull();
+        expect(soZerosComoVazio('0')).toBeNull();
+        expect(soZerosComoVazio('')).toBeNull();
+        expect(soZerosComoVazio(null)).toBeNull();
+    });
+    it('inscrição de verdade passa intacta (sem reformatar)', () => {
+        expect(soZerosComoVazio('29175976')).toBe('29175976');
+        expect(soZerosComoVazio('4.019.814')).toBe('4.019.814');
+    });
+});

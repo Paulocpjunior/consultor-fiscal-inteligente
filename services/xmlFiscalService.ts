@@ -34,6 +34,7 @@ import {
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
+import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import {
     podeVerDocumentoPorCarteira,
@@ -976,12 +977,10 @@ export const xmlCollections = COLLECTIONS;
  * equipe configura na tela Correlação CFOP não estava chegando ao arquivo —
  * tudo caía na inversão mecânica, ignorando a configuração (Paulo, 29/07).
  */
-/** '', '0', '000…' → null (não é inscrição); demais valores voltam limpos. */
-const soZeros = (v: unknown): string | null => {
-    const s = String(v ?? '').trim();
-    if (!s) return null;
-    return /^0*$/.test(s.replace(/\D/g, '')) && !/[1-9]/.test(s) ? null : s;
-};
+// '', '0', '000…' → null (não é inscrição). A régua mora em
+// empresaDadosFiscaisSanitize (soZerosComoVazio) — a cópia local daqui foi a
+// razão de a régua de pendências não conhecer a regra (21/08, os 8 zeros).
+const soZeros = soZerosComoVazio;
 
 export async function getDadosFiscaisEmpresa(
     fonte: 'simples' | 'lucro',

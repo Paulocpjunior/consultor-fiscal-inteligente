@@ -9,6 +9,7 @@
  * Regra: cada pendência precisa do IMPACTO real. "Falta UF" não move ninguém;
  * "sem UF a captura da SEFAZ nem é tentada e o SPED não gera" move.
  */
+import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 
 export type GravidadePendencia = 'bloqueia' | 'atencao';
 
@@ -96,9 +97,13 @@ export function conferirCadastroCliente(e: EmpresaParaConferir): PendenciaCadast
     }
 
     // CCM só existe em SP capital (#311). Cobrar de quem é de outro município
-    // seria pedir um dado que não existe.
+    // seria pedir um dado que não existe. E CCM só-zeros ('00000000') é o
+    // contorno antigo da equipe para campo que parecia obrigatório — vale como
+    // VAZIO (régua única em soZerosComoVazio; 21/08, "coloco uma sequência de
+    // 8 zeros… e o erro segue").
+    const ccmLido = soZerosComoVazio(e.ccmSp);
     const ehSpCapital = String(e.codMunIBGE || '') === COD_MUN_SP_CAPITAL;
-    if (ehSpCapital && vazio(e.ccmSp)) {
+    if (ehSpCapital && vazio(ccmLido)) {
         p.push({
             campo: 'CCM (Inscrição Municipal de SP capital)',
             impacto: 'Sem CCM a captura da NFS-e no portal da Prefeitura de SP não roda.',
@@ -112,7 +117,7 @@ export function conferirCadastroCliente(e: EmpresaParaConferir): PendenciaCadast
     // a pendência do próprio município, logo acima; acusar o CCM aqui manda a
     // pessoa procurar defeito num campo que ela preencheu certo — ausência não
     // é prova (é a régua da uf-desconhecida, 15/08).
-    if (!ehSpCapital && !vazio(e.codMunIBGE) && !vazio(e.ccmSp)) {
+    if (!ehSpCapital && !vazio(e.codMunIBGE) && !vazio(ccmLido)) {
         p.push({
             campo: 'CCM preenchido fora de SP capital',
             impacto: 'O CCM é específico da capital. Se esse número é a inscrição municipal local, ele está no campo errado.',
