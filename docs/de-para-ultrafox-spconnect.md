@@ -89,7 +89,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 |---|---|---|---|
 | Cadastro de contatos | ✔ **[Paulo]** (o backup é dela) | **📇 Contatos (17/08)**: agenda com busca por nome/empresa/número, ➕ cadastro à mão, etiquetas e o 📥 Importar no mesmo lugar | ✅ **17/08** — até aqui a coleção era gravada por 4 caminhos e **lida por nenhuma tela** |
 | **Compartilhar um contato na conversa** | ✔ **[Paulo]** | cartão do WhatsApp (tipo `contacts`), com `wa_id` — o cliente toca e já conversa | ✅ **17/08** · guardas iguais às do texto livre (janela de 24h + fila visível) |
-| **Restaurar o backup da Ultra Fox** | — | ⚙️ → 📥: contatos (CSV) e mensagens (CSV/.txt), com preview antes de gravar, sem sobrescrever contato existente e sem duplicar ao reimportar | ✅ **16/08** — falta rodar com o arquivo real |
+| **Restaurar o backup da Ultra Fox** | — | ⚙️ → 📥: contatos (CSV) e mensagens (CSV/.txt), com preview antes de gravar, sem sobrescrever contato existente e sem duplicar ao reimportar | ✅ **RODADO COM O ARQUIVO REAL — 21/08 [Paulo]**: *"O backup já foi restaurado inclusive com os contatos"*. ⚠️ No dia do cancelamento vale UM export final incremental (o que chegou depois deste backup) — reimportar não duplica, então custa só o clique |
 | Vincular contato ↔ cliente do escritório | **[?]** | 🔗 busca no cadastro central (nome/CNPJ), gravando quem vinculou | 🆕 |
 | Ver responsável da carteira do cliente | ✕ (a Ultra Fox não conhece o cadastro) | coluna do cliente, lendo `carteiras` | 🆕 |
 | Ver guias já enviadas ao cliente | ✕ | coluna do cliente, lendo a auditoria do rito #293 | 🆕 |
@@ -183,10 +183,11 @@ real com várias pessoas logadas** (ver §9) → **virar o alcance para 🌐
 todos** (se ainda estiver em 🧪 piloto — conferir na ⚙️ → 🤖) → só então
 cancelar a Ultra Fox. E o backup dela entra ANTES do cancelamento —
 plataforma cancelada não devolve export. **Checklist do dia do
-cancelamento**: (1) backup COMPLETO exportado e importado pelo ⚙️ → 📥
-(inclusive a pasta `_files`, que vai pro SharePoint); (2) alcance 🌐
-confirmado e bot respondendo; (3) um dia de operação sem a equipe abrir a
-Ultra Fox — se ninguém sentiu falta, corta.
+cancelamento**: (1) ✅ ~~backup COMPLETO exportado e importado pelo ⚙️ →
+📥~~ — **FEITO 21/08 [Paulo]**, inclusive contatos (no dia do corte, um
+export final incremental do que chegou depois — reimportar não duplica);
+(2) alcance 🌐 confirmado e bot respondendo; (3) um dia de operação sem a
+equipe abrir a Ultra Fox — se ninguém sentiu falta, corta.
 
 ⚠️ **O que fica ENTRE o piloto e o 🌐 todos**: o piloto prova o bot na
 conversa de UMA pessoa que começa do zero; o 🌐 solta o bot sobre as
