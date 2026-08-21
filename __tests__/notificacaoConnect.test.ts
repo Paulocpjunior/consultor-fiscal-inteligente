@@ -93,6 +93,16 @@ describe('permissão do navegador — recusa com CAMINHO', () => {
         expect(textoDaPermissao('sem-suporte').acao).toContain('som');
         expect(textoDaPermissao('concedida').acao).toBeNull();
     });
+
+    it('dentro do Teams NÃO fala em cadeado — lá não existe barra de endereço (Paulo, 21/08)', () => {
+        const negada = textoDaPermissao('negada', true);
+        expect(negada.texto).toContain('Teams');
+        expect(negada.acao).not.toContain('cadeado');
+        expect(negada.acao).toMatch(/som/i);        // o que FUNCIONA lá fica dito
+        expect(negada.acao).toMatch(/navegador/i);  // e o caminho do pop-up também
+        const pendente = textoDaPermissao('nao-pedida', true);
+        expect(pendente.acao).not.toContain('o navegador vai perguntar');
+    });
 });
 
 describe('preferências', () => {
@@ -161,6 +171,13 @@ describe('🚨 faltaNosAvisos — as TRÊS camadas numa pergunta só', () => {
         const r = faltaNosAvisos({ ...base, permissao: 'negada' });
         expect(r.falta).toBe(true);
         expect(r.acao).toMatch(/cadeado/i);
+    });
+
+    it('permissão NEGADA dentro do Teams troca o conselho (não há cadeado lá)', () => {
+        const r = faltaNosAvisos({ ...base, permissao: 'negada', emIframe: true });
+        expect(r.falta).toBe(true);
+        expect(r.acao).not.toMatch(/cadeado/i);
+        expect(r.texto).toContain('Teams');
     });
 
     it('som pendente aparece — e o botão do push CONTINUA sendo oferecido', () => {

@@ -24,6 +24,7 @@ import {
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
+    arquivarMidiasNoSharePoint, ResultadoArquivoSp,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -43,7 +44,7 @@ import {
 import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
-    rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila,
+    rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila, dentroDeIframe,
 } from '../../services/spConnect';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
@@ -322,7 +323,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram'>('bot');
+    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo'>('bot');
+
+    // ── 🗄 Arquivo de mídia no SharePoint (o cron roda sozinho; o botão antecipa)
+    const [arqRodando, setArqRodando] = useState(false);
+    const [arqErro, setArqErro] = useState<string | null>(null);
+    const [arqResultado, setArqResultado] = useState<ResultadoArquivoSp | null>(null);
+    const rodarArquivoSp = async () => {
+        setArqRodando(true); setArqErro(null);
+        try {
+            const r = await arquivarMidiasNoSharePoint();
+            if (!r.ok) { setArqErro(r.error || 'O arquivamento falhou.'); return; }
+            setArqResultado(r);
+        } finally { setArqRodando(false); }
+    };
 
     // ── ☎️ Sonda de voz/vídeo: PERGUNTA à Meta, não liga nada.
     const [sonda, setSonda] = useState<{
@@ -533,7 +547,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 });
             }, 1000);
         } catch (e) {
-            const t = traduzirErroDeMicrofone(e as { name?: string; message?: string });
+            const t = traduzirErroDeMicrofone(e as { name?: string; message?: string }, dentroDeIframe());
             setErroEnvio(`${t.erro} ${t.acao}`);
             setGravando(false);
         }
@@ -1016,6 +1030,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         somOk,
         pushDisponivel: pushConfigurado().ok,
         pushLigado: push.ligado,
+        emIframe: dentroDeIframe(),
     });
     // Chips por fila: só as que o usuário ENXERGA (o backend já filtrou as
     // conversas; os chips seguem o MESMO recorte, senão é leitura dupla).
@@ -1618,7 +1633,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -1900,6 +1915,40 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         A entrada é roteada pelo próprio aviso da Meta — nada de adivinhar de quem é a mensagem.
                                     </p>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* ── aba 🗄 SharePoint (arquivo de mídia) ──────────── */}
+                        {cfgAba === 'arquivo' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Regra do manual: <strong>tudo que não for texto</strong> (foto, áudio, vídeo, documento)
+                                    é salvo no SharePoint. Isso roda <strong>sozinho</strong>, de carona no ciclo do arquivo
+                                    fiscal — este botão só antecipa a rodada e mostra o resultado.
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    A pasta é <strong>genérica de propósito</strong> (muito contato não é cliente — currículo,
+                                    lead): <code className="text-[10px]">SP Connect/{'{ano}'}/{'{mês}'}/{'{nome ou empresa}'} - {'{número}'}</code>.
+                                    Contato vinculado a cliente ganha o nome da empresa no rótulo da pasta.
+                                </p>
+                                <button onClick={rodarArquivoSp} disabled={arqRodando}
+                                    className="text-[11px] font-bold px-3 py-1.5 rounded bg-[#0e3bfa] text-white disabled:opacity-60">
+                                    {arqRodando ? '⏳ arquivando…' : '🗄 Arquivar agora'}
+                                </button>
+                                {arqErro && <p className="text-[11px] text-red-600 dark:text-red-400">{arqErro}</p>}
+                                {arqResultado && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                                        <p><strong>{arqResultado.arquivados ?? 0}</strong> arquivo(s) subiram nesta rodada · {arqResultado.lidos ?? 0} mensagens conferidas.</p>
+                                        {(arqResultado.erros ?? 0) > 0 && (
+                                            <p className="text-red-600 dark:text-red-400">{arqResultado.erros} falha(s) de upload — elas voltam na próxima rodada. {(arqResultado.errosDetalhe || []).slice(0, 3).join(' · ')}</p>
+                                        )}
+                                        {arqResultado.pausadoPorTeto
+                                            ? <p>Parou no teto da rodada — <strong>ainda há mídia esperando</strong>: rode de novo (ou deixe o ciclo automático continuar).</p>
+                                            : arqResultado.cicloCompleto
+                                                ? <p>✓ Varredura completa — tudo que tinha mídia gravada está arquivado.</p>
+                                                : <p>Rodada parcial — o ciclo continua sozinho.</p>}
+                                    </div>
+                                )}
                             </div>
                         )}
 

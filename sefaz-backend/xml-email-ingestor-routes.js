@@ -17,6 +17,7 @@ import { requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { ingerirXmlPorEmail } from './xml-email-ingestor.js';
 import { arquivarNoSharePoint } from './cofre-sharepoint-arquivo.js';
+import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
 import { listarEmailsComXml } from './graph-mail-reader.js';
 import { agregarKpisDeRuns } from './cofre-email-metrics.js';
 import { detectarInatividade, decidirAlertasCofre, montarCorpoAlerta } from './cofre-alerta.js';
@@ -170,10 +171,19 @@ router.post('/xml-email-ingest/alerta-cron', requireCronAuth, async (req, res) =
 });
 
 // Fase 3 — arquivo automático no SharePoint dos XMLs do cofre.
+// Desde 21/08 o MESMO cron também arquiva a mídia do SP Connect (foto, áudio,
+// vídeo, documento — regra do manual: tudo que não é texto vai pro
+// SharePoint). Pegar carona aqui é decisão: scheduler novo dependeria de o
+// Paulo rodar o script na máquina dele, e a cadência que serve pro XML serve
+// pra mídia. Uma falha NÃO derruba a outra — cada arquivador tem cursor e
+// resultado próprios.
 router.post('/xml-email-arquivo-sp-cron', requireCronAuth, async (req, res) => {
   try {
-    const r = await arquivarNoSharePoint({});
-    return res.json(r);
+    const fiscal = await arquivarNoSharePoint({})
+      .catch((e) => ({ ok: false, erroFatal: e.message }));
+    const whatsapp = await arquivarMidiasWhatsappNoSharePoint({})
+      .catch((e) => ({ ok: false, erroFatal: e.message }));
+    return res.json({ ...fiscal, whatsapp });
   } catch (e) {
     console.error('[xml-email-arquivo-sp-cron] erro:', e.message);
     return res.status(500).json({ error: e.message });
