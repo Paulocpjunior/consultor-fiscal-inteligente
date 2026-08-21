@@ -43,7 +43,7 @@ import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
-import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, type MesDeclaracao } from '../../services/declaracaoFaturamento';
+import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, parseValorMoeda, type MesDeclaracao } from '../../services/declaracaoFaturamento';
 import { montarApuracaoTrimestre, trimestresDisponiveis } from '../../services/apuracaoTrimestral';
 import { calcularLucro } from '../../services/lucroService';
 import { convertFichaToInput, getRetencoesAcumuladasTrimestre } from '../LucroPresumidoReal/fichaCalc';
@@ -2311,6 +2311,12 @@ const AbaDeclaracao: React.FC<{
     const [buscando, setBuscando] = useState(false);
     const [meses, setMeses] = useState<MesDeclaracao[] | null>(null);
     const [ajustes, setAjustes] = useState<Record<string, number>>({});
+    /** 🚨 O TEXTO CRU do campo, separado do número (caso APATEL 0371, 21/08).
+        O input era controlado por `String(número)` e re-parseava o próprio
+        texto exibido a cada tecla — a vírgula digitada sumia da tela e
+        "3.241.688,71" virava 324168871 (100×) num documento ASSINADO. Campo de
+        digitação guarda TEXTO; o número é derivado (padrão dos campos de CFOP). */
+    const [ajustesTexto, setAjustesTexto] = useState<Record<string, string>>({});
     const [apurado, setApurado] = useState<Record<string, { valor: number; docs: number }>>({});
     const [dadosFiscais, setDadosFiscais] = useState<any>(null);
 
@@ -2332,6 +2338,7 @@ const AbaDeclaracao: React.FC<{
             setDadosFiscais(df);
             setApurado(r.porMes || {});
             setAjustes({});
+            setAjustesTexto({});
             setMeses(montarMeses(competencias, (r.porMes || {}) as any, {}));
         } finally {
             setBuscando(false);
@@ -2339,10 +2346,14 @@ const AbaDeclaracao: React.FC<{
     };
 
     const editar = (competencia: string, texto: string) => {
-        const v = Number(String(texto).replace(/\./g, '').replace(',', '.'));
+        // O TEXTO fica como a pessoa digitou/colou — o input nunca é
+        // re-formatado no meio da digitação. Quem interpreta é a régua pura
+        // (parseValorMoeda), e o que o app ENTENDEU aparece do lado da linha.
+        setAjustesTexto(prev => ({ ...prev, [competencia]: texto }));
+        const v = parseValorMoeda(texto);
         const novos = { ...ajustes };
-        if (texto.trim() === '') delete novos[competencia];
-        else if (Number.isFinite(v)) novos[competencia] = v;
+        if (texto.trim() === '' || v === null) delete novos[competencia];
+        else novos[competencia] = v;
         setAjustes(novos);
         setMeses(montarMeses(mesesDoPeriodo(de, ate), apurado as any, novos));
     };
@@ -2430,15 +2441,28 @@ const AbaDeclaracao: React.FC<{
                                         <td className="py-1 text-right tabular-nums text-slate-500">{fmtBRL(m.apurado)}</td>
                                         <td className="py-1 text-right">
                                             <input
-                                                value={ajustes[m.competencia] !== undefined ? String(ajustes[m.competencia]) : ''}
+                                                /* O valor do input é o TEXTO cru — nunca String(número),
+                                                   que re-parseava a cada tecla e comia a vírgula (APATEL). */
+                                                value={ajustesTexto[m.competencia] ?? ''}
                                                 onChange={e => editar(m.competencia, e.target.value)}
-                                                placeholder={m.apurado.toFixed(2)}
+                                                placeholder={m.apurado.toFixed(2).replace('.', ',')}
+                                                inputMode="decimal"
                                                 className="w-32 p-1 text-sm text-right rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 tabular-nums"
                                             />
                                         </td>
                                         <td className="py-1 text-[11px]">
                                             {m.semDocumentos && <span className="text-amber-600">⚠ sem documento capturado</span>}
-                                            {m.ajustado && <span className="text-indigo-600 ml-2">ajustado</span>}
+                                            {/* O que o app ENTENDEU, formatado — é esta leitura que vai
+                                                no documento assinado, então ela aparece ANTES do PDF. */}
+                                            {m.ajustado && (
+                                                <span className="text-indigo-600 ml-2">ajustado = {fmtBRL(m.valor)}</span>
+                                            )}
+                                            {(ajustesTexto[m.competencia] ?? '').trim() !== ''
+                                                && parseValorMoeda(ajustesTexto[m.competencia]) === null && (
+                                                <span className="text-red-600 ml-2 font-bold">
+                                                    ⛔ valor ilegível — use o formato 3.241.688,71
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
