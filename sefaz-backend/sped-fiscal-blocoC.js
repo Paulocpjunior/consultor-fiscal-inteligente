@@ -25,8 +25,8 @@ import { cstDoLancamento } from './cst-correlacao.js';
 // Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
 // campo cru `n.modelo`, que o importer principal não grava.
 import { selecionarNotasBlocoC, avisosDaSelecao } from './sped-selecao-documentos.js';
-import { modeloDoDoc } from './participante-doc-helper.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { modeloDoDoc, participanteDoDocumento } from './participante-doc-helper.js';
+import { docCancelado, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
 // leem daqui; eram três leituras, e as três discordavam do manual.
@@ -212,6 +212,28 @@ export function buildBlocoC(dados) {
     }
     dados.difalAquisicaoResumo = { total: difal.totalDifal, notas: difal.porNota };
 
+    // Nota própria de IMPORTAÇÃO: o destinatário também é a própria empresa,
+    // então o COD_PART sai com o CNPJ dela — o EXPORTADOR estrangeiro não vem
+    // no XML e não se inventa participante. O e-Fiscal resolve com cadastro
+    // manual (0150 do exportador); aqui a limitação é DITA, nunca calada.
+    if (Array.isArray(dados.warnings)) {
+        const cnpjEmp = String(dados?.empresa?.cnpj || '').replace(/\D/g, '');
+        const importacoesSemExportador = notas.filter((n) => {
+            if (!ehNotaPropriaDeEntrada(n, dados?.empresa?.cnpj).sim) return false;
+            const p = participanteDoDocumento(n, dados?.empresa?.cnpj);
+            const doc = String(p?.cnpjCpf || p?.cnpj || '').replace(/\D/g, '');
+            return !!doc && doc === cnpjEmp;
+        });
+        if (importacoesSemExportador.length > 0) {
+            const nums = importacoesSemExportador.map((n) => n.numero).filter(Boolean).join(', ');
+            dados.warnings.push(
+                `${importacoesSemExportador.length} nota(s) própria(s) de entrada (nº ${nums}) com participante `
+                + '= a própria empresa: o XML da nota de importação não traz o fornecedor estrangeiro. '
+                + 'O PVA pode pedir o participante do exterior no 0150 — se pedir, será preciso cadastrá-lo.',
+            );
+        }
+    }
+
     // C100 + C170s + C190s pra cada nota
     for (const nota of notas) {
         try {
@@ -314,9 +336,14 @@ function buildC100(nota, dados) {
         return fromItens > 0 ? fromItens : fromTotal;
     };
 
-    // Identifica participante e direcao
+    // Identifica participante e direcao — a régua do "outro lado" é ÚNICA
+    // (participanteDoDocumento), a mesma do coletor do 0150: escolher o lado
+    // aqui de novo foi o que fez a NOTA PRÓPRIA DE ENTRADA (importação da
+    // REALITY 0899 · 07/2026) sair com COD_PART = a própria empresa E
+    // IND_EMIT=1, quando a chave diz que quem emitiu foi ela (IND_EMIT=0).
     const indOper = nota.direcao === 'saida' ? '1' : '0';
-    const participante = nota.direcao === 'saida' ? nota.destinatario : nota.emitente;
+    const propriaDeEntrada = ehNotaPropriaDeEntrada(nota, dados?.empresa?.cnpj).sim;
+    const participante = participanteDoDocumento(nota, dados?.empresa?.cnpj);
 
     // 🚨 O COD_MOD SAI DA RÉGUA (PVA da PS VIDROS 07/2026, 19/08: *"O modelo da
     // chave do documento eletrônico não confere com o modelo do documento"* —
@@ -344,8 +371,11 @@ function buildC100(nota, dados) {
         ? String(participante.cnpjCpf || participante.cnpj).replace(/\D/g, '')
         : '';
 
-    // IND_EMIT: 0=Emissao propria (saida), 1=Terceiros (entrada)
-    const indEmit = nota.direcao === 'saida' ? '0' : '1';
+    // IND_EMIT: 0=Emissao propria, 1=Terceiros. Nota própria de ENTRADA
+    // (tpNF=0 emitida pela empresa — importação, compra de produtor rural)
+    // é emissão PRÓPRIA mesmo sendo entrada: o e-Fiscal aceito da REALITY
+    // declara |C100|0|0|…| nas duas notas de importação.
+    const indEmit = (nota.direcao === 'saida' || propriaDeEntrada) ? '0' : '1';
     /** Campo que a NFC-e não pode informar — vazio, nunca 0,00. */
     const soNfe = (valor) => (ehNfce ? '' : valor);
 

@@ -6,3 +6,14 @@ export function nomeEmitente(d: unknown): string;
 export function ufEmitente(d: unknown): string;
 export function modeloDoDoc(d: unknown): string;
 export function cfopNaOticaDeEntrada(cfop: unknown): string;
+
+/**
+ * A CONTRAPARTE do documento (C100/0150) — régua única: saída = destinatário;
+ * entrada = emitente, SALVO nota própria de entrada (tpNF=0 da empresa), cuja
+ * contraparte é o destinatário. Devolve o que o documento TEM (importação
+ * devolve a própria empresa — o exportador não vem no XML).
+ */
+export function participanteDoDocumento(
+    d: unknown,
+    empresaCnpj?: string,
+): Record<string, unknown> | null;

@@ -5,6 +5,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O BLOCO E DE ST SAÍA COM 9 REGISTROS NUMA LINHA SÓ — módulo formando
+  linha FORA do buildLine** (21/08, REALITY 0899 · 07/2026 — dúvida do
+  colaborador com análise do Copilot; conferida contra os DOIS arquivos antes
+  de concluir). `montarLinhasStBlocoE` devolvia strings com `join('|')` cru
+  (sem o `|` inicial e sem `\r\n`) e o arquivo final é `join('')`: os
+  E200/E210 de MG/PR/RJ/SP + o E500 saíram GRUDADOS na linha 2406 —
+  invisíveis para o PVA, para o 9900 e para a PRÓPRIA prevalidação, que lê
+  linha a linha (nem o E500 dela era visto). O módulo nunca tinha passado no
+  PVA, e o próprio cabeçalho avisava. ✂️ As linhas viraram **ARRAYS de campos**
+  formatados pelo blocoE com `fmt.buildLine` (o padrão do E111, escrito ao
+  lado); **R15 da prevalidação fecha a CLASSE** (linha fora de `|REG|…|` é
+  erro nomeado — módulo novo que bypassar o buildLine cai nela).
+  ⚠️ **E o campo 11 do E210 era outra dedução minha errada**: `VL_SLD_DEV_
+  ANT_ST` é o saldo devedor **ANTES das deduções** (apurado no mês), não o
+  "anterior" do mês passado — corroborado pelo E210 do e-Fiscal ACEITO da
+  mesma empresa (380,79 → 380,79 → 380,79; a conta 11−12=13 fecha). Dedução
+  ganhou o TETO do devedor: excedente sai NOMEADO, nunca vira crédito a
+  transportar.
+  ✂️ No mesmo PR, dois defeitos irmãos que a comparação expôs: **IND_EMIT da
+  nota PRÓPRIA de entrada saía '1' (terceiros) com COD_PART = a própria
+  empresa** (a chave diz que quem emitiu foi ela; o e-Fiscal aceito declara
+  `|C100|0|0|`) — a régua do "outro lado" virou ÚNICA
+  (`participanteDoDocumento`, usada pelo buildC100 E pelo coletor do 0150,
+  senão o C100 referenciaria participante que o 0150 não tem); e o **0200
+  cravava COD_GEN '00' (= SERVIÇO) em toda mercadoria** — agora deriva do
+  CAPÍTULO da NCM (48131000→48, corroborado pelo aceito) e sem NCM fica
+  VAZIO, porque gênero não se afirma no escuro.
+  🛑 **PAULO CORTOU O RESTO DA COMPARAÇÃO** (*"estamos corretos, pode
+  desconsiderar"*): C120 da importação (nDI não capturado; Σ vPIS/vCOFINS dos
+  itens bate centavo a centavo com o C120 do e-Fiscal, se um dia voltar),
+  C191 do FCP, CEST/alíquota do 0200 e E300/E310 zerado **NÃO entraram — não
+  ressuscitar sem pedido dele**. Só os três acima subiram, porque são defeitos
+  do NOSSO arquivo, independentes do e-Fiscal.
 - **🏛️ O CFI NUNCA TEVE CAMPO DE REGIME TRIBUTÁRIO — e uma IGREJA chegava ao
   CCI como "Lucro Presumido"** (Paulo, 18/08, com o print do cadastro do túnel:
   *"criamos no CCI que as informações de cadastro sejam compartilhadas do CFI…

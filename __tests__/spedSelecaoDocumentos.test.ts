@@ -408,3 +408,49 @@ describe('🚨 C190 · VL_OPR — o valor da OPERAÇÃO (caso PWR, 20/08)', () =
         expect(brl(c190sDe(buildBlocoC(dados([nota]) as never))[0][5])).toBeCloseTo(100, 2);
     });
 });
+
+// ═══ Nota PRÓPRIA de entrada — IND_EMIT e o lado do participante ════════════
+//
+// Caso REALITY 0899 · 07/2026 (21/08): as duas notas próprias de IMPORTAÇÃO
+// saíam |C100|0|1|<CNPJ da própria empresa>|… — IND_EMIT dizia "terceiros"
+// para uma chave cujo emitente é a própria empresa. O e-Fiscal aceito declara
+// |C100|0|0|…|. A régua do "outro lado" virou ÚNICA (participanteDoDocumento),
+// compartilhada entre o buildC100 e o coletor do 0150.
+describe('🚨 nota própria de entrada — IND_EMIT=0 e participante da CONTRAPARTE', () => {
+    const dados = (notas: any[]) => ({
+        empresa: { _regime: 'lucro', cnpj: '07590894000166', dadosFiscais: { uf: 'SP' } },
+        competenciaInicio: '2026-07', competenciaFim: '2026-07', notas, warnings: [] as string[],
+    });
+    const c100De = (linhas: string[]) => linhas.find((l: string) => l.startsWith('|C100|'))!.split('|');
+    const propriaDeEntrada = (dest: any) => capturada({
+        chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada', tpNF: '0', numero: '49467',
+        emitente: { cnpjCpf: '07590894000166', nome: 'A PROPRIA EMPRESA' },
+        destinatario: dest,
+        itens: [{ cfop: '1102', vProd: 100, vBC: 100, vICMS: 18, cst: '00' }],
+    });
+
+    it('IND_EMIT sai 0 (emissão própria) e COD_PART é a contraparte do DESTINATÁRIO', () => {
+        const f = c100De(buildBlocoC(dados([
+            propriaDeEntrada({ cnpjCpf: '12345678000195', nome: 'CONTRAPARTE LTDA' }),
+        ]) as never));
+        expect(f[2]).toBe('0');              // IND_OPER: entrada
+        expect(f[3]).toBe('0');              // IND_EMIT: emissão PRÓPRIA
+        expect(f[4]).toBe('12345678000195'); // COD_PART: a contraparte, nunca a empresa
+    });
+
+    it('entrada de TERCEIRO continua IND_EMIT=1 com o emitente como participante', () => {
+        const f = c100De(buildBlocoC(dados([capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada', numero: '5',
+            emitente: { cnpjCpf: '98765432000109', nome: 'FORNECEDOR' },
+            itens: [{ cfop: '1102', vProd: 50, vBC: 50, vICMS: 9, cst: '00' }],
+        })]) as never));
+        expect(f[3]).toBe('1');
+        expect(f[4]).toBe('98765432000109');
+    });
+
+    it('IMPORTAÇÃO (destinatário = a própria empresa) sai avisada — o exportador não está no XML', () => {
+        const d = dados([propriaDeEntrada({ cnpjCpf: '07590894000166', nome: 'A PROPRIA EMPRESA' })]);
+        buildBlocoC(d as never);
+        expect(d.warnings.join(' ')).toContain('fornecedor estrangeiro');
+    });
+});

@@ -207,7 +207,11 @@ export function buildBlocoE(dados) {
             dtFin: fmt.formatCompetenciaFim(dados.competenciaFim),
             obrigacoesPorUf: dados.obrigacoesStPorUf || {},
         });
-        linhas.push(...st.linhas);
+        // O módulo de ST devolve ARRAYS de campos — quem forma a linha
+        // (|campo|…|\r\n) é o buildLine, igual ao E111. A 1ª versão empurrava
+        // strings cruas e TODOS os E200/E210 saíam grudados numa linha só
+        // (caso REALITY 0899 · 07/2026).
+        for (const campos of st.linhas) linhas.push(fmt.buildLine(campos));
         if (Array.isArray(dados.warnings)) dados.warnings.push(...st.avisos);
         geraSt = st.linhas.length > 0;
 

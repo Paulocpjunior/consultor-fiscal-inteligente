@@ -25,6 +25,7 @@
 // ============================================================================
 
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
+import { docCancelado } from './xml-metadata-helper.js';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -32,14 +33,17 @@ const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'denegada', 'i
 
 /**
  * Agrupa o ICMS-ST RETIDO nas saídas por UF do destinatário.
- * Saída sem ST não entra. Nota cancelada/denegada fica de fora.
+ * Saída sem ST não entra. Nota cancelada/denegada fica de fora — e quem decide
+ * é `docCancelado` (o campo cru mente quando o cancelamento chega por evento);
+ * o `situacao` derivado continua honrado para quem já vem classificado.
  */
 export function agruparStPorUf(notas, ufEmpresa) {
     const porUf = new Map();
 
     for (const nota of notas || []) {
         if (String(nota?.direcao) !== 'saida') continue;
-        if (CANCELADOS.has(String(nota?.situacao || nota?.status || '').toLowerCase())) continue;
+        if (docCancelado(nota)) continue;
+        if (CANCELADOS.has(String(nota?.situacao || '').toLowerCase())) continue;
 
         const vST = num(nota?.totais?.vST) || num(nota?.totais?.vICMSST)
             || (nota?.itens || []).reduce((s, i) => s + num(i?.vICMSST), 0);
@@ -62,11 +66,17 @@ export function agruparStPorUf(notas, ufEmpresa) {
 /**
  * Apura o ST de UMA UF: retenção + ajustes de débito − créditos − deduções −
  * saldo credor anterior. O que sobrar de crédito vai para o mês seguinte.
+ *
+ * ⚠️ `saldoDevedorApurado` é o campo 11 do E210 (VL_SLD_DEV_ANT_ST = saldo
+ * devedor ANTES das deduções) — corroborado pelo E210 aceito do e-Fiscal da
+ * REALITY 07/2026 (retenção 380,79 ⇒ campo 11 = 380,79 ⇒ recolher 380,79).
+ * A 1ª versão deste módulo leu o nome como "saldo devedor ANTERIOR" (do mês
+ * passado) e escrevia 0,00 ali — o PVA não fecha a conta 11 − 12 = 13.
  */
 export function apurarStDaUf({ uf, retencao, ajustes = {}, saldoCredorAnterior = 0, saldoDevedorAnterior = 0, devolucoes = 0, ressarcimentos = 0, outrosCreditos = 0, outrosDebitos = 0 }) {
     const ajDebitos = r2(num(ajustes.outrosDebitos) + num(ajustes.estornosCredito));
     const ajCreditos = r2(num(ajustes.outrosCreditos) + num(ajustes.estornosDebito));
-    const deducoes = r2(num(ajustes.deducoes));
+    const deducoesLancadas = r2(num(ajustes.deducoes));
     const debEsp = r2(num(ajustes.debitosEspeciais));
 
     const creditos = r2(
@@ -75,7 +85,12 @@ export function apurarStDaUf({ uf, retencao, ajustes = {}, saldoCredorAnterior =
     );
     const debitos = r2(num(retencao) + num(outrosDebitos) + ajDebitos + num(saldoDevedorAnterior));
 
-    const saldo = r2(debitos - creditos - deducoes);
+    // Deduções só abatem saldo DEVEDOR (mesma regra do E110): com o período já
+    // credor, deduzir "sobra" não aumenta o crédito a transportar — o excedente
+    // sai NOMEADO para virar aviso, nunca crédito inventado.
+    const antesDeducoes = r2(debitos - creditos);
+    const saldoDevedorApurado = antesDeducoes > 0 ? antesDeducoes : 0;
+    const deducoes = r2(Math.min(deducoesLancadas, saldoDevedorApurado));
     return {
         uf,
         saldoCredorAnterior: r2(saldoCredorAnterior),
@@ -87,10 +102,11 @@ export function apurarStDaUf({ uf, retencao, ajustes = {}, saldoCredorAnterior =
         outrosDebitos: r2(outrosDebitos),
         ajDebitos,
         saldoDevedorAnterior: r2(saldoDevedorAnterior),
+        saldoDevedorApurado,
         deducoes,
-        // Deduções só abatem saldo DEVEDOR (mesma regra do E110).
-        icmsRecolher: saldo > 0 ? saldo : 0,
-        saldoCredorTransportar: saldo < 0 ? r2(-saldo) : 0,
+        deducoesExcedentes: r2(deducoesLancadas - deducoes),
+        icmsRecolher: r2(saldoDevedorApurado - deducoes),
+        saldoCredorTransportar: antesDeducoes < 0 ? r2(-antesDeducoes) : 0,
         debitosEspeciais: debEsp,
     };
 }
@@ -99,6 +115,14 @@ const dec = (n) => (Number.isFinite(Number(n)) ? Number(n) : 0).toFixed(2).repla
 
 /**
  * Monta E200/E210/E220 (+E250 quando há guia) de TODAS as UFs com ST.
+ *
+ * 🚨 CADA LINHA SAI COMO ARRAY DE CAMPOS, NUNCA COMO STRING PRONTA — o dono do
+ * formato (`|campo|…|\r\n`) é o `fmt.buildLine` de quem monta o arquivo.
+ * A 1ª versão devolvia strings com `join('|')` cru (sem o `|` inicial e sem o
+ * `\r\n`), e como o arquivo final é `join('')`, TODOS os E200/E210 de todas as
+ * UFs saíam GRUDADOS numa linha só, colados na linha do E500 — caso REALITY
+ * 0899 · 07/2026 (21/08): 9 registros numa linha, invisíveis para o PVA, para
+ * o 9900 e para a própria prevalidação. É o mesmo desenho do `montarLinhasE111`.
  *
  * @param {object} p
  * @param {Array}  p.notas            documentos do período
@@ -130,7 +154,15 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
         });
         apuracoes.push({ ...ap, documentos: g.documentos });
 
-        linhas.push(['E200', g.uf, dtIni, dtFin, ''].join('|'));
+        if (ap.deducoesExcedentes > 0) {
+            avisos.push(
+                `ST de ${g.uf}: R$ ${dec(ap.deducoesExcedentes)} de dedução NÃO aplicada — dedução só abate `
+                + 'saldo DEVEDOR (mesma regra do E110) e o período não tinha devedor suficiente. '
+                + 'O E210 declara só a parte aplicada.',
+            );
+        }
+
+        linhas.push(['E200', g.uf, dtIni, dtFin]);
         linhas.push([
             'E210',
             '1',                              // IND_MOV_ST: 1 = com operações de ST
@@ -142,18 +174,17 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
             dec(ap.retencao),                 // VL_RETENCAO_ST
             dec(ap.outrosDebitos),            // VL_OUT_DEB_ST
             dec(ap.ajDebitos),                // VL_AJ_DEBITOS_ST
-            dec(ap.saldoDevedorAnterior),     // VL_SLD_DEV_ANT_ST
+            dec(ap.saldoDevedorApurado),      // VL_SLD_DEV_ANT_ST — saldo devedor ANTES das deduções
             dec(ap.deducoes),                 // VL_DEDUCOES_ST
             dec(ap.icmsRecolher),             // VL_ICMS_RECOL_ST
             dec(ap.saldoCredorTransportar),   // VL_SLD_CRED_ST_TRANSPORTAR
             dec(ap.debitosEspeciais),         // DEB_ESP_ST
-            '',
-        ].join('|'));
+        ]);
 
         // E220 — uma linha por ajuste, só na UF da empresa.
         if (daUfDaEmpresa) {
             for (const aj of cls.validos) {
-                linhas.push(['E220', aj.codigo, aj.descricao || '', dec(aj.valor), ''].join('|'));
+                linhas.push(['E220', aj.codigo, aj.descricao || '', dec(aj.valor)]);
             }
         }
 
@@ -162,9 +193,10 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
         if (ap.icmsRecolher > 0) {
             const o = obrigacoesPorUf[g.uf] || {};
             if (o.dtVcto && o.codRec) {
+                // Mesmos 9 campos do E116 (IND_OBR…MES_REF), espelho do bloco próprio.
                 linhas.push([
                     'E250', '000', dec(ap.icmsRecolher), o.dtVcto, o.codRec, '', '', '', '', '',
-                ].join('|'));
+                ]);
             } else {
                 avisos.push(
                     `ST de ${g.uf}: R$ ${dec(ap.icmsRecolher)} a recolher, mas o E250 não foi gerado — `
