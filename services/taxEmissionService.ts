@@ -11,6 +11,7 @@ import type {
 } from '../types';
 
 import { getAuth } from 'firebase/auth';
+import { fichasDasCompetencias } from '../sefaz-backend/ipi-varredura.js';
 
 const BASE = '/api/admin/emission';
 
@@ -76,9 +77,12 @@ function selecionarRegistros(
     competencia: string,                  // 'YYYY-MM'
     periodicidade: 'mensal' | 'trimestral'
 ): FichaFinanceiraRegistro[] {
+    // RÉGUA ÚNICA (`fichasDasCompetencias`): `mesReferencia` aparece em três
+    // formatos e comparar na mão devolve lista VAZIA — que aqui se lê como
+    // "não há o que emitir", com a ficha lançada.
     const registros = empresa.fichaFinanceira || [];
     if (periodicidade === 'mensal') {
-        return registros.filter(r => r.mesReferencia === competencia);
+        return fichasDasCompetencias(registros, competencia);
     }
     // Trimestral: junta os 3 meses do trimestre da competência
     const [ano, mes] = competencia.split('-').map(Number);
@@ -86,7 +90,7 @@ function selecionarRegistros(
     const trimestre = Math.floor((mes - 1) / 3);
     const mesesTrim = [trimestre * 3 + 1, trimestre * 3 + 2, trimestre * 3 + 3]
         .map(m => `${ano}-${String(m).padStart(2, '0')}`);
-    return registros.filter(r => mesesTrim.includes(r.mesReferencia));
+    return fichasDasCompetencias(registros, mesesTrim);
 }
 
 export function sugerirValorDarf(

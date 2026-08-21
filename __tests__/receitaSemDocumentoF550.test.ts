@@ -188,9 +188,15 @@ describe('🚨 orquestrador — ficha casada por competência NORMALIZADA', () =
         path.resolve(__dirname, '../sefaz-backend/sped-contrib-orchestrator.js'), 'utf8',
     );
 
-    it('usa normalizarCompetencia (régua existente), não igualdade estrita', () => {
-        expect(fonte).toMatch(/normalizarCompetencia\(f\?\.mesReferencia\)/);
+    // ⚠️ TESTE TROCADO na mesma noite: a 1ª versão exigia a normalização
+    // INLINE (`normalizarCompetencia(f?.mesReferencia)`) — que era a SEGUNDA
+    // CÓPIA da régua, criada por mim no PR do F550. A leitura da ficha por
+    // competência tem dono (`acharFichaCompetencia`), e é ele que o teste
+    // exige agora; travar a cópia impediria a própria correção.
+    it('usa o DONO da leitura por competência, não igualdade estrita nem cópia da normalização', () => {
+        expect(fonte).toMatch(/acharFichaCompetencia\(empresa\.fichaFinanceira, competencia\)/);
         expect(fonte).toMatch(/from '\.\/ipi-varredura\.js'/);
+        expect(fonte).not.toMatch(/f\?\.mesReferencia\s*===/);
     });
 
     it('período sem receita NENHUMA sai DITO — zero no M200/M600 é afirmação', () => {

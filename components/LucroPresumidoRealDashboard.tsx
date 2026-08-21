@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, ItemFinanceiroAvulso } from '../types';
 import * as lucroPresumidoService from '../services/lucroPresumidoService';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
+import { acharFichaCompetencia } from '../sefaz-backend/ipi-varredura.js';
 import { useConfirm } from './dialog/DialogProvider';
 import { calcularLucro, mesEncerraTrimestre } from '../services/lucroService';
 import ConferirDctfwebModal from './DCTFWeb/ConferirDctfwebModal';
@@ -666,7 +667,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
                 try {
                     const [anoN, mesN] = fichaMes.split('-').map(n => parseInt(n, 10));
                     const proxMes = mesN === 12 ? `${anoN + 1}-01` : `${anoN}-${String(mesN + 1).padStart(2, '0')}`;
-                    const fichaProxExiste = savedFicha?.fichaFinanceira?.find(f => f.mesReferencia === proxMes);
+                    const fichaProxExiste = acharFichaCompetencia(savedFicha?.fichaFinanceira, proxMes);
                     const fichaBase: FichaFinanceiraRegistro = fichaProxExiste
                         ? { ...fichaProxExiste }
                         : {
@@ -703,7 +704,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             if (savedFicha) setCarregadas(prev => ({ ...prev, [selectedEmpresa.id]: savedFicha }));
 
             if (savedFicha) {
-                const novaFicha = savedFicha.fichaFinanceira.find(f => f.mesReferencia === fichaMes);
+                const novaFicha = acharFichaCompetencia(savedFicha.fichaFinanceira, fichaMes);
                 if (novaFicha) {
                     setSelectedFichaId(novaFicha.id);
                     setView('report');

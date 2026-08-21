@@ -34,6 +34,8 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { selecionarNotasBlocoC, selecionarCtesBlocoD } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento } from './participante-doc-helper.js';
+// RÉGUA ÚNICA da leitura da ficha por competência (mesReferencia tem 3 formas).
+import { acharFichaCompetencia } from './ipi-varredura.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -406,8 +408,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
 
     if (regime === 'lucro' && !saldoVeioDaAbertura) {
         try {
-            const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
-            const daComp = (comp) => fichas.find(f => String(f?.mesReferencia || '') === comp) || null;
+            // RÉGUA ÚNICA da leitura por competência — igualdade estrita
+            // perderia a ficha (e com ela o saldo credor) em silêncio.
+            const daComp = (comp) => acharFichaCompetencia(empresa.fichaFinanceira, comp);
             const anterior = daComp(computarCompetenciaAnterior(periodoInicio));
             const atual = daComp(periodoInicio);
 

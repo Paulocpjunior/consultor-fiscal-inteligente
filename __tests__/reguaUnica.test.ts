@@ -71,6 +71,31 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A leitura da FICHA por competência — mesReferencia tem TRÊS formas',
+        dono: 'sefaz-backend/ipi-varredura.js',
+        comoUsar: "import { acharFichaCompetencia } from 'sefaz-backend/ipi-varredura.js'",
+        porque: '21/08 (AFFITTARE 1139): o F550 saiu vazio porque a régua lia a ficha pela forma do INPUT do '
+            + 'cálculo. Ao varrer os OUTROS leitores apareceu a segunda metade do mesmo defeito: quatro deles '
+            + 'comparavam `f.mesReferencia === competencia` na MÃO — e `mesReferencia` aparece em "YYYY-MM", '
+            + '"YYYY-MM-DD" e "MM/YYYY" conforme a época do lançamento. Igualdade estrita não devolve erro: '
+            + 'devolve NADA, que é indistinguível de "a ficha não foi lançada" — o zero silencioso que já '
+            + 'zerou M200/M600, o saldo credor do SPED Fiscal e a etapa de apuração da Rotina do Mês.',
+        assinaturas: [
+            // `.find(f => f.mesReferencia === X)` e variantes com String(...)
+            /mesReferencia\s*(?:\|\|\s*'')?\s*\)?\s*===\s*(?!'\d)/,
+        ],
+        permitido: [
+            // Dedup na GRAVAÇÃO da ficha: compara a competência do registro que
+            // está sendo salvo com a dele mesmo (mesma origem, mesmo formato) —
+            // é substituição de linha, não busca por competência de fora.
+            'services/lucroPresumidoService.ts',
+            // Merge de cadastros duplicados: compara ficha do vencedor × do
+            // perdedor, os dois vindos do MESMO campo — não é leitura por
+            // competência informada pelo usuário.
+            'sefaz-backend/empresa-merge.js',
+        ],
+    },
+    {
         nome: 'A cronologia do saldo credor — abertura do SPED ENTREGUE + transporte calculado',
         dono: 'sefaz-backend/saldo-abertura.js',
         comoUsar: "import { extrairAberturaDoSped, resolverSaldoAnterior, transportarIpi } from 'sefaz-backend/saldo-abertura.js'",

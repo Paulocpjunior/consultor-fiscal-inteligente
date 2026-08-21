@@ -24,9 +24,10 @@ import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A receita de aluguel não tem documento — ela entra pelo F550.
 import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-documento-f550.js';
-// Competência da ficha normalizada pela régua EXISTENTE (YYYY-MM · YYYY-MM-DD ·
-// MM/YYYY) — igualdade estrita perderia a ficha em silêncio.
-import { normalizarCompetencia } from './ipi-varredura.js';
+// RÉGUA ÚNICA da leitura da ficha por competência (YYYY-MM · YYYY-MM-DD ·
+// MM/YYYY) — igualdade estrita perderia a ficha em silêncio, e uma segunda
+// cópia da normalização é o começo de duas respostas divergentes.
+import { acharFichaCompetencia } from './ipi-varredura.js';
 import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 function fa() {
@@ -98,12 +99,10 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // 9) o PVA ACEITOU as entradas — mudar arquivo aceito sem recusa que mande
     // é inventar leiaute. E documento de SAÍDA nunca é excluído aqui: se ele
     // convive com o F550, quem avisa é a trava de dupla contagem, abaixo.
-    const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
-    // A competência casa NORMALIZADA (régua existente do ipi-varredura):
+    // A competência casa pela RÉGUA ÚNICA (`acharFichaCompetencia`):
     // mesReferencia aparece como 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a
     // época do lançamento, e igualdade estrita perderia a ficha em silêncio.
-    const compNorm = normalizarCompetencia(competencia) || String(competencia || '');
-    const fichaDaComp = fichas.find(f => normalizarCompetencia(f?.mesReferencia) === compNorm) || null;
+    const fichaDaComp = acharFichaCompetencia(empresa.fichaFinanceira, competencia);
     const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
     let entradasForaDaConsolidada = 0;
     if (receitaSemDocumento > 0 && regimeApuracao === '2') {

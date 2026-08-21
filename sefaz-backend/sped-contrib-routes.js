@@ -7,7 +7,7 @@
 
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
-import { conferirContagemDeCampos } from './sped-contrib-campos.js';
+import { conferirContagemDeCampos, conferirPerfilConsolidado } from './sped-contrib-campos.js';
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { requireAdmin } from './require-admin.js';
 
@@ -74,8 +74,16 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // que não foi provado volta NOMEADO, porque silêncio aqui não é
         // aprovação. Tabela de contagens escrita de memória seria uma segunda
         // cópia do mesmo palpite que produziu o defeito.
-        const campos = conferirContagemDeCampos(txt.split('\r\n').filter(Boolean));
+        const linhasDoArquivo = txt.split('\r\n').filter(Boolean);
+        const campos = conferirContagemDeCampos(linhasDoArquivo);
         for (const e of campos.erros) dados.warnings.push(`[leiaute] ${e.mensagem}`);
+
+        // O PERFIL do arquivo: consolidado (F550) não admite documento. Recusa
+        // REAL do PVA em 21/08 (AFFITTARE) — conferida sobre as LINHAS, o mesmo
+        // texto que o validador lê, para a próxima empresa gastar UMA volta.
+        for (const e of conferirPerfilConsolidado(linhasDoArquivo).erros) {
+            dados.warnings.push(`[perfil] ${e.mensagem}`);
+        }
 
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
