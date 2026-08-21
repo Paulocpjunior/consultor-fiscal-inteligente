@@ -17,3 +17,10 @@ export function participanteDoDocumento(
     d: unknown,
     empresaCnpj?: string,
 ): Record<string, unknown> | null;
+
+/**
+ * Emissão PRÓPRIA (IND_EMIT = 0) — saída OU nota própria de entrada (tpNF=0).
+ * Régua única do IND_EMIT do C100, da existência do C170 (Guia 3.2.3, Exceção
+ * 2) e da coleta de itens do 0200: os três têm que concordar.
+ */
+export function ehEmissaoPropriaDoc(d: unknown, empresaCnpj?: string): boolean;

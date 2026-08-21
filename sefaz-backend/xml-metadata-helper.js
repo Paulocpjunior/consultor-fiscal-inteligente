@@ -271,3 +271,30 @@ export function docCancelado(d) {
         return cStat === '' || CSTAT_EVENTO_CANCELAMENTO.has(cStat);
     });
 }
+
+
+/**
+ * O VALOR do documento, em TODAS as formas em que ele é gravado.
+ *
+ * Nasceu no bloco A do EFD-Contribuições (17/08, MANTOAN: 37 documentos com
+ * VL_DOC 0,00) e mudou para cá em 21/08, quando a varredura achou o MESMO
+ * defeito no bloco D dos DOIS arquivos: eles liam `valor || totalNota` e o
+ * importer grava **valorTotal** (o CT-e traz `<vTPrest>`).
+ *
+ * Devolve **NaN** quando nenhuma forma tem número — de propósito: "documento
+ * de R$ 0,00" e "não achei o valor" são coisas diferentes, e foi o zero
+ * silencioso que produziu linhas zeradas num arquivo entregue à Receita.
+ */
+export function valorDoDocumentoServico(nota) {
+    const n = nota || {};
+    const candidatos = [
+        n.valor, n.valorTotal, n.totalNota, n.valorServicos,
+        n.totais?.vNF, n.totais?.vServ, n.valores?.valorServicos,
+    ];
+    for (const c of candidatos) {
+        if (c === null || c === undefined || c === '') continue;
+        const v = typeof c === 'number' ? c : parseFloat(String(c).replace(',', '.'));
+        if (Number.isFinite(v)) return v;
+    }
+    return NaN;
+}

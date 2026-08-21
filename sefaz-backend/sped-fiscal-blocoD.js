@@ -15,6 +15,19 @@
 
 import * as fmt from './sped-fiscal-format.js';
 import { selecionarCtesBlocoD } from './sped-selecao-documentos.js';
+// Réguas DONAS da leitura do documento — o CT-e capturado grava os campos
+// achatados, e ler só a forma aninhada fazia o COD_PART cair num literal.
+import {
+    docCancelado, direcaoEfetivaDoc, valorDoDocumentoServico,
+} from './xml-metadata-helper.js';
+import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
+import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
+
+/** Valor do documento; 0 quando não há valor em forma nenhuma (o aviso é do chamador). */
+const valorDoDoc = (nota) => {
+    const v = valorDoDocumentoServico(nota);
+    return Number.isFinite(v) ? v : 0;
+};
 
 const MODELOS_BLOCO_D = ['57'];  // Apenas CTe
 
@@ -72,22 +85,28 @@ function filtrarNotasBlocoD(notas) {
  *  22 COD_INF      Codigo informacao complementar (vazio)
  *  23 COD_CTA      Codigo conta contabil (vazio)
  */
-function buildD100(nota, dados) {
+function buildD100(notaCrua, dados) {
+    // 🚨 CINCO LEITURAS CRUAS NUM REGISTRO SÓ (21/08, varredura dos leitores de
+    // documento). Este bloco lia `nota.emitente?.cnpj` — e a régua monta
+    // `.cnpjCpf` enquanto a captura grava `cnpjEmit`: NENHUMA das duas era
+    // lida, então `indEmit` saía sempre '1' e o COD_PART caía no literal
+    // 'PARTSEM' — um participante INVENTADO, que o 0150 nunca teria.
+    const nota = normalizarParticipantesDoc(notaCrua);
     const t = nota.totais || {};
-    const codSit = statusParaCodSit(nota.status);
+    // O cancelamento chega por EVENTO: o campo `status` continua 'autorizado'.
+    const codSit = docCancelado(nota) ? '02' : statusParaCodSit(nota.status);
 
-    const indOper = nota.direcao === 'saida' ? '1' : '0';
+    const indOper = direcaoEfetivaDoc(nota) === 'saida' ? '1' : '0';
 
-    // Identifica emitente vs proprio
-    const cnpjEmpresa = (dados.empresa?.cnpj || '').replace(/\D/g, '');
-    const cnpjEmitente = (nota.emitente?.cnpj || nota.cnpjEmitente || '').replace(/\D/g, '');
-    const indEmit = (cnpjEmpresa && cnpjEmitente && cnpjEmpresa === cnpjEmitente) ? '0' : '1';
+    // Emissão própria pela MESMA régua do bloco C (cobre a nota própria de
+    // entrada, que é emissão própria mesmo entrando).
+    const indEmit = ehEmissaoPropriaDoc(nota, dados.empresa?.cnpj) ? '0' : '1';
 
-    // Codigo participante: prefere o CNPJ do "outro lado" da operacao
-    const cnpjOutro = indEmit === '0'
-        ? (nota.destinatario?.cnpj || nota.cnpjDestinatario || '')
-        : (nota.emitente?.cnpj || nota.cnpjEmitente || '');
-    const codPart = (cnpjOutro || '').replace(/\D/g, '') || 'PARTSEM';
+    // Código do participante: o "outro lado" pela régua ÚNICA — a mesma que o
+    // C100 e o coletor do 0150 usam, senão o D100 aponta para quem o 0150 não
+    // cadastrou. Sem participante legível o campo sai VAZIO, nunca inventado.
+    const participante = participanteDoDocumento(nota, dados.empresa?.cnpj);
+    const codPart = String(participante?.cnpjCpf || participante?.cnpj || '').replace(/\D/g, '');
 
     // Tipo CTe: campo tpCTe do XML; default 0 (normal)
     const tpCte = String(nota.tpCTe || '0').slice(0, 1);
@@ -107,10 +126,13 @@ function buildD100(nota, dados) {
         fmt.formatDate(nota.dataEntrada || nota.dataEmissao || nota.dhEmi),
         tpCte,
         fmt.sanitizeString(nota.chaveCTeRef || '', 44),
-        fmt.formatValue(t.vNF || t.valor || 0, 2),
+        // VL_DOC pela régua do VALOR: o CT-e capturado grava `valorTotal` na
+        // raiz (o XML traz <vTPrest>), e `t.vNF || t.valor` não existe nele —
+        // era o mesmo VL_DOC 0,00 do bloco D do EFD-Contribuições.
+        fmt.formatValue(valorDoDoc(nota), 2),
         fmt.formatValue(t.vDesc || 0, 2),
         '9',  // IND_FRT default sem cobranca (CTe nao tem o conceito de frete sobre frete)
-        fmt.formatValue(t.vTPrest || t.vServ || t.vNF || 0, 2),
+        fmt.formatValue(t.vTPrest || t.vServ || valorDoDoc(nota), 2),
         fmt.formatValue(t.vBC || 0, 2),
         fmt.formatValue(t.vICMS || 0, 2),
         fmt.formatValue(t.vNT || 0, 2),
@@ -147,7 +169,9 @@ function buildD190PorNota(nota) {
         cstIcms,
         cfop,
         fmt.formatValue(aliq, 2),
-        fmt.formatValue(t.vNF || t.valor || 0, 2),
+        // VL_OPR pela MESMA régua do VL_DOC do D100 — se os dois lerem formas
+        // diferentes, o resumo contradiz o documento que ele resume.
+        fmt.formatValue(valorDoDoc(nota), 2),
         fmt.formatValue(t.vBC || 0, 2),
         fmt.formatValue(t.vICMS || 0, 2),
         '',  // VL_RED_BC

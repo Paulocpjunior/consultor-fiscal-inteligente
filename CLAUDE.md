@@ -51,6 +51,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
   defeitos de uma vez.
+  🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
+  corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
+  do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
+  própria" **e** mandar C170 na mesma nota. O Guia 3.2.3, C100, **Exceção 2** é
+  literal (*"NF-e de emissão própria: … somente os registros C100 e C190"*) e o
+  EFD **aceito** da REALITY prova: as duas notas de importação têm **ZERO**
+  C170. ✂️ `ehEmissaoPropriaDoc` virou o dono de TRÊS decisões que têm que
+  concordar — o IND_EMIT, a existência do C170 e a coleta de itens do **0200**
+  (item de nota sem C170 no 0200 vira item ÓRFÃO, outra recusa).
+  🔴 **(5) O BLOCO D DO EFD ICMS/IPI INVENTAVA PARTICIPANTE.** Ele lia
+  `nota.emitente?.cnpj` — a régua monta `.cnpjCpf` e a captura grava
+  `cnpjEmit`: **nenhuma das duas** era lida, então o `IND_EMIT` saía sempre '1'
+  e o `COD_PART` caía no literal **`'PARTSEM'`** — participante FABRICADO, que
+  o 0150 nunca teria. Junto: VL_DOC e VL_OPR zerados (mesma causa do bloco D do
+  Contribuições), COD_SIT sem o cancelamento por evento e IND_OPER pela direção
+  crua. **Cinco leituras num registro só.** Agora sem participante legível o
+  campo sai **VAZIO** — ausência não se inventa.
+  ✂️ A régua do VALOR mudou de casa no mesmo PR: `valorDoDocumentoServico` saiu
+  do bloco A do Contribuições para o `xml-metadata-helper` (dono das leituras
+  de documento), porque os DOIS blocos D a leem; o arquivo antigo re-exporta
+  (mesmo desenho do `decidirGravacaoNFe`).
+  📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
+  único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
+  defeitos de uma vez.
 - **🚨 A FICHA SE LÊ PELA RÉGUA, NUNCA POR `===` — e a varredura achou MAIS
   QUATRO leitores quebrados** (21/08, à noite, depois do F550). O defeito da
   AFFITTARE tinha DUAS metades: os CAMPOS (forma do input × forma gravada,

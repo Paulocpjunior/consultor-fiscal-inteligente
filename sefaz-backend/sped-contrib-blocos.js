@@ -14,7 +14,7 @@ import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, valorDoDocumentoServico } from './xml-metadata-helper.js';
 // A assinatura de alíquota que separa RETENÇÃO (0,65%+3%) de tributo da
 // OPERAÇÃO (1,65%+7,60%) — a régua do R-4020, reusada pelo F600.
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
@@ -263,19 +263,11 @@ export const COD_ITEM_SERVICO_GENERICO = 'SERV-GENERICO';
  * chama precisa distinguir "documento de R$ 0,00" (existe, é raro e é legítimo)
  * de "não achei o valor". Zero silencioso aqui foi o defeito de 17/08.
  */
-export function valorDoDocumentoServico(nota) {
-    const n = nota || {};
-    const candidatos = [
-        n.valor, n.valorTotal, n.totalNota, n.valorServicos,
-        n.totais?.vNF, n.totais?.vServ, n.valores?.valorServicos,
-    ];
-    for (const c of candidatos) {
-        if (c === null || c === undefined || c === '') continue;
-        const v = typeof c === 'number' ? c : parseFloat(String(c).replace(',', '.'));
-        if (Number.isFinite(v)) return v;
-    }
-    return NaN;
-}
+// A régua do VALOR mudou de casa (21/08): ela é lida também pelo bloco D do
+// EFD ICMS/IPI, e régua de leitura de documento mora no dono
+// (`xml-metadata-helper`). Re-exportada aqui para nada quebrar — mesmo
+// desenho do `decidirGravacaoNFe`, que saiu do importer para a régua própria.
+export { valorDoDocumentoServico };
 
 export function filtrarNotasBlocoA(notas) {
     return (notas || []).filter(n => {
