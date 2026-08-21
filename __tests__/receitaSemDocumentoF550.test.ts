@@ -196,4 +196,23 @@ describe('🚨 orquestrador — ficha casada por competência NORMALIZADA', () =
     it('período sem receita NENHUMA sai DITO — zero no M200/M600 é afirmação', () => {
         expect(fonte).toMatch(/M200\/M600 vão declarar ZERO/);
     });
+
+    // 🚨 PVA da AFFITTARE 21/08 (2ª rodada): com o arquivo CONSOLIDADO (F550 +
+    // IND_REG_CUM 2), o A010/A100 do serviço TOMADO volta com "O registro não
+    // deve ser informado para esse perfil e/ou tipo de operação". No cumulativo
+    // o tomado não gera crédito — sai da escrituração, NOMEADO no aviso.
+    it('🚨 consolidada exclui documento de ENTRADA — antes da coleta de 0150/0200', () => {
+        expect(fonte).toMatch(/receitaSemDocumento > 0 && regimeApuracao === '2'/);
+        expect(fonte).toMatch(/direcaoEfetivaDoc\(n\) === 'saida'/);
+        expect(fonte).toMatch(/não deve ser informado para esse perfil/);
+        // A exclusão tem que vir ANTES da coleta de participantes/itens —
+        // coletar quem vai sair deixaria o 0150/0200 órfãos (recusa do PVA).
+        expect(fonte.indexOf('entradasForaDaConsolidada'))
+            .toBeLessThan(fonte.indexOf('Extrai participantes unicos'));
+    });
+
+    it('⚠️ o detalhado NÃO exclui — o PVA aceitou as entradas da MANTOAN (IND_REG_CUM 9)', () => {
+        // A exclusão é condicionada à receita consolidada; sem F550 nada muda.
+        expect(fonte).toMatch(/Só o caminho CONSOLIDADO exclui/);
+    });
 });

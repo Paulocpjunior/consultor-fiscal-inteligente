@@ -1311,7 +1311,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ali é afirmação à Receita. 📌 **LIÇÃO DO CARIMBO: print de validador só prova
   o arquivo cujo NOME/número se conferiu** — valores que batem podem ser o
   arquivo de referência aberto do lado. A prova real é o PVA sobre o arquivo
-  REGERADO pelo CFI, e ela está PENDENTE.
+  REGERADO pelo CFI.
+  🚨 **E A 2ª RODADA DO PVA ENSINOU O PERFIL: arquivo CONSOLIDADO não leva
+  documento** (Paulo, 21/08, com o Relatório de Erros de Importação: *"está
+  puxando a NFS de serviços tomados… tem que ter a opção apenas para o que
+  gera receita"*). Com o F550 no arquivo (IND_REG_CUM **2**), o A010/A100 do
+  serviço TOMADO voltou com *"O registro não deve ser informado para esse
+  PERFIL e/ou tipo de operação"* — e no regime CUMULATIVO o tomado não gera
+  crédito nenhum, então excluí-lo **não muda um centavo** da apuração; o
+  aceito de 05/2026 da própria empresa tem o bloco A **VAZIO**.
+  ✂️ O orquestrador tira os documentos de ENTRADA quando o arquivo sai
+  consolidado — **ANTES da coleta de participantes/itens**, senão 0150/0200
+  ficariam órfãos (outra recusa do PVA) — e DIZ quantos saíram.
+  ⚠️ **O caminho DETALHADO não exclui nada**: o PVA ACEITOU as entradas da
+  MANTOAN (IND_REG_CUM 9), e mexer em arquivo aceito sem recusa que mande é
+  inventar leiaute. Documento de SAÍDA nunca é excluído: convivendo com o
+  F550, quem fala é a trava de dupla contagem.
 - **🚨 O CAMPO DE VALOR COMIA A VÍRGULA ENQUANTO A PESSOA DIGITAVA — e o
   documento ASSINADO saiu 100× maior** (colaboradora via Paulo, 21/08, APATEL
   0371: *"os valores do consultor não estão puxando ponto e vírgula"*). Ela
