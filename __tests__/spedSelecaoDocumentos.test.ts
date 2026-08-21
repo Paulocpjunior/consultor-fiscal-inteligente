@@ -454,3 +454,67 @@ describe('🚨 nota própria de entrada — IND_EMIT=0 e participante da CONTRAP
         expect(d.warnings.join(' ')).toContain('fornecedor estrangeiro');
     });
 });
+
+// ═══ EMISSÃO PRÓPRIA: IND_EMIT, C170 e 0200 têm que CONCORDAR ══════════════
+//
+// Guia Prático 3.2.3, C100, Exceção 2 (literal): "NF-e de emissão própria:
+// regra geral, devem ser apresentados somente os registros C100 e C190 …
+// somente será admitida a informação do registro C170 quando também houver
+// sido informado o registro C176, C180, C181 ou o Registro C177".
+//
+// 🐛 DEFEITO QUE EU CRIEI na manhã de 21/08: ao corrigir o IND_EMIT da nota
+// PRÓPRIA DE ENTRADA para '0', deixei a decisão do C170 lendo `direcao ===
+// 'saida'` — o arquivo passou a dizer "emissão própria" E mandar C170 na mesma
+// nota. O EFD ICMS/IPI ACEITO da REALITY 0899 · 07/2026 prova o certo: as duas
+// notas de importação saem |C100|0|0|…| com ZERO C170.
+describe('🚨 emissão própria não leva C170 — nem na entrada (Exceção 2)', () => {
+    const CNPJ_EMPRESA = '07590894000166';
+    const dados = (notas: any[]) => ({
+        empresa: { _regime: 'lucro', cnpj: CNPJ_EMPRESA, dadosFiscais: { uf: 'SP' } },
+        competenciaInicio: '2026-07', competenciaFim: '2026-07', notas, warnings: [] as string[],
+    });
+    const propriaDeEntrada = capturada({
+        chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada', tpNF: '0', numero: '49467',
+        emitente: { cnpjCpf: CNPJ_EMPRESA, nome: 'A PROPRIA EMPRESA' },
+        destinatario: { cnpjCpf: '12345678000195', nome: 'CONTRAPARTE' },
+        itens: [{ cfop: '3102', vProd: 100, vBC: 100, vICMS: 18, cst: '00' }],
+    });
+
+    it('a nota própria de entrada sai com IND_EMIT=0 e NENHUM C170', () => {
+        const linhas = buildBlocoC(dados([propriaDeEntrada]) as never);
+        const c100 = linhas.find((l: string) => l.startsWith('|C100|'))!.split('|');
+        expect(c100[3]).toBe('0');                                        // IND_EMIT: própria
+        expect(linhas.filter((l: string) => l.startsWith('|C170|'))).toHaveLength(0);
+        // …e o C190 continua saindo: é dele que a apuração vive.
+        expect(linhas.filter((l: string) => l.startsWith('|C190|')).length).toBeGreaterThan(0);
+    });
+
+    it('entrada de TERCEIRO continua com C170 — é ela que detalha o item', () => {
+        const deTerceiro = capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada', numero: '5',
+            emitente: { cnpjCpf: '98765432000109', nome: 'FORNECEDOR' },
+            itens: [{ cfop: '1102', vProd: 50, vBC: 50, vICMS: 9, cst: '00' }],
+        });
+        const linhas = buildBlocoC(dados([deTerceiro]) as never);
+        expect(linhas.filter((l: string) => l.startsWith('|C170|'))).toHaveLength(1);
+    });
+
+    it('saída própria segue sem C170, como antes', () => {
+        const saida = capturada({
+            chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'saida', numero: '7',
+            itens: [{ cfop: '5102', vProd: 100, vBC: 100, vICMS: 18, cst: '00' }],
+        });
+        expect(buildBlocoC(dados([saida]) as never).filter((l: string) => l.startsWith('|C170|'))).toHaveLength(0);
+    });
+
+    it('🚨 a régua do C170 é a MESMA do IND_EMIT e da coleta do 0200', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const blocoC = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/sped-fiscal-blocoC.js'), 'utf8');
+        const orq = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/sped-fiscal-orchestrator.js'), 'utf8');
+        // Item de nota sem C170 no 0200 vira item ÓRFÃO — outra recusa do PVA.
+        expect(blocoC).toMatch(/ehEmissaoPropriaDoc\(nota, dados\?\.empresa\?\.cnpj\)/);
+        expect(orq).toMatch(/ehEmissaoPropriaDoc\(nota, empresa\.cnpj\)/);
+        expect(orq).not.toMatch(/nota\.direcao === 'saida'\) continue/);
+    });
+});

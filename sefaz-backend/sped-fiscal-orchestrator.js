@@ -33,7 +33,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // senão o PVA acusa participante que nenhum registro referencia.
 import { selecionarNotasBlocoC, selecionarCtesBlocoD } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
-import { modeloDoDoc, participanteDoDocumento } from './participante-doc-helper.js';
+import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 // RÉGUA ÚNICA da leitura da ficha por competência (mesReferencia tem 3 formas).
 import { acharFichaCompetencia } from './ipi-varredura.js';
 
@@ -199,12 +199,16 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     }
 
     // ─── 5. Extrai itens unicos (produtos/servicos) e unidades ───
-    // Importante: itens de notas de saida propria (IND_EMIT=0) NAO geram
-    // C170 — entao nao podem aparecer no 0200 (PVA reclama de item orfao).
+    // Importante: itens de nota de EMISSÃO PRÓPRIA (IND_EMIT=0) NÃO geram
+    // C170 (Guia 3.2.3, Exceção 2) — então não podem aparecer no 0200, senão
+    // viram item ÓRFÃO e o PVA recusa. A régua é a MESMA que decide o IND_EMIT
+    // e a existência do C170 (`ehEmissaoPropriaDoc`): a nota própria de
+    // ENTRADA também é emissão própria, e lê-la pela direção crua deixaria os
+    // itens dela no 0200 sem nenhum C170 apontando para eles.
     const itensMap = new Map();
     const unidadesMap = new Map();
     for (const nota of notas) {
-        if (nota.direcao === 'saida') continue;  // itens de saida propria nao geram C170 nem 0200
+        if (ehEmissaoPropriaDoc(nota, empresa.cnpj)) continue;
         for (const item of (nota.itens || [])) {
             const codItem = item.cProd || item.codigo || item.cFiscal || `ITEM-${item.nItem || '?'}`;
             if (!itensMap.has(codItem)) {

@@ -25,7 +25,7 @@ import { cstDoLancamento } from './cst-correlacao.js';
 // Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
 // campo cru `n.modelo`, que o importer principal não grava.
 import { selecionarNotasBlocoC, avisosDaSelecao } from './sped-selecao-documentos.js';
-import { modeloDoDoc, participanteDoDocumento } from './participante-doc-helper.js';
+import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
@@ -243,10 +243,15 @@ export function buildBlocoC(dados) {
             // C170s — apenas se a nota nao for cancelada/denegada/inutilizada
             // (Guia Pratico: notas canceladas vao apenas com C100, sem C170)
             if (!docCancelado(nota) && nota.status !== 'denegado' && nota.status !== 'inutilizado') {
-                // Regra Guia Pratico: NF-e de emissao propria (IND_EMIT=0)
-                // NAO leva C170 — basta C100+C190. So gera C170 quando a
-                // nota foi emitida por terceiros (entrada).
-                const ehEmissaoPropria = nota.direcao === 'saida';
+                // Guia Prático 3.2.3, C100, Exceção 2: NF-e de EMISSÃO PRÓPRIA
+                // (IND_EMIT=0) leva somente C100 + C190 — sem C170.
+                // 🚨 E saída não é a única emissão própria: a nota própria de
+                // ENTRADA (importação, compra de produtor) também é. Ela saía
+                // com IND_EMIT=0 **e** C170 desde a correção da manhã de
+                // 21/08 — o arquivo se contradizendo. O EFD ICMS/IPI ACEITO da
+                // REALITY prova: as duas notas de importação têm ZERO C170.
+                // A régua é a MESMA do IND_EMIT (`ehEmissaoPropriaDoc`).
+                const ehEmissaoPropria = ehEmissaoPropriaDoc(nota, dados?.empresa?.cnpj);
                 if (!ehEmissaoPropria) {
                     let nItem = 1;
                     for (const item of (nota.itens || [])) {

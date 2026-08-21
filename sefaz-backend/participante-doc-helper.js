@@ -112,3 +112,27 @@ export function participanteDoDocumento(d, empresaCnpj) {
     }
     return d.emitente || d.prestador || null;
 }
+
+/**
+ * O documento é de EMISSÃO PRÓPRIA? (IND_EMIT = 0)
+ *
+ * RÉGUA ÚNICA de três decisões que TÊM que concordar entre si, senão o arquivo
+ * se contradiz: o `IND_EMIT` do C100, a existência do `C170` e a coleta de
+ * itens do `0200`.
+ *
+ * Guia Prático 3.2.3, C100, **Exceção 2** (literal): *"Notas Fiscais
+ * Eletrônicas - NF-e de emissão própria: regra geral, devem ser apresentados
+ * somente os registros C100 e C190 … somente será admitida a informação do
+ * registro C170 quando também houver sido informado o registro C176, C180,
+ * C181 ou o Registro C177"*.
+ *
+ * ⚠️ SAÍDA NÃO É A ÚNICA EMISSÃO PRÓPRIA: a nota própria de ENTRADA (tpNF=0
+ * emitida pela empresa — importação, compra de produtor rural) também é.
+ * Corroborado pelo EFD ICMS/IPI **aceito** da REALITY 0899 · 07/2026: as duas
+ * notas de importação saem `|C100|0|0|…|` e com **ZERO** C170.
+ */
+export function ehEmissaoPropriaDoc(d, empresaCnpj) {
+    if (!d) return false;
+    if (d.direcao === 'saida') return true;
+    return ehNotaPropriaDeEntrada(d, empresaCnpj).sim;
+}
