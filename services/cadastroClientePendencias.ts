@@ -106,12 +106,18 @@ export function conferirCadastroCliente(e: EmpresaParaConferir): PendenciaCadast
             onde: 'Dados fiscais → CCM.',
         });
     }
-    if (!ehSpCapital && !vazio(e.ccmSp)) {
+    // ⚠️ SÓ se afirma "fora de SP capital" com o MUNICÍPIO CONHECIDO (21/08,
+    // Paulo: *"por algum motivo tá constando pendência no CCM"* — o CCM estava
+    // certo e o que faltava era o codMunIBGE). Sem o código IBGE, quem acusa é
+    // a pendência do próprio município, logo acima; acusar o CCM aqui manda a
+    // pessoa procurar defeito num campo que ela preencheu certo — ausência não
+    // é prova (é a régua da uf-desconhecida, 15/08).
+    if (!ehSpCapital && !vazio(e.codMunIBGE) && !vazio(e.ccmSp)) {
         p.push({
             campo: 'CCM preenchido fora de SP capital',
             impacto: 'O CCM é específico da capital. Se esse número é a inscrição municipal local, ele está no campo errado.',
             gravidade: 'atencao',
-            onde: 'Dados fiscais → mova para Inscrição Municipal.',
+            onde: 'Dados fiscais → mova para Inscrição Municipal (ou corrija o Código Município IBGE, se a empresa É da capital).',
         });
     }
 

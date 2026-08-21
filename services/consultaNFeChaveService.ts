@@ -35,6 +35,8 @@ export interface NFeChaveResposta {
     xmlsResumo?: { schema: string | null; nsu: string | null; temXml: boolean; tamanho: number; primeiraTag: string | null }[];
     totalXmls?: number;
     importacao?: { schema: string | null; status: string; chave?: string; motivo?: string | null }[] | null;
+    /** Cancelamento confirmado (cStat 653): o que foi GRAVADO no documento da base (21/08, MV LIDER). */
+    gravacaoCancelamento?: { carimbado: boolean; mensagem: string } | null;
     error?: string;
 }
 

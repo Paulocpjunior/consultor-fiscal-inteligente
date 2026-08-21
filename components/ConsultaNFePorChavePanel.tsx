@@ -188,6 +188,16 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                                 <div className="text-xs font-mono mb-1 text-slate-600 dark:text-slate-400">
                                     cStat={resultado.cStat || '—'} · {resultado.xMotivo || '—'}
                                 </div>
+                                {/* Cancelamento confirmado (653): o que foi GRAVADO — antes esta tela
+                                    via o 653 e não gravava nada (MV LIDER, 18-21/08). */}
+                                {resultado.gravacaoCancelamento && (
+                                    <div className={`text-xs font-bold mt-1 ${resultado.gravacaoCancelamento.carimbado
+                                        ? 'text-emerald-700 dark:text-emerald-300'
+                                        : 'text-amber-700 dark:text-amber-300'}`}>
+                                        {resultado.gravacaoCancelamento.carimbado ? '✓ ' : '⚠ '}
+                                        {resultado.gravacaoCancelamento.mensagem}
+                                    </div>
+                                )}
                                 {resultado.escritorioEhDestinatario === true && (
                                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                                         ✓ Sim — o escritório É destinatário desta NFe.

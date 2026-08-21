@@ -84,6 +84,16 @@ describe('CCM só existe em SP capital', () => {
         expect(ccm.gravidade).toBe('atencao');
         expect(ccm.onde).toMatch(/Inscrição Municipal/);
     });
+
+    // 21/08 (Paulo: *"por algum motivo tá constando pendência no CCM"*): o CCM
+    // estava certo — o que faltava era o codMunIBGE. Sem o município, afirmar
+    // "CCM fora de SP capital" é acusar no escuro um campo preenchido certo;
+    // quem acusa a falta é a pendência do próprio código IBGE.
+    it('município DESCONHECIDO não acusa o CCM — acusa o código IBGE', () => {
+        const p = conferirCadastroCliente({ ...completo, codMunIBGE: '', ccmSp: '29175976' } as any);
+        expect(p.some((x) => x.campo.includes('CCM'))).toBe(false);
+        expect(p.some((x) => x.campo.includes('Código do município'))).toBe(true);
+    });
 });
 
 describe('farol do cadastro', () => {

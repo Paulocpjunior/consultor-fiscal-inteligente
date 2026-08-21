@@ -22,6 +22,7 @@ import { podeAcessarCnpj } from './carteira-auth.js';
 import {
     selecionarParaReconferir, lerRespostaCancelamento, resumirReconferencia,
 } from './reconferir-cancelamento.js';
+import { gravarCancelamentoConfirmado, carimbarPerguntaSefaz } from './cancelamento-gravacao.js';
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const router = express.Router();
@@ -304,17 +305,16 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
             if (leitura.situacao === 'cancelada') {
                 // Grava o EVENTO, não o status: assim `docCancelado` decide na
                 // leitura como em todo o resto do app, e o backfill do cron não
-                // encontra um status órfão sem prova ao lado.
+                // encontra um status órfão sem prova ao lado. A escrita é a
+                // MESMA do 🔎 (cancelamento-gravacao.js) — duas gravações foi o
+                // que deixou o 🔎 mudo até 21/08.
                 try {
-                    await db.collection('documentos_fiscais').doc(alvo.id).set({
-                        status: 'cancelado',
-                        eventos: fa().firestore.FieldValue.arrayUnion({
-                            ...leitura.evento,
-                            origem: usaCertEscritorio ? 'reconferencia-sefaz-cert-escritorio' : 'reconferencia-sefaz',
-                            reconferidoPor: req.user.email || req.user.uid,
-                            reconferidoEm: Date.now(),
-                        }),
-                    }, { merge: true });
+                    await gravarCancelamentoConfirmado({
+                        db, FieldValue: fa().firestore.FieldValue, docId: alvo.id,
+                        evento: leitura.evento,
+                        origem: usaCertEscritorio ? 'reconferencia-sefaz-cert-escritorio' : 'reconferencia-sefaz',
+                        usuario: req.user.email || req.user.uid,
+                    });
                 } catch (e) {
                     leitura = { situacao: 'indeterminado', motivo: `A SEFAZ disse CANCELADA, mas a gravação falhou: ${e.message}` };
                 }
@@ -326,11 +326,7 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
             // Falha ao carimbar NÃO derruba a rodada: no pior caso a nota volta
             // na fila, que é o comportamento antigo — nunca perder o resultado.
             try {
-                await db.collection('documentos_fiscais').doc(alvo.id).set({
-                    reconferenciaSefazEm: Date.now(),
-                    reconferenciaSefazSituacao: leitura.situacao,
-                    reconferenciaSefazCStat: leitura.cStat || null,
-                }, { merge: true });
+                await carimbarPerguntaSefaz({ db, docId: alvo.id, situacao: leitura.situacao, cStat: leitura.cStat });
             } catch (e) {
                 console.warn(`[reconferir-cancelamento] carimbo falhou em ${alvo.id}: ${e.message}`);
             }
