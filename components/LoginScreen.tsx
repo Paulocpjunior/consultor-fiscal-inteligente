@@ -8,9 +8,15 @@ import { APP_RELEASE, APP_BUILD_TIME, formatBuildDate, rotuloVersao } from '../v
 
 interface LoginScreenProps {
     onLoginSuccess: (user: User) => void;
+    /**
+     * Login por /connect é do SP Connect, não do CFI — mesma identidade da
+     * CASA que o resto do app já respeita (Paulo recusou associar a
+     * ferramenta ao nome do CFI). Login compartilhado (Firebase), tela não.
+     */
+    spConnect?: boolean;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = false }) => {
     const [isRegistering, setIsRegistering] = useState(false);
     
     // Fields
@@ -58,8 +64,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     <div className="flex justify-center mb-4">
                         <Logo variant="light" className="h-20 w-auto" />
                     </div>
-                    <h1 className="text-2xl font-bold text-[var(--text-primary)]" style={{fontFamily:"Cormorant Garamond,serif"}}>Consultor Fiscal Inteligente</h1>
-                    <p className="text-sm mt-2" style={{color:"var(--text-muted)"}}>Acesso Exclusivo SP Assessoria Contábil</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-primary)]" style={{fontFamily:"Cormorant Garamond,serif"}}>{spConnect ? 'SP Connect' : 'Consultor Fiscal Inteligente'}</h1>
+                    <p className="text-sm mt-2" style={{color:"var(--text-muted)"}}>{spConnect ? 'Atendimento WhatsApp · SP Assessoria Contábil' : 'Acesso Exclusivo SP Assessoria Contábil'}</p>
 
                     <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
                         <span

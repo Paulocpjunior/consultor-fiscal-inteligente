@@ -172,6 +172,14 @@ describe('janela de 24h e resumo da conversa', () => {
             metaMessageId: 'wamid.A=', de: '5511', tipo: 'audio', texto: null,
             midia: { metaMediaId: 'm1', mime: 'audio/ogg; codecs=opus', nomeArquivo: null, sha256: null },
         } as any)).toBe('whatsapp/5511/wamid_A_.ogg');
+        // GIF/figurinha também não manda nome de arquivo — 'image/gif' tinha
+        // ficado de fora do mapa e caía em '.bin' (Paulo, 21/08: erro ao ver
+        // imagem/gif). A extensão é só cosmética (quem serve o Content-Type
+        // é o mime gravado), mas o arquivo tem que dizer o que é.
+        expect(caminhoStorageMidia({
+            metaMessageId: 'wamid.G=', de: '5511', tipo: 'image', texto: null,
+            midia: { metaMediaId: 'm2', mime: 'image/gif', nomeArquivo: null, sha256: null },
+        } as any)).toBe('whatsapp/5511/wamid_G_.gif');
     });
 
     it('resumo usa o texto; sem texto, nomeia a mídia', () => {

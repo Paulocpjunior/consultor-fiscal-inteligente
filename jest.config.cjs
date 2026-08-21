@@ -10,6 +10,9 @@ module.exports = {
   testEnvironment: 'jsdom',
   moduleNameMapper: {
     '\\.(css|less|scss)$': 'identity-obj-proxy',
+    // O main do lamejs é um IIFE sem exports; o shim avalia e expõe (o
+    // encoder dos testes é o real — ver __tests__/shims/lamejs.cjs).
+    '^@breezystack/lamejs$': '<rootDir>/__tests__/shims/lamejs.cjs',
     // ts-jest CJS resolve '../foo.js' como ESM e quebra. Mapeia o sufixo
     // .js explicito pro mesmo arquivo sem ele — ts-jest entao acha o .ts
     // OU transforma o .js via a regra de transform abaixo.

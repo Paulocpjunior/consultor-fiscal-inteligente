@@ -29,6 +29,7 @@ import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMet
 import {
     suporteDeGravacao, nomeDoAudio, duracaoLegivel, traduzirErroDeMicrofone,
     atingiuLimite, LIMITE_SEGUNDOS, duracaoSuficiente, DURACAO_MINIMA_SEGUNDOS,
+    converterGravacaoParaMp3,
 } from '../../services/gravacaoAudio';
 import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, faltaNosAvisos,
@@ -383,21 +384,38 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // navegador segura os blobs até o F5.
     const [midias, setMidias] = useState<Record<string, { url: string; mime: string }>>({});
     const [midiaErro, setMidiaErro] = useState<Record<string, string>>({});
-    const [midiaCarregando, setMidiaCarregando] = useState<string | null>(null);
+    // Virou mapa (era um id só) — imagem/gif carrega SOZINHA (abaixo), então
+    // várias podem estar baixando ao mesmo tempo; um mutex de string só
+    // travaria a segunda enquanto a primeira ainda está em voo.
+    const [midiaCarregando, setMidiaCarregando] = useState<Record<string, boolean>>({});
     const midiasRef = useRef<Record<string, { url: string; mime: string }>>({});
     midiasRef.current = midias;
     useEffect(() => () => { Object.values(midiasRef.current).forEach((m) => URL.revokeObjectURL(m.url)); }, []);
 
     const verMidia = async (m: MensagemInbox) => {
-        if (!sel || midias[m.id] || midiaCarregando) return;
-        setMidiaCarregando(m.id);
+        if (!sel || midias[m.id] || midiaCarregando[m.id]) return;
+        setMidiaCarregando((c) => ({ ...c, [m.id]: true }));
         setMidiaErro((e) => ({ ...e, [m.id]: '' }));
         try {
             const r = await abrirMidia(sel.numero, m.id);
             if (!r.ok) { setMidiaErro((e) => ({ ...e, [m.id]: `${r.error}${r.acao ? ` ${r.acao}` : ''}` })); return; }
             setMidias((x) => ({ ...x, [m.id]: { url: r.url, mime: r.mime } }));
-        } finally { setMidiaCarregando(null); }
+        } finally { setMidiaCarregando((c) => { const n = { ...c }; delete n[m.id]; return n; }); }
     };
+
+    // 🖼️ Imagem/figurinha (inclusive GIF) aparece SOZINHA, como na Ultra Fox —
+    // Paulo, 21/08, comparando print a print: lá o comprovante fotografado já
+    // vinha na tela; aqui exigia clicar em "abrir anexo" pra cada uma. A mídia
+    // já foi baixada da Meta pro NOSSO Storage assim que chegou (F1 do
+    // webhook, 16/08) — então mostrar sozinha não é buscar de novo na Meta,
+    // é só puxar do bucket. Documento/vídeo continuam por clique: são
+    // maiores e o clique ali já é o comportamento esperado (baixar/abrir).
+    useEffect(() => {
+        mensagens
+            .filter((m) => (m.tipo === 'image' || m.tipo === 'sticker') && m.midia?.baixada !== false)
+            .forEach((m) => { verMidia(m); });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mensagens]);
 
     const [anexando, setAnexando] = useState(false);
     const inputAnexo = useRef<HTMLInputElement>(null);
@@ -484,8 +502,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                     setErroEnvio(`Gravação muito curta (${duracaoReal.toFixed(1)}s) — grave por pelo menos ${DURACAO_MINIMA_SEGUNDOS}s. Áudios muito curtos costumam falhar no envio pelo WhatsApp.`);
                     return;
                 }
-                setPrevia({ url: URL.createObjectURL(blob), blob, nome: nomeDoAudio(new Date(), suporte.extensao) });
+                // 🎙️→MP3 ANTES da prévia: o MP4 do Safari a Meta aceita no
+                // upload e recusa no processamento (131053 — caso real,
+                // audio-2108-1430.m4a), e o webm do Chrome vira "documento"
+                // sem player. Convertido, todo navegador manda audio/mpeg.
+                // Falha na conversão NÃO perde a gravação: vai o original.
                 setGravando(false);
+                converterGravacaoParaMp3(blob).then((mp3) => {
+                    const escolhido = mp3 || blob;
+                    const ext = mp3 ? 'mp3' : suporte.extensao;
+                    setPrevia({ url: URL.createObjectURL(escolhido), blob: escolhido, nome: nomeDoAudio(new Date(), ext) });
+                    if (!mp3) setErroEnvio(`Não deu pra converter a gravação pra MP3 — vai no formato original (${suporte.mime}); se o WhatsApp recusar, grave de novo.`);
+                });
             };
             recorderRef.current = rec;
             iniciadoEmRef.current = Date.now();
@@ -1039,11 +1067,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 Departamento
                                 <select value={nc.departamento} onChange={(e) => setNc((f) => ({ ...f, departamento: e.target.value, escolha: f.escolha.startsWith('c:') ? '' : f.escolha, variaveis: {} }))}
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
-                                    <option value="fiscal">🧾 Fiscal</option>
-                                    <option value="contabil">📊 Contábil</option>
-                                    <option value="dp-folha">👥 DP / Folha</option>
-                                    <option value="legalizacao">📋 Legalização</option>
-                                    <option value="financeiro">💰 Financeiro</option>
+                                    {/* As 8 FILAS de atendimento, não só os 5 módulos do SaaS — a
+                                        Recepção (e RH/Jurídico) também iniciam conversa; só não têm
+                                        template do CADASTRO (⚙️), então usam um Aprovado na Meta. */}
+                                    {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
                                 </select>
                             </label>
                             <label className="text-[11px] text-slate-500">
@@ -2606,10 +2633,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         ) : (
                                                             <button
                                                                 onClick={() => verMidia(m)}
-                                                                disabled={m.midia?.baixada === false || midiaCarregando === m.id}
+                                                                disabled={m.midia?.baixada === false || Boolean(midiaCarregando[m.id])}
                                                                 title={m.midia?.baixada === false ? 'ainda não baixado da Meta' : 'abrir anexo'}
                                                                 className="text-[11px] font-semibold underline disabled:no-underline disabled:opacity-60">
-                                                                {midiaCarregando === m.id ? '⏳ abrindo…' : midia}
+                                                                {midiaCarregando[m.id] ? '⏳ abrindo…' : midia}
                                                             </button>
                                                         )}
                                                         {midiaErro[m.id] && <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{midiaErro[m.id]}</p>}

@@ -480,8 +480,15 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
     try {
         const p = req.body || {};
         const departamento = String(p.departamento || '').trim().toLowerCase();
-        if (!DEPARTAMENTOS_WHATSAPP.has(departamento)) {
-            return res.status(400).json({ ok: false, error: `Departamento inválido (use ${[...DEPARTAMENTOS_WHATSAPP].join(', ')}).` });
+        // Quem inicia a conversa é uma FILA de atendimento (as 8 — Recepção,
+        // RH e Jurídico incluídos), não só os 5 apps do SaaS: DEPARTAMENTOS_
+        // WHATSAPP é o escopo do CADASTRO de template (esse sim só os 5
+        // módulos, decisão de 10/08), mas o template APROVADO NA META (ramo
+        // templateDireto, abaixo) não depende de cadastro nenhum — recusar
+        // aqui é o que fazia a Recepção nunca conseguir abrir uma conversa
+        // (Paulo, 21/08).
+        if (!filaValida(departamento)) {
+            return res.status(400).json({ ok: false, error: `Departamento (fila) inválido — use ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}.` });
         }
         if (!p.para) return res.status(400).json({ ok: false, error: 'Informe o número do WhatsApp do destinatário.' });
 
@@ -570,6 +577,10 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
         }, { merge: true });
         await db.collection('whatsapp_conversas').doc(numero).set({
             numero,
+            // A fila é de quem INICIOU — sem isso a conversa nascia sem dono
+            // e caía no default da Recepção (cx.fila || 'recepcao'), mesmo
+            // quando foi o Fiscal ou a Contábil quem mandou o template.
+            fila: departamento,
             ultimaMensagem: { resumo, direcao: 'saida', em: agora },
             atualizadoEm: agora,
             // Janela NÃO abre aqui — só a resposta do cliente abre (regra da Meta).

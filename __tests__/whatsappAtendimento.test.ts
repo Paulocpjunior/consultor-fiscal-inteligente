@@ -668,3 +668,59 @@ describe('🖼️ imagensPorFila — ação produzida pelo núcleo tem que ter Q
         expect(tela).toMatch(/removerImagemFila\(/);
     });
 });
+
+describe('🚨 "Nova conversa" tinha uma SEGUNDA lista de departamentos, e ela não tinha a Recepção', () => {
+    // Paulo, 21/08 (print da tela): "o Dpto Front/Recepcao, nao aparece p
+    // iniciar msg". O <select> do modal era 5 <option> escritas à mão —
+    // cópia velha dos 5 apps do SaaS — enquanto o catálogo de VERDADE
+    // (FILAS_ATENDIMENTO) tem 8, com Recepção, RH e Jurídico. Mesma família
+    // do #382: campo que devia ler de UM lugar só tinha nascido com a lista
+    // duplicada e desatualizada.
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+    const rotasAdmin = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    it('o select de departamento do modal lê de `filas` (o catálogo), não de <option> fixas', () => {
+        expect(tela).toMatch(/\{filas\.map\(\(f\) => <option key=\{f\.id\} value=\{f\.id\}>\{rotuloCurtoFila\(f\.id\)\}<\/option>\)\}/);
+        // A lista velha não pode ter voltado por um merge desatento.
+        expect(tela).not.toMatch(/<option value="fiscal">🧾 Fiscal<\/option>/);
+    });
+
+    // Isola o handler da rota (até o próximo `router.` do arquivo) — janela
+    // de tamanho fixo em char é frágil a qualquer comentário que cresça.
+    const inicioHandler = rotasAdmin.indexOf("router.post('/conversas/iniciar'");
+    const proximaRota = rotasAdmin.indexOf('router.', inicioHandler + 10);
+    const handler = rotasAdmin.slice(inicioHandler, proximaRota > 0 ? proximaRota : undefined);
+
+    it('a rota /conversas/iniciar aceita qualquer FILA válida, não só os 5 apps do SaaS', () => {
+        // DEPARTAMENTOS_WHATSAPP segue existindo (é o escopo do CADASTRO de
+        // template — decisão de 10/08, não mexida aqui); quem abre ou fecha a
+        // porta de iniciar conversa é `filaValida`.
+        expect(handler).toMatch(/filaValida\(departamento\)/);
+        expect(handler).not.toMatch(/DEPARTAMENTOS_WHATSAPP\.has\(departamento\)/);
+    });
+
+    it('a conversa nasce COM a fila de quem a iniciou (senão cai no default da Recepção)', () => {
+        expect(handler).toMatch(/fila: departamento,/);
+    });
+});
+
+describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — não atrás de clique', () => {
+    // Paulo, 21/08, comparando print a print (Ultra Fox × SP Connect): lá o
+    // comprovante fotografado já vinha na tela; aqui exigia "abrir anexo".
+    // A mídia já é baixada da Meta pro NOSSO Storage assim que chega (F1 do
+    // webhook, 16/08) — então mostrar sozinha é só puxar do bucket, não é
+    // buscar de novo na Meta.
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('existe um efeito que chama verMidia sozinho pra imagem/figurinha', () => {
+        expect(tela).toMatch(/useEffect\(\(\) => \{\s*mensagens\s*\.filter\(\(m\) => \(m\.tipo === 'image' \|\| m\.tipo === 'sticker'\)/);
+        expect(tela).toMatch(/\.forEach\(\(m\) => \{ verMidia\(m\); \}\);/);
+    });
+
+    it("midiaCarregando virou MAPA (era um id só) — senão a 2ª imagem trava esperando a 1ª", () => {
+        expect(tela).toMatch(/const \[midiaCarregando, setMidiaCarregando\] = useState<Record<string, boolean>>\(\{\}\)/);
+        // O mutex de string único é exatamente o defeito que travaria o
+        // carregamento automático de várias imagens ao mesmo tempo.
+        expect(tela).not.toMatch(/const \[midiaCarregando, setMidiaCarregando\] = useState<string \| null>/);
+    });
+});
