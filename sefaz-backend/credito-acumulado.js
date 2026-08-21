@@ -30,6 +30,10 @@
 // ============================================================================
 
 import { somarIcmsPorDirecao } from './sped-fiscal-blocoE.js';
+// A varredura das hipóteses tem que olhar os MESMOS documentos que a soma —
+// por isso a seleção e o cancelamento vêm das réguas donas, nunca do campo cru.
+import { ehNotaDeMercadoria } from './sped-selecao-documentos.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const num = (v) => {
@@ -67,9 +71,24 @@ export function detectarHipotesesArt71(notas) {
     let bcEntrada = 0; let icmsEntrada = 0;
 
     for (const n of notas || []) {
-        if (n?.status !== 'autorizado') continue;
-        if (!['55', '65'].includes(String(n.modelo))) continue;
-        const saida = n.direcao === 'saida';
+        // 🚨 AS MESMAS DUAS LEITURAS CRUAS QUE ZERARAM A APURAÇÃO DA PS VIDROS
+        // (19/08) estavam aqui, num painel que decide se o cliente abre
+        // processo no e-CredAc:
+        //   · `status !== 'autorizado'` — o cancelamento chega por EVENTO e o
+        //     campo continua 'autorizado';
+        //   · `String(n.modelo)` — o importer principal NÃO grava o campo, e o
+        //     modelo mora na CHAVE. Em toda empresa de captura automática esta
+        //     varredura lia ZERO itens.
+        // O efeito era PERVERSO: `somarIcmsPorDirecao` (logo abaixo) já usa a
+        // régua e enxerga as notas, então a empresa aparecia credora TODO mês
+        // e SEM hipótese legal — indo para o balde "provavelmente falta saída
+        // na captura" quando podia ser exportadora legítima. Dois conjuntos de
+        // documentos no MESMO painel é a divergência que este projeto mais paga.
+        if (!ehNotaDeMercadoria(n)) continue;
+        if (docCancelado(n)) continue;
+        if (n?.status === 'denegado' || n?.status === 'inutilizado') continue;
+        const direcao = direcaoEfetivaDoc(n);
+        const saida = direcao === 'saida';
         for (const it of (n.itens || [])) {
             itensLidos += 1;
             const cfop = soDigitos(it?.cfop);
@@ -84,7 +103,7 @@ export function detectarHipotesesArt71(notas) {
                 if (cfop.startsWith('7')) exportacao += 1;
                 else if (CST_SAIDA_SEM_DEBITO.has(cst) && num(it?.vProd) > 0) isentaComCredito += 1;
                 if (num(it?.pRedBC) > 0) reducaoBase += 1;
-            } else if (n.direcao === 'entrada') {
+            } else if (direcao === 'entrada') {
                 bcEntrada += bc; icmsEntrada += icms;
             }
         }

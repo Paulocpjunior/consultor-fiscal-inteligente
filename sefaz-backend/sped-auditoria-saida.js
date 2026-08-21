@@ -48,6 +48,12 @@ export const DETALHES_VIGIADOS = {
     // VL_DOC é o valor do documento — zerado em 100% das linhas não é caso
     // legítimo nenhum, é leitura que não achou o campo.
     A100: { rotulo: 'documentos de serviço (Contribuições)', campos: { 12: 'VL_DOC' } },
+    // 🚨 D100 FALTAVA pelo MESMO motivo, e o defeito estava lá (21/08,
+    // varredura dos leitores de documento): o bloco D lia
+    // `nota.valor || nota.totalNota` e o importer grava **valorTotal** (o CT-e
+    // traz <vTPrest>) — todo CT-e capturado saía com VL_DOC 0,00 e o crédito
+    // de PIS/COFINS do frete ia a zero. Só o D190 estava vigiado.
+    D100: { rotulo: 'conhecimentos de transporte (Contribuições)', campos: { 12: 'VL_DOC' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
     // F600 — retenção na fonte (Contribuições, 19/08 · caso HS PROJETOS).
     // Posições provadas contra arquivo aceito do E-Fiscal:

@@ -5,6 +5,52 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A VARREDURA DOS LEITORES DE DOCUMENTO ACHOU TRÊS DEFEITOS QUE NINGUÉM
+  TINHA VISTO** (21/08, à noite — Paulo: *"pode varrer a noite toda"*). Depois
+  de fechar a classe da FICHA, apliquei o mesmo método ao DOCUMENTO: levantar os
+  donos (`docCancelado`, `modeloDoDoc`, `direcaoEfetivaDoc`,
+  `normalizarParticipantesDoc`, `valorDoDocumentoServico`) e varrer quem lê o
+  campo cru. **162 ocorrências, 3 defeitos reais** — o resto é domínio onde o
+  campo NÃO mente (tarefa cancelada, NFS-e do ADN) ou comentário sobre a
+  correção antiga. Triagem por RISCO, nunca correção cega.
+  🔴 **(1) O CRÉDITO ACUMULADO lia dois conjuntos de documentos ao mesmo
+  tempo.** `detectarHipotesesArt71` tinha as MESMAS duas leituras cruas que
+  zeraram a apuração da PS VIDROS (`status !== 'autorizado'` + `String(modelo)`)
+  enquanto `apurarCompetencia`, ao lado, já usava a régua. Efeito PERVERSO: em
+  toda empresa de captura automática a detecção lia **ZERO itens**, então a
+  empresa aparecia credora todo mês e **sem hipótese legal** — indo para o balde
+  *"provavelmente falta saída na captura"* quando podia ser **exportadora
+  legítima**. Num painel que decide se o cliente abre processo no e-CredAc.
+  🔴 **(2) O BLOCO A perguntava pelas DUAS formas mais raras.**
+  `filtrarNotasBlocoA` testava `n.tipo === 'NFSe'` e `String(n.modelo) ===
+  'NFSE'` — e a NFS-e do portal de SP entra por CSV/TXT gravando
+  `prestador`/`tomador`, a do ADN grava `tipoDoc`. Documento desses trilhos
+  **sumia do bloco A**, e sumir do bloco A é sumir da apuração de PIS/COFINS.
+  ✂️ Nasceu `ehNotaDeServico` na seleção (o irmão que faltava de
+  `ehNotaDeMercadoria`/`ehConhecimentoDeTransporte`). ⚠️ **NÃO é a
+  `ehDocumentoDeServico` do FUNRURAL**: aquela responde *"é serviço?"* e o CT-e
+  É — mas o CT-e vai ao bloco **D**. Trocar uma pela outra mandaria todo
+  conhecimento de transporte para o bloco errado. 🐛 E o teste pegou um defeito
+  MEU antes de subir: escrevi `/NFS?e/`, e o `?` faz **"NFe"** casar — nota de
+  MERCADORIA entrando no bloco A.
+  🔴 **(3) O PIOR: o BLOCO D saía com VL_DOC 0,00 em TODO CT-e capturado** — e
+  não tinha **um único teste**. Ele lia `nota.valor || nota.totalNota` e o
+  importer grava **`valorTotal`** (o CT-e traz `<vTPrest>`): nenhuma das duas
+  formas existe no documento capturado. É o MESMO defeito que zerou o M200 da
+  MANTOAN em 17/08 — corrigido no bloco A e **deixado vivo no D**, com o
+  crédito de PIS/COFINS do FRETE indo a zero. Junto vinham a direção crua e o
+  participante só aninhado: as três leituras num bloco só.
+  📌 **D100 entrou em `DETALHES_VIGIADOS`** (a regra de 06/08 — só o D190
+  estava lá, e por isso a auditoria não teve o que olhar), e CT-e sem valor em
+  forma nenhuma agora sai **NOMEADO**, nunca como zero.
+  🚩 **PENDÊNCIA NOMEADA, NÃO CONSERTADA**: o leiaute do D100 do
+  EFD-Contribuições **não está provado** — o gerador monta 20 campos onde o Guia
+  lista 23, e o valor cai na casa do `TP_CT-e`. O teste pergunta pelo VALOR, não
+  pela POSIÇÃO, de propósito: travar a posição atual carimbaria de PROVADO um
+  leiaute deduzido. Fecha com um EFD-Contribuições **aceito que tenha bloco D**.
+  📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
+  único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
+  defeitos de uma vez.
 - **🚨 A FICHA SE LÊ PELA RÉGUA, NUNCA POR `===` — e a varredura achou MAIS
   QUATRO leitores quebrados** (21/08, à noite, depois do F550). O defeito da
   AFFITTARE tinha DUAS metades: os CAMPOS (forma do input × forma gravada,
@@ -1356,7 +1402,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   MANTOAN (IND_REG_CUM 9), e mexer em arquivo aceito sem recusa que mande é
   inventar leiaute. Documento de SAÍDA nunca é excluído: convivendo com o
   F550, quem fala é a trava de dupla contagem.
-<<<<<<< HEAD
   🚦 **E A RECUSA VIROU REGRA NO MESMO PR** (`conferirPerfilConsolidado`, em
   `sped-contrib-campos.js`): o arquivo consolidado que declarar A010/A100/C100/
   D100 sai com aviso ANTES do PVA, com a recusa literal como fonte. Ela lê as
@@ -1365,8 +1410,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   arquivo detalhado. É a mesma disciplina do PVA de bolso do ICMS/IPI: **recusa
   aprendida entra na prevalidação no MESMO PR**, senão volta no mês seguinte
   com outro CNPJ.
-=======
->>>>>>> origin/main
 - **🚨 O CAMPO DE VALOR COMIA A VÍRGULA ENQUANTO A PESSOA DIGITAVA — e o
   documento ASSINADO saiu 100× maior** (colaboradora via Paulo, 21/08, APATEL
   0371: *"os valores do consultor não estão puxando ponto e vírgula"*). Ela
