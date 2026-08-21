@@ -44,6 +44,16 @@ describe('a receita de LOCAÇÃO sai da ficha', () => {
         expect(receitaDeLocacao({ faturamentoLocacao: 1000, faturamentoFiliais: { locacao: 500 } })).toBe(1500);
     });
 
+    // 🚨 21/08, AFFITTARE de novo — o arquivo saiu F001|1 DEPOIS de a régua
+    // existir: a ficha GRAVADA (fichaFinanceira[]) usa os nomes ACHATADOS
+    // (`faturamentoMesLocacao`, `faturamentoFiliaisLocacao` — o que a tela e o
+    // ReportView leem); a forma `faturamentoLocacao` é a do INPUT do cálculo,
+    // que a ficha nunca tem. A 1ª versão lia só o input → 0 em silêncio.
+    it('🚨 lê a FICHA GRAVADA (faturamentoMesLocacao) — é ela que o orquestrador entrega', () => {
+        expect(receitaDeLocacao({ faturamentoMesLocacao: 21811.34 })).toBeCloseTo(21811.34, 2);
+        expect(receitaDeLocacao({ faturamentoMesLocacao: 1000, faturamentoFiliaisLocacao: 500 })).toBe(1500);
+    });
+
     it('ficha ausente ou sem locação devolve 0 — nunca NaN', () => {
         expect(receitaDeLocacao(null)).toBe(0);
         expect(receitaDeLocacao({ faturamentoServico: 5000 })).toBe(0);
@@ -163,5 +173,27 @@ describe('🚨 DUPLA CONTAGEM é o risco, e o app DIZ em vez de escolher', () =>
         // A ficha é EMBUTIDA — não existe coleção `lucro_fichas` (lição de 19/08).
         expect(fonte).toMatch(/empresa\.fichaFinanceira/);
         expect(fonte).not.toMatch(/collection\('lucro_fichas'\)/);
+    });
+});
+
+// ─── A trava do ORQUESTRADOR: quem entrega a ficha entrega a ficha CERTA ─────
+//
+// O defeito de 21/08 não estava só no nome do campo: a competência da ficha
+// (`mesReferencia`) aparece em três formatos conforme a época do lançamento, e
+// igualdade estrita perderia a ficha em silêncio — o mesmo zero indistinguível.
+describe('🚨 orquestrador — ficha casada por competência NORMALIZADA', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const fonte = fs.readFileSync(
+        path.resolve(__dirname, '../sefaz-backend/sped-contrib-orchestrator.js'), 'utf8',
+    );
+
+    it('usa normalizarCompetencia (régua existente), não igualdade estrita', () => {
+        expect(fonte).toMatch(/normalizarCompetencia\(f\?\.mesReferencia\)/);
+        expect(fonte).toMatch(/from '\.\/ipi-varredura\.js'/);
+    });
+
+    it('período sem receita NENHUMA sai DITO — zero no M200/M600 é afirmação', () => {
+        expect(fonte).toMatch(/M200\/M600 vão declarar ZERO/);
     });
 });

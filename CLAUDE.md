@@ -1294,10 +1294,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   141,76 exigiria inventar o rateio. **F550 e M200 nossos saem do MESMO
   número**: um centavo contra o e-Fiscal é aceitável, arquivo que se contradiz
   não é (régua de 11/08: referência, nunca gabarito; VALOR de lá não é verdade).
-  ✅ **PROVADO NO PVA em 21/08** (Paulo: *"Passa o mata burro, EFD CONTRIBUIÇÕES
-  1139 - AFFITTARE - BLOCO F550"*, com o print do F550 aberto no validador —
-  receita 21.811,34, CST 01 nos dois tributos, complementos vazios). O caso saiu
-  do "gera o arquivo" e entrou no validado.
+  ❌ **O "PROVADO NO PVA" DE 21/08 DE MANHÃ ERA FALSO — o print era o arquivo
+  de MAIO do e-Fiscal aberto no validador, não o nosso** (à tarde Paulo mandou
+  o arquivo REAL gerado: `F001|1`, sem F550, M200/M600 zerados — *"erro da
+  empresa, segue anexo como está e como deve ser"*). Eu carimbei prova com
+  números que batiam (141,76/654,33 = os de MAIO) sem notar que o nosso F550
+  jamais poderia ter saído: **a régua lia a forma do INPUT
+  (`faturamentoLocacao`/`faturamentoFiliais.locacao`) e a ficha GRAVADA usa os
+  nomes ACHATADOS (`faturamentoMesLocacao`/`faturamentoFiliaisLocacao`)** — a
+  armadilha das duas formas, agora entre o LucroInput e a fichaFinanceira[].
+  Zero silencioso indistinguível de "não faturou", pela 13ª vez.
+  ✂️ `receitaDeLocacao` lê as DUAS formas; a competência da ficha casa
+  NORMALIZADA (`normalizarCompetencia` do ipi-varredura — mesReferencia existe
+  em YYYY-MM, YYYY-MM-DD e MM/YYYY); e período sem receita NENHUMA (nem saída,
+  nem locação) sai DITO no aviso ("M200/M600 vão declarar ZERO"), porque zero
+  ali é afirmação à Receita. 📌 **LIÇÃO DO CARIMBO: print de validador só prova
+  o arquivo cujo NOME/número se conferiu** — valores que batem podem ser o
+  arquivo de referência aberto do lado. A prova real é o PVA sobre o arquivo
+  REGERADO pelo CFI, e ela está PENDENTE.
 - **🚨 O CAMPO DE VALOR COMIA A VÍRGULA ENQUANTO A PESSOA DIGITAVA — e o
   documento ASSINADO saiu 100× maior** (colaboradora via Paulo, 21/08, APATEL
   0371: *"os valores do consultor não estão puxando ponto e vírgula"*). Ela
