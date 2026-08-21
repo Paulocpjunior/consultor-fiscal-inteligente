@@ -20,8 +20,12 @@ async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolea
 }
 
 export const listarConversas = () =>
-    req<{ conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null; papel: 'admin' | 'gestor' | 'colaborador' }>(
-        '/api/admin/whatsapp/conversas');
+    req<{
+        conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null;
+        papel: 'admin' | 'gestor' | 'colaborador';
+        /** Teto de leitura atingido (nº do teto) — a lista mostra as N mais recentes, não a carteira toda. */
+        limiteLeitura?: number | null;
+    }>('/api/admin/whatsapp/conversas');
 
 export const listarMensagens = (numero: string) =>
     req<{ mensagens: MensagemInbox[] }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens`);

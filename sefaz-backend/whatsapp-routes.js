@@ -395,19 +395,41 @@ async function perfilAtendimento(db, user) {
 
 // Uma leitura, todas as conversas + o contato de cada uma (getAll em lote —
 // nada de N consultas).
+// 🚨 O teto de 100 mordeu no PRIMEIRO teste real (Paulo, 21/08, com várias
+// pessoas logadas: o chip dizia "Todas · 100" — número redondo é teto, não
+// carteira). Conversa mais antiga que a centésima sumia da lista CALADA,
+// mesmo aberta e não lida — a mesma classe do limit(2000) dos contatos.
+// Virou leitura paginada com teto ALTO e NOMEADO: se um dia bater, a
+// resposta diz (`limiteLeitura`), nunca esconde.
+const PAGINA_CONVERSAS = 500;
+const TETO_LEITURA_CONVERSAS = 2000;
+
 router.get('/conversas', requireAuth, async (req, res) => {
     try {
         const db = getDb();
         const { filas: minhasFilas, papel } = await perfilAtendimento(db, req.user);
-        const snap = await db.collection('whatsapp_conversas')
-            .orderBy('atualizadoEm', 'desc').limit(100).get();
-        const numeros = snap.docs.map((d) => d.id);
+        let docsConversas = [];
+        let cursorConv = null;
+        while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
+            let q = db.collection('whatsapp_conversas')
+                .orderBy('atualizadoEm', 'desc').limit(PAGINA_CONVERSAS);
+            if (cursorConv) q = q.startAfter(cursorConv);
+            // eslint-disable-next-line no-await-in-loop
+            const pagina = await q.get();
+            if (pagina.empty) break;
+            docsConversas = docsConversas.concat(pagina.docs);
+            cursorConv = pagina.docs[pagina.docs.length - 1];
+            if (pagina.docs.length < PAGINA_CONVERSAS) break;
+        }
+        const numeros = docsConversas.map((d) => d.id);
         const contatos = new Map();
-        if (numeros.length) {
-            const refs = numeros.map((n) => db.collection('whatsapp_contatos').doc(n));
+        // getAll em fatias: uma chamada com 2000 refs é pedir recusa do RPC.
+        for (let i = 0; i < numeros.length; i += 300) {
+            const refs = numeros.slice(i, i + 300).map((n) => db.collection('whatsapp_contatos').doc(n));
+            // eslint-disable-next-line no-await-in-loop
             (await db.getAll(...refs)).forEach((c) => { if (c.exists) contatos.set(c.id, c.data()); });
         }
-        const conversas = snap.docs.map((d) => {
+        const conversas = docsConversas.map((d) => {
             const x = d.data();
             const c = contatos.get(d.id) || {};
             return {
@@ -428,7 +450,10 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 atualizadoEm: x.atualizadoEm || null,
             };
         }).filter((cv) => conversaVisivel(minhasFilas, cv.fila));
-        return res.json({ ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel });
+        return res.json({
+            ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel,
+            limiteLeitura: docsConversas.length >= TETO_LEITURA_CONVERSAS ? TETO_LEITURA_CONVERSAS : null,
+        });
     } catch (e) {
         console.error('[whatsapp/conversas]', e);
         return res.status(500).json({ ok: false, error: e.message });

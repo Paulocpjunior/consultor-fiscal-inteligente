@@ -63,6 +63,7 @@ const CAMPO = 'w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 da
 /** aba = 'todas' | 'nao-lidas' | id de fila. */
 const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = ({ currentUser }) => {
     const [conversas, setConversas] = useState<ConversaResumo[]>([]);
+    const [limiteConversas, setLimiteConversas] = useState<number | null>(null);
     const [filas, setFilas] = useState<FilaAtendimento[]>([]);
     const [minhasFilas, setMinhasFilas] = useState<string[] | null>(null);
     const [papel, setPapel] = useState<'admin' | 'gestor' | 'colaborador'>('colaborador');
@@ -87,6 +88,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return; }
             setErro(null);
             setConversas(r.conversas || []);
+            setLimiteConversas(r.limiteLeitura ?? null);
             setFilas(r.filas || []);
             setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
             if (r.papel) setPapel(r.papel);
@@ -2526,6 +2528,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </p>
                                 )}
                             </div>
+                        )}
+                        {/* Lista cortada SEMPRE diz (farol honesto): sem isto, "Todas · 2000"
+                            seria lido como a carteira inteira. */}
+                        {limiteConversas != null && (
+                            <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                ⚠️ Mostrando as {limiteConversas} conversas mais recentes — há mais no banco.
+                                A busca acha só o que está na lista.
+                            </p>
                         )}
                         <div className="flex gap-1.5 flex-wrap">
                             {chip('todas', `Todas · ${conversas.length}`)}
