@@ -762,7 +762,7 @@ const App: React.FC = () => {
     if (!currentUser) {
         return (
             <>
-                <LoginScreen onLoginSuccess={handleLoginSuccess} />
+                <LoginScreen onLoginSuccess={handleLoginSuccess} spConnect={MODO_SP_CONNECT} />
                 <div className="fixed bottom-4 right-4 flex gap-2">
                     <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-lg" aria-label="Alternar tema claro/escuro">
                         {theme === 'light' ? '🌙' : '☀️'}
