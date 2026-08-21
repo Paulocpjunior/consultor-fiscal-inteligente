@@ -30,7 +30,7 @@ export function valorSped(txt: unknown): number | null;
 export interface SuspeitaSped {
     registro: string;
     tipo: 'coluna-vazia' | 'coluna-toda-zerada' | 'total-ausente' | 'total-nao-bate'
-        | 'bloco-vazio-declarado-cheio';
+        | 'bloco-vazio-declarado-cheio' | 'linha-malformada';
     gravidade: 'bloqueia' | 'atencao';
     detalhe: string;
 }
@@ -40,6 +40,13 @@ export function auditarSaidaSped(linhas: string[]): {
     suspeitas: SuspeitaSped[];
     ok: boolean;
 };
+
+/**
+ * RÉGUA ÚNICA da FORMA da linha (`|REG|…|`) — usada por esta auditoria (que
+ * roda no EFD ICMS/IPI **e** no EFD-Contribuições) e pela R15 da prevalidação.
+ * Devolve no máximo 5 suspeitas + 1 resumo do que sobrou.
+ */
+export function linhasMalformadas(linhas: string[]): SuspeitaSped[];
 
 /** Frase pra tela — nunca diz "tudo certo" quando a auditoria não rodou. */
 export function resumoAuditoria(r: { ok: boolean; suspeitas: SuspeitaSped[] } | null | undefined): string;

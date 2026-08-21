@@ -83,12 +83,62 @@ export function valorSped(txt) {
 const registroDe = (linha) => campo(linha, 1);
 
 /**
+ * Toda linha de arquivo SPED é `|REG|campo|…|`. RÉGUA ÚNICA da FORMA — usada
+ * pela auditoria (que roda nos dois arquivos) e pela R15 da prevalidação do
+ * EFD ICMS/IPI, que reporta o mesmo fato com a linguagem de recusa do PVA.
+ *
+ * Devolve no máximo 5 suspeitas + 1 resumo: uma linha grudada costuma vir
+ * acompanhada, e listar centenas afogaria o resto da auditoria.
+ */
+export function linhasMalformadas(linhas) {
+    const fora = [];
+    (linhas || []).forEach((linha, i) => {
+        const limpa = String(linha).replace(/[\r\n]+$/, '');
+        if (!limpa) return;
+        if (/^\|[A-Z0-9]{4}\|.*\|$/.test(limpa)) return;
+        fora.push({ linha: i + 1, texto: limpa });
+    });
+    if (!fora.length) return [];
+
+    const suspeitas = fora.slice(0, 5).map((f) => ({
+        registro: registroDe(`|${String(f.texto).replace(/^\|/, '')}`) || '?',
+        tipo: 'linha-malformada',
+        gravidade: 'bloqueia',
+        detalhe: `Linha ${f.linha} fora do formato |REG|…| — registro(s) grudado(s) ou separador perdido. `
+            + 'O PVA não importa o arquivo assim, e o 9900 não conta o que está grudado. Isto é defeito de '
+            + `GERAÇÃO do app (módulo formando linha fora do buildLine): "${String(f.texto).slice(0, 60)}…"`,
+    }));
+    if (fora.length > 5) {
+        suspeitas.push({
+            registro: '?', tipo: 'linha-malformada', gravidade: 'bloqueia',
+            detalhe: `…e mais ${fora.length - 5} linha(s) malformada(s) no mesmo arquivo.`,
+        });
+    }
+    return suspeitas;
+}
+
+/**
  * @param {string[]} linhas  arquivo gerado, linha a linha
  * @returns {{suspeitas: Array<{registro:string, tipo:string, gravidade:'bloqueia'|'atencao', detalhe:string}>}}
  */
 export function auditarSaidaSped(linhas) {
     const lista = (linhas || []).map(String);
     const suspeitas = [];
+
+    // ── 0. FORMA DA LINHA — antes de qualquer conta sobre o conteúdo ────────
+    //
+    // 🚨 Caso REALITY 0899 · 07/2026 (21/08): o gerador de ST devolvia linhas
+    // sem o `|` inicial e sem `\r\n`, e NOVE registros (E200/E210 de 4 UFs + o
+    // E500) saíram GRUDADOS numa única linha. Nada acusou — nem o 9900, nem a
+    // prevalidação, nem esta auditoria: todos leem LINHA A LINHA, e a linha
+    // grudada é invisível para quem pergunta pelo registro.
+    //
+    // A verificação mora AQUI porque é a auditoria que roda em TODO arquivo
+    // gerado — EFD ICMS/IPI **e** EFD-Contribuições. Deixá-la só na
+    // prevalidação do ICMS/IPI (R15) protegeria um arquivo e não o outro,
+    // enquanto o defeito é do MECANISMO (módulo formando linha fora do
+    // buildLine), não do leiaute.
+    for (const suspeita of linhasMalformadas(lista)) suspeitas.push(suspeita);
 
     // ── 1. Coluna de valor zerada em TODAS as linhas de um detalhe ──────────
     // Esta é a assinatura do bloco H: 400 itens, todos com QTD 0,00. Um item

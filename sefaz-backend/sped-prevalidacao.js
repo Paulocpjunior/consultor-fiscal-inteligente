@@ -37,6 +37,9 @@
 // ============================================================================
 
 import { cfopExiste } from './cfop-catalogo.js';
+// A FORMA da linha (|REG|…|) tem dono na auditoria de saída — ela roda nos DOIS
+// arquivos (ICMS/IPI e Contribuições), e o defeito que ela pega é do mecanismo.
+import { linhasMalformadas } from './sped-auditoria-saida.js';
 
 const campos = (linha) => String(linha || '').split('|');
 const registroDe = (linha) => campos(linha)[1] || '';
@@ -412,25 +415,24 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // E500) saíram GRUDADOS numa linha só — invisíveis para o PVA, para o 9900
     // e para ESTA prevalidação, que lê linha a linha. Linha que não casa com o
     // trilho não é registro nenhum: o PVA recusa a importação do arquivo.
-    let malformadas = 0;
-    for (const l of lista) {
-        const limpa = String(l).replace(/[\r\n]+$/, '');
-        if (/^\|[A-Z0-9]{4}\|.*\|$/.test(limpa)) continue;
-        malformadas += 1;
-        if (malformadas <= 5) {
-            add(erros, {
-                regra: 'linha-malformada', registro: registroDe(l) || '?', campo: '—',
-                valor: limpa.slice(0, 80), esperado: '|REG|…|', linha: l,
-                mensagem: 'Linha fora do formato |REG|…| — registro(s) grudado(s) ou separador perdido; '
-                    + 'o PVA não importa o arquivo assim.',
-                acao: 'Isto é defeito de GERAÇÃO do app (não do lançamento) — reporte com o print em vez de '
-                    + 'editar o arquivo à mão.',
-                fonte: 'Arquivo gerado da REALITY 0899 · 07/2026 (21/08): E200/E210 de 4 UFs + E500 numa linha só.',
-            });
+    // A régua da FORMA tem dono (`linhasMalformadas`, na auditoria de saída) —
+    // ela roda nos DOIS arquivos, ICMS/IPI e Contribuições, porque o defeito é
+    // do mecanismo (módulo formando linha fora do buildLine), não do leiaute.
+    // Aqui o mesmo fato é reportado com a linguagem de RECUSA que esta tela usa.
+    for (const s of linhasMalformadas(lista)) {
+        if (s.detalhe.startsWith('…e mais')) {
+            avisos.push({ regra: 'linha-malformada', mensagem: s.detalhe });
+            continue;
         }
-    }
-    if (malformadas > 5) {
-        avisos.push({ regra: 'linha-malformada', mensagem: `…e mais ${malformadas - 5} linha(s) malformada(s).` });
+        add(erros, {
+            regra: 'linha-malformada', registro: s.registro, campo: '—',
+            valor: '', esperado: '|REG|…|', linha: s.detalhe,
+            mensagem: 'Linha fora do formato |REG|…| — registro(s) grudado(s) ou separador perdido; '
+                + 'o PVA não importa o arquivo assim.',
+            acao: 'Isto é defeito de GERAÇÃO do app (não do lançamento) — reporte com o print em vez de '
+                + 'editar o arquivo à mão.',
+            fonte: 'Arquivo gerado da REALITY 0899 · 07/2026 (21/08): E200/E210 de 4 UFs + E500 numa linha só.',
+        });
     }
 
     const resumo = erros.length
