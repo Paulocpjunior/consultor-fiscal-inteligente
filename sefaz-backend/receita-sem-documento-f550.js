@@ -72,7 +72,18 @@ const n = (v) => {
  */
 export function receitaDeLocacao(ficha) {
     if (!ficha) return 0;
-    return Math.max(0, n(ficha.faturamentoLocacao) + n(ficha.faturamentoFiliais?.locacao));
+    // 🚨 A ARMADILHA DAS DUAS FORMAS, na FICHA (21/08, AFFITTARE de novo — o
+    // arquivo saiu F001|1 com M200/M600 zerados DEPOIS de a régua existir):
+    // a ficha GRAVADA em `fichaFinanceira[]` usa os nomes ACHATADOS
+    // (`faturamentoMesLocacao`, `faturamentoFiliaisLocacao` — é o que a tela e
+    // o ReportView leem); `faturamentoLocacao`/`faturamentoFiliais.locacao` é
+    // a forma do INPUT do cálculo (LucroInput), montada por convertFichaToInput
+    // na hora de calcular. A 1ª versão lia SÓ a forma do input — de uma ficha
+    // que nunca a tem — e devolvia 0 em silêncio, que é indistinguível de
+    // "não houve locação".
+    const matriz = n(ficha.faturamentoMesLocacao) || n(ficha.faturamentoLocacao);
+    const filiais = n(ficha.faturamentoFiliaisLocacao) || n(ficha.faturamentoFiliais?.locacao);
+    return Math.max(0, matriz + filiais);
 }
 
 /**

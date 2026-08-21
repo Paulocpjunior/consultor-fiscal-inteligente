@@ -24,6 +24,9 @@ import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A receita de aluguel não tem documento — ela entra pelo F550.
 import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-documento-f550.js';
+// Competência da ficha normalizada pela régua EXISTENTE (YYYY-MM · YYYY-MM-DD ·
+// MM/YYYY) — igualdade estrita perderia a ficha em silêncio.
+import { normalizarCompetencia } from './ipi-varredura.js';
 import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 function fa() {
@@ -192,13 +195,33 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // `mesReferencia`) — não existe coleção `lucro_fichas`, e consultá-la
     // devolvia vazio SEMPRE (lição de 19/08, saldo credor de IPI).
     const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
-    const fichaDaComp = fichas.find(f => String(f?.mesReferencia || '') === competencia) || null;
+    // A competência casa NORMALIZADA (régua existente do ipi-varredura):
+    // mesReferencia aparece como 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a
+    // época do lançamento, e igualdade estrita perderia a ficha em silêncio.
+    const compNorm = normalizarCompetencia(competencia) || String(competencia || '');
+    const fichaDaComp = fichas.find(f => normalizarCompetencia(f?.mesReferencia) === compNorm) || null;
     const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
 
     // ─── 6. Warnings ───
     const warnings = [];
     if (notas.length === 0 && !receitaSemDocumento) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo ${competencia}. Arquivo sera gerado com estrutura minima.`);
+    }
+    // 🚨 PERÍODO SEM RECEITA NENHUMA NÃO PASSA CALADO (21/08, AFFITTARE: o
+    // arquivo saiu F001|1 + M200/M600 zerados com a locação lançada na ficha —
+    // a régua lia o campo errado e o zero era indistinguível de "não faturou").
+    // Documento de ENTRADA não é receita: se só há entradas e a ficha não tem
+    // locação, o M200/M600 vai declarar zero — e isso é uma AFIRMAÇÃO à
+    // Receita, então sai DITO.
+    if (!(receitaSemDocumento > 0)) {
+        const doc = receitaDeDocumentosNoPeriodo(notas, direcaoEfetivaDoc);
+        if (doc.quantidade === 0) {
+            warnings.push(
+                'M200/M600 vão declarar ZERO: nenhum documento de SAÍDA no período e nenhuma receita de '
+                + 'LOCAÇÃO na ficha financeira desta competência. Se a empresa faturou (ex.: aluguel), lance '
+                + 'a ficha do mês ANTES de gerar — é dela que sai o F550.',
+            );
+        }
     }
     if (receitaSemDocumento > 0) {
         const doc = receitaDeDocumentosNoPeriodo(notas, direcaoEfetivaDoc);
