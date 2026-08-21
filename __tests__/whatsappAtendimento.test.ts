@@ -704,6 +704,27 @@ describe('🚨 "Nova conversa" tinha uma SEGUNDA lista de departamentos, e ela n
     });
 });
 
+describe('🚨 a lista de conversas não pode ter teto SECO — "Todas · 100" no 1º teste real', () => {
+    // Paulo, 21/08, com várias pessoas logadas: o chip dizia exatamente
+    // "Todas · 100" — o limit(100) da rota. Conversa mais antiga que a
+    // centésima sumia CALADA, mesmo aberta e não lida. Mesma classe do
+    // limit(2000) dos contatos, pega dois dias antes.
+    const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('a leitura é paginada até um teto ALTO, e o teto sai NOMEADO na resposta', () => {
+        expect(rotas).toMatch(/TETO_LEITURA_CONVERSAS = 2000/);
+        expect(rotas).toMatch(/limiteLeitura: docsConversas\.length >= TETO_LEITURA_CONVERSAS/);
+        // O limit(100) seco não pode voltar por merge desatento.
+        expect(rotas).not.toMatch(/whatsapp_conversas'\)\s*\n?\s*\.orderBy\('atualizadoEm', 'desc'\)\.limit\(100\)/);
+    });
+
+    it('lista cortada SEMPRE diz — o aviso existe na tela (farol honesto)', () => {
+        expect(tela).toMatch(/limiteConversas != null/);
+        expect(tela).toMatch(/conversas mais recentes/);
+    });
+});
+
 describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — não atrás de clique', () => {
     // Paulo, 21/08, comparando print a print (Ultra Fox × SP Connect): lá o
     // comprovante fotografado já vinha na tela; aqui exigia "abrir anexo".
