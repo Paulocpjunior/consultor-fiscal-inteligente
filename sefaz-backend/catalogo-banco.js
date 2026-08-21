@@ -102,6 +102,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'sage_codigos_participantes', grupo: 'Integrações', funcionalidade: 'De→Para de códigos de participante do E-Fiscal (Exportar SAGE) — 1 doc por empresa' },
     { colecao: 'sped_ajustes_apuracao', grupo: 'Integrações', funcionalidade: 'Ajustes da apuração ICMS (Registro E111 do SPED Fiscal) — 1 doc por empresa×competência' },
     { colecao: 'sped_inventario', grupo: 'Integrações', funcionalidade: 'Bloco H do SPED Fiscal — contagem física do inventário (H005/H010); 1 doc por empresa × data do inventário' },
+    { colecao: 'sped_saldos_abertura', grupo: 'Integrações', funcionalidade: '🧮 Saldo credor de ABERTURA (E110 c.14 / E520 c.7 do último SPED ENTREGUE, colado) — 1 doc por empresa; o transporte mês a mês é calculado, nunca redigitado' },
     { colecao: 'sped_ciap_bens', grupo: 'Integrações', funcionalidade: 'CIAP / Bloco G do SPED Fiscal — bens do imobilizado com crédito de ICMS em 48 parcelas; 1 doc por empresa' },
     { colecao: 'contadores', grupo: 'Cadastro & Acesso', funcionalidade: 'Catálogo de contadores do escritório (identificação dos relatórios) — escolhido por empresa no modal Dados Fiscais' },
     { colecao: 'nbs_codigos_oficiais', grupo: 'Catálogos', funcionalidade: 'Catálogo NBS oficial' },

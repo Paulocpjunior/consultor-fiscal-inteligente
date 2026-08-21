@@ -215,13 +215,19 @@ function parseApuracaoE110(fields: string[]): SpedApuracaoE110 {
     };
 }
 
+// 🚨 CORRIGIDO 21/08 — este parser lia posições que NÃO são as do leiaute
+// (fields[4] como "saldo credor" é o VL_OD_IPI, quase sempre 0,00). Ver o
+// comentário do tipo em types.ts; a prova é a linha real da PWR.
 function parseApuracaoE520(fields: string[]): SpedApuracaoE520 {
     return {
         tipo: 'E520',
-        valorSaldoDevedorIpi: parseNumber(fields[1]),
-        valorDeducoesIpi: parseNumber(fields[2]),
-        valorIpiRecolher: parseNumber(fields[3]),
-        valorSaldoCredorIpi: parseNumber(fields[4]),
+        saldoCredorAnteriorIpi: parseNumber(fields[1]),
+        valorDebitosIpi: parseNumber(fields[2]),
+        valorCreditosIpi: parseNumber(fields[3]),
+        valorOutrosDebitosIpi: parseNumber(fields[4]),
+        valorOutrosCreditosIpi: parseNumber(fields[5]),
+        valorSaldoCredorIpi: parseNumber(fields[6]),
+        valorSaldoDevedorIpi: parseNumber(fields[7]),
     };
 }
 

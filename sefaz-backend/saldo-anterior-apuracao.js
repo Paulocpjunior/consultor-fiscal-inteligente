@@ -65,14 +65,26 @@ export const temMovimento = (deb, cred) => num(deb) > 0 || num(cred) > 0;
 export function avisosDeSaldoAnterior({ icmsAnterior = 0, origemIcms = '', ipiAnterior = 0, origemIpi = '', geraIpi = false, geraSt = false } = {}) {
     const avisos = [];
 
-    if (num(icmsAnterior) > 0) {
+    // 🧮 A CRONOLOGIA EXISTE DESDE 21/08: quando a origem é a abertura
+    // carimbada (SPED entregue) + transporte calculado, o aviso NÃO pode mais
+    // dizer "o CFI não calcula o transporte" — aviso desatualizado é o farol
+    // mentindo na direção oposta. A origem é quem distingue.
+    const daCronologia = (origem) => /abertura|cronologia|SPED ENTREGUE/i.test(String(origem || ''));
+
+    if (num(icmsAnterior) > 0 && daCronologia(origemIcms)) {
+        avisos.push(
+            `Saldo credor de ICMS do período anterior: ${num(icmsAnterior).toFixed(2)} — CALCULADO pela `
+            + `cronologia (${origemIcms}). A ficha não foi usada neste campo.`,
+        );
+    } else if (num(icmsAnterior) > 0) {
         // Número que veio de outro lugar sai CARIMBADO com a origem — quem
         // confere precisa saber onde ele foi digitado para poder discordar.
         avisos.push(
             `Saldo credor de ICMS do período anterior: ${num(icmsAnterior).toFixed(2)} `
-            + `(origem: ${origemIcms || 'não registrada'}). O CFI ainda NÃO calcula o transporte mês a mês — `
+            + `(origem: ${origemIcms || 'não registrada'}). O CFI não calculou o transporte — `
             + 'este valor é o campo "Saldo Credor ICMS (Mês Anterior)" da ficha da competência anterior, '
-            + 'não o saldo que sobrou dela. Confira contra o E110 campo 14 do último SPED entregue.',
+            + 'não o saldo que sobrou dela. Para a cronologia de verdade, cole o último SPED ENTREGUE na '
+            + 'aba 🧮 Saldo de abertura do card SPED.',
         );
     } else {
         avisos.push(
@@ -82,14 +94,20 @@ export function avisosDeSaldoAnterior({ icmsAnterior = 0, origemIcms = '', ipiAn
         );
     }
 
-    if (geraIpi && num(ipiAnterior) > 0) {
+    if (geraIpi && num(ipiAnterior) > 0 && daCronologia(origemIpi)) {
+        avisos.push(
+            `Saldo credor de IPI do período anterior: ${num(ipiAnterior).toFixed(2)} — CALCULADO pela `
+            + `cronologia (${origemIpi}).`,
+        );
+    } else if (geraIpi && num(ipiAnterior) > 0) {
         // Ligado em 19/08 (caso PWR 07/2026): o valor sai do campo "Cred. IPI
         // do mês anterior" da ficha DESTA competência — na ficha, esse campo
         // já é "o que entrou neste mês", exatamente o VL_SD_ANT_IPI.
         avisos.push(
             `Saldo credor de IPI do período anterior: ${num(ipiAnterior).toFixed(2)} `
             + `(origem: ${origemIpi || 'não registrada'}). O valor foi digitado na ficha, não calculado — `
-            + 'confira contra o VL_SC_IPI do E520 do último SPED entregue antes de transmitir.',
+            + 'confira contra o VL_SC_IPI do E520 do último SPED entregue, ou cole-o na aba 🧮 Saldo de '
+            + 'abertura para o transporte passar a ser calculado.',
         );
     } else if (geraIpi) {
         avisos.push(

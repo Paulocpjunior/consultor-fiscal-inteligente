@@ -593,6 +593,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // sped_saldos_abertura: 🧮 saldo credor de abertura (SPED entregue colado).
+    // Só o BACKEND escreve (rota admin com a extração e a conferência de CNPJ);
+    // escrita direta do cliente seria digitar saldo — a ficha de novo.
+    match /sped_saldos_abertura/{empresaId} {
+      allow read, write: if false;
+    }
+
     // ───────────────────────────────────────────────────────────────
     // gia_st_guias: GIA-ST (ICMS-ST) por CNPJ × UF favorecida × mês.
     // Colaborador cria/atualiza; exclusão só admin (mesmo padrão do

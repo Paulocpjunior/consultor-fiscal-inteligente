@@ -478,13 +478,17 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--text-secondary)' }}>
                             IPI — Registro E520
                         </h3>
+                        {/* 🚨 Rótulos corrigidos 21/08 — o parser lia posições erradas
+                            do E520 e esta tela mostrava o VL_CRED como "IPI a
+                            Recolher" e o VL_OD como "Saldo Credor". Ver types.ts. */}
                         {parseResult?.apuracaoIpi ? (
                             <div className="space-y-2">
-                                <ApuracaoRow label="Saldo Devedor IPI" value={parseResult.apuracaoIpi.valorSaldoDevedorIpi} />
-                                <ApuracaoRow label="Deduções IPI" value={parseResult.apuracaoIpi.valorDeducoesIpi} />
+                                <ApuracaoRow label="Saldo Credor Anterior" value={parseResult.apuracaoIpi.saldoCredorAnteriorIpi} />
+                                <ApuracaoRow label="Débitos IPI" value={parseResult.apuracaoIpi.valorDebitosIpi} />
+                                <ApuracaoRow label="Créditos IPI" value={parseResult.apuracaoIpi.valorCreditosIpi} />
                                 <div style={{ borderTop: '1px solid var(--border-default)', paddingTop: '8px', marginTop: '8px' }}>
-                                    <ApuracaoRow label="IPI a Recolher" value={parseResult.apuracaoIpi.valorIpiRecolher} bold accent />
-                                    <ApuracaoRow label="Saldo Credor IPI" value={parseResult.apuracaoIpi.valorSaldoCredorIpi} />
+                                    <ApuracaoRow label="IPI a Recolher (VL_SD)" value={parseResult.apuracaoIpi.valorSaldoDevedorIpi} bold accent />
+                                    <ApuracaoRow label="Saldo Credor a Transportar (VL_SC)" value={parseResult.apuracaoIpi.valorSaldoCredorIpi} />
                                 </div>
                             </div>
                         ) : (

@@ -16,6 +16,8 @@ import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 // sobre o arquivo, antes de alguém abrir o PVA (Paulo, 20/08: o gargalo é o
 // vai-e-vem). Cada regra carrega a recusa LITERAL como fonte.
 import { prevalidarSpedFiscal, resumoPrevalidacao } from './sped-prevalidacao.js';
+// 🧮 A abertura do saldo credor vem do SPED ENTREGUE colado — nunca digitada.
+import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
@@ -123,6 +125,72 @@ router.post('/inventario', requireAuth, express.json({ limit: '4mb' }), async (r
         return res.json({ ok: true, gravados: limpos.length, recebidos: (itens || []).length });
     } catch (e) {
         console.error('[sped/inventario POST]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ─── 🧮 SALDO DE ABERTURA — a cronologia do saldo credor ───────────────────
+//
+// A fonte é o SPED ENTREGUE colado (E110 c.14 / E520 c.7), nunca digitação —
+// saldo digitado é a ficha de novo, com outro nome. O POST extrai, confere o
+// CNPJ contra a empresa e grava com carimbo; quem decide o saldo anterior de
+// cada geração é `resolverSaldoAnterior` no orquestrador.
+router.get('/saldo-abertura', requireAdmin, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+        const snap = await fa().firestore().collection('sped_saldos_abertura').doc(String(empresaId)).get();
+        return res.json({ ok: true, existe: snap.exists, abertura: snap.exists ? snap.data() : null });
+    } catch (e) {
+        console.error('[sped/saldo-abertura GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/saldo-abertura', requireAdmin, express.json({ limit: '20mb' }), async (req, res) => {
+    try {
+        const { empresaId, texto } = req.body || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+
+        const r = extrairAberturaDoSped(texto);
+        if (!r.ok) return res.status(400).json({ ok: false, error: r.motivo });
+
+        // O SPED colado tem que ser DESTA empresa — abertura da empresa errada
+        // é o saldo de um contribuinte transportado para outro, e ninguém acha
+        // depois. A conferência é pela RAIZ (matriz/filial compartilham cert,
+        // não saldo — aqui é o CNPJ INTEIRO).
+        const db = fa().firestore();
+        let emp = await db.collection('lucro_empresas').doc(String(empresaId)).get();
+        if (!emp.exists) emp = await db.collection('simples_empresas').doc(String(empresaId)).get();
+        if (!emp.exists) return res.status(404).json({ ok: false, error: 'Empresa não encontrada.' });
+        const cnpjEmpresa = String(emp.data().cnpj || '').replace(/\D/g, '');
+        if (cnpjEmpresa && cnpjEmpresa !== r.cnpj) {
+            return res.status(400).json({
+                ok: false,
+                error: `O SPED colado é do CNPJ ${r.cnpj} e a empresa selecionada é ${cnpjEmpresa} — `
+                    + 'confira se colou o arquivo do cliente certo. Nada foi gravado.',
+            });
+        }
+
+        // Substituir a abertura é legítimo (SPED entregue mais novo) — mas o
+        // que havia antes fica no histórico do documento, com quem e quando.
+        const ref = db.collection('sped_saldos_abertura').doc(String(empresaId));
+        const antes = await ref.get();
+        await ref.set({
+            empresaId: String(empresaId),
+            cnpj: r.cnpj,
+            competencia: r.competencia,
+            icms: r.icms,
+            ipi: r.ipi,
+            temE520: !!r.temE520,
+            origem: 'sped-entregue-colado',
+            criadoPor: req.user?.email || null,
+            criadoEm: new Date().toISOString(),
+            ...(antes.exists ? { anterior: { ...antes.data(), anterior: null } } : {}),
+        });
+        return res.json({ ok: true, abertura: { competencia: r.competencia, icms: r.icms, ipi: r.ipi, temE520: r.temE520 } });
+    } catch (e) {
+        console.error('[sped/saldo-abertura POST]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

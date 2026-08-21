@@ -45,7 +45,9 @@ describe('zero declarado é dito, não engolido', () => {
         expect(a).toMatch(/origem: ficha da competência anterior/);
         // O ponto que evita confiar no número: ele NÃO é o saldo que sobrou.
         expect(a).toMatch(/não o saldo que sobrou dela/);
-        expect(a).toMatch(/E110 campo 14/);
+        // 21/08: a frase deixou de mandar "conferir contra o E110 c.14 na mão"
+        // e passou a apontar a aba 🧮, onde a conferência virou mecanismo.
+        expect(a).toMatch(/🧮 Saldo de abertura/);
     });
 
     it('IPI só avisa quando o bloco E500/E520 SAI', () => {

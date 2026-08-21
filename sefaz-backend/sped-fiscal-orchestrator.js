@@ -16,7 +16,10 @@ import {
     buildBlocoG, buildBlocoK, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
-import { buildBlocoE } from './sped-fiscal-blocoE.js';
+import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped-fiscal-blocoE.js';
+// 🧮 A cronologia do saldo credor: abertura do SPED ENTREGUE + transporte
+// calculado com a MESMA matemática do E110/E520.
+import { resolverSaldoAnterior, competenciasEntre } from './saldo-abertura.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
 import { dataInventario } from './sped-bloco-h.js';
 import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bloco-g.js';
@@ -318,7 +321,90 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     let saldoCredorIpiAnterior = 0;
     let origemSaldoIcms = '';
     let origemSaldoIpi = '';
+    let saldoVeioDaAbertura = false;
+
+    // ─── 7-A. A CRONOLOGIA DE VERDADE: abertura carimbada + transporte ──────
+    //
+    // 🧮 Quando existe um SALDO DE ABERTURA cadastrado (o E110 c.14 / E520 c.7
+    // do último SPED ENTREGUE, colado na tela 🧮 do card SPED), ele VENCE a
+    // ficha: a ficha é digitada e transporta defasado; a abertura é o número
+    // que a própria empresa afirmou à SEFAZ, e daí em diante o transporte é
+    // CALCULADO mês a mês com a MESMA matemática do E110 (`saldo-abertura.js`).
+    //
+    // ⚠️ Falha de leitura NUNCA derruba a geração nem vira zero calado: cai no
+    // caminho da ficha, com o motivo no warning.
     if (regime === 'lucro') {
+        try {
+            const snapAb = await db.collection('sped_saldos_abertura').doc(String(empresaId)).get();
+            if (snapAb.exists) {
+                const abertura = snapAb.data() || {};
+                const mesesCadeia = competenciasEntre(String(abertura.competencia || ''), periodoInicio);
+                if (mesesCadeia.length > 12) {
+                    // Cadeia longa = N consultas de notas por geração. Não é
+                    // recusa técnica, é freio: acima de 1 ano o certo é colar
+                    // um SPED entregue mais recente.
+                    warnings.push(
+                        `🧮 Saldo de abertura de ${abertura.competencia} está a ${mesesCadeia.length} meses desta `
+                        + 'competência — cadeia longa demais para calcular a cada geração. Cole na tela 🧮 um SPED '
+                        + 'ENTREGUE mais recente. Enquanto isso o saldo anterior sai da FICHA, como antes.',
+                    );
+                } else {
+                    // Movimento de cada mês intermediário: as MESMAS somas do
+                    // E110/E520 (somarIcmsPorDirecao / somarImpostoPorDirecao)
+                    // sobre as notas daquele mês + os ajustes E111 lançados.
+                    const movimentos = {};
+                    for (const comp of mesesCadeia) {
+                        const [snapNotas, snapAj] = await Promise.all([
+                            db.collection('documentos_fiscais')
+                                .where('empresaId', '==', empresaId)
+                                .where('competencia', '==', comp).get(),
+                            db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${comp}`).get(),
+                        ]);
+                        const notasMes = snapNotas.docs.map((d) => ({ id: d.id, ...d.data() }))
+                            .filter((n) => !n._merged_into);
+                        const cls = classificarAjustes(
+                            snapAj.exists ? (snapAj.data().ajustes || []) : [],
+                            (empresa.dadosFiscais?.uf || '').toUpperCase(),
+                        );
+                        movimentos[comp] = {
+                            icms: {
+                                debitos: somarIcmsPorDirecao(notasMes, 'saida'),
+                                creditos: somarIcmsPorDirecao(notasMes, 'entrada'),
+                                cls,
+                            },
+                            ipi: {
+                                debitos: somarImpostoPorDirecao(notasMes, 'saida', 'vIPI', 'vIPI'),
+                                creditos: somarImpostoPorDirecao(notasMes, 'entrada', 'vIPI', 'vIPI'),
+                            },
+                        };
+                    }
+                    const r = resolverSaldoAnterior({ abertura, competencia: periodoInicio, movimentos });
+                    if (r.aplicavel) {
+                        saldoCredorIcmsAnterior = r.icms;
+                        saldoCredorIpiAnterior = r.ipi;
+                        origemSaldoIcms = r.origem;
+                        origemSaldoIpi = r.origem;
+                        saldoVeioDaAbertura = true;
+                        warnings.push(
+                            `🧮 Saldo credor anterior pela CRONOLOGIA: ICMS ${r.icms.toFixed(2)} · IPI `
+                            + `${r.ipi.toFixed(2)} — origem: ${r.origem}. A ficha NÃO foi usada para este campo.`,
+                        );
+                    } else {
+                        warnings.push(`🧮 Saldo de abertura cadastrado mas NÃO aplicado: ${r.motivo} `
+                            + 'O saldo anterior sai da FICHA, como antes.');
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn(`[sped-fiscal] cronologia do saldo falhou: ${err.message}`);
+            warnings.push(
+                `🧮 A cronologia do saldo de abertura falhou na leitura (${err.message}) — o saldo anterior `
+                + 'sai da FICHA, como antes. Confira antes de transmitir.',
+            );
+        }
+    }
+
+    if (regime === 'lucro' && !saldoVeioDaAbertura) {
         try {
             const fichas = Array.isArray(empresa.fichaFinanceira) ? empresa.fichaFinanceira : [];
             const daComp = (comp) => fichas.find(f => String(f?.mesReferencia || '') === comp) || null;

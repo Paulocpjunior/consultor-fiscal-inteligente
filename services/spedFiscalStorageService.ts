@@ -50,7 +50,9 @@ export async function salvarSpedArquivo(
             temApuracaoIcms: !!parseResult.apuracaoIcms,
             temApuracaoIpi: !!parseResult.apuracaoIpi,
             icmsRecolher: parseResult.apuracaoIcms?.valorIcmsRecolher,
-            ipiRecolher: parseResult.apuracaoIpi?.valorIpiRecolher,
+            // 21/08: era `valorIpiRecolher` (fields[3]) — que no leiaute real do
+            // E520 é o VL_CRED_IPI. O IPI a recolher é o VL_SD_IPI (campo 8).
+            ipiRecolher: parseResult.apuracaoIpi?.valorSaldoDevedorIpi,
             erros: parseResult.erros.length,
             avisos: parseResult.avisos.length,
         },
