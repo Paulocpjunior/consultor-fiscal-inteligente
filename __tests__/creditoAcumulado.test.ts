@@ -213,3 +213,52 @@ describe('painel da carteira', () => {
         expect(p.avisos.join(' ')).toMatch(/saída faltando na captura/);
     });
 });
+
+// ═══ A NOTA COMO ELA CHEGA DA CAPTURA — e não como o fixture a inventa ══════
+//
+// 21/08, varredura noturna dos leitores de DOCUMENTO. `detectarHipotesesArt71`
+// lia `status !== 'autorizado'` e `String(n.modelo)` — as MESMAS duas leituras
+// cruas que zeraram a apuração da PS VIDROS em 19/08. O importer principal NÃO
+// grava `modelo` (ele mora na CHAVE) e o cancelamento chega por EVENTO.
+//
+// O efeito era PERVERSO e invisível: `apurarCompetencia` usa a régua
+// (somarIcmsPorDirecao) e ENXERGA as notas; a detecção das hipóteses lia ZERO
+// itens. A empresa aparecia credora todo mês e SEM hipótese legal — indo para
+// o balde "provavelmente falta saída na captura" quando podia ser exportadora.
+// Os 22 testes existentes passavam porque TODO fixture traz modelo e status.
+describe('🚨 documento CAPTURADO (sem `modelo`, cancelado por evento)', () => {
+    const CHAVE_55 = '35260731947349000169550010000000031705547508';
+    /** Como o importer principal grava: sem `modelo`, modelo só na chave. */
+    const capturada = (over: any = {}) => ({
+        direcao: 'saida', status: 'autorizado', chave: CHAVE_55,
+        itens: [item({ cfop: '7102', vICMS: 0 })], ...over,
+    });
+
+    it('exportação é reconhecida na nota SEM o campo modelo — era zero antes', () => {
+        const h = detectarHipotesesArt71([capturada()]);
+        expect(h.itensLidos).toBe(1);
+        expect(h.exportacao).toBe(1);
+    });
+
+    it('a detecção olha os MESMOS documentos que a apuração soma', () => {
+        // Se os dois conjuntos divergirem, o painel diz "credora sem hipótese"
+        // sobre uma empresa cuja saída ele mesmo somou.
+        const notas = [
+            capturada({ itens: [item({ cfop: '7102', vICMS: 0, vBC: 0 })] }),
+            capturada({ direcao: 'entrada', itens: [item({ vICMS: 400 })] }),
+        ];
+        expect(apurarCompetencia(notas).credor).toBe(true);
+        expect(detectarHipotesesArt71(notas).itensLidos).toBe(2);
+    });
+
+    it('cancelada por EVENTO fica de fora da detecção, como fica da soma', () => {
+        const cancelada = capturada({ eventos: [{ tpEvento: '110111', cStat: '135' }] });
+        expect(detectarHipotesesArt71([cancelada]).itensLidos).toBe(0);
+        expect(apurarCompetencia([cancelada]).debitos).toBe(0);
+    });
+
+    it('NFS-e não entra na conta do ICMS (a régua de mercadoria decide)', () => {
+        const nfse = { direcao: 'saida', tipoDoc: 'NFSe', prestador: {}, itens: [item()] };
+        expect(detectarHipotesesArt71([nfse]).itensLidos).toBe(0);
+    });
+});

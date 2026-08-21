@@ -14,7 +14,7 @@ import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // A assinatura de alíquota que separa RETENÇÃO (0,65%+3%) de tributo da
 // OPERAÇÃO (1,65%+7,60%) — a régua do R-4020, reusada pelo F600.
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
@@ -22,7 +22,7 @@ import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 // DONO — o mesmo leitor que alimenta o R-4020. Segunda cópia divergiria.
 import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
-import { selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao } from './sped-selecao-documentos.js';
+import { selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico } from './sped-selecao-documentos.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import { modeloDoDoc } from './participante-doc-helper.js';
 // CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
@@ -286,9 +286,12 @@ export function filtrarNotasBlocoA(notas) {
         // de situação é o oposto da régua da casa. Omitir não declara nada a
         // menos — a nota cancelada não tem valor a declarar.
         if (docCancelado(n)) return false;
-        if (n.tipo === 'NFSe' || n.tipo === 'NFSE') return true;
-        if (String(n.modelo) === 'NFSE') return true;
-        return false;
+        // 🚨 A régua é a DONA da seleção por bloco (`ehNotaDeServico`), não o
+        // campo cru: perguntar `n.tipo === 'NFSe'` cobre a forma mais rara — a
+        // NFS-e do portal de SP entra por CSV/TXT gravando prestador/tomador, e
+        // a do ADN grava `tipoDoc`. Documento desses trilhos sumia do bloco A,
+        // e sumir do bloco A é sumir da apuração de PIS/COFINS, calada.
+        return ehNotaDeServico(n);
     });
 }
 
@@ -686,9 +689,20 @@ export function buildBlocoD_Contrib(dados) {
     linhas.push(fmt.buildLine(['D001', '0']));
     linhas.push(fmt.buildLine(['D010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
 
-    for (const nota of notasD) {
-        if (docCancelado(nota)) continue;
-        const direcao = nota.direcao;
+    /** CT-e sem valor legível: sai NOMEADO, como no bloco A. */
+    const valorZeroD = [];
+    for (const notaCrua of notasD) {
+        if (docCancelado(notaCrua)) continue;
+        // As MESMAS três réguas do bloco A — este bloco tinha as três leituras
+        // cruas (21/08, varredura dos leitores de documento):
+        //   · `nota.valor || nota.totalNota` — o importer grava **valorTotal**
+        //     (o CT-e traz <vTPrest>), então TODO CT-e capturado saía com
+        //     VL_DOC 0,00 e PIS/COFINS zerados. É o defeito que zerou o M200 da
+        //     MANTOAN em 17/08, corrigido no bloco A e vivo aqui;
+        //   · `nota.direcao` cru — a régua é `direcaoEfetivaDoc`;
+        //   · participante só na forma ANINHADA — a captura grava achatado.
+        const nota = normalizarParticipantesDoc(notaCrua);
+        const direcao = direcaoEfetivaDoc(nota);
         const indOper = direcao === 'saida' ? '1' : '0';
         const indEmit = direcao === 'saida' ? '0' : '1';
 
@@ -699,7 +713,13 @@ export function buildBlocoD_Contrib(dados) {
             ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || '').replace(/\D/g, '')
             : '';
 
-        const vlDoc = parseFloat(nota.valor || nota.totalNota || 0);
+        const vlDoc = valorDoDocumentoServico(nota);
+        // Zero num campo de valor é AFIRMAÇÃO, e o PVA recusa D100 zerado.
+        // Documento sem valor em forma nenhuma sai da base, nomeado.
+        if (!Number.isFinite(vlDoc) || vlDoc <= 0) {
+            valorZeroD.push(String(nota.numero || nota.chave || '(sem número)'));
+            continue;
+        }
         const vlPis = vlDoc * aliq.pis;
         const vlCofins = vlDoc * aliq.cofins;
 
@@ -718,6 +738,16 @@ export function buildBlocoD_Contrib(dados) {
             fmt.formatValue(vlDoc), fmt.formatValue(vlPis),
             fmt.formatValue(vlDoc), fmt.formatValue(vlCofins),
         ]));
+    }
+
+    if (valorZeroD.length && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Bloco D: ${valorZeroD.length} CT-e ficaram FORA porque o valor não foi encontrado em forma `
+            + `nenhuma — nº ${valorZeroD.slice(0, 10).join(', ')}`
+            + `${valorZeroD.length > 10 ? ` e mais ${valorZeroD.length - 10}` : ''}. `
+            + 'O PVA recusa D100 com VL_DOC zerado, e declarar zero seria afirmar que o frete não teve valor. '
+            + 'Reimporte o XML do CT-e (o valor mora em <vTPrest>) ou rode o ♻️ antes de transmitir.',
+        );
     }
 
     const totalBloco = linhas.length + 1;

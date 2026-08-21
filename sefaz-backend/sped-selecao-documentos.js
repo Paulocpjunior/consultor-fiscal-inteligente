@@ -68,6 +68,36 @@ export function ehNotaDeMercadoria(d) {
     return ['55', '65'].includes(modeloDoDoc(d));
 }
 
+/**
+ * NFS-e — o que vai ao bloco A do EFD-Contribuições.
+ *
+ * 🚨 O IRMÃO QUE FALTAVA (21/08, varredura dos leitores de documento). O filtro
+ * do bloco A perguntava `n.tipo === 'NFSe' || String(n.modelo) === 'NFSE'` — as
+ * DUAS formas mais raras. A NFS-e do portal de SP entra por CSV/TXT e grava
+ * `prestador`/`tomador`; a do ADN grava `tipoDoc`. Documento que chegasse por
+ * esses trilhos sem o `tipo` cravado sumia do bloco A — e sumir do bloco A é
+ * sumir da apuração de PIS/COFINS, calada.
+ *
+ * ⚠️ CT-e NÃO ENTRA, e é por isso que esta régua não é a `ehDocumentoDeServico`
+ * do FUNRURAL: aquela responde "é serviço?" (e o CT-e é), enquanto aqui a
+ * pergunta é "vai ao bloco A?" — o CT-e vai ao **D**. Trocar uma pela outra
+ * mandaria todo conhecimento de transporte para o bloco errado.
+ */
+export function ehNotaDeServico(d) {
+    if (!d) return false;
+    if (ehConhecimentoDeTransporte(d)) return false;
+    const rotulo = rotuloTipo(d);
+    if (/MDFe/i.test(rotulo)) return false;
+    // ⚠️ `NFS-?e`, nunca `NFS?e`: com o `?` no S o padrão casa "NFe" e a nota
+    // de MERCADORIA entraria no bloco A (pego pelo teste antes de subir).
+    if (/NFS-?e|servico|serviço/i.test(rotulo)) return true;
+    // Blocos que SÓ existem em nota de serviço — é como o próprio app já
+    // normaliza a NFS-e do portal (prestador/tomador) e o que o FUNRURAL usa.
+    if (d.prestador || d.tomador) return true;
+    if (d.codigoServicoMunicipal || d.itemLc116 || d.discriminacao) return true;
+    return false;
+}
+
 /** CT-e (57) / CT-e OS (67) — o que vai ao bloco D. */
 export function ehConhecimentoDeTransporte(d) {
     if (!d) return false;

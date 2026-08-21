@@ -17,7 +17,7 @@
  * grava `valorTotal`). O laço nunca rodava — 37 A100 órfãos.
  */
 // @ts-ignore — módulo JS do backend
-import { buildBlocoA } from '../sefaz-backend/sped-contrib-blocos.js';
+import { buildBlocoA, filtrarNotasBlocoA } from '../sefaz-backend/sped-contrib-blocos.js';
 // @ts-ignore
 import { buildBloco0Contrib, ieDoArquivo } from '../sefaz-backend/sped-contrib-bloco0.js';
 // @ts-ignore
@@ -201,5 +201,41 @@ describe('0150 COD_MUN — o app DENUNCIA, não preenche', () => {
         };
         buildBloco0Contrib(d);
         expect(d.warnings.some(w => w.includes('COD_MUN'))).toBe(false);
+    });
+});
+
+// ═══ A NFS-e COMO ELA CHEGA — e não como o fixture a inventa ════════════════
+//
+// 21/08, varredura dos leitores de DOCUMENTO. `filtrarNotasBlocoA` perguntava
+// `n.tipo === 'NFSe' || String(n.modelo) === 'NFSE'` — as DUAS formas mais
+// raras. A NFS-e do portal de SP entra por CSV/TXT gravando prestador/tomador
+// e a do ADN grava `tipoDoc`: documento desses trilhos SUMIA do bloco A, e
+// sumir do bloco A é sumir da apuração de PIS/COFINS, calada.
+describe('🚨 bloco A — a NFS-e entra pelas formas REAIS de captura', () => {
+    it('NFS-e do portal (prestador/tomador, sem `tipo`) entra', () => {
+        const doPortal = { prestador: { cnpj: '1' }, tomador: { cnpj: '2' }, valorTotal: 100 };
+        expect(filtrarNotasBlocoA([doPortal])).toHaveLength(1);
+    });
+
+    it('NFS-e do ADN (tipoDoc, sem `tipo`) entra', () => {
+        expect(filtrarNotasBlocoA([{ tipoDoc: 'NFSe', valorTotal: 100 }])).toHaveLength(1);
+    });
+
+    it('documento com código de serviço municipal entra', () => {
+        expect(filtrarNotasBlocoA([{ codigoServicoMunicipal: '07498', valorTotal: 50 }])).toHaveLength(1);
+    });
+
+    it('⚠️ CT-e NÃO entra no bloco A — ele é do bloco D', () => {
+        expect(filtrarNotasBlocoA([{ tipoDoc: 'CTe', modelo: '57' }])).toHaveLength(0);
+        expect(filtrarNotasBlocoA([{ tipo: 'CTe', chave: '3'.repeat(44) }])).toHaveLength(0);
+    });
+
+    it('NF-e de mercadoria continua fora, e cancelada também', () => {
+        expect(filtrarNotasBlocoA([{ tipo: 'NFe', modelo: '55' }])).toHaveLength(0);
+        const canceladaPorEvento = {
+            tipoDoc: 'NFSe', status: 'autorizado',
+            eventos: [{ tpEvento: '110111', cStat: '135' }],
+        };
+        expect(filtrarNotasBlocoA([canceladaPorEvento])).toHaveLength(0);
     });
 });
