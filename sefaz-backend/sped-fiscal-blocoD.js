@@ -22,6 +22,9 @@ import {
 } from './xml-metadata-helper.js';
 import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
+// A correlação de CFOP é a MESMA do C190 — o CT-e traz o código do
+// transportador, e quem toma o frete escritura na ótica de entrada.
+import { cfopDoLancamento } from './cfop-correlacao.js';
 
 /** Valor do documento; 0 quando não há valor em forma nenhuma (o aviso é do chamador). */
 const valorDoDoc = (nota) => {
@@ -30,6 +33,18 @@ const valorDoDoc = (nota) => {
 };
 
 const MODELOS_BLOCO_D = ['57'];  // Apenas CTe
+
+/** CFOP do CT-e — cabeçalho (onde o CT-e o guarda) ou 1º item. Vazio = não sei. */
+export function cfopDoCte(nota) {
+    const cru = String(nota?.cfop || nota?.CFOP || (nota?.itens || [])[0]?.cfop || '').replace(/\D/g, '');
+    return cru.length === 4 ? cru : '';
+}
+
+/** CST de ICMS do CT-e — mesma ideia; '' quando o documento não diz. */
+export function cstDoCte(nota) {
+    const cru = String(nota?.cstIcms || nota?.cst || (nota?.itens || [])[0]?.cst || '').replace(/\D/g, '');
+    return cru ? cru : '';
+}
 
 /**
  * Mapeia status interno -> COD_SIT do registro D100 (mesmo do C100).
@@ -160,8 +175,20 @@ function buildD100(notaCrua, dados) {
  */
 function buildD190PorNota(nota) {
     const t = nota.totais || {};
-    const cstIcms = String(nota.cstIcms || '000').padStart(3, '0').slice(-3);
-    const cfop = String(nota.cfop || nota.CFOP || '5352').padStart(4, '0').slice(-4);
+    // 🚨 SEM CFOP/CST INVENTADO (21/08): o CFOP saía CRAVADO em '5352'
+    // ("prestação a estabelecimento industrial") em 100% dos conhecimentos,
+    // porque a captura só lia o CFOP de dentro de <prod> — e o CT-e o traz no
+    // CABEÇALHO. Cravar aqui é afirmar a NATUREZA da operação de transporte,
+    // que é justamente o que a fiscalização lê. Quem não tem CFOP legível não
+    // entra no bloco (ver `cfopDoCte`): aqui ele já chegou conferido.
+    const cstIcms = String(cstDoCte(nota) || '090').padStart(3, '0').slice(-3);
+    // ⚠️ E o CFOP passa pela MESMA régua do C190: o CT-e traz o CFOP do
+    // TRANSPORTADOR (5352/6352 — a prestação, do lado dele), e quem TOMA o
+    // frete escritura na ótica de entrada (1352/2352). Preservar o do emitente
+    // escrituraria a operação DELE — é a lição da correlação de CFOP.
+    const cfop = String(
+        cfopDoLancamento(nota, cfopDoCte(nota), direcaoEfetivaDoc(nota), {}) || cfopDoCte(nota),
+    ).padStart(4, '0').slice(-4);
     const aliq = parseFloat(nota.aliqIcms || 0) || 0;
 
     return fmt.buildLine([
@@ -191,14 +218,29 @@ export function buildBlocoD(dados) {
     linhas.push(fmt.buildLine(['D001', indMovimento]));
 
     // D100 + D190 por CTe
+    /** CT-e sem CFOP legível: sai NOMEADO em vez de entrar com natureza inventada. */
+    const semCfop = [];
     for (const nota of notas) {
         try {
+            if (!cfopDoCte(nota)) {
+                semCfop.push(String(nota.numero || nota.chave || '(sem número)'));
+                continue;
+            }
             linhas.push(buildD100(nota, dados));
             // D190 pra cada CTe — agrupamento detalhado pode vir em fase futura
             linhas.push(buildD190PorNota(nota));
         } catch (e) {
             console.error(`[blocoD] erro ao gerar registros do CTe ${nota.chave || nota.numero}:`, e.message);
         }
+    }
+    if (semCfop.length && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Bloco D: ${semCfop.length} CT-e ficaram FORA porque o CFOP não foi capturado — `
+            + `nº ${semCfop.slice(0, 10).join(', ')}${semCfop.length > 10 ? ` e mais ${semCfop.length - 10}` : ''}. `
+            + 'O CFOP do CT-e mora no CABEÇALHO do XML e a captura antiga não o lia; cravar um valor aqui '
+            + 'declararia a NATUREZA da operação de transporte no escuro. Rode o ♻️ (reler XMLs guardados) '
+            + 'para recuperá-lo, ou reimporte o XML do conhecimento.',
+        );
     }
 
     // D990 — Encerramento

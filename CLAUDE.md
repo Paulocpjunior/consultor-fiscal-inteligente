@@ -48,10 +48,49 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lista 23, e o valor cai na casa do `TP_CT-e`. O teste pergunta pelo VALOR, não
   pela POSIÇÃO, de propósito: travar a posição atual carimbaria de PROVADO um
   leiaute deduzido. Fecha com um EFD-Contribuições **aceito que tenha bloco D**.
+  🔴 **(6) A CONFERÊNCIA DO SAGE VALIDAVA UM CFOP E O ARQUIVO GRAVAVA OUTRO.**
+  `cfopParaEscriturar` recebe o DOCUMENTO como 4º argumento porque o CFOP
+  informado na NF (✏️ CFOP por nota) vence o override e a régua automática — o
+  Exportar SAGE passa, e o **preflight não passava**. É a família da "réplica de
+  CFOP no modal" (12/08), e a régua da casa é dura: *conferência que promete
+  número diferente do arquivo é pior que não ter tela*.
+  🔴 **(7) O D190 CRAVAVA CFOP `'5352'` EM 100% DOS CONHECIMENTOS.** A captura
+  só lia o CFOP de dentro de `<prod>` — e o **CT-e o traz no CABEÇALHO**
+  (`<ide><CFOP>`), então `nota.cfop` era sempre vazio e o default entrava.
+  Cravar ali AFIRMA a natureza da operação de transporte, num campo que a
+  fiscalização lê: é o 'PARTSEM' de novo. ✂️ O importer passou a capturar
+  CFOP/CST do cabeçalho, o D190 os lê, e o CFOP passa pela **mesma correlação
+  do C190** (o CT-e traz o código do TRANSPORTADOR — 5352 — e quem TOMA o frete
+  escritura 1352). CT-e sem CFOP legível **não entra** e sai NOMEADO, com a
+  ação (♻️), em vez de entrar com natureza inventada.
+  📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
+  único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
+  defeitos de uma vez. E **default de campo fiscal é invenção com outro nome**:
+  'PARTSEM', '5352', '000' e o COD_GEN '00' saíram todos da mesma cabeça.
+  🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
+  corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
+  do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
+  própria" **e** mandar C170 na mesma nota. O Guia 3.2.3, C100, **Exceção 2** é
+  literal (*"NF-e de emissão própria: … somente os registros C100 e C190"*) e o
+  EFD **aceito** da REALITY prova: as duas notas de importação têm **ZERO**
+  C170. ✂️ `ehEmissaoPropriaDoc` virou o dono de TRÊS decisões que têm que
+  concordar — o IND_EMIT, a existência do C170 e a coleta de itens do **0200**
+  (item de nota sem C170 no 0200 vira item ÓRFÃO, outra recusa).
+  🔴 **(5) O BLOCO D DO EFD ICMS/IPI INVENTAVA PARTICIPANTE.** Ele lia
+  `nota.emitente?.cnpj` — a régua monta `.cnpjCpf` e a captura grava
+  `cnpjEmit`: **nenhuma das duas** era lida, então o `IND_EMIT` saía sempre '1'
+  e o `COD_PART` caía no literal **`'PARTSEM'`** — participante FABRICADO, que
+  o 0150 nunca teria. Junto: VL_DOC e VL_OPR zerados (mesma causa do bloco D do
+  Contribuições), COD_SIT sem o cancelamento por evento e IND_OPER pela direção
+  crua. **Cinco leituras num registro só.** Agora sem participante legível o
+  campo sai **VAZIO** — ausência não se inventa.
+  ✂️ A régua do VALOR mudou de casa no mesmo PR: `valorDoDocumentoServico` saiu
+  do bloco A do Contribuições para o `xml-metadata-helper` (dono das leituras
+  de documento), porque os DOIS blocos D a leem; o arquivo antigo re-exporta
+  (mesmo desenho do `decidirGravacaoNFe`).
   📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
   defeitos de uma vez.
-<<<<<<< HEAD
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
@@ -77,7 +116,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
   defeitos de uma vez.
 =======
->>>>>>> origin/main
 - **🚨 A FICHA SE LÊ PELA RÉGUA, NUNCA POR `===` — e a varredura achou MAIS
   QUATRO leitores quebrados** (21/08, à noite, depois do F550). O defeito da
   AFFITTARE tinha DUAS metades: os CAMPOS (forma do input × forma gravada,
