@@ -51,6 +51,7 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
   defeitos de uma vez.
+<<<<<<< HEAD
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
@@ -75,6 +76,8 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
   defeitos de uma vez.
+=======
+>>>>>>> origin/main
 - **🚨 A FICHA SE LÊ PELA RÉGUA, NUNCA POR `===` — e a varredura achou MAIS
   QUATRO leitores quebrados** (21/08, à noite, depois do F550). O defeito da
   AFFITTARE tinha DUAS metades: os CAMPOS (forma do input × forma gravada,
