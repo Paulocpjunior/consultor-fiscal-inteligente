@@ -80,7 +80,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Etiquetas/tags | **[?]** | **📇 → 🏷 (17/08)**: catálogo Lead · Cliente · Marketing · Colaborador · Candidato · Fornecedor · Parceiro · Ex-cliente, editável pelo admin. Filtro por etiqueta com a contagem de cada uma, e "sem etiqueta" como fila de trabalho | ✅ **respondeu a pergunta 3 do §7** — o Paulo pediu, então alguém usa |
 | Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
 | Notificação sonora / pop-up de mensagem nova | ✔ **[Paulo, 16/08]** | **som** (sintetizado, sem arquivo externo), **pop-up do navegador** (clique abre a conversa) e **contador no título da aba** — a mesma mensagem nunca apita duas vezes, a conversa aberta não apita e a 1ª carga aprende sem apitar | ✅ **16/08** |
-| Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | **pronto** — service worker, cadastro do aparelho, escolha de quem recebe (a MESMA régua de fila do inbox) e envio pelo FCM; fora do expediente só quem pediu | 🟡 **falta UMA chave**: `VITE_FIREBASE_VAPID_KEY` (Firebase Console → Cloud Messaging → certificados push da Web). Sem ela o app **diz** que o push está pendente — não finge |
+| Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | **pronto** — service worker, cadastro do aparelho, escolha de quem recebe (a MESMA régua de fila do inbox) e envio pelo FCM; fora do expediente só quem pediu | 🟡 a `VITE_FIREBASE_VAPID_KEY` **já viaja no deploy** (`deploy-app.yml`, secret + build-arg — conferido 20/08). Quem responde se o push está DE PÉ é a barra de avisos do próprio app: se ela oferecer "📱 Avisar também no celular", está; se disser pendente, o secret está vazio |
 | Presença (online/ausente) do atendente | **[?]** | — | 🟡 |
 
 ## 4. Contatos e cliente
@@ -177,11 +177,16 @@ relatórios de volume/tempo, presença, respostas rápidas configuráveis,
 busca dentro da thread, CRM/Jotform.
 
 **Sequência recomendada**: ~~fechar os 3 bloqueantes~~ ✅ 16/08 →
-~~ligar o bot no PILOTO, com a Ultra Fox de pé~~ ✅ 17/08 → **ensaio com
-atendente real resolvendo conversa ponta a ponta** (o aceite que o Paulo
-pediu) → **virar o alcance para 🌐 todos** → só então cancelar a Ultra Fox.
-E o backup dela entra ANTES do cancelamento —
-plataforma cancelada não devolve export.
+~~ligar o bot no PILOTO, com a Ultra Fox de pé~~ ✅ 17/08 → ~~**ensaio com
+atendente real resolvendo conversa ponta a ponta**~~ ✅ **21/08 — teste
+real com várias pessoas logadas** (ver §9) → **virar o alcance para 🌐
+todos** (se ainda estiver em 🧪 piloto — conferir na ⚙️ → 🤖) → só então
+cancelar a Ultra Fox. E o backup dela entra ANTES do cancelamento —
+plataforma cancelada não devolve export. **Checklist do dia do
+cancelamento**: (1) backup COMPLETO exportado e importado pelo ⚙️ → 📥
+(inclusive a pasta `_files`, que vai pro SharePoint); (2) alcance 🌐
+confirmado e bot respondendo; (3) um dia de operação sem a equipe abrir a
+Ultra Fox — se ninguém sentiu falta, corta.
 
 ⚠️ **O que fica ENTRE o piloto e o 🌐 todos**: o piloto prova o bot na
 conversa de UMA pessoa que começa do zero; o 🌐 solta o bot sobre as
@@ -205,3 +210,11 @@ de avaliação. Nota dele: **10**. Dois fatos importam junto com o resultado:
 a Ultra Fox continuava assinada na WABA e **o bot dela não respondeu** (não
 houve menu em dobro), e a nota 10 só foi capturada porque a escala virou
 DADO no mesmo dia — na régua antiga ela teria sido descartada em silêncio.
+
+**21/08 — TESTE REAL com várias pessoas logadas ao mesmo tempo** (Paulo:
+*"Começamos o teste real! Várias pessoas logadas!"*). Clientes de verdade
+passando pelo bot (saudação, menu, encaminhamento por fila), transferência
+Recepção → RH em produção, conversa encerrada e avaliada. O dia também
+provou o valor do ensaio: o **teto de 100 conversas** da lista apareceu no
+primeiro dia de volume real ("Todas · 100") e foi corrigido no mesmo dia —
+leitura paginada até 2000, com o corte NOMEADO na tela quando bater.
