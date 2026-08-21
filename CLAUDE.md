@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TELA QUE VÊ A RESPOSTA E NÃO GRAVA — o 🔎 via o cStat 653 e o
+  conhecimento EVAPORAVA** (21/08, MV LIDER 639, *"erro persistente"* — e
+  ✅ **FECHADA NO MESMO DIA**: *"639 - MV LIDER - ok"*). O print mostrava a
+  reconferência ANDANDO (102 → 82 nunca perguntadas — a correção de 20/08
+  funcionou); o que persistia era outra coisa: em 18/08 o Paulo consultou as
+  chaves suspeitas no 🔎 Consultar NFe por chave, a SEFAZ confirmou o
+  cancelamento (653)… e a rota **não gravava nada** — rota de diagnóstico que
+  VÊ o fato e não carimba é a família da "rota sem gravação". A reconferência
+  teve que redescobrir as mesmas canceladas a ~20 consultas/hora, porque a
+  SEFAZ pausa com 656 (limite DELA, não do app).
+  ✂️ A gravação virou ÚNICA (`cancelamento-gravacao.js`): reconferência e 🔎
+  escrevem o MESMO evento + carimbo; o 🔎 **só carimba documento que JÁ existe
+  na base** (id = chave — consulta de chave alheia continua só consulta) e a
+  tela DIZ o que gravou ("✓ cancelamento GRAVADO"). ⚠️ E os dois números da
+  mesma tela discordavam por TEMPO, não por régua: o texto da rodada dizia o
+  "nunca perguntadas" de ANTES (102) com o cabeçalho já no DEPOIS (82) — o
+  aviso passou a descontar a própria rodada ("Depois desta rodada, restam N").
+  📌 **REGRA QUE FICA: número que aparece duas vezes na mesma tela sai do
+  MESMO instante** — e resposta de órgão confirmando fato fiscal NUNCA fica só
+  na tela de quem consultou.
+- **🚨 CCM `00000000` VALE COMO VAZIO EM TODO LEITOR — a régua existia e
+  faltava justo onde acusava** (21/08, caso LAV COMERCIO DE AUTOPECAS,
+  colaboradora via Paulo: *"ali onde deveria colocar o de ccm de SP coloco uma
+  sequência de 8 zeros"*). Os 8 zeros são contorno ANTIGO da equipe, de quando
+  o campo parecia obrigatório; a regra "só-zeros = vazio" (#311) existia na
+  GRAVAÇÃO e na captura de NFS-e — e a régua de PENDÊNCIAS não a conhecia,
+  acusando *"CCM preenchido fora de SP capital"* sobre zeros que significam
+  "não tem". ✂️ Dono único `soZerosComoVazio` (`empresaDadosFiscaisSanitize`):
+  pendências usam, o `xmlFiscalService` perdeu a cópia local, e a rota do
+  perfil parou de devolver os zeros pro modal (o campo aparece VAZIO, como o
+  texto de ajuda sempre pediu). Na capital, zeros = **CCM FALTANDO** (a
+  captura não roda com eles); fora dela, zeros não são nada. Os zeros já
+  gravados **não precisam ser removidos um a um** — o app os ignora.
+  ⚠️ No mesmo dia, a outra metade: a pendência afirmava "fora de SP capital"
+  também com `codMunIBGE` VAZIO — ausência não é prova (régua da
+  uf-desconhecida, 15/08); sem o código IBGE quem acusa é a pendência do
+  próprio município.
 - **🚨 O BLOCO E DE ST SAÍA COM 9 REGISTROS NUMA LINHA SÓ — módulo formando
   linha FORA do buildLine** (21/08, REALITY 0899 · 07/2026 — dúvida do
   colaborador com análise do Copilot; conferida contra os DOIS arquivos antes
@@ -3648,10 +3685,12 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
    excluir é SOFT-DELETE e a lápide precisa aguentar F5 + outro navegador.
 6. **ABERTAS EM 17-18/08, cada uma esperando UM dado dele** — nenhuma é trabalho
    de código, e enquanto não vierem **o número da tela não é fato**:
-   a) **MV LIDER 639 · 07/2026 — os 3 NÚMEROS das notas canceladas** (R$
-      26.820,44). A régua única da cancelada subiu, mas quem diz se o "0
-      cancelada(s)" era RECORTE (competência/empresa) ou régua divergente é o
-      número da nota. **Não dar a competência por fechada antes.**
+   a) ✅ **RESOLVIDO 21/08 — MV LIDER 639 · 07/2026** (Paulo: *"639 - MV LIDER
+      - ok"*). O que fechou: o 🔎 passou a GRAVAR o cancelamento confirmado
+      (653) na hora, a fila da reconferência anda (carimbo + antiguidade), o
+      640 conta como "não cancelada por recusa" e os dois números da tela
+      saem do mesmo instante. Ver o mata-burro "A TELA QUE VÊ A RESPOSTA E
+      NÃO GRAVA" no topo.
    b) ✅ **RESOLVIDO 19/08 — KROYA × GOLDLOG.** `17.390.490/0001-82` é a
       GOLDLOG; a captura automática escriturou a entrada dela pela chave e a
       saída correspondente da KROYA foi lançada manualmente pelo ✍️ sem chave,
