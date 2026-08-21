@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-20';
+export const SOBRE_VERSAO = '2026-08-21';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -249,6 +249,16 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-08-21',
+        itens: [
+            '🎙️ O áudio gravado agora é convertido pra MP3 antes de enviar — resolve o erro 131053 do WhatsApp com gravações do Safari (o formato que ele grava a Meta não processava) e o cliente ganha o player nativo em qualquer navegador.',
+            '🖼️ Foto e GIF recebidos aparecem SOZINHOS na conversa, como na Ultra Fox — sem precisar clicar em "abrir anexo" em cada um. Documento e vídeo continuam abrindo por clique.',
+            '📱 No Teams, o microfone passa a ser permitido (pacote 1.0.1 do app do Teams — o admin precisa reenviar o zip no painel do Teams pra valer).',
+            '✚ Nova conversa: a Recepção (e RH/Jurídico) entraram na lista de departamentos pra iniciar mensagem — antes só os 5 módulos apareciam.',
+            '🔑 A tela de login do /connect diz "SP Connect" — não mais o nome do app fiscal.',
+        ],
+    },
     {
         data: '2026-08-20',
         itens: [

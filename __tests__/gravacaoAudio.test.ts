@@ -8,6 +8,7 @@ import {
     FORMATOS_AUDIO, LIMITE_SEGUNDOS, suporteDeGravacao, nomeDoAudio,
     duracaoLegivel, traduzirErroDeMicrofone, atingiuLimite,
     DURACAO_MINIMA_SEGUNDOS, duracaoSuficiente,
+    floatParaInt16, codificarMp3, converterGravacaoParaMp3, lerBytesDoBlob,
 } from '../services/gravacaoAudio';
 
 describe('formato — o que a Meta aceita, na ordem', () => {
@@ -85,5 +86,66 @@ describe('piso de duração — grava curto demais falha DEPOIS, no WhatsApp', (
     it('no piso ou acima já basta', () => {
         expect(duracaoSuficiente(DURACAO_MINIMA_SEGUNDOS)).toBe(true);
         expect(duracaoSuficiente(5)).toBe(true);
+    });
+});
+
+// 🚨 Caso real nº 2, Paulo 21/08 (audio-2108-1430.m4a): a duração passou do
+// piso e a Meta AINDA recusou (131053) — o MP4 do MediaRecorder do Safari é
+// que não processa lá, curto ou longo. A saída definitiva: converter TODA
+// gravação pra MP3 (audio/mpeg — formato de player nativo no WhatsApp).
+describe('🎙️→MP3 — a gravação é convertida antes do envio', () => {
+    it('floatParaInt16 satura em vez de estourar (clipping vira teto, não ruído)', () => {
+        const r = floatParaInt16(new Float32Array([0, 1, -1, 2, -2, 0.5]));
+        expect(r[0]).toBe(0);
+        expect(r[1]).toBe(0x7fff);
+        expect(r[2]).toBe(-0x8000);
+        expect(r[3]).toBe(0x7fff);   // acima de 1 não passa do teto
+        expect(r[4]).toBe(-0x8000);
+        expect(r[5]).toBe(Math.round(0.5 * 0x7fff));
+    });
+
+    it('codificarMp3 produz um MP3 de verdade (bytes com frame sync, mime audio/mpeg)', async () => {
+        // 1s de senoide a 44,1 kHz — pequeno o bastante pro teste, real o
+        // bastante pro encoder ter o que codificar.
+        const pcm = new Int16Array(44100);
+        for (let i = 0; i < pcm.length; i++) pcm[i] = Math.round(Math.sin(i / 20) * 8000);
+        const blob = await codificarMp3(pcm, 44100);
+        expect(blob.type).toBe('audio/mpeg');
+        expect(blob.size).toBeGreaterThan(1000);
+        // lerBytesDoBlob é o MESMO leitor da produção (fallback FileReader —
+        // o Blob do jsdom, como o do Safari 13, não tem .arrayBuffer()).
+        const bytes = new Uint8Array(await lerBytesDoBlob(blob));
+        // Frame sync do MPEG: 11 bits em 1 (0xFF Ex/Fx) no primeiro frame.
+        expect(bytes[0]).toBe(0xff);
+        expect(bytes[1] & 0xe0).toBe(0xe0);
+    });
+
+    it('converterGravacaoParaMp3 decodifica via contexto injetado e devolve MP3 mono', async () => {
+        const amostras = 22050; // 0,5s a 44,1 kHz
+        const canalA = new Float32Array(amostras).fill(0.5);
+        const canalB = new Float32Array(amostras).fill(-0.5);
+        const ctx = {
+            decodeAudioData: async () => ({
+                numberOfChannels: 2, sampleRate: 44100, length: amostras,
+                // média dos canais = silêncio — prova que o downmix é por MÉDIA
+                getChannelData: (c: number) => (c === 0 ? canalA : canalB),
+            }),
+            close: async () => { /* noop */ },
+        };
+        const blob = await converterGravacaoParaMp3(new Blob([new Uint8Array(10)]), () => ctx);
+        expect(blob).not.toBeNull();
+        expect(blob!.type).toBe('audio/mpeg');
+    });
+
+    it('falha na decodificação devolve NULL — o componente manda o original, nunca perde a gravação', async () => {
+        const ctx = { decodeAudioData: async () => { throw new Error('formato ilegível'); } };
+        const r = await converterGravacaoParaMp3(new Blob([new Uint8Array(10)]), () => ctx as any);
+        expect(r).toBeNull();
+    });
+
+    it('a tela converte ANTES da prévia e cai no original se a conversão falhar', () => {
+        const tela = require('fs').readFileSync(require('path').join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+        expect(tela).toMatch(/converterGravacaoParaMp3\(blob\)\.then/);
+        expect(tela).toMatch(/mp3 \|\| blob/);
     });
 });

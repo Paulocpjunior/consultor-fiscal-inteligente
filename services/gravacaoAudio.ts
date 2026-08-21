@@ -134,3 +134,102 @@ export function traduzirErroDeMicrofone(erro: { name?: string; message?: string 
 export function atingiuLimite(segundos: number): boolean {
     return segundos >= LIMITE_SEGUNDOS;
 }
+
+// ─── 🎙️ → MP3: a gravação é CONVERTIDA antes de enviar ─────────────────────
+// Caso real (Paulo, 21/08, audio-2108-1430.m4a): o MP4 que o Safari grava a
+// Meta aceita no UPLOAD e recusa no PROCESSAMENTO (131053) — mesmo com
+// duração acima do piso. E no Chrome o MediaRecorder só grava webm, que a
+// Meta trata como documento (o cliente perde o player). Convertendo a
+// gravação pra MP3 (audio/mpeg — formato com player nativo no WhatsApp) os
+// dois problemas somem de uma vez: todo navegador passa a enviar o MESMO
+// formato, processável e audível.
+//
+// A conversão é local (lamejs, JS puro) — o áudio não sai do navegador até o
+// envio normal. decodeAudioData quem faz é o componente (AudioContext não
+// existe no jest); AQUI fica a parte pura e testável: PCM → MP3.
+
+/** Taxa do MP3 de voz (96 kbps mono ≈ 720 KB/min — sobra folga no limite). */
+export const MP3_KBPS = 96;
+
+/**
+ * Bytes de um Blob com fallback por FileReader — `blob.arrayBuffer()` só
+ * existe do Safari 14 em diante, e Safari antigo ainda é comum nos celulares
+ * do escritório (a mesma ressalva do suporteDeGravacao).
+ */
+export function lerBytesDoBlob(blob: Blob): Promise<ArrayBuffer> {
+    if (typeof (blob as any).arrayBuffer === 'function') return blob.arrayBuffer();
+    return new Promise((resolve, reject) => {
+        const leitor = new FileReader();
+        leitor.onload = () => resolve(leitor.result as ArrayBuffer);
+        leitor.onerror = () => reject(new Error('não deu pra ler o áudio'));
+        leitor.readAsArrayBuffer(blob);
+    });
+}
+
+/** Float32 [-1,1] do WebAudio → Int16 que o encoder come. */
+export function floatParaInt16(canal: Float32Array): Int16Array {
+    const saida = new Int16Array(canal.length);
+    for (let i = 0; i < canal.length; i++) {
+        const v = Math.max(-1, Math.min(1, canal[i]));
+        saida[i] = Math.round(v < 0 ? v * 0x8000 : v * 0x7fff);
+    }
+    return saida;
+}
+
+/**
+ * PCM mono → MP3. O import do lamejs é dinâmico de propósito: o encoder só
+ * entra no bundle de quem grava áudio, não no carregamento do app.
+ */
+export async function codificarMp3(pcm: Int16Array, taxaAmostragem: number): Promise<Blob> {
+    // O pacote entrega ESM e CJS; conforme o empacotador, o construtor vem
+    // como named export ou dentro do default — as duas formas são lidas.
+    const mod: any = await import('@breezystack/lamejs');
+    const Mp3Encoder = mod.Mp3Encoder || mod.default?.Mp3Encoder;
+    const enc = new Mp3Encoder(1, taxaAmostragem, MP3_KBPS);
+    const partes: Uint8Array[] = [];
+    const BLOCO = 1152; // tamanho de frame do MP3
+    for (let i = 0; i < pcm.length; i += BLOCO) {
+        const b = enc.encodeBuffer(pcm.subarray(i, i + BLOCO));
+        if (b.length) partes.push(new Uint8Array(b));
+    }
+    const fim = enc.flush();
+    if (fim.length) partes.push(new Uint8Array(fim));
+    return new Blob(partes as BlobPart[], { type: 'audio/mpeg' });
+}
+
+/**
+ * Gravação (qualquer formato do navegador) → MP3, decodificando com o
+ * AudioContext do próprio navegador. Canais viram MONO por média — voz é
+ * mono por natureza, e metade dos bytes.
+ * Falha na decodificação NÃO derruba o envio: devolve null e o componente
+ * manda o blob original (o comportamento de antes), com o formato dito.
+ */
+export async function converterGravacaoParaMp3(blob: Blob, criarContexto?: () => {
+    decodeAudioData: (b: ArrayBuffer) => Promise<{
+        numberOfChannels: number; sampleRate: number; length: number;
+        getChannelData: (c: number) => Float32Array;
+    }>;
+    close?: () => Promise<void> | void;
+}): Promise<Blob | null> {
+    try {
+        const Ctx = (typeof window !== 'undefined')
+            ? ((window as any).AudioContext || (window as any).webkitAudioContext)
+            : null;
+        const ctx = criarContexto ? criarContexto() : (Ctx ? new Ctx() : null);
+        if (!ctx) return null;
+        try {
+            const audio = await ctx.decodeAudioData(await lerBytesDoBlob(blob));
+            const canais = audio.numberOfChannels;
+            const mono = new Float32Array(audio.length);
+            for (let c = 0; c < canais; c++) {
+                const dados = audio.getChannelData(c);
+                for (let i = 0; i < mono.length; i++) mono[i] += dados[i] / canais;
+            }
+            return await codificarMp3(floatParaInt16(mono), audio.sampleRate);
+        } finally {
+            try { await ctx.close?.(); } catch { /* contexto já fechado */ }
+        }
+    } catch {
+        return null;
+    }
+}

@@ -29,6 +29,7 @@ import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMet
 import {
     suporteDeGravacao, nomeDoAudio, duracaoLegivel, traduzirErroDeMicrofone,
     atingiuLimite, LIMITE_SEGUNDOS, duracaoSuficiente, DURACAO_MINIMA_SEGUNDOS,
+    converterGravacaoParaMp3,
 } from '../../services/gravacaoAudio';
 import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, faltaNosAvisos,
@@ -501,8 +502,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                     setErroEnvio(`Gravação muito curta (${duracaoReal.toFixed(1)}s) — grave por pelo menos ${DURACAO_MINIMA_SEGUNDOS}s. Áudios muito curtos costumam falhar no envio pelo WhatsApp.`);
                     return;
                 }
-                setPrevia({ url: URL.createObjectURL(blob), blob, nome: nomeDoAudio(new Date(), suporte.extensao) });
+                // 🎙️→MP3 ANTES da prévia: o MP4 do Safari a Meta aceita no
+                // upload e recusa no processamento (131053 — caso real,
+                // audio-2108-1430.m4a), e o webm do Chrome vira "documento"
+                // sem player. Convertido, todo navegador manda audio/mpeg.
+                // Falha na conversão NÃO perde a gravação: vai o original.
                 setGravando(false);
+                converterGravacaoParaMp3(blob).then((mp3) => {
+                    const escolhido = mp3 || blob;
+                    const ext = mp3 ? 'mp3' : suporte.extensao;
+                    setPrevia({ url: URL.createObjectURL(escolhido), blob: escolhido, nome: nomeDoAudio(new Date(), ext) });
+                    if (!mp3) setErroEnvio(`Não deu pra converter a gravação pra MP3 — vai no formato original (${suporte.mime}); se o WhatsApp recusar, grave de novo.`);
+                });
             };
             recorderRef.current = rec;
             iniciadoEmRef.current = Date.now();
