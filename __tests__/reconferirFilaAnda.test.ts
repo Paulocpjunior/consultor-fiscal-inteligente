@@ -66,10 +66,13 @@ describe('🚨 a fila ANDA — quem nunca foi perguntada vem primeiro', () => {
         expect(s.nuncaConferidas).toBe(0);
     });
 
-    it('o aviso diz quantas NUNCA foram perguntadas — "3 rodadas" sozinho prometia demais', () => {
+    it('o aviso diz quantas AINDA nunca foram perguntadas — descontando a própria rodada', () => {
+        // 21/08 (MV LIDER): a seleção conta ANTES de consultar, e o texto dizia
+        // o número velho ("102") com o cabeçalho da tela já mostrando o novo
+        // ("82"). O aviso fala do DEPOIS: nunca-perguntadas − consultadas.
         const s = selecionarParaReconferir(docs, opts(2));
         const r = resumirReconferencia({ selecao: s, resultados: [{ situacao: 'nao-cancelada' }] });
-        expect(r.avisos.join(' ')).toMatch(/4 nota\(s\) nunca foram perguntadas/);
+        expect(r.avisos.join(' ')).toMatch(/Depois desta rodada, 3 nota\(s\) ainda nunca foram perguntadas/);
     });
 
     it('e quando todas já foram, ele DIZ que a fila volta nas mais antigas', () => {
@@ -129,8 +132,21 @@ describe('🚨 a rota tem que CARIMBAR e tem que LER o carimbo', () => {
         path.resolve(__dirname, '../sefaz-backend/conferencia-chaves-routes.js'), 'utf8',
     );
 
-    it('carimba TODA nota perguntada, não só a cancelada', () => {
-        expect(rota).toMatch(/reconferenciaSefazEm: Date\.now\(\)/);
+    it('carimba TODA nota perguntada, não só a cancelada — pela gravação ÚNICA', () => {
+        // 21/08: a escrita mudou de casa (cancelamento-gravacao.js) para o 🔎
+        // Consultar NFe por chave gravar o MESMO evento — era a rota que via o
+        // cStat 653 e não gravava nada (o "erro persistente" da MV LIDER).
+        expect(rota).toMatch(/carimbarPerguntaSefaz\(\{ db, docId: alvo\.id/);
+        const gravacao = fs.readFileSync(
+            path.resolve(__dirname, '../sefaz-backend/cancelamento-gravacao.js'), 'utf8',
+        );
+        expect(gravacao).toMatch(/reconferenciaSefazEm: Date\.now\(\)/);
+        // E o 🔎 usa a MESMA gravação — segunda cópia é como as duas divergem.
+        const sync = fs.readFileSync(
+            path.resolve(__dirname, '../sefaz-backend/sync-routes.js'), 'utf8',
+        );
+        expect(sync).toMatch(/gravarCancelamentoConfirmado\(/);
+        expect(sync).toMatch(/from '\.\/cancelamento-gravacao\.js'/);
     });
 
     it('e passa o carimbo para a seleção — senão a ordem nova não vale nada', () => {

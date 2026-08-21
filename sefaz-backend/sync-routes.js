@@ -10,6 +10,8 @@ import { sincronizarEmpresa } from './sync-orchestrator.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
+import { lerRespostaCancelamento } from './reconferir-cancelamento.js';
+import { gravarCancelamentoConfirmado, carimbarPerguntaSefaz } from './cancelamento-gravacao.js';
 import { loadCertificate } from './secret-loader.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropria, corrigirStatusCanceladoPorEvento, preencherEnderecoDestinatario } from './xml-importer.js';
@@ -829,11 +831,51 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
       }
     }
 
+    // 🚨 CANCELAMENTO CONFIRMADO NÃO EVAPORA MAIS (caso MV LIDER, 21/08):
+    // em 18/08 esta tela viu cStat 653 nas chaves suspeitas e NÃO gravou nada
+    // — o app teve que redescobrir as mesmas canceladas pela reconferência, a
+    // ~20 consultas/hora (cStat 656). Quando a SEFAZ diz CANCELADA e o
+    // documento JÁ EXISTE na base (o id do documento é a chave), grava o
+    // MESMO evento + carimbo da reconferência. Documento que não está na base
+    // não é criado — consulta de chave alheia continua só consulta.
+    let gravacaoCancelamento = null;
+    try {
+      const leitura = lerRespostaCancelamento(resp);
+      if (leitura.situacao === 'cancelada') {
+        const db = admin.firestore();
+        const docRef = db.collection('documentos_fiscais').doc(chave);
+        const snap = await docRef.get();
+        if (snap.exists) {
+          await gravarCancelamentoConfirmado({
+            db, FieldValue: admin.firestore.FieldValue, docId: chave,
+            evento: leitura.evento, origem: 'consulta-chave-diagnostico',
+            usuario: req.user.email || req.user.uid,
+          });
+          await carimbarPerguntaSefaz({ db, docId: chave, situacao: leitura.situacao, cStat: leitura.cStat });
+          gravacaoCancelamento = {
+            carimbado: true,
+            mensagem: 'A SEFAZ confirmou o CANCELAMENTO e o documento existe na base — o cancelamento foi '
+              + 'GRAVADO agora: a aba 🚫 Canceladas/Faltantes e a apuração passam a contar sem nova consulta.',
+          };
+        } else {
+          gravacaoCancelamento = {
+            carimbado: false,
+            mensagem: 'A SEFAZ confirmou o CANCELAMENTO, mas nenhum documento com esta chave está na base — '
+              + 'nada a carimbar.',
+          };
+        }
+      }
+    } catch (e) {
+      gravacaoCancelamento = { carimbado: false, mensagem: `Cancelamento confirmado, mas a gravação falhou: ${e.message}` };
+      console.warn('[consulta-nfe-por-chave] gravação do cancelamento falhou:', e.message);
+    }
+
     return res.json({
       ok: resp.ok,
       cStat: resp.cStat,
       xMotivo: resp.xMotivo,
       chave,
+      gravacaoCancelamento,
       cnpjConsultadoComo: tentou.join(' → '),
       ufEmitente: ufSigla,
       cnpjEmitenteChave: cnpjEmitente,

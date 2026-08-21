@@ -367,10 +367,17 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         const quantas = rodadas > 1 ? ` São ${rodadas} rodadas para cobrir as ${selecao.total}.` : '';
         // Quantas NUNCA foram perguntadas — é este número que mede o que falta.
         // "Rodadas" sozinho já prometeu progresso que não acontecia (MV LIDER).
-        const faltam = Number(selecao.nuncaConferidas) || 0;
-        const nunca = faltam ? ` Hoje ${faltam} nota(s) nunca foram perguntadas — são elas que a próxima `
-            + 'rodada pega primeiro.' : ' Todas já foram perguntadas ao menos uma vez; a rodada volta nas '
-            + 'mais antigas, porque nota válida hoje pode ser cancelada amanhã.';
+        // ⚠️ E o número é o de DEPOIS da rodada (21/08, MV LIDER de novo): a
+        // seleção conta ANTES de consultar, e a rodada consome primeiro as
+        // nunca perguntadas — dizer o número velho fazia esta caixa mostrar
+        // "102" com o cabeçalho da tela mostrando "82", duas leituras do mesmo
+        // fato discordando na mesma tela.
+        const nuncaAntes = Number(selecao.nuncaConferidas) || 0;
+        const consumidas = simulado ? 0 : Math.min(r.length, nuncaAntes);
+        const faltam = Math.max(0, nuncaAntes - consumidas);
+        const nunca = faltam ? ` Depois desta rodada, ${faltam} nota(s) ainda nunca foram perguntadas — são `
+            + 'elas que a próxima rodada pega primeiro.' : ' Todas já foram perguntadas ao menos uma vez; a '
+            + 'rodada volta nas mais antigas, porque nota válida hoje pode ser cancelada amanhã.';
         avisos.push(
             simulado
                 ? `Ainda NÃO consultamos nada — isto é só a prévia. Ao clicar em "Reconferir na SEFAZ", `
