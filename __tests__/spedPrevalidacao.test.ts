@@ -329,3 +329,26 @@ describe('🚨 núcleo sem leitor não protege', () => {
         expect(fonte).toMatch(/const linhasDoArquivo = txt\.split/);
     });
 });
+
+describe('R15 — linha malformada: tudo no arquivo é |REG|…| (caso REALITY 0899)', () => {
+    // A linha REAL do arquivo gerado em 21/08: E200/E210 de 4 UFs + E500
+    // GRUDADOS, sem o | inicial e sem quebra — invisíveis para o PVA, para o
+    // 9900 e para a própria prevalidação.
+    const grudada = 'E200|MG|01072026|31072026|E210|1|0,00|0,00|0,00|0,00|0,00|2,03|0,00|0,00|0,00|0,00|2,03'
+        + '|0,00|0,00|E200|SP|01072026|31072026||E500|0|01072026|31072026|';
+
+    it('a linha grudada da REALITY vira ERRO nomeado', () => {
+        const r = prevalidarSpedFiscal([L('|E110|0,00|'), L(grudada)]);
+        const e = acha(r, 'linha-malformada');
+        expect(e).toHaveLength(1);
+        expect(e[0].mensagem).toContain('grudado');
+        expect(e[0].acao).toContain('defeito de GERAÇÃO');
+    });
+
+    it('linha sem o | final também é acusada; linha bem formada passa', () => {
+        const r = prevalidarSpedFiscal([L('|E110|0,00|'), L('|E200|MG|01072026|31072026')]);
+        expect(acha(r, 'linha-malformada')).toHaveLength(1);
+        const ok = prevalidarSpedFiscal([L('|E200|MG|01072026|31072026|')]);
+        expect(acha(ok, 'linha-malformada')).toHaveLength(0);
+    });
+});

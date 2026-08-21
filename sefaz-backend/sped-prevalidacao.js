@@ -406,6 +406,33 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+    // ── R15. Linha malformada — tudo no arquivo é |REG|…|, sem exceção ──────
+    // Caso REALITY 0899 · 07/2026 (21/08): o gerador de ST devolvia linhas sem
+    // o `|` inicial e sem `\r\n`, e NOVE registros (E200/E210 de 4 UFs + o
+    // E500) saíram GRUDADOS numa linha só — invisíveis para o PVA, para o 9900
+    // e para ESTA prevalidação, que lê linha a linha. Linha que não casa com o
+    // trilho não é registro nenhum: o PVA recusa a importação do arquivo.
+    let malformadas = 0;
+    for (const l of lista) {
+        const limpa = String(l).replace(/[\r\n]+$/, '');
+        if (/^\|[A-Z0-9]{4}\|.*\|$/.test(limpa)) continue;
+        malformadas += 1;
+        if (malformadas <= 5) {
+            add(erros, {
+                regra: 'linha-malformada', registro: registroDe(l) || '?', campo: '—',
+                valor: limpa.slice(0, 80), esperado: '|REG|…|', linha: l,
+                mensagem: 'Linha fora do formato |REG|…| — registro(s) grudado(s) ou separador perdido; '
+                    + 'o PVA não importa o arquivo assim.',
+                acao: 'Isto é defeito de GERAÇÃO do app (não do lançamento) — reporte com o print em vez de '
+                    + 'editar o arquivo à mão.',
+                fonte: 'Arquivo gerado da REALITY 0899 · 07/2026 (21/08): E200/E210 de 4 UFs + E500 numa linha só.',
+            });
+        }
+    }
+    if (malformadas > 5) {
+        avisos.push({ regra: 'linha-malformada', mensagem: `…e mais ${malformadas - 5} linha(s) malformada(s).` });
+    }
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';

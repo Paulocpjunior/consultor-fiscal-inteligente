@@ -33,7 +33,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // senão o PVA acusa participante que nenhum registro referencia.
 import { selecionarNotasBlocoC, selecionarCtesBlocoD } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
-import { modeloDoDoc } from './participante-doc-helper.js';
+import { modeloDoDoc, participanteDoDocumento } from './participante-doc-helper.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -143,11 +143,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     let participantesOrfaos = 0;
     for (const nota of notas) {
         if (nfceOuNaoEscriturada(nota)) { participantesOrfaos += 1; continue; }
-        // Identifica o "outro lado" da nota (nao a empresa).
-        const direcao = nota.direcao;  // 'entrada' | 'saida'
-        const participanteRaw = direcao === 'saida'
-            ? (nota.destinatario || nota.tomador)
-            : (nota.emitente || nota.prestador);
+        // Identifica o "outro lado" da nota (nao a empresa) — RÉGUA ÚNICA com
+        // o buildC100 (participanteDoDocumento): o 0150 tem que cadastrar
+        // exatamente quem o C100 referencia, senão o PVA acusa COD_PART órfão.
+        // Cobre a nota própria de entrada (contraparte no DESTINATÁRIO).
+        const participanteRaw = participanteDoDocumento(nota, empresa.cnpj);
 
         if (!participanteRaw) continue;
         const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';

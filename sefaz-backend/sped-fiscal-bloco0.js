@@ -289,6 +289,14 @@ function build0190(u) {
  *  13 CEST          CEST (vazio OK)            7 digitos
  */
 function build0200(item) {
+    // COD_GEN (tabela 4.2.1 — Gênero do item) = CAPÍTULO da NCM, os 2 primeiros
+    // dígitos; o código '00' significa SERVIÇO. O default antigo cravava '00'
+    // em todo item — 309 mercadorias com NCM declaradas como "serviço" no
+    // arquivo da REALITY 0899 · 07/2026 (o e-Fiscal aceito deriva
+    // 48131000 → 48). Sem NCM não se afirma gênero: o campo sai VAZIO.
+    const ncmLimpo = String(item.ncm || '').replace(/\D/g, '');
+    const codGen = item.codGen
+        || (ncmLimpo.length === 8 && ncmLimpo !== '00000000' ? ncmLimpo.slice(0, 2) : '');
     return fmt.buildLine([
         '0200',
         fmt.sanitizeString(item.codItem, 60),
@@ -299,7 +307,7 @@ function build0200(item) {
         item.tipo || '00',  // 00=Mercadoria pra Revenda
         fmt.sanitizeString(item.ncm || '00000000', 8),
         '',  // EX_IPI
-        fmt.sanitizeString(item.codGen || '00', 2),
+        fmt.sanitizeString(codGen, 2),
         fmt.sanitizeString(item.codLst || '', 5),
         fmt.formatValue(item.aliqIcms, 2),
         fmt.sanitizeString(item.cest || '', 7),

@@ -15,6 +15,8 @@
 // antigo, sem depender do backfill.
 // ============================================================================
 
+import { ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
+
 const so = (v) => String(v || '').replace(/\D/g, '');
 
 /** cUF (2 primeiras posições da chave) → sigla. */
@@ -88,4 +90,25 @@ export function cfopNaOticaDeEntrada(cfop) {
     if (faixa === '6') return `2${c.slice(1)}`;
     if (faixa === '7') return `3${c.slice(1)}`;
     return c;
+}
+
+/**
+ * A CONTRAPARTE de um documento — o participante que o C100 declara e o 0150
+ * cadastra. RÉGUA ÚNICA dos dois lugares (caso REALITY 0899 · 07/2026): o
+ * orquestrador e o buildC100 escolhiam o lado cada um por si, e os dois erravam
+ * juntos na NOTA PRÓPRIA DE ENTRADA (tpNF=0 emitida pela empresa — importação,
+ * compra de produtor rural): pegavam o EMITENTE, que ali é a própria empresa.
+ * A contraparte da nota própria mora no DESTINATÁRIO.
+ *
+ * ⚠️ Na IMPORTAÇÃO o destinatário também é a própria empresa — o exportador
+ * estrangeiro NÃO vem no XML da nota de entrada. A função devolve o que o
+ * documento TEM; quem monta o arquivo avisa (não se inventa participante).
+ */
+export function participanteDoDocumento(d, empresaCnpj) {
+    if (!d) return null;
+    if (d.direcao === 'saida') return d.destinatario || d.tomador || null;
+    if (ehNotaPropriaDeEntrada(d, empresaCnpj).sim) {
+        return d.destinatario || d.tomador || d.emitente || null;
+    }
+    return d.emitente || d.prestador || null;
 }

@@ -15,7 +15,11 @@ export interface ApuracaoStUf {
     outrosDebitos: number;
     ajDebitos: number;
     saldoDevedorAnterior: number;
+    /** Campo 11 do E210: saldo devedor ANTES das deduções (débitos − créditos, quando > 0). */
+    saldoDevedorApurado: number;
     deducoes: number;
+    /** Dedução lançada que NÃO coube no saldo devedor — vira aviso, nunca crédito. */
+    deducoesExcedentes: number;
     icmsRecolher: number;
     saldoCredorTransportar: number;
     debitosEspeciais: number;
@@ -41,4 +45,4 @@ export function montarLinhasStBlocoE(p: {
     dtIni: string;
     dtFin: string;
     obrigacoesPorUf?: Record<string, { dtVcto?: string; codRec?: string }>;
-}): { linhas: string[]; apuracoes: ApuracaoStUf[]; avisos: string[] };
+}): { linhas: string[][]; apuracoes: ApuracaoStUf[]; avisos: string[] };
