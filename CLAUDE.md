@@ -1402,7 +1402,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   MANTOAN (IND_REG_CUM 9), e mexer em arquivo aceito sem recusa que mande é
   inventar leiaute. Documento de SAÍDA nunca é excluído: convivendo com o
   F550, quem fala é a trava de dupla contagem.
-<<<<<<< HEAD
   🚦 **E A RECUSA VIROU REGRA NO MESMO PR** (`conferirPerfilConsolidado`, em
   `sped-contrib-campos.js`): o arquivo consolidado que declarar A010/A100/C100/
   D100 sai com aviso ANTES do PVA, com a recusa literal como fonte. Ela lê as
@@ -1411,8 +1410,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   arquivo detalhado. É a mesma disciplina do PVA de bolso do ICMS/IPI: **recusa
   aprendida entra na prevalidação no MESMO PR**, senão volta no mês seguinte
   com outro CNPJ.
-=======
->>>>>>> origin/main
 - **🚨 O CAMPO DE VALOR COMIA A VÍRGULA ENQUANTO A PESSOA DIGITAVA — e o
   documento ASSINADO saiu 100× maior** (colaboradora via Paulo, 21/08, APATEL
   0371: *"os valores do consultor não estão puxando ponto e vírgula"*). Ela
