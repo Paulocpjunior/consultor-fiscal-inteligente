@@ -75,6 +75,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   formatados pelo blocoE com `fmt.buildLine` (o padrão do E111, escrito ao
   lado); **R15 da prevalidação fecha a CLASSE** (linha fora de `|REG|…|` é
   erro nomeado — módulo novo que bypassar o buildLine cai nela).
+  ⚠️ **E A TRAVA MUDOU DE CASA no mesmo dia, porque cobria METADE**: a R15 vivia
+  só na prevalidação do EFD ICMS/IPI, e o EFD-**Contribuições** usa o MESMO
+  buildLine — o defeito é do MECANISMO, não do leiaute, então lá ele passaria
+  calado. `linhasMalformadas` virou dono ÚNICO dentro de
+  `sped-auditoria-saida.js`, que é quem roda em **todo arquivo gerado, nos
+  dois**; a R15 passou a chamá-la e só traduz para a linguagem de recusa do
+  PVA. 📌 **Trava nasce onde roda para TODOS os arquivos daquela família** —
+  senão ela protege o cliente que já quebrou e deixa o próximo descoberto.
   ⚠️ **E o campo 11 do E210 era outra dedução minha errada**: `VL_SLD_DEV_
   ANT_ST` é o saldo devedor **ANTES das deduções** (apurado no mês), não o
   "anterior" do mês passado — corroborado pelo E210 do e-Fiscal ACEITO da

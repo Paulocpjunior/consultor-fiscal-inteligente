@@ -1,4 +1,4 @@
-import { auditarSaidaSped, resumoAuditoria, valorSped, campo } from '../sefaz-backend/sped-auditoria-saida';
+import { auditarSaidaSped, resumoAuditoria, valorSped, campo, linhasMalformadas } from '../sefaz-backend/sped-auditoria-saida';
 
 /**
  * Paulo, 06/08: *"esses erros não podem acontecer"*.
@@ -151,5 +151,47 @@ describe('SPED Contribuições entra na mesma trava', () => {
             L('A990', '3'),
         ]);
         expect(r.ok).toBe(true);
+    });
+});
+
+// ═══ A FORMA DA LINHA — a trava que faltava no EFD-Contribuições ════════════
+//
+// O bloco E de ST saiu com NOVE registros grudados numa linha (REALITY 0899 ·
+// 07/2026, 21/08) e nada acusou: o 9900, a prevalidação e esta auditoria leem
+// LINHA A LINHA, e a linha grudada é invisível para quem pergunta pelo
+// registro. A R15 fechou a classe no ICMS/IPI — e o EFD-Contribuições, que usa
+// o MESMO buildLine e a MESMA auditoria, ficaria descoberto.
+describe('🚨 linha malformada — a régua roda nos DOIS arquivos', () => {
+    // A linha REAL do arquivo da REALITY, encurtada.
+    const grudada = 'E200|MG|01072026|31072026|E210|1|0,00|0,00|2,03|0,00|0,00'
+        + '|E200|SP|01072026|31072026||E500|0|01072026|31072026|';
+
+    it('acusa a linha grudada como BLOQUEIA, dizendo que é defeito de geração', () => {
+        const { suspeitas } = auditarSaidaSped(['|E110|0,00|', grudada]);
+        const s = suspeitas.filter((x: any) => x.tipo === 'linha-malformada');
+        expect(s).toHaveLength(1);
+        expect(s[0].gravidade).toBe('bloqueia');
+        expect(s[0].detalhe).toMatch(/GERAÇÃO do app/);
+    });
+
+    it('vale para o arquivo do EFD-CONTRIBUIÇÕES — mesma auditoria, mesmo buildLine', () => {
+        const contrib = [
+            '|0000|006|0|||01072026|31072026|EMPRESA|17213641000127|SP|3550308||00|1|',
+            'F550|21811,34|01|0,00|21811,34|F600|03|02052026|5200|',   // dois registros grudados
+        ];
+        const s = auditarSaidaSped(contrib).suspeitas.filter((x: any) => x.tipo === 'linha-malformada');
+        expect(s).toHaveLength(1);
+    });
+
+    it('arquivo bem formado não acusa nada — linha vazia do fim não conta', () => {
+        const ok = ['|0000|006|0|', '|E110|0,00|', '|9999|59|', ''];
+        expect(auditarSaidaSped(ok).suspeitas.filter((x: any) => x.tipo === 'linha-malformada')).toEqual([]);
+    });
+
+    it('muitas linhas tortas: mostra 5 e CONTA o resto — lista infinita afoga a auditoria', () => {
+        const muitas = Array.from({ length: 9 }, (_, i) => `E200|UF${i}|01072026|`);
+        const s = linhasMalformadas(muitas);
+        expect(s).toHaveLength(6);
+        expect(s[5].detalhe).toMatch(/e mais 4 linha\(s\)/);
     });
 });
