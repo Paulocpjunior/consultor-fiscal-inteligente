@@ -108,12 +108,28 @@ export function duracaoLegivel(segundos: number): string {
     return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** Traduz a recusa do getUserMedia — "erro" cru não diz o que fazer. */
-export function traduzirErroDeMicrofone(erro: { name?: string; message?: string } | null | undefined): {
-    erro: string; acao: string;
-} {
+/**
+ * Traduz a recusa do getUserMedia — "erro" cru não diz o que fazer.
+ * `emIframe` muda o CONSELHO, não o diagnóstico: dentro do Teams não existe
+ * cadeado nem barra de endereço (Paulo, 21/08: *"vc esta me dando erro de
+ * navegador dentro do teams"*) — lá quem libera o microfone é o PACOTE do
+ * app (devicePermissions do manifest, versão 1.0.1) + o "Permitir" do
+ * próprio Teams.
+ */
+export function traduzirErroDeMicrofone(
+    erro: { name?: string; message?: string } | null | undefined,
+    emIframe = false,
+): { erro: string; acao: string } {
     const nome = String(erro?.name || '');
     if (nome === 'NotAllowedError' || nome === 'SecurityError') {
+        if (emIframe) {
+            return {
+                erro: 'O Teams ainda não liberou o microfone para o app.',
+                acao: 'O pacote do SP Connect no Teams precisa estar na versão 1.0.1 (é ela que declara a permissão de mídia). '
+                    + 'Com o pacote atualizado, feche e reabra o Teams e clique em Permitir quando ele perguntar. '
+                    + 'Enquanto isso, o 🎙️ funciona abrindo o SP Connect direto no navegador.',
+            };
+        }
         return {
             erro: 'O navegador bloqueou o microfone.',
             // O "não" fica GUARDADO — sem dizer onde reverter, a pessoa acha

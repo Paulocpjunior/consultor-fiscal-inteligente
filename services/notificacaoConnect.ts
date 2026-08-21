@@ -95,12 +95,23 @@ export function estadoDaPermissao(deps?: { permission?: string; temApi?: boolean
     return 'nao-pedida';
 }
 
-/** O que a tela diz em cada estado — recusa sempre com CAMINHO. */
-export function textoDaPermissao(estado: EstadoPermissao): { texto: string; acao: string | null } {
+/**
+ * O que a tela diz em cada estado — recusa sempre com CAMINHO.
+ * `emIframe` muda o conselho: dentro do Teams não há cadeado nem barra de
+ * endereço (Paulo, 21/08), e o pop-up do navegador não é do nosso controle
+ * lá — o caminho honesto é o som (que funciona) e o app fora do Teams.
+ */
+export function textoDaPermissao(estado: EstadoPermissao, emIframe = false): { texto: string; acao: string | null } {
     switch (estado) {
         case 'concedida':
             return { texto: '🔔 Avisos ligados neste navegador.', acao: null };
         case 'negada':
+            if (emIframe) {
+                return {
+                    texto: '🔕 Dentro do Teams o pop-up de mensagem nova não aparece.',
+                    acao: 'O som de mensagem nova continua tocando aqui. Para pop-up e push, abra o SP Connect direto no navegador (mesmo endereço, fora do Teams).',
+                };
+            }
             return {
                 texto: '🔕 Este navegador BLOQUEOU os avisos — mensagem nova não vai aparecer na tela.',
                 // O "não" fica guardado: sem dizer onde reverter, a pessoa
@@ -110,6 +121,12 @@ export function textoDaPermissao(estado: EstadoPermissao): { texto: string; acao
         case 'sem-suporte':
             return { texto: '🔕 Este navegador não mostra avisos.', acao: 'O som continua funcionando; para o pop-up, use um navegador atualizado.' };
         default:
+            if (emIframe) {
+                return {
+                    texto: '🔔 Avisos no Teams dependem da permissão do Teams.',
+                    acao: 'Clique em "Ligar avisos" — se o Teams não perguntar, o som continua avisando; para pop-up e push, use o SP Connect no navegador.',
+                };
+            }
             return { texto: '🔔 Ligue os avisos para não depender de olhar a tela.', acao: 'Clique em "Ligar avisos" (o navegador vai perguntar).' };
     }
 }
@@ -132,10 +149,12 @@ export function faltaNosAvisos(p: {
     somOk: boolean;
     pushDisponivel: boolean;
     pushLigado: boolean;
+    /** Rodando emoldurado (Teams)? O conselho de permissão muda — ver textoDaPermissao. */
+    emIframe?: boolean;
 }): { falta: boolean; texto: string; acao: string | null; oferecerPush: boolean } {
     // Sem permissão (ou negada/sem suporte) manda: é o que impede o pop-up.
     if (p.permissao !== 'concedida') {
-        const t = textoDaPermissao(p.permissao);
+        const t = textoDaPermissao(p.permissao, Boolean(p.emIframe));
         return { falta: true, texto: t.texto, acao: t.acao, oferecerPush: false };
     }
     if (!p.somOk) {
