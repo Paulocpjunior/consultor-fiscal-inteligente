@@ -48,7 +48,7 @@ const COD_REC_PADRAO_POR_UF = {
 // Dia de vencimento padrao do ICMS — sobrescritivel via icmsDiaVencimento.
 const DIA_VENCIMENTO_PADRAO = 20;
 
-function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
+export function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
     // Soma dos ITENS (mesma fonte do C190). Garante que E110/E210 ficam
     // consistentes com o que o PVA vê nos analíticos. Se o total da nota
     // estiver zerado (parser legado), os itens ainda têm os valores.

@@ -2351,9 +2351,25 @@ export interface SpedApuracaoE110 {
     valorSaldoCredorTransportar?: number;
 }
 
+/**
+ * E520 — leiaute REAL: |E520|VL_SD_ANT|VL_DEB|VL_CRED|VL_OD|VL_OC|VL_SC|VL_SD|.
+ *
+ * 🚨 CORRIGIDO 21/08: o parser mapeava fields[1..4] como "saldo devedor /
+ * deduções / a recolher / saldo credor" — nomes que NÃO existem nessas
+ * posições. A tela 🪞 mostrava o VL_CRED como "IPI a Recolher" e o VL_OD
+ * (quase sempre 0,00) como "Saldo Credor". A prova é a linha real da PWR
+ * (|E520|2547,39|0,00|2200,45|0,00|0,00|4747,84|0,00|): 2.547,39 + 2.200,45 =
+ * 4.747,84 só fecha com o campo 7 sendo o credor a transportar.
+ */
 export interface SpedApuracaoE520 {
-    tipo: 'E520'; valorSaldoDevedorIpi?: number; valorDeducoesIpi?: number;
-    valorIpiRecolher?: number; valorSaldoCredorIpi?: number;
+    tipo: 'E520';
+    saldoCredorAnteriorIpi?: number;   // c.2 VL_SD_ANT_IPI
+    valorDebitosIpi?: number;          // c.3 VL_DEB_IPI
+    valorCreditosIpi?: number;         // c.4 VL_CRED_IPI
+    valorOutrosDebitosIpi?: number;    // c.5 VL_OD_IPI
+    valorOutrosCreditosIpi?: number;   // c.6 VL_OC_IPI
+    valorSaldoCredorIpi?: number;      // c.7 VL_SC_IPI (a transportar)
+    valorSaldoDevedorIpi?: number;     // c.8 VL_SD_IPI (a recolher)
 }
 
 /** E510 — consolidação do IPI por CFOP + CST_IPI (uma linha por par). */

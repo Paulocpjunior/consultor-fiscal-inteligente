@@ -1319,13 +1319,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   para o bloco que REALMENTE saiu (`geraIpi`/`geraSt` vêm do tamanho das linhas
   produzidas, nunca do cadastro) — alarme sobre bloco inexistente é o que ensina
   a ignorar alarme.
-  🚧 **A CRONOLOGIA DE VERDADE AINDA NÃO EXISTE** e o desenho está decidido no
-  princípio: saldo de **ABERTURA** carimbado numa competência + transporte
-  CALCULADO mês a mês (nunca redigitado). E a fonte da abertura **não é
-  digitação**: é o **E110 campo 14 (`VL_SLD_CREDOR_TRANSPORTAR`)** do último SPED
-  entregue — que o `spedFiscalParserService` **já sabe ler**
-  (`valorSaldoCredorTransportar`, e o `valorSaldoCredorIpi` do E520). Falta o
-  aceite do Paulo sobre em qual empresa/competência abrir.
+  ✅ **A CRONOLOGIA EXISTE DESDE 21/08 — aba 🧮 Saldo de abertura no card
+  SPED** (`saldo-abertura.js`, na `REGUAS_VIGIADAS`; rota
+  `/api/admin/sped-fiscal/saldo-abertura`; coleção `sped_saldos_abertura`).
+  Cola-se o .txt do **último SPED ENTREGUE** — o backend lê o **E110 c.14** e o
+  **E520 c.7**, confere o CNPJ contra a empresa (arquivo de outro cliente é
+  recusado NOMEADO) e carimba a abertura. Daí em diante o transporte é
+  **CALCULADO** mês a mês com a MESMA matemática do E110
+  (`aplicarAjustesApuracao` — nunca uma segunda fórmula), e a geração PREFERE a
+  cronologia sobre a ficha, com a origem no aviso. **Não há campo de digitar
+  valor, de propósito**: saldo digitado é a ficha de novo, com outro nome.
+  TRÊS TRAVAS: não retroage (competência ≤ abertura já foi entregue com outro
+  número); elo faltando derruba a cadeia NOMEADO (mês sem leitura não vira zero
+  calado); cadeia > 12 meses pede um SPED entregue mais novo em vez de custar N
+  consultas por geração. **O que falta é só o USO**: colar o SPED entregue de
+  cada empresa do Lucro com crédito acumulado — decisão de operação, não código.
+  🚨 **E O PARSER TS DO E520 LIA POSIÇÕES ERRADAS — pego ao construir isto**: o
+  plano era reusar o `valorSaldoCredorIpi` do `spedFiscalParserService`, que
+  mapeava `fields[4]` — a posição do **VL_OD_IPI** (outros débitos, quase
+  sempre 0,00). O leiaute real é |E520|VL_SD_ANT|VL_DEB|VL_CRED|VL_OD|VL_OC|
+  VL_SC|VL_SD| e a tela 🪞 mostrava o **VL_CRED como "IPI a Recolher"** e o
+  VL_OD como "Saldo Credor" — zero plausível, ninguém desconfiou (pouquíssimos
+  clientes têm IPI). A prova é a linha real da PWR: 2.547,39 + 2.200,45 =
+  4.747,84 só fecha com o campo 7 sendo o credor. Corrigido parser, tipo e
+  tela no mesmo PR. **Reusar leitor existente sem conferir contra uma linha
+  REAL é herdar o defeito dele com carimbo de régua única.**
+  ⚠️ **E A ARMADILHA DAS DUAS FORMAS MORDEU DENTRO DO PRÓPRIO MÓDULO NOVO, no
+  primeiro teste**: a coerção de texto SPED (tira ponto de milhar, vírgula →
+  ponto) aplicada a um número JS transforma 2547.39 em **254739** — cem vezes o
+  saldo, calado. Viraram DUAS funções nomeadas (`numArquivo` × `numJs`), cada
+  leitura com o seu dono.
   📌 **E ST NUNCA SE SOMA AO ICMS PRÓPRIO NO DEMONSTRATIVO**: são apurações
   distintas e a de ST é **POR UF DE DESTINO** (E200/E210/E220/E250, uma GNRE por
   estado) contra E100/E110/E111 do próprio. Hoje o demonstrativo 📊 ICMS·IPI·ISS

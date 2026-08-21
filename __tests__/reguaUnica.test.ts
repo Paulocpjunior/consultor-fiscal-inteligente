@@ -71,6 +71,22 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A cronologia do saldo credor — abertura do SPED ENTREGUE + transporte calculado',
+        dono: 'sefaz-backend/saldo-abertura.js',
+        comoUsar: "import { extrairAberturaDoSped, resolverSaldoAnterior, transportarIpi } from 'sefaz-backend/saldo-abertura.js'",
+        porque: 'Paulo, 17/08: a apuração não considerava o saldo acumulado — o ICMS transportava DEFASADO '
+            + '(a ficha guarda o que ENTROU no mês, não o que sobrou) e o IPI/ST saíam 0,00. A régua carrega o '
+            + 'que uma cópia perderia: a fonte é o E110 c.14 / E520 c.7 do SPED ENTREGUE (nunca digitação), o '
+            + 'E520 lê o campo 7 (o parser TS lia fields[4], que é o VL_OD — quase sempre 0,00), a cadeia usa a '
+            + 'MESMA matemática do E110 (aplicarAjustesApuracao), não retroage, e elo faltando derruba NOMEADO '
+            + 'em vez de virar zero calado.',
+        assinaturas: [
+            /function extrairAberturaDoSped\s*\(/,
+            /function resolverSaldoAnterior\s*\(/,
+            /function transportarIpi\s*\(/,
+        ],
+    },
+    {
         nome: 'A receita que NÃO tem documento (aluguel) — o F550 e o IND_REG_CUM do 0110',
         dono: 'sefaz-backend/receita-sem-documento-f550.js',
         comoUsar: "import { receitaDeLocacao, montarF550, indRegCumDoArquivo } from 'sefaz-backend/receita-sem-documento-f550.js'",

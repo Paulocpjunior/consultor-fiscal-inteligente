@@ -25,6 +25,7 @@ const CruzarObrigacoes = lazy(() => import('./CruzarObrigacoes'));
 const CruzarComCapturadas = lazy(() => import('./CruzarComCapturadas'));
 const ConciliarFaturamento = lazy(() => import('./ConciliarFaturamento'));
 const AjustesE111 = lazy(() => import('./AjustesE111'));
+const SaldoAbertura = lazy(() => import('./SaldoAbertura'));
 const ProntidaoMigracao = lazy(() => import('./ProntidaoMigracao'));
 const FilaMigracao = lazy(() => import('./FilaMigracao'));
 const CreditoAcumulado = lazy(() => import('./CreditoAcumulado'));
@@ -55,7 +56,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'ajustes' | 'ciap' | 'inventario' | 'credito' | 'migracao' | 'fila' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
+type SpedTab = 'gerar' | 'ajustes' | 'saldo' | 'ciap' | 'inventario' | 'credito' | 'migracao' | 'fila' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 // MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
@@ -395,6 +396,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             Ajustes E111
                         </button>
                         <button
+                            onClick={() => setSpedTab('saldo')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'saldo' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'saldo' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'saldo' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            🧮 Saldo de abertura
+                        </button>
+                        <button
                             onClick={() => setSpedTab('ciap')}
                             className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
                             style={{
@@ -577,6 +589,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {spedTab === 'ajustes' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
                     <AjustesE111 currentUser={currentUser} empresas={empresas} onShowToast={onShowToast} />
+                </Suspense>
+            )}
+
+            {spedTab === 'saldo' && (
+                <Suspense fallback={<p className="text-sm p-4" style={{ color: 'var(--text-muted)' }}>Carregando…</p>}>
+                    <SaldoAbertura currentUser={currentUser} empresas={empresas} onShowToast={onShowToast} />
                 </Suspense>
             )}
 
