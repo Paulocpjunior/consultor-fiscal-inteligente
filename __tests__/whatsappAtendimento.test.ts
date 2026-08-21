@@ -703,3 +703,24 @@ describe('🚨 "Nova conversa" tinha uma SEGUNDA lista de departamentos, e ela n
         expect(handler).toMatch(/fila: departamento,/);
     });
 });
+
+describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — não atrás de clique', () => {
+    // Paulo, 21/08, comparando print a print (Ultra Fox × SP Connect): lá o
+    // comprovante fotografado já vinha na tela; aqui exigia "abrir anexo".
+    // A mídia já é baixada da Meta pro NOSSO Storage assim que chega (F1 do
+    // webhook, 16/08) — então mostrar sozinha é só puxar do bucket, não é
+    // buscar de novo na Meta.
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('existe um efeito que chama verMidia sozinho pra imagem/figurinha', () => {
+        expect(tela).toMatch(/useEffect\(\(\) => \{\s*mensagens\s*\.filter\(\(m\) => \(m\.tipo === 'image' \|\| m\.tipo === 'sticker'\)/);
+        expect(tela).toMatch(/\.forEach\(\(m\) => \{ verMidia\(m\); \}\);/);
+    });
+
+    it("midiaCarregando virou MAPA (era um id só) — senão a 2ª imagem trava esperando a 1ª", () => {
+        expect(tela).toMatch(/const \[midiaCarregando, setMidiaCarregando\] = useState<Record<string, boolean>>\(\{\}\)/);
+        // O mutex de string único é exatamente o defeito que travaria o
+        // carregamento automático de várias imagens ao mesmo tempo.
+        expect(tela).not.toMatch(/const \[midiaCarregando, setMidiaCarregando\] = useState<string \| null>/);
+    });
+});

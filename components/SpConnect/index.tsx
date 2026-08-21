@@ -383,21 +383,38 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // navegador segura os blobs até o F5.
     const [midias, setMidias] = useState<Record<string, { url: string; mime: string }>>({});
     const [midiaErro, setMidiaErro] = useState<Record<string, string>>({});
-    const [midiaCarregando, setMidiaCarregando] = useState<string | null>(null);
+    // Virou mapa (era um id só) — imagem/gif carrega SOZINHA (abaixo), então
+    // várias podem estar baixando ao mesmo tempo; um mutex de string só
+    // travaria a segunda enquanto a primeira ainda está em voo.
+    const [midiaCarregando, setMidiaCarregando] = useState<Record<string, boolean>>({});
     const midiasRef = useRef<Record<string, { url: string; mime: string }>>({});
     midiasRef.current = midias;
     useEffect(() => () => { Object.values(midiasRef.current).forEach((m) => URL.revokeObjectURL(m.url)); }, []);
 
     const verMidia = async (m: MensagemInbox) => {
-        if (!sel || midias[m.id] || midiaCarregando) return;
-        setMidiaCarregando(m.id);
+        if (!sel || midias[m.id] || midiaCarregando[m.id]) return;
+        setMidiaCarregando((c) => ({ ...c, [m.id]: true }));
         setMidiaErro((e) => ({ ...e, [m.id]: '' }));
         try {
             const r = await abrirMidia(sel.numero, m.id);
             if (!r.ok) { setMidiaErro((e) => ({ ...e, [m.id]: `${r.error}${r.acao ? ` ${r.acao}` : ''}` })); return; }
             setMidias((x) => ({ ...x, [m.id]: { url: r.url, mime: r.mime } }));
-        } finally { setMidiaCarregando(null); }
+        } finally { setMidiaCarregando((c) => { const n = { ...c }; delete n[m.id]; return n; }); }
     };
+
+    // 🖼️ Imagem/figurinha (inclusive GIF) aparece SOZINHA, como na Ultra Fox —
+    // Paulo, 21/08, comparando print a print: lá o comprovante fotografado já
+    // vinha na tela; aqui exigia clicar em "abrir anexo" pra cada uma. A mídia
+    // já foi baixada da Meta pro NOSSO Storage assim que chegou (F1 do
+    // webhook, 16/08) — então mostrar sozinha não é buscar de novo na Meta,
+    // é só puxar do bucket. Documento/vídeo continuam por clique: são
+    // maiores e o clique ali já é o comportamento esperado (baixar/abrir).
+    useEffect(() => {
+        mensagens
+            .filter((m) => (m.tipo === 'image' || m.tipo === 'sticker') && m.midia?.baixada !== false)
+            .forEach((m) => { verMidia(m); });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mensagens]);
 
     const [anexando, setAnexando] = useState(false);
     const inputAnexo = useRef<HTMLInputElement>(null);
@@ -2605,10 +2622,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         ) : (
                                                             <button
                                                                 onClick={() => verMidia(m)}
-                                                                disabled={m.midia?.baixada === false || midiaCarregando === m.id}
+                                                                disabled={m.midia?.baixada === false || Boolean(midiaCarregando[m.id])}
                                                                 title={m.midia?.baixada === false ? 'ainda não baixado da Meta' : 'abrir anexo'}
                                                                 className="text-[11px] font-semibold underline disabled:no-underline disabled:opacity-60">
-                                                                {midiaCarregando === m.id ? '⏳ abrindo…' : midia}
+                                                                {midiaCarregando[m.id] ? '⏳ abrindo…' : midia}
                                                             </button>
                                                         )}
                                                         {midiaErro[m.id] && <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{midiaErro[m.id]}</p>}
