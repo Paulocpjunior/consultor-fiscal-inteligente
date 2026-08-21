@@ -31,9 +31,12 @@ const cteCapturado = (over: any = {}) => ({
     chave: CHAVE_CTE, tipoDoc: 'CTe', direcao: 'entrada', status: 'autorizado',
     numero: '4321', dhEmi: '2026-07-10T10:00:00-03:00',
     valorTotal: 1500,
+<<<<<<< HEAD
     // O CT-e traz o CFOP no CABEÇALHO (o da PRESTAÇÃO, na ótica do
     // transportador) — a captura passou a lê-lo em 21/08.
     cfop: '5352', cstIcms: '00',
+=======
+>>>>>>> origin/main
     cnpjEmit: '47252373000113', xNomeEmit: 'TRANSPORTADORA LTDA',
     ...over,
 });
@@ -78,6 +81,7 @@ describe('🚨 bloco D (ICMS/IPI) — o CT-e como ele chega da captura', () => {
         expect(linhas.find((l: string) => l.startsWith('|D001|'))).toBe('|D001|1|\r\n');
     });
 });
+<<<<<<< HEAD
 
 // ═══ O CFOP DO CT-e NÃO SE INVENTA (e é o do TRANSPORTADOR) ═════════════════
 //
@@ -109,3 +113,5 @@ describe('🚨 D190 — CFOP vem do documento, na ótica de quem escritura', () 
         expect(imp).toMatch(/meta\.cfopCabecalho \? \{ cfop: meta\.cfopCabecalho \}/);
     });
 });
+=======
+>>>>>>> origin/main
