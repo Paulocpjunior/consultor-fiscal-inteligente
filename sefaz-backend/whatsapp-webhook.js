@@ -295,7 +295,7 @@ export function interpretarErroEntrega(codigo, detalhe = '', mensagem = null) {
 // figurinha nunca mandam; imagem quase nunca).
 const EXT_POR_MIME = {
     'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png',
-    'image/webp': '.webp', 'audio/ogg': '.ogg', 'audio/mpeg': '.mp3',
+    'image/webp': '.webp', 'image/gif': '.gif', 'audio/ogg': '.ogg', 'audio/mpeg': '.mp3',
     'audio/mp4': '.m4a', 'audio/amr': '.amr', 'video/mp4': '.mp4', 'video/3gpp': '.3gp',
 };
 
