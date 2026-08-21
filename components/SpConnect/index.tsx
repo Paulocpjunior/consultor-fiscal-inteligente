@@ -1039,11 +1039,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 Departamento
                                 <select value={nc.departamento} onChange={(e) => setNc((f) => ({ ...f, departamento: e.target.value, escolha: f.escolha.startsWith('c:') ? '' : f.escolha, variaveis: {} }))}
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
-                                    <option value="fiscal">🧾 Fiscal</option>
-                                    <option value="contabil">📊 Contábil</option>
-                                    <option value="dp-folha">👥 DP / Folha</option>
-                                    <option value="legalizacao">📋 Legalização</option>
-                                    <option value="financeiro">💰 Financeiro</option>
+                                    {/* As 8 FILAS de atendimento, não só os 5 módulos do SaaS — a
+                                        Recepção (e RH/Jurídico) também iniciam conversa; só não têm
+                                        template do CADASTRO (⚙️), então usam um Aprovado na Meta. */}
+                                    {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
                                 </select>
                             </label>
                             <label className="text-[11px] text-slate-500">
