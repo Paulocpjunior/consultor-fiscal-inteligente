@@ -1224,6 +1224,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   141,76 exigiria inventar o rateio. **F550 e M200 nossos saem do MESMO
   número**: um centavo contra o e-Fiscal é aceitável, arquivo que se contradiz
   não é (régua de 11/08: referência, nunca gabarito; VALOR de lá não é verdade).
+  ✅ **PROVADO NO PVA em 21/08** (Paulo: *"Passa o mata burro, EFD CONTRIBUIÇÕES
+  1139 - AFFITTARE - BLOCO F550"*, com o print do F550 aberto no validador —
+  receita 21.811,34, CST 01 nos dois tributos, complementos vazios). O caso saiu
+  do "gera o arquivo" e entrou no validado.
+- **🚨 O CAMPO DE VALOR COMIA A VÍRGULA ENQUANTO A PESSOA DIGITAVA — e o
+  documento ASSINADO saiu 100× maior** (colaboradora via Paulo, 21/08, APATEL
+  0371: *"os valores do consultor não estão puxando ponto e vírgula"*). Ela
+  colou os valores do e-Fiscal ("3.241.688,71") na Declaração de Faturamento e
+  o PDF saiu com **324.168.871,00** — total de **R$ 4,2 BILHÕES** numa empresa
+  de R$ 42 milhões, num papel que vai assinado para banco.
+  🔴 **A CAUSA NÃO ERA O PARSE — era o INPUT CONTROLADO re-formatando a cada
+  tecla**: o campo exibia `String(número)` e re-parseava o próprio texto
+  exibido. Na tecla da vírgula o parse devolvia o inteiro, o render apagava a
+  vírgula da tela, e os dígitos seguintes grudavam: "3241688,71" virava
+  324168871 tecla a tecla, sem nenhum erro aparecer. O usuário FEZ tudo certo.
+  ✂️ TRÊS correções: (1) o campo guarda **TEXTO cru** (rascunho — o padrão dos
+  campos de CFOP); (2) o parse virou régua pura (`parseValorMoeda` em
+  `declaracaoFaturamento.ts`), aceitando as formas reais (pt-BR colado,
+  digitado sem milhar, ponto decimal JS) e devolvendo **null** para o ilegível
+  — nunca um número inventado; (3) **o que o app ENTENDEU aparece formatado ao
+  lado** ("ajustado = R$ 3.241.688,71") e o ilegível sai em vermelho com o
+  formato esperado. Num documento assinado, a interpretação se mostra ANTES do
+  PDF.
+  📌 **REGRA QUE FICA: input de valor NUNCA é controlado por `String(número)`**
+  — texto no estado, número derivado. Re-formatar no meio da digitação é comer
+  o que a pessoa digitou, e o erro sai com cara de dado certo. Travado em
+  `declaracaoFaturamento.test.ts` (barra o `String(ajustes[...])` na fonte).
 - **🚨 CAMPO OBRIGATÓRIO NÃO NASCE COM EXEMPLO CINZA DENTRO** (Paulo, 20/08, o
   segundo dos "2 erros": aba **🧠 Por fornecedor**, POXPUR, CFOP de origem 5101,
   e o botão *🧠 Criar parâmetro* apagado). O campo "Escriturar como" estava
