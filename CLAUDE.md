@@ -48,9 +48,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lista 23, e o valor cai na casa do `TP_CT-e`. O teste pergunta pelo VALOR, não
   pela POSIÇÃO, de propósito: travar a posição atual carimbaria de PROVADO um
   leiaute deduzido. Fecha com um EFD-Contribuições **aceito que tenha bloco D**.
+  🔴 **(6) A CONFERÊNCIA DO SAGE VALIDAVA UM CFOP E O ARQUIVO GRAVAVA OUTRO.**
+  `cfopParaEscriturar` recebe o DOCUMENTO como 4º argumento porque o CFOP
+  informado na NF (✏️ CFOP por nota) vence o override e a régua automática — o
+  Exportar SAGE passa, e o **preflight não passava**. É a família da "réplica de
+  CFOP no modal" (12/08), e a régua da casa é dura: *conferência que promete
+  número diferente do arquivo é pior que não ter tela*.
+  🔴 **(7) O D190 CRAVAVA CFOP `'5352'` EM 100% DOS CONHECIMENTOS.** A captura
+  só lia o CFOP de dentro de `<prod>` — e o **CT-e o traz no CABEÇALHO**
+  (`<ide><CFOP>`), então `nota.cfop` era sempre vazio e o default entrava.
+  Cravar ali AFIRMA a natureza da operação de transporte, num campo que a
+  fiscalização lê: é o 'PARTSEM' de novo. ✂️ O importer passou a capturar
+  CFOP/CST do cabeçalho, o D190 os lê, e o CFOP passa pela **mesma correlação
+  do C190** (o CT-e traz o código do TRANSPORTADOR — 5352 — e quem TOMA o frete
+  escritura 1352). CT-e sem CFOP legível **não entra** e sai NOMEADO, com a
+  ação (♻️), em vez de entrar com natureza inventada.
   📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
-  defeitos de uma vez.
+  defeitos de uma vez. E **default de campo fiscal é invenção com outro nome**:
+  'PARTSEM', '5352', '000' e o COD_GEN '00' saíram todos da mesma cabeça.
 <<<<<<< HEAD
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão

@@ -31,6 +31,9 @@ const cteCapturado = (over: any = {}) => ({
     chave: CHAVE_CTE, tipoDoc: 'CTe', direcao: 'entrada', status: 'autorizado',
     numero: '4321', dhEmi: '2026-07-10T10:00:00-03:00',
     valorTotal: 1500,
+    // O CT-e traz o CFOP no CABEÇALHO (o da PRESTAÇÃO, na ótica do
+    // transportador) — a captura passou a lê-lo em 21/08.
+    cfop: '5352', cstIcms: '00',
     cnpjEmit: '47252373000113', xNomeEmit: 'TRANSPORTADORA LTDA',
     ...over,
 });
@@ -73,5 +76,36 @@ describe('🚨 bloco D (ICMS/IPI) — o CT-e como ele chega da captura', () => {
     it('sem CT-e no período o bloco continua vazio', () => {
         const linhas = buildBlocoD(dados([]));
         expect(linhas.find((l: string) => l.startsWith('|D001|'))).toBe('|D001|1|\r\n');
+    });
+});
+
+// ═══ O CFOP DO CT-e NÃO SE INVENTA (e é o do TRANSPORTADOR) ═════════════════
+//
+// O D190 saía com CFOP **'5352' CRAVADO** em 100% dos conhecimentos e CST
+// '000': a captura só lia o CFOP de dentro de <prod>, e o CT-e o traz no
+// CABEÇALHO. Cravar ali é afirmar a NATUREZA da operação de transporte — é a
+// mesma família do 'PARTSEM', num campo que a fiscalização lê.
+describe('🚨 D190 — CFOP vem do documento, na ótica de quem escritura', () => {
+    it('CT-e tomado: o 5352 do transportador vira 1352 na entrada', () => {
+        const d190 = buildBlocoD(dados([cteCapturado()])).find((l: string) => l.startsWith('|D190|'))!;
+        const campos = d190.split('|');
+        expect(campos[3]).toBe('1352');       // CFOP na ótica de ENTRADA
+        expect(campos[3]).not.toBe('5352');   // nunca o do emitente
+    });
+
+    it('CT-e SEM CFOP fica de fora e sai NOMEADO — nada de natureza inventada', () => {
+        const d = dados([cteCapturado({ cfop: undefined, numero: '888' })]);
+        const linhas = buildBlocoD(d as never);
+        expect(linhas.find((l: string) => l.startsWith('|D100|'))).toBeUndefined();
+        expect(d.warnings.join(' ')).toMatch(/888/);
+        expect(d.warnings.join(' ')).toMatch(/♻️|CABEÇALHO/);
+    });
+
+    it('e o importer passa a CAPTURAR o CFOP/CST do cabeçalho do CT-e', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const imp = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/xml-importer.js'), 'utf8');
+        expect(imp).toMatch(/cfopCabecalho = pickTag\(xml, 'CFOP'\)/);
+        expect(imp).toMatch(/meta\.cfopCabecalho \? \{ cfop: meta\.cfopCabecalho \}/);
     });
 });

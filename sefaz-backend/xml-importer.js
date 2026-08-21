@@ -279,6 +279,14 @@ export function extrairMetadados(xml, schema) {
   // aparecia com valor R$ 0,00.
   const vNF = pickTag(xml, 'vNF') || pickTag(xml, 'vTPrest') || pickTag(xml, 'vRec') || null;
   const tpNF = pickTag(xml, 'tpNF') || null;
+  // 🚨 CFOP E CST DO CT-e — no CT-e eles moram no CABEÇALHO (<ide><CFOP>,
+  // <imp><ICMS><CST>), não em <prod>: a captura só lia o de dentro de <prod>,
+  // que o CT-e não tem. Resultado (21/08, varredura dos leitores): o D190 saía
+  // com CFOP **'5352' CRAVADO** em 100% dos conhecimentos e CST '000' — dado
+  // fiscal INVENTADO, a mesma família do 'PARTSEM'. A natureza da operação de
+  // transporte não se adivinha; ela está no XML e faltava LER.
+  const cfopCabecalho = pickTag(xml, 'CFOP') || null;
+  const cstCabecalho = pickTag(xml, 'CST') || null;
 
   // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
   // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando
@@ -344,6 +352,9 @@ export function extrairMetadados(xml, schema) {
     vNF: vNF ? Number(vNF) : null,
     tpNF, tipoDoc, tipoNormalizado, schema, evento,
     numero, serie, natOp, cStat,
+    // CFOP/CST do CABEÇALHO — é onde o CT-e os guarda (o D190 os exige e
+    // estava inventando '5352'/'000' porque a captura só lia <prod>).
+    cfopCabecalho, cstCabecalho,
     // Endereço dos DOIS participantes. Vem daqui (e não de uma variável solta
     // no importer) porque `participantes` só existe NESTE escopo — usá-la lá
     // fora quebrou a captura inteira com "participantes is not defined"
@@ -774,6 +785,10 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,
     tpNF: meta.tpNF,
+    // Só gravam quando o XML os traz no cabeçalho (CT-e) — em NF-e eles moram
+    // no item e continuam vindo de lá.
+    ...(meta.cfopCabecalho ? { cfop: meta.cfopCabecalho } : {}),
+    ...(meta.cstCabecalho ? { cstIcms: meta.cstCabecalho } : {}),
     tipoDoc: tipoDocFinal,
     tipo: meta.tipoNormalizado,
     schema: meta.schema,

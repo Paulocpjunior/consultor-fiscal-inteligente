@@ -203,7 +203,15 @@ export function conferirAntesDeGerar(
         }
 
         for (const it of itens) {
-            const cfopFinal = cfopParaEscriturar(it.cfop, d.direcao, opts.cfopCtx);
+            // 🚨 O DOCUMENTO ENTRA NA CONTA (21/08, varredura dos leitores):
+            // `cfopParaEscriturar` recebe o doc como 4º argumento porque o CFOP
+            // informado NA NF (✏️ CFOP por nota) vence o override e a régua
+            // automática. O Exportar SAGE passa `d`; ESTE preflight não passava
+            // — então a conferência validava um CFOP e o arquivo gravava outro,
+            // que é a família do "réplica de CFOP no modal" (12/08). Régua da
+            // casa: conferência que promete número diferente do arquivo é pior
+            // que não ter tela.
+            const cfopFinal = cfopParaEscriturar(it.cfop, d.direcao, opts.cfopCtx, d);
             const primeiro = String(cfopFinal || '')[0];
             const esperado = d.direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
             if (!primeiro || !esperado.includes(primeiro)) {
