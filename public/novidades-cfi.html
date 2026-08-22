@@ -68,14 +68,75 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 18/08/2026 · leitura de 6 minutos</p>
+            <p>Departamento Fiscal · atualizado em 22/08/2026 · leitura de 7 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (18/08) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (22/08) — leia esta parte primeiro</h2>
+
+    <h3>1. Três campos novos em <strong>Dados Fiscais</strong> — e o que acontece se ficarem em branco</h3>
+    <p>O gerador do SPED já <em>lia</em> esses três campos, e não havia onde preenchê-los: ele
+    caía no valor padrão sempre. Agora eles existem na tela.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Empresas → <strong>Dados Fiscais</strong>.<br>
+    · <strong>Natureza da PJ (IND_NAT_PJ)</strong> — vai no registro 0000 do EFD-Contribuições.
+      Em branco, o arquivo sai com <code>00 — sociedade empresária em geral</code>. Confira nas
+      entidades <strong>imunes, isentas e cooperativas</strong>: nelas o app avisa na geração.<br>
+    · <strong>Código de receita do ICMS</strong> e <strong>Dia de vencimento do ICMS</strong> —
+      vão no E116 do SPED Fiscal. Em branco, o vencimento sai no <strong>dia 20, que é o de
+      SP</strong>, e a geração avisa. O prazo varia por UF e pelo CPR do contribuinte.<br>
+    · <strong>Regime de apuração PIS/COFINS</strong> — em branco, o app <em>deriva</em> do regime
+      tributário (Real = não-cumulativo, Presumido = cumulativo). Só preencha no caso
+      <strong>"ambos"</strong>, que a derivação não tem como adivinhar.</div>
+    <div class="alerta">⚠️ Nenhum desses códigos é deduzido pelo app: são de <strong>tabela
+    oficial</strong>. O que mudou é o silêncio — antes o valor padrão saía sem ninguém saber.</div>
+
+    <h3>2. O <strong>perfil do EFD</strong> que você escolhe agora chega ao arquivo</h3>
+    <p>O campo de perfil (A/B/C) existia em Dados Fiscais e <strong>o arquivo ignorava</strong>:
+    saía sempre <code>A</code>. O perfil é o enquadramento que o fisco estadual atribuiu e decide
+    <strong>quais registros o PVA exige</strong> — se o seu cliente é perfil B, o arquivo pedia
+    detalhamento que ele não deve entregar.</p>
+    <div class="ganho">💡 Perfil diferente de A aparece <strong>dito no aviso</strong> da geração,
+    para você conferir antes de transmitir.</div>
+
+    <h3>3. Aba <strong>Ajustes E111</strong>: obrigações e códigos estaduais</h3>
+    <p>Dois registros nunca saíam do arquivo porque dependiam de um código estadual que
+    <strong>não tinha onde ser digitado</strong> — e o aviso mandava "informe no cadastro".</p>
+    <div class="onde">📍 <strong>Onde:</strong> SPED Fiscal → aba <strong>Ajustes E111</strong>,
+    bloco novo no fim.<br>
+    · <strong>ICMS-ST a recolher por UF (E250)</strong> — vencimento e código de receita da GNRE,
+      <strong>uma linha por estado</strong> (cada UF é uma guia).<br>
+    · <strong>Código de ajuste do C197</strong> (DIFAL de aquisição, tabela 5.3 do estado).</div>
+    <div class="alerta">⚠️ A linha do ST só vira registro com os <strong>três</strong> campos
+    preenchidos — meia obrigação não se declara. Use o mesmo botão 💾 Salvar ajustes.</div>
+
+    <h3>4. O arquivo passou a conferir a si mesmo antes do PVA</h3>
+    <p>As recusas que o PVA já nos deu viraram <strong>verificação na hora da geração</strong>:
+    item sem código, campo obrigatório de nota de entrada, retenção do bloco M que não fecha com
+    o F600, documento em arquivo consolidado, linha malformada. Elas aparecem nos avisos junto do
+    arquivo.</p>
+    <div class="ganho">💡 <strong>Por que importa:</strong> antes cada recusa aparecia <em>uma
+    volta de PVA por vez</em>, e cada volta custava um dia. A ideia é gastar <strong>uma
+    volta</strong>.</div>
+
+    <h3>5. Correções que mudam NÚMERO — e o que fazer</h3>
+    <p>Algumas correções desta semana mudam valores em arquivos gerados de agora em diante:</p>
+    <div class="onde">· <strong>ICMS-ST</strong> agora é apurado na <strong>UF de destino certa</strong>
+      (antes, em nota capturada automaticamente, caía na UF da empresa — e cada UF é uma GNRE).<br>
+    · <strong>Compra de produtor rural</strong> (nota própria de entrada) entra como
+      <strong>crédito</strong> de ICMS, não como débito.<br>
+    · <strong>CT-e</strong> passou a sair com participante e valor reais no bloco D.<br>
+    · <strong>Índice do CIAP</strong> passou a contar as notas importadas pelo navegador.</div>
+    <div class="alerta">⚠️ <strong>Não refaça nada por conta própria.</strong> Arquivo já
+    transmitido é assunto de <strong>retificação</strong>, e isso se decide cliente a cliente com
+    o Paulo. Se um número mudar em relação ao mês passado, é esta correção — e o aviso da geração
+    diz qual foi.</div>
+</section>
+
+<section>
+    <h2>O que mudou em 18/08</h2>
 
     <h3>1. ✏️ CFOP por nota: dá para corrigir a escrituração — e ensinar o CFI</h3>
     <p>O XML da compra traz o CFOP do <strong>fornecedor</strong>, não o nosso. Quando a
