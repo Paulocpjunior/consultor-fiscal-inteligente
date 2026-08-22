@@ -285,11 +285,18 @@ export function docCancelado(d) {
  * de R$ 0,00" e "não achei o valor" são coisas diferentes, e foi o zero
  * silencioso que produziu linhas zeradas num arquivo entregue à Receita.
  */
-export function valorDoDocumentoServico(nota) {
+export function valorDoDocumento(nota) {
     const n = nota || {};
     const candidatos = [
         n.valor, n.valorTotal, n.totalNota, n.valorServicos,
         n.totais?.vNF, n.totais?.vServ, n.valores?.valorServicos,
+        // 🚨 A FORMA QUE FALTAVA (21/08): o import pelo NAVEGADOR
+        // (`xmlParserService`) grava **só `totais.vNF`** — nunca `valorTotal` —
+        // e `valores.total`/`vNF` na raiz aparecem em documentos antigos. O
+        // índice do CIAP lia `valores.total ?? valorTotal` e pulava a nota
+        // importada à mão como se ela valesse zero: denominador menor, índice
+        // MAIOR, mais crédito de ICMS do imobilizado do que a lei dá.
+        n.valores?.total, n.vNF,
     ];
     for (const c of candidatos) {
         if (c === null || c === undefined || c === '') continue;
@@ -298,3 +305,13 @@ export function valorDoDocumentoServico(nota) {
     }
     return NaN;
 }
+
+/**
+ * Nome antigo, MESMA função — a pergunta ("quanto vale este documento?") nunca
+ * foi específica de serviço, e manter duas implementações seria o começo de
+ * duas respostas divergentes.
+ *
+ * ⚠️ `valores.liquido` NÃO entra na lista, de propósito: na NFS-e ele é o valor
+ * LÍQUIDO de retenções, e o VL_DOC do arquivo é o BRUTO.
+ */
+export const valorDoDocumentoServico = valorDoDocumento;

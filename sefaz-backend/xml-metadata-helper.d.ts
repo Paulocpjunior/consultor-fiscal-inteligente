@@ -72,3 +72,19 @@ export function decidirDirecaoPorTpNF(
     empresaCnpj: unknown,
     tpNF: unknown,
 ): 'entrada' | 'saida' | 'desconhecida';
+
+/**
+ * O VALOR do documento, em TODAS as formas em que ele é gravado — `valorTotal`
+ * (importer principal), `totais.vNF` (import pelo NAVEGADOR, que NÃO grava
+ * `valorTotal`), `valor`/`totalNota`/`valorServicos`, `valores.total` e `vNF`
+ * na raiz.
+ *
+ * Devolve **NaN** quando nenhuma forma tem número — de propósito: "documento de
+ * R$ 0,00" e "não achei o valor" são coisas diferentes, e foi o zero silencioso
+ * que produziu 37 A100 zerados num arquivo entregue à Receita.
+ *
+ * ⚠️ `valores.liquido` fica FORA: na NFS-e ele é o líquido de retenções.
+ */
+export function valorDoDocumento(nota: unknown): number;
+/** Nome antigo da MESMA função (a pergunta nunca foi específica de serviço). */
+export function valorDoDocumentoServico(nota: unknown): number;

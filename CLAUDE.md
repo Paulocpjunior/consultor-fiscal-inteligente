@@ -161,6 +161,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **DELETADAS** (código morto é a isca para reativar a régua velha) e a
   varredura ganhou a **segunda assinatura**, com as exceções declaradas COM o
   motivo — quase todas a mesma: **NFS-e não tem evento, ali o campo é a fonte**.
+  🔴 **(15) E O ÍNDICE DO CIAP PULAVA A NOTA IMPORTADA PELO NAVEGADOR.** O
+  `xmlParserService` (import manual) grava **só `totais.vNF`** — **nunca**
+  `valorTotal` —, e `classificarSaidasCiap` lia `valores.total ?? valorTotal`:
+  a nota caía como se valesse **zero**. Efeito PERVERSO: denominador menor ⇒
+  **índice MAIOR** ⇒ mais crédito de ICMS do imobilizado do que a lei dá (LC
+  87/96 art. 20 §5º). Zero silencioso na direção mais cara, pela 15ª vez.
+  ✂️ `valorDoDocumentoServico` virou **`valorDoDocumento`** — a pergunta
+  ("quanto vale este documento?") nunca foi específica de serviço — com as duas
+  formas que faltavam (`valores.total` e `vNF` na raiz); o nome antigo continua
+  exportado apontando para a MESMA função. ⚠️ **`valores.liquido` fica FORA de
+  propósito**: na NFS-e ele é o líquido de RETENÇÕES, e o VL_DOC é o bruto.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
