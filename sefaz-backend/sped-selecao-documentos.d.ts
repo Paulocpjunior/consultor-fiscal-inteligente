@@ -35,3 +35,18 @@ export function selecionarCtesBlocoD<T = any>(notas: T[] | null | undefined): T[
 export function avisosDaSelecao(p?: {
     soResumo?: string[]; semItens?: string[]; nfceEmEntrada?: string[];
 }): string[];
+
+/** NFS-e — o que vai ao bloco A do EFD-Contribuições (CT-e fica de fora: é do D). */
+export function ehNotaDeServico(d: unknown): boolean;
+
+/**
+ * COD_SIT do documento (C100 e D100 — a tabela é a MESMA).
+ *
+ * Régua ÚNICA: havia duas, e o bloco D declarava '08' (regime especial) para
+ * status desconhecido. O status ESPECÍFICO vem antes do `docCancelado`, senão
+ * a nota DENEGADA sai como cancelada (02) em vez de 04.
+ *
+ * @param uf UF da empresa — no PARANÁ a nota em substituição ao cupom
+ *   (CFOP 5929/6929) escritura por outra regra, ressalva do próprio manual.
+ */
+export function codSitDoDocumento(d: unknown, uf?: string): string;

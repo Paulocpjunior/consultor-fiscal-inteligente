@@ -24,7 +24,7 @@ import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js
 import { cstDoLancamento } from './cst-correlacao.js';
 // Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
 // campo cru `n.modelo`, que o importer principal não grava.
-import { selecionarNotasBlocoC, avisosDaSelecao } from './sped-selecao-documentos.js';
+import { selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento } from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
@@ -70,15 +70,6 @@ const MODELOS_BLOCO_C = ['55', '65'];
  *   07 = Documento Fiscal Complementar extemp.
  *   08 = Documento Fiscal Regime Especial ou Norma Especifica
  */
-function statusParaCodSit(status) {
-    switch (status) {
-        case 'cancelado':    return '02';
-        case 'denegado':     return '04';
-        case 'inutilizado':  return '05';
-        case 'autorizado':
-        default:             return '00';
-    }
-}
 
 /**
  * Tenta extrair CST do ICMS de um item.
@@ -124,13 +115,6 @@ export function serieDoC100(serie) {
  * ⚠️ A ressalva do próprio manual: o contribuinte do PARANÁ escritura por outra
  * regra — por isso a UF entra na decisão em vez de a régua valer para todos.
  */
-const CFOPS_SUBSTITUICAO_CUPOM = new Set(['5929', '6929']);
-function ehNotaEmSubstituicaoACupom(nota, uf) {
-    if (String(uf || '').toUpperCase() === 'PR') return false;
-    return (nota?.itens || []).some(
-        (i) => CFOPS_SUBSTITUICAO_CUPOM.has(String(i?.cfop || i?.CFOP || '').replace(/\D/g, '')),
-    );
-}
 
 function getCstIcms(item) {
     return (
@@ -325,10 +309,12 @@ function buildC100(nota, dados) {
     // EVENTO e o campo continua 'autorizado' (régua de 11/08, MV LIDER). Quem
     // responde é `docCancelado` — senão a nota cancelada saía COD_SIT 00
     // (regular) e voltava ao livro pela porta do SPED.
-    let codSit = docCancelado(nota) ? '02' : statusParaCodSit(nota.status);
-    if (codSit === '00' && ehNotaEmSubstituicaoACupom(nota, dados?.empresa?.dadosFiscais?.uf)) {
-        codSit = '08';
-    }
+    // COD_SIT pela régua ÚNICA (`codSitDoDocumento`): a tabela é a MESMA do
+    // D100, e os dois blocos tinham defaults DIFERENTES para status
+    // desconhecido — o D declarava '08' (regime especial), que é afirmar sobre
+    // a natureza do documento. A régua cobre o cancelamento por evento e a
+    // Exceção 4 (nota em substituição ao cupom, com a ressalva do PARANÁ).
+    const codSit = codSitDoDocumento(nota, dados?.empresa?.dadosFiscais?.uf);
 
     // Soma dos itens — fonte primária pros campos que precisam bater com C190.
     // Fallback pra nota.totais.X apenas se os itens não tiverem (nota sem itens).

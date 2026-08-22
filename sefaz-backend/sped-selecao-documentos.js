@@ -181,3 +181,54 @@ export function avisosDaSelecao({ soResumo = [], semItens = [], nfceEmEntrada = 
     }
     return avisos;
 }
+
+
+// ═══ COD_SIT — a SITUAÇÃO do documento, régua ÚNICA ════════════════════════
+//
+// 🚨 Existiam DUAS (21/08, varredura dos defaults): o bloco C mandava '00'
+// (regular) quando não reconhecia o status e o bloco D mandava **'08'** —
+// que significa *"documento emitido por regime especial ou norma específica"*
+// e tem regras PRÓPRIAS de preenchimento (Guia 3.2.3, C100, Exceção 4).
+// Declarar regime especial porque o status veio desconhecido é afirmar sobre a
+// natureza do documento — a mesma família do 'PARTSEM' e do CFOP '5352'.
+// A tabela do COD_SIT é a MESMA para C100 e D100, então a régua é uma só.
+
+/** CFOPs da nota em substituição ao cupom fiscal (Exceção 4 → COD_SIT 08). */
+const CFOPS_SUBSTITUICAO_CUPOM = new Set(['5929', '6929']);
+
+const SITUACAO_POR_STATUS = {
+    autorizado: '00',
+    extemporaneo: '01',
+    cancelado: '02',
+    denegado: '04',
+    inutilizado: '05',
+};
+
+/**
+ * COD_SIT do documento (C100 e D100 — mesma tabela).
+ *
+ * @param {object} nota
+ * @param {string} [uf] UF da empresa — o PARANÁ escritura a nota em
+ *   substituição ao cupom por outra regra, ressalva do próprio manual.
+ */
+export function codSitDoDocumento(nota, uf) {
+    // ⚠️ O STATUS ESPECÍFICO VEM PRIMEIRO, e a ordem é o conserto de um defeito
+    // pré-existente: `docCancelado` trata denegado/inutilizado como cancelamento
+    // (para efeito de "não conta no livro", que é o uso dela), então perguntar
+    // por ela antes fazia a nota DENEGADA sair com COD_SIT **02** em vez de
+    // **04**. São fatos diferentes: denegada é a SEFAZ RECUSANDO a autorização
+    // (a nota nunca valeu); cancelada é a nota que existiu e foi cancelada.
+    const doStatus = SITUACAO_POR_STATUS[String(nota?.status || '').toLowerCase()];
+    if (doStatus && doStatus !== '00') return doStatus;
+    // Só então o cancelamento por EVENTO — nele o campo `status` continua
+    // 'autorizado', e é a régua que responde.
+    if (docCancelado(nota)) return '02';
+    // Status que ninguém reconhece é REGULAR ('00'), nunca regime especial:
+    // '08' declara um fato sobre o documento que ninguém verificou.
+    const base = '00';
+    if (String(uf || '').toUpperCase() === 'PR') return base;
+    const ehSubstituicaoCupom = (nota?.itens || []).some(
+        (i) => CFOPS_SUBSTITUICAO_CUPOM.has(String(i?.cfop || i?.CFOP || '').replace(/\D/g, '')),
+    );
+    return ehSubstituicaoCupom ? '08' : base;
+}
