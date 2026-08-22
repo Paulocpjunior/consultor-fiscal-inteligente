@@ -18,6 +18,7 @@ import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { prevalidarSpedFiscal, resumoPrevalidacao } from './sped-prevalidacao.js';
 // 🧮 A abertura do saldo credor vem do SPED ENTREGUE colado — nunca digitada.
 import { extrairAberturaDoSped } from './saldo-abertura.js';
+import { competenciaParaGerarArquivo } from './competencia.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
@@ -34,19 +35,45 @@ function fa() {
 const router = express.Router();
 
 /**
+ * As TRÊS formas de pedir período aqui — mês único, ou início+fim do trimestre.
+ * Cada uma que vier é normalizada; ILEGÍVEL recusa com o motivo.
+ *
+ * ⚠️ O range compara STRING (`n.competencia >= periodoInicio`), então uma forma
+ * diferente não filtra "quase certo": ela não casa com nada. Vazio, de novo.
+ */
+function periodoDaRequisicao(q) {
+    const out = { ok: true, competencia: undefined, competenciaInicio: undefined, competenciaFim: undefined };
+    for (const campo of ['competencia', 'competenciaInicio', 'competenciaFim']) {
+        const bruta = (q || {})[campo];
+        if (bruta === undefined || bruta === null || bruta === '') continue;
+        const r = competenciaParaGerarArquivo(bruta);
+        if (!r.ok) return { ok: false, erro: `${campo}: ${r.erro}` };
+        out[campo] = r.competencia;
+    }
+    return out;
+}
+
+/**
  * GET /preview?empresaId=X&competencia=YYYY-MM
  * Retorna estatisticas: notas, itens, participantes elegiveis pro periodo.
  */
 router.get('/preview', requireAdmin, async (req, res) => {
     try {
-        const { empresaId, competencia, competenciaInicio, competenciaFim } = req.query;
+        const { empresaId } = req.query;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        // 🚨 A MESMA porta do EFD-Contribuições, e pela MESMA razão: competência
+        // fora de `AAAA-MM` fazia o `where` devolver ZERO documentos e o
+        // arquivo sair VAZIO, com o aviso lido como "empresa sem movimento".
+        // Meia trava protege o cliente que já quebrou e deixa o próximo
+        // descoberto — aqui o trimestral tem TRÊS campos, e os três passam.
+        const periodo = periodoDaRequisicao(req.query);
+        if (!periodo.ok) return res.status(400).json({ error: periodo.erro });
 
         const dados = await coletarDadosEmpresa({
             empresaId,
-            competencia,
-            competenciaInicio,
-            competenciaFim,
+            competencia: periodo.competencia,
+            competenciaInicio: periodo.competenciaInicio,
+            competenciaFim: periodo.competenciaFim,
         });
 
         return res.json({
@@ -200,14 +227,21 @@ router.post('/saldo-abertura', requireAdmin, express.json({ limit: '20mb' }), as
 
 router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
-        const { empresaId, competencia, competenciaInicio, competenciaFim } = req.body || {};
+        const { empresaId } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        // 🚨 A MESMA porta do EFD-Contribuições, e pela MESMA razão: competência
+        // fora de `AAAA-MM` fazia o `where` devolver ZERO documentos e o
+        // arquivo sair VAZIO, com o aviso lido como "empresa sem movimento".
+        // Meia trava protege o cliente que já quebrou e deixa o próximo
+        // descoberto — aqui o trimestral tem TRÊS campos, e os três passam.
+        const periodo = periodoDaRequisicao(req.body || {});
+        if (!periodo.ok) return res.status(400).json({ error: periodo.erro });
 
         const dados = await coletarDadosEmpresa({
             empresaId,
-            competencia,
-            competenciaInicio,
-            competenciaFim,
+            competencia: periodo.competencia,
+            competenciaInicio: periodo.competenciaInicio,
+            competenciaFim: periodo.competenciaFim,
         });
 
         const txt = await montarBlocos({ dados });
@@ -237,10 +271,13 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
 
         // Nome do arquivo: SPED_<cnpj>_<periodo>.txt
         const cnpj = (dados.empresa.cnpj || '').replace(/\D/g, '');
-        const periodo = competencia
-            ? competencia.replace('-', '')
-            : `${competenciaInicio.replace('-', '')}_${competenciaFim.replace('-', '')}`;
-        const filename = `SPED_${cnpj}_${periodo}.txt`;
+        // Vem do período JÁ NORMALIZADO — o nome do arquivo carregava a forma
+        // crua que a requisição mandou, então um `07/2026` viraria nome de
+        // arquivo com barra.
+        const sufixo = periodo.competencia
+            ? periodo.competencia.replace('-', '')
+            : `${periodo.competenciaInicio.replace('-', '')}_${periodo.competenciaFim.replace('-', '')}`;
+        const filename = `SPED_${cnpj}_${sufixo}.txt`;
 
         res.setHeader('Content-Type', 'text/plain; charset=windows-1252');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

@@ -12,8 +12,10 @@ import {
 } from './sped-contrib-campos.js';
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { requireAdmin } from './require-admin.js';
+import { competenciaParaGerarArquivo } from './competencia.js';
 
 const router = express.Router();
+
 
 /**
  * GET /preview?empresaId=X&competencia=YYYY-MM
@@ -21,9 +23,11 @@ const router = express.Router();
  */
 router.get('/preview', requireAdmin, async (req, res) => {
     try {
-        const { empresaId, competencia } = req.query;
+        const { empresaId } = req.query;
+        const comp = competenciaParaGerarArquivo(req.query.competencia);
+        if (!comp.ok) return res.status(400).json({ error: comp.erro });
+        const competencia = comp.competencia;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
-        if (!competencia) return res.status(400).json({ error: 'competencia obrigatoria (YYYY-MM)' });
 
         const dados = await coletarDadosContribuicoes({ empresaId, competencia });
 
@@ -52,9 +56,11 @@ router.get('/preview', requireAdmin, async (req, res) => {
  */
 router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
-        const { empresaId, competencia } = req.body || {};
+        const { empresaId } = req.body || {};
+        const comp = competenciaParaGerarArquivo((req.body || {}).competencia);
+        if (!comp.ok) return res.status(400).json({ error: comp.erro });
+        const competencia = comp.competencia;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
-        if (!competencia) return res.status(400).json({ error: 'competencia obrigatoria (YYYY-MM)' });
 
         const dados = await coletarDadosContribuicoes({ empresaId, competencia });
 
