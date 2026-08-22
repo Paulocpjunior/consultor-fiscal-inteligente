@@ -26,7 +26,7 @@ import { cstDoLancamento } from './cst-correlacao.js';
 // campo cru `n.modelo`, que o importer principal não grava.
 import {
     selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento, serieDoDocumento,
-    codItemDoItem,
+    codItemDoItem, unidadeDoItem,
 } from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
@@ -469,7 +469,7 @@ function buildC170(item, nItem, nota) {
         fmt.sanitizeString(codItemDoItem(item), 60),
         '',  // DESCR_COMPL
         fmt.formatValue(item.qCom || item.quantidade, 5),
-        fmt.sanitizeString((item.uCom || item.unidade || 'UN').toUpperCase(), 6),
+        unidadeDoItem(item),
         fmt.formatValue(item.vProd || item.valor, 2),
         fmt.formatValue(item.vDesc, 2),
         '0',  // IND_MOV: 0=Sim (movimentacao fisica)

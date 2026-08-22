@@ -31,6 +31,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   dois produtos distintos nessa situação colapsam num cadastro só. É o
   comportamento que o 0200 já tinha; trocar uma chave de cadastro sem caso real
   seria pior que a colisão.
+  ✂️ **E A IRMÃ ESTAVA UM CAMPO ADIANTE — a `UNID`, que liga o item ao 0190.**
+  Mesma doença, CINCO escritas e quatro normalizações: o **0190** dos dois
+  orquestradores fazia `.toUpperCase().substring(0,6)` **sem trim**; o **C170**
+  das duas famílias, `sanitizeString(upper, 6)` **com trim**; o **UNID_INV do
+  0200**, `sanitizeString(unidade, 6)` **sem `toUpperCase`**; o **H010**, sem
+  nenhum dos dois; e a rota do editor, uma quarta forma. Com `'UN '` no XML, o
+  0190 cadastrava `'UN '` e o C170 referenciava `'UN'` — o registro aponta para
+  unidade que a Tabela não tem **e** a Tabela declara uma que ninguém
+  referencia: as duas recusas do PVA de uma vez.
+  📌 **O validador do app já sabia** (*"C170: UNID 'X' nao cadastrada no
+  0190"*) — mas ele roda DEPOIS, sobre o arquivo pronto. **Conferência que
+  existe não substitui régua única**: ela conta o erro, não o impede.
+  ⚠️ `normalizarUnidade` devolve **''** para ausência de propósito: o default
+  `'UN'` continua onde já estava (0190, 0200 e C170) e o **H010 segue sem
+  default** — inventar a unidade do inventário mudaria a leitura da
+  QUANTIDADE, que é outra ordem de erro. A régua uniformiza a FORMA da chave,
+  não a política de ausência.
 
 - **🚨 O FORMATADOR DE VALOR DO SPED ENCOLHIA O NÚMERO EM SILÊNCIO** (22/08,
   varrendo o gêmeo da data — mesmo módulo, mesma classe). `formatValue` fazia
