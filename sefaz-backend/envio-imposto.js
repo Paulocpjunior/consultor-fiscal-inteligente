@@ -23,6 +23,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { normalizarCompetencia, competenciaTarefa } from './competencia.js';
 
 export const GESTOR_EMAIL = process.env.ENVIO_IMPOSTO_GESTOR
     || 'alexandre@spassessoriacontabil.com.br';
@@ -39,27 +40,18 @@ function getDb() {
 // ─── Helpers puros ──────────────────────────────────────────────────────────
 
 /**
- * Normaliza competência pra 'AAAA-MM'. Aceita 'AAAA-MM', 'MM/AAAA' e
- * 'AAAAMM'. Devolve null se não reconhecer (nunca chuta período).
+ * Normaliza competência pra 'AAAA-MM' — RE-EXPORTADO do dono único.
+ *
+ * 🚨 Esta função era uma SEGUNDA cópia: ela recusava `AAAA-MM-DD` (a forma que
+ * a ficha financeira usa conforme a época do lançamento) enquanto a cópia do
+ * `ipi-varredura` recusava `AAAAMM`. Cada uma devolvia null para a forma que a
+ * outra entendia — e null aqui não falha, some.
  */
-export function normalizarCompetencia(comp) {
-    const s = String(comp || '').trim();
-    let m = /^(\d{4})-(\d{2})$/.exec(s);
-    if (m) return `${m[1]}-${m[2]}`;
-    m = /^(\d{2})\/(\d{4})$/.exec(s);
-    if (m) return `${m[2]}-${m[1]}`;
-    m = /^(\d{4})(\d{2})$/.exec(s);
-    if (m) return `${m[1]}-${m[2]}`;
-    return null;
-}
+export { normalizarCompetencia };
 
-/** Competência no formato da coleção tarefas ('MM/AAAA'). */
-export function competenciaTarefa(comp) {
-    const n = normalizarCompetencia(comp);
-    if (!n) return null;
-    const [ano, mes] = n.split('-');
-    return `${mes}/${ano}`;
-}
+/** Competência no formato da coleção tarefas ('MM/AAAA') — dono único. */
+export { competenciaTarefa };
+
 
 /**
  * Pasta IMPOSTOS do período no SharePoint — MESMA árvore do sync/arquivo de

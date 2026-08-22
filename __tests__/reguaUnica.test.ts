@@ -71,6 +71,27 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A NORMALIZAÇÃO da competência — quatro formas, uma resposta',
+        dono: 'sefaz-backend/competencia.js',
+        comoUsar: "import { normalizarCompetencia, formasDaCompetencia } from 'sefaz-backend/competencia.js'",
+        porque: '22/08: existiam DUAS funções `normalizarCompetencia` e elas divergiam nos dois sentidos — a '
+            + 'do `envio-imposto` aceitava "AAAAMM" e recusava "AAAA-MM-DD" (a forma da ficha), a do '
+            + '`ipi-varredura` fazia o contrário. Cada uma devolvia null para a forma que a outra entendia, e '
+            + 'null aqui não falha: some. O efeito mais caro estava na CONSULTA — a trava do débito repetido '
+            + 'perguntava `where(competencia, ==, <texto cru>)` enquanto a gravação normaliza, então pedindo '
+            + '"07/2026" ela achava ZERO envios anteriores e liberava a MESMA cobrança (caso HYPE, 17/08).',
+        assinaturas: [
+            // Outra implementação da mesma conversão MM/AAAA → AAAA-MM.
+            /export function normalizarCompetencia/,
+        ],
+        permitido: [
+            // `partesDaCompetencia`/`assertCompetencia` validam o formato que o
+            // catálogo EXIGE e LANÇAM de propósito — outra pergunta, outro
+            // contrato. Régua única é o dono da MESMA pergunta.
+            'sefaz-backend/catalogo-obrigacoes.js',
+        ],
+    },
+    {
         nome: 'A leitura da FICHA por competência — mesReferencia tem TRÊS formas',
         dono: 'sefaz-backend/ipi-varredura.js',
         comoUsar: "import { acharFichaCompetencia } from 'sefaz-backend/ipi-varredura.js'",

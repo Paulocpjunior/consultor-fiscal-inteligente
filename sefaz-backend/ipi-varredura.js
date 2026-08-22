@@ -17,18 +17,20 @@
 // antes de virar urgência uma a uma (vide Experte 06/2026).
 // ============================================================================
 
+import { normalizarCompetencia } from './competencia.js';
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-/** 'YYYY-MM' a partir de mesReferencia em formatos comuns (YYYY-MM, YYYY-MM-DD,
- *  MM/YYYY). null se não der pra normalizar. */
-export function normalizarCompetencia(mes) {
-    const s = String(mes ?? '').trim();
-    let m = s.match(/^(\d{4})-(\d{2})/);
-    if (m) return `${m[1]}-${m[2]}`;
-    m = s.match(/^(\d{2})\/(\d{4})$/);
-    if (m) return `${m[2]}-${m[1]}`;
-    return null;
-}
+/**
+ * Normaliza competência pra 'AAAA-MM' — RE-EXPORTADO do dono único
+ * (`competencia.js`).
+ *
+ * 🚨 Esta era a SEGUNDA cópia da mesma pergunta: ela aceitava `AAAA-MM-DD` (a
+ * forma que a ficha usa conforme a época do lançamento) e recusava `AAAAMM`,
+ * enquanto a cópia do `envio-imposto` fazia o contrário. Cada uma devolvia
+ * null para a forma que a outra entendia.
+ */
+export { normalizarCompetencia };
+
 
 /** IPI a recolher da ficha — MESMA fórmula do lucroService:
  *  max(0, ipiRecolher - saldoCredorIpi). 0 quando não há IPI. */
