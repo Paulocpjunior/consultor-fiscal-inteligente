@@ -25,10 +25,10 @@ import { requireAdmin, requireAuth } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema,
-    DEPARTAMENTOS_WHATSAPP,
+    DEPARTAMENTOS_WHATSAPP, validarNovoTemplateMeta,
 } from './whatsapp-templates.js';
 import {
-    enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, numeroCanonicoWhatsapp,
+    enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp,
 } from './whatsapp-cloud.js';
@@ -46,6 +46,7 @@ import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-mid
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
+import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
 import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
@@ -128,6 +129,23 @@ router.get('/templates-meta', autorizarLeitura, async (_req, res) => {
         return res.json({ ok: true, templates: r.templates });
     } catch (e) {
         console.error('[whatsapp/templates-meta]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📝 Criar template NOVO na Meta (Paulo, 21/08: cadastro pelo nosso app).
+// Validação de forma ANTES da rede (recusa da Meta custa a fila de aprovação
+// de novo); o status volta como a Meta respondeu — normalmente PENDING, e o
+// aprovado aparece sozinho na lista de cima quando a Meta liberar.
+router.post('/templates-meta', requireAdmin, async (req, res) => {
+    try {
+        const v = validarNovoTemplateMeta(req.body || {});
+        if (!v.ok) return res.status(400).json({ ok: false, error: 'Template inválido', detalhes: v.erros });
+        const r = await criarTemplateNaMeta(v.template);
+        if (!r.ok) return res.status(502).json({ ok: false, error: r.erro, detalheMeta: r.detalheMeta || null });
+        return res.json({ ok: true, id: r.id, status: r.status, categoria: r.categoria, variaveis: v.variaveis });
+    } catch (e) {
+        console.error('[whatsapp/templates-meta:criar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -1874,6 +1892,46 @@ router.get('/avaliacoes', requireAuth, async (req, res) => {
             avaliacoes: visiveis.slice(0, 50),
         });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── 📈 RELATÓRIO DE ATENDIMENTO (volume e tempo de 1ª resposta) ────────────
+// Item 3 da lista de 21/08 — o último 🔴 do de-para. Admin e GESTOR (é papel
+// de gestão; colaborador tem o próprio painel de avaliações). A CONTA é do
+// núcleo puro (whatsapp-relatorio.js); aqui só a leitura do período.
+router.get('/relatorio', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const { papel } = await perfilAtendimento(db, req.user);
+        if (papel !== 'admin' && papel !== 'gestor') {
+            return res.status(403).json({ ok: false, error: 'Relatório de atendimento é de admin/gestor.' });
+        }
+        const dias = Math.min(Math.max(Number(req.query.dias) || 7, 1), 90);
+        const inicioIso = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+
+        // timestamp é ISO string — where >= compara certo. Teto NOMEADO: se
+        // bater, o relatório DIZ que está parcial em vez de parecer completo.
+        const TETO_MSGS = 20000;
+        const snap = await db.collection('whatsapp_mensagens')
+            .where('timestamp', '>=', inicioIso).limit(TETO_MSGS).get();
+        const mensagens = snap.docs.map((d) => d.data() || {});
+
+        const numeros = [...new Set(mensagens.map((m) => m.conversaId).filter(Boolean))];
+        const filaPorConversa = new Map();
+        for (let i = 0; i < numeros.length; i += 300) {
+            const refs = numeros.slice(i, i + 300).map((n) => db.collection('whatsapp_conversas').doc(n));
+            // eslint-disable-next-line no-await-in-loop
+            (await db.getAll(...refs)).forEach((c) => { if (c.exists) filaPorConversa.set(c.id, (c.data() || {}).fila || null); });
+        }
+
+        const r = montarRelatorioAtendimento({ mensagens, filaPorConversa });
+        return res.json({
+            ok: true, dias, ...r,
+            parcial: mensagens.length >= TETO_MSGS ? TETO_MSGS : null,
+        });
+    } catch (e) {
+        console.error('[whatsapp/relatorio]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 // ─── 🗄 ARQUIVO DE MÍDIA NO SHAREPOINT (manual — o cron roda sozinho) ───────

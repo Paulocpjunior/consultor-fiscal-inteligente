@@ -121,3 +121,14 @@ export const statusWebhook = () =>
 /** Assina o app do CFI na WABA (subscribed_apps) — liga o fluxo real de eventos. */
 export const assinarWabaWebhook = () =>
     req<{ wabaId: string }>('/api/admin/whatsapp/webhook-assinar-waba', { method: 'POST' });
+
+/**
+ * 📝 Submete um template NOVO à aprovação da Meta (Paulo, 21/08 — cadastro
+ * pelo nosso app). O backend valida a FORMA antes da rede; a resposta traz o
+ * status da Meta (normalmente PENDING). Aprovado, ele aparece sozinho na
+ * lista "Aprovados na Meta" — aí é só vincular ao departamento acima.
+ */
+export const criarTemplateNaMeta = (p: {
+    nome: string; idioma: string; categoria: string; corpo: string; exemplos?: string[];
+}) => req<{ id?: string | null; status?: string; categoria?: string; variaveis?: number; detalhes?: string[]; detalheMeta?: unknown }>(
+    '/api/admin/whatsapp/templates-meta', { method: 'POST', body: JSON.stringify(p) });

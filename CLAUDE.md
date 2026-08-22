@@ -281,6 +281,7 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   oitava era esta, que nem existe. As sete entraram no catálogo e
   `catalogoBancoCompleto` fecha a classe: `.collection('x')` sem linha no
   catálogo quebra a build. Provada criando uma coleção órfã de propósito.
+<<<<<<< HEAD
   🐛 **E A TRAVA NASCEU COM O MESMO VÍCIO QUE ELA DENUNCIA — pego uma hora
   depois, pela varredura INVERSA.** Ela lia só `sefaz-backend/` e só a forma
   `.collection('x')`: escapavam o **`server.js` da RAIZ** (onde mora o histórico
@@ -291,6 +292,8 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   grita sem motivo é teste desligado**, então a assinatura ficou estreita
   (`.doc('x/y')` ou constante `*_DOC`/`*_PATH`). As duas extensões provadas
   quebrando de propósito.
+=======
+>>>>>>> origin/main
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão

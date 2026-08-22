@@ -158,4 +158,58 @@ export function resolverTemplate(cadastro, { departamento, templateNome } = {}) 
     return { ok: false, erro: `O departamento ${dep} tem ${doDep.length} templates — informe qual usar.`, opcoes: doDep.map((t) => t.nome) };
 }
 
+// ─── 📝 Criar template NOVO na Meta (Paulo, 21/08: "existe a possibilidade
+// de cadastro pelo nosso app?" — existe: a Graph API aceita a submissão).
+// AQUI é só a VALIDAÇÃO (pura); quem fala com a Meta é o whatsapp-cloud.
+// A recusa sai ANTES da rede, nomeada — template recusado pela Meta por
+// forma é retrabalho de 24h de fila de aprovação.
+
+/** Categorias que este cadastro aceita. AUTHENTICATION fica FORA nomeada:
+ * é o formato especial de OTP (corpo gerado pela Meta), outro fluxo. */
+export const CATEGORIAS_TEMPLATE_META = ['UTILITY', 'MARKETING'];
+
+/**
+ * Valida a SUBMISSÃO de um template novo. Devolve { ok, erros[], variaveis }.
+ * As variáveis do corpo são {{1}},{{2}}… e têm que ser SEQUENCIAIS a partir
+ * de 1 (a Meta recusa buraco); com variável no corpo, o EXEMPLO de cada uma
+ * é obrigatório — é ele que o revisor da Meta lê.
+ */
+export function validarNovoTemplateMeta(entrada) {
+    const e = [];
+    const t = entrada && typeof entrada === 'object' ? entrada : {};
+    const nome = String(t.nome || '').trim().toLowerCase();
+    const idioma = String(t.idioma || 'pt_BR').trim();
+    const categoria = String(t.categoria || 'UTILITY').trim().toUpperCase();
+    const corpo = String(t.corpo || '').trim();
+    const exemplos = (Array.isArray(t.exemplos) ? t.exemplos : []).map((x) => String(x ?? '').trim());
+
+    if (!RE_NOME_TEMPLATE.test(nome)) {
+        e.push(`nome inválido: "${t.nome}" — a Meta exige minúsculas, dígitos e "_" (ex.: aviso_guia_pronta)`);
+    }
+    if (!RE_IDIOMA.test(idioma)) e.push(`idioma inválido: "${t.idioma}" (ex.: pt_BR)`);
+    if (!CATEGORIAS_TEMPLATE_META.includes(categoria)) {
+        e.push(`categoria "${t.categoria}" não é aceita aqui — use UTILITY (aviso de serviço) ou MARKETING; AUTHENTICATION é o fluxo de OTP da Meta, outro cadastro`);
+    }
+    if (!corpo) e.push('o corpo da mensagem é obrigatório');
+    if (corpo.length > 1024) e.push(`corpo com ${corpo.length} caracteres — a Meta aceita até 1024`);
+
+    const posicoes = [...new Set((corpo.match(/\{\{\s*(\d+)\s*\}\}/g) || [])
+        .map((m) => Number(m.replace(/\D/g, ''))))].sort((a, b) => a - b);
+    const n = posicoes.length;
+    if (n && (posicoes[0] !== 1 || posicoes[n - 1] !== n)) {
+        e.push(`as variáveis do corpo têm que ser {{1}}…{{${n}}} sem buraco — vieram {{${posicoes.join('}}, {{')}}}`);
+    }
+    if (n && (exemplos.length !== n || exemplos.some((x) => !x))) {
+        e.push(`o corpo tem ${n} variável(is) — informe UM exemplo para cada (é o que o revisor da Meta lê)`);
+    }
+    if (!n && exemplos.length) e.push('exemplos sem variável no corpo — apague os exemplos ou use {{1}} no texto');
+
+    return {
+        ok: e.length === 0,
+        erros: e,
+        variaveis: n,
+        template: { nome, idioma, categoria, corpo, exemplos: n ? exemplos : [] },
+    };
+}
+
 export const _internals = { RE_NOME_TEMPLATE, RE_IDIOMA, RE_CHAVE_VAR };

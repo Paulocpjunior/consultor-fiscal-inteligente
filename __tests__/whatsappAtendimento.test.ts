@@ -755,6 +755,65 @@ describe('⚡ respostas rápidas viraram CONFIG — eram 4 frases cravadas na te
     });
 });
 
+describe('↳ SUB-MENUS do bot (item 5 de 21/08) — um nível, com 0 de voltar', () => {
+    const cfgCom = resolverConfig({
+        botAtivo: true, botAlcance: 'todos',
+        menu: [
+            { opcao: '1', fila: 'recepcao', rotulo: 'Recepção' },
+            {
+                opcao: '2', fila: 'fiscal', rotulo: 'Gestão',
+                submenu: [
+                    { opcao: '1', fila: 'fiscal', rotulo: 'Impostos' },
+                    { opcao: '2', fila: 'contabil', rotulo: 'Contábil' },
+                ],
+            },
+        ],
+    });
+    const decidir = (texto: string, conversa: Record<string, unknown> = {}) => decidirAutomacao({
+        conversa, numero: '5511999990000', textoMensagem: texto, nomeContato: 'Cli',
+        config: cfgCom, agora: new Date('2026-08-21T14:00:00-03:00'), protocoloNovo: 'P1',
+    });
+
+    it('escolher a opção-PORTA abre o sub-menu SEM definir fila nenhuma', () => {
+        const acoes = decidir('2', { protocolo: 'P1' });
+        expect(acoes.map((a) => a.tipo)).toEqual(['abrirSubmenu', 'responder']);
+        expect(acoes[1].texto).toContain('Impostos');
+        expect(acoes[1].texto).toContain('0 - Voltar');
+        expect(acoes.some((a) => a.tipo === 'definirFila')).toBe(false);
+    });
+
+    it('dentro do sub-menu, o dígito escolhe a SUB-fila e fecha o sub-menu', () => {
+        const acoes = decidir('2', { protocolo: 'P1', submenuAberto: '2' });
+        expect(acoes.map((a) => a.tipo)).toEqual(['fecharSubmenu', 'definirFila', 'responder']);
+        expect(acoes[1].fila).toBe('contabil');
+    });
+
+    it('"0" volta ao menu principal; dígito inválido reapresenta o SUB-menu (o cliente está lá)', () => {
+        const volta = decidir('0', { protocolo: 'P1', submenuAberto: '2' });
+        expect(volta.map((a) => a.tipo)).toEqual(['fecharSubmenu', 'responder']);
+        expect(volta[1].texto).toContain('1 - Recepção');
+        const invalido = decidir('9', { protocolo: 'P1', submenuAberto: '2' });
+        expect(invalido.map((a) => a.tipo)).toEqual(['responder']);
+        expect(invalido[0].texto).toContain('0 - Voltar');
+    });
+
+    it('sub-menu com fila inválida é SANEADO; esvaziado, a opção volta a ser direta', () => {
+        const c = resolverConfig({
+            menu: [{ opcao: '1', fila: 'fiscal', rotulo: 'X', submenu: [{ opcao: '1', fila: 'marketing', rotulo: 'inválida' }] }],
+        });
+        expect(c.menu[0].submenu).toBeUndefined();
+    });
+
+    it('o executor do webhook conhece as duas ações novas — ação sem executor cai no chão em silêncio', () => {
+        const rotasWebhook = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        expect(rotasWebhook).toMatch(/acao\.tipo === 'abrirSubmenu'/);
+        expect(rotasWebhook).toMatch(/acao\.tipo === 'fecharSubmenu'/);
+        // #menu e a escolha de fila zeram o estado do sub-menu junto.
+        expect(rotasWebhook).toMatch(/fila: null, submenuAberto: null/);
+        expect(rotasWebhook).toMatch(/fila: acao\.fila, submenuAberto: null/);
+    });
+});
+
 describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — não atrás de clique', () => {
     // Paulo, 21/08, comparando print a print (Ultra Fox × SP Connect): lá o
     // comprovante fotografado já vinha na tela; aqui exigia "abrir anexo".

@@ -25,6 +25,7 @@ import {
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
+    relatorioAtendimento, RelatorioAtendimento,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -623,6 +624,21 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         else setAvErro(r.error || 'Falha ao carregar as avaliações.');
     };
 
+    // ── 📈 Relatório de atendimento (admin/gestor) — item 3 de 21/08, o
+    // último 🔴 do de-para. A CONTA é do backend; aqui só o desenho.
+    const [relAberto, setRelAberto] = useState(false);
+    const [relDias, setRelDias] = useState(7);
+    const [relDados, setRelDados] = useState<RelatorioAtendimento | null>(null);
+    const [relErro, setRelErro] = useState<string | null>(null);
+    const [relCarregando, setRelCarregando] = useState(false);
+    const abrirRelatorio = async (dias = relDias) => {
+        setRelAberto(true); setRelDias(dias); setRelCarregando(true); setRelErro(null);
+        const r = await relatorioAtendimento(dias);
+        setRelCarregando(false);
+        if (r.ok) setRelDados(r);
+        else setRelErro(r.error || 'Falha ao montar o relatório.');
+    };
+
     // ── 📇 CONTATOS: a agenda que faltava. O importador da Ultra Fox grava em
     // `whatsapp_contatos` e, até aqui, NENHUMA tela lia — 800 contatos
     // importados ficavam invisíveis até alguém escrever pro número.
@@ -1188,6 +1204,92 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             ))}
                         </div>
                         <p className="text-[10px] text-slate-400">O vínculo fica gravado com quem vinculou — é uma afirmação sobre quem o contato é.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal 📈 Relatório de atendimento (admin/gestor) ──────────── */}
+            {relAberto && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setRelAberto(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl my-8 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">📈 Relatório de atendimento</h3>
+                            <button onClick={() => setRelAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                        </div>
+                        <div className="flex gap-1.5">
+                            {[7, 30, 90].map((d) => (
+                                <button key={d} onClick={() => abrirRelatorio(d)}
+                                    className={`text-[10px] font-bold px-2 py-1 rounded-full ${relDias === d
+                                        ? 'bg-[#0e3bfa] text-white'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
+                                    {d} dias
+                                </button>
+                            ))}
+                        </div>
+                        {relErro && <p className="text-[11px] text-red-600 dark:text-red-400">{relErro}</p>}
+                        {relCarregando && <p className="text-[11px] text-slate-400">Montando…</p>}
+                        {relDados && !relCarregando && (
+                            <>
+                                {relDados.parcial != null && (
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                        ⚠️ O período tem mais de {relDados.parcial} mensagens — os números abaixo são PISO, não total. Encurte o período.
+                                    </p>
+                                )}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                                    {[
+                                        ['Conversas', relDados.conversasComMovimento],
+                                        ['Recebidas', relDados.recebidas],
+                                        ['Respondidas (humano)', relDados.enviadasHumanas],
+                                        ['Sem resposta humana', relDados.semRespostaHumana],
+                                    ].map(([rotulo, v]) => (
+                                        <div key={String(rotulo)} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                                            <p className="text-xl font-black text-slate-800 dark:text-slate-100">{v as number}</p>
+                                            <p className="text-[9px] text-slate-500">{rotulo}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                {relDados.semRespostaHumana > 0 && (
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                        ⚠️ {relDados.semRespostaHumana} conversa(s) com mensagem de cliente e NENHUMA resposta humana no período — o bot não conta como atendimento.
+                                    </p>
+                                )}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-[10px]">
+                                        <thead><tr className="text-left text-slate-400">
+                                            <th className="py-1">Fila</th><th>Conversas</th><th>Recebidas</th><th>Resp. humanas</th><th>Bot</th><th>Sem resposta</th><th>1ª resposta (média)</th>
+                                        </tr></thead>
+                                        <tbody>
+                                            {relDados.porFila.map((f) => (
+                                                <tr key={f.fila} className="border-t border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-300">
+                                                    <td className="py-1 font-semibold">{rotuloCurtoFila(f.fila)}</td>
+                                                    <td>{f.conversas}</td><td>{f.recebidas}</td><td>{f.enviadasHumanas}</td><td>{f.enviadasBot}</td>
+                                                    <td className={f.semRespostaHumana ? 'text-amber-600 font-bold' : ''}>{f.semRespostaHumana}</td>
+                                                    <td>{f.tempoMedio1aRespostaMin != null ? `${f.tempoMedio1aRespostaMin} min` : '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-[10px]">
+                                        <thead><tr className="text-left text-slate-400">
+                                            <th className="py-1">Atendente</th><th>Mensagens enviadas</th><th>Conversas em que atuou</th>
+                                        </tr></thead>
+                                        <tbody>
+                                            {relDados.porAtendente.map((a) => (
+                                                <tr key={a.atendente} className="border-t border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-300">
+                                                    <td className="py-1 font-semibold">{a.atendente.split('@')[0]}</td>
+                                                    <td>{a.enviadas}</td><td>{a.conversas}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p className="text-[9px] text-slate-400">
+                                    "1ª resposta" mede da mensagem do cliente até a primeira resposta HUMANA — a média é só das respondidas; as sem resposta saem contadas ao lado, nunca dissolvidas na média.
+                                </p>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -2386,20 +2488,55 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🔢 Menu de triagem (opção → fila)</p>
                                     {cfg.menu.map((m, i) => (
-                                        <div key={i} className="flex items-center gap-1.5">
-                                            <input value={m.opcao} onChange={(e) => setCfg((c) => c ? {
-                                                ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, opcao: e.target.value } : x)),
-                                            } : c)} className={`${CAMPO} !w-10 text-center`} />
-                                            <input value={m.rotulo} onChange={(e) => setCfg((c) => c ? {
-                                                ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, rotulo: e.target.value } : x)),
-                                            } : c)} className={CAMPO} placeholder="O que o cliente lê" />
-                                            <select value={m.fila} onChange={(e) => setCfg((c) => c ? {
-                                                ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, fila: e.target.value } : x)),
-                                            } : c)} className={`${CAMPO} !w-32`}>
-                                                {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
-                                            </select>
-                                            <button onClick={() => setCfg((c) => c ? { ...c, menu: c.menu.filter((_, j) => j !== i) } : c)}
-                                                className="text-slate-400 hover:text-red-600 px-1">✕</button>
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <input value={m.opcao} onChange={(e) => setCfg((c) => c ? {
+                                                    ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, opcao: e.target.value } : x)),
+                                                } : c)} className={`${CAMPO} !w-10 text-center`} />
+                                                <input value={m.rotulo} onChange={(e) => setCfg((c) => c ? {
+                                                    ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, rotulo: e.target.value } : x)),
+                                                } : c)} className={CAMPO} placeholder="O que o cliente lê" />
+                                                <select value={m.fila} onChange={(e) => setCfg((c) => c ? {
+                                                    ...c, menu: c.menu.map((x, j) => (j === i ? { ...x, fila: e.target.value } : x)),
+                                                } : c)} className={`${CAMPO} !w-32`}>
+                                                    {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
+                                                </select>
+                                                <button onClick={() => setCfg((c) => c ? {
+                                                    ...c, menu: c.menu.map((x, j) => (j === i
+                                                        ? { ...x, submenu: [...(x.submenu || []), { opcao: String((x.submenu?.length || 0) + 1), fila: x.fila, rotulo: '' }] }
+                                                        : x)),
+                                                } : c)} title="Adicionar sub-opção (a opção vira uma PORTA: escolher abre este sub-menu)"
+                                                    className="text-[10px] text-[#0e3bfa] font-bold px-1 whitespace-nowrap">↳ sub</button>
+                                                <button onClick={() => setCfg((c) => c ? { ...c, menu: c.menu.filter((_, j) => j !== i) } : c)}
+                                                    className="text-slate-400 hover:text-red-600 px-1">✕</button>
+                                            </div>
+                                            {/* ↳ Sub-opções (item 5 de 21/08): a opção acima vira PORTA —
+                                                o cliente escolhe, vê este sub-menu (com "0 - Voltar"), e a
+                                                fila só se define aqui. Esvaziar as sub-opções devolve a
+                                                opção ao comportamento direto. */}
+                                            {(m.submenu?.length || 0) > 0 && (m.submenu || []).map((s, k) => (
+                                                <div key={k} className="flex items-center gap-1.5 pl-8">
+                                                    <span className="text-[10px] text-slate-400">↳</span>
+                                                    <input value={s.opcao} onChange={(e) => setCfg((c) => c ? {
+                                                        ...c, menu: c.menu.map((x, j) => (j === i
+                                                            ? { ...x, submenu: (x.submenu || []).map((y, l) => (l === k ? { ...y, opcao: e.target.value } : y)) } : x)),
+                                                    } : c)} className={`${CAMPO} !w-10 text-center`} />
+                                                    <input value={s.rotulo} onChange={(e) => setCfg((c) => c ? {
+                                                        ...c, menu: c.menu.map((x, j) => (j === i
+                                                            ? { ...x, submenu: (x.submenu || []).map((y, l) => (l === k ? { ...y, rotulo: e.target.value } : y)) } : x)),
+                                                    } : c)} className={CAMPO} placeholder="Sub-opção que o cliente lê" />
+                                                    <select value={s.fila} onChange={(e) => setCfg((c) => c ? {
+                                                        ...c, menu: c.menu.map((x, j) => (j === i
+                                                            ? { ...x, submenu: (x.submenu || []).map((y, l) => (l === k ? { ...y, fila: e.target.value } : y)) } : x)),
+                                                    } : c)} className={`${CAMPO} !w-32`}>
+                                                        {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
+                                                    </select>
+                                                    <button onClick={() => setCfg((c) => c ? {
+                                                        ...c, menu: c.menu.map((x, j) => (j === i
+                                                            ? { ...x, submenu: (x.submenu || []).filter((_, l) => l !== k) } : x)),
+                                                    } : c)} className="text-slate-400 hover:text-red-600 px-1">✕</button>
+                                                </div>
+                                            ))}
                                         </div>
                                     ))}
                                     <button onClick={() => setCfg((c) => c ? {
@@ -2482,6 +2619,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
                                     📊
                                 </button>
+                                {(papel === 'admin' || papel === 'gestor') && (
+                                    <button onClick={() => abrirRelatorio()} title="Relatório de atendimento: volume por fila/atendente e tempo de 1ª resposta"
+                                        className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
+                                        📈
+                                    </button>
+                                )}
                                 <button onClick={() => abrirSobre(sobreNovo ? 'novidades' : 'manual')}
                                     title="Sobre o SP Connect: manual de uso, o que mudou e por que ele existe"
                                     className="relative text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
