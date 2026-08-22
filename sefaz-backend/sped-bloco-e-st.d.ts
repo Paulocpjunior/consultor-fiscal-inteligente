@@ -26,7 +26,15 @@ export interface ApuracaoStUf {
     documentos?: number;
 }
 
-export function agruparStPorUf(notas: unknown[], ufEmpresa?: string): GrupoStUf[];
+/**
+ * ⚠️ Devolve TAMBÉM o que ficou de fora: documento com ST retido e sem UF de
+ * destino legível não entra na UF da empresa (cada UF é uma GNRE) — ele sai
+ * NOMEADO em `semUf`, e o `montarLinhasStBlocoE` o transforma em aviso.
+ */
+export function agruparStPorUf(
+    notas: unknown[],
+    ufEmpresa?: string,
+): { grupos: GrupoStUf[]; semUf: string[] };
 export function apurarStDaUf(p: {
     uf: string;
     retencao: number;

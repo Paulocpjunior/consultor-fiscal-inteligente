@@ -133,6 +133,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   detalhe de PIS/COFINS do item, e o arquivo ACEITO da PWR (03/2026) tem C170
   nas notas próprias. Portar a régua inteira do arquivo vizinho apagaria a
   apuração; travado por teste.
+  🔴 **(13) E O ICMS-ST IA PARA O ESTADO ERRADO — a UF de destino era lida só na
+  forma ANINHADA.** `agruparStPorUf` lia `destinatario.uf` e o importer grava
+  **`ufDest` ACHATADO**: em toda nota capturada a UF vinha vazia e caía no
+  **`ufEmpresa`**. O E200/E210 é **POR UF de destino e cada UF é uma GNRE** —
+  o ST retido para MG/PR/RJ era apurado como se fosse do próprio estado, ou
+  seja recolhimento no estado errado, calado. ✂️ Dono `ufDoDestinatarioDoc`
+  (no `participante-doc-helper`), e **`ufEmpresa` deixou de ser default**:
+  documento sem UF legível sai NOMEADO, com o número e a ação.
+  ⚠️ **E ELE NÃO PASSA PELO `normalizarParticipantesDoc`, de propósito**: aquele
+  dono decide o lado pela IDENTIDADE (nome/CNPJ), então `destinatario: {uf:'MG'}`
+  — sem nome e sem documento, que é como a venda de balcão chega — é DESCARTADO
+  por ele e a UF se perde. Foi o teste que mostrou isso, na primeira tentativa
+  de reusar o dono errado: **régua única é o dono da MESMA pergunta**, não o
+  dono mais próximo.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão

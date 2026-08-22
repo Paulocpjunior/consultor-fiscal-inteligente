@@ -136,3 +136,23 @@ export function ehEmissaoPropriaDoc(d, empresaCnpj) {
     if (d.direcao === 'saida') return true;
     return ehNotaPropriaDeEntrada(d, empresaCnpj).sim;
 }
+
+/**
+ * UF do DESTINATÁRIO — nas duas formas em que o documento chega.
+ *
+ * 🚨 A UF é campo de DECISÃO no ICMS-ST: o E200/E210 é POR UF de destino, e
+ * cada UF é uma GNRE. O agrupamento do bloco E lia só `destinatario.uf`
+ * (ANINHADA) e o importer principal grava **`ufDest` ACHATADO** — em toda nota
+ * capturada a UF vinha vazia e caía na UF da EMPRESA, mandando o recolhimento
+ * do ST para o estado errado, calado (21/08).
+ *
+ * ⚠️ POR QUE NÃO PASSA PELO `normalizarParticipantesDoc`: aquele dono decide o
+ * lado pela IDENTIDADE (nome/CNPJ/CPF), então um `destinatario: { uf: 'MG' }`
+ * — sem nome e sem documento, que é como a nota de balcão chega — é DESCARTADO
+ * por ele e a UF se perde. Aqui a pergunta é só sobre a UF.
+ */
+export function ufDoDestinatarioDoc(d) {
+    return String(
+        d?.destinatario?.uf || d?.tomador?.uf || d?.ufDest || d?.ufDestinatario || '',
+    ).trim().toUpperCase();
+}

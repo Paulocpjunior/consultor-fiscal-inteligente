@@ -25,7 +25,10 @@
 // ============================================================================
 
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+// A UF do destinatário chega em DUAS formas (aninhada × `ufDest` achatado) —
+// quem as concilia é o dono, nunca uma leitura nova.
+import { ufDoDestinatarioDoc } from './participante-doc-helper.js';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -33,26 +36,45 @@ const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'denegada', 'i
 
 /**
  * Agrupa o ICMS-ST RETIDO nas saídas por UF do destinatário.
- * Saída sem ST não entra. Nota cancelada/denegada fica de fora — e quem decide
- * é `docCancelado` (o campo cru mente quando o cancelamento chega por evento);
- * o `situacao` derivado continua honrado para quem já vem classificado.
+ *
+ * 🚨 A UF SAI DA RÉGUA, NUNCA DA FORMA ANINHADA (21/08, varredura dos leitores
+ * de documento). Este agrupamento lia `nota.destinatario?.uf` — e o importer
+ * principal grava **`ufDest` ACHATADO**. Em toda nota capturada
+ * automaticamente a UF vinha vazia e caía no **`ufEmpresa`**: o ST retido para
+ * MG, PR ou RJ era apurado como se fosse do próprio estado, e cada UF aqui é
+ * **uma GNRE**. Dinheiro no estado errado, sem nada acusar.
+ *
+ * ⚠️ E O `ufEmpresa` DEIXOU DE SER DEFAULT: ele só vale quando a nota é da
+ * PRÓPRIA UF — o que a régua já responde lendo o documento. Sem UF legível o
+ * documento sai NOMEADO em `semUf`, porque UF de destino inventada é a mesma
+ * família do 'PARTSEM', num campo que decide para QUEM se recolhe.
+ *
+ * Saída sem ST não entra. Cancelada fica de fora e quem decide é `docCancelado`
+ * (o campo cru mente quando o cancelamento chega por evento); o `situacao`
+ * derivado continua honrado para quem já vem classificado. A direção também é
+ * pela régua: a nota PRÓPRIA de entrada (tpNF=0) fica gravada como 'saida' até
+ * o backfill passar, e ela não é retenção nenhuma.
+ *
+ * @returns {{grupos: object[], semUf: string[]}}
  */
 export function agruparStPorUf(notas, ufEmpresa) {
     const porUf = new Map();
+    const semUf = [];
 
-    for (const nota of notas || []) {
-        if (String(nota?.direcao) !== 'saida') continue;
-        if (docCancelado(nota)) continue;
-        if (CANCELADOS.has(String(nota?.situacao || '').toLowerCase())) continue;
+    for (const notaCrua of notas || []) {
+        if (direcaoEfetivaDoc(notaCrua) !== 'saida') continue;
+        if (docCancelado(notaCrua)) continue;
+        if (CANCELADOS.has(String(notaCrua?.situacao || '').toLowerCase())) continue;
 
-        const vST = num(nota?.totais?.vST) || num(nota?.totais?.vICMSST)
-            || (nota?.itens || []).reduce((s, i) => s + num(i?.vICMSST), 0);
+        const vST = num(notaCrua?.totais?.vST) || num(notaCrua?.totais?.vICMSST)
+            || (notaCrua?.itens || []).reduce((s, i) => s + num(i?.vICMSST), 0);
         if (vST <= 0) continue;
 
-        const uf = String(
-            nota?.destinatario?.uf || nota?.tomador?.uf || ufEmpresa || '',
-        ).toUpperCase();
-        if (!uf) continue;
+        const uf = ufDoDestinatarioDoc(notaCrua);
+        if (!uf) {
+            semUf.push(String(notaCrua?.numero || notaCrua?.chave || '(sem número)'));
+            continue;
+        }
 
         const atual = porUf.get(uf) || { uf, retencao: 0, documentos: 0 };
         atual.retencao = r2(atual.retencao + vST);
@@ -60,7 +82,10 @@ export function agruparStPorUf(notas, ufEmpresa) {
         porUf.set(uf, atual);
     }
 
-    return Array.from(porUf.values()).sort((a, b) => a.uf.localeCompare(b.uf));
+    return {
+        grupos: Array.from(porUf.values()).sort((a, b) => a.uf.localeCompare(b.uf)),
+        semUf,
+    };
 }
 
 /**
@@ -133,8 +158,16 @@ const dec = (n) => (Number.isFinite(Number(n)) ? Number(n) : 0).toFixed(2).repla
  * @param {object} [p.obrigacoesPorUf] { UF: { dtVcto, codRec } } para o E250
  */
 export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dtFin, obrigacoesPorUf = {} }) {
-    const grupos = agruparStPorUf(notas, ufEmpresa);
+    const { grupos, semUf } = agruparStPorUf(notas, ufEmpresa);
     const avisos = [];
+    if (semUf.length) {
+        avisos.push(
+            `ST: ${semUf.length} documento(s) com ICMS-ST retido ficaram FORA da apuração por UF porque a `
+            + `UF do destinatário não foi capturada — nº ${semUf.slice(0, 8).join(', ')}`
+            + `${semUf.length > 8 ? '…' : ''}. Cada UF aqui é uma GNRE: declarar na UF da empresa mandaria o `
+            + 'recolhimento para o estado errado. Reimporte o XML (♻️ Reler XMLs guardados) e gere de novo.',
+        );
+    }
     if (grupos.length === 0) return { linhas: [], apuracoes: [], avisos };
 
     // Ajustes de ST valem para a apuração da UF da EMPRESA (a tabela 5.1.1 é
