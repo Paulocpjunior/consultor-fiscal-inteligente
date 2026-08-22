@@ -53,6 +53,9 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   guia já paga) — ele não vira "não conferido".
   📌 E o bloco entrou **na TELA no mesmo PR**: flag que ninguém lê é
   exatamente a classe que este PR fecha.
+  de ganhar motivo inventado: sobraram **quatro pendentes**, e duas delas
+  (`spOk`/`baixaOk` do painel de envio) têm cara da MESMA classe — conferência
+  do rito #293 escrita e nunca ligada.
 
 - **🚨 O `COD_ITEM` TINHA QUATRO RÉGUAS — e ele é a CHAVE que liga o item ao
   cadastro do 0200** (22/08). O 0200 é a Tabela de Identificação do Item; C170
