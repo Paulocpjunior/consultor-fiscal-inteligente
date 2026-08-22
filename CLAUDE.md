@@ -84,6 +84,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   defeitos de uma vez. E **default de campo fiscal é invenção com outro nome**:
   'PARTSEM', '5352', '000', '08' e o COD_GEN '00' saíram todos da mesma cabeça
   — cinco dos oito achados da noite eram exatamente isso.
+  🔴 **(9) E A 5ª LEVA ACHOU O DEFAULT DENTRO DO BLOCO 0 — o `TIPO_ITEM` saía
+  '00' (MERCADORIA PARA REVENDA) em TODO item, inclusive no item SINTÉTICO de
+  SERVIÇO.** O `SERV-GENERICO` existe justamente porque o documento é uma NFS-e
+  sem discriminação, e o 0200 dele declarava mercadoria — com **NCM
+  `00000000`** ao lado, que é NCM FABRICADO. O Guia 3.2.3 é literal nos dois
+  pontos: o serviço *"deverá ser criado o correspondente item no registro 0200,
+  cujo conteúdo do campo TIPO_ITEM será igual '09' (Serviços)"*, e o campo 08 —
+  *"Não existe COD-NCM para serviços"*. ✂️ `tipoItemDoDocumento` (na seleção,
+  lida pelos DOIS orquestradores) + NCM vazio no item de serviço.
+  ⚠️ **O QUE A RÉGUA SE RECUSA A FAZER**: adivinhar o tipo da MERCADORIA. Numa
+  indústria, matéria-prima é 01 e produto acabado é 04 — e **isso não está no
+  XML** (é o caso KALUNGA do CFOP, um campo adiante). Mercadoria continua '00',
+  pendência NOMEADA no código, porque deduzir pelo ramo produziria o 1405 num
+  campo que o Bloco K cruza. A trava é por VARREDURA: `tipo: '00'` cravado na
+  coleta quebra a build.
+  🔴 **(10) O `IND_NAT_PJ` ERA LIDO DE UM CADASTRO QUE NÃO EXISTIA.** O 0000 do
+  EFD-Contribuições escrevia `df.indNatPJ || '00'` — e `indNatPJ` **não estava
+  na whitelist nem em tela nenhuma**: caía no '00' SEMPRE, que declara
+  *sociedade empresária em geral*. É a "rota sem botão" (13/08) na versão
+  CAMPO, e o arquivo afirmava isso à Receita todo mês — inclusive na igreja do
+  caso de 18/08, que é o cliente que fez o módulo de regime nascer.
+  ⚠️ **O APP NÃO ESCOLHE O CÓDIGO** (Tabela 3.1.3, oficial, fora deste repo —
+  mesma disciplina do 0002 e do código 9 do ISS fixo). O que mudou é o
+  SILÊNCIO: campo no modal + whitelist no MESMO PR (#382), e quando o cadastro
+  diz IMUNE/ISENTA ou sem fins lucrativos o '00' sai **DITO**, com o lugar de
+  preencher. Empresa comum não ganha aviso — alarme sem ação é o que ensina a
+  equipe a ignorar alarme.
+  🔴 **(11) E O `SER` INVENTAVA SÉRIE 1**: o bloco D (nos DOIS arquivos) escrevia
+  `nota.serie || '1'`. A série é um campo que o **PVA confere CONTRA A CHAVE**
+  (recusa de 20/08 na PWR), e a chave a carrega nas posições **23-25** — do
+  lado do modelo (21-22) e do número (26-34), que a casa já lê. ✂️
+  `serieDoDocumento`: campo gravado > chave > '000' (o Guia manda 000 quando
+  não há série). O C100 também parou de mandar '000' quando a chave diz outra
+  coisa.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão

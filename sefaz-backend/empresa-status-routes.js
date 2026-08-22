@@ -557,6 +557,12 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // ("Registro filho obrigatório não foi informado · 0002" — PWR 07/2026).
     // Mesmo desenho do código 9 do ISS fixo: o número mora no cadastro.
     'classEstabIpi', 'contribuinteIpi',
+    // Natureza da PJ (IND_NAT_PJ, campo 13 do 0000 do EFD-Contribuições). O
+    // gerador LIA este campo desde sempre e ele não estava aqui nem na tela:
+    // caía no '00' — "sociedade empresária em geral" — em toda empresa,
+    // inclusive nas imunes/isentas (varredura de 21/08). Tabela 3.1.3 do
+    // leiaute: o número vem do cadastro, o app não deduz.
+    'indNatPJ',
     // Cod.Cliente — o código da empresa no E-Fiscal (Paulo, 04/08): CHAVE da
     // migração do PG12 (schema e{código} ↔ CNPJ). 4 dígitos com zero à
     // esquerda, 0001–9999, ÚNICO na carteira — validação em cod-cliente.js e

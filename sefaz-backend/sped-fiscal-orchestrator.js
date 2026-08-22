@@ -31,7 +31,9 @@ import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } f
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
-import { selecionarNotasBlocoC, selecionarCtesBlocoD } from './sped-selecao-documentos.js';
+import {
+    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento,
+} from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 // RÉGUA ÚNICA da leitura da ficha por competência (mesReferencia tem 3 formas).
@@ -217,7 +219,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                     descricao: item.xProd || item.descricao || codItem,
                     codBarra: item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : '',
                     unidade: (item.uCom || item.unidade || 'UN').toUpperCase().substring(0, 6),
-                    tipo: '00',  // Default: 00 = Mercadoria pra Revenda
+                    // TIPO_ITEM pela régua: serviço é '09' (Guia 3.2.3). A
+                    // MERCADORIA continua '00' porque a destinação real
+                    // (matéria-prima, produto acabado) não está no XML — ver a
+                    // pendência nomeada em `tipoItemDoDocumento`.
+                    tipo: tipoItemDoDocumento(nota),
                     ncm: item.NCM || item.ncm || '',
                     codGen: '',
                     codLst: '',

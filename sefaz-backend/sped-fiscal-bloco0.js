@@ -16,6 +16,10 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+// TIPO_ITEM/NCM do item de serviço — a MESMA régua do bloco 0 do
+// EFD-Contribuições; duas cópias declarariam tipos diferentes para o mesmo item
+// em dois arquivos do mesmo mês.
+import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-documentos.js';
 
 const VERSAO_LEIAUTE = '020';  // Leiaute 020 vigente desde 01/01/2026
 
@@ -304,8 +308,10 @@ function build0200(item) {
         fmt.sanitizeString(item.codBarra || '', 14),
         '',  // COD_ANT_ITEM
         fmt.sanitizeString(item.unidade || 'UN', 6),
-        item.tipo || '00',  // 00=Mercadoria pra Revenda
-        fmt.sanitizeString(item.ncm || '00000000', 8),
+        item.tipo || TIPO_ITEM_MERCADORIA_REVENDA,
+        // Serviço não tem NCM (Guia 3.2.3, 0200 campo 08: "Não existe COD-NCM
+        // para serviços") — o '00000000' era NCM fabricado.
+        ehItemDeServico(item) ? '' : fmt.sanitizeString(item.ncm || '00000000', 8),
         '',  // EX_IPI
         fmt.sanitizeString(codGen, 2),
         fmt.sanitizeString(item.codLst || '', 5),

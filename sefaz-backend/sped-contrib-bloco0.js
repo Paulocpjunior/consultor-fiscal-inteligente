@@ -20,6 +20,12 @@
 import * as fmt from './sped-fiscal-format.js';
 // IND_REG_CUM sai do que o arquivo PRODUZIU (F550 × blocos A/C/D).
 import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
+// TIPO_ITEM/NCM do item de serviço — régua única, a mesma que os dois
+// orquestradores usam para classificar o item.
+import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-documentos.js';
+// A natureza da PJ (IND_NAT_PJ) sai do CADASTRO — nunca do regime, que é outro
+// eixo. Aqui só se lê o regime para SABER quando o '00' é uma afirmação falsa.
+import { regimeDaEmpresa, semFinsLucrativos } from './regime-tributario.js';
 
 const COD_VER = '006';  // Versao 006 vigente desde 01/01/2026
 
@@ -117,6 +123,7 @@ function buildBloco0Contrib(dados) {
 function build0000(dados) {
     const { empresa, competenciaInicio, competenciaFim } = dados;
     const df = empresa.dadosFiscais || {};
+    conferirIndNatPJ(dados, df);
     return fmt.buildLine([
         '0000',
         COD_VER,
@@ -133,6 +140,42 @@ function build0000(dados) {
         fmt.sanitizeString(df.indNatPJ || '00', 2),
         df.indAtividade === 'industrial' ? '0' : '1',
     ]);
+}
+
+/**
+ * 🚨 IND_NAT_PJ — o campo era LIDO de um cadastro que não existia.
+ *
+ * Varredura noturna dos leitores (21/08). O 0000 escrevia
+ * `df.indNatPJ || '00'` — e `indNatPJ` não estava na whitelist do modal Dados
+ * Fiscais nem tinha campo em tela nenhuma: **caía SEMPRE no '00'**. É a "rota
+ * sem botão" (13/08) na versão CAMPO, e o efeito é uma afirmação: '00' é
+ * *sociedade empresária em geral*, o que a COMUNIDADE EVANGÉLICA do caso de
+ * 18/08 não é — e o arquivo declarava isso à Receita todo mês.
+ *
+ * ⚠️ **O APP NÃO ESCOLHE O CÓDIGO.** A Tabela 3.1.3 do leiaute não está neste
+ * repositório, e código de tabela oficial não se deduz (é a regra do 0002 e do
+ * código 9 do ISS fixo — inventar aqui declararia natureza errada num campo que
+ * muda a apuração de quem recolhe PIS sobre a FOLHA). O que muda é o SILÊNCIO:
+ * quando o app SABE que a entidade é imune, isenta ou sem fins lucrativos, o
+ * '00' vira aviso NOMEADO com o lugar de preencher.
+ *
+ * Regime tributário e natureza da PJ são EIXOS SEPARADOS (18/08) — o regime
+ * aqui só responde "este '00' contradiz o que já sabemos?".
+ */
+function conferirIndNatPJ(dados, df) {
+    if (String(df.indNatPJ || '').trim()) return;
+    if (!Array.isArray(dados.warnings)) return;
+    const empresa = dados.empresa || {};
+    const { regime } = regimeDaEmpresa(empresa);
+    const terceiroSetor = semFinsLucrativos(empresa);
+    if (!terceiroSetor && !['IMUNE', 'ISENTA'].includes(regime)) return;
+    const quem = terceiroSetor ? 'entidade SEM FINS LUCRATIVOS' : `entidade ${regime === 'IMUNE' ? 'IMUNE' : 'ISENTA'}`;
+    dados.warnings.push(
+        `⚠️ 0000 campo 13 (IND_NAT_PJ): o arquivo está declarando **00 — sociedade `
+        + `empresária em geral**, e o cadastro diz que esta é ${quem}. O código é de `
+        + `TABELA OFICIAL (3.1.3 do leiaute) e o app NÃO o deduz: preencha `
+        + `"Natureza da PJ (IND_NAT_PJ)" em Empresas → Dados Fiscais e gere de novo.`,
+    );
 }
 
 /**
@@ -277,6 +320,11 @@ function build0190(u) {
  * 0200 — Tabela de Identificacao do Item
  */
 function build0200(item) {
+    // 🚨 SERVIÇO NÃO TEM NCM — Guia 3.2.3, 0200 campo 08, literal: *"Não existe
+    // COD-NCM para serviços"*. O gerador escrevia '00000000', que é NCM
+    // FABRICADO (mesma família do 'PARTSEM'), justamente no item sintético que
+    // representa a NFS-e sem discriminação.
+    const ehServico = ehItemDeServico(item);
     return fmt.buildLine([
         '0200',
         fmt.sanitizeString(item.codItem, 60),
@@ -284,8 +332,8 @@ function build0200(item) {
         fmt.sanitizeString(item.codBarra || '', 14),
         '',  // COD_ANT_ITEM
         fmt.sanitizeString(item.unidade || 'UN', 6),
-        item.tipo || '00',
-        fmt.sanitizeString(item.ncm || '00000000', 8),
+        item.tipo || TIPO_ITEM_MERCADORIA_REVENDA,
+        ehServico ? '' : fmt.sanitizeString(item.ncm || '00000000', 8),
         '',  // EX_IPI
         '',  // COD_GEN
         '',  // COD_LST

@@ -308,11 +308,19 @@ describe('Guia Prático 3.2.3 — C100, as três regras que o manual corrigiu', 
     });
 
     // Campo 07 (SER): "obrigatório com TRÊS posições … Se não existir, 000."
-    it('SER sai com três posições, e 000 quando a nota não tem série', () => {
+    //
+    // ⚠️ ESTE TESTE FOI TROCADO EM 21/08, e a premissa derrubada era minha: ele
+    // exigia '000' para a nota SEM o campo `serie` **mesmo tendo chave**. Só que
+    // campo vazio ali é buraco de CAPTURA, não ausência de série — e a chave
+    // carrega a série nas posições 23-25 (nesta, `...5500100000348...` ⇒ 001).
+    // Como o PVA confere a série CONTRA a chave (recusa de 20/08 na PWR),
+    // mandar '000' com a chave dizendo 001 é a divergência que ele recusa.
+    // O '000' do Guia continua valendo para a nota que realmente não tem série.
+    it('SER sai com três posições — da nota, e da CHAVE quando o campo falta', () => {
         const comSerie = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', serie: '1' });
         expect(c100De(buildBlocoC(dados([comSerie]) as never))[7]).toBe('001');
-        const semSerie = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', serie: '' });
-        expect(c100De(buildBlocoC(dados([semSerie]) as never))[7]).toBe('000');
+        const semCampo = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', serie: '' });
+        expect(c100De(buildBlocoC(dados([semCampo]) as never))[7]).toBe('001');
     });
 
     // Exceção 4: nota em substituição ao cupom (CFOP 5929/6929) é COD_SIT 08.

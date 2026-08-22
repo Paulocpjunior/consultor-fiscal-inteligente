@@ -355,6 +355,24 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('classEstabIpi', v)}
                                 placeholder="Só p/ contribuinte de IPI — código do registro 0002"
                             />
+                            {/* 🚨 O gerador do EFD-Contribuições LIA este campo desde
+                                sempre e ele não existia em tela nenhuma: caía no '00',
+                                que declara "sociedade empresária em geral" — inclusive
+                                nas imunes/isentas (varredura de 21/08). Tabela oficial:
+                                o app não deduz o código. */}
+                            <div>
+                                <Field
+                                    label="Natureza da PJ (IND_NAT_PJ)"
+                                    value={dados.indNatPJ || ''}
+                                    onChange={v => handleField('indNatPJ', v.replace(/\D/g, '').slice(0, 2))}
+                                    placeholder="2 dígitos — campo 13 do registro 0000"
+                                />
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Código da Tabela 3.1.3 do leiaute do EFD-Contribuições. Em branco, o arquivo
+                                    sai com <strong>00 — sociedade empresária em geral</strong>: confira quando a
+                                    entidade for cooperativa, imune ou isenta. O app não deduz este código.
+                                </p>
+                            </div>
                         </div>
                     </Section>
 

@@ -24,7 +24,9 @@ import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js
 import { cstDoLancamento } from './cst-correlacao.js';
 // Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
 // campo cru `n.modelo`, que o importer principal não grava.
-import { selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento } from './sped-selecao-documentos.js';
+import {
+    selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento, serieDoDocumento,
+} from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
@@ -100,9 +102,7 @@ function cstDoItemNoArquivo(item, cfopLancado, nota) {
  * é justamente o que faz os dois baterem.
  */
 export function serieDoC100(serie) {
-    const d = String(serie ?? '').replace(/\D/g, '');
-    if (!d) return '000';
-    return d.padStart(3, '0').slice(-3);
+    return serieDoDocumento({ serie });
 }
 
 /**
@@ -381,7 +381,7 @@ function buildC100(nota, dados) {
         // obrigatório com TRÊS POSIÇÕES … Se não existir Série … informar 000"*.
         // E o PVA confere a série contra a que está DENTRO da chave (3 dígitos),
         // então o zero à esquerda é o que faz os dois baterem.
-        serieDoC100(nota.serie),
+        serieDoDocumento(nota),
         fmt.sanitizeString(String(nota.numero || ''), 9),
         fmt.sanitizeString(nota.chave || '', 44),
         soCancelavel(fmt.formatDate(nota.dhEmi)),

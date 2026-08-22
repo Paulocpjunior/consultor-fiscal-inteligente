@@ -14,7 +14,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
-import { selecionarCtesBlocoD, codSitDoDocumento } from './sped-selecao-documentos.js';
+import { selecionarCtesBlocoD, codSitDoDocumento, serieDoDocumento } from './sped-selecao-documentos.js';
 // Réguas DONAS da leitura do documento — o CT-e capturado grava os campos
 // achatados, e ler só a forma aninhada fazia o COD_PART cair num literal.
 import {
@@ -126,7 +126,9 @@ function buildD100(notaCrua, dados) {
         codPart,
         '57',
         codSit,
-        fmt.sanitizeString(nota.serie || '1', 4),
+        // SER — a régua, nunca o '1' inventado: sem o campo gravado a série
+        // sai da CHAVE (posições 23-25), e '000' quando não há série.
+        serieDoDocumento(nota),
         '',  // SUB
         fmt.sanitizeString(String(nota.numero || ''), 9),
         fmt.sanitizeString(nota.chave || nota.chaveAcesso || '', 44),

@@ -29,6 +29,9 @@ import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-do
 // cópia da normalização é o começo de duas respostas divergentes.
 import { acharFichaCompetencia } from './ipi-varredura.js';
 import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
+// TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
+// cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
+import { tipoItemDoDocumento, TIPO_ITEM_SERVICO } from './sped-selecao-documentos.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -175,7 +178,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
                     descricao: item.xProd || item.descricao || codItem,
                     codBarra: item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : '',
                     unidade: (item.uCom || item.unidade || 'UN').toUpperCase().substring(0, 6),
-                    tipo: '00',
+                    tipo: tipoItemDoDocumento(nota),
                     ncm: item.NCM || item.ncm || '',
                 });
             }
@@ -199,7 +202,10 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
             descricao: 'Prestação de serviços sem discriminação de itens no documento',
             codBarra: '',
             unidade: 'UN',
-            tipo: '00',
+            // Este item EXISTE porque o documento é de SERVIÇO — declará-lo
+            // como '00' (mercadoria para revenda) era o documento se
+            // desmentindo dentro do próprio arquivo.
+            tipo: TIPO_ITEM_SERVICO,
             ncm: '',
         });
         if (!unidadesMap.has('UN')) {
