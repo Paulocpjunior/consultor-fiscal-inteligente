@@ -155,9 +155,13 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
         expect(f).toMatch(/cfopDoLancamento\(doc, rawCfop, direcao,/);
     });
 
+    // ⚠️ TERCEIRA trava literal do dia. O que ela garante é que a NOTA chega
+    // à callback (senão o E510 divergiria do C190); a direção passou a vir da
+    // régua em 22/08, porque ela decide também o CST de escrituração.
     it('E510 (IPI) recebe a nota pela callback — senão divergiria do C190', () => {
-        expect(leitor('sefaz-backend/sped-bloco-ipi-e510.js'))
-            .toMatch(/conv\(item\.cfop \|\| item\.CFOP \|\| '0000', nota\.direcao, nota\._dados, nota\)/);
+        const f = leitor('sefaz-backend/sped-bloco-ipi-e510.js');
+        expect(f).toMatch(/conv\(item\.cfop \|\| item\.CFOP \|\| '0000', [^,]+, nota\._dados, nota\)/);
+        expect(f).not.toMatch(/conv\(item\.cfop \|\| item\.CFOP \|\| '0000', nota\.direcao/);
         expect(leitor('sefaz-backend/sped-fiscal-blocoE.js'))
             .toMatch(/convertCfop: \(cfop, direcao, notaDados, nota\)/);
     });
