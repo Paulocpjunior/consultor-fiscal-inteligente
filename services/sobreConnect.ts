@@ -258,6 +258,8 @@ export const REVISOES: Revisao[] = [
             '✚ Nova conversa: a Recepção (e RH/Jurídico) entraram na lista de departamentos pra iniciar mensagem — antes só os 5 módulos apareciam.',
             '🔑 A tela de login do /connect diz "SP Connect" — não mais o nome do app fiscal.',
             '🗄 Tudo que não é texto (foto, áudio, vídeo, documento) passa a ser arquivado SOZINHO no SharePoint, na pasta "SP Connect/{ano}/{mês}/{contato}" — inclusive de quem não é cliente (currículo, lead). O admin pode antecipar a rodada em ⚙️ → 🗄 SharePoint.',
+            '⚡ As respostas rápidas do composer viraram configuração: o admin edita as frases em ⚙️ → 🤖 (uma por linha) e valem pra equipe inteira.',
+            '🔍 Busca DENTRO da conversa: campo no topo da thread filtra as mensagens (sem acento/caixa) e acha também pelo nome do anexo — currículo se procura pelo nome.',
         ],
     },
     {

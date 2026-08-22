@@ -408,6 +408,12 @@ router.get('/conversas', requireAuth, async (req, res) => {
     try {
         const db = getDb();
         const { filas: minhasFilas, papel } = await perfilAtendimento(db, req.user);
+        // ⚡ As respostas rápidas vão de CARONA: o composer precisa delas o
+        // tempo todo e esta é a rota que todo atendente já lê a cada 30s —
+        // uma leitura a mais aqui evita uma rota nova + um fetch por tela.
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get()
+            .catch(() => ({ data: () => null }));
+        const respostasRapidas = resolverConfig(cfgDoc.data()).respostasRapidas;
         let docsConversas = [];
         let cursorConv = null;
         while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
@@ -451,7 +457,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
             };
         }).filter((cv) => conversaVisivel(minhasFilas, cv.fila));
         return res.json({
-            ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel,
+            ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel, respostasRapidas,
             limiteLeitura: docsConversas.length >= TETO_LEITURA_CONVERSAS ? TETO_LEITURA_CONVERSAS : null,
         });
     } catch (e) {

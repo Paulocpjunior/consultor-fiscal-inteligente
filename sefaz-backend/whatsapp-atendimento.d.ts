@@ -15,6 +15,8 @@ export interface ConfigAtendimento {
     menu: { opcao: string; fila: string; rotulo: string }[];
     /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
     imagensPorFila: Record<string, string>;
+    /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */
+    respostasRapidas: string[];
 }
 
 export interface AcaoBot {

@@ -44,7 +44,7 @@ import {
 import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
-    rotuloMidia, filtrarConversas, iniciais, rotuloCurtoFila, dentroDeIframe,
+    rotuloMidia, filtrarConversas, filtrarMensagensDaThread, iniciais, rotuloCurtoFila, dentroDeIframe,
 } from '../../services/spConnect';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
@@ -64,12 +64,17 @@ const CAMPO = 'w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 da
 const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = ({ currentUser }) => {
     const [conversas, setConversas] = useState<ConversaResumo[]>([]);
     const [limiteConversas, setLimiteConversas] = useState<number | null>(null);
+    const [respostasRapidas, setRespostasRapidas] = useState<string[]>([]);
     const [filas, setFilas] = useState<FilaAtendimento[]>([]);
     const [minhasFilas, setMinhasFilas] = useState<string[] | null>(null);
     const [papel, setPapel] = useState<'admin' | 'gestor' | 'colaborador'>('colaborador');
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
+    // 🔍 Busca DENTRO da conversa aberta (pendência 🟡 do de-para — a busca
+    // só alcançava a lista). Limpa ao trocar de conversa, senão a próxima
+    // abriria filtrada por um termo de outra thread.
+    const [buscaThread, setBuscaThread] = useState('');
     const [aba, setAba] = useState<string>('todas');
     const [sel, setSel] = useState<ConversaResumo | null>(null);
     const [mensagens, setMensagens] = useState<MensagemInbox[]>([]);
@@ -89,6 +94,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setErro(null);
             setConversas(r.conversas || []);
             setLimiteConversas(r.limiteLeitura ?? null);
+            if (r.respostasRapidas) setRespostasRapidas(r.respostasRapidas);
             setFilas(r.filas || []);
             setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
             if (r.papel) setPapel(r.papel);
@@ -124,6 +130,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const abrir = async (c: ConversaResumo) => {
         setSel(c);
         setMensagens([]);
+        setBuscaThread('');
         setErroEnvio(null);
         setAcaoErro(null);
         setSituacaoAviso(null);
@@ -2401,6 +2408,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <p className="text-[10px] text-slate-400">Menu vazio ou só com fila inválida volta ao padrão na gravação — triagem morta em silêncio não passa.</p>
                                 </div>
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">⚡ Respostas rápidas do composer</p>
+                                    <p className="text-[10px] text-slate-400">
+                                        Uma frase por linha — viram os chips ⚡ acima da caixa de resposta, pra equipe inteira.
+                                        Apagar todas tira os chips (é escolha, não erro).
+                                    </p>
+                                    <textarea value={(cfg.respostasRapidas || []).join('\n')}
+                                        onChange={(e) => setCfg((c) => c ? { ...c, respostasRapidas: e.target.value.split('\n') } : c)}
+                                        rows={4} className={CAMPO} placeholder={'Bom dia! Tudo bem?\nRecebido, já estamos verificando.'} />
+                                </div>
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🖼️ Imagem por fila (opcional)</p>
                                     <p className="text-[10px] text-slate-400">Enviada JUNTO da confirmação, quando o cliente escolhe a opção — a arte do departamento, como a Ultra Fox manda hoje. Sobe/troca na hora (não depende de "Salvar configuração"). Fila sem imagem segue só com o texto.</p>
                                     {filas.map((f) => {
@@ -2634,13 +2651,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 </div>
                             )}
 
+                            {/* 🔍 Busca dentro da conversa — filtra os balões carregados. */}
+                            <div className="px-3 pt-1.5 flex items-center gap-1.5">
+                                <input value={buscaThread} onChange={(e) => setBuscaThread(e.target.value)}
+                                    placeholder="🔍 Buscar nesta conversa…"
+                                    className="flex-1 px-2 py-1 text-[11px] rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200" />
+                                {buscaThread.trim() && (
+                                    <>
+                                        <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                            {filtrarMensagensDaThread(mensagens, buscaThread).length} de {mensagens.length}
+                                        </span>
+                                        <button onClick={() => setBuscaThread('')} className="text-slate-400 hover:text-slate-600 px-1 text-[11px]">✕</button>
+                                    </>
+                                )}
+                            </div>
+
                             <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-1.5">
                                 {carregandoMsgs ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">Carregando…</p>
                                 ) : mensagens.length === 0 ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">Nenhuma mensagem gravada nesta conversa.</p>
+                                ) : filtrarMensagensDaThread(mensagens, buscaThread).length === 0 ? (
+                                    <p className="text-xs text-slate-400 text-center mt-4">
+                                        Nada com "{buscaThread}" nas mensagens carregadas desta conversa.
+                                    </p>
                                 ) : (
-                                    mensagens.map((m) => {
+                                    filtrarMensagensDaThread(mensagens, buscaThread).map((m) => {
                                         const tick = carimboStatus(m.statusEntrega);
                                         const midia = rotuloMidia(m.midia, m.tipo);
                                         const saida = m.direcao === 'saida';
@@ -2760,9 +2796,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         </button>
                                     </div>
                                 )}
-                                {janela?.aberta && !conduzidaPorOutro && (
+                                {/* ⚡ As frases vêm da CONFIG (⚙️ → 🤖), não mais cravadas aqui —
+                                    era a pendência 🟡 do de-para (pergunta 2). Lista vazia é
+                                    escolha do admin: os chips somem sem quebrar nada. */}
+                                {janela?.aberta && !conduzidaPorOutro && respostasRapidas.length > 0 && (
                                     <div className="flex gap-1.5 flex-wrap mb-1.5">
-                                        {['Bom dia! Tudo bem?', 'Recebido, já estamos verificando.', 'Pode nos enviar o comprovante, por favor?', 'Ficamos à disposição!'].map((q) => (
+                                        {respostasRapidas.map((q) => (
                                             <button key={q} onClick={() => setTexto((t) => (t ? `${t} ${q}` : q))}
                                                 className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600">
                                                 ⚡ {q}

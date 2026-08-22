@@ -97,3 +97,39 @@ describe('filtrarConversas e iniciais', () => {
         expect(iniciais({ nome: null, numero: '5511997377599' })).toBe('99');
     });
 });
+
+// 🔍 Busca dentro da conversa (21/08 — pendência 🟡 do de-para: a busca só
+// alcançava a LISTA; dentro da thread era rolar no dedo).
+import { filtrarMensagensDaThread, MensagemInbox } from '../services/spConnect';
+
+describe('filtrarMensagensDaThread', () => {
+    const msg = (texto: string | null, nomeArquivo: string | null = null): MensagemInbox => ({
+        id: Math.random().toString(36).slice(2), direcao: 'entrada', tipo: 'text', texto,
+        midia: nomeArquivo ? { nomeArquivo, mime: null, baixada: true } : null,
+        timestamp: null, statusEntrega: null, erroEntrega: null,
+    });
+    const thread = [
+        msg('Segue o comprovante do pagamento'),
+        msg('Você pode conferir?'),
+        msg(null, 'Curriculo_Simone_2026.pdf'),
+        msg('Obrigado!'),
+    ];
+
+    it('casa sem acento e sem caixa — "voce" acha "Você"', () => {
+        expect(filtrarMensagensDaThread(thread, 'voce')).toHaveLength(1);
+        expect(filtrarMensagensDaThread(thread, 'VOCÊ')).toHaveLength(1);
+    });
+
+    it('acha pelo NOME DO ARQUIVO do anexo — currículo se procura pelo nome', () => {
+        expect(filtrarMensagensDaThread(thread, 'curriculo')[0].midia?.nomeArquivo).toContain('Simone');
+    });
+
+    it('termo vazio devolve TUDO — busca desligada não é filtro', () => {
+        expect(filtrarMensagensDaThread(thread, '')).toHaveLength(4);
+        expect(filtrarMensagensDaThread(thread, '   ')).toHaveLength(4);
+    });
+
+    it('sem resultado devolve vazio (a tela diz, em vez de mostrar tudo como se tivesse achado)', () => {
+        expect(filtrarMensagensDaThread(thread, 'boleto')).toHaveLength(0);
+    });
+});
