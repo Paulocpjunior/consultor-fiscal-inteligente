@@ -77,3 +77,42 @@ describe('🚨 as DUAS portas de geração conferem a forma', () => {
         expect(src).not.toMatch(/const periodo = competencia\s*$/m);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E NO DAS A COMPETÊNCIA CRUA DECIDE DUAS COISAS QUE NÃO VOLTAM ATRÁS
+//
+//   · o **período que vai ao PGDAS-D** — o provider faz
+//     `Number(competencia.replace(/\D/g,'').slice(0,6))`, e com `07/2026` isso
+//     vira **72026**, período que não existe;
+//   · a **IDENTIDADE do DAS emitido** — o `docId` é
+//     `${cnpj}_${competencia}_regular` com não-alfanuméricos virando `_`.
+//     `2026-07` e `07/2026` dão ids DIFERENTES para o MESMO mês, então a
+//     idempotência que impede a segunda emissão não vê a primeira: **duas
+//     guias do mesmo DAS**.
+//
+// ⚠️ Entrega ao PGDAS-D não se desfaz, e guia dobrada é o defeito que a casa
+// mais paga — por isso aqui a régua RECUSA a ilegível em vez de seguir.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 o DAS normaliza a competência antes de emitir', () => {
+    const src = readFileSync(join(RAIZ, 'sefaz-backend/das-orchestrator.js'), 'utf8');
+
+    it('o regular e o avulso passam pela régua', () => {
+        expect((src.match(/competenciaNormalizadaOuErro\(/g) || []).length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('e nenhum dos dois desestrutura a competência crua da requisição', () => {
+        expect(src).not.toMatch(/const \{[^}]*\bcompetencia\b[^}]*\} = req;/);
+    });
+
+    // A frase precisa dizer as DUAS consequências — "competência inválida"
+    // sozinho manda procurar erro de digitação num problema que termina em
+    // declaração no período errado e guia emitida duas vezes.
+    it('a recusa diz o que estava em jogo', () => {
+        expect(src).toMatch(/PGDAS-D/);
+        expect(src).toMatch(/duas vezes/);
+    });
+
+    it('o docId continua saindo da competência já normalizada', () => {
+        expect(src).toContain('_regular`.replace(');
+    });
+});

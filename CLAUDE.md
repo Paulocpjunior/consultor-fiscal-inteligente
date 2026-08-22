@@ -31,6 +31,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   viraria nome de arquivo com barra.
   🐛 A trava de nomes do backend (20/08) pegou um import que faltou nesta mesma
   correção, antes de subir.
+  🔴 **E A MESMA VARREDURA ACHOU O CASO QUE VALE DINHEIRO: o DAS.** Lá a
+  competência crua decide DUAS coisas que não voltam atrás — o **período que vai
+  ao PGDAS-D** (o provider faz `Number(comp.replace(/\D/g,'').slice(0,6))`, e
+  `07/2026` vira **72026**, período que não existe) e a **IDENTIDADE do DAS**
+  (`docId = cnpj_competencia_regular`, com não-alfanuméricos virando `_`):
+  `2026-07` e `07/2026` dão ids DIFERENTES para o MESMO mês, então a
+  idempotência que impede a segunda emissão **não vê a primeira** — duas guias
+  do mesmo DAS. Regular e avulso passaram a normalizar pelo dono, e a recusa diz
+  as DUAS consequências (só *"competência inválida"* manda procurar erro de
+  digitação num problema que termina em declaração no período errado).
 
 - **📌 TESTE CRUZADO PROVA OS DOIS QUE VOCÊ CONHECE; SÓ A VARREDURA IMPEDE O
   TERCEIRO** (22/08, fechando a classe da DATA). Pela manhã o gerador do SPED e

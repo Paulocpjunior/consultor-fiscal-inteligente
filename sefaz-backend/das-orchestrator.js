@@ -8,6 +8,7 @@ import { getDasProvider, getDasMode } from './das-provider.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
+import { normalizarCompetencia } from './competencia.js';
 import { assertValorMinimoDas } from './das-valor-utils.js';
 import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-duplicidade-utils.js';
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
@@ -29,12 +30,45 @@ function fa() {
  * @param {object} req { empresaId, empresaCnpj, empresaNome, competencia, valor, opts? }
  * @returns {object} doc DAS persistido
  */
+/**
+ * A competência do DAS, trazida para `AAAA-MM` pelo dono — ou RECUSA.
+ *
+ * ⚠️ Ela decide o período que vai ao PGDAS-D **e** o `docId` que impede a
+ * segunda emissão. As duas coisas erram calado quando a forma diverge, e
+ * nenhuma delas volta atrás.
+ */
+function competenciaNormalizadaOuErro(bruta) {
+    const n = normalizarCompetencia(bruta);
+    if (n) return n;
+    const err = new Error(
+        `Competência inválida: "${String(bruta ?? '')}". Use AAAA-MM (ex.: 2026-07). `
+        + 'Ela vai ao PGDAS-D e identifica o DAS emitido — forma diferente declara outro '
+        + 'período e ainda deixa emitir a MESMA guia duas vezes.',
+    );
+    err.httpStatus = 400;
+    throw err;
+}
+
 export async function emitirDasRegular(req) {
     assertEmissaoLiberada('DAS');
-    const { empresaId, empresaCnpj, empresaNome, competencia, dadosPgdas } = req;
-    if (!empresaId || !empresaCnpj || !competencia || req.valor == null || req.valor === '') {
+    const { empresaId, empresaCnpj, empresaNome, dadosPgdas } = req;
+    if (!empresaId || !empresaCnpj || !req.competencia || req.valor == null || req.valor === '') {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
     }
+    // 🚨 A COMPETÊNCIA ENTRAVA CRUA — e ela decide DUAS coisas que não voltam
+    // atrás: o período que vai ao PGDAS-D e a IDENTIDADE do DAS emitido.
+    //
+    //  · o provider faz `Number(competencia.replace(/\D/g,'').slice(0,6))`.
+    //    Com `07/2026` isso vira **72026** — período que não existe;
+    //  · o `docId` é `${cnpj}_${competencia}_regular` com os caracteres não
+    //    alfanuméricos trocados por `_`. `2026-07` e `07/2026` produzem ids
+    //    DIFERENTES para o MESMO mês, então a idempotência que impede a
+    //    segunda emissão simplesmente não vê a primeira: **duas guias do mesmo
+    //    DAS**, que é o defeito que a casa mais paga.
+    //
+    // Normaliza pelo dono (as quatro formas dizem a mesma competência) e
+    // RECUSA a ilegível — entrega ao PGDAS-D não se desfaz.
+    const competencia = competenciaNormalizadaOuErro(req.competencia);
     const valor = assertValorMinimoDas(req.valor);
 
     // Defesa em profundidade: a tela já recusa, mas um cliente desatualizado
@@ -102,10 +136,14 @@ export async function emitirDasRegular(req) {
  */
 export async function emitirDasAvulso(req) {
     assertEmissaoLiberada('DAS');
-    const { empresaId, empresaCnpj, empresaNome, competencia, descricao } = req;
-    if (!empresaId || !empresaCnpj || !competencia || req.valor == null || req.valor === '') {
+    const { empresaId, empresaCnpj, empresaNome, descricao } = req;
+    if (!empresaId || !empresaCnpj || !req.competencia || req.valor == null || req.valor === '') {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, competencia, valor');
     }
+    // Mesma régua do regular: aqui a competência entra na conferência de
+    // conflito com os avulsos já emitidos, e forma diferente não acha o
+    // conflito que existe.
+    const competencia = competenciaNormalizadaOuErro(req.competencia);
     const valor = assertValorMinimoDas(req.valor);
 
     const db = fa().firestore();
