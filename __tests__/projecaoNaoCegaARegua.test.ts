@@ -18,7 +18,6 @@
 // ============================================================================
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
-// @ts-expect-error — módulo backend .js sem .d.ts
 import { CAMPOS_PARA_DOC_CANCELADO } from '../sefaz-backend/xml-metadata-helper.js';
 
 const RAIZ = join(__dirname, '..');
