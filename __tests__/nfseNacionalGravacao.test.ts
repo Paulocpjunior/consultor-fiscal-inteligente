@@ -168,3 +168,38 @@ describe('🚨 o evento entra em eventos[], sem tocar na identidade', () => {
         expect(eventoDaNfseNacional({ ...evt, tpEvento: '110111' }).tpEvento).toBe('110111');
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E O ACERVO JÁ CAPTURADO CONTINUA COM O RÓTULO ANTIGO
+//
+// A gravação foi corrigida, mas ela só vale da próxima rodada em diante. As
+// notas do ADN que já estão na base seguem com `tipo: 'nfseNacional'` — e é a
+// régua da LEITURA que tem de responder por elas. `detectTipo` (a régua da
+// lista) perguntava `tipo === 'NFSe'`, não casava, e caía no default `'NFe'`:
+// a NFS-e aparecia como nota de MERCADORIA.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 a lista reconhece a nota do ADN gravada ANTES da correção', () => {
+    /** Exatamente como o acervo está hoje: rótulo antigo, campos achatados. */
+    const acervoAntigo = {
+        id: 'antigo', tipo: 'nfseNacional', tipoDoc: 'nfseNacional',
+        chave: 'NFS3550308000000000000000000000000000000000000000009',
+        numero: '900', dataEmissao: '2026-07-15T09:30:00-03:00',
+        prestadorCnpj: EMPRESA, tomadorCnpj: TERCEIRO,
+        valorServico: 4000, valorIss: 200,
+        empresaCnpj: EMPRESA,
+    } as any;
+
+    it('ela não é mais lida como nota de MERCADORIA', () => {
+        expect(getView(acervoAntigo).tipo).toBe('NFSe');
+    });
+
+    // A régua não pode inverter o caso comum.
+    it('e a NF-e continua NF-e', () => {
+        const nfe = { id: 'n', tipo: 'NFe', emitente: { cnpjCpf: TERCEIRO }, totais: { vNF: 100 } };
+        expect(getView(nfe as any).tipo).toBe('NFe');
+    });
+
+    it('documento sem rótulo nenhum segue no default conservador', () => {
+        expect(getView({ id: 'x', totais: { vNF: 10 } } as any).tipo).toBe('NFe');
+    });
+});

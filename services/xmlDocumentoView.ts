@@ -26,6 +26,10 @@
 // filtro, CSV e PDF — continuava dizendo o contrário.
 // @ts-ignore — módulo backend com .d.ts próprio
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+// "É nota de serviço?" — o MESMO dono que separa o bloco A do C no SPED. Ele
+// conhece as formas raras do rótulo (o `nfseNacional` do ADN, os blocos
+// prestador/tomador do portal), que é o que o `tipo === 'NFSe'` não vê.
+import { ehNotaDeServico } from '../sefaz-backend/sped-selecao-documentos.js';
 
 export type DocumentoTipo = 'NFe' | 'NFSe';
 
@@ -102,6 +106,19 @@ function extractChaveMeta(chave: string): { modelo: string; serie: string; numer
 
 function detectTipo(d: any): DocumentoTipo {
     if (d?.tipo === 'NFe' || d?.tipo === 'NFSe') return d.tipo;
+    // 🚨 O RÓTULO DA NFS-e TEM MAIS DE UMA FORMA — e o default é NF-e.
+    //
+    // A captura do **ADN** gravava `tipo: 'nfseNacional'`; o `tipo === 'NFSe'`
+    // acima não casa, `emitente`/`totais.vNF` também não (aquele trilho grava
+    // `prestadorCnpj` achatado e `valorServico`), então a nota caía no default
+    // e a lista a mostrava como nota de **MERCADORIA**, com valor 0,00.
+    //
+    // A gravação já foi corrigida, mas **o acervo capturado antes continua com
+    // o rótulo antigo** — e é a régua da LEITURA que tem de responder por ele,
+    // que é a lição de sempre: campo gravado pode não existir na forma que o
+    // leitor espera. Quem sabe dizer "é serviço?" é o dono
+    // (`ehNotaDeServico`), o MESMO que separa o bloco A do C no SPED.
+    if (ehNotaDeServico(d)) return 'NFSe';
     if (d?.emitente || d?.totais?.vNF !== undefined) return 'NFe';
     if (d?.prestador || d?.valores?.liquido !== undefined) return 'NFSe';
     return 'NFe'; // default conservador
