@@ -68,6 +68,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   módulo tem `.d.ts`.
   📌 **REGRA QUE FICA: quem MONTA o input de uma conferência também é leitor** —
   a régua única não termina no serviço, ela começa em quem preenche o objeto.
+  ⚠️ **E O SELO VERDE ERA A OUTRA METADE**: com documento pulado, a caixa verde
+  dizia *"todos os documentos estão compatíveis"* logo ABAIXO do aviso que diz
+  o contrário — duas leituras do mesmo fato na mesma tela, que é o defeito que
+  este projeto mais paga. Agora ela só afirma o absoluto quando nada foi pulado;
+  com pulo, sai âmbar e diz *"nos que deu para conferir"*.
 - **🐛 `| tail` MASCARA O EXIT CODE — e por isso um commit com marcador de
   conflito passou pelo gate** (22/08, defeito meu, pego pelo próprio `tsc` no
   push seguinte). `npm run lint 2>&1 | tail -3 && npx jest && ...` continua a

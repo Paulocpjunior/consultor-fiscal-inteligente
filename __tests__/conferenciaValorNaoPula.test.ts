@@ -72,6 +72,24 @@ describe('🚨 confronto de valor: ou compara, ou DIZ que não comparou', () => 
         expect(src).not.toMatch(/valorTotal:\s*d\.totais\?\.vNF\s*,/);
     });
 
+    // 🚨 O SELO VERDE É A OUTRA METADE: com documento pulado, "todos
+    // compatíveis" seria uma afirmação que a rodada NÃO estabeleceu — e ela
+    // apareceria logo abaixo do aviso que diz o contrário.
+    it('o selo VERDE só afirma "todos compatíveis" quando nada foi pulado', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fs = require('fs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const path = require('path');
+        const src = fs.readFileSync(
+            path.resolve(__dirname, '..', 'components/SpedFiscal/AnaliseConferencia.tsx'), 'utf8',
+        );
+        // A frase absoluta é condicionada ao contador.
+        expect(src).toMatch(/semValorParaConferir > 0[\s\S]{0,400}Todos os documentos estão compatíveis/);
+        expect(src).toContain('nos que deu para conferir');
+        // E o verde sai quando há pulo — farol honesto vale para o selo também.
+        expect(src).toMatch(/semValorParaConferir > 0[\s\S]{0,200}rgba\(34,197,94/);
+    });
+
     it('e a tela DIZ o que não foi conferido', () => {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const fs = require('fs');

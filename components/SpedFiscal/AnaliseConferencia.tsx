@@ -574,15 +574,33 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 <div
                                     className="p-6 rounded-xl text-center"
                                     style={{
-                                        background: 'rgba(34,197,94,0.1)',
-                                        border: '1px solid rgba(34,197,94,0.3)',
+                                        // 🚨 VERDE SÓ QUANDO NADA FOI PULADO. Com documento sem
+                                        // valor legível, "todos compatíveis" seria uma afirmação
+                                        // que a rodada NÃO estabeleceu — e ela apareceria logo
+                                        // abaixo do aviso que diz o contrário: duas leituras do
+                                        // mesmo fato na mesma tela, que é o que este projeto mais
+                                        // paga.
+                                        background: conferenceResult.semValorParaConferir > 0
+                                            ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.1)',
+                                        border: conferenceResult.semValorParaConferir > 0
+                                            ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(34,197,94,0.3)',
                                     }}
                                 >
-                                    <p className="text-sm font-bold" style={{ color: 'var(--success)' }}>
+                                    <p
+                                        className="text-sm font-bold"
+                                        style={{
+                                            color: conferenceResult.semValorParaConferir > 0
+                                                ? 'var(--warning, #d97706)' : 'var(--success)',
+                                        }}
+                                    >
                                         Nenhuma inconsistência encontrada
+                                        {conferenceResult.semValorParaConferir > 0 ? ' — nos que deu para conferir' : ''}
                                     </p>
                                     <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                        Todos os documentos estão compatíveis entre XML e SPED.
+                                        {conferenceResult.semValorParaConferir > 0
+                                            ? `O confronto de valor não rodou em ${conferenceResult.semValorParaConferir} documento(s) — `
+                                              + 'eles não entram nesta conclusão.'
+                                            : 'Todos os documentos estão compatíveis entre XML e SPED.'}
                                     </p>
                                 </div>
                             ) : (
