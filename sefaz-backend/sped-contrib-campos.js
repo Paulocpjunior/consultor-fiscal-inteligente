@@ -375,11 +375,72 @@ export function conferirRetencaoDoBlocoM(linhas) {
 }
 
 /** As três, prontas para a lista de avisos que a geração devolve. */
+/**
+ * CST de PIS/COFINS fora da Tabela 4.3.3/4.3.4.
+ *
+ * 🚨 ESTA TABELA ESTAVA ESCRITA E NUNCA FOI LIGADA. Ela morava em
+ * `sped-fiscal-regras-tributarias.js` — o módulo do EFD **ICMS/IPI**, que não
+ * escreve CST de PIS/COFINS nenhum — sem um único leitor. É a família do
+ * `coberturaIncompleta`, que passou quatro dias produzindo uma flag que
+ * ninguém lia, e do E510 "pronto" que ninguém gerava: **trava escrita não é
+ * trava ligada**.
+ *
+ * E a classe é real neste arquivo: em 20/08 a PWR saiu com **CST `01` numa
+ * ENTRADA** — código que nem existe na tabela das aquisições. Aquele caminho
+ * foi corrigido no gerador; o que faltava era a rede.
+ *
+ * ⚠️ **O QUE ELA CONFERE, e o que NÃO confere.** Ela pergunta se o código
+ * EXISTE na tabela — pega vazio, CSOSN (`101`, `500`) e lixo de captura. Ela
+ * **não** julga se o código é o certo para a DIREÇÃO da operação: a Tabela
+ * 4.3.7 (aquisições) não está neste repo, e reconstruí-la de memória seria
+ * inventar tabela oficial, que é o oposto da régua da casa.
+ *
+ * ⚠️ E ela lê **só o C170**, cujas posições estão PROVADAS (37 campos, recibo
+ * do PVA da PWR + arquivo aceito): CST_PIS é o **25** e CST_COFINS o **31**. O
+ * **A170 fica de fora, nomeado** — a contagem dele não está em
+ * `CAMPOS_POR_REGISTRO`, e conferir posição deduzida produziria alarme falso.
+ */
+const CST_PISCOFINS_VALIDOS = new Set([
+    '01', '02', '03', '04', '05', '06', '07', '08', '09',
+    '49', '50', '51', '52', '53', '54', '55', '56',
+    '60', '61', '62', '63', '64', '65', '66', '67',
+    '70', '71', '72', '73', '74', '75', '98', '99',
+]);
+
+/** Posições PROVADAS no C170 de 37 campos (recibo do PVA · PWR 07/2026). */
+const C170_CST_PIS = 25;
+const C170_CST_COFINS = 31;
+
+export function conferirCstPisCofins(linhas) {
+    const erros = [];
+    (linhas || []).forEach((linha, i) => {
+        const f = String(linha).split('|');
+        if (f[1] !== 'C170') return;   // forEach: `return` é o continue
+        const conferir = (pos, nome) => {
+            const cst = String(f[pos] || '').trim();
+            if (CST_PISCOFINS_VALIDOS.has(cst)) return;
+            erros.push({
+                regra: 'cst-piscofins-fora-da-tabela', registro: 'C170', campo: `${pos} - ${nome}`,
+                valor: cst,
+                fonte: 'Tabela 4.3.3/4.3.4 do EFD-Contribuições. Posições provadas pelo recibo do PVA '
+                    + '(PWR 31947349000169 · 07/2026, 20/08) e pelo arquivo aceito de 03/2026.',
+                mensagem: `C170 na linha ${i + 1}: ${nome} = "${cst || '(vazio)'}", que não existe na `
+                    + 'Tabela 4.3.3/4.3.4. O PVA recusa a importação. Confira o CST do item na Central de '
+                    + 'Documentos — CSOSN (101, 500…) e código de ICMS não valem para PIS/COFINS.',
+            });
+        };
+        conferir(C170_CST_PIS, 'CST_PIS');
+        conferir(C170_CST_COFINS, 'CST_COFINS');
+    });
+    return { erros, ok: erros.length === 0 };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirCodItemDosItens(linhas).erros,
         ...conferirIndOrigCredDasEntradas(linhas).erros,
         ...conferirRetencaoDoBlocoM(linhas).erros,
+        ...conferirCstPisCofins(linhas).erros,
         // 🚨 AS DUAS QUE VALIAM AQUI E NÃO RODAVAM (22/08). O cabeçalho do
         // C100 é o MESMO nas duas famílias, então a recusa "o modelo da chave
         // não confere" (PS VIDROS, 35×) e o limite de DT_DOC do Guia valem

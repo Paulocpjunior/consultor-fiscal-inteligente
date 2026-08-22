@@ -59,8 +59,6 @@ function somarTotaisDosItens(nota) {
     return { vProd, vBC, vICMS, vBCST, vICMSST, vIPI, vPIS, vCOFINS };
 }
 
-const MODELOS_BLOCO_C = ['55', '65'];
-
 /**
  * Mapeia status interno -> COD_SIT do registro C100.
  *   00 = Documento regular (autorizado)
@@ -142,18 +140,6 @@ export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
         naturezaAtividade: derivarNaturezaAtividade(empresa),
         cfopOverrides: df.cfopOverrides,
     });
-}
-
-/**
- * Filtra notas que entram no Bloco C.
- *
- * 🚨 O MODELO SAI DA RÉGUA, NÃO DO CAMPO CRU (caso PS VIDROS 0896, 19/08):
- * o importer principal nunca gravou `modelo`, então `String(n.modelo)` era
- * 'undefined' e TODA nota capturada automaticamente ficava fora do arquivo —
- * 131 no recorte, 2 CFOPs no SPED. Quem decide é `selecionarNotasBlocoC`.
- */
-function filtrarNotasBlocoC(notas) {
-    return selecionarNotasBlocoC(notas).notas;
 }
 
 /**

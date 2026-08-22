@@ -5,6 +5,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CÓDIGO MORTO DO SPED **ERA A RÉGUA VELHA** — e uma trava estava
+  escrita sem nunca ter sido ligada** (22/08). A varredura de declarações
+  órfãs no `sefaz-backend/` achou seis, e a triagem por RISCO deu duas
+  naturezas OPOSTAS.
+  🗑️ **Cinco a DELETAR, porque o morto ERA a régua que já custou caro**:
+  `MODELOS_BLOCO_C = ['55','65']` + `filtrarNotasBlocoC` viviam nos DOIS
+  geradores, e `MODELOS_BLOCO_D` no bloco D — é a comparação contra o campo
+  CRU `n.modelo`, o defeito que tirou **100 das 131 notas** da PS VIDROS do
+  arquivo (19/08). Quem responde hoje é `selecionarNotasBlocoC`. Junto saiu o
+  `modeloDaChave` órfão da prevalidação, que eu mesmo orfanei horas antes ao
+  mover a R1 para o dono comum.
+  🔌 **Uma a LIGAR, porque ela deveria estar rodando**: a tabela de **CST de
+  PIS/COFINS (4.3.3/4.3.4)** morava em `sped-fiscal-regras-tributarias.js` — o
+  módulo do EFD **ICMS/IPI**, que não escreve CST de PIS/COFINS nenhum — **sem
+  um único leitor**. É a família do `coberturaIncompleta` (quatro dias
+  produzindo flag que ninguém lia) e do E510 "pronto" que ninguém gerava:
+  **trava escrita não é trava ligada.** E a classe é real ali: em 20/08 a PWR
+  saiu com **CST `01` numa ENTRADA**, código que nem existe na tabela das
+  aquisições.
+  ⚠️ **O QUE ELA CONFERE, e o que NÃO**: se o código EXISTE na tabela — pega
+  vazio, CSOSN (`101`, `500`) e lixo de captura. Ela **não** julga se o código
+  é o certo para a DIREÇÃO: a Tabela 4.3.7 (aquisições) não está no repo, e
+  reconstruí-la de memória seria inventar tabela oficial.
+  ⚠️ E lê **só o C170**, cujas posições estão PROVADAS (37 campos, recibo do
+  PVA + arquivo aceito: CST_PIS 25, CST_COFINS 31). O **A170 fica de fora,
+  nomeado** — a contagem dele não está em `CAMPOS_POR_REGISTRO`, e conferir
+  posição deduzida é alarme falso.
+  📌 **REGRA QUE FICA: no SPED, declaração órfã se TRIA, não se apaga em
+  bloco** — ou ela some (era a régua velha), ou ela é LIGADA (era a trava que
+  faltava). A varredura fica, e o que não foi triado fica **NOMEADO** em vez
+  de ganhar motivo inventado: sobraram **quatro pendentes**, e duas delas
+  (`spOk`/`baixaOk` do painel de envio) têm cara da MESMA classe — conferência
+  do rito #293 escrita e nunca ligada.
+
 - **🚨 O `COD_ITEM` TINHA QUATRO RÉGUAS — e ele é a CHAVE que liga o item ao
   cadastro do 0200** (22/08). O 0200 é a Tabela de Identificação do Item; C170
   e A170 **apontam** para ela. Nas DUAS famílias de arquivo os dois lados

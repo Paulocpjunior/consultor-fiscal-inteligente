@@ -32,8 +32,6 @@ const valorDoDoc = (nota) => {
     return Number.isFinite(v) ? v : 0;
 };
 
-const MODELOS_BLOCO_D = ['57'];  // Apenas CTe
-
 /** CFOP do CT-e — cabeçalho (onde o CT-e o guarda) ou 1º item. Vazio = não sei. */
 export function cfopDoCte(nota) {
     const cru = String(nota?.cfop || nota?.CFOP || (nota?.itens || [])[0]?.cfop || '').replace(/\D/g, '');
