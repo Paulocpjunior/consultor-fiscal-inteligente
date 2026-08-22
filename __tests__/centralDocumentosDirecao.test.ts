@@ -91,3 +91,45 @@ describe('🚨 o FILTRO — era aqui que a nota sumia', () => {
         expect(applyDocumentosFilters([compraDeProdutor(), venda()], {})).toHaveLength(2);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E O ARQUIVO DO FISCO SE CONTRADIZIA: o SPED Fiscal declarava a MESMA nota
+// como SAÍDA
+//
+// Três leituras cruas no C100/C170/C190 do EFD ICMS/IPI:
+//
+//   · **IND_OPER** (C100 campo 2) saía **1 (saída)** — no MESMO registro cujo
+//     IND_EMIT logo abaixo já reconhecia a emissão própria de entrada;
+//   · a **correlação de CFOP** do C170 e do C190 recebia a direção crua, então
+//     o CFOP saía **5102** — enquanto o `.FML` do SAGE grava 1102 (corrigido
+//     hoje de manhã) e o E110 já soma como CRÉDITO. Dois arquivos do mesmo mês
+//     declarando CFOPs diferentes para a mesma nota, e o C190 é o que a
+//     apuração soma.
+// ═══════════════════════════════════════════════════════════════════════════
+// @ts-expect-error — módulo backend .js sem .d.ts
+import { convertCfopParaEntrada } from '../sefaz-backend/sped-fiscal-blocoC.js';
+
+describe('🚨 o SPED Fiscal e o .FML declaram o MESMO lado', () => {
+    const dados = { empresa: { cnpj: CNPJ_EMPRESA, dadosFiscais: {} } };
+
+    it('a compra de produtor sai com CFOP de ENTRADA no C170/C190', () => {
+        const doc = compraDeProdutor();
+        expect(convertCfopParaEntrada('5102', getView(doc).direcao, dados, doc)).toBe('1102');
+    });
+
+    it('e a venda normal continua 5102 — a régua não inverte o caso comum', () => {
+        const doc = venda();
+        expect(convertCfopParaEntrada('5102', getView(doc).direcao, dados, doc)).toBe('5102');
+    });
+
+    // A leitura da tela e a do arquivo têm de dar o MESMO lado: é isso que
+    // impede o colaborador de conferir um número que o arquivo não tem.
+    it('a tela e o arquivo concordam sobre o lado da nota', () => {
+        for (const doc of [compraDeProdutor(), venda()]) {
+            const daTela = getView(doc).direcao;
+            const doArquivo = convertCfopParaEntrada('5102', daTela, dados, doc);
+            expect({ daTela, primeiro: String(doArquivo)[0] })
+                .toEqual({ daTela, primeiro: daTela === 'entrada' ? '1' : '5' });
+        }
+    });
+});

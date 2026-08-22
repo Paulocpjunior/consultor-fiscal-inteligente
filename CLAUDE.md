@@ -26,6 +26,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   PROCURA o documento.** Livro certo com tela que esconde a nota é a mesma
   divergência de sempre, na forma mais cara: a pessoa conclui que a captura
   falhou.
+  🔴 **E A MESMA VARREDURA ACHOU O ARQUIVO DO FISCO SE CONTRADIZENDO — o SPED
+  Fiscal declarava a MESMA nota como SAÍDA.** Três leituras cruas no
+  C100/C170/C190 do EFD ICMS/IPI: o **IND_OPER** saía **1 (saída)** no MESMO
+  registro cujo `IND_EMIT` logo abaixo já reconhecia a emissão própria de
+  entrada; e a **correlação de CFOP** do C170 e do C190 recebia a direção crua,
+  então o CFOP saía **5102** — enquanto o `.FML` grava 1102 e o E110 já soma
+  como CRÉDITO. **É o C190 que a apuração soma.** No EFD-Contribuições a mesma
+  leitura crua punha a COMPRA em `totalReceitaSaida`: o arquivo declarava
+  PIS/COFINS a pagar **sobre uma compra**.
+  📌 **E A TRAVA LITERAL MORDEU PELA QUARTA VEZ** (`cfopPorNota.test.ts`): ela
+  prendia `nota.direcao` no TEXTO da chamada — e esse campo É o defeito.
+  Trocada pela INTENÇÃO (o documento chega + a direção vem da régua) mais a
+  proibição explícita do campo cru.
 
 - **🚨 O CÓDIGO MORTO DO SPED **ERA A RÉGUA VELHA** — e uma trava estava
   escrita sem nunca ter sido ligada** (22/08). A varredura de declarações

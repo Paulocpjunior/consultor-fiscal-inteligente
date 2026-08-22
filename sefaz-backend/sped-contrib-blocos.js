@@ -1006,7 +1006,10 @@ export function buildBlocoM(dados) {
             continue;
         }
 
-        if (nota.direcao === 'saida') {
+        // 🚨 A DIREÇÃO PELA RÉGUA (22/08): lida crua, a compra de produtor rural
+        // (art. 136, gravada como 'saida') entrava como RECEITA — o arquivo
+        // declarava PIS/COFINS a pagar sobre uma COMPRA.
+        if (direcaoEfetivaDoc(nota) === 'saida') {
             totalBcSaida += rb.base;
             totalReceitaSaida += rb.receita;
             icmsExcluido += rb.icms;
