@@ -161,6 +161,7 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **DELETADAS** (código morto é a isca para reativar a régua velha) e a
   varredura ganhou a **segunda assinatura**, com as exceções declaradas COM o
   motivo — quase todas a mesma: **NFS-e não tem evento, ali o campo é a fonte**.
+<<<<<<< HEAD
   🔴 **(15) E O ÍNDICE DO CIAP PULAVA A NOTA IMPORTADA PELO NAVEGADOR.** O
   `xmlParserService` (import manual) grava **só `totais.vNF`** — **nunca**
   `valorTotal` —, e `classificarSaidasCiap` lia `valores.total ?? valorTotal`:
@@ -172,6 +173,8 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   formas que faltavam (`valores.total` e `vNF` na raiz); o nome antigo continua
   exportado apontando para a MESMA função. ⚠️ **`valores.liquido` fica FORA de
   propósito**: na NFS-e ele é o líquido de RETENÇÕES, e o VL_DOC é o bruto.
+=======
+>>>>>>> origin/main
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
