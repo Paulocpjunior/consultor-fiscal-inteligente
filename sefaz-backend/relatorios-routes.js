@@ -18,7 +18,7 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
-import { direcaoEfetivaDoc, docCancelado } from './xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docCancelado, valorDoDocumento } from './xml-metadata-helper.js';
 
 const router = Router();
 
@@ -75,7 +75,11 @@ router.get('/faturamento', requireAuth, async (req, res) => {
                 .where('competencia', '==', competencia)
                 // eventos/cStat no select: o cancelamento pode estar só no
                 // evento (status torto) — docCancelado decide na leitura.
-                .select('empresaId', 'direcao', 'tpNF', 'status', 'valorTotal', 'eventos', 'cStat'),
+                // 🚨 O VALOR também tem duas formas: o import pelo NAVEGADOR
+                // grava só `totais.vNF` — nunca `valorTotal`. Lendo o campo cru,
+                // essas notas entravam valendo ZERO no faturamento da carteira.
+                .select('empresaId', 'direcao', 'tpNF', 'status', 'valorTotal', 'eventos', 'cStat',
+                    'valor', 'totalNota', 'totais.vNF', 'valores.total', 'vNF'),
             { label: `relatorio-faturamento ${competencia}`, maxDocs: 80000 },
         );
         let ignoradosSemEmpresa = 0;
@@ -85,7 +89,7 @@ router.get('/faturamento', requireAuth, async (req, res) => {
             if (!emp) { ignoradosSemEmpresa++; continue; }
             if (docCancelado(d)) continue;
             const direcao = direcaoEfetivaDoc(d);
-            const valor = Number(d.valorTotal) || 0;
+            const valor = Number(valorDoDocumento(d)) || 0;
             if (direcao === 'saida') { emp.saidasQtd++; emp.saidasValor = r2(emp.saidasValor + valor); }
             else if (direcao === 'entrada') { emp.entradasQtd++; emp.entradasValor = r2(emp.entradasValor + valor); }
         }
@@ -166,7 +170,11 @@ router.get('/faturamento-mensal', requireAuth, async (req, res) => {
                 db.collection('documentos_fiscais')
                     .where('empresaId', '==', empresaId)
                     .where('competencia', '==', competencia)
-                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc', 'eventos', 'cStat'),
+                    // 🚨 Este número vai num documento ASSINADO ao banco. O
+                    // import pelo navegador grava só `totais.vNF`, então ler o
+                    // campo cru declarava faturamento A MENOR — e nada acusa.
+                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc', 'eventos', 'cStat',
+                        'valor', 'totalNota', 'totais.vNF', 'valores.total', 'vNF'),
                 { label: `declaracao-faturamento ${empresaId} ${competencia}`, maxDocs: 20000 },
             );
             let valor = 0;
@@ -175,7 +183,7 @@ router.get('/faturamento-mensal', requireAuth, async (req, res) => {
                 const d = s.data() || {};
                 if (docCancelado(d)) continue;
                 if (direcaoEfetivaDoc(d) !== 'saida') continue;
-                valor = r2(valor + (Number(d.valorTotal) || 0));
+                valor = r2(valor + (Number(valorDoDocumento(d)) || 0));
                 docs++;
             }
             porMes[competencia] = { valor, docs, lidos: snaps.length };

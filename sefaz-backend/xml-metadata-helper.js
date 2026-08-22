@@ -302,6 +302,23 @@ export function docCancelado(d) {
  * de R$ 0,00" e "não achei o valor" são coisas diferentes, e foi o zero
  * silencioso que produziu linhas zeradas num arquivo entregue à Receita.
  */
+/**
+ * 🚨 OS CAMPOS QUE UMA PROJEÇÃO `.select()` PRECISA CARREGAR PARA QUE
+ * `valorDoDocumento` CONSIGA RESPONDER.
+ *
+ * A régua lê SEIS formas porque o valor chega em seis — e o import pelo
+ * NAVEGADOR grava **só `totais.vNF`**, nunca `valorTotal`. Projeção que traz
+ * apenas o campo cru faz a régua devolver NaN (ou o leitor cair no `|| 0`) e a
+ * nota entra valendo **zero**, calada.
+ *
+ * Em 22/08 isso valia para o Relatório de Faturamento da carteira, para a
+ * **Declaração de Faturamento** — o papel ASSINADO que vai ao banco — e para a
+ * base do FUNRURAL/DIPAM.
+ */
+export const CAMPOS_PARA_VALOR_DO_DOCUMENTO = Object.freeze([
+    'valor', 'valorTotal', 'totalNota', 'totais.vNF', 'valores.total', 'vNF',
+]);
+
 export function valorDoDocumento(nota) {
     const n = nota || {};
     const candidatos = [

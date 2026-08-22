@@ -179,7 +179,12 @@ router.get('/varredura', requireAuth, async (req, res) => {
                     // 🚨 `eventos`/`cStat`: sem eles `docCancelado` não vê o
                     // cancelamento por EVENTO e a nota cancelada volta a gerar
                     // FUNRURAL/DIPAM — imposto sobre nota que não existe.
-                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'emitente', 'destinatario', 'tpNF', 'valorTotal',
+                    // 🚨 `totais.vNF`/`totais.vProd`: o valor da DIPAM lê as três
+                    // formas, mas sem `totais` na projeção o fallback nunca
+                    // dispara — a nota importada pelo navegador (que grava SÓ
+                    // `totais.vNF`) entrava valendo ZERO na base do FUNRURAL.
+                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'emitente', 'destinatario', 'tpNF',
+                    'valorTotal', 'totais.vNF', 'totais.vProd',
                     'cnpjEmit', 'xNomeEmit', 'ufEmit', 'codMunEmit',
                     'cnpjDest', 'xNomeDest', 'ieDest', 'ufDest', 'codMunDest',
                 ),
