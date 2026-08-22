@@ -78,7 +78,15 @@ router.get('/credito-acumulado', requireAdmin, async (req, res) => {
             const snaps = await fetchAllDocs(
                 db.collection('documentos_fiscais')
                     .where('competencia', '==', competencia)
-                    .select('empresaId', 'empresaCnpj', 'direcao', 'status', 'chave', 'modelo', 'itens', 'totais.vICMS'),
+                    // 🚨 `eventos`/`cStat` e `tpNF` NÃO são enfeite: sem eles a
+                    // projeção CEGA as réguas que este painel chama.
+                    // `docCancelado` só enxerga o cancelamento por EVENTO com
+                    // `eventos`; `direcaoEfetivaDoc` só reconhece a nota própria
+                    // de entrada (art. 136) com `tpNF`. Campo fora da projeção
+                    // some da leitura, e a régua responde como se ele não
+                    // existisse — o defeito corrigido em 21/08 voltava aqui.
+                    .select('empresaId', 'empresaCnpj', 'direcao', 'tpNF', 'status', 'cStat', 'eventos',
+                        'chave', 'modelo', 'itens', 'totais.vICMS'),
                 { label: `credito-acumulado ${competencia}`, maxDocs: 80000 },
             );
             lidos += snaps.length;

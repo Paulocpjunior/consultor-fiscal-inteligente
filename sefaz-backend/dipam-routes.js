@@ -176,7 +176,10 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 // importer PRINCIPAL grava; sem eles no projection a contraparte
                 // some e todo mundo vira "indefinido" (bug 07/2026 EDUARDO GUERRA).
                 .select(
-                    'empresaId', 'direcao', 'status', 'emitente', 'destinatario', 'tpNF', 'valorTotal',
+                    // 🚨 `eventos`/`cStat`: sem eles `docCancelado` não vê o
+                    // cancelamento por EVENTO e a nota cancelada volta a gerar
+                    // FUNRURAL/DIPAM — imposto sobre nota que não existe.
+                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'emitente', 'destinatario', 'tpNF', 'valorTotal',
                     'cnpjEmit', 'xNomeEmit', 'ufEmit', 'codMunEmit',
                     'cnpjDest', 'xNomeDest', 'ieDest', 'ufDest', 'codMunDest',
                 ),

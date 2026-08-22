@@ -254,6 +254,23 @@ export function chaveDaNotaDoEvento(d) {
     return null;
 }
 
+/**
+ * 🚨 O QUE UMA PROJEÇÃO `.select()` PRECISA CARREGAR PARA QUE `docCancelado`
+ * CONSIGA RESPONDER.
+ *
+ * A régua decide na LEITURA por três sinais — `status`, o `cStat` legado
+ * (101/151) e o EVENTO 110111. O caminho NORMAL do cancelamento é o evento, e
+ * nele o `status` continua 'autorizado'. Projeção sem `eventos` deixa a régua
+ * cega justamente no caso comum: ela responde "não cancelada" com toda
+ * confiança, e o silêncio é indistinguível do documento válido.
+ *
+ * Em 22/08 a varredura achou TRÊS apurações de imposto nessa situação (crédito
+ * acumulado, DIFAL de aquisição e FUNRURAL/DIPAM) — as mesmas que tinham sido
+ * corrigidas no dia anterior. Consertar o leitor não basta se a consulta não
+ * traz o campo.
+ */
+export const CAMPOS_PARA_DOC_CANCELADO = Object.freeze(['status', 'cStat', 'eventos']);
+
 export function docCancelado(d) {
     if (!d) return false;
     if (STATUS_CANCELADO.has(String(d.status || '').toLowerCase())) return true;

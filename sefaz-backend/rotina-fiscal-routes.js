@@ -249,7 +249,12 @@ router.get('/painel', requireAuth, async (req, res) => {
         const docsSnaps = await fetchAllDocs(
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
-                .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status',
+                // 🚨 `cStat`/`eventos`: a etapa de VALIDAÇÃO conta as canceladas
+                // por `docCancelado`, e o cancelamento chega por EVENTO com o
+                // `status` ainda 'autorizado'. Sem eles a Rotina dizia
+                // "0 cancelada(s)" e a etapa fechava VERDE — o farol honesto
+                // mentindo justamente no guia do mês do colaborador.
+                .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos',
                     // `emitente`/`destinatario`/`tpNF` entram pra detectar compra
                     // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
                     // detalhe fica na aba própria, aqui só sinaliza a obrigação.
