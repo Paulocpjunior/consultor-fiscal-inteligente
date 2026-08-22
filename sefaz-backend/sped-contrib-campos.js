@@ -245,3 +245,152 @@ export function conferirPerfilConsolidado(linhas) {
 export function avisosDePerfilConsolidado(linhas) {
     return conferirPerfilConsolidado(linhas).erros.map(e => `🚨 ${e.mensagem}`);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 AS RECUSAS DO PVA QUE FORAM APRENDIDAS E NUNCA VIRARAM REGRA
+//
+// A régua da casa é *"recusa aprendida entra na prevalidação no MESMO PR"* — o
+// EFD ICMS/IPI tem 15 regras assim. Do lado do EFD-Contribuições havia só duas,
+// e três recusas REAIS de 2026 tinham sido corrigidas **só no gerador**:
+// consertar o gerador fecha a INSTÂNCIA, a regra fecha a CLASSE. Sem elas, a
+// próxima empresa gasta uma volta de PVA descobrindo o mesmo.
+//
+// Todas leem as **LINHAS** do arquivo gerado — o mesmo texto que o validador
+// lê. Auditar o objeto em memória foi o que deixou o C100 sair com modelo 55 e
+// chave 65 por meses sem nenhum teste acusar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** O documento é de ENTRADA? (A100/C100 campo 2, IND_OPER: '0' = entrada) */
+function ehDocumentoDeEntrada(campos) {
+    return String(campos[1] || '').trim() === '0';
+}
+
+/**
+ * COD_ITEM vazio em A170/C170.
+ *
+ * FONTE: PVA da CLINICA MEDICA MANTOAN 07/2026 (18/08) — **36 recusas** de
+ * "Campo obrigatório · COD_ITEM" nos A170 sintéticos da NFS-e sem
+ * discriminação. E as 2 recusas de M205/M605 ("registro filho obrigatório")
+ * eram CONSEQUÊNCIA desta: um A170 sem item identificável quebra o
+ * encadeamento que o PVA cobra do detalhamento por código de receita.
+ */
+export function conferirCodItemDosItens(linhas) {
+    const erros = [];
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        const reg = String(campos[0] || '').trim();
+        if (reg !== 'A170' && reg !== 'C170') return;
+        if (String(campos[2] || '').trim()) return;
+        erros.push({
+            registro: reg, linha: i + 1,
+            fonte: 'PVA: "Campo obrigatório · COD_ITEM" (MANTOAN 0040 · 07/2026, 18/08 — 36 recusas).',
+            mensagem: `${reg} na linha ${i + 1} está sem COD_ITEM. O PVA recusa a importação, e as recusas `
+                + 'de M205/M605 ("registro filho obrigatório") vêm junto — um item sem código quebra o '
+                + 'encadeamento do detalhamento por código de receita. Documento de serviço sem itens usa o '
+                + 'código sintético SERV-GENERICO, que também precisa constar do 0200.',
+        });
+    });
+    return { erros };
+}
+
+/**
+ * IND_ORIG_CRED vazio em A170 de documento de ENTRADA.
+ *
+ * FONTE: PVA da MANTOAN (18/08) — *"Campo obrigatório PARA NOTAS FISCAIS DE
+ * ENTRADA"*. Quem manda é a DIREÇÃO do documento, **não o CST**: a versão
+ * anterior só preenchia quando o CST tinha crédito (50-56), e o PVA desmentiu
+ * em três itens com CST 70 (sem crédito). Saída continua SEM o campo — ele
+ * descreve a origem da AQUISIÇÃO, que só existe do lado de quem compra.
+ */
+export function conferirIndOrigCredDasEntradas(linhas) {
+    const erros = [];
+    let entradaAberta = false;
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        const reg = String(campos[0] || '').trim();
+        if (reg === 'A100') { entradaAberta = ehDocumentoDeEntrada(campos); return; }
+        // Qualquer outro registro de documento fecha o contexto — A170 só é
+        // filho de A100, e ler "a última entrada vista" atravessaria blocos.
+        if (['C100', 'D100', 'F100', 'A990', 'C990'].includes(reg)) { entradaAberta = false; return; }
+        if (reg !== 'A170' || !entradaAberta) return;
+        if (String(campos[7] || '').trim()) return;
+        erros.push({
+            registro: reg, linha: i + 1,
+            fonte: 'PVA: "Campo obrigatório para notas fiscais de entrada · IND_ORIG_CRED" '
+                + '(MANTOAN 0040 · 07/2026, 18/08).',
+            mensagem: `A170 na linha ${i + 1} pertence a um documento de ENTRADA e está sem IND_ORIG_CRED. `
+                + 'Quem manda aqui é a DIREÇÃO do documento, não o CST: toda entrada leva o campo (0 = '
+                + 'mercado interno), tenha ou não crédito.',
+        });
+    });
+    return { erros };
+}
+
+/**
+ * A retenção declarada no M200/M600 tem de bater com a soma dos F600.
+ *
+ * FONTE: PVA da HS PROJETOS 0304 · 07/2026 (19/08) — *"VL_RET_CUM maior que o
+ * somatório dos F600"*. ⚠️ E o sintoma apontava o lugar ERRADO: os erros
+ * saíam no M200, que estava certo — o vazio era o F600 (a coleta lia só a
+ * forma aninhada da retenção). Por isso a regra diz os DOIS números.
+ *
+ * Campos, na ordem que o gerador escreve (e o arquivo aceito de 05/2026
+ * confirma): M200/M600 [5] = VL_RET_NC e [9] = VL_RET_CUM — só um dos dois é
+ * diferente de zero, por construção; F600 [8] = VL_RET_PIS e [9] = VL_RET_COFINS.
+ */
+export function conferirRetencaoDoBlocoM(linhas) {
+    const erros = [];
+    const num = (v) => {
+        const n = parseFloat(String(v ?? '').replace(/\./g, '').replace(',', '.'));
+        return Number.isFinite(n) ? n : 0;
+    };
+    let f600Pis = 0, f600Cofins = 0, temF600 = false;
+    const retDeclarada = {};
+    (Array.isArray(linhas) ? linhas : []).forEach((linha) => {
+        const c = camposDaLinha(linha);
+        const reg = String(c[0] || '').trim();
+        if (reg === 'F600') { temF600 = true; f600Pis += num(c[8]); f600Cofins += num(c[9]); }
+        if (reg === 'M200' || reg === 'M600') retDeclarada[reg] = num(c[5]) + num(c[9]);
+    });
+
+    const par = [['M200', 'PIS', f600Pis], ['M600', 'COFINS', f600Cofins]];
+    for (const [reg, tributo, somaF600] of par) {
+        const declarada = retDeclarada[reg];
+        if (declarada === undefined) continue;
+        if (Math.abs(declarada - somaF600) < 0.01) continue;
+        erros.push({
+            registro: reg,
+            fonte: 'PVA: "VL_RET_CUM maior que o somatório dos F600" (HS PROJETOS 0304 · 07/2026, 19/08).',
+            mensagem: `${reg}: a retenção de ${tributo} declarada é R$ ${declarada.toFixed(2)} e a soma dos `
+                + `F600 é R$ ${somaF600.toFixed(2)}${temF600 ? '' : ' (o bloco F saiu SEM nenhum F600)'}. `
+                + 'O PVA recusa quando o M não fecha com o F — e o defeito costuma estar no F600, não no M: '
+                + 'foi a coleta da retenção que deixou de ler a forma ACHATADA do documento em 19/08.',
+        });
+    }
+    return { erros };
+}
+
+/** As três, prontas para a lista de avisos que a geração devolve. */
+export function avisosDaPrevalidacaoContrib(linhas) {
+    const todos = [
+        ...conferirCodItemDosItens(linhas).erros,
+        ...conferirIndOrigCredDasEntradas(linhas).erros,
+        ...conferirRetencaoDoBlocoM(linhas).erros,
+    ];
+    // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
+    // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.
+    const porRegra = new Map();
+    for (const e of todos) {
+        const chave = e.fonte;
+        if (!porRegra.has(chave)) porRegra.set(chave, []);
+        porRegra.get(chave).push(e);
+    }
+    const avisos = [];
+    for (const lista of porRegra.values()) {
+        avisos.push(`🚨 ${lista[0].mensagem}`);
+        if (lista.length > 1) {
+            avisos.push(`   └ e mais ${lista.length - 1} ocorrência(s) do mesmo caso neste arquivo.`);
+        }
+    }
+    return avisos;
+}

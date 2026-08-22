@@ -7,7 +7,9 @@
 
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
-import { conferirContagemDeCampos, conferirPerfilConsolidado } from './sped-contrib-campos.js';
+import {
+    conferirContagemDeCampos, conferirPerfilConsolidado, avisosDaPrevalidacaoContrib,
+} from './sped-contrib-campos.js';
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { requireAdmin } from './require-admin.js';
 
@@ -83,6 +85,14 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // texto que o validador lê, para a próxima empresa gastar UMA volta.
         for (const e of conferirPerfilConsolidado(linhasDoArquivo).erros) {
             dados.warnings.push(`[perfil] ${e.mensagem}`);
+        }
+
+        // As recusas que o PVA JÁ NOS DEU, conferidas sobre o arquivo — uma
+        // volta em vez de N. Recusa aprendida e corrigida só no gerador fecha a
+        // INSTÂNCIA; é aqui que ela fecha a CLASSE (COD_ITEM vazio, MANTOAN;
+        // IND_ORIG_CRED da entrada, MANTOAN; M200/M600 × Σ F600, HS PROJETOS).
+        for (const aviso of avisosDaPrevalidacaoContrib(linhasDoArquivo)) {
+            dados.warnings.push(`[prevalidação] ${aviso}`);
         }
 
         // Encoding Windows-1252 (legado SPED)

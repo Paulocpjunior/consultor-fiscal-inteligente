@@ -190,3 +190,108 @@ describe('🚨 perfil CONSOLIDADO não leva documento (PVA da AFFITTARE, 21/08)'
         expect(rota).toMatch(/conferirPerfilConsolidado\(linhasDoArquivo\)/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 AS RECUSAS QUE FORAM APRENDIDAS E NUNCA VIRARAM REGRA (21/08)
+//
+// O EFD ICMS/IPI tem 15 regras de prevalidação, cada uma nascida de uma recusa
+// REAL. Do lado do EFD-Contribuições havia duas, e três recusas de 2026 tinham
+// sido corrigidas **só no gerador**: consertar o gerador fecha a INSTÂNCIA, a
+// regra fecha a CLASSE — sem ela a próxima empresa gasta uma volta de PVA
+// descobrindo o mesmo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 prevalidação do EFD-Contribuições — as três que faltavam', () => {
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const {
+        conferirCodItemDosItens, conferirIndOrigCredDasEntradas,
+        conferirRetencaoDoBlocoM, avisosDaPrevalidacaoContrib,
+    } = require('../sefaz-backend/sped-contrib-campos.js');
+
+    describe('COD_ITEM vazio (MANTOAN, 36 recusas)', () => {
+        it('acusa o A170 sem código e cita a fonte', () => {
+            const r = conferirCodItemDosItens([
+                '|A170|1||PRESTACAO DE SERVICOS|1450,00|\r\n',
+            ]);
+            expect(r.erros).toHaveLength(1);
+            expect(r.erros[0].fonte).toContain('MANTOAN');
+            expect(r.erros[0].mensagem).toContain('SERV-GENERICO');
+        });
+
+        it('A170 e C170 COM código passam', () => {
+            expect(conferirCodItemDosItens([
+                '|A170|1|SERV-GENERICO|PRESTACAO|1450,00|\r\n',
+                '|C170|1|84814|TELHA|500|UN|4765,00|\r\n',
+            ]).erros).toHaveLength(0);
+        });
+    });
+
+    describe('IND_ORIG_CRED da ENTRADA (MANTOAN, 3 recusas)', () => {
+        const a100 = (indOper: string) => `|A100|${indOper}|1|05059447000150|00|1|123||\r\n`;
+        // A170: REG|NUM_ITEM|COD_ITEM|DESCR|VL_ITEM|VL_DESC|NAT_BC_CRED|IND_ORIG_CRED|CST…
+        const a170 = (indOrig: string) => `|A170|1|SERV|X|100,00||01|${indOrig}|70|\r\n`;
+
+        it('entrada sem o campo é acusada — quem manda é a DIREÇÃO, não o CST', () => {
+            const r = conferirIndOrigCredDasEntradas([a100('0'), a170('')]);
+            expect(r.erros).toHaveLength(1);
+            expect(r.erros[0].mensagem).toContain('ENTRADA');
+        });
+
+        it('entrada COM o campo passa', () => {
+            expect(conferirIndOrigCredDasEntradas([a100('0'), a170('0')]).erros).toHaveLength(0);
+        });
+
+        it('SAÍDA sem o campo passa — ele só existe do lado de quem compra', () => {
+            expect(conferirIndOrigCredDasEntradas([a100('1'), a170('')]).erros).toHaveLength(0);
+        });
+
+        it('o contexto FECHA no fim do bloco — não atravessa para outro documento', () => {
+            expect(conferirIndOrigCredDasEntradas([
+                a100('0'), a170('0'), '|A990|3|\r\n', a170(''),
+            ]).erros).toHaveLength(0);
+        });
+    });
+
+    describe('M200/M600 × Σ F600 (HS PROJETOS)', () => {
+        // Os números REAIS do arquivo aceito da HS: Σ F600 = PIS 114,40 e
+        // COFINS 528,00, iguais ao VL_RET_CUM do M200/M600 do mesmo arquivo.
+        const f600 = (pis: string, cofins: string) =>
+            `|F600|03|02052026|5200|189,8|5952|1|47252373000113|${pis}|${cofins}|0|\r\n`;
+        const m = (reg: string, retCum: string) =>
+            `|${reg}|0,00|0,00|0,00|0,00|0,00|0,00|0,00|0,00|${retCum}|0,00|0,00|0,00|\r\n`;
+
+        it('fechando, fica em silêncio', () => {
+            const r = conferirRetencaoDoBlocoM([
+                f600('114,40', '528,00'), m('M200', '114,40'), m('M600', '528,00'),
+            ]);
+            expect(r.erros).toHaveLength(0);
+        });
+
+        it('bloco F vazio com retenção no M é acusado — e o aviso diz onde olhar', () => {
+            const r = conferirRetencaoDoBlocoM([m('M200', '114,40')]);
+            expect(r.erros).toHaveLength(1);
+            expect(r.erros[0].mensagem).toContain('SEM nenhum F600');
+            expect(r.erros[0].mensagem).toContain('o defeito costuma estar no F600');
+        });
+
+        it('divergência de centavos acusa, com os DOIS números', () => {
+            const r = conferirRetencaoDoBlocoM([f600('100,00', '528,00'), m('M200', '114,40')]);
+            expect(r.erros[0].mensagem).toContain('114.40');
+            expect(r.erros[0].mensagem).toContain('100.00');
+        });
+    });
+
+    it('o muro de aviso é CONTADO, não repetido linha a linha', () => {
+        const avisos = avisosDaPrevalidacaoContrib([
+            '|A170|1||X|10,00|\r\n', '|A170|2||Y|10,00|\r\n', '|A170|3||Z|10,00|\r\n',
+        ]);
+        expect(avisos).toHaveLength(2);
+        expect(avisos[1]).toContain('mais 2 ocorrência(s)');
+    });
+
+    it('e a rota da geração CHAMA a prevalidação — regra sem leitor não protege ninguém', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const rota = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/sped-contrib-routes.js'), 'utf8');
+        expect(rota).toContain('avisosDaPrevalidacaoContrib(linhasDoArquivo)');
+    });
+});
