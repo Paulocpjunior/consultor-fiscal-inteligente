@@ -217,7 +217,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   código de tabela estadual que alguém digitou.
   ⚠️ O app **continua não deduzindo** nenhum dos dois: vencimento e código de
   receita da GNRE e o COD_AJ da 5.3 são ESTADUAIS.
-<<<<<<< HEAD
   🔴 **(19) E A VARREDURA INVERSA — "a tela grava × ninguém lê" — pegou o
   `IND_PERFIL`.** O modal tinha o campo de PERFIL do EFD desde sempre: a pessoa
   escolhia, salvava, e o 0000 saía com **'A' cravado** (o comentário dizia
@@ -228,8 +227,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Com a agravante do **trabalho perdido**: o colaborador preenchia e nada
   acontecia. Perfil fora de A/B/C é RECUSADO com o motivo, e perfil ≠ A sai
   DITO no aviso.
-=======
->>>>>>> origin/main
+  🔴 **(20) E TRÊS RECUSAS DO PVA TINHAM SIDO APRENDIDAS E NUNCA VIRARAM
+  REGRA.** A régua da casa é *"recusa aprendida entra na prevalidação no MESMO
+  PR"* — o EFD ICMS/IPI tem 15 regras assim, e o EFD-**Contribuições** tinha
+  DUAS. As três estavam corrigidas **só no gerador**: **COD_ITEM vazio no
+  A170/C170** (MANTOAN, 36 recusas — e as 2 de M205/M605 eram consequência),
+  **IND_ORIG_CRED vazio em item de ENTRADA** (MANTOAN, 3 recusas: *"campo
+  obrigatório para notas fiscais de entrada"* — quem manda é a DIREÇÃO, não o
+  CST) e **M200/M600 × Σ F600** (HS PROJETOS: *"VL_RET_CUM maior que o
+  somatório dos F600"*).
+  📌 **Consertar o gerador fecha a INSTÂNCIA; a regra fecha a CLASSE** — sem ela
+  a próxima empresa gasta uma volta de PVA descobrindo o mesmo, que é
+  exatamente o "vai e vem o dia todo" de 20/08.
+  ⚠️ E a do bloco M diz os DOIS números de propósito: em 19/08 o sintoma do PVA
+  apontou o M200 (que estava certo) quando o vazio era o F600.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
