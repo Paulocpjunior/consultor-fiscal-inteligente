@@ -27,7 +27,9 @@ import {
     serieDoDocumento,
 } from './sped-selecao-documentos.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
-import { modeloDoDoc } from './participante-doc-helper.js';
+import {
+    modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc,
+} from './participante-doc-helper.js';
 // CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
 // declarando códigos diferentes para o mesmo item é a divergência de sempre.
 import { cstDoLancamento } from './cst-correlacao.js';
@@ -501,16 +503,30 @@ export function buildBlocoC_Contrib(dados) {
         regimeApuracao === '1' ? '1' : '2',
     ]));
 
-    for (const nota of notasC) {
-        if (docCancelado(nota) || nota.status === 'denegado') continue;
+    for (const notaCrua of notasC) {
+        if (docCancelado(notaCrua) || notaCrua.status === 'denegado') continue;
 
-        const direcao = nota.direcao;
+        // 🚨 AS TRÊS RÉGUAS DA CASA, que este C100 não tinha (21/08, varredura
+        // dos leitores de documento). Ele lia o participante SÓ na forma
+        // ANINHADA — e o importer principal grava ACHATADO (`cnpjEmit`/
+        // `cnpjDest`), então **toda nota capturada automaticamente saía com
+        // COD_PART VAZIO**. É o defeito de 17/08 (37 A100 da MANTOAN sem
+        // participante) vivo um bloco adiante, no arquivo que a PWR ainda vai
+        // regerar. E o participante do C100 tem de ser o MESMO que o 0150
+        // cadastra, senão o registro aponta para um participante que não existe.
+        const nota = normalizarParticipantesDoc(notaCrua);
+        const direcao = direcaoEfetivaDoc(nota);
         const indOper = direcao === 'saida' ? '1' : '0';
-        const indEmit = direcao === 'saida' ? '0' : '1';
+        // ⚠️ IND_EMIT pela régua da EMISSÃO, não pela direção: a nota própria de
+        // ENTRADA (art. 136, tpNF=0) é emissão PRÓPRIA e saía '1' (terceiros).
+        // 🚨 E É SÓ O IND_EMIT: a Exceção 2 do Guia do ICMS/IPI — "emissão
+        // própria não leva C170" — **NÃO vale aqui**. No EFD-Contribuições o
+        // C170 é quem carrega o detalhe de PIS/COFINS do item, e o arquivo
+        // ACEITO da PWR (03/2026) tem C170 nas notas próprias. Portar a regra
+        // inteira apagaria a apuração.
+        const indEmit = ehEmissaoPropriaDoc(nota, dados.empresa?.cnpj) ? '0' : '1';
 
-        const participanteRaw = direcao === 'saida'
-            ? (nota.destinatario || nota.tomador)
-            : (nota.emitente || nota.prestador);
+        const participanteRaw = participanteDoDocumento(nota, dados.empresa?.cnpj);
         const codPart = participanteRaw
             ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
             : '';

@@ -32,6 +32,8 @@ import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import { tipoItemDoDocumento, TIPO_ITEM_SERVICO } from './sped-selecao-documentos.js';
+// O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
+import { participanteDoDocumento } from './participante-doc-helper.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -122,8 +124,11 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         // para um cadastro que não existe. Foi o arquivo de 17/08 (CLINICA
         // MANTOAN): 37 documentos e nenhum participante.
         const nota = normalizarParticipantesDoc(notaCrua);
-        const direcao = nota.direcao;
-        const participanteRaw = direcao === 'saida' ? nota.destinatario : nota.emitente;
+        // 🚨 O MESMO DONO QUE O C100 e o A100 usam. Escolher aqui pela direção
+        // crua colocaria no 0150 o participante ERRADO da nota própria de
+        // entrada (tpNF=0) — e aí o C100 referenciaria um COD_PART que a Tabela
+        // de Cadastro do Participante não tem, que é recusa do PVA.
+        const participanteRaw = participanteDoDocumento(nota, empresa.cnpj);
 
         if (!participanteRaw) continue;
         const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';

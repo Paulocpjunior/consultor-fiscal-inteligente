@@ -217,3 +217,60 @@ describe('🚨 COD_CONT do M210/M610 segue o REGIME', () => {
         expect(cod(mDe('1'), 'M610')).toBe('01');
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O C100 DESTE ARQUIVO LIA O PARTICIPANTE SÓ NA FORMA ANINHADA
+//
+// Varredura dos leitores de documento, 21/08. A régua monta `.cnpjCpf` e o
+// importer principal grava ACHATADO (`cnpjEmit`/`cnpjDest`) — nenhuma das duas
+// era lida em toda nota capturada automaticamente, e o COD_PART saía VAZIO. É
+// o defeito de 17/08 (37 A100 da MANTOAN sem participante) vivo um bloco
+// adiante, no arquivo que a PWR ainda tem de regerar.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 C100 — participante e emissão pelas réguas da casa', () => {
+    /** Como o importer principal grava: sem `emitente`, tudo achatado. */
+    const entradaCapturada = (over: any = {}) => {
+        const { emitente, ...resto } = entrada();
+        return {
+            ...resto,
+            cnpjEmit: '02235305000108', xNomeEmit: 'GLOBAL COMPANY', ufEmit: 'MG',
+            ...over,
+        };
+    };
+
+    const c100 = (nota: any) => acha(linhasDe([nota]), 'C100')[0].split('|');
+
+    it('nota capturada (forma ACHATADA) sai com COD_PART preenchido', () => {
+        expect(c100(entradaCapturada())[4]).toBe('02235305000108');
+    });
+
+    it('a forma aninhada continua funcionando', () => {
+        expect(c100(entrada())[4]).toBe('02235305000108');
+    });
+
+    it('nota PRÓPRIA de entrada é emissão própria (IND_EMIT 0) e leva a CONTRAPARTE', () => {
+        // Compra de produtor rural PF (art. 136): a empresa emite a nota da
+        // própria entrada, então ela é a emitente e o produtor é o destinatário.
+        const propria = {
+            ...entrada(), tpNF: '0',
+            emitente: { cnpjCpf: '31947349000169', nome: 'PWR' },
+            destinatario: { cnpjCpf: '12345678901', nome: 'PRODUTOR RURAL' },
+        };
+        const campos = c100(propria);
+        expect(campos[2]).toBe('0');              // IND_OPER: entrada
+        expect(campos[3]).toBe('0');              // IND_EMIT: emissão PRÓPRIA
+        expect(campos[4]).toBe('12345678901');    // COD_PART: a contraparte
+    });
+
+    it('⚠️ e o C170 CONTINUA saindo na emissão própria — a Exceção 2 é do ICMS/IPI', () => {
+        // No EFD-Contribuições o C170 é quem carrega o detalhe de PIS/COFINS do
+        // item, e o arquivo ACEITO da PWR tem C170 nas notas próprias. Portar a
+        // regra do outro arquivo apagaria a apuração.
+        const propria = {
+            ...entrada(), tpNF: '0',
+            emitente: { cnpjCpf: '31947349000169', nome: 'PWR' },
+            destinatario: { cnpjCpf: '12345678901', nome: 'PRODUTOR' },
+        };
+        expect(acha(linhasDe([propria]), 'C170').length).toBe(1);
+    });
+});
