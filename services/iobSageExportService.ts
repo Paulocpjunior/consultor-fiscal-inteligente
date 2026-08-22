@@ -69,11 +69,46 @@ export function encodeWindows1252(text: string): Uint8Array {
 
 const onlyDigits = (s: string | undefined) => (s || '').replace(/\D+/g, '');
 
-function dateAAAAMMDD(d: Date): string {
-    const y = d.getFullYear().toString().padStart(4, '0');
-    const m = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    return `${y}${m}${d}`.length === 8 ? `${y}${m}${day}` : `${y}${m}${day}`;
+/**
+ * 🚨 A DATA QUE O DOCUMENTO DECLARA — no fuso do EMITENTE, nunca convertida.
+ *
+ * É a mesma correção que o SPED levou em 22/08, um arquivo adiante: o `dhEmi`
+ * chega com o fuso de quem emitiu (`2026-07-31T22:30:00-03:00`), e formatar a
+ * partir de um `Date` lê o dia do fuso de QUEM ESTÁ RODANDO. Aqui o defeito é
+ * mais discreto porque o .FML sai do navegador do colaborador, que está em
+ * BRT — mas basta a nota vir de outro fuso (Manaus, -04:00, emitida às 23h30)
+ * para o dia andar.
+ *
+ * E o custo dessa diferença é o que a casa mais paga: o **SPED declararia
+ * 31/07 e o `.FML` 01/08 para a MESMA nota** — dois arquivos do mesmo mês
+ * discordando, sem nada acusar.
+ *
+ * ⚠️ `Date` continua lido em UTC porque um `Date` já perdeu o fuso de origem:
+ * não há o que recuperar. Devolve **''** para o ilegível — data não se chuta.
+ */
+export function dataDeclaradaAAAAMMDD(bruto: unknown): string {
+    if (bruto == null || bruto === '') return '';
+    if (typeof bruto === 'string') {
+        const iso = bruto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[1]}${iso[2]}${iso[3]}`;
+        const br = bruto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (br) return `${br[3]}${br[2]}${br[1]}`;
+        const d = new Date(bruto);
+        return Number.isNaN(d.getTime()) ? '' : emUtcAAAAMMDD(d);
+    }
+    if (bruto instanceof Date) return Number.isNaN(bruto.getTime()) ? '' : emUtcAAAAMMDD(bruto);
+    const comToDate = bruto as { toDate?: () => Date };
+    if (typeof comToDate?.toDate === 'function') {
+        const d = comToDate.toDate();
+        return d instanceof Date && !Number.isNaN(d.getTime()) ? emUtcAAAAMMDD(d) : '';
+    }
+    return '';
+}
+
+function emUtcAAAAMMDD(d: Date): string {
+    return `${d.getUTCFullYear()}`.padStart(4, '0')
+        + String(d.getUTCMonth() + 1).padStart(2, '0')
+        + String(d.getUTCDate()).padStart(2, '0');
 }
 
 /**
@@ -576,7 +611,18 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
         );
     }
     const especie = d.tipo === 'NFCe' ? 'NFCE' : d.tipo === 'NFe' ? 'NFE' : 'NF';
-    const dEmi = parseIsoDate(d.dhEmi) || new Date();
+    // 🚨 SEM DATA LEGÍVEL A NOTA FICA DE FORA, NOMEADA — nunca com a data de
+    // HOJE. O `|| new Date()` anterior escriturava a nota no dia da GERAÇÃO, o
+    // que na virada do mês a joga em OUTRA competência, e o E-Fiscal aceita
+    // sem dizer nada. É a régua de 06/08: campo de data não recebe default.
+    const dEmi = dataDeclaradaAAAAMMDD(d.dhEmi);
+    if (!dEmi) {
+        throw new Error(
+            `nota ${d.numero || d.chave}: sem data de emissão legível. Sem ela o E200 sairia com a data de `
+            + 'HOJE, e na virada do mês a nota cairia em outra competência. Reimporte o XML completo (♻️) '
+            + 'ou corrija a data no lançamento.',
+        );
+    }
     // A UF da NFC-e a consumidor é a da PRÓPRIA EMPRESA: a venda é no balcão.
     const ufConsumidor = sanitizeAlfa(ufEmpresa || '').slice(0, 2).toUpperCase()
         || ufDaChave(d.chave);

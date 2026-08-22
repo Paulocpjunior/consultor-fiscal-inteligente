@@ -92,3 +92,83 @@ describe('🚨 R16 — DT_DOC depois do fim do período', () => {
         expect(r.erros.some((x: any) => x.regra === 'dt-doc-fora-do-periodo')).toBe(false);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O `.FML` TINHA O MESMO DEFEITO — e discordar do SPED é o que custa caro
+//
+// O Exportar SAGE formatava a data a partir de um `Date`, com `getFullYear`/
+// `getMonth`/`getDate` — ou seja, no fuso de QUEM ESTÁ RODANDO. Ali o defeito
+// é mais discreto (o .FML sai do navegador do colaborador, em BRT), mas basta
+// a nota vir de outro fuso — Manaus, -04:00, emitida às 23h30 — para o dia
+// andar. E aí o **SPED declara 31/07 e o `.FML` 01/08 para a MESMA nota**.
+//
+// A trava é sobre a RESPOSTA, não sobre o código: os dois formatadores moram
+// em mundos diferentes (o do SPED é backend `.js` sem `.d.ts`, e criar um só
+// para partilhar cinco linhas traria de volta a armadilha do `.d.ts` à mão,
+// 20/08). O que a casa precisa é que eles digam o MESMO DIA — e é isso que
+// esta comparação prova, entrada por entrada.
+// ═══════════════════════════════════════════════════════════════════════════
+import { dataDeclaradaAAAAMMDD, participanteDoDoc } from '../services/iobSageExportService';
+
+describe('🚨 SPED e .FML declaram o MESMO dia', () => {
+    const casos = [
+        '2026-07-31T22:30:00-03:00',   // o caso caro: vira o mês em UTC
+        '2026-07-10T22:30:00-03:00',
+        '2026-07-10T23:30:00-04:00',   // Manaus — o fuso que o BRT também erra
+        '2026-07-10T10:00:00-03:00',
+        '2026-07-05',
+        '05/07/2026',
+    ];
+
+    it.each(casos)('%s', (bruto) => {
+        const ddmmaaaa = fmt.formatDate(bruto);           // SPED: DDMMAAAA
+        const aaaammdd = dataDeclaradaAAAAMMDD(bruto);    // .FML: AAAAMMDD
+        expect(aaaammdd).toHaveLength(8);
+        // Mesma data, formatos espelhados.
+        expect(aaaammdd.slice(6, 8) + aaaammdd.slice(4, 6) + aaaammdd.slice(0, 4)).toBe(ddmmaaaa);
+    });
+
+    it('o ilegível sai VAZIO nos dois — data não se chuta', () => {
+        for (const lixo of ['', 'ontem', null as any]) {
+            expect(fmt.formatDate(lixo)).toBe('');
+            expect(dataDeclaradaAAAAMMDD(lixo)).toBe('');
+        }
+    });
+});
+
+describe('🚨 nota sem data legível fica de FORA do .FML, nomeada', () => {
+    const nota = (dhEmi: any) => ({
+        id: 'x', numero: '3485', serie: '1', tipo: 'NFe', modelo: '55',
+        chave: '35260731947349000169550010000034853106861510',
+        dhEmi, direcao: 'entrada', status: 'autorizado',
+        cnpjEmit: '12345678000199', xNomeEmit: 'FORNECEDOR LTDA', ufEmit: 'SP',
+        emitente: { cnpjCpf: '12345678000199', nome: 'FORNECEDOR LTDA', uf: 'SP' },
+        totais: { vNF: 1000 },
+        itens: [{ cfop: '1102', vProd: 1000 }],
+    }) as any;
+
+    // A régua da casa: ausência bloqueia e é DITA. O `|| new Date()` anterior
+    // escriturava a nota no dia da GERAÇÃO — na virada do mês, outra
+    // competência, e o E-Fiscal aceita sem dizer nada.
+    it('o participante continua legível (a nota é montável, o que falta é a data)', () => {
+        expect(participanteDoDoc(nota('2026-07-10T10:00:00-03:00'))?.cnpjCpf).toBe('12345678000199');
+    });
+
+    it('e o gerador RECUSA a nota sem data, com a ação na frase', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { exportarParaIobSage } = require('../services/iobSageExportService');
+        const r = exportarParaIobSage({ documentos: [nota(null)], numeroEmpresaEfiscal: 1 });
+        const f = r.falhas.find((x: any) => /data de emissão/i.test(x.motivo));
+        expect(f).toBeDefined();
+        expect(f.motivo).toMatch(/HOJE/);
+        expect(f.motivo).toMatch(/♻️|Reimporte/);
+    });
+
+    it('com data legível ela entra normalmente', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { exportarParaIobSage } = require('../services/iobSageExportService');
+        const r = exportarParaIobSage({ documentos: [nota('2026-07-10T10:00:00-03:00')], numeroEmpresaEfiscal: 1 });
+        expect(r.falhas.some((x: any) => /data de emissão/i.test(x.motivo))).toBe(false);
+        expect(r.conteudo).toContain('20260710');
+    });
+});

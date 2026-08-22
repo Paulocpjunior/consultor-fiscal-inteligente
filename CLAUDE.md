@@ -24,13 +24,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   do campo DT_FIN do registro 0000"*. ⚠️ **Só o limite SUPERIOR**: o Guia não
   exige `DT_DOC ≥ DT_INI` no C100, e documento **EXTEMPORÂNEO** é legítimo —
   acusá-lo seria alarme falso sobre escrituração correta.
-  ⚠️ **O Exportar SAGE tem o mesmo mecanismo e hoje ACERTA por acidente**: ele
-  usa `getDate()`, que lê o fuso do PROCESSO — e ele roda no NAVEGADOR do
-  colaborador, em BRT. É correto hoje e frágil por construção; fica NOMEADO, não
-  corrigido, porque mexer ali sem caso real é risco sem ganho.
+  ✂️ **E O EXPORTAR SAGE FECHOU NA SEQUÊNCIA, no mesmo dia** — eu o tinha
+  deixado NOMEADO ("acerta por acidente: `getDate()` lê o fuso do PROCESSO, e o
+  .FML sai do navegador em BRT"). Errado deixar: basta a nota vir de **outro
+  fuso** (Manaus, −04:00, emitida às 23h30) para o dia andar — e aí o **SPED
+  declara 31/07 e o `.FML` 01/08 para a MESMA nota**. Corrigir o gerador e
+  deixar o gêmeo é criar a divergência que a casa mais paga, que é a lição
+  deste mesmo dia.
+  🐛 **E o caminho até lá achou DOIS defeitos que ninguém tinha visto**: o
+  `dEmi` caía em **`|| new Date()`** — nota sem `dhEmi` legível era escriturada
+  com a data **de HOJE**, e na virada do mês em OUTRA competência, com o
+  E-Fiscal aceitando calado (é a régua de 06/08: campo de data não recebe
+  default). Agora ela fica **de FORA e NOMEADA**, com a ação (♻️) — e o
+  preflight concorda **por construção**, porque ele roda a geração REAL e lê
+  `falhas`. E o `dateAAAAMMDD` era **código morto** com um corpo sem sentido
+  (`\`${y}${m}${d}\`.length === 8 ? A : A`, interpolando o `Date` inteiro):
+  deletado, porque código morto é a isca para alguém reativar a régua velha.
+  📌 **A TRAVA É SOBRE A RESPOSTA, NÃO SOBRE O CÓDIGO**: os dois formatadores
+  moram em mundos diferentes (o do SPED é backend `.js` **sem `.d.ts`**, e criar
+  um só para partilhar cinco linhas traria de volta a armadilha do `.d.ts` à mão
+  de 20/08). O teste alimenta os DOIS com as mesmas entradas e exige que digam
+  o **MESMO DIA** — inclusive o caso de Manaus, que o BRT também erra.
   📌 **REGRA QUE FICA: data de documento fiscal se lê do TEXTO, nunca de uma
-  conversão de fuso.** `new Date(...)` + `getUTCDate()` sobre um `dhEmi` é a
-  armadilha das duas formas com outra roupa — o mesmo instante, dois dias.
+  conversão de fuso.** `new Date(...)` + `getUTCDate()`/`getDate()` sobre um
+  `dhEmi` é a armadilha das duas formas com outra roupa — o mesmo instante,
+  dois dias.
+  ✅ Fica cru, com o motivo: a **DATA DE INCLUSÃO** do E020 (cadastro de
+  produto) — ela responde "quando este item entrou no cadastro", não que dia o
+  documento declara; um dia de diferença ali não muda livro nenhum.
 
 - **🚨 E OS RELATÓRIOS LIAM A DIREÇÃO CRUA — a tela discordaria do arquivo que
   eu tinha acabado de consertar** (22/08, fechando o eixo). Corrigidos o SPED,
