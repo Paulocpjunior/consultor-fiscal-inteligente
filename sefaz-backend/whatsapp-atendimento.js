@@ -228,7 +228,28 @@ export function configPadraoAtendimento() {
         // entrada aqui continua só com o texto — nada quebra sem imagem
         // cadastrada. Nasce vazio: imagem é a admin quem sobe, nunca chute.
         imagensPorFila: {},
+        // 📷 Quem atende as DMs do Instagram — POR USUÁRIO, não por fila
+        // (Paulo, 22/08: "o instagram sera limitado por usuario e nao por
+        // dpto"). Lista VAZIA = sem restrição (vale a regra de filas de
+        // sempre) — é também a retrocompatibilidade: config gravada antes
+        // deste campo não pode esconder conversa de ninguém em silêncio.
+        // Com e-mails na lista, SÓ eles veem/respondem conversa 📷 —
+        // inclusive admin fora da lista (a edição é admin-only, então não
+        // há trancamento real: o admin se inclui na própria ⚙️).
+        instagramAtendentes: [],
     };
+}
+
+/**
+ * 📷 Este usuário pode ver/atender as DMs do Instagram? Régua ÚNICA — inbox,
+ * thread, resposta, anexo e push passam todos por aqui (uma segunda cópia é
+ * como duas respostas divergentes nascem).
+ */
+export function podeAtenderInstagram(config, email) {
+    const lista = Array.isArray(config?.instagramAtendentes) ? config.instagramAtendentes : [];
+    if (!lista.length) return true;   // sem restrição configurada
+    const e = String(email || '').trim().toLowerCase();
+    return Boolean(e) && lista.includes(e);
 }
 
 /** Escalas que o app entende. Fora daqui, cai no padrão. */
@@ -316,6 +337,14 @@ export function resolverConfig(gravada) {
             ? Object.fromEntries(Object.entries(gravada.imagensPorFila)
                 .filter(([fila, url]) => filaValida(fila) && typeof url === 'string' && url.trim()))
             : p.imagensPorFila,
+        // 📷 e-mails em minúsculas, sem duplicata; entrada sem "@" é
+        // descartada (não é e-mail, não pode virar chave de acesso). Lista
+        // gravada VAZIA é escolha legítima: sem restrição.
+        instagramAtendentes: Array.isArray(gravada.instagramAtendentes)
+            ? [...new Set(gravada.instagramAtendentes
+                .map((s) => String(s ?? '').trim().toLowerCase())
+                .filter((s) => s.includes('@')))].slice(0, 30)
+            : p.instagramAtendentes,
     };
 }
 

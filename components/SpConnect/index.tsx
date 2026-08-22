@@ -1943,6 +1943,36 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     recebimento das DMs é o botão <strong>📡</strong> logo abaixo, e só ele.
                                 </p>
 
+                                {/* 👤 Restrição POR USUÁRIO (Paulo, 22/08: "o instagram sera
+                                    limitado por usuario e nao por dpto"). A régua real é do
+                                    BACKEND (listagem, thread, resposta, anexo e push) — aqui é
+                                    só a edição da lista. */}
+                                {cfg && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-1.5">
+                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">👤 Quem atende as DMs (um e-mail por linha)</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            Com e-mails aqui, <strong>SÓ eles</strong> veem, abrem e respondem conversa 📷 — vale
+                                            também pro push, e vale até pra admin fora da lista (admin edita aqui e pode se
+                                            incluir). <strong>Lista vazia = sem restrição</strong> (vale a regra de filas de sempre).
+                                        </p>
+                                        <textarea
+                                            value={(cfg.instagramAtendentes || []).join('\n')}
+                                            onChange={(e) => setCfg((c) => (c ? { ...c, instagramAtendentes: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) } : c))}
+                                            rows={4}
+                                            placeholder={'juliana.gomes@spassessoriacontabil.com.br\nrhsp@spassessoriacontabil.com.br'}
+                                            className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-mono"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={salvarCfg} disabled={cfgSalvando}
+                                                className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                                {cfgSalvando ? 'Salvando…' : '💾 Salvar lista'}
+                                            </button>
+                                            {cfgOk && <span className="text-[11px] text-emerald-600 dark:text-emerald-400">✓ salvo</span>}
+                                            {cfgErro && <span className="text-[11px] text-red-600 dark:text-red-400">{cfgErro}</span>}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <button onClick={rodarSondaIg} disabled={sondandoIg}
                                     className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
                                     {sondandoIg ? 'Perguntando à Meta…' : '🔎 Sondar o estado na Meta'}

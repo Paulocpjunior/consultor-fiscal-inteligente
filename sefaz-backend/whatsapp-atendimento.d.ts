@@ -16,6 +16,8 @@ export interface ConfigAtendimento {
     menu: { opcao: string; fila: string; rotulo: string; submenu?: { opcao: string; fila: string; rotulo: string }[] }[];
     /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
     imagensPorFila: Record<string, string>;
+    /** 📷 e-mails que atendem as DMs do Instagram; vazia = sem restrição. */
+    instagramAtendentes: string[];
     /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */
     respostasRapidas: string[];
 }
@@ -35,6 +37,7 @@ export interface AcaoBot {
 
 export const PAPEIS_ATENDIMENTO: string[];
 export function papelValido(p: unknown): boolean;
+export function podeAtenderInstagram(config: Pick<ConfigAtendimento, 'instagramAtendentes'> | null | undefined, email: string | null | undefined): boolean;
 export function podeEncerrar(p: { role?: string; papelAtendimento?: string | null; email?: string | null; atribuidoA?: string | null }): boolean;
 export const ESCALAS_AVALIACAO: number[];
 export const ESCALA_AVALIACAO_PADRAO: number;

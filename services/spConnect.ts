@@ -26,6 +26,8 @@ export interface ConfigAtendimento {
     imagensPorFila: Record<string, string>;
     /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */
     respostasRapidas: string[];
+    /** 📷 e-mails que atendem as DMs do Instagram; lista vazia = sem restrição. */
+    instagramAtendentes: string[];
 }
 
 /**
