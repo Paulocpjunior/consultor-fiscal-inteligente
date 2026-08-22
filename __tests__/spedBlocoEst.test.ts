@@ -24,10 +24,11 @@ describe('agruparStPorUf', () => {
             saidaComSt('RJ', 30),
         ], 'SP');
 
-        expect(r).toEqual([
+        expect(r.grupos).toEqual([
             { uf: 'MG', retencao: 150, documentos: 2 },
             { uf: 'RJ', retencao: 30, documentos: 1 },
         ]);
+        expect(r.semUf).toEqual([]);
     });
 
     it('entrada, saída sem ST e nota cancelada ficam fora', () => {
@@ -37,7 +38,7 @@ describe('agruparStPorUf', () => {
             saidaComSt('MG', 100, { situacao: 'cancelada' }),
             saidaComSt('MG', 40),
         ], 'SP');
-        expect(r).toEqual([{ uf: 'MG', retencao: 40, documentos: 1 }]);
+        expect(r.grupos).toEqual([{ uf: 'MG', retencao: 40, documentos: 1 }]);
     });
 
     it('cancelada por EVENTO (status ainda "autorizado") também fica fora — régua docCancelado', () => {
@@ -48,14 +49,63 @@ describe('agruparStPorUf', () => {
             }),
             saidaComSt('MG', 40),
         ], 'SP');
-        expect(r).toEqual([{ uf: 'MG', retencao: 40, documentos: 1 }]);
+        expect(r.grupos).toEqual([{ uf: 'MG', retencao: 40, documentos: 1 }]);
     });
 
     it('soma pelos itens quando a nota não traz o total de ST', () => {
         const r = agruparStPorUf([
             { direcao: 'saida', destinatario: { uf: 'PR' }, itens: [{ vICMSST: 12.5 }, { vICMSST: 7.5 }] },
         ], 'SP');
-        expect(r[0]).toMatchObject({ uf: 'PR', retencao: 20 });
+        expect(r.grupos[0]).toMatchObject({ uf: 'PR', retencao: 20 });
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A UF DE DESTINO SAI DA RÉGUA — e o `ufEmpresa` deixou de ser default
+//
+// Varredura dos leitores de documento (21/08). Este agrupamento lia
+// `destinatario.uf` (forma ANINHADA) e o importer principal grava `ufDest`
+// ACHATADO: em toda nota capturada automaticamente a UF vinha vazia e caía no
+// `ufEmpresa`. O ST retido para MG/PR/RJ era apurado como se fosse do próprio
+// estado — e cada UF aqui é uma GNRE.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 UF de destino — as duas formas do documento', () => {
+    it('nota CAPTURADA (ufDest achatado) é agrupada na UF certa, não na da empresa', () => {
+        const r = agruparStPorUf([
+            { direcao: 'saida', status: 'autorizado', ufDest: 'MG', totais: { vST: 100 } },
+        ], 'SP');
+        expect(r.grupos).toEqual([{ uf: 'MG', retencao: 100, documentos: 1 }]);
+    });
+
+    it('sem UF legível o documento sai NOMEADO — nunca na UF da empresa', () => {
+        const r = agruparStPorUf([
+            { direcao: 'saida', status: 'autorizado', numero: '4321', totais: { vST: 100 } },
+        ], 'SP');
+        expect(r.grupos).toEqual([]);
+        expect(r.semUf).toEqual(['4321']);
+    });
+
+    it('e o aviso diz o número e a ação — some da conta, não da tela', () => {
+        const r = montarLinhasStBlocoE({
+            notas: [
+                { direcao: 'saida', status: 'autorizado', numero: '4321', totais: { vST: 100 } },
+                saidaComSt('MG', 40),
+            ],
+            ufEmpresa: 'SP', dtIni: '01072026', dtFin: '31072026',
+        });
+        const aviso = r.avisos.find((a: string) => a.includes('4321'));
+        expect(aviso).toBeDefined();
+        expect(aviso).toContain('GNRE');
+    });
+
+    it('nota PRÓPRIA de entrada (tpNF=0 gravada como saída) não vira retenção', () => {
+        const r = agruparStPorUf([
+            {
+                direcao: 'saida', status: 'autorizado', tpNF: '0', ufDest: 'MG',
+                totais: { vST: 900 },
+            },
+        ], 'SP');
+        expect(r.grupos).toEqual([]);
     });
 });
 

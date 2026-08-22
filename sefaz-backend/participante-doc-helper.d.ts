@@ -24,3 +24,10 @@ export function participanteDoDocumento(
  * 2) e da coleta de itens do 0200: os três têm que concordar.
  */
 export function ehEmissaoPropriaDoc(d: unknown, empresaCnpj?: string): boolean;
+
+/**
+ * UF do destinatário nas DUAS formas (aninhada × `ufDest` achatado). Campo de
+ * decisão do ICMS-ST: cada UF do E200/E210 é uma GNRE. Devolve '' quando o
+ * documento não a traz — UF de destino não se inventa.
+ */
+export function ufDoDestinatarioDoc(d: unknown): string;
