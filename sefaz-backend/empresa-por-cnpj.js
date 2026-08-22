@@ -12,9 +12,15 @@
 // `51227692000146`, parte tem `51.227.692/0001-46`. Consulta por igualdade
 // casa com um e ignora o outro.
 //
-// Nenhuma outra rota do CFI consulta por igualdade — TODAS varrem a coleção e
-// normalizam na leitura (`soDigitos(d.cnpj)`). Não é desleixo delas: é a única
-// forma correta enquanto o dado tiver duas formas.
+// A leitura correta varre e normaliza (`soDigitos(d.cnpj)`) — não é desleixo,
+// é a única forma correta enquanto o dado tiver duas formas.
+//
+// 🚨 ESTE COMENTÁRIO DIZIA "nenhuma outra rota do CFI consulta por igualdade",
+// e em 22/08 a varredura achou OITO que consultavam — seis sem fallback
+// nenhum. Regra escrita não é regra travada: quem fecha a classe agora é
+// `empresa-cadastro-lookup.js` (a casca que fala com o Firestore) mais o teste
+// que barra `where('cnpj','==' | 'in')` fora dela. Este módulo continua sendo
+// o dono do lado PURO — quem já tem a lista de empresas na mão usa ele.
 //
 // E o pior desse defeito não era falhar — era CULPAR O CADASTRO. A mensagem
 // dizia "sem cadastro não há captura" e mandava a pessoa procurar um problema

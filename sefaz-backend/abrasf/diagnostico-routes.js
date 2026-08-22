@@ -9,6 +9,7 @@ import admin from 'firebase-admin';
 import { requireAdmin } from '../require-admin.js';
 import { configMunicipio, municipiosSuportados } from './config-municipios.js';
 import { listarMunicipiosNfse, caminhoNfseRecomendado } from '../municipio-nfse-caminho.js';
+import { acharEmpresaCadastrada } from '../empresa-cadastro-lookup.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -48,14 +49,15 @@ router.get('/diagnostico/:cnpj', requireAdmin, async (req, res) => {
         const db = getDb();
 
         // 1) Empresa cadastrada?
+        // 🚨 Aqui a igualdade era a mais cara das nove: quem tem o CNPJ
+        // gravado MASCARADO recebia "Empresa nao esta cadastrada — cadastre
+        // primeiro", ou seja, o diagnóstico mandava recadastrar um cliente que
+        // já existe. Quem responde é o dono, que normaliza na leitura.
         let empresa = null;
-        for (const col of ['simples_empresas', 'lucro_empresas']) {
-            const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
-            if (!snap.empty) {
-                const d = snap.docs[0];
-                empresa = { id: d.id, colecao: col, ...d.data() };
-                break;
-            }
+        const achado = await acharEmpresaCadastrada(db, cnpj);
+        if (achado) {
+            const d = await db.collection(achado.colecao).doc(achado.empresaId).get();
+            if (d.exists) empresa = { id: d.id, colecao: achado.colecao, ...d.data() };
         }
 
         const checklist = [];

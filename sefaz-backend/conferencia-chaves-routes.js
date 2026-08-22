@@ -18,6 +18,7 @@ import { consultaNFePorChave } from './sefaz-client.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import { carregarFlagsEmpresa, CNPJ_ESCRITORIO } from './empresa-flags.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import {
     selecionarParaReconferir, lerRespostaCancelamento, resumirReconferencia,
@@ -54,21 +55,10 @@ async function buscarPresentes(db, chaves) {
     return presentes;
 }
 
-// Localiza a empresa (id + uf) pelo CNPJ em simples/lucro.
-async function acharEmpresaPorCnpj(db, cnpj) {
-    for (const col of ['simples_empresas', 'lucro_empresas']) {
-        const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
-        if (!snap.empty) return { empresaId: snap.docs[0].id, colecao: col };
-        // fallback: cnpj formatado no doc
-        const todos = await db.collection(col).get();
-        for (const d of todos.docs) {
-            if (String(d.data().cnpj || '').replace(/\D/g, '') === cnpj) {
-                return { empresaId: d.id, colecao: col };
-            }
-        }
-    }
-    return null;
-}
+// Localiza a empresa (id + coleção) pelo CNPJ — pelo DONO ÚNICO.
+// A varredura que morava aqui não olhava a LÁPIDE, então empresa excluída
+// ainda respondia por chaves; a casca resolve as duas coisas de uma vez.
+const acharEmpresaPorCnpj = (db, cnpj) => acharEmpresaCadastrada(db, cnpj);
 
 router.post('/conferencia-chaves', requireAuth, express.json({ limit: '2mb' }), async (req, res) => {
     try {
