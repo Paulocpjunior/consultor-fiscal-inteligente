@@ -56,7 +56,11 @@ describe('🚨 toda coleção do backend tem dono no catálogo', () => {
     /* eslint-disable @typescript-eslint/no-var-requires */
     const { readdirSync, readFileSync, statSync } = require('fs');
     const { join } = require('path');
-    const RAIZ = join(__dirname, '..', 'sefaz-backend');
+    const REPO = join(__dirname, '..');
+    const RAIZ = join(REPO, 'sefaz-backend');
+    // 🚨 O `server.js` da RAIZ também abre coleção (o histórico de envios de DAS
+    // mora lá) e a 1ª versão desta varredura NÃO o lia — trava escrita como
+    // lista só cobre o que EU LEMBREI (13/08). Ele entra pelo nome.
 
     /**
      * Nomes que aparecem em `.collection(...)` e NÃO são coleção de verdade —
@@ -77,11 +81,24 @@ describe('🚨 toda coleção do backend tem dono no catálogo', () => {
     it('nenhuma coleção usada fica fora do catálogo', () => {
         const catalogadas = new Set(CATALOGO_BANCO.map((c: any) => c.colecao));
         const fora: string[] = [];
-        for (const arq of varrer(RAIZ)) {
+        for (const arq of [...varrer(RAIZ), join(REPO, 'server.js')]) {
             if (arq.endsWith('catalogo-banco.js')) continue;
             const src = readFileSync(arq, 'utf8');
-            for (const m of src.matchAll(/\.collection\(\s*['"]([A-Za-z0-9_]+)['"]/g)) {
-                const nome = m[1];
+            // Duas formas de citar a coleção: `.collection('x')` e o CAMINHO
+            // `'x/doc'` — a segunda é como o cofre de e-mail guarda o estado
+            // (`const STATE_DOC = 'sefaz_xml_email_state/estado'`), e ela
+            // escapava da 1ª versão desta varredura.
+            //
+            // ⚠️ A 2ª forma é reconhecida por assinatura ESTREITA — `.doc('x/y')`
+            // ou uma constante `*_DOC`/`*_PATH` — porque a versão larga acusava
+            // `application/json` e prefixo de rota. Teste que grita sem motivo é
+            // teste desligado.
+            const citadas = [
+                ...[...src.matchAll(/\.collection\(\s*['"]([A-Za-z0-9_]+)['"]/g)].map((m) => m[1]),
+                ...[...src.matchAll(/\.doc\(\s*['"]([a-z][A-Za-z0-9_]{4,})\/[^'"]+['"]/g)].map((m) => m[1]),
+                ...[...src.matchAll(/(?:_DOC|_PATH)\s*=\s*['"]([a-z][A-Za-z0-9_]{4,})\/[^'"]+['"]/g)].map((m) => m[1]),
+            ];
+            for (const nome of citadas) {
                 if (catalogadas.has(nome) || NAO_E_COLECAO[nome]) continue;
                 const rel = arq.replace(`${join(__dirname, '..')}/`, '');
                 const linha = `${nome}  (${rel})`;
