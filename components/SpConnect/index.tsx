@@ -2012,6 +2012,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     {igEstado && igEnvs && (
                                         <p className="text-[11px] text-slate-600 dark:text-slate-300">
                                             🔑 Envs no ar: INSTAGRAM_APP_SECRET {igEnvs.instagramAppSecret ? '✅' : '🔴 AUSENTE'} · INSTAGRAM_ACCESS_TOKEN {igEnvs.instagramAccessToken ? '✅' : '🔴 AUSENTE'}
+                                            {igEnvs.instagramAppSecret && igEnvs.instagramAccessToken && (
+                                                <span className="font-bold"> — tudo pronto: mande a DM de teste e recarregue esta aba.</span>
+                                            )}
                                             {(!igEnvs.instagramAppSecret || !igEnvs.instagramAccessToken) && (
                                                 <span className="block text-red-700 dark:text-red-300 font-bold">
                                                     Env ausente na revisão que está servindo — se você já adicionou no console, falta o deploy da esteira levá-la a 100% (peça o "pode disparar").
