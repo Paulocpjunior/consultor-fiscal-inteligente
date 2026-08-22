@@ -43,6 +43,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **O validador do app já sabia** (*"C170: UNID 'X' nao cadastrada no
   0190"*) — mas ele roda DEPOIS, sobre o arquivo pronto. **Conferência que
   existe não substitui régua única**: ela conta o erro, não o impede.
+  ✂️ **E O BLOCO 9 INTEIRO ERA UMA SEGUNDA CÓPIA, linha por linha.** Ele é a
+  **aritmética de FECHAMENTO**: o 9900 conta cada tipo de registro, o 9990 as
+  linhas do próprio bloco e o **9999 o ARQUIVO INTEIRO** — os três conferidos
+  pelo PVA. As duas implementações eram **idênticas**, e é aí que a segunda
+  cópia é perigosa: **não há defeito hoje, e a próxima correção entra numa
+  só** — foi exatamente o que aconteceu com o `getContadorPadrao` e com o
+  `UNIDADES_PADRAO`, nesta MESMA dupla de arquivos. Virou re-exportação, com
+  teste cruzado exigindo saída idêntica.
+  ✅ O desenho do 9900 já era o certo e fica declarado: ele conta os registros
+  que de fato SAÍRAM, nunca uma lista — bloco novo entra sozinho.
   ✂️ **E A TABELA DE DESCRIÇÃO ERA A TERCEIRA CÓPIA — já divergida.** O
   `UNIDADES_PADRAO` existia nos DOIS orquestradores, e o do EFD ICMS/IPI tinha
   **`CM: CENTIMETRO`** que o do EFD-Contribuições não tinha: item em CM saía
