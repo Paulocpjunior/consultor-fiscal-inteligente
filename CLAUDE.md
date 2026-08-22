@@ -5,6 +5,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A NOTA EMITIDA ÀS 22h SAÍA NO SPED COM A DATA DO DIA SEGUINTE** (22/08).
+  O `dhEmi` da NF-e chega com o fuso do EMITENTE
+  (`2026-07-31T22:30:00-03:00`); o formatador fazia `new Date(...)` e lia
+  **`getUTCDate()`**. Às 22h30 de Brasília, em UTC, já é o dia seguinte — e o
+  backend roda no **Cloud Run, que é UTC**, então o defeito era ATIVO.
+  🔴 **Duas gravidades**: nota depois das **21h** saía com a data do dia
+  seguinte (errado, e ninguém confere data a olho); e na **VIRADA DO MÊS** ela
+  saía com a data de OUTRA competência, aí o PVA recusa.
+  ✂️ **A data que o documento DECLARA é a do TEXTO** — `2026-07-31`. Converter
+  para outro fuso é reescrever o que a nota diz, então o formatador passou a ler
+  o prefixo ISO da string. O `Date` continua em UTC porque um `Date` já perdeu o
+  fuso de origem: não há o que recuperar; quem tem a string não deve convertê-la
+  antes. **Timestamp do Firestore** também parou de sair VAZIO — data em branco
+  no C100 é recusa do PVA.
+  🚦 **E a recusa virou REGRA no mesmo PR (R16)**, com a fonte no Guia — 3.2.3,
+  C100 campo 10: *"o valor informado no campo deve ser menor ou igual ao valor
+  do campo DT_FIN do registro 0000"*. ⚠️ **Só o limite SUPERIOR**: o Guia não
+  exige `DT_DOC ≥ DT_INI` no C100, e documento **EXTEMPORÂNEO** é legítimo —
+  acusá-lo seria alarme falso sobre escrituração correta.
+  ⚠️ **O Exportar SAGE tem o mesmo mecanismo e hoje ACERTA por acidente**: ele
+  usa `getDate()`, que lê o fuso do PROCESSO — e ele roda no NAVEGADOR do
+  colaborador, em BRT. É correto hoje e frágil por construção; fica NOMEADO, não
+  corrigido, porque mexer ali sem caso real é risco sem ganho.
+  📌 **REGRA QUE FICA: data de documento fiscal se lê do TEXTO, nunca de uma
+  conversão de fuso.** `new Date(...)` + `getUTCDate()` sobre um `dhEmi` é a
+  armadilha das duas formas com outra roupa — o mesmo instante, dois dias.
+
 - **🚨 E OS RELATÓRIOS LIAM A DIREÇÃO CRUA — a tela discordaria do arquivo que
   eu tinha acabado de consertar** (22/08, fechando o eixo). Corrigidos o SPED,
   o `.FML` e o preflight, sobrava quem o colaborador USA para conferir: a

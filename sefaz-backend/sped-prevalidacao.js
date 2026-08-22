@@ -435,6 +435,45 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         });
     }
 
+    // ── R16. DT_DOC do C100 depois do fim do período ────────────────────────
+    // Guia Prático 3.2.3, C100, Campo 10 (DT_DOC): "Validação: o valor
+    // informado no campo deve ser MENOR OU IGUAL ao valor do campo DT_FIN do
+    // registro 0000."
+    //
+    // 🚨 POR QUE ESTA REGRA NASCEU (22/08): o formatador de data lia
+    // `getUTCDate()` sobre o `dhEmi` da NF-e, que vem com o fuso do emitente.
+    // Nota emitida às 22h30 de Brasília virava o DIA SEGUINTE em UTC — e na
+    // virada do mês, a competência SEGUINTE. Corrigido no formatador; esta
+    // regra é a rede, porque o erro é de DATA e ninguém confere data a olho.
+    //
+    // ⚠️ Só o limite SUPERIOR é checado, de propósito: o Guia não exige
+    // DT_DOC ≥ DT_INI no C100 — documento EXTEMPORÂNEO (de mês anterior,
+    // escriturado agora) é legítimo, e acusá-lo seria alarme falso.
+    const linha0000 = doReg('0000')[0];
+    // |0000|COD_VER|COD_FIN|DT_INI|DT_FIN|NOME|… → DT_FIN é o índice 5.
+    const dtFin = linha0000 ? String(campos(linha0000)[5] || '').replace(/\D/g, '') : '';
+    if (dtFin.length === 8) {
+        const comoNumero = (ddmmaaaa) => Number(
+            `${ddmmaaaa.slice(4)}${ddmmaaaa.slice(2, 4)}${ddmmaaaa.slice(0, 2)}`,
+        );
+        const limite = comoNumero(dtFin);
+        for (const l of c100s) {
+            const f = campos(l);
+            const dt = String(f[10] || '').replace(/\D/g, '');
+            if (dt.length !== 8) continue;
+            if (comoNumero(dt) <= limite) continue;
+            add(erros, {
+                regra: 'dt-doc-fora-do-periodo', registro: 'C100', campo: '10 (DT_DOC)',
+                valor: dt, esperado: `≤ ${dtFin}`, linha: `NUM_DOC ${f[8] || '?'}`,
+                mensagem: 'Data de emissão POSTERIOR ao fim do período da escrituração.',
+                acao: 'Confira a data no XML. Se ela estiver certa lá, é defeito de GERAÇÃO do app '
+                    + '(fuso horário) — reporte com o print em vez de editar o arquivo.',
+                fonte: 'Guia Prático EFD ICMS/IPI 3.2.3, C100 Campo 10: "o valor informado no campo deve ser '
+                    + 'menor ou igual ao valor do campo DT_FIN do registro 0000".',
+            });
+        }
+    }
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';
