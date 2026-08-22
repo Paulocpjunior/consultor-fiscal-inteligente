@@ -24,7 +24,12 @@ import {
 import type { User } from '../types';
 import ConsultaNFePorChavePanel from './ConsultaNFePorChavePanel';
 import ConferenciaChavesPanel from './ConferenciaChavesPanel';
-import { manifestarPendentes, type ManifestarPendentesResult, type TipoManifestacao } from '../services/manifestoService';
+import {
+    manifestarPendentes, listarElegiveisManifestacao, manifestarUmaChave,
+    resetarFalhasInfraManifestacao,
+    type ManifestarPendentesResult, type TipoManifestacao,
+    type ElegivelManifestacao,
+} from '../services/manifestoService';
 import { instrucoesMigracaoCofre } from '../services/cofreInstrucoes';
 
 interface Props {
@@ -510,6 +515,7 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
             {isAdmin && <ConsultaNFePorChavePanel />}
             {isAdmin && <ConferenciaChavesPanel />}
             {isAdmin && <ManifestarPendentesCard />}
+            {isAdmin && <FilaManifestacaoCard />}
         </div>
     );
 };
@@ -624,6 +630,178 @@ const ManifestarPendentesCard: React.FC = () => {
                         </div>
                     )}
                 </div>
+            )}
+        </div>
+    );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A FILA DA MANIFESTAÇÃO — três rotas que existiam sem botão
+//
+// Varredura de 21/08 (autorizada pelo Paulo no mesmo dia): `manifest-elegiveis`,
+// `manifest-one` e `manifest-reset-falhas-infra` existiam no backend e nenhuma
+// tela as chamava. O lote já tinha botão; o que faltava era **ver a fila** e
+// **agir numa chave** — que é justamente o que se quer quando UMA nota trava.
+//
+// ⚠️ Manifestação é IRREVERSÍVEL na SEFAZ: a linha pede confirmação antes, e o
+// tipo aparece na pergunta.
+// ═══════════════════════════════════════════════════════════════════════════
+export const FilaManifestacaoCard: React.FC = () => {
+    const [carregando, setCarregando] = useState(false);
+    const [itens, setItens] = useState<ElegivelManifestacao[] | null>(null);
+    const [total, setTotal] = useState(0);
+    const [erro, setErro] = useState<string | null>(null);
+    const [tipo, setTipo] = useState<TipoManifestacao>('ciencia');
+    const [emAndamento, setEmAndamento] = useState<string | null>(null);
+    const [resultadoPorChave, setResultadoPorChave] = useState<Record<string, string>>({});
+    const [resetando, setResetando] = useState(false);
+    const [resetInfo, setResetInfo] = useState<string | null>(null);
+
+    const carregar = async () => {
+        setCarregando(true); setErro(null);
+        try {
+            const r = await listarElegiveisManifestacao({ limit: 50 });
+            if (r.erro) { setErro(r.erro); setItens(null); return; }
+            setItens(r.itens || []);
+            setTotal(r.total ?? (r.itens || []).length);
+        } catch (e: any) {
+            setErro(e.message || 'erro');
+        } finally {
+            setCarregando(false);
+        }
+    };
+
+    const manifestarUma = async (it: ElegivelManifestacao) => {
+        const cnpj = String(it.empresaCnpj || '').replace(/\D/g, '');
+        if (!cnpj) {
+            setResultadoPorChave(p => ({ ...p, [it.chave]: 'sem CNPJ do destinatário no documento' }));
+            return;
+        }
+        const ok = window.confirm(
+            `Manifestar ${tipo.toUpperCase()} na nota ${it.chave.slice(25, 34)} de ${it.empresaNome || cnpj}?\n\n`
+            + 'A manifestação é IRREVERSÍVEL na SEFAZ.',
+        );
+        if (!ok) return;
+        setEmAndamento(it.chave);
+        try {
+            const r = await manifestarUmaChave({ chNFe: it.chave, cnpjDestinatario: cnpj, tipo });
+            setResultadoPorChave(p => ({
+                ...p,
+                [it.chave]: r.erro ? `✕ ${r.erro}` : `✓ ${r.status || r.cStat || 'enviada'} ${r.xMotivo || ''}`.trim(),
+            }));
+        } catch (e: any) {
+            setResultadoPorChave(p => ({ ...p, [it.chave]: `✕ ${e.message || 'erro'}` }));
+        } finally {
+            setEmAndamento(null);
+        }
+    };
+
+    const destravarInfra = async () => {
+        setResetando(true); setResetInfo(null);
+        try {
+            const r = await resetarFalhasInfraManifestacao();
+            setResetInfo(r.erro
+                ? `Erro: ${r.erro}`
+                : `${r.resetados ?? 0} chave(s) voltaram ao lote (de ${r.candidatos ?? 0} com falha). `
+                  + 'Só as que pararam por rede/timeout — recusa da SEFAZ por mérito continua fora.');
+            if (!r.erro) carregar();
+        } catch (e: any) {
+            setResetInfo(`Erro: ${e.message || 'erro'}`);
+        } finally {
+            setResetando(false);
+        }
+    };
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">
+                🔎 Fila da manifestação — quem está esperando, e agir numa chave
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                O lote acima consome esta fila. Aqui dá para <strong>ver quem está nela</strong> e
+                manifestar <strong>uma nota específica</strong> — que é o que se quer quando uma nota
+                trava e o lote não a alcança.
+            </p>
+            <div className="flex flex-wrap gap-2 items-end mb-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Tipo</label>
+                    <select
+                        value={tipo}
+                        onChange={(e) => setTipo(e.target.value as TipoManifestacao)}
+                        className="px-2 py-1 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded"
+                    >
+                        <option value="ciencia">Ciência (210210) — recomendado</option>
+                        <option value="confirmacao">Confirmação (210200) — implica concordância</option>
+                    </select>
+                </div>
+                <button
+                    onClick={carregar}
+                    disabled={carregando}
+                    className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded"
+                >
+                    {carregando ? '⏳ Carregando…' : '🔎 Ver fila'}
+                </button>
+                <button
+                    onClick={destravarInfra}
+                    disabled={resetando}
+                    className="px-3 py-1.5 text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50 rounded"
+                    title="Devolve ao lote as chaves que pararam por rede/timeout — recusa da SEFAZ por mérito continua fora"
+                >
+                    {resetando ? '⏳ Destravando…' : '🔧 Destravar falhas de infraestrutura'}
+                </button>
+            </div>
+
+            {resetInfo && (
+                <div className="mb-3 p-2 rounded border text-xs bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                    {resetInfo}
+                </div>
+            )}
+
+            {erro && (
+                <div className="p-3 rounded border text-xs bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-700 dark:text-red-400">
+                    <strong>Erro:</strong> {erro}
+                </div>
+            )}
+
+            {itens && !erro && (
+                itens.length === 0 ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Nenhuma chave elegível agora. Isso <strong>não</strong> quer dizer que não há resumo
+                        pendente: chave em cooldown ou com falhas seguidas fica de fora da fila até o
+                        🔧 acima devolvê-la.
+                    </p>
+                ) : (
+                    <div className="space-y-1">
+                        <div className="text-xs text-slate-600 dark:text-slate-300 mb-1">
+                            {itens.length} de {total} na fila
+                            {total > itens.length && ' (mostrando as primeiras)'}
+                        </div>
+                        <div className="max-h-[280px] overflow-y-auto space-y-1">
+                            {itens.map((it) => (
+                                <div key={it.chave} className="flex flex-wrap items-center gap-2 text-[11px] border-b border-slate-100 dark:border-slate-700 pb-1">
+                                    <span className="font-mono text-slate-500">nº {it.chave.slice(25, 34)}</span>
+                                    <span className="text-slate-700 dark:text-slate-300 flex-1 min-w-[140px] truncate">
+                                        {it.empresaNome || it.empresaCnpj || '—'}
+                                    </span>
+                                    <span className="text-slate-500">{(it.dhEmi || '').slice(0, 10)}</span>
+                                    <button
+                                        onClick={() => manifestarUma(it)}
+                                        disabled={emAndamento === it.chave}
+                                        className="px-2 py-1 font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded"
+                                    >
+                                        {emAndamento === it.chave ? '⏳' : '📨 Manifestar'}
+                                    </button>
+                                    {resultadoPorChave[it.chave] && (
+                                        <span className={`basis-full ${resultadoPorChave[it.chave].startsWith('✓')
+                                            ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                            {resultadoPorChave[it.chave]}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )
             )}
         </div>
     );

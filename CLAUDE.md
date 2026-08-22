@@ -5,6 +5,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 SETE ROTAS SEM BOTÃO — E O PAULO MANDOU DAR BOTÃO A TODAS** (22/08:
+  *"sim, todas com botao, e NFP tbm deve ser corrigido"*). A varredura de
+  `rotaTemChamada` (a trava de 13/08 virada em CLASSE) leu as 273 rotas do
+  backend e achou sete grupos que **nenhuma tela chama** — código morto com cara
+  de entrega. A 1ª leva a fechar foi a **MANIFESTAÇÃO**, que é a mais cara:
+  sem Ciência a SEFAZ não entrega o XML COMPLETO, então resumo preso na fila é
+  **livro a menor** — e o app só tinha o botão do LOTE, que passa por cima da
+  chave que trava.
+  ✂️ Card **🔎 Fila da manifestação** no Diagnóstico da captura (admin), com as
+  três: **🔎 Ver fila** (`/manifest-elegiveis` — quem está esperando, com o
+  recorte DIZENDO "1 de N", que é a régua do farol honesto), **📨 Manifestar**
+  (`/manifest-one`, por LINHA) e **🔧 Destravar falhas de infraestrutura**
+  (`/manifest-reset-falhas-infra`).
+  ⚠️ **TRÊS TRAVAS, e as três são de linguagem**: (1) manifestar **PERGUNTA
+  antes** — evento na SEFAZ não se desfaz, e botão por linha é clique fácil;
+  (2) **fila vazia não é "não há pendência"** — chave em cooldown ou com falhas
+  seguidas fica FORA da fila, e o texto diz isso (senão o vazio vira prova de
+  que está tudo capturado, que é a mentira do "0 de 388"); (3) o 🔧 diz que só
+  volta o que falhou por **INFRAESTRUTURA** — recusa da SEFAZ por mérito
+  continua fora, e prometer o contrário faria alguém clicar esperando
+  ressuscitar nota que a SEFAZ recusou por regra.
+  📌 **A PROVA É POR RENDER, NUNCA POR VARREDURA DE FONTE** — a lição de 20/08
+  (o campo do cérebro do CFOP que a varredura dizia estar certo e o dedo do
+  Paulo não achava): `filaManifestacaoBotoes.test.tsx` monta o card, clica e
+  lê o que aparece. 🐛 E ele pegou um detalhe que só existe no DOM: o "não" do
+  texto vai em `<strong>`, então o parágrafo é **partido em três nós** e regex
+  que atravessa a fronteira nunca casa — quem responde é o `textContent`.
 - **🚨 A VARREDURA DOS LEITORES DE DOCUMENTO ACHOU TRÊS DEFEITOS QUE NINGUÉM
   TINHA VISTO** (21/08, à noite — Paulo: *"pode varrer a noite toda"*). Depois
   de fechar a classe da FICHA, apliquei o mesmo método ao DOCUMENTO: levantar os

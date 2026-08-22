@@ -17,10 +17,12 @@
 // montada em pedaços. O remédio é declarar a exceção com o motivo, nunca
 // afrouxar a varredura: teste que grita sem motivo é teste desligado.
 //
-// 📌 As 29 declaradas abaixo são o retrato de 21/08 — sete delas são órfãs de
-// VERDADE (nomeadas no grupo "sem caminho na interface"). Elas não foram
-// apagadas: apagar rota que talvez alguém chame por fora é decisão do dono, e
-// nomear já impede que a próxima sessão as leia como entrega pronta.
+// 📌 As declaradas abaixo são o retrato de 21/08 — sete grupos eram órfãos de
+// VERDADE (nomeados em "sem caminho na interface"). Elas não foram apagadas:
+// apagar rota que talvez alguém chame por fora é decisão do dono, e nomear já
+// impede que a próxima sessão as leia como entrega pronta.
+// ✂️ Em 22/08 o Paulo mandou dar botão a TODAS ("sim, todas com botão, e NFP
+// tbm deve ser corrigido") — a lista encolhe a cada grupo que ganha tela.
 // ============================================================================
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
@@ -58,9 +60,9 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     //
     // Não foram apagadas: remover rota que talvez alguém chame por fora é
     // decisão do Paulo. O que não pode é a próxima sessão lê-las como entrega.
-    '/manifest-elegiveis': 'ÓRFÃ — lista de elegíveis à manifestação que nenhuma tela mostra',
-    '/manifest-one': 'ÓRFÃ — manifestar UM documento; a tela só tem o lote (manifest-pending)',
-    '/manifest-reset-falhas-infra': 'ÓRFÃ — manutenção, sem botão',
+    // ✂️ 22/08: as TRÊS da manifestação saíram daqui — ganharam o card
+    // "🔎 Fila da manifestação" no Diagnóstico da captura (autorização do Paulo:
+    // "sim, todas com botão"). Se a chamada sumir da tela, a varredura acusa.
     '/sincronizar-uma': 'ÓRFÃ — caixa postal de UMA empresa, sem botão',
     '/sync-targeted': 'ÓRFÃ — sincronização dirigida, sem botão',
     '/previa-resumo': 'ÓRFÃ — prévia do resumo de notificações, sem tela',
