@@ -106,6 +106,20 @@ export const CATALOGO_BANCO = [
     { colecao: 'sped_ciap_bens', grupo: 'Integrações', funcionalidade: 'CIAP / Bloco G do SPED Fiscal — bens do imobilizado com crédito de ICMS em 48 parcelas; 1 doc por empresa' },
     { colecao: 'contadores', grupo: 'Cadastro & Acesso', funcionalidade: 'Catálogo de contadores do escritório (identificação dos relatórios) — escolhido por empresa no modal Dados Fiscais' },
     { colecao: 'nbs_codigos_oficiais', grupo: 'Catálogos', funcionalidade: 'Catálogo NBS oficial' },
+
+    // ── 🚨 SETE COLEÇÕES QUE ESTAVAM FORA DO CATÁLOGO (21/08) ──────────────
+    //
+    // O painel Sistema→Banco denuncia órfã em TEMPO DE EXECUÇÃO — e só para
+    // quem o abre (é dev-only). Estas sete viveram invisíveis: coleção sem dono
+    // declarado é coleção que ninguém sabe explicar daqui a três meses. A
+    // varredura `catalogoBancoCompleto.test.ts` passou a fechar a classe.
+    { colecao: 'abrasf_state', grupo: 'Captura', funcionalidade: 'Cursor/última sincronização do trilho ABRASF por empresa (NFS-e municipal)' },
+    { colecao: 'sefaz_state_cte', grupo: 'Captura', funcionalidade: 'Cursor do CTeDistribuicaoDFe (NSU do CT-e) — coleção PRÓPRIA: compartilhar com a do NF-e faria um dos dois ficar "sincronizado" com o cursor do outro' },
+    { colecao: 'sefaz_locks_cte', grupo: 'Captura', funcionalidade: 'Lock da sincronização de CT-e — própria pelo mesmo motivo do cursor' },
+    { colecao: 'dctfweb_transmissoes', grupo: 'Impostos & Guias', funcionalidade: 'Auditoria da transmissão da DCTFWeb: quem transmitiu, departamento, competência e a justificativa escrita quando se seguiu com insumo pendente (trava T3)' },
+    { colecao: 'dctfweb_encerramento_forcado', grupo: 'Impostos & Guias', funcionalidade: 'Quem confirmou seguir com o encerramento da DCTFWeb mesmo com pendência — o QUEM e o QUÊ, para a decisão ter dono' },
+    { colecao: 'pgdas_sonda_sem_movimento', grupo: 'Impostos & Guias', funcionalidade: 'Resultado da sonda do PGDAS-D "sem movimento" — a sonda gasta chamada paga do SERPRO e produz CONHECIMENTO, que precisa sobreviver à sessão que a rodou' },
+    { colecao: 'horario_acesso_bloqueios', grupo: 'Cadastro & Acesso', funcionalidade: 'Registro dos acessos barrados por horário (quem, quando, qual rota) — gravado sem travar a resposta' },
     { colecao: 'nfp_compliance_cache', grupo: 'Catálogos', funcionalidade: 'Cache de compliance NFP' },
     { colecao: 'items', grupo: 'Catálogos', funcionalidade: '⚠ Nome genérico — verificar origem e renomear ou aposentar' },
 

@@ -38,3 +38,65 @@ describe('catálogo do banco', () => {
         expect(calcularDeltas(null, { a: 5 })).toEqual({ a: null });
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 COLEÇÃO SEM DONO DECLARADO — a regra existia e só o painel denunciava
+//
+// A regra é de 31/07: *"toda feature nova que criar coleção adiciona a linha
+// aqui no MESMO PR"*, e o painel Sistema→Banco acusa a órfã. Só que o painel
+// acusa em TEMPO DE EXECUÇÃO e é dev-only — sete coleções viveram invisíveis
+// (cursor e lock do CT-e, estado do ABRASF, as duas auditorias da DCTFWeb, a
+// sonda do PGDAS e o log de bloqueio por horário).
+//
+// Coleção sem dono declarado é coleção que ninguém sabe explicar daqui a três
+// meses. Esta varredura fecha a CLASSE: `.collection('x')` no backend sem linha
+// no catálogo quebra a build.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 toda coleção do backend tem dono no catálogo', () => {
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const { readdirSync, readFileSync, statSync } = require('fs');
+    const { join } = require('path');
+    const RAIZ = join(__dirname, '..', 'sefaz-backend');
+
+    /**
+     * Nomes que aparecem em `.collection(...)` e NÃO são coleção de verdade —
+     * exceção declarada COM o motivo, nunca afrouxando a varredura.
+     */
+    const NAO_E_COLECAO: Record<string, string> = {};
+
+    function varrer(dir: string, out: string[] = []): string[] {
+        for (const nome of readdirSync(dir)) {
+            if (nome.startsWith('.') || nome === 'node_modules') continue;
+            const p = join(dir, nome);
+            if (statSync(p).isDirectory()) varrer(p, out);
+            else if (nome.endsWith('.js') && !nome.endsWith('.d.ts')) out.push(p);
+        }
+        return out;
+    }
+
+    it('nenhuma coleção usada fica fora do catálogo', () => {
+        const catalogadas = new Set(CATALOGO_BANCO.map((c: any) => c.colecao));
+        const fora: string[] = [];
+        for (const arq of varrer(RAIZ)) {
+            if (arq.endsWith('catalogo-banco.js')) continue;
+            const src = readFileSync(arq, 'utf8');
+            for (const m of src.matchAll(/\.collection\(\s*['"]([A-Za-z0-9_]+)['"]/g)) {
+                const nome = m[1];
+                if (catalogadas.has(nome) || NAO_E_COLECAO[nome]) continue;
+                const rel = arq.replace(`${join(__dirname, '..')}/`, '');
+                const linha = `${nome}  (${rel})`;
+                if (!fora.includes(linha)) fora.push(linha);
+            }
+        }
+        if (fora.length) {
+            throw new Error(
+                '\n\n🚧 COLEÇÃO FORA DO CATÁLOGO\n\n'
+                + fora.map((x) => `  · ${x}`).join('\n')
+                + '\n\nToda coleção precisa de dono declarado em `catalogo-banco.js` — é o "controle\n'
+                + 'acirrado" do Paulo (30/07). Sem a linha, ninguém sabe explicar a coleção daqui a\n'
+                + 'três meses, e o painel Sistema→Banco só acusa para quem o abre.\n\n'
+                + 'Adicione a linha no MESMO PR que cria a coleção.\n',
+            );
+        }
+    });
+});
