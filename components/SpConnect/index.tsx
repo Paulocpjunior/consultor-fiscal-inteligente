@@ -21,7 +21,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
-    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram,
+    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
@@ -382,6 +382,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Meta e o estado persistido é o que diz "ligado em …, por …".
     const [igEstado, setIgEstado] = useState<EstadoInstagram | null>(null);
     const [igEventos, setIgEventos] = useState<EventosInstagram | null | undefined>(undefined);
+    const [igAssinaturas, setIgAssinaturas] = useState<AssinaturasInstagram | null>(null);
     const [igEstadoLido, setIgEstadoLido] = useState(false);
     const [igLigando, setIgLigando] = useState(false);
     const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
@@ -389,7 +390,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
         (async () => {
             const r = await estadoInstagram();
-            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgEstadoLido(true); }
+            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgEstadoLido(true); }
         })();
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
@@ -2001,6 +2002,54 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </div>
                                         )
                                     )}
+
+                                    {/* 🔬 O que a META diz que está assinado — pergunta à fonte,
+                                        não à nossa memória do clique no 📡. */}
+                                    {igEstado && (() => {
+                                        if (!igAssinaturas) {
+                                            return (
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                    🔬 Não deu pra perguntar à Meta o que está assinado (a consulta falhou) — recarregue pra tentar de novo.
+                                                </p>
+                                            );
+                                        }
+                                        const subIg = igAssinaturas.doApp.find((s) => s.objeto === 'instagram');
+                                        const cobre = Boolean(subIg && subIg.ativa && subIg.campos.includes('messages'));
+                                        return (
+                                            <div className={`rounded-lg border px-3 py-2 space-y-1 ${cobre
+                                                ? 'border-slate-200 dark:border-slate-700'
+                                                : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'}`}>
+                                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                                    🔬 O que a Meta diz que está assinado (app {igAssinaturas.appId}):
+                                                </p>
+                                                {igAssinaturas.doApp.length === 0 && (
+                                                    <p className="text-[11px] text-red-700 dark:text-red-300">Nenhuma assinatura de webhook no app — clique o 📡 de novo.</p>
+                                                )}
+                                                {igAssinaturas.doApp.map((s) => (
+                                                    <p key={s.objeto} className="text-[11px] text-slate-600 dark:text-slate-300">
+                                                        • <strong>{s.objeto}</strong> → campos: {s.campos.join(', ') || '—'} · {s.ativa ? '✅ ativa' : '🔴 INATIVA'}
+                                                        {s.callback ? ` · callback …${s.callback.slice(-40)}` : ''}
+                                                    </p>
+                                                ))}
+                                                {igAssinaturas.daPagina && (
+                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                        Página assinada por: {igAssinaturas.daPagina.map((a) => `app ${a.appId} (${a.campos.join(', ') || 'sem campos'})`).join(' · ') || 'nenhum app'}
+                                                    </p>
+                                                )}
+                                                {!cobre ? (
+                                                    <p className="text-[11px] font-bold text-red-700 dark:text-red-300">
+                                                        A assinatura do objeto instagram com o campo <code>messages</code> NÃO está de pé do lado da Meta — clique o 📡 de novo; se persistir, o painel de Webhooks do app é quem resolve.
+                                                    </p>
+                                                ) : (igEventos && igEventos.doInstagram === 0 && (
+                                                    <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                                                        <p className="font-bold">A assinatura está de pé e mesmo assim nada chega. Os dois suspeitos que sobram:</p>
+                                                        <p>• <strong>Solicitações de mensagem</strong>: a DM de quem a conta não segue cai em "Message requests", e a Meta pode não avisar enquanto a solicitação não for aceita. Abra o Instagram oficial do @spassessoriacontabil, ACEITE a solicitação da DM de teste e peça pra pessoa mandar OUTRA mensagem.</p>
+                                                        <p>• <strong>Nível de acesso da permissão</strong>: em developers.facebook.com → API_Oficial → Revisão do app → Permissões e recursos, confira <code>instagram_manage_messages</code> — se estiver em "Acesso padrão", a Meta só entrega DM de quem tem papel no app; "Acesso avançado" libera o público.</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 {sondaIg && (

@@ -202,8 +202,63 @@ export async function ligarRecebimentoInstagram(deps = {}) {
 }
 
 /**
+ * 🔬 O que a META diz que está assinado — a resposta da FONTE, não a nossa
+ * memória de ter clicado o 📡. GET /{app}/subscriptions devolve objeto,
+ * campos, callback e `active`; GET /{page}/subscribed_apps devolve o que a
+ * Página assinou. É o degrau seguinte do diagnóstico de 22/08: com o
+ * interruptor do Instagram ligado e ZERO evento cru, a pergunta vira "a
+ * assinatura está mesmo de pé do lado de lá?".
+ */
+export async function assinaturasDoApp(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const web = deps.web || configWebhook(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token) return { ok: false, erro: 'Canal sem token (WHATSAPP_CLOUD_TOKEN).' };
+    if (!web.appSecret) return { ok: false, erro: 'Sem WHATSAPP_APP_SECRET — o token de app é id|secret.' };
+
+    const rApp = await doFetch(`${GRAPH_BASE}/app?fields=id,name`, { headers: { Authorization: `Bearer ${cfg.token}` } });
+    const app = await rApp.json().catch(() => ({}));
+    if (!rApp.ok || !app.id) {
+        return { ok: false, erro: `Não deu pra identificar o app do token: ${app?.error?.message || `HTTP ${rApp.status}`}` };
+    }
+
+    const tokenApp = `${app.id}|${web.appSecret}`;
+    const r = await doFetch(`${GRAPH_BASE}/${app.id}/subscriptions?access_token=${encodeURIComponent(tokenApp)}`);
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}` };
+    const doApp = (Array.isArray(corpo.data) ? corpo.data : []).map((s) => ({
+        objeto: String(s.object || ''),
+        ativa: s.active !== false,
+        callback: s.callback_url || null,
+        campos: (Array.isArray(s.fields) ? s.fields : [])
+            .map((f) => (typeof f === 'string' ? f : f?.name))
+            .filter(Boolean),
+    }));
+
+    // O lado da PÁGINA (best-effort — sem Página o lado do app já responde).
+    let daPagina = null;
+    try {
+        const pag = await paginaDoInstagram(deps);
+        if (pag.ok && pag.pagina.pageToken) {
+            const rp = await doFetch(`${GRAPH_BASE}/${pag.pagina.pageId}/subscribed_apps?fields=subscribed_fields`, {
+                headers: { Authorization: `Bearer ${pag.pagina.pageToken}` },
+            });
+            const cp = await rp.json().catch(() => ({}));
+            if (rp.ok) {
+                daPagina = (Array.isArray(cp.data) ? cp.data : []).map((a) => ({
+                    appId: String(a.id || ''),
+                    campos: Array.isArray(a.subscribed_fields) ? a.subscribed_fields : [],
+                }));
+            }
+        }
+    } catch { /* lado da página fica null — dito, não zerado */ }
+
+    return { ok: true, appId: String(app.id), doApp, daPagina };
+}
+
+/**
  * Responde UMA DM com texto. A janela de 24h é regra da Meta no Instagram
- * também — fora dela a API recusa, e a recusa volta TRADUZIDA (a tela já
+ * também — fora dela a API recusa, e a resposta volta TRADUZIDA (a tela já
  * sabe dizer "janela fechada").
  */
 export async function enviarTextoInstagram({ para, texto }, deps = {}) {
