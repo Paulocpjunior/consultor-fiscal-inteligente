@@ -192,6 +192,19 @@ describe('fiação das DMs do Instagram', () => {
         expect(anexo).toContain('não é suportado');
     });
 
+    it('o diagnóstico de entrega existe: /estado conta os eventos CRUS do IG e a tela separa os dois lados', () => {
+        // Caso real de 22/08: "mandaram uma DM e não chegou". Zero evento cru
+        // = a Meta não entrega (conserto do lado de lá); cru sem conversa =
+        // processamento nosso. Sem o contador, as duas caras são o mesmo
+        // silêncio — e falha de leitura NÃO pode virar "zero".
+        const estado = rotas.slice(rotas.indexOf("get('/instagram/estado'"), rotas.indexOf('export default router'));
+        expect(estado).toContain('whatsapp_webhook_eventos');
+        expect(estado).toContain("payload?.object === 'instagram'");
+        expect(estado).toContain('eventos = null');
+        expect(tela).toContain('Permitir acesso às mensagens');
+        expect(tela).toContain('a Meta não está entregando');
+    });
+
     it('o 📡 existe: rota /instagram/ligar (admin) + estado persistido + botão na tela', () => {
         expect(rotas).toContain("router.post('/instagram/ligar', requireAdmin");
         expect(rotas).toContain("router.get('/instagram/estado', requireAdmin");
