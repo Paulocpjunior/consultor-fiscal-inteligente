@@ -96,45 +96,9 @@ export function avisosDaDeclaracao(meses: MesDeclaracao[]): string[] {
 /**
  * 🚨 O VALOR DIGITADO/COLADO NO "VAI NO DOCUMENTO" — caso APATEL 0371 (21/08).
  *
- * A colaboradora colou os valores do e-Fiscal ("3.241.688,71") e o documento
- * saiu com **324.168.871,00** — cem vezes o faturamento, num papel ASSINADO
- * que ia para banco. O total: R$ 4,2 BILHÕES numa empresa de R$ 42 milhões.
- *
- * A causa não era o parse: era o INPUT CONTROLADO re-formatando a cada tecla.
- * O campo exibia `String(número)` e re-parseava o próprio texto exibido — ao
- * digitar a vírgula, o parse devolvia o número sem ela, o render apagava a
- * vírgula da tela, e os dígitos seguintes grudavam no inteiro: "3241688,71"
- * virava 324168871, tecla a tecla, sem nenhum erro aparecer.
- *
- * A correção tem DUAS metades, e esta função é só uma: (1) o campo passou a
- * guardar o TEXTO cru (rascunho — o mesmo padrão dos campos de CFOP), e
- * (2) o parse mora AQUI, puro e testado, aceitando as formas que chegam de
- * verdade: pt-BR colado do e-Fiscal ("3.241.688,71"), digitado sem milhar
- * ("3241688,71") e a forma JS com ponto decimal ("3241688.71").
+ * A régua MUDOU DE CASA em 22/08: a pergunta ("que número a pessoa digitou?")
+ * nunca foi da Declaração, e o nome deste arquivo foi o que fez nascer uma
+ * segunda cópia no ✍️ Lançar nota sem XML. O dono é `valorDigitado.ts`; aqui
+ * fica só a re-exportação, para quem já importava daqui não mudar.
  */
-export function parseValorMoeda(texto: string): number | null {
-    const t = String(texto ?? '').trim().replace(/^R\$\s*/i, '');
-    if (!t) return null;
-    if (!/^[\d.,\s]+$/.test(t)) return null;
-    const s = t.replace(/\s/g, '');
-
-    let normalizado: string;
-    if (s.includes(',')) {
-        // Vírgula presente ⇒ forma pt-BR: pontos são milhar, vírgula é decimal.
-        normalizado = s.replace(/\./g, '').replace(',', '.');
-    } else {
-        const pontos = (s.match(/\./g) || []).length;
-        const m = /^(\d+)\.(\d{1,2})$/.exec(s);
-        if (pontos === 1 && m) {
-            // Um ponto com 1-2 casas no fim ⇒ decimal JS ("3241688.71").
-            normalizado = s;
-        } else {
-            // "1.234" / "1.234.567" ⇒ pontos de milhar (a forma que o e-Fiscal
-            // imprime quando o valor é redondo).
-            normalizado = s.replace(/\./g, '');
-        }
-    }
-    const n = Number(normalizado);
-    if (!Number.isFinite(n) || n < 0) return null;
-    return Math.round(n * 100) / 100;
-}
+export { parseValorMoeda } from './valorDigitado';
