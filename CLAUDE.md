@@ -43,6 +43,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **O validador do app já sabia** (*"C170: UNID 'X' nao cadastrada no
   0190"*) — mas ele roda DEPOIS, sobre o arquivo pronto. **Conferência que
   existe não substitui régua única**: ela conta o erro, não o impede.
+  🔴 **E A MESMA "MEIA TRAVA" ESTAVA NA PREVALIDAÇÃO: duas recusas já pagas
+  rodavam numa família só.** O **cabeçalho do C100 é o MESMO nos dois
+  arquivos** (`|C100|IND_OPER|IND_EMIT|COD_PART|COD_MOD|COD_SIT|SER|NUM_DOC|
+  CHV_NFE|DT_DOC|DT_E_S|VL_DOC|…` — só o que vem DEPOIS do VL_DOC diverge), e
+  mesmo assim a recusa *"o modelo da chave não confere com o modelo do
+  documento"* (PS VIDROS, **35 ocorrências**) e o limite de `DT_DOC` do Guia
+  3.2.3 só existiam no EFD ICMS/IPI. `sped-c100-regras-comuns.js` é o dono, e
+  as duas passaram a rodar no EFD-Contribuições.
+  🐛 **E O TESTE PEGOU UM ERRO MEU DE CONTAGEM ANTES DE SUBIR — do tipo
+  BARULHENTO, não do silencioso**: eu escrevi que o `DT_FIN` do
+  EFD-Contribuições era o campo **6**; ele é o **7** (o 0000 dele traz
+  `IND_SIT_ESP` e `NUM_REC_ANTERIOR` antes das datas). O campo 6 é o
+  **DT_INI** — que também é uma data VÁLIDA —, então a regra não emudeceria:
+  passaria a acusar **TODA** nota emitida depois do dia 1º, em todo arquivo da
+  família. **Posição de campo é PARÂMETRO por família, nunca dedução do
+  vizinho.**
+  ⚠️ **A100 e D100 ficam de FORA, declarado**: eles têm campos a mais no
+  cabeçalho (`SUB` no D100), então as posições NÃO são as mesmas. Portá-los sem
+  a prova do leiaute produziria o alarme falso que desliga a prevalidação.
   🔴 **E A VARREDURA DA DUPLA ACHOU O CASO EM QUE A CÓPIA JÁ TINHA CUSTADO: o
   0150 e o 0190.** Os dois têm o **MESMO leiaute** nas duas famílias (só o 0000
   é de fato diferente — um tem COD_VER/IND_PERFIL, o outro
