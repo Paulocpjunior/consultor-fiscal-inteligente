@@ -22,7 +22,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
-    codItemDoItem, unidadeDoItem, normalizarUnidade,
+    codItemDoItem, unidadeDoItem, normalizarUnidade, descreverUnidade,
 } from '../sefaz-backend/sped-selecao-documentos.js';
 
 const RAIZ = join(__dirname, '..');
@@ -155,6 +155,28 @@ describe('🚨 UNID — a chave do 0190 tem UMA forma', () => {
     it.each(ESCREVEM_UNID)('%s lê pela régua', (rel) => {
         const src = readFileSync(join(RAIZ, rel), 'utf8');
         expect(src).toMatch(/unidadeDoItem|normalizarUnidade/);
+    });
+
+    // 🔴 A tabela de DESCRIÇÃO tinha DUAS cópias, uma por orquestrador, e elas
+    // já divergiam: a do EFD ICMS/IPI conhecia 'CM' e a do EFD-Contribuições
+    // não. Um item em CM saía "CENTIMETRO" num arquivo e "CM" no outro — dois
+    // arquivos do mesmo mês descrevendo a mesma unidade de dois jeitos, que é
+    // a divergência do `getContadorPadrao` (20/08) na MESMA dupla.
+    it('a descrição do 0190 é UMA, e o CM que faltava numa das cópias está lá', () => {
+        expect(descreverUnidade('CM')).toBe('CENTIMETRO');
+        expect(descreverUnidade('un')).toBe('UNIDADE');
+        // Unidade fora da tabela repete o código — descrever no escuro seria
+        // inventar, e o código já é a informação.
+        expect(descreverUnidade('BDJ')).toBe('BDJ');
+    });
+
+    it('e as duas cópias da tabela foram DELETADAS — código morto é isca', () => {
+        for (const rel of [
+            'sefaz-backend/sped-fiscal-orchestrator.js',
+            'sefaz-backend/sped-contrib-orchestrator.js',
+        ]) {
+            expect(readFileSync(join(RAIZ, rel), 'utf8')).not.toContain('const UNIDADES_PADRAO');
+        }
     });
 
     it('e nenhum normaliza a unidade por conta própria', () => {

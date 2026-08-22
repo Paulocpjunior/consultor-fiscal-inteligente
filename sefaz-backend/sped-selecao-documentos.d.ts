@@ -93,3 +93,9 @@ export function normalizarUnidade(u: unknown): string;
 
 /** A unidade do item de documento, já na forma que o 0190 cadastra. */
 export function unidadeDoItem(item: unknown): string;
+
+/**
+ * DESCR_UNID do 0190. A tabela tinha duas cópias divergentes (a do ICMS/IPI
+ * conhecia 'CM', a do Contribuições não). Unidade fora dela repete o código.
+ */
+export function descreverUnidade(codigo: unknown): string;

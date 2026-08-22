@@ -379,3 +379,29 @@ export function unidadeDoItem(item) {
     const i = item || {};
     return normalizarUnidade(i.uCom || i.unidade) || 'UN';
 }
+
+/**
+ * DESCR_UNID do 0190 — a descrição da unidade.
+ *
+ * 🚨 A tabela existia em DUAS cópias, uma em cada orquestrador, e elas já
+ * divergiam: a do EFD ICMS/IPI tinha **`CM: CENTIMETRO`** e a do
+ * EFD-Contribuições não. Um item em CM saía descrito como *"CENTIMETRO"* num
+ * arquivo e *"CM"* no outro — **dois arquivos do mesmo mês descrevendo a mesma
+ * unidade de dois jeitos**, que é a divergência do `getContadorPadrao` (20/08)
+ * na mesma dupla de orquestradores.
+ *
+ * Unidade fora da tabela repete o próprio código: descrever no escuro seria
+ * inventar, e o código já é a informação.
+ */
+const UNIDADES_PADRAO = {
+    UN: 'UNIDADE', KG: 'QUILOGRAMA', L: 'LITRO', LT: 'LITRO',
+    M: 'METRO', M2: 'METRO QUADRADO', M3: 'METRO CUBICO',
+    CX: 'CAIXA', PC: 'PECA', PCT: 'PACOTE', PAR: 'PAR',
+    DZ: 'DUZIA', TON: 'TONELADA', G: 'GRAMA', ML: 'MILILITRO',
+    CM: 'CENTIMETRO',
+};
+
+export function descreverUnidade(codigo) {
+    const c = normalizarUnidade(codigo);
+    return UNIDADES_PADRAO[c] || c;
+}

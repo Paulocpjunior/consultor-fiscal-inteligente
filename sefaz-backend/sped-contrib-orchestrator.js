@@ -32,7 +32,7 @@ import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
-    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, unidadeDoItem,
+    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, unidadeDoItem, descreverUnidade,
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
 import { participanteDoDocumento } from './participante-doc-helper.js';
@@ -351,14 +351,4 @@ function determinarRegimeApuracao(empresa) {
     return '2';
 }
 
-const UNIDADES_PADRAO = {
-    'UN': 'UNIDADE', 'KG': 'QUILOGRAMA', 'L': 'LITRO', 'LT': 'LITRO',
-    'M': 'METRO', 'M2': 'METRO QUADRADO', 'M3': 'METRO CUBICO',
-    'CX': 'CAIXA', 'PC': 'PECA', 'PCT': 'PACOTE', 'PAR': 'PAR',
-    'DZ': 'DUZIA', 'TON': 'TONELADA', 'G': 'GRAMA', 'ML': 'MILILITRO',
-};
-
-function descreverUnidade(codigo) {
-    return UNIDADES_PADRAO[codigo.toUpperCase()] || codigo.toUpperCase();
-}
 
