@@ -304,10 +304,13 @@ async function analisarDasSegregacao(empresaId, empresa) {
 async function analisarIssLocal(empresaId, empresa) {
     const db = fa().firestore();
     // 🚨 O RÓTULO TEM DUAS FORMAS — e a consulta conhecia UMA. A NFS-e do
-    // **ADN** (NFS-e Nacional) grava `tipo: 'nfseNacional'`, então ela nunca
-    // chegava aqui: a tese saía "sem_oportunidade" sem ter olhado essas notas.
-    // Duas igualdades (as duas usam índice) e união por id — varrer a coleção
-    // inteira custaria leitura em toda NF-e da empresa, por nada.
+    // **ADN** (NFS-e Nacional) era gravada com `tipo: 'nfseNacional'`, então
+    // ela nunca chegava aqui: a tese saía "sem_oportunidade" sem ter olhado
+    // essas notas. A gravação passou a usar `'NFSe'` (com o trilho em
+    // `tipoDoc`), mas **o acervo já capturado continua com o rótulo antigo** —
+    // por isso as DUAS formas seguem sendo consultadas. Duas igualdades (as
+    // duas usam índice) e união por id: varrer a coleção inteira custaria
+    // leitura em toda NF-e da empresa, por nada.
     const porId = new Map();
     for (const rotulo of ['NFSe', 'nfseNacional']) {
         const snap = await fetchAllDocs(

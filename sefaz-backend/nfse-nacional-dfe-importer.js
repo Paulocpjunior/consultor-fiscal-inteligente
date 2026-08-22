@@ -24,6 +24,10 @@
 import admin from 'firebase-admin';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
+import {
+    documentoDaNfseNacional, lacunasDaNfseNacional,
+    eventoDaNfseNacional, eventoJaRegistrado,
+} from './nfse-nacional-gravacao.js';
 
 const COLLECTION = 'documentos_fiscais';
 const STORAGE_PREFIX = 'nfse-nacional';
@@ -181,12 +185,9 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
         console.warn(`[nfse-nac-dfe importer] falha gravando XML em storage: ${e.message}`);
     }
 
-    // Persistência metadados
-    const payload = {
+    const comum = {
         empresaId,
         empresaCnpj: String(empresaCnpj).replace(/\D/g, ''),
-        tipo: meta.tipoDoc,
-        ...meta,
         nsu: item.nsu || null,
         schema: item.schema || null,
         storagePath,
@@ -196,9 +197,45 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
         capturadoEm: admin.firestore.FieldValue.serverTimestamp(),
     };
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 O EVENTO NÃO PODE APAGAR A NOTA
+    //
+    // O `docId` é a CHAVE nos DOIS casos — e a chave do evento é a **da NFS-e
+    // a que ele se refere**. Com `merge: true` e `tipo: meta.tipoDoc`, o
+    // evento de cancelamento reescrevia o `tipo` do documento para
+    // `'eventoNfseNacional'`: a nota deixava de ser nota, sumindo de todo
+    // leitor que pergunta pelo tipo. É a família do stub que o merge
+    // ressuscitava (11/08, MV LIDER 639), na direção contrária.
+    //
+    // Agora o evento entra em `eventos[]` — o array que `docCancelado` já lê —
+    // sem tocar na identidade do documento.
+    // ═══════════════════════════════════════════════════════════════════════
+    if (tipo === 'evento') {
+        const evento = eventoDaNfseNacional(meta);
+        const eventosAtuais = existing.exists ? (existing.data()?.eventos || []) : [];
+        const payloadEvento = { ...comum };
+        if (evento && !eventoJaRegistrado(eventosAtuais, evento)) {
+            payloadEvento.eventos = [...eventosAtuais, evento];
+        }
+        await ref.set(payloadEvento, { merge: true });
+        return { status: 'novo', chave: meta.chave, tipo: meta.tipoDoc, evento: true };
+    }
+
+    // ⚠️ O `...meta` continua entrando (ele é o que o parser leu do XML), mas
+    // DEPOIS vem o que os leitores do app precisam — direção, competência,
+    // rótulo, valor e blocos de participante —, derivado do próprio documento.
+    const derivado = documentoDaNfseNacional(meta, empresaCnpj);
+    const payload = { ...comum, ...meta, ...derivado };
+
     await ref.set(payload, { merge: true });
 
-    return { status: 'novo', chave: meta.chave, tipo: meta.tipoDoc };
+    // O que NÃO deu para derivar volta NOMEADO: nota que entra torta e calada
+    // é a que ninguém acha depois.
+    const lacunas = lacunasDaNfseNacional(meta, empresaCnpj);
+    return {
+        status: 'novo', chave: meta.chave, tipo: meta.tipoDoc,
+        ...(lacunas.length ? { lacunas } : {}),
+    };
 }
 
 /**
