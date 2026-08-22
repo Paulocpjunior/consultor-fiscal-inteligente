@@ -311,6 +311,20 @@ export const sondarInstagram = () =>
         sobreRestringirAtendentes: { titulo: string; texto: string };
     }>('/api/admin/whatsapp/instagram/sondar');
 
+/** Estado persistido do recebimento das DMs (null = 📡 nunca clicado). */
+export interface EstadoInstagram {
+    ligadoEm: string; ligadoPor: string | null;
+    appId: string; callback: string;
+    pageId: string; igId: string | null; igUsername: string | null;
+}
+
+export const estadoInstagram = () =>
+    req<{ estado: EstadoInstagram | null }>('/api/admin/whatsapp/instagram/estado');
+
+/** 📡 Liga o recebimento das DMs (assina webhook + Página na Meta). Idempotente. */
+export const ligarInstagram = () =>
+    post<EstadoInstagram>('/api/admin/whatsapp/instagram/ligar', {});
+
 // ─── Atendentes ↔ filas (admin) ─────────────────────────────────────────────
 
 export interface Atendente {

@@ -21,6 +21,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
+    estadoInstagram, ligarInstagram, EstadoInstagram,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
@@ -376,6 +377,26 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setSondandoIg(false);
         if (r.ok) setSondaIg({ conclusao: r.conclusao, sondas: r.sondas, sobreRestringirAtendentes: r.sobreRestringirAtendentes });
         else setSondaIgErro(r.error || 'A sonda não respondeu.');
+    };
+    // 📡 Recebimento das DMs — nasce DESLIGADO; o botão assina o webhook na
+    // Meta e o estado persistido é o que diz "ligado em …, por …".
+    const [igEstado, setIgEstado] = useState<EstadoInstagram | null>(null);
+    const [igEstadoLido, setIgEstadoLido] = useState(false);
+    const [igLigando, setIgLigando] = useState(false);
+    const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
+    useEffect(() => {
+        if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
+        (async () => {
+            const r = await estadoInstagram();
+            if (r.ok) { setIgEstado(r.estado || null); setIgEstadoLido(true); }
+        })();
+    }, [cfgAberta, cfgAba, igEstadoLido]);
+    const ligarIg = async () => {
+        setIgLigando(true); setIgLigarErro(null);
+        const r = await ligarInstagram();
+        setIgLigando(false);
+        if (r.ok) setIgEstado({ ligadoEm: r.ligadoEm, ligadoPor: r.ligadoPor, appId: r.appId, callback: r.callback, pageId: r.pageId, igId: r.igId, igUsername: r.igUsername });
+        else setIgLigarErro(r.error || 'A Meta recusou a assinatura.');
     };
     const [atendentes, setAtendentes] = useState<Atendente[]>([]);
     const [atdErro, setAtdErro] = useState<string | null>(null);
@@ -1912,11 +1933,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         {cfgAba === 'instagram' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Esta aba <strong>pergunta à Meta</strong> se o token que já usamos no WhatsApp
-                                    também enxerga uma Página do Facebook com o Instagram vinculado — e{' '}
-                                    <strong>não linka nada</strong>. O token do WhatsApp foi concedido só pras
-                                    permissões do WhatsApp; DM do Instagram é outro produto da Graph API, com
-                                    permissão própria.
+                                    A <strong>sonda</strong> pergunta à Meta se o token enxerga uma Página com o
+                                    Instagram vinculado — ela <strong>não liga nada</strong>. Quem liga o
+                                    recebimento das DMs é o botão <strong>📡</strong> logo abaixo, e só ele.
                                 </p>
 
                                 <button onClick={rodarSondaIg} disabled={sondandoIg}
@@ -1924,6 +1943,31 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     {sondandoIg ? 'Perguntando à Meta…' : '🔎 Sondar o estado na Meta'}
                                 </button>
                                 {sondaIgErro && <p className="text-[11px] text-red-600 dark:text-red-400">{sondaIgErro}</p>}
+
+                                {/* ── 📡 Recebimento das DMs (nasce DESLIGADO, como o bot) ── */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-1.5">
+                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">📡 Recebimento das DMs no inbox</p>
+                                    {igEstado ? (
+                                        <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                            ✅ Ligado em {new Date(igEstado.ligadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                                            {igEstado.ligadoPor ? ` por ${igEstado.ligadoPor}` : ''} — Página {igEstado.pageId}
+                                            {igEstado.igUsername ? ` · @${igEstado.igUsername}` : ''}. Religar só re-afirma a assinatura (não duplica nada).
+                                        </p>
+                                    ) : (
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            Desligado. O botão assina o webhook do Instagram na Meta: a DM passa a
+                                            entrar aqui como conversa <strong>📷 Instagram</strong>, na triagem da
+                                            Recepção — <strong>o bot não roda nas DMs</strong> (menu numérico é
+                                            contrato do WhatsApp); quem conduz é gente. Nesta fase a resposta é
+                                            por <strong>texto</strong>, dentro da janela que a Meta dá.
+                                        </p>
+                                    )}
+                                    <button onClick={ligarIg} disabled={igLigando}
+                                        className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {igLigando ? 'Assinando na Meta…' : igEstado ? '📡 Religar (re-afirmar assinatura)' : '📡 Ligar recebimento das DMs'}
+                                    </button>
+                                    {igLigarErro && <p className="text-[11px] text-red-600 dark:text-red-400">{igLigarErro}</p>}
+                                </div>
 
                                 {sondaIg && (
                                     <>
@@ -2745,6 +2789,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </div>
                                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                                                 <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">{rotuloCurtoFila(c.fila)}</span>
+                                                {c.canal === 'instagram' && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-300">📷 Instagram</span>}
                                                 {c.situacao === 'resolvida' && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">✅ resolvida</span>}
                                                 {c.transferidaDe && !c.atribuidoA && c.situacao !== 'resolvida' && (
                                                     <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">↪ de {rotuloCurtoFila(c.transferidaDe)}</span>
@@ -2778,9 +2823,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[13px] font-bold text-slate-800 dark:text-slate-100 truncate">{nomeExibicao(sel)}</p>
                                     <p className="text-[10px] text-slate-400 truncate">
-                                        {formatarNumeroBr(sel.numero)} · {rotuloCurtoFila(sel.fila)}
+                                        {sel.canal === 'instagram' ? '📷 DM do Instagram' : formatarNumeroBr(sel.numero)} · {rotuloCurtoFila(sel.fila)}
                                         {sel.protocolo ? ` · protocolo ${sel.protocolo}` : ''}
-                                        {multiCanal ? ` · 📞 ${rotuloCanal(sel.canalId)}` : ''}
+                                        {multiCanal && sel.canal !== 'instagram' ? ` · 📞 ${rotuloCanal(sel.canalId)}` : ''}
                                     </p>
                                 </div>
                             </div>
@@ -2984,21 +3029,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <div className="flex items-end gap-2">
                                         <input ref={inputAnexo} type="file" className="hidden"
                                             onChange={(e) => mandarAnexo(e.target.files?.[0] || null)} />
-                                        <button
-                                            onClick={suporte.suportado ? comecarGravacao : () => setErroEnvio(`${suporte.motivo} ${suporte.acao}`)}
-                                            title={suporte.suportado ? 'Gravar áudio' : suporte.motivo}
-                                            className={`shrink-0 px-3 py-2 rounded-xl border ${suporte.suportado
-                                                ? 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                                                : 'border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600'}`}>
-                                            🎤
-                                        </button>
-                                        <button
-                                            onClick={() => inputAnexo.current?.click()}
-                                            disabled={anexando}
-                                            title="Anexar arquivo, foto ou documento (o texto escrito vira legenda)"
-                                            className="shrink-0 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40">
-                                            {anexando ? '⏳' : '📎'}
-                                        </button>
+                                        {/* 📷 DM do Instagram: esta fase responde TEXTO — áudio e
+                                            anexo saem por outra API e ainda não foram construídos.
+                                            Botão que não faz nada é pior que botão nenhum. */}
+                                        {sel.canal !== 'instagram' && (
+                                            <>
+                                                <button
+                                                    onClick={suporte.suportado ? comecarGravacao : () => setErroEnvio(`${suporte.motivo} ${suporte.acao}`)}
+                                                    title={suporte.suportado ? 'Gravar áudio' : suporte.motivo}
+                                                    className={`shrink-0 px-3 py-2 rounded-xl border ${suporte.suportado
+                                                        ? 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                        : 'border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600'}`}>
+                                                    🎤
+                                                </button>
+                                                <button
+                                                    onClick={() => inputAnexo.current?.click()}
+                                                    disabled={anexando}
+                                                    title="Anexar arquivo, foto ou documento (o texto escrito vira legenda)"
+                                                    className="shrink-0 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40">
+                                                    {anexando ? '⏳' : '📎'}
+                                                </button>
+                                            </>
+                                        )}
                                         <textarea
                                             value={texto}
                                             onChange={(e) => setTexto(e.target.value)}
@@ -3014,6 +3066,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         >
                                             {enviando ? '…' : 'Enviar ➤'}
                                         </button>
+                                    </div>
+                                ) : sel.canal === 'instagram' ? (
+                                    <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+                                        📷 Janela do Instagram fechada — no Instagram <strong>não há template</strong>: aguarde o cliente escrever de novo (isso reabre a janela).
                                     </div>
                                 ) : (
                                     <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
@@ -3035,7 +3091,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Contato</p>
                                 <p className="text-[13px] font-bold text-slate-800 dark:text-slate-100">{nomeExibicao(sel)}</p>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">{formatarNumeroBr(sel.numero)}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">{sel.canal === 'instagram' ? '📷 DM do Instagram' : formatarNumeroBr(sel.numero)}</p>
                             </div>
                             <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cliente · cadastro central</p>

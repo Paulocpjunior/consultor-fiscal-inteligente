@@ -38,6 +38,7 @@ import { configWhatsapp, GRAPH_BASE, enviarTextoLivre, enviarMidiaWhatsapp } fro
 import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaValida } from './whatsapp-atendimento.js';
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
+import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -153,6 +154,92 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
         naoLidas: admin.firestore.FieldValue.increment(1),
         atualizadoEm: agora,
     }, { merge: true });
+}
+
+/**
+ * 📷 Grava UMA DM do Instagram (entrada OU eco de saída) + contato + conversa.
+ * Idempotente pelo mid da Meta. A conversa é `ig_{IGSID}` com canal
+ * 'instagram' na MESMA coleção — fila/assumir/transferir/relatório leem a
+ * conversa, então funcionam sem mudar. O BOT NÃO roda aqui (decisão do
+ * módulo instagram-dm.js): DM entra na triagem da Recepção e gente conduz.
+ */
+async function gravarMensagemInstagram(db, m) {
+    const agora = new Date().toISOString();
+    const eco = m.direcao === 'saida';
+    const anexo = m.anexos[0] || null;
+    const msgRef = db.collection('whatsapp_mensagens').doc(m.metaMessageId);
+    // O eco da NOSSA resposta volta com o MESMO mid do envio: o doc já existe
+    // com enviadoPor = atendente, e sobrescrever com null apagaria a autoria
+    // (o relatório conta resposta humana por esse campo). Só o eco de fora
+    // (Business Suite) cria doc novo — esse sim com enviadoPor null.
+    const ecoJaNosso = eco ? (await msgRef.get()).exists : false;
+    if (!ecoJaNosso) {
+        await msgRef.set({
+            conversaId: m.conversaId,
+            direcao: m.direcao,
+            tipo: anexo ? anexo.tipo : 'text',
+            texto: m.texto,
+            // O link da CDN da Meta expira, mas é o que a DM entrega — a tela
+            // usa enquanto vale; anexo do Instagram não passa pelo download de
+            // mídia do WhatsApp (media id é conceito da WABA, não existe aqui).
+            midia: anexo ? { link: anexo.url, mime: null, nomeArquivo: null, baixada: true } : null,
+            timestamp: m.timestamp,
+            canal: 'instagram',
+            // Eco = a Página respondeu por OUTRA plataforma (Business Suite).
+            // enviadoPor null é a honestidade de sempre: não se afirma QUEM.
+            ...(eco ? { statusEntrega: 'enviado', enviadoPor: null } : {}),
+            recebidoEm: agora,
+        }, { merge: true });
+    }
+
+    const contatoRef = db.collection('whatsapp_contatos').doc(m.conversaId);
+    const contato = await contatoRef.get();
+    await contatoRef.set({
+        numero: m.conversaId,
+        canal: 'instagram',
+        ...(contato.exists ? {} : { origem: 'instagram', criadoEm: agora, empresaId: null }),
+        atualizadoEm: agora,
+    }, { merge: true });
+
+    await db.collection('whatsapp_conversas').doc(m.conversaId).set({
+        numero: m.conversaId,
+        canal: 'instagram',
+        ultimaMensagem: { resumo: resumoDaMensagemIg(m), direcao: m.direcao, em: m.timestamp || agora },
+        // Só mensagem DO CLIENTE abre/renova a janela e conta não lida — o eco
+        // é resposta nossa, não pendência.
+        ...(eco ? {} : {
+            janela24hAte: janela24hAte(m.timestamp || agora),
+            naoLidas: admin.firestore.FieldValue.increment(1),
+        }),
+        atualizadoEm: agora,
+    }, { merge: true });
+    return { contatoNovo: !contato.exists, contatoNome: contato.data()?.nomePerfil || null };
+}
+
+/**
+ * Best-effort: nome/username do perfil do Instagram pro contato recém-criado.
+ * Falha NÃO derruba nada — sem perfil a tela mostra "Instagram" e segue.
+ */
+async function preencherPerfilInstagram(db, conversaId, igsid) {
+    try {
+        const pag = await paginaDoInstagram();
+        if (!pag.ok) return;
+        const token = pag.pagina.pageToken;
+        if (!token) return;
+        const r = await fetch(`${GRAPH_BASE}/${igsid}?fields=name,username`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const corpo = await r.json().catch(() => ({}));
+        if (!r.ok) return;
+        const nome = corpo.name || (corpo.username ? `@${corpo.username}` : null);
+        if (!nome) return;
+        await db.collection('whatsapp_contatos').doc(conversaId).set({
+            nomePerfil: nome,
+            ...(corpo.username ? { igUsername: corpo.username } : {}),
+        }, { merge: true });
+    } catch (e) {
+        console.warn('[whatsapp/instagram] perfil não lido (segue sem nome):', e.message);
+    }
 }
 
 /**
@@ -437,6 +524,40 @@ router.post('/webhook', async (req, res) => {
             recebidoEm: agora,
             payload: req.body,
         }, { merge: true });
+
+        // ── 📷 Instagram: MESMO endpoint, outro objeto ──────────────────────
+        // A assinatura já foi validada (o app secret assina TODOS os webhooks
+        // do app). DM entra nas MESMAS coleções com id ig_{IGSID}; o bot NÃO
+        // roda (decisão registrada no instagram-dm.js) — triagem é humana.
+        if (req.body?.object === 'instagram') {
+            const ig = extrairEventosInstagram(req.body);
+            const gravadas = [];
+            for (const m of ig.mensagens) {
+                const r = await gravarMensagemInstagram(db, m);
+                gravadas.push({ m, ...r });
+            }
+            const entradas = gravadas.filter((g) => g.m.direcao === 'entrada');
+            if (gravadas.length) {
+                setImmediate(async () => {
+                    for (const g of gravadas) {
+                        if (g.contatoNovo) await preencherPerfilInstagram(db, g.m.conversaId, g.m.igsid);
+                    }
+                    for (const g of entradas) {
+                        try {
+                            const conversa = (await db.collection('whatsapp_conversas').doc(g.m.conversaId).get()).data() || {};
+                            const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+                            await notificarMensagem({
+                                msg: { de: g.m.conversaId, nomePerfil: g.contatoNome, texto: g.m.texto, midia: g.m.anexos[0] || null },
+                                conversa, config: resolverConfig(cfgDoc.data()), canalRotulo: 'Instagram',
+                            });
+                        } catch (e) {
+                            console.warn('[whatsapp/push] IG falhou (webhook intacto):', e.message);
+                        }
+                    }
+                });
+            }
+            return res.status(200).json({ ok: true, instagram: gravadas.length });
+        }
 
         // 2) Extrai e grava.
         const ev = extrairEventos(req.body);
