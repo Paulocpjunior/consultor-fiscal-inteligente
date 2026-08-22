@@ -99,7 +99,17 @@ router.get('/diagnostico/:cnpj', requireAdmin, async (req, res) => {
         });
 
         // 4) Tem cert A1?
-        const certSnap = await db.collection('sefaz_certificados_empresa').doc(empresa.id).get();
+        //
+        // 🚨 A COLEÇÃO ESTAVA ERRADA (21/08, varredura das coleções × catálogo):
+        // este diagnóstico lia `sefaz_certificados_empresa`, que **nenhum ponto
+        // do app escreve** — o cadastro de certificado por empresa é
+        // `empresas_certificados`, usado pela captura, pelo cron de alerta e
+        // pelo túnel. A leitura devolvia SEMPRE vazio, então o checklist dizia
+        // "Certificado A1 cadastrado: NÃO" para toda empresa, inclusive as que
+        // têm um válido. Consulta que só devolve vazio é indistinguível de
+        // "não tem" — o mesmo defeito da ficha lida de uma coleção inexistente
+        // (19/08, que fez o saldo de IPI ficar 0,00 para sempre).
+        const certSnap = await db.collection('empresas_certificados').doc(empresa.id).get();
         const temCert = certSnap.exists;
         let certInfo = null;
         if (temCert) {

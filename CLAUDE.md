@@ -264,6 +264,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   chama `/analise-completa`). **Não apaguei nenhuma**: remover rota que talvez
   alguém chame por fora é decisão do Paulo. Nomear já impede que a próxima
   sessão as leia como entrega pronta.
+  🔴 **(23) E A VARREDURA DAS COLEÇÕES ACHOU UM DIAGNÓSTICO QUE MENTIA PARA
+  TODA EMPRESA.** O checklist do ABRASF lia
+  `db.collection('sefaz_certificados_empresa')` — coleção que **NENHUM ponto do
+  app escreve** (o cadastro de certificado é `empresas_certificados`, usado pela
+  captura, pelo cron de alerta e pelo túnel). A leitura devolvia SEMPRE vazio,
+  então o item *"Certificado A1 cadastrado"* saía **NÃO** para todas, inclusive
+  as que têm um válido. É o defeito da ficha lida de `lucro_fichas` (19/08, que
+  deixou o saldo de IPI em 0,00 para sempre): **consulta que só devolve vazio é
+  indistinguível de "não tem"**.
+  📌 **E O CAMINHO ATÉ ELE FOI O CATÁLOGO**: a regra de 31/07 manda toda coleção
+  ter dono declarado em `catalogo-banco.js`, e o painel Sistema→Banco denuncia a
+  órfã — só que em TEMPO DE EXECUÇÃO e só para quem o abre (é dev-only). **Sete
+  coleções viviam invisíveis** (cursor e lock do CT-e, estado do ABRASF, as duas
+  auditorias da DCTFWeb, a sonda do PGDAS, o log de bloqueio por horário) e a
+  oitava era esta, que nem existe. As sete entraram no catálogo e
+  `catalogoBancoCompleto` fecha a classe: `.collection('x')` sem linha no
+  catálogo quebra a build. Provada criando uma coleção órfã de propósito.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
