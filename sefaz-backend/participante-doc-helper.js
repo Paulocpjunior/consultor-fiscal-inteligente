@@ -106,11 +106,37 @@ export function cfopNaOticaDeEntrada(cfop) {
  */
 export function participanteDoDocumento(d, empresaCnpj) {
     if (!d) return null;
-    if (d.direcao === 'saida') return d.destinatario || d.tomador || null;
-    if (ehNotaPropriaDeEntrada(d, empresaCnpj).sim) {
-        return d.destinatario || d.tomador || d.emitente || null;
+    if (ladoDaContraparte(d, empresaCnpj) === 'destinatario') {
+        return d.destinatario || d.tomador || (d.direcao === 'saida' ? null : d.emitente) || null;
     }
     return d.emitente || d.prestador || null;
+}
+
+/**
+ * EM QUAL LADO do documento está a contraparte — `'emitente'` ou
+ * `'destinatario'`.
+ *
+ * É a MESMA régua do `participanteDoDocumento`, na forma que a TELA precisa: o
+ * arquivo quer o objeto do participante, a lista e o PDF querem escolher entre
+ * as duas colunas já normalizadas da view. Duas implementações da mesma
+ * pergunta é como a tela começa a discordar do arquivo.
+ *
+ * 🚨 **NÃO SE RESOLVE PELA DIREÇÃO EFETIVA** — e é aqui que a leitura "óbvia"
+ * erra. Na nota PRÓPRIA DE ENTRADA (art. 136) a direção efetiva é ENTRADA, e
+ * mesmo assim a contraparte mora no **DESTINATÁRIO**: o emitente ali é a
+ * própria empresa. Trocar este `d.direcao` cru por `direcaoEfetivaDoc` faria a
+ * lista passar a mostrar o nome do PRÓPRIO CLIENTE na coluna da contraparte —
+ * a correção "certa" produzindo o defeito.
+ *
+ * ⚠️ Por isso o campo cru fica, com o caso da própria entrada tratado
+ * explicitamente na linha seguinte. É a mesma decisão declarada em
+ * `contraparteDoc`.
+ */
+export function ladoDaContraparte(d, empresaCnpj) {
+    if (!d) return 'emitente';
+    if (d.direcao === 'saida') return 'destinatario';
+    if (ehNotaPropriaDeEntrada(d, empresaCnpj).sim) return 'destinatario';
+    return 'emitente';
 }
 
 /**

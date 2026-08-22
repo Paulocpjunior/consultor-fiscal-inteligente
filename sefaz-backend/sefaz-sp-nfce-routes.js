@@ -22,6 +22,7 @@ import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { carregarEmpresas, acharDono } from './xml-empresa-matcher.js';
 import { repararDocsSemDono } from './docs-sem-dono.js';
+import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const router = express.Router();
 
@@ -249,7 +250,16 @@ router.get('/localizar-doc', requireAdmin, async (req, res) => {
         cnpjEmit: d.cnpjEmit ?? null,
         cnpjDest: d.cnpjDest ?? null,
         xNomeEmit: d.xNomeEmit ?? null,
-        direcao: d.direcao ?? null,
+        // 🚨 A DIREÇÃO SAI PELA RÉGUA — este é o "onde está a nota?", a tela
+        // que o colaborador abre justamente quando o filtro não achou o
+        // documento. Devolvendo o campo CRU, a compra de produtor rural
+        // (art. 136, gravada como 'saida' até o backfill passar) aparecia
+        // aqui como SAÍDA e mandava procurar do lado errado — contradizendo
+        // o filtro da própria lista, que desde hoje lê pelo dono.
+        direcao: direcaoEfetivaDoc(d) ?? null,
+        // E o `tpNF` viaja junto: é ele que sustenta a resposta, e campo fora
+        // da resposta some da leitura de quem quiser conferi-la depois.
+        tpNF: d.tpNF ?? null,
         valorTotal: d.valorTotal ?? null,
         tipoDoc: d.tipoDoc ?? null,
         temItens: d.temItens ?? null,

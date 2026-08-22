@@ -108,6 +108,7 @@ describe('🚨 o FILTRO — era aqui que a nota sumia', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // @ts-expect-error — módulo backend .js sem .d.ts
 import { convertCfopParaEntrada } from '../sefaz-backend/sped-fiscal-blocoC.js';
+import { ladoDaContraparte, participanteDoDocumento } from '../sefaz-backend/participante-doc-helper.js';
 
 describe('🚨 o SPED Fiscal e o .FML declaram o MESMO lado', () => {
     const dados = { empresa: { cnpj: CNPJ_EMPRESA, dadosFiscais: {} } };
@@ -131,5 +132,68 @@ describe('🚨 o SPED Fiscal e o .FML declaram o MESMO lado', () => {
             expect({ daTela, primeiro: String(doArquivo)[0] })
                 .toEqual({ daTela, primeiro: daTela === 'entrada' ? '1' : '5' });
         }
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E A COLUNA DA CONTRAPARTE LIA O CAMPO CRU — na MESMA linha em que o selo
+// da direção já vinha do dono
+//
+// A lista de documentos e o PDF dela pintavam o selo com `getView(d).direcao`
+// (o dono) e escolhiam entre "emitente" e "destinatário" com `d.direcao`
+// (o campo cru). Duas leituras do mesmo fato na mesma linha — o defeito que
+// esta casa mais paga.
+//
+// 🔴 E ele é do tipo mais traiçoeiro: **hoje o campo cru ACERTA por acidente**.
+// A nota própria de entrada está gravada como 'saida', então o `=== 'entrada'`
+// dá falso e a tela mostra o destinatário — que é, de fato, a contraparte. No
+// dia em que o backfill do sync-cron virar a direção para 'entrada', a MESMA
+// linha passa a mostrar o EMITENTE, que ali é o próprio cliente.
+//
+// ⚠️ E a correção "óbvia" produz o defeito: trocar por `direcaoEfetivaDoc`
+// (que responde ENTRADA) faz a tela mostrar o próprio cliente na hora. A
+// pergunta não é "qual a direção", é **"em qual lado está a contraparte"** —
+// e ela já tinha dono no backend (`participanteDoDocumento`, do C100/0150).
+// `ladoDaContraparte` é a MESMA régua na forma que a tela precisa.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 em qual lado está a contraparte', () => {
+    it('na compra de produtor é o DESTINATÁRIO, mesmo a direção sendo entrada', () => {
+        const doc = compraDeProdutor();
+        expect(getView(doc).direcao).toBe('entrada');
+        expect(ladoDaContraparte(doc, CNPJ_EMPRESA)).toBe('destinatario');
+    });
+
+    it('na venda também é o destinatário, e na compra normal é o emitente', () => {
+        expect(ladoDaContraparte(venda(), CNPJ_EMPRESA)).toBe('destinatario');
+        const compraDeTerceiro = compraDeProdutor({
+            id: 'c1', direcao: 'entrada', tpNF: '1',
+            cnpjEmit: '99999999000199', emitente: { cnpjCpf: '99999999000199', nome: 'FORNECEDOR SA' },
+        });
+        expect(ladoDaContraparte(compraDeTerceiro, CNPJ_EMPRESA)).toBe('emitente');
+    });
+
+    // A trava que importa: a régua da TELA e a do ARQUIVO são a mesma, senão a
+    // coluna que o colaborador confere não bate com o COD_PART do C100.
+    it('a tela e o arquivo escolhem o MESMO lado', () => {
+        for (const doc of [compraDeProdutor(), venda()]) {
+            const lado = ladoDaContraparte(doc, CNPJ_EMPRESA);
+            const doArquivo: any = participanteDoDocumento(doc, CNPJ_EMPRESA);
+            const daTela: any = lado === 'emitente' ? (doc as any).emitente : (doc as any).destinatario;
+            expect({ id: doc.id, cnpj: doArquivo?.cnpjCpf }).toEqual({ id: doc.id, cnpj: daTela?.cnpjCpf });
+        }
+    });
+
+    // 🔴 O caso que a correção "óbvia" quebraria: o lado NÃO é a direção.
+    it('o lado NÃO se deduz da direção efetiva — seria o próprio cliente na coluna', () => {
+        const doc = compraDeProdutor();
+        const seFosseDeduzido = getView(doc).direcao === 'entrada' ? 'emitente' : 'destinatario';
+        expect(seFosseDeduzido).toBe('emitente');   // o que a dedução daria…
+        expect(ladoDaContraparte(doc, CNPJ_EMPRESA)).toBe('destinatario');   // …e o que é.
+        expect((doc as any).emitente.cnpjCpf).toBe(CNPJ_EMPRESA);   // por isso erraria.
+    });
+
+    it('documento sem nada legível cai no emitente, sem explodir', () => {
+        expect(ladoDaContraparte(null)).toBe('emitente');
+        expect(ladoDaContraparte({} as any)).toBe('emitente');
     });
 });

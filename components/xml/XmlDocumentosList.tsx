@@ -15,6 +15,13 @@ import { downloadXmlText } from '../../services/xmlStorageService';
 import NFeStatusCell from './NFeStatusCell';
 // A MESMA régua de cancelamento do selo e dos relatórios — nunca o campo cru.
 import { docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
+// 🚨 EM QUAL LADO ESTÁ A CONTRAPARTE — a lista e o PDF pintavam a direção pelo
+// DONO (`getView`) e escolhiam a coluna do participante pelo campo CRU: duas
+// leituras do mesmo fato na MESMA linha. Hoje o campo cru acerta por acidente
+// na nota própria de entrada, e passaria a ERRAR no dia em que o backfill do
+// sync-cron virar a direção — mostrando o nome do PRÓPRIO cliente na coluna da
+// contraparte. Quem responde é o dono, que já trata o art. 136 explicitamente.
+import { ladoDaContraparte } from '../../sefaz-backend/participante-doc-helper.js';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import EmpresaFilterCombobox from './EmpresaFilterCombobox';
 
@@ -262,11 +269,12 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
             let nome = d.empresaNome || '';
             if (!nome) {
                 const e = d as any;
-                if (d.direcao === 'saida') {
-                    nome = e.emitente?.nome || e.prestador?.nome || '';
-                } else if (d.direcao === 'entrada') {
-                    nome = e.destinatario?.nome || e.tomador?.nome || '';
-                }
+                // A empresa está no lado OPOSTO ao da contraparte — uma régua
+                // só, lida ao contrário, em vez de uma segunda condição que
+                // divergiria da primeira no dia da nota própria de entrada.
+                nome = ladoDaContraparte(d, d.empresaCnpj) === 'destinatario'
+                    ? (e.emitente?.nome || e.prestador?.nome || '')
+                    : (e.destinatario?.nome || e.tomador?.nome || '');
                 if (!nome) {
                     for (const bloco of [e.emitente, e.prestador, e.destinatario, e.tomador]) {
                         if (bloco && normCnpj(bloco.cnpj) === cnpj && bloco.nome) {
@@ -580,7 +588,11 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
                     pdf.setFillColor(250, 250, 252);
                     pdf.rect(tableX, y, W - 2 * M, rowH, 'F');
                 }
-                const contraparte = d.direcao === 'entrada' ? v.emitente : v.destinatario;
+                // 🚨 O papel imprimia a direção pelo DONO (coluna ao lado) e
+                // escolhia a contraparte pelo campo CRU — duas leituras do
+                // mesmo fato na MESMA linha. Quem responde é `ladoDaContraparte`.
+                const contraparte = ladoDaContraparte(d, d.empresaCnpj) === 'emitente'
+                    ? v.emitente : v.destinatario;
                 // Mesma derivação do contador acima — a linha não pode sair
                 // verde no papel enquanto o total já a tirou.
                 // `situacao`, não `status`: é o resultado da RÉGUA, não o campo
@@ -894,10 +906,10 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
                                             </span>
                                         </td>
                                         <td className="px-3 py-1.5 max-w-[200px] truncate text-slate-600 dark:text-slate-300" title={`${getView(d).emitente.nome || '—'} → ${getView(d).destinatario.nome || '—'}`}>
-                                            {d.direcao === 'entrada'
+                                            {ladoDaContraparte(d, d.empresaCnpj) === 'emitente'
                                                 ? (getView(d).emitente.nome || '—')
                                                 : (getView(d).destinatario.nome || '—')}
-                                            <span className="text-[10px] text-slate-400 ml-1">{formatCnpjCpf(d.direcao === 'entrada'
+                                            <span className="text-[10px] text-slate-400 ml-1">{formatCnpjCpf(ladoDaContraparte(d, d.empresaCnpj) === 'emitente'
                                                 ? getView(d).emitente.cnpj
                                                 : getView(d).destinatario.cnpj)}</span>
                                         </td>
