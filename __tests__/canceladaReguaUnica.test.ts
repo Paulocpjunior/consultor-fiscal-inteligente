@@ -66,6 +66,36 @@ const PERMITIDO: Record<string, string> = {
     'services/danfseGenerator.ts': 'NFS-e: cancelamento vem no próprio status, não por evento',
 };
 
+/**
+ * Exceções da varredura da LISTA de rótulos, com o motivo escrito.
+ *
+ * ⚠️ Nenhuma delas é "cansei de consertar": ou o rótulo é ESCRITO ali (a fonte
+ * diz o cancelamento), ou o domínio é outro, ou a leitura é de DIAGNÓSTICO e
+ * não entra em conta de imposto.
+ */
+const PERMITIDO_LISTA: Record<string, string> = {
+    'sefaz-backend/xml-metadata-helper.js': 'é o arquivo DONO da régua',
+    'sefaz-backend/xml-importer.js': 'ESCREVE o status a partir do protocolo/evento',
+    'sefaz-backend/reconferir-cancelamento.js': 'ESCREVE a situação a partir da resposta da SEFAZ',
+    'sefaz-backend/conferencia-chaves-routes.js': 'lê a resposta da SEFAZ, não o campo do documento',
+    'sefaz-backend/nfse-sp-csv-parser.js': 'NFS-e: o cancelamento vem no próprio documento',
+    'sefaz-backend/nfse-sp-csv-importer.js': 'NFS-e: idem, e aqui é ESCRITA',
+    'sefaz-backend/dctfweb-insumos.js': 'NFS-e tomada: o campo não mente (não há evento)',
+    'sefaz-backend/sped-bloco-e-st.js': 'honra o `situacao` DERIVADO, ao lado de docCancelado',
+    'sefaz-backend/sped-difal-c197.js': 'idem — o docCancelado vem antes',
+    'sefaz-backend/prova-captura.js': 'diagnóstico de captura, não entra em conta de imposto',
+    'sefaz-backend/migracao-prontidao.js': 'diagnóstico da fila de migração',
+    'sefaz-backend/rotina-fiscal-routes.js': 'contagem do painel, não é apuração',
+    'sefaz-backend/manifesto-orchestrator.js': 'decide MANIFESTAÇÃO pelo status conhecido do documento',
+    'sefaz-backend/iss-carteira.js': 'ISS: só NFS-e, e nela o cancelamento vem no próprio status',
+    'services/issSpApuracao.ts': 'ISS: só NFS-e, e nela o cancelamento vem no próprio status',
+    'sefaz-backend/reinf-retencoes-pj.js': 'NFS-e tomada (R-4020): o campo não mente',
+    'sefaz-backend/reinf-servicos-tomados.js': 'NFS-e tomada (R-2010): o campo não mente',
+    'sefaz-backend/fila-migracao-routes.js': 'diagnóstico da fila de migração',
+    'services/sageReportService.ts': 'DECLARAÇÃO de tipo (union), não leitura de documento',
+    'sefaz-backend/rotina-fiscal.js': 'status de TAREFA, outro domínio',
+};
+
 function varrer(dir: string, out: string[] = []): string[] {
     for (const nome of readdirSync(dir)) {
         if (nome === 'node_modules' || nome === 'dist' || nome.startsWith('.')) continue;
@@ -109,6 +139,47 @@ describe('🚨 a régua de "cancelada" mora num lugar só', () => {
         }
     });
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 A SEGUNDA FORMA DA MESMA CÓPIA — a que a varredura NÃO via (21/08)
+    //
+    // A varredura acima pega `status === 'cancelado'`. Metade das cópias não
+    // se escreve assim: elas montam uma LISTA de rótulos
+    // (['cancelado','cancelada','denegado','inutilizado']) e perguntam com
+    // `.includes`/`Set.has`. É a MESMA régua duplicada, com outra roupa — e
+    // ela estava viva em quatro lugares onde muda DINHEIRO: o FUNRURAL/DIPAM
+    // (imposto sobre nota cancelada), o DIFAL de aquisição e a rota dele, e o
+    // índice do CIAP (que decide quanto do crédito do imobilizado entra no mês).
+    // ═══════════════════════════════════════════════════════════════════════
+    it('nem pela LISTA de rótulos — a cópia com outra roupa', () => {
+        const infratores: string[] = [];
+        for (const pasta of PASTAS) {
+            for (const arquivo of varrer(join(RAIZ, pasta))) {
+                const rel = relative(RAIZ, arquivo).replace(/\\/g, '/');
+                if (PERMITIDO[rel] || PERMITIDO_LISTA[rel]) continue;
+                const linhas = readFileSync(arquivo, 'utf8').split('\n');
+                linhas.forEach((linha, i) => {
+                    const semComentario = linha.replace(/\/\/.*$/, '');
+                    // A assinatura é LITERAL: 'cancelado' e 'denegado' na mesma
+                    // lista. Régua parecida não conta (falso positivo em teste
+                    // que bloqueia build vira teste desligado).
+                    if (/'cancelad[ao]'/.test(semComentario) && /'denegad[ao]'/.test(semComentario)) {
+                        infratores.push(`${rel}:${i + 1}  ${linha.trim().slice(0, 90)}`);
+                    }
+                });
+            }
+        }
+        if (infratores.length) {
+            throw new Error(
+                '\n\n🚧 SEGUNDA RÉGUA DE CANCELAMENTO (pela LISTA de rótulos)\n\n'
+                + infratores.map((x) => `  · ${x}`).join('\n')
+                + '\n\nA lista parece mais completa que `status === "cancelado"` e erra pelo MESMO\n'
+                + 'motivo: nenhum desses rótulos aparece quando o cancelamento chega por EVENTO.\n'
+                + "Use `docCancelado` — ela já trata denegado e inutilizado como 'não conta no livro'.\n"
+                + 'Exceção legítima se declara em PERMITIDO_LISTA COM o motivo.\n',
+            );
+        }
+    });
+
     it('e os leitores que importam a régua continuam importando', () => {
         const exigido = [
             'components/xml/NFeStatusCell.tsx',
@@ -123,6 +194,62 @@ describe('🚨 a régua de "cancelada" mora num lugar só', () => {
             expect({ rel, importa: /import \{[^}]*docCancelado/.test(fonte) })
                 .toEqual({ rel, importa: true });
         }
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O QUE A CÓPIA PELA LISTA CUSTAVA — imposto sobre nota que não existe mais
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 cancelada por EVENTO não gera imposto', () => {
+    const canceladaPorEvento = {
+        status: 'autorizado',
+        eventos: [{ tpEvento: '110111', cStat: '135' }],
+    };
+
+    it('FUNRURAL/DIPAM: nota cancelada sai da conta (não é operação)', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { classificarNota } = require('../sefaz-backend/dipam-produtor-rural.js');
+        const r = classificarNota({
+            ...canceladaPorEvento,
+            direcao: 'entrada',
+            cnpjEmit: '12345678901', xNomeEmit: 'PRODUTOR RURAL',
+            valorTotal: 10000,
+            itens: [{ cfop: '1101', vProd: 10000, NCM: '08039000' }],
+        });
+        expect(r.funrural.aplica).toBe(false);
+        expect(r.dipam.aplica).toBe(false);
+    });
+
+    it('DIFAL de aquisição: compra cancelada não gera imposto a pagar', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { montarDifalMensal } = require('../sefaz-backend/difal-aquisicao.js');
+        const compra = (over: any = {}) => ({
+            direcao: 'entrada', competencia: '2026-07',
+            chave: '31260702235305000108550010000348531000385216',
+            ufEmit: 'MG', cnpjEmit: '02235305000108',
+            totais: { vNF: 1000 },
+            itens: [{ cfop: '6556', vProd: 1000, vBC: 1000, vICMS: 120, aliqIcms: 12 }],
+            ...over,
+        });
+        const empresa = { cnpj: '31947349000169', uf: 'SP' };
+        const viva = montarDifalMensal({ docs: [compra({ status: 'autorizado' })], empresa });
+        expect(viva.linhas.length).toBe(1);
+
+        const cancelada = montarDifalMensal({
+            docs: [compra(canceladaPorEvento)], empresa,
+        });
+        expect(cancelada.linhas).toEqual([]);
+    });
+
+    it('CIAP: saída cancelada não entra no índice (ele decide o crédito do mês)', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { classificarSaidasCiap } = require('../sefaz-backend/sped-bloco-g.js');
+        const r = classificarSaidasCiap([
+            { ...canceladaPorEvento, direcao: 'saida', valorTotal: 5000, valores: { icms: 900 } },
+            { status: 'autorizado', direcao: 'saida', valorTotal: 1000, valores: { icms: 180 } },
+        ]);
+        expect(r.total).toBe(1000);
+        expect(r.tributadasEExportacao).toBe(1000);
     });
 });
 

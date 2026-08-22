@@ -50,6 +50,8 @@ import { decidirPosseDocumento } from '../sefaz-backend/documento-posse.js';
 // A régua de upgrade mora no módulo PURO (não no xml-importer, que puxa
 // firebase-admin e não entra no bundle do navegador).
 import { decidirGravacaoNFe } from '../sefaz-backend/gravacao-nfe-regua.js';
+// Régua única do cancelamento (status + cStat + evento 110111).
+import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
 
 export interface DocumentoExistente {
     empresaId?: string | null;
@@ -134,8 +136,6 @@ const TRILHO: Record<string, string> = {
     csv: 'importação de CSV',
     pdf: 'importação de PDF',
 };
-
-const CANCELADOS = new Set(['cancelado', 'denegado']);
 
 function quando(iso?: string | null): string {
     const s = texto(iso);
@@ -238,7 +238,10 @@ export function lerDuplicado(
         };
     }
 
-    if (CANCELADOS.has(texto(d.status).toLowerCase())) {
+    // Régua da casa: o cancelamento chega por EVENTO e o campo cru fica
+    // 'autorizado' — dizer "está aqui, normal" sobre nota cancelada manda
+    // o colaborador reimportar procurando um valor que não deve aparecer.
+    if (docCancelado(d as never)) {
         return {
             situacao: 'ja-esta-cancelado',
             permiteReincluir: false,

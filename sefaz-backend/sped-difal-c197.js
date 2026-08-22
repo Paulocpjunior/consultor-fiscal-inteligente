@@ -27,6 +27,8 @@
 // ============================================================================
 
 import { ufEmitente, cfopNaOticaDeEntrada } from './participante-doc-helper.js';
+// Régua única do cancelamento (status + cStat + evento 110111) e da direção.
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -58,7 +60,10 @@ const cfopDoItem = (item) => cfopNaOticaDeEntrada(item?.cfop);
 /** A nota é entrada interestadual com pelo menos um item de uso/consumo ou ativo? */
 export function notaGeraDifalAquisicao(nota, ufEmpresa) {
     if (!nota) return false;
-    if (String(nota.direcao) !== 'entrada') return false;
+    if (direcaoEfetivaDoc(nota) !== 'entrada') return false;
+    // O campo cru mente no cancelamento por evento; o `situacao` derivado
+    // continua honrado para quem já vem classificado.
+    if (docCancelado(nota)) return false;
     if (CANCELADOS.has(String(nota.situacao || nota.status || '').toLowerCase())) return false;
 
     const ufOrigem = ufEmitente(nota);
