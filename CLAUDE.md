@@ -147,6 +147,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   por ele e a UF se perde. Foi o teste que mostrou isso, na primeira tentativa
   de reusar o dono errado: **régua única é o dono da MESMA pergunta**, não o
   dono mais próximo.
+  🔴 **(14) E A VARREDURA DO CANCELAMENTO SÓ VIA METADE DAS CÓPIAS.** A trava de
+  17/08 acusa `status === 'cancelado'`; metade das cópias não se escreve assim
+  — elas montam uma **LISTA de rótulos** (`['cancelado','cancelada','denegado',
+  'inutilizado']`) e perguntam com `.has`/`.includes`. Mesma régua, outra roupa,
+  e o mesmo defeito: **nenhum desses rótulos aparece quando o cancelamento chega
+  por EVENTO**. Estava viva onde muda DINHEIRO — **FUNRURAL/DIPAM** (imposto
+  sobre nota cancelada, na direção mais cara), **DIFAL de aquisição** e a rota
+  dele (imposto A PAGAR sobre compra que não existiu) e o **índice do CIAP** (que
+  decide quanto do crédito do imobilizado entra no mês). O C197 do DIFAL e o
+  bloco G liam também a DIREÇÃO crua.
+  ✂️ Os quatro passaram por `docCancelado`, as constantes mortas foram
+  **DELETADAS** (código morto é a isca para reativar a régua velha) e a
+  varredura ganhou a **segunda assinatura**, com as exceções declaradas COM o
+  motivo — quase todas a mesma: **NFS-e não tem evento, ali o campo é a fonte**.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão

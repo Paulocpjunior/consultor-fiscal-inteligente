@@ -40,7 +40,7 @@
 // "Evento não é nota" mora no helper de metadados, junto de `docCancelado` e
 // `direcaoEfetivaDoc` — as outras duas réguas que decidem na LEITURA o que o
 // campo gravado não conta direito. Reescrever aqui seria a segunda cópia.
-import { ehRegistroDeEvento, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
+import { ehRegistroDeEvento, ehNotaPropriaDeEntrada, docCancelado } from './xml-metadata-helper.js';
 
 /**
  * Rótulo de cada causa que segura nota fora do total.
@@ -657,7 +657,11 @@ export function classificarNota(doc, opts = {}) {
     };
 
     // Cancelada/denegada não é operação — sai da conta sem virar pendência.
-    if (['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d.status)) {
+    // 🚨 QUEM DECIDE É A RÉGUA (21/08): o cancelamento chega por EVENTO e nesse
+    // caminho o campo `status` continua 'autorizado'. Lendo o campo cru, nota
+    // cancelada seguia gerando FUNRURAL e DIPAM — imposto sobre operação que
+    // não existiu, na direção mais cara.
+    if (docCancelado(d)) {
         return { ...base, dipam: naoAplica('Nota cancelada/denegada.'), funrural: naoAplica('Nota cancelada/denegada.') };
     }
 

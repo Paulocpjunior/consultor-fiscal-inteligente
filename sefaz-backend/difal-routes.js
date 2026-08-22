@@ -23,6 +23,8 @@ import { apurarAntecipacoes426APorItem } from './difal-426a.js';
 import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper.js';
 import { COLECAO_NCM, sugerirIvaPorItem } from './ncm-parametros.js';
 
+// Régua única do cancelamento (status + cStat + evento 110111).
+import { docCancelado } from './xml-metadata-helper.js';
 const router = Router();
 
 function getDb() {
@@ -32,7 +34,6 @@ function getDb() {
 
 const so = (v) => String(v || '').replace(/\D/g, '');
 const ehCompetencia = (c) => /^\d{4}-\d{2}$/.test(String(c || ''));
-const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
 router.get('/varredura', requireAuth, async (req, res) => {
     try {
@@ -90,7 +91,7 @@ router.get('/varredura', requireAuth, async (req, res) => {
         for (const s of snaps) {
             const d = s.data() || {};
             const emp = empresas.get(d.empresaId) || porCnpj.get(so(d.empresaCnpj));
-            if (!emp || CANCELADOS.has(d.status)) continue;
+            if (!emp || docCancelado(d)) continue;
             if (modeloDoDoc(d) !== '55') continue;
             const emit = cnpjEmitente(d);
             if (!emit || emit === emp.cnpj || emit.length !== 14) continue;

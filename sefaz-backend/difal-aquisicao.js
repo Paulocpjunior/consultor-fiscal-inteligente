@@ -22,10 +22,11 @@ import {
 } from './participante-doc-helper.js';
 import { classificarItensDifal } from './difal-itens.js';
 
+// Régua única do cancelamento (status + cStat + evento 110111).
+import { docCancelado } from './xml-metadata-helper.js';
 const so = (v) => String(v || '').replace(/\D/g, '');
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
 /** UFs cuja saída para SP é 12% (Sul/Sudeste, exceto ES). */
 const UF_INTER_12 = new Set(['SP', 'RJ', 'MG', 'RS', 'SC', 'PR']);
@@ -61,7 +62,10 @@ export function montarDifalMensal({ docs, empresa, aliqInternaPadrao = ALIQ_INTE
     }
 
     for (const d of docs || []) {
-        if (CANCELADOS.has(d?.status)) continue;
+        // Régua da casa: o cancelamento por EVENTO deixa o `status` em
+        // 'autorizado', e o DIFAL de uma compra cancelada é imposto a pagar
+        // sobre operação que não existiu.
+        if (docCancelado(d)) continue;
         if (modeloDoDoc(d) !== '55') continue;
         // Emitente pela RÉGUA ÚNICA: objeto (importação por XML) OU campo
         // achatado (captura SEFAZ). Ler só o objeto descartava TODA nota

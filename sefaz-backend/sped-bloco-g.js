@@ -25,6 +25,10 @@
 // do arquivo.
 // ============================================================================
 
+// Régua única do cancelamento (status + cStat + evento 110111) e da direção
+// efetiva (a nota própria de entrada fica gravada como 'saida').
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+
 /** Nº de parcelas do CIAP (LC 87/96 art. 20 §5º, inciso I). */
 export const PARCELAS_CIAP = 48;
 
@@ -96,7 +100,12 @@ export function classificarSaidasCiap(documentos) {
     let total = 0;
 
     for (const doc of Array.isArray(documentos) ? documentos : []) {
-        if (String(doc?.direcao) !== 'saida') continue;
+        // As DUAS réguas da casa: o cancelamento chega por EVENTO (o campo
+        // cru continua 'autorizado') e a nota PRÓPRIA de entrada fica gravada
+        // como 'saida'. Aqui os dois erram o ÍNDICE do CIAP — que é quem decide
+        // quanto do crédito do imobilizado se aproveita no mês.
+        if (direcaoEfetivaDoc(doc) !== 'saida') continue;
+        if (docCancelado(doc)) continue;
         const situacao = String(doc?.situacao || '').toLowerCase();
         if (situacao.includes('cancel') || situacao.includes('deneg')) continue;
 
