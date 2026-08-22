@@ -5,6 +5,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 E OS RELATÓRIOS LIAM A DIREÇÃO CRUA — a tela discordaria do arquivo que
+  eu tinha acabado de consertar** (22/08, fechando o eixo). Corrigidos o SPED,
+  o `.FML` e o preflight, sobrava quem o colaborador USA para conferir: a
+  **conferência de correlação de CFOP** (`d.direcao !== 'entrada'` → a compra de
+  produtor **sumia da tela** que existe para mostrá-la) e o
+  `relatoriosAgregacoes` inteiro — **Resumo por CFOP** (linha saía como
+  *"saída"* com um CFOP **1xxx** ao lado), **ICMS/IPI destacados** (o ICMS ia ao
+  **DÉBITO** em vez do crédito — o achado 16 outra vez, errando para os dois
+  lados), **Por participante**, **Por produto** e **Por UF**.
+  📌 **REGRA QUE FICA: corrigir o GERADOR sem corrigir quem CONFERE cria a
+  divergência que a casa mais paga.** O eixo da direção só fechou quando
+  gerador, preflight, conferência e relatórios passaram a ler o MESMO dono.
+  ✅ Ficam cruas, com o motivo no teste: `contraparteDoc` (já trata a própria
+  entrada explicitamente) e as leituras de **NFS-e**, que não têm `tpNF`.
+
 - **🚨 O EXPORTAR SAGE DECIDIA O LADO DO LIVRO PELO CAMPO CRU** (22/08). A nota
   PRÓPRIA DE ENTRADA (art. 136 — a compra de produtor rural PF, que o
   adquirente emite) fica gravada como `direcao: 'saida'` até o backfill do

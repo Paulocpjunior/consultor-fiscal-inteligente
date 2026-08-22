@@ -117,10 +117,16 @@ describe('🚨 CFOP digitado não entra torto', () => {
 describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra é pior que não ter', () => {
     const leitor = (rel: string) => readFileSync(join(RAIZ, rel), 'utf8');
 
+    // ⚠️ COMO O TESTE DO SAGE, este travava a FORMA LITERAL e reprovou a
+    // correção de 22/08, que trocou `d.direcao` por `direcaoDoc(d)` (a direção
+    // gravada mente na nota própria de entrada). O que ele garante é a
+    // INTENÇÃO: o DOCUMENTO chega como 1º argumento, senão o CFOP informado na
+    // NF não vence a régua automática.
     it('Resumo por CFOP e Por produto passam o DOCUMENTO', () => {
         const f = leitor('services/relatoriosAgregacoes.ts');
-        expect(f).toMatch(/cfopDoLancamento\(d, cru, d\.direcao as any, ctx\)/);
-        expect(f).toMatch(/cfopDoLancamento\(d, cru, direcao, ctx\)/);
+        expect((f.match(/cfopDoLancamento\(d, cru, [^,]+, ctx\)/g) || []).length).toBe(2);
+        // E a direção não volta a ser lida crua nessas chamadas.
+        expect(f).not.toMatch(/cfopDoLancamento\(d, cru, d\.direcao/);
     });
 
     it('Livro de Entradas/Saídas passa o documento', () => {
