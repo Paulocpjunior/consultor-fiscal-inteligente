@@ -10,6 +10,8 @@ import type {
 } from '../../types';
 import { parseSpedFiscalFile } from '../../services/spedFiscalParserService';
 import { conferXmlContraSped, type XmlConferenciaInput } from '../../services/spedFiscalConferenceService';
+// @ts-ignore — módulo backend com .d.ts próprio
+import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { listDocumentos, getDocumentosByChaves, getDocumentosByCnpjPeriodo } from '../../services/xmlFiscalService';
 import { salvarSpedArquivo } from '../../services/spedFiscalStorageService';
 import { isFirebaseConfigured } from '../../services/firebaseConfig';
@@ -139,7 +141,11 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 xmlInputs = filtered.map(d => ({
                     chave: d.chave?.replace(/\D/g, ''),
                     numero: d.numero,
-                    valorTotal: d.totais?.vNF,
+                    // 🚨 Ler SÓ `totais.vNF` pulava o confronto de valor em TODA
+                    // nota capturada pela SEFAZ (que grava `valorTotal`) — e o
+                    // pulo era calado: a tela dizia "sem divergência" sem ter
+                    // comparado nada. Quem responde é o dono da pergunta.
+                    valorTotal: Number.isFinite(valorDoDocumento(d)) ? Number(valorDoDocumento(d)) : undefined,
                     valorIcms: d.totais?.vICMS,
                     status: d.status,
                 }));
@@ -552,6 +558,17 @@ const AnaliseConferencia: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                     highlight={conferenceResult.inconsistencias.length > 0}
                                 />
                             </div>
+
+                            {/* 🚨 Confronto de valor que NÃO aconteceu não pode
+                                passar por "sem divergência" — ausência de alarme
+                                aqui era indistinguível de números que batem. */}
+                            {conferenceResult.semValorParaConferir > 0 && (
+                                <p className="text-xs text-amber-700 dark:text-amber-400">
+                                    ⚠️ {conferenceResult.semValorParaConferir} documento(s) sem valor legível —
+                                    o confronto de VALOR não foi feito neles. Isso não quer dizer que batem:
+                                    quer dizer que não foram comparados. Reimporte o XML completo (♻️) para conferir.
+                                </p>
+                            )}
 
                             {conferenceResult.inconsistencias.length === 0 ? (
                                 <div

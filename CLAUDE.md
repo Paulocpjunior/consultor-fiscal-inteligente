@@ -5,6 +5,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A CONFERÊNCIA CFI × SPED PULAVA O CONFRONTO DE VALOR — CALADA, e
+  justamente na maioria das notas** (22/08). A tela montava o input lendo **só
+  `d.totais?.vNF`**, e a captura pela SEFAZ grava **`valorTotal`**: em toda nota
+  capturada automaticamente o valor chegava `undefined`, o serviço PULAVA a
+  comparação, e a tela mostrava *"nenhuma inconsistência"*. A conferência que
+  existe para pegar divergência de valor dizia que estava tudo certo **sem ter
+  comparado nada** — é a lição de 12/08 ("conferência que promete número
+  diferente do arquivo é pior que não ter tela") na versão silenciosa.
+  ⚠️ **O pulo continua existindo** (documento sem valor legível não dá para
+  confrontar) — o que mudou é que ele é **CONTADO e DITO** na tela, com a ação
+  (♻️ reimportar o XML completo). Ausência de alarme não pode ser
+  indistinguível de "os números batem".
+  ✂️ No mesmo eixo, a **terceira cópia da régua do valor**: o painel de
+  estatísticas do `xmlFiscalService` lia `valorTotal ?? totais.vNF ??
+  valores.liquido` — e `valores.liquido` é o que o dono **EXCLUI de propósito**
+  (na NFS-e ele é o líquido de RETENÇÕES, não o bruto). Os dois passaram a
+  chamar `valorDoDocumento`; serviço do front já importa do backend quando o
+  módulo tem `.d.ts`.
+  📌 **REGRA QUE FICA: quem MONTA o input de uma conferência também é leitor** —
+  a régua única não termina no serviço, ela começa em quem preenche o objeto.
+- **🐛 `| tail` MASCARA O EXIT CODE — e por isso um commit com marcador de
+  conflito passou pelo gate** (22/08, defeito meu, pego pelo próprio `tsc` no
+  push seguinte). `npm run lint 2>&1 | tail -3 && npx jest && ...` continua a
+  corrente mesmo com o lint VERMELHO, porque o código que o shell lê é o do
+  `tail`. É a mesma armadilha do `git merge … | tail` que já tinha deixado eu
+  empurrar uma branch com marcadores horas antes.
+  📌 **REGRA QUE FICA: gate se lê SEM pipe** (ou com `set -o pipefail`), e
+  **depois de um merge, varrer a árvore inteira por marcador** — `git add -A`
+  engole conflito não resolvido em arquivo que você não abriu. A lição de 20/08
+  (*"rodar o gate antes do último arquivo é não rodar o gate"*) ganha a irmã:
+  **ler o gate por um pipe é não ler o gate**.
+
 - **🚨 A PROJEÇÃO CEGAVA A RÉGUA — as três apurações corrigidas ONTEM
   respondiam como se o campo não existisse** (22/08). Em 21/08 o crédito
   acumulado, o **DIFAL de aquisição** e o **FUNRURAL/DIPAM** passaram a

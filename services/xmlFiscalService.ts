@@ -35,6 +35,8 @@ import {
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
+// @ts-ignore — módulo backend com .d.ts próprio
+import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import {
     podeVerDocumentoPorCarteira,
@@ -913,8 +915,13 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
 
     const seenChaves = new Set<string>();
     for (const d of docs) {
-        // valorTotal normalizado pelo importer (vNF | vTPrest | vRec). Fallback p/ docs antigos.
-        const valor = d.valorTotal ?? d.totais?.vNF ?? d.valores?.liquido ?? 0;
+        // 🚨 SEGUNDA CÓPIA DA RÉGUA DO VALOR — e ela divergia do dono em dois
+        // pontos: não conhecia `valores.total`/`vNF` (as formas do import pelo
+        // NAVEGADOR) e usava `valores.liquido`, que o dono EXCLUI de propósito
+        // — na NFS-e ele é o líquido de RETENÇÕES, não o bruto do documento.
+        // Duas respostas para "quanto vale este documento" é o defeito que
+        // este projeto mais paga.
+        const valor = Number(valorDoDocumento(d)) || 0;
         const tipoKey = d.tipoDoc || d.tipo || 'desconhecido';
         const t = out.porTipoDoc[tipoKey] ||= { quantidade: 0, valor: 0 };
         t.quantidade++;
