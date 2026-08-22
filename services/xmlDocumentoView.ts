@@ -19,6 +19,14 @@
  * Se um dia o backend padronizar o schema, basta atualizar este arquivo.
  */
 
+// 🚨 A DIREÇÃO SE LÊ PELA RÉGUA — a nota PRÓPRIA de entrada (art. 136: a
+// compra de produtor rural PF, que o adquirente é quem emite) fica GRAVADA
+// como 'saida' até o backfill do sync-cron passar. O SPED e o `.FML` já a
+// escrituram como ENTRADA desde 22/08; a Central de Documentos — lista,
+// filtro, CSV e PDF — continuava dizendo o contrário.
+// @ts-ignore — módulo backend com .d.ts próprio
+import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+
 export type DocumentoTipo = 'NFe' | 'NFSe';
 
 export interface XmlDocumentoView {
@@ -126,7 +134,10 @@ export function getView(d: any): XmlDocumentoView {
     }
     // 'desconhecida' deve ser tratada como vazia pra acionar o fallback.
     // resNFe vinha gravado com direcao='desconhecida' antes do fallback amplo.
-    const direcaoGravada = s(d?.direcao);
+    // O DONO decide: `direcaoEfetivaDoc` devolve 'entrada' para a nota própria
+    // de entrada (tpNF=0) mesmo com o campo gravado 'saida'. O fallback pelo
+    // CNPJ continua valendo quando não há direção legível nenhuma (resNFe).
+    const direcaoGravada = s(direcaoEfetivaDoc(d) as string, d?.direcao);
     const direcaoFinal = (direcaoGravada && direcaoGravada !== 'desconhecida') ? direcaoGravada : direcaoFallback;
 
     return {
