@@ -16,6 +16,8 @@
  * item aqui, e não mais uma rodada perdida.
  */
 import type { DocumentoFiscal } from '../types';
+// @ts-ignore — módulo backend com .d.ts próprio
+import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 import {
     exportarParaIobSage, participanteDoDoc, numeroDaNota, cfopParaEscriturar,
     motivoConsumidorNfce, rotuloDocumentoFalha,
@@ -211,14 +213,22 @@ export function conferirAntesDeGerar(
             // que é a família do "réplica de CFOP no modal" (12/08). Régua da
             // casa: conferência que promete número diferente do arquivo é pior
             // que não ter tela.
-            const cfopFinal = cfopParaEscriturar(it.cfop, d.direcao, opts.cfopCtx, d);
+            // ⚠️ E A DIREÇÃO ENTRA PELA RÉGUA, não pelo campo cru — mesma
+            // razão. A nota PRÓPRIA DE ENTRADA (art. 136) fica gravada como
+            // 'saida' até o backfill passar; o gerador do .FML já a lê pelo
+            // `direcaoEfetivaDoc`, e ler cru AQUI faria o preflight exigir
+            // 5/6/7 de uma nota que o arquivo grava (corretamente) como 1xxx —
+            // alarme falso em TODA compra de produtor rural, que é o jeito mais
+            // rápido de ensinar a equipe a ignorar o preflight.
+            const direcao = direcaoEfetivaDoc(d) as string;
+            const cfopFinal = cfopParaEscriturar(it.cfop, direcao, opts.cfopCtx, d);
             const primeiro = String(cfopFinal || '')[0];
-            const esperado = d.direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
+            const esperado = direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
             if (!primeiro || !esperado.includes(primeiro)) {
                 marcar(d);
                 balde.add({
-                    causa: `CFOP inválido para nota de ${d.direcao === 'entrada' ? 'entrada' : 'saída'}`,
-                    oQueAconteceLa: `E201, campo 08: "o CFOP é inválido para o tipo de nota. Informe um CFOP de ${d.direcao === 'entrada' ? 'entradas (com início 1, 2 e 3)' : 'saídas (com início 5, 6 e 7)'}".`,
+                    causa: `CFOP inválido para nota de ${direcao === 'entrada' ? 'entrada' : 'saída'}`,
+                    oQueAconteceLa: `E201, campo 08: "o CFOP é inválido para o tipo de nota. Informe um CFOP de ${direcao === 'entrada' ? 'entradas (com início 1, 2 e 3)' : 'saídas (com início 5, 6 e 7)'}".`,
                     acao: 'A conversão automática cobre 5/6/7 → 1/2/3. CFOP fora desse padrão precisa de override na tela Correlação CFOP.',
                     gravidade: 'bloqueia',
                 }, `${rotulo(d)} · CFOP ${it.cfop || '(vazio)'} → ${cfopFinal || '(vazio)'}`);

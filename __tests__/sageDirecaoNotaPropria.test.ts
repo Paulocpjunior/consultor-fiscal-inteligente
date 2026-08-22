@@ -64,6 +64,31 @@ describe('🚨 nota própria de entrada — o livro do cliente', () => {
     });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E O PREFLIGHT TEM DE CONCORDAR COM O ARQUIVO
+//
+// A régua da casa é dura: "conferência que promete número diferente do arquivo
+// é pior que não ter tela" (12/08, a réplica de CFOP no modal). Com o gerador
+// lendo a direção pela régua e o preflight lendo o campo cru, a compra de
+// produtor rural sairia acusada de "CFOP inválido para nota de saída" — sobre
+// um arquivo CERTO. Alarme falso em toda nota de um cliente é o jeito mais
+// rápido de ensinar a equipe a ignorar o preflight.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 preflight e gerador leem a MESMA direção', () => {
+    const src = readFileSync(join(RAIZ, 'services/iobSagePreflight.ts'), 'utf8');
+
+    it('o preflight importa a régua', () => {
+        expect(src).toContain('direcaoEfetivaDoc');
+    });
+
+    it('e a usa nas quatro leituras — cfop, faixa esperada e as duas mensagens', () => {
+        expect(src).toMatch(/const direcao = direcaoEfetivaDoc\(d\)/);
+        expect(src).toMatch(/cfopParaEscriturar\(it\.cfop, direcao,/);
+        expect(src).toMatch(/const esperado = direcao === 'entrada'/);
+        expect(src).not.toMatch(/d\.direcao === 'entrada'/);
+    });
+});
+
 describe('🚨 o gerador do .FML lê a direção pelo DONO', () => {
     const src = readFileSync(join(RAIZ, 'services/iobSageExportService.ts'), 'utf8');
 

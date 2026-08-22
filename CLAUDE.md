@@ -21,6 +21,12 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   livro, e a exceção já está explícita ao lado), e a derivação da UF da empresa
   procura uma nota com chave — a própria entrada também foi emitida pela
   empresa, então a chave carrega a MESMA UF.
+  🐛 **E EU DEIXEI A CONFERÊNCIA PARA TRÁS POR ALGUNS MINUTOS**: corrigi o
+  GERADOR e o **preflight** continuou lendo o campo cru — com o arquivo saindo
+  1xxx (certo) e a conferência exigindo 5/6/7, TODA compra de produtor rural
+  viraria "CFOP inválido para nota de saída" sobre um arquivo CERTO. Alarme
+  falso em toda nota de um cliente é o jeito mais rápido de ensinar a equipe a
+  ignorar o preflight. Os dois lêem a MESMA régua agora, travado por teste.
   📌 **E A TRAVA DE 17/08 REPROVOU A PRÓPRIA CORREÇÃO**: `cfopPorNota.test.ts`
   prendia a **forma literal** `cfopParaEscriturar(it.cfop, d.direcao, ...)`
   quando o que ela existe para garantir é a INTENÇÃO (o DOCUMENTO chega como 4º
