@@ -14,6 +14,8 @@ export interface PainelEnviosResultado {
     total: number;
     completos: number;
     incompletos: number;
+    /** Envios sem registro das etapas do rito — nem completos, nem pendência. */
+    naoConferidos: string[];
     porTipo: Record<string, number>;
     pendencias: Record<string, { qtd: number; acao: string; empresas: string[] }>;
     semGestorEmCopia: string[];

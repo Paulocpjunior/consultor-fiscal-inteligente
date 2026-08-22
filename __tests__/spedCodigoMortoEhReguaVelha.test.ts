@@ -102,12 +102,13 @@ const ORFAS_DECLARADAS: Record<string, string> = {
     'manifesto-routes.js:fa': 'acessor do firebase-admin — o mesmo helper existe em toda rota do backend',
 
     // ── 🚩 NÃO TRIADAS. Ficam NOMEADAS em vez de apagadas ou de ganharem um
-    //    motivo inventado: as duas primeiras têm cara da MESMA classe do CST
-    //    de PIS/COFINS deste PR — conferência do rito #293 (arquivo no
-    //    SharePoint, baixa da obrigação) escrita e nunca ligada. Só o dono do
-    //    painel decide se é trava faltando ou sobra de versão antiga.
-    'envio-imposto-painel.js:spOk': 'PENDENTE DE TRIAGEM — pergunta se o arquivo foi arquivado no SharePoint (rito #293); pode ser trava não ligada',
-    'envio-imposto-painel.js:baixaOk': 'PENDENTE DE TRIAGEM — pergunta se a obrigação foi baixada (rito #293); mesma dúvida do spOk',
+    //    motivo inventado.
+    //
+    //    ✅ `spOk`/`baixaOk` SAÍRAM daqui: triadas e DELETADAS — elas estavam
+    //    superadas por `pendenciaSharePoint`/`pendenciaBaixa`, que respondem a
+    //    mesma pergunta E devolvem o motivo. Mas a triagem achou o defeito que
+    //    elas escondiam: aquelas duas devolvem null quando NÃO HÁ status
+    //    gravado, e o painel lia esse null como "etapa cumprida".
     'captura-resumo-cron.js:fmtDateBr': 'PENDENTE DE TRIAGEM — formatador de data do e-mail de resumo; é exibição, não decide dado fiscal',
     'require-cross-project-auth.js:getGooglePublicKeys': 'PENDENTE DE TRIAGEM — busca das chaves públicas do Google; caminho de AUTH, não se mexe sem caso real',
 };
