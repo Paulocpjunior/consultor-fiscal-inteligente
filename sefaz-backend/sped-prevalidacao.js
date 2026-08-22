@@ -56,12 +56,6 @@ const num = (v) => {
 const centavos = (n) => Math.round(n * 100);
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
-/** Modelo declarado DENTRO da chave de acesso (posições 21-22). */
-const modeloDaChave = (chave) => {
-    const c = soDigitos(chave);
-    return c.length === 44 ? c.slice(20, 22) : '';
-};
-
 /**
  * Campos que a NFC-e (COD_MOD 65) NÃO pode informar no C100, com a posição do
  * leiaute (contando REG como 1, igual o PVA numera).

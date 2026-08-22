@@ -473,15 +473,6 @@ export function buildBlocoA(dados) {
 // BLOCO C — Mercadorias (NF-e modelo 55/65)
 // ═══════════════════════════════════════════════════════════════════════
 
-const MODELOS_BLOCO_C = ['55', '65'];
-
-function filtrarNotasBlocoC(notas) {
-    // Modelo pela RÉGUA, nunca pelo campo cru — o importer principal não grava
-    // `modelo`, e ler o campo tirava do arquivo toda nota capturada
-    // automaticamente (caso PS VIDROS 0896, 19/08, no EFD ICMS/IPI).
-    return selecionarNotasBlocoC(notas).notas;
-}
-
 export function buildBlocoC_Contrib(dados) {
     const linhas = [];
     const selecaoC = selecionarNotasBlocoC(dados.notas);
