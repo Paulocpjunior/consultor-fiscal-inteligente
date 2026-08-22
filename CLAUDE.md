@@ -118,6 +118,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `serieDoDocumento`: campo gravado > chave > '000' (o Guia manda 000 quando
   não há série). O C100 também parou de mandar '000' quando a chave diz outra
   coisa.
+  🔴 **(12) E O C100 DO EFD-CONTRIBUIÇÕES LIA O PARTICIPANTE SÓ NA FORMA
+  ANINHADA** — o mesmo defeito de 17/08 (37 A100 da MANTOAN com COD_PART
+  VAZIO), vivo um bloco adiante e justamente no arquivo que a PWR ainda tem de
+  regerar: em toda nota capturada automaticamente (achatada, `cnpjEmit`) o
+  participante saía VAZIO — e participante vazio no C100 é recusa do PVA. Junto
+  vinham a direção crua e o `IND_EMIT` pela direção, com a nota PRÓPRIA de
+  entrada saindo como "terceiros". ✂️ Passou a usar os DONOS
+  (`normalizarParticipantesDoc` + `direcaoEfetivaDoc` + `participanteDoDocumento`
+  + `ehEmissaoPropriaDoc`), e o coletor do **0150 usa o MESMO dono** — senão o
+  C100 referencia participante que a Tabela de Cadastro não tem.
+  ⚠️ **E SÓ O IND_EMIT: a Exceção 2 do Guia do ICMS/IPI ("emissão própria não
+  leva C170") NÃO VALE AQUI** — no EFD-Contribuições o C170 é quem carrega o
+  detalhe de PIS/COFINS do item, e o arquivo ACEITO da PWR (03/2026) tem C170
+  nas notas próprias. Portar a régua inteira do arquivo vizinho apagaria a
+  apuração; travado por teste.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
