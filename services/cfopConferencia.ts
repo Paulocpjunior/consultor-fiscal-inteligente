@@ -34,6 +34,8 @@ import { cfopParaEscriturar, type CfopCtx } from './iobSageExportService';
  * velho e explicando a operação errada.
  */
 import { SUFIXOS_COMPRA_PRODUTO as SUFIXOS_COMPRA, SUFIXOS_ST_VENDA } from '../sefaz-backend/cfop-correlacao.js';
+// @ts-ignore — módulo backend com .d.ts próprio
+import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 export type MotivoCorrelacao = 'override' | 'natureza' | 'natureza-st' | 'espelho' | 'sem-conversao';
 
@@ -77,7 +79,12 @@ export function conferirCorrelacaoCfop(
     const mapa = new Map<string, LinhaCorrelacao>();
 
     for (const d of documentos || []) {
-        if (d.direcao !== 'entrada') continue;
+        // 🚨 A DIREÇÃO GRAVADA PODE MENTIR: a nota PRÓPRIA DE ENTRADA (art. 136
+        // — a compra de produtor rural PF, que o adquirente emite) fica gravada
+        // como 'saida' até o backfill do sync-cron passar. Lendo o campo cru,
+        // ela SUMIA desta conferência — e é justamente nela que a correlação
+        // 5xxx → 1xxx mais importa. Quem decide na leitura é o `tpNF`.
+        if (direcaoEfetivaDoc(d) !== 'entrada') continue;
         for (const it of d.itens || []) {
             const origem = String(it.cfop || '').trim();
             if (origem.length !== 4) continue;

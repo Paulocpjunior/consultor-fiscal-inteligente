@@ -20,7 +20,7 @@ import { correlacionarCfop, cfopDoLancamento } from '../sefaz-backend/cfop-corre
 // status; merge stub→nota ressuscitava a cancelada). docCancelado decide na
 // LEITURA olhando também eventos[]/cStat — bug 11/08, MV LIDER 639: cancelada
 // contada no Livro de Saídas e no fechamento.
-import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 // RÉGUA ÚNICA das retenções federais nas DUAS formas (achatada do portal ×
 // objeto do XML): o CSV do portal grava `valorIr`/`valorInss`/`valorCsll` na
 // RAIZ, e este relatório só lia `valores.*` — 67 notas da CLUDE com IR/INSS
@@ -34,6 +34,20 @@ import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coere
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export const docValido = (d: DocumentoFiscal) => !docCancelado(d);
+
+/**
+ * 🚨 A DIREÇÃO GRAVADA PODE MENTIR — e estes relatórios são o que o
+ * colaborador compara com o SPED e com o arquivo do SAGE.
+ *
+ * A nota PRÓPRIA DE ENTRADA (art. 136 — a compra de produtor rural PF, que o
+ * adquirente emite) fica gravada como 'saida' até o backfill do sync-cron
+ * passar. Lida crua, ela aparecia como SAÍDA no Resumo por CFOP (com um CFOP
+ * 1xxx ao lado), somava ICMS/IPI no DÉBITO em vez do crédito, e sumia da lista
+ * de fornecedores. Depois de 22/08 o SPED e o .FML lêem pela régua — o
+ * relatório tinha de ler igual, senão a tela discorda do arquivo.
+ */
+const direcaoDoc = (d: DocumentoFiscal): 'entrada' | 'saida' =>
+    (direcaoEfetivaDoc(d) as 'entrada' | 'saida');
 const contabilDoc = (d: DocumentoFiscal) => d.totais?.vNF || d.valorTotal || 0;
 
 /** Contraparte (quem não é a empresa): destinatário na saída e na nota própria de entrada. */
@@ -104,7 +118,7 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             // própria de entrada (art. 136) já nasce 1xxx e passa intacta.
             // O CFOP informado NA NF vence a régua automática (decisão do
             // Paulo, 17/08: "é por NF"). Sem ele, nada muda.
-            const cfop = String(cfopDoLancamento(d, cru, d.direcao as any, ctx) || cru);
+            const cfop = String(cfopDoLancamento(d, cru, direcaoDoc(d) as any, ctx) || cru);
             if (!porCfop.has(cfop)) porCfop.set(cfop, []);
             porCfop.get(cfop)!.push(it);
         }
@@ -120,9 +134,9 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
                 : (totalItens > 0 ? r2(contabil * (valorGrupo(its) / totalItens)) : 0);
             distribuido = r2(distribuido + contabilLinha);
             const a = alocarTributacaoIcms(its, contabilLinha);
-            const k = `${d.direcao}|${cfop}`;
+            const k = `${direcaoDoc(d)}|${cfop}`;
             const linha = mapa.get(k) || {
-                cfop, direcao: d.direcao as 'entrada' | 'saida',
+                cfop, direcao: direcaoDoc(d),
                 notas: 0, itens: 0, contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0,
             };
             linha.notas += 1;
@@ -169,7 +183,12 @@ export function resumoImpostos(docs: DocumentoFiscal[]): ResumoImpostos {
         }
         const icms = (d.itens || []).reduce((a, i) => a + (i.vICMS || 0), 0) || d.totais?.vICMS || 0;
         const ipi = (d.itens || []).reduce((a, i) => a + (i.vIPI || 0), 0) || d.totais?.vIPI || 0;
-        if (d.direcao === 'saida') {
+        // 🚨 A nota PRÓPRIA DE ENTRADA (art. 136) fica gravada como 'saida' até
+        // o backfill passar — lendo o campo cru, o ICMS dela entrava como
+        // DÉBITO em vez de CRÉDITO. É o achado 16 (o E110 fazia o mesmo), aqui
+        // no relatório que o colaborador lê, e o erro é para os DOIS lados:
+        // débito a maior e crédito a menor.
+        if (direcaoEfetivaDoc(d) === 'saida') {
             out.icms.debitoSaidas = r2(out.icms.debitoSaidas + icms);
             out.ipi.debitoSaidas = r2(out.ipi.debitoSaidas + ipi);
         } else {
@@ -579,7 +598,7 @@ export interface LinhaParticipante {
 export function resumoPorParticipante(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaParticipante[] {
     const mapa = new Map<string, LinhaParticipante>();
     for (const d of docs) {
-        if (!docValido(d) || d.direcao !== direcao) continue;
+        if (!docValido(d) || direcaoDoc(d) !== direcao) continue;
         const parte: any = contraparteDoc(d);
         const doc = String(parte?.cnpjCpf || '').replace(/\D/g, '');
         const k = doc || `nome:${String(parte?.nome || '—').toUpperCase()}`;
@@ -628,7 +647,7 @@ export function resumoPorAliquota(docs: DocumentoFiscal[]): LinhaAliquota[] {
     for (const d of docs) {
         const tipoDoc = (d as any).tipoDoc || d.tipo;
         if (!docValido(d) || !['NFe', 'NFCe'].includes(tipoDoc)) continue;
-        const direcao = d.direcao as 'entrada' | 'saida';
+        const direcao = direcaoDoc(d);
         for (const it of d.itens || []) {
             const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
             const cst = String(it.cst || '').replace(/\D/g, '');
@@ -676,7 +695,7 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
     const mapa = new Map<string, LinhaProduto & { _unidades: Set<string>; _cfops: Set<string>; _notas: Set<string> }>();
     for (const d of docs) {
         const tipoDoc = (d as any).tipoDoc || d.tipo;
-        if (!docValido(d) || d.direcao !== direcao || !['NFe', 'NFCe'].includes(tipoDoc)) continue;
+        if (!docValido(d) || direcaoDoc(d) !== direcao || !['NFe', 'NFCe'].includes(tipoDoc)) continue;
         for (const it of d.itens || []) {
             const produto = String(it.xProd || '—').trim().toUpperCase();
             const ncm = String(it.ncm || '').replace(/\D/g, '');
@@ -723,7 +742,7 @@ export function resumoPorUf(docs: DocumentoFiscal[]): LinhaUf[] {
         const uf = String(parte?.uf || '').toUpperCase() || '??';
         const linha = mapa.get(uf) || { uf, entradasQtd: 0, entradasValor: 0, saidasQtd: 0, saidasValor: 0 };
         const valor = contabilDoc(d);
-        if (d.direcao === 'saida') { linha.saidasQtd++; linha.saidasValor = r2(linha.saidasValor + valor); }
+        if (direcaoDoc(d) === 'saida') { linha.saidasQtd++; linha.saidasValor = r2(linha.saidasValor + valor); }
         else { linha.entradasQtd++; linha.entradasValor = r2(linha.entradasValor + valor); }
         mapa.set(uf, linha);
     }
