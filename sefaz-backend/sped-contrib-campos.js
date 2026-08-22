@@ -38,6 +38,10 @@
  * dos `TOTAIS_VIGIADOS`/`DETALHES_VIGIADOS` da auditoria de saída.
  */
 
+import {
+    conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_CONTRIBUICOES,
+} from './sped-c100-regras-comuns.js';
+
 /**
  * Contagem de campos INCLUINDO o REG, que é como o PVA conta ("Valor Esperado
  * 16" para uma linha que começa em M210).
@@ -376,6 +380,18 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirCodItemDosItens(linhas).erros,
         ...conferirIndOrigCredDasEntradas(linhas).erros,
         ...conferirRetencaoDoBlocoM(linhas).erros,
+        // 🚨 AS DUAS QUE VALIAM AQUI E NÃO RODAVAM (22/08). O cabeçalho do
+        // C100 é o MESMO nas duas famílias, então a recusa "o modelo da chave
+        // não confere" (PS VIDROS, 35×) e o limite de DT_DOC do Guia valem
+        // palavra por palavra neste arquivo — e a regra existia só no EFD
+        // ICMS/IPI. É a "meia trava" do COD_MUN do 0150, um bloco adiante.
+        //
+        // ⚠️ A posição do DT_FIN é PARÂMETRO: o 0000 do EFD-Contribuições traz
+        // IND_SIT_ESP e NUM_REC_ANTERIOR antes das datas, então o campo é o 6
+        // (no ICMS/IPI é o 5). Carimbar a posição do vizinho faria a regra ler
+        // o nome da empresa como se fosse data.
+        ...conferirCodModContraChave(linhas),
+        ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

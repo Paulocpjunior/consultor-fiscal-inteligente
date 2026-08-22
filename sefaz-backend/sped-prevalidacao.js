@@ -41,6 +41,10 @@ import { cfopExiste } from './cfop-catalogo.js';
 // arquivos (ICMS/IPI e Contribuições), e o defeito que ela pega é do mecanismo.
 import { linhasMalformadas } from './sped-auditoria-saida.js';
 
+import {
+    conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_ICMS_IPI,
+} from './sped-c100-regras-comuns.js';
+
 const campos = (linha) => String(linha || '').split('|');
 const registroDe = (linha) => campos(linha)[1] || '';
 const num = (v) => {
@@ -93,25 +97,10 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     const d100s = doReg('D100');
 
     // ── R1. COD_MOD × modelo da CHAVE ───────────────────────────────────────
-    // PVA (PS VIDROS 0896 · 07/2026, 19/08, 35 ocorrências):
-    // "O modelo da chave do documento eletrônico não confere com o modelo do
-    //  documento."
-    for (const l of c100s) {
-        const f = campos(l);
-        const codMod = f[5] || '';
-        const daChave = modeloDaChave(f[9]);
-        if (daChave && codMod && daChave !== codMod) {
-            add(erros, {
-                regra: 'cod-mod-x-chave', registro: 'C100', campo: '5 - COD_MOD',
-                valor: codMod, esperado: daChave, linha: l,
-                mensagem: `A nota nº ${f[8] || '?'} está declarada como modelo ${codMod} e a chave de acesso diz ${daChave}.`,
-                acao: 'O modelo tem que sair da chave. Se a nota é NFC-e (65), ela também não pode informar '
-                    + 'COD_PART nem os campos de ST/IPI/PIS/COFINS no C100.',
-                fonte: 'PVA: "O modelo da chave do documento eletrônico não confere com o modelo do documento" '
-                    + '(PS VIDROS 0896 · 07/2026, 19/08).',
-            });
-        }
-    }
+    // A régua mora em `sped-c100-regras-comuns.js`: o cabeçalho do C100 é o
+    // MESMO nas duas famílias, e esta recusa valia no EFD-Contribuições sem
+    // rodar lá (a "meia trava" do COD_MUN, 22/08).
+    for (const e of conferirCodModContraChave(lista)) add(erros, e);
 
     // ── R2. NFC-e não informa participante nem tributos no C100 ─────────────
     // PVA (mesmo arquivo, 86 ocorrências).
@@ -436,43 +425,9 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     }
 
     // ── R16. DT_DOC do C100 depois do fim do período ────────────────────────
-    // Guia Prático 3.2.3, C100, Campo 10 (DT_DOC): "Validação: o valor
-    // informado no campo deve ser MENOR OU IGUAL ao valor do campo DT_FIN do
-    // registro 0000."
-    //
-    // 🚨 POR QUE ESTA REGRA NASCEU (22/08): o formatador de data lia
-    // `getUTCDate()` sobre o `dhEmi` da NF-e, que vem com o fuso do emitente.
-    // Nota emitida às 22h30 de Brasília virava o DIA SEGUINTE em UTC — e na
-    // virada do mês, a competência SEGUINTE. Corrigido no formatador; esta
-    // regra é a rede, porque o erro é de DATA e ninguém confere data a olho.
-    //
-    // ⚠️ Só o limite SUPERIOR é checado, de propósito: o Guia não exige
-    // DT_DOC ≥ DT_INI no C100 — documento EXTEMPORÂNEO (de mês anterior,
-    // escriturado agora) é legítimo, e acusá-lo seria alarme falso.
-    const linha0000 = doReg('0000')[0];
-    // |0000|COD_VER|COD_FIN|DT_INI|DT_FIN|NOME|… → DT_FIN é o índice 5.
-    const dtFin = linha0000 ? String(campos(linha0000)[5] || '').replace(/\D/g, '') : '';
-    if (dtFin.length === 8) {
-        const comoNumero = (ddmmaaaa) => Number(
-            `${ddmmaaaa.slice(4)}${ddmmaaaa.slice(2, 4)}${ddmmaaaa.slice(0, 2)}`,
-        );
-        const limite = comoNumero(dtFin);
-        for (const l of c100s) {
-            const f = campos(l);
-            const dt = String(f[10] || '').replace(/\D/g, '');
-            if (dt.length !== 8) continue;
-            if (comoNumero(dt) <= limite) continue;
-            add(erros, {
-                regra: 'dt-doc-fora-do-periodo', registro: 'C100', campo: '10 (DT_DOC)',
-                valor: dt, esperado: `≤ ${dtFin}`, linha: `NUM_DOC ${f[8] || '?'}`,
-                mensagem: 'Data de emissão POSTERIOR ao fim do período da escrituração.',
-                acao: 'Confira a data no XML. Se ela estiver certa lá, é defeito de GERAÇÃO do app '
-                    + '(fuso horário) — reporte com o print em vez de editar o arquivo.',
-                fonte: 'Guia Prático EFD ICMS/IPI 3.2.3, C100 Campo 10: "o valor informado no campo deve ser '
-                    + 'menor ou igual ao valor do campo DT_FIN do registro 0000".',
-            });
-        }
-    }
+    // Mesma casa da R1 — e a posição do DT_FIN é PARÂMETRO porque o 0000 tem
+    // leiaute diferente nos dois arquivos (campo 5 aqui, 6 no Contribuições).
+    for (const e of conferirDtDocNoPeriodo(lista, POS_DT_FIN_ICMS_IPI)) add(erros, e);
 
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
