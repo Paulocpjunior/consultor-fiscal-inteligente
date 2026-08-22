@@ -74,6 +74,8 @@ export function conferXmlContraSped(
     parseResult: SpedFiscalParseResult,
 ): SpedFiscalConferenceResult {
     const inconsistencias: SpedFiscalInconsistencia[] = [];
+    // Documentos em que o VALOR não pôde ser lido — o confronto não aconteceu.
+    let semValorParaConferir = 0;
 
     // Unifica C100 (NF-e) + D100 (CT-e) num mapa genérico para conferência
     const allSpedDocs: SpedDocGenerico[] = [
@@ -169,7 +171,13 @@ export function conferXmlContraSped(
             );
         }
 
-        if (xml.valorTotal !== undefined) {
+        // 🚨 SEM VALOR LEGÍVEL A CONFERÊNCIA NÃO ACONTECE — e antes ela
+        // simplesmente PULAVA, calada. Quem lê a tela via "nenhuma divergência
+        // de valor" e concluía que os números batiam, quando na verdade nada
+        // foi comparado. Agora o pulo é CONTADO e a tela diz.
+        if (xml.valorTotal === undefined || xml.valorTotal === null) {
+            semValorParaConferir += 1;
+        } else {
             const diff = Math.abs((xml.valorTotal || 0) - spedDoc.valorDocumento);
             if (diff > TOLERANCE) {
                 inconsistencias.push(
@@ -229,6 +237,7 @@ export function conferXmlContraSped(
         totalXmls: xmls.length,
         totalDocumentosSped: allDocs,
         documentosConferidos,
+        semValorParaConferir,
         inconsistencias,
     };
 }

@@ -2433,6 +2433,12 @@ export interface SpedFiscalConferenceResult {
     totalXmls: number;
     totalDocumentosSped: number;
     documentosConferidos: number;
+    /**
+     * Documentos em que o VALOR não pôde ser lido — o confronto de valor NÃO
+     * aconteceu neles. Antes esses eram pulados em silêncio, e a tela dizia
+     * "nenhuma divergência" sobre um confronto que nunca rodou.
+     */
+    semValorParaConferir: number;
     inconsistencias: SpedFiscalInconsistencia[];
 }
 
