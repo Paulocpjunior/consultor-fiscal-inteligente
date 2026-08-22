@@ -27,7 +27,7 @@
 
 // Régua única do cancelamento (status + cStat + evento 110111) e da direção
 // efetiva (a nota própria de entrada fica gravada como 'saida').
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, valorDoDocumento } from './xml-metadata-helper.js';
 
 /** Nº de parcelas do CIAP (LC 87/96 art. 20 §5º, inciso I). */
 export const PARCELAS_CIAP = 48;
@@ -109,7 +109,10 @@ export function classificarSaidasCiap(documentos) {
         const situacao = String(doc?.situacao || '').toLowerCase();
         if (situacao.includes('cancel') || situacao.includes('deneg')) continue;
 
-        const valor = num(doc?.valores?.total ?? doc?.valorTotal ?? doc?.valores?.valorTotal);
+        // Valor pela RÉGUA: o import pelo navegador grava só `totais.vNF`, e
+        // ler `valores.total ?? valorTotal` pulava essas notas como se
+        // valessem zero — denominador menor, índice MAIOR, crédito a mais.
+        const valor = num(valorDoDocumento(doc));
         if (valor <= 0) continue;
         total = round2(total + valor);
 

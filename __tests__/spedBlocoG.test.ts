@@ -165,3 +165,35 @@ describe('classificarSaidasCiap — de onde saem as duas bases do índice', () =
         expect(r.total).toBe(200);
     });
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O ÍNDICE DO CIAP PULAVA A NOTA IMPORTADA PELO NAVEGADOR
+//
+// Varredura dos leitores de documento (21/08): o `xmlParserService` (import
+// manual pelo navegador) grava **só `totais.vNF`** — nunca `valorTotal` —, e
+// esta classificação lia `valores.total ?? valorTotal`. A nota caía como se
+// valesse zero: DENOMINADOR menor ⇒ índice MAIOR ⇒ mais crédito de ICMS do
+// imobilizado do que a lei dá. Zero silencioso, na direção mais cara.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 índice do CIAP — o valor sai da régua, nas duas formas', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { classificarSaidasCiap } = require('../sefaz-backend/sped-bloco-g.js');
+
+    it('nota importada pelo NAVEGADOR (só totais.vNF) entra na conta', () => {
+        const r = classificarSaidasCiap([
+            { direcao: 'saida', status: 'autorizado', totais: { vNF: 2000 }, valores: { icms: 360 } },
+        ]);
+        expect(r.total).toBe(2000);
+        expect(r.tributadasEExportacao).toBe(2000);
+    });
+
+    it('e a isenta importada assim DERRUBA o índice, como deve', () => {
+        const r = classificarSaidasCiap([
+            { direcao: 'saida', status: 'autorizado', valorTotal: 1000, valores: { icms: 180 } },
+            { direcao: 'saida', status: 'autorizado', totais: { vNF: 1000 } },  // sem ICMS: isenta/ST
+        ]);
+        expect(r.total).toBe(2000);
+        expect(r.tributadasEExportacao).toBe(1000);   // antes: 1000/1000 = índice 1,0
+    });
+});
