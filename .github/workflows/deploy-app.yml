@@ -13,6 +13,11 @@
 # account e demais configs do serviço são PRESERVADOS da revisão atual.
 name: Deploy App Principal
 
+# ⚠️ MATA-BURRO (22/08): commit SÓ de docs/ ou *.md NÃO dispara este deploy
+# (paths-ignore abaixo) — um "deploy de ativação" (levar env/secret adicionado
+# pelo console a 100% do tráfego) precisa tocar arquivo de CÓDIGO, senão o
+# merge fica verde no GitHub com NADA publicado. E o workflow_dispatch pela
+# API devolve 403 pra o token do agente — quem dispara é push ou o painel.
 on:
   push:
     branches:
