@@ -5,6 +5,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A VARREDURA DE "CAMPO QUE O GERADOR LÊ E NINGUÉM PODE PREENCHER" EXISTIA
+  COMO SCRIPT E NUNCA FOI LIGADA — e o oitavo campo já estava esperando**
+  (22/08). O eixo nasceu em 17/08 com o `IND_NAT_PJ` e o cruzamento virou
+  script naquele dia, achando mais três — mas **o script não ficou no repo**. O
+  que sobrou foi um teste citando o `indNatPJ` **pelo NOME**: a "trava escrita
+  como LISTA" (13/08), que cobre o campo que alguém lembrou.
+  🔴 **O oitavo é o `gerarInventario`, lido pelo BLOCO H.** Sem ele na
+  whitelist nem no modal, `inventarioExigido` virava na prática *"só em
+  dezembro"* — e a empresa que precisa apresentar o inventário em outro mês
+  (mudança de regime, encerramento, exigência estadual) **não tinha como fazer
+  o bloco sair**. ⚠️ E **a ausência de um bloco é silenciosa**: o PVA só reclama
+  do que ESTÁ no arquivo.
+  ✂️ Campo entrou na whitelist **e** no modal no MESMO PR (regra do #382), e a
+  varredura virou TESTE. ⚠️ Ela não muda o que o app se recusa a fazer: o bloco
+  continua saindo **vazio com aviso** enquanto ninguém informar a contagem —
+  quantidade de inventário não se estima (o Bloco H zerado de 06/08).
+  ⚠️ **A assinatura recusa o `)` entre o objeto e o campo, de propósito**:
+  `resolverNaturezaAtividade(empresa?.dadosFiscais || {}).natureza` lê o
+  RESULTADO da função, não um campo do cadastro — a versão larga acusava
+  `natureza` como órfã, que é alarme sobre código certo.
+  ✅ As sete exceções são carimbo do backend ou fallback de campo cuja casa real
+  é outra, **cada uma com o motivo escrito**. Provada removendo o
+  `gerarInventario` da whitelist de propósito.
+
 - **🚨 NO DARF, A COMPETÊNCIA ILEGÍVEL VIRAVA VENCIMENTO = HOJE — e só a ORDEM
   de duas chamadas segurava o defeito** (22/08, terceira parada da varredura de
   competência). `parseCompetencia`, no construtor do payload, casava só

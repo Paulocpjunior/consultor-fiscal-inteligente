@@ -527,6 +527,11 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // inscricaoMunicipal = genérica (qualquer município); ccmSp = específico de
     // SP capital (chave da captura NFS-e SP). Campos SEPARADOS de propósito.
     'inscricaoEstadual', 'uf', 'codMunIBGE', 'ccmSp', 'inscricaoMunicipal',
+    // 🚨 `gerarInventario` era LIDO pelo bloco H e não existia aqui nem em tela:
+    // `inventarioExigido` virava, na prática, "só em dezembro", e quem precisa
+    // do inventário em outro mês não tinha como fazer o bloco sair. A ausência
+    // de um bloco é silenciosa — o PVA só reclama de quem ESTÁ lá.
+    'gerarInventario',
     'logradouro', 'numero',
     // whatsappCliente = número que recebe as guias pelo WhatsApp OFICIAL
     // (Cloud API, 09/08). Separado do telefone de propósito: o contato de

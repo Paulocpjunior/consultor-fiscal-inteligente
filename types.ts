@@ -1503,6 +1503,20 @@ export interface EmpresaDadosFiscais {
     contribuinteIpi?: 'sim' | 'nao' | '';
     classEstabIpi?: string;
     /**
+     * 🚨 Gera o **Bloco H (inventário)** fora de dezembro.
+     *
+     * O gerador lia este campo desde sempre e ele não existia em tela nenhuma
+     * nem na whitelist do backend: `inventarioExigido` virava, na prática,
+     * *"só no encerramento do exercício"*. Empresa que precisa apresentar o
+     * inventário em outro mês (mudança de regime, encerramento, exigência
+     * estadual) não tinha como fazer o bloco sair — e a ausência de um bloco é
+     * SILENCIOSA: o PVA só reclama do que está no arquivo.
+     *
+     * ⚠️ Ligar isto NÃO inventa contagem: o bloco continua saindo vazio com
+     * aviso enquanto ninguém informar a quantidade.
+     */
+    gerarInventario?: boolean;
+    /**
      * IND_NAT_PJ — natureza da PJ, campo 13 do registro 0000 do
      * EFD-Contribuições (Tabela 3.1.3 do leiaute).
      *

@@ -96,7 +96,11 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
         }
     };
 
-    const handleField = (key: keyof EmpresaDadosFiscais, value: string) => {
+    // `string | boolean`: quase todo campo aqui é texto, mas o
+    // `gerarInventario` é uma DECISÃO de sim/não e o backend a lê como
+    // booleano (`!!gerarInventario`). Guardá-la como a string 'nao' seria
+    // truthy — o bloco sairia justamente quando alguém marcasse que NÃO.
+    const handleField = (key: keyof EmpresaDadosFiscais, value: string | boolean) => {
         // Guarda a string COMO ESTÁ, inclusive vazia. O `value || undefined`
         // antigo virava undefined ao limpar o campo, o JSON perdia a chave e o
         // backend nunca recebia ordem de apagar — era por isso que "limpar e
@@ -355,6 +359,34 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('classEstabIpi', v)}
                                 placeholder="Só p/ contribuinte de IPI — código do registro 0002"
                             />
+                            {/* 🚨 O gerador do BLOCO H LIA `gerarInventario` desde
+                                sempre e ele não existia em tela nenhuma nem na
+                                whitelist: `inventarioExigido` virava, na prática,
+                                "só em dezembro". Empresa que precisa apresentar o
+                                inventário FORA de dezembro (mudança de regime,
+                                encerramento, exigência estadual) não tinha como
+                                fazer o bloco sair — e a ausência de um bloco é
+                                silenciosa. É o IND_NAT_PJ de novo, um registro
+                                adiante. */}
+                            <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-slate-500 dark:text-slate-400">
+                                    Inventário (Bloco H) fora de dezembro
+                                </label>
+                                <select
+                                    value={dados.gerarInventario ? 'sim' : ''}
+                                    onChange={e => handleField('gerarInventario', e.target.value === 'sim')}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                >
+                                    <option value="">Não — só no encerramento do exercício (dezembro)</option>
+                                    <option value="sim">Sim — gerar o Bloco H em TODA competência</option>
+                                </select>
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Dezembro já sai sozinho. Marque só quando o inventário for exigido em
+                                    outro mês — mudança de regime, encerramento ou exigência do estado. O
+                                    bloco continua saindo <strong>vazio com aviso</strong> enquanto ninguém
+                                    informar a contagem: quantidade não se estima.
+                                </p>
+                            </div>
                             {/* 🚨 O gerador do EFD-Contribuições LIA este campo desde
                                 sempre e ele não existia em tela nenhuma: caía no '00',
                                 que declara "sociedade empresária em geral" — inclusive
