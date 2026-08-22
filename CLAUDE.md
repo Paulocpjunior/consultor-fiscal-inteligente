@@ -173,12 +173,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   formas que faltavam (`valores.total` e `vNF` na raiz); o nome antigo continua
   exportado apontando para a MESMA função. ⚠️ **`valores.liquido` fica FORA de
   propósito**: na NFS-e ele é o líquido de RETENÇÕES, e o VL_DOC é o bruto.
+<<<<<<< HEAD
   ⚠️ **E O MESMO ZERO APARECIA NA CONFERÊNCIA**: o cruzamento CFI × SPED (e os
   três painéis de diagnóstico) liam `valorTotal ?? vNF` na mão — a nota
   importada pelo navegador entrava valendo 0,00 e o cruzamento acusava
   **divergência de valor contra um SPED CERTO**. Alarme falso que aparece
   justamente quando está tudo certo é o que ensina a equipe a ignorar a
   conferência que existe para pegar o erro de verdade. Os quatro leem o dono.
+=======
+>>>>>>> origin/main
 =======
 >>>>>>> origin/main
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
