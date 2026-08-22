@@ -189,7 +189,7 @@ export async function sincronizarEmpresa({ empresaId, empresaCnpj, capturadoPor,
   if (!uf) {
     return {
       ok: false,
-      motivo: `UF não cadastrada para a empresa. Acesse a tela de configuração e preencha dadosFiscais.uf (ex: SP).`,
+      motivo: 'UF não cadastrada para a empresa — preencha em Empresas → Dados Fiscais (ex.: SP).',
     };
   }
 

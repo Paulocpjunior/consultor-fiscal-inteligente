@@ -241,6 +241,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   exatamente o "vai e vem o dia todo" de 20/08.
   ⚠️ E a do bloco M diz os DOIS números de propósito: em 19/08 o sintoma do PVA
   apontou o M200 (que estava certo) quando o vazio era o F600.
+  📌 **(21) E A CLASSE DO ACHADO 18 VIROU TRAVA: "aviso que aponta um lugar
+  tem de apontar um lugar que a pessoa ACHA".** Varrendo os 61 avisos que
+  mandam preencher algo, sobraram QUATRO com o mesmo vício em forma mais leve —
+  apontar a **chave do banco** (*"preencha em `dadosFiscais.uf`"*, nos DOIS
+  orquestradores de captura) ou lugar nenhum (*"informe a contagem física"*).
+  O colaborador não sabe o que é `dadosFiscais`; ele sabe o que é o botão
+  **Dados Fiscais**. `avisoApontaLugarReal.test.ts` barra caminho de campo do
+  Firestore dentro de mensagem de usuário — e foi ela que achou a quarta, que
+  eu não tinha visto.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
