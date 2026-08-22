@@ -141,3 +141,102 @@ export async function manifestarPendentes({
     }
     return data;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 AS TRÊS ROTAS QUE EXISTIAM SEM BOTÃO (21/08 → autorizadas pelo Paulo)
+//
+// A varredura das 273 rotas achou sete sem caminho na interface, e três eram
+// da manifestação: ver QUEM está elegível, manifestar UMA chave e destravar as
+// que pararam por falha de infraestrutura. A regra de 13/08 é dura — rota que
+// nenhuma tela chama não é funcionalidade, é código morto com cara de entrega.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ElegivelManifestacao {
+    chave: string;
+    empresaId?: string;
+    empresaNome?: string;
+    empresaCnpj?: string;
+    dhEmi?: string;
+    valorTotal?: number;
+    emitente?: string;
+}
+
+export interface ElegiveisResult {
+    total?: number;
+    itens?: ElegivelManifestacao[];
+    erro?: string;
+}
+
+/** Quem está esperando manifestação — a fila que o lote vai consumir. */
+export async function listarElegiveisManifestacao(
+    { empresaId, limit = 50 }: { empresaId?: string | null; limit?: number } = {},
+): Promise<ElegiveisResult> {
+    const token = await getToken();
+    const qs = new URLSearchParams();
+    if (empresaId) qs.set('empresaId', empresaId);
+    qs.set('limit', String(limit));
+    const res = await fetch(`/api/admin/sefaz/manifest-elegiveis?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!res.ok) return { erro: data.error || data.erro || `HTTP ${res.status}` };
+    return data;
+}
+
+export interface ManifestarUmaResult {
+    ok?: boolean;
+    status?: string;
+    motivo?: string;
+    cStat?: string;
+    xMotivo?: string;
+    erro?: string;
+}
+
+/**
+ * Manifestar UMA chave.
+ *
+ * ⚠️ A manifestação é IRREVERSÍVEL na SEFAZ — por isso o tipo vai explícito e a
+ * tela pergunta antes. `operacao_nao_realizada` exige justificativa de 15 a 255
+ * caracteres (Manual ENT 6.0), e quem recusa é o backend.
+ */
+export async function manifestarUmaChave({
+    chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false,
+}: {
+    chNFe: string;
+    cnpjDestinatario: string;
+    tipo?: TipoManifestacao;
+    xJustificativa?: string;
+    dryRun?: boolean;
+}): Promise<ManifestarUmaResult> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/manifest-one', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { erro: data.error || data.erro || `HTTP ${res.status}` };
+    return data;
+}
+
+export interface ResetFalhasInfraResult {
+    candidatos?: number;
+    resetados?: number;
+    erro?: string;
+}
+
+/**
+ * Devolve ao lote as chaves que pararam por falha de INFRAESTRUTURA (rede,
+ * timeout, indisponibilidade da SEFAZ) — nunca as que a SEFAZ recusou por
+ * mérito: essas continuam fora, e é assim que tem de ser.
+ */
+export async function resetarFalhasInfraManifestacao(): Promise<ResetFalhasInfraResult> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/manifest-reset-falhas-infra', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) return { erro: data.error || data.erro || `HTTP ${res.status}` };
+    return data;
+}
