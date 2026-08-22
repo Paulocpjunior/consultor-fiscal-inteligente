@@ -78,3 +78,48 @@ describe('🚨 E250 — a obrigação do ST agora tem onde ser cadastrada', () =
         expect(fonte('services/spedAjustesService.ts')).toMatch(/\{\s*merge:\s*true\s*\}/);
     });
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 VARREDURA INVERSA: campo que a TELA grava e que nenhum gerador lê
+//
+// O `perfilEFD` estava no modal desde sempre — a pessoa escolhia, salvava, e o
+// 0000 saía com **'A' cravado** ("perfil EFD: sempre A", dizia o comentário).
+// O perfil é atribuído pelo FISCO ESTADUAL e decide QUAIS REGISTROS o arquivo
+// deve ter: é a família da recusa "O registro não deve ser informado para esse
+// PERFIL" que a AFFITTARE levou em 21/08, com a agravante do trabalho perdido.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 IND_PERFIL — o campo da tela chega ao arquivo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { buildBloco0 } = require('../sefaz-backend/sped-fiscal-bloco0.js');
+
+    const dados = (perfilEFD?: string) => ({
+        empresa: {
+            nome: 'X LTDA', cnpj: '31947349000169',
+            dadosFiscais: { uf: 'SP', codMunIBGE: '3550308', ...(perfilEFD ? { perfilEFD } : {}) },
+        },
+        competenciaInicio: '2026-07', competenciaFim: '2026-07',
+        participantes: [], unidades: [], itens: [], warnings: [] as string[],
+    });
+    const campo14 = (linhas: string[]) =>
+        linhas.find((l) => l.startsWith('|0000|'))!.replace(/\r?\n$/, '').split('|')[14];
+
+    it('perfil B do cadastro sai B no arquivo — não mais o A cravado', () => {
+        const d = dados('B');
+        expect(campo14(buildBloco0(d))).toBe('B');
+        // Perfil diferente de A é DITO: ele muda o que o PVA exige.
+        expect(d.warnings.some((w: string) => w.includes('IND_PERFIL'))).toBe(true);
+    });
+
+    it('sem cadastro continua A, e sem alarme (é o enquadramento comum)', () => {
+        const d = dados();
+        expect(campo14(buildBloco0(d))).toBe('A');
+        expect(d.warnings.some((w: string) => w.includes('IND_PERFIL'))).toBe(false);
+    });
+
+    it('valor inválido é RECUSADO com o motivo, nunca descartado calado', () => {
+        const d = dados('Z');
+        expect(campo14(buildBloco0(d))).toBe('A');
+        expect(d.warnings.some((w: string) => w.includes('não existe'))).toBe(true);
+    });
+});

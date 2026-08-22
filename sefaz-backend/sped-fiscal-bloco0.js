@@ -118,9 +118,44 @@ function buildBloco0(dados) {
  *  11 COD_MUN      Codigo Municipio IBGE      7 digitos
  *  12 IM           Inscricao Municipal        max 15 chars (vazio aceito)
  *  13 SUFRAMA      Codigo Suframa             9 digitos (vazio aceito)
- *  14 IND_PERFIL   A | B | C                   'A' fixo
+ *  14 IND_PERFIL   A | B | C                   do cadastro (default A)
  *  15 IND_ATIV     0=Industrial, 1=Outras
  */
+/**
+ * 🚨 IND_PERFIL — o modal tinha o campo e o arquivo IGNORAVA (21/08, varredura
+ * inversa: campo que a TELA grava e nenhum gerador lê).
+ *
+ * O perfil de enquadramento (A/B/C) é atribuído pelo FISCO ESTADUAL e decide
+ * QUAIS REGISTROS o arquivo deve ter. Declarar 'A' num contribuinte de perfil
+ * B faz o arquivo prometer um detalhamento que o PVA vai cobrar — é a família
+ * da recusa *"O registro não deve ser informado para esse PERFIL"* que a
+ * AFFITTARE levou no EFD-Contribuições em 21/08.
+ *
+ * E tinha a agravante do trabalho perdido: a pessoa escolhia o perfil na tela,
+ * salvava, e o arquivo saía com outro. Valor fora de A/B/C é RECUSADO com o
+ * motivo (nunca descartado calado — lição do #382) e cai em 'A'.
+ */
+function perfilDoArquivo(dados) {
+    const bruto = String(dados?.empresa?.dadosFiscais?.perfilEFD || '').trim().toUpperCase();
+    if (['A', 'B', 'C'].includes(bruto)) {
+        if (bruto !== 'A' && Array.isArray(dados.warnings)) {
+            dados.warnings.push(
+                `0000: o arquivo saiu com IND_PERFIL = ${bruto} (o cadastro da empresa diz isso). `
+                + 'O perfil decide quais registros o PVA exige — confira se é o enquadramento que o '
+                + 'fisco estadual atribuiu antes de transmitir.',
+            );
+        }
+        return bruto;
+    }
+    if (bruto && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `0000: perfil "${bruto}" não existe (os válidos são A, B e C) — o arquivo saiu com A. `
+            + 'Corrija em Empresas → Dados Fiscais.',
+        );
+    }
+    return 'A';
+}
+
 function build0000(dados) {
     const { empresa, competenciaInicio, competenciaFim } = dados;
     const df = empresa.dadosFiscais || {};
@@ -138,7 +173,7 @@ function build0000(dados) {
         fmt.sanitizeString(df.codMunIBGE || '', 7),
         fmt.sanitizeString(df.ccmSp || empresa.ccmSp || '', 15),  // Inscricao Municipal (cadastro unico dadosFiscais, fallback legado)
         fmt.sanitizeString(df.codSuframa || '', 9),
-        'A',  // perfil EFD: sempre A
+        perfilDoArquivo(dados),
         df.indAtividade === 'industrial' ? '0' : '1',
     ]);
 }

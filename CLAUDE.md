@@ -217,6 +217,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   código de tabela estadual que alguém digitou.
   ⚠️ O app **continua não deduzindo** nenhum dos dois: vencimento e código de
   receita da GNRE e o COD_AJ da 5.3 são ESTADUAIS.
+<<<<<<< HEAD
+  🔴 **(19) E A VARREDURA INVERSA — "a tela grava × ninguém lê" — pegou o
+  `IND_PERFIL`.** O modal tinha o campo de PERFIL do EFD desde sempre: a pessoa
+  escolhia, salvava, e o 0000 saía com **'A' cravado** (o comentário dizia
+  *"perfil EFD: sempre A"*). O perfil é atribuído pelo **fisco estadual** e
+  decide QUAIS REGISTROS o arquivo deve ter — declarar A num contribuinte B faz
+  o arquivo prometer detalhamento que o PVA vai cobrar, a MESMA família da
+  recusa *"O registro não deve ser informado para esse PERFIL"* da AFFITTARE.
+  Com a agravante do **trabalho perdido**: o colaborador preenchia e nada
+  acontecia. Perfil fora de A/B/C é RECUSADO com o motivo, e perfil ≠ A sai
+  DITO no aviso.
+=======
+>>>>>>> origin/main
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
