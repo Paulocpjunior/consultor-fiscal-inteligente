@@ -5,6 +5,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A CLASSE QUE A CASA DECLAROU FECHADA — E ESTAVA ABERTA EM NOVE LUGARES**
+  (22/08). A regra de 07/08 é literal, e está escrita DENTRO do
+  `empresa-por-cnpj.js`: *"nunca consultar Firestore por igualdade de CNPJ neste
+  projeto"* — o cadastro guarda o CNPJ em DUAS formas (`51227692000146` e
+  `51.227.692/0001-46`), então igualdade casa com uma e ignora a outra. O
+  comentário do módulo AFIRMAVA que nenhuma outra rota fazia isso. A varredura
+  achou **nove**, e **sete sem fallback nenhum**.
+  🔴 **E cada uma erra de um jeito que não parece erro**: o `xml-importer` não
+  acha o dono e o documento fica **SEM DONO**, invisível em qualquer filtro por
+  cliente (o caso GUARANI, 27/07); os **quatro toggles** (captura SEFAZ e NFS-e
+  Nacional) devolvem **404 "Empresa não encontrada"** para empresa que ESTÁ
+  cadastrada; o **diagnóstico do ABRASF** era o pior — dizia *"cadastre em
+  Simples ou Lucro primeiro"*, mandando recadastrar cliente que já existe; e a
+  captura dirigida reportava um cliente em `naoEncontrados`.
+  ⚠️ **`where('cnpj','in',[…])` é o MESMO defeito em roupa de LOTE**: ele filtra
+  ANTES de normalizar, então o `replace(/\D/g,'')` que vem depois só normaliza o
+  que já passou — o mascarado nunca chega lá.
+  ✂️ `empresa-cadastro-lookup.js` é a casca que fala com o Firestore (o
+  `empresa-por-cnpj.js` continua dono do lado PURO): **igualdade primeiro**
+  (1-2 leituras, usa índice) e **só na falha** o índice normalizado, varrido uma
+  vez por janela com `.select('cnpj')` e cacheado — inclusive o **negativo**,
+  porque CNPJ de terceiro aparece em toda paginação de captura e sem isso cada
+  um custaria uma varredura. **LÁPIDE fica de fora nos dois caminhos** (#290):
+  os fallbacks antigos da `conferencia-chaves` e da drenagem **não** olhavam a
+  lápide e o do `xml-importer` olhava — mesma pergunta, três respostas.
+  📌 **REGRA QUE FICA: regra escrita não é regra travada.** Esta viveu 15 dias
+  como comentário e renasceu em seis arquivos. A trava varre
+  `where('cnpj','==' | 'in')` fora do dono — e **foi ela que achou a nona**, na
+  subpasta `abrasf/`, que meu próprio glob de `sefaz-backend/*.js` não pegava.
+  ✅ Conferidos e **inocentes**, para não virarem correção cega: os
+  `where('empresaCnpj','==',…)` (coleções que o APP escreve, sempre em dígitos)
+  e os dois `e.cnpj === CNPJ_ESCRITORIO` (o CNPJ já chega normalizado ali).
 - **🚨 SETE ROTAS SEM BOTÃO — E O PAULO MANDOU DAR BOTÃO A TODAS** (22/08:
   *"sim, todas com botao, e NFP tbm deve ser corrigido"*). A varredura de
   `rotaTemChamada` (a trava de 13/08 virada em CLASSE) leu as 273 rotas do

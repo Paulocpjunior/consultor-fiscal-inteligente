@@ -34,6 +34,7 @@ import {
   normalizarCnpjsDirigidos, minutosEstimadosDirigida,
   LIMITE_CNPJS_DIRIGIDOS, RESPIRO_ENTRE_EMPRESAS_MS,
 } from './cnpjs-dirigidos.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 
 const router = express.Router();
 
@@ -299,15 +300,14 @@ async function executarSyncDirigido({ cnpjs, sleepMs, pararEm656, capturadoPor, 
   const alvos = [];
   const naoEncontrados = [];
   for (const cnpj of cnpjs) {
+    // Dono único: igualdade não enxerga o CNPJ mascarado, e aqui o cliente
+    // sairia NOMEADO como "não encontrado" — afirmação falsa sobre o cadastro.
+    const achado = await acharEmpresaCadastrada(db, cnpj);
     let found = null;
-    for (const col of ['simples_empresas', 'lucro_empresas']) {
-      const snap = await db.collection(col)
-        .where('cnpj', '==', cnpj).limit(1).get();
-      if (!snap.empty) {
-        const d = snap.docs[0];
-        found = { id: d.id, cnpj, nome: d.data().nome || d.data().razaoSocial || '', fonte: col };
-        break;
-      }
+    if (achado) {
+      const doc = await db.collection(achado.colecao).doc(achado.empresaId).get();
+      const d = doc.data() || {};
+      found = { id: achado.empresaId, cnpj, nome: d.nome || d.razaoSocial || '', fonte: achado.colecao };
     }
     if (found) alvos.push(found);
     else {
@@ -464,22 +464,10 @@ router.post('/sync-drenagem-cron', requireCronAuth, async (req, res) => {
     const errosResumo = [];
     for (let i = 0; i < alvos.length && !parouEm656; i++) {
       const alvo = alvos[i];
-      // Resolve empresaId pelo CNPJ (mesma busca do sync-targeted).
-      let emp = null;
-      for (const col of ['simples_empresas', 'lucro_empresas']) {
-        const snap = await db.collection(col).where('cnpj', '==', alvo.cnpj).limit(1).get();
-        if (!snap.empty) { emp = { id: snap.docs[0].id, cnpj: alvo.cnpj }; break; }
-      }
-      if (!emp) {
-        // cnpj formatado no doc — fallback lento só quando necessário
-        for (const col of ['simples_empresas', 'lucro_empresas']) {
-          const todos = await db.collection(col).get();
-          for (const d of todos.docs) {
-            if (String(d.data().cnpj || '').replace(/\D/g, '') === alvo.cnpj) { emp = { id: d.id, cnpj: alvo.cnpj }; break; }
-          }
-          if (emp) break;
-        }
-      }
+      // Dono único (o fallback lento que morava aqui virou o índice
+      // normalizado da casca, cacheado — uma varredura por janela).
+      const achadoDren = await acharEmpresaCadastrada(db, alvo.cnpj);
+      let emp = achadoDren ? { id: achadoDren.empresaId, cnpj: alvo.cnpj } : null;
       if (!emp) { console.warn(`[sync-drenagem] ${alvo.cnpj} sem cadastro — pulando`); continue; }
 
       try {
@@ -1876,9 +1864,14 @@ router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
     const db = fa().firestore();
     const colNames = ['simples_empresas', 'lucro_empresas'];
     let updated = 0;
+    // 🚨 Igualdade aqui devolvia 404 "Empresa não encontrada" para empresa que
+    // ESTÁ cadastrada com o CNPJ mascarado — o erro que manda a pessoa
+    // consertar um cadastro que está certo.
+    const achadoToggle = await acharEmpresaCadastrada(db, cnpj);
     for (const colName of colNames) {
-      const snap = await db.collection(colName).where('cnpj', '==', cnpj).limit(1).get();
-      for (const doc of snap.docs) {
+      if (!achadoToggle || achadoToggle.colecao !== colName) continue;
+      const snap = await db.collection(colName).doc(achadoToggle.empresaId).get();
+      for (const doc of (snap.exists ? [snap] : [])) {
         await doc.ref.update({
           capturarSefaz: ativo,
           capturarSefazAlteradoEm: fa().firestore.FieldValue.serverTimestamp(),

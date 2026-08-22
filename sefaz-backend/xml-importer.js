@@ -14,6 +14,7 @@ import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 import { decidirPosseDocumento } from './documento-posse.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
 import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from './releitura-notas-vazias.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 // CNPJ do escritório — é ele que o cliente põe no autXML da nota dele.
@@ -495,30 +496,20 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
 // chegou (ex.: escritório via autXML) não é emit nem dest, o dono real é a
 // empresa CADASTRADA que aparece como emitente (saída) ou destinatário
 // (entrada). Cache de 10 min evita 2 queries por documento numa paginação.
-const cacheEmpresaPorCnpj = new Map(); // cnpj → { val: {empresaId,cnpj}|null, ts }
-const CACHE_EMPRESA_TTL_MS = 10 * 60_000;
-
+// 🚨 A BUSCA POR IGUALDADE NÃO ENXERGA O CNPJ MASCARADO — e aqui o efeito era
+// o pior de todos: o dono não é achado e o documento fica SEM DONO, invisível
+// em qualquer filtro por cliente (o caso GUARANI, 27/07). Quem responde é o
+// dono único, que só cai na varredura normalizada quando a igualdade falha.
 async function lookupEmpresaCadastrada(db, cnpj) {
-  const c = String(cnpj || '').replace(/\D/g, '');
-  if (c.length !== 14) return null;
-  const hit = cacheEmpresaPorCnpj.get(c);
-  if (hit && (Date.now() - hit.ts) < CACHE_EMPRESA_TTL_MS) return hit.val;
-  let val = null;
-  for (const col of ['simples_empresas', 'lucro_empresas']) {
-    try {
-      const snap = await db.collection(col).where('cnpj', '==', c).limit(1).get();
-      if (!snap.empty) {
-        const d = snap.docs[0].data() || {};
-        // Lápides não recebem documentos (regra do soft-delete #290).
-        if (!d._deleted && !d._merged_into) {
-          val = { empresaId: snap.docs[0].id, cnpj: c };
-          break;
-        }
-      }
-    } catch (e) { /* coleção indisponível — tenta a próxima */ }
+  try {
+    const r = await acharEmpresaCadastrada(db, cnpj);
+    return r ? { empresaId: r.empresaId, cnpj: r.cnpj } : null;
+  } catch (e) {
+    // Coleção indisponível: null mantém a atribuição atual (nunca reatribui
+    // no escuro), e é o mesmo desfecho de antes.
+    console.warn('[xml-importer] lookup de empresa falhou:', e?.message);
+    return null;
   }
-  cacheEmpresaPorCnpj.set(c, { val, ts: Date.now() });
-  return val;
 }
 
 // Resolve o dono real pelos participantes (emit → saída; dest → entrada).

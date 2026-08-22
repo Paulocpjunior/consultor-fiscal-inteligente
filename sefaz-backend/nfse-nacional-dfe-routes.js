@@ -19,6 +19,7 @@ import { listarElegibilidadeNfseNacionalDfe, classificarElegibilidadeAdn } from 
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
+import { acharEmpresaCadastrada, acharEmpresasCadastradas } from './empresa-cadastro-lookup.js';
 
 const router = express.Router();
 
@@ -490,8 +491,11 @@ router.post('/toggle-bulk-por-municipio', requireAuth, express.json(), async (re
         for (const cnpj of cnpjs) {
             try {
                 let achou = false;
+                const alvo = await acharEmpresaCadastrada(db, cnpj);
                 for (const col of ['simples_empresas', 'lucro_empresas']) {
-                    const q = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
+                    if (!alvo || alvo.colecao !== col) continue;
+                    const doc = await db.collection(col).doc(alvo.empresaId).get();
+                    const q = { empty: !doc.exists, docs: doc.exists ? [doc] : [] };
                     if (!q.empty) {
                         achou = true;
                         await q.docs[0].ref.update({
@@ -544,24 +548,20 @@ router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
             else cnpjsValidos.push(cnpj);
         }
 
-        // Loteia em chunks de 10 (limite do where('in')) e procura nas 2 colecoes.
         // Mapa cnpj -> { ref, colecao } pra atualizar no batch depois.
+        // 🚨 O `where('cnpj','in',[…])` é o mesmo defeito em roupa de LOTE: ele
+        // filtra ANTES de normalizar, então o replace(/\D/g,'') que vinha
+        // depois só normalizava o que já tinha passado — o CNPJ mascarado
+        // nunca chegava lá. Quem responde é o dono, em lote.
         const docPorCnpj = new Map();
-        for (let i = 0; i < cnpjsValidos.length; i += 10) {
-            const chunk = cnpjsValidos.slice(i, i + 10);
-            for (const col of ['simples_empresas', 'lucro_empresas']) {
-                try {
-                    const snap = await db.collection(col).where('cnpj', 'in', chunk).get();
-                    snap.forEach((doc) => {
-                        const d = doc.data();
-                        const c = String(d.cnpj || '').replace(/\D/g, '');
-                        if (c.length === 14 && !docPorCnpj.has(c)) docPorCnpj.set(c, { ref: doc.ref, colecao: col });
-                    });
-                } catch (e) {
-                    // Falha de query nao silencia — registra cada CNPJ do chunk como falha
-                    for (const c of chunk) falhas.push({ cnpj: c, erro: e.message });
-                }
+        try {
+            const achados = await acharEmpresasCadastradas(db, cnpjsValidos);
+            for (const [c, a] of achados) {
+                docPorCnpj.set(c, { ref: db.collection(a.colecao).doc(a.empresaId), colecao: a.colecao });
             }
+        } catch (e) {
+            // Falha de leitura nao silencia — cada CNPJ vira falha nomeada.
+            for (const c of cnpjsValidos) falhas.push({ cnpj: c, erro: e.message });
         }
 
         // CNPJs validos mas sem doc -> naoEncontrados
@@ -616,9 +616,14 @@ router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
         const db = fa().firestore();
         // Empresa esta em apenas uma das duas colecoes (simples OU lucro).
         // Erro de query/update vira warn — fluxo continua tentando a outra colecao.
+        // 🚨 Igualdade devolvia 404 "não encontrada" para empresa cadastrada
+        // com o CNPJ mascarado — o erro que manda consertar cadastro correto.
+        const achado = await acharEmpresaCadastrada(db, cnpj);
         for (const col of ['simples_empresas', 'lucro_empresas']) {
             try {
-                const snap = await db.collection(col).where('cnpj', '==', cnpj).limit(1).get();
+                if (!achado || achado.colecao !== col) continue;
+                const doc = await db.collection(col).doc(achado.empresaId).get();
+                const snap = { empty: !doc.exists, docs: doc.exists ? [doc] : [] };
                 if (!snap.empty) {
                     await snap.docs[0].ref.update({
                         nfseNacionalDfeAtivo: ativo,
