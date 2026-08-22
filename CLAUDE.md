@@ -30,6 +30,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   traz o campo.** Régua nova que lê um campo nasce declarando de quais campos
   ela depende, e a projeção que a alimenta é conferida no MESMO PR — é a irmã
   da regra do `.d.ts` e da whitelist do #382.
+  ✂️ **E A IRMÃ APARECEU UM CAMPO ADIANTE — o VALOR.** `valorDoDocumento` lê
+  SEIS formas porque o valor chega em seis, e o import pelo **NAVEGADOR** grava
+  **só `totais.vNF`**. Três consultas traziam apenas `valorTotal`: o **Relatório
+  de Faturamento** da carteira, a **Declaração de Faturamento** — o papel
+  ASSINADO que vai ao banco — e a base do **FUNRURAL/DIPAM**. Nas duas primeiras
+  o leitor ainda lia `Number(d.valorTotal) || 0` cru; na DIPAM o leitor já lia
+  as três formas e a **projeção** é que apagava o fallback. Nota importada à mão
+  entrava valendo **zero** nos três, calada. `CAMPOS_PARA_VALOR_DO_DOCUMENTO`
+  entrou junto do dono e a varredura cobra `totais.vNF` de quem soma dinheiro.
+  🐛 **E a trava nasceu com um defeito meu**: ela fechava o `.select(` no
+  PRIMEIRO `)` — e as projeções são comentadas, então um parêntese dentro do
+  comentário cortava a captura no meio e ela acusava campo que estava lá.
+  **Alarme falso que aparece justamente quando está tudo certo** é o que ensina
+  a equipe a desligar a trava; o comentário passou a ser removido ANTES da
+  leitura dos campos.
 - **🚨 A CLASSE QUE A CASA DECLAROU FECHADA — E ESTAVA ABERTA EM NOVE LUGARES**
   (22/08). A regra de 07/08 é literal, e está escrita DENTRO do
   `empresa-por-cnpj.js`: *"nunca consultar Firestore por igualdade de CNPJ neste

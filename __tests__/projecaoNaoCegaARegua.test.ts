@@ -49,17 +49,26 @@ function varrer(dir: string, out: string[] = []): string[] {
     return out;
 }
 
-/** Cada `.select(...)` que sai de uma consulta a `documentos_fiscais`. */
+/**
+ * Cada `.select(...)` que sai de uma consulta a `documentos_fiscais`.
+ *
+ * 🐛 A 1ª versão casava o fechamento do `.select(` no primeiro `)` — e as
+ * projeções são COMENTADAS, então um parêntese dentro do comentário fechava a
+ * captura no meio e a varredura acusava campo que estava lá. Comentário é
+ * removido ANTES de ler os campos; a linha, calculada sobre o texto original.
+ */
 function projecoes(src: string): Array<{ linha: number; campos: Set<string> }> {
     const out: Array<{ linha: number; campos: Set<string> }> = [];
-    const re = /collection\('documentos_fiscais'\)(?:.|\n){0,900}?\.select\(((?:.|\n){0,700}?)\)/g;
-    for (const m of src.matchAll(re)) {
+    // Preserva o número de linhas (troca o comentário por vazio, não o apaga).
+    const limpo = src.replace(/\/\/[^\n]*/g, '');
+    const re = /collection\('documentos_fiscais'\)(?:.|\n){0,900}?\.select\(((?:.|\n){0,900}?)\)/g;
+    for (const m of limpo.matchAll(re)) {
         const campos = new Set<string>();
         for (const c of m[1].matchAll(/'([^']+)'/g)) {
             campos.add(c[1]);
             campos.add(c[1].split('.')[0]);   // 'totais.vICMS' → 'totais'
         }
-        out.push({ linha: src.slice(0, m.index).split('\n').length, campos });
+        out.push({ linha: limpo.slice(0, m.index).split('\n').length, campos });
     }
     return out;
 }
@@ -115,6 +124,44 @@ describe('🚨 projeção que alimenta docCancelado carrega o que ela lê', () =
     it('e o crédito acumulado traz o tpNF, que decide entrada × saída', () => {
         const [proj] = projecoes(readFileSync(join(RAIZ, 'sefaz-backend/credito-acumulado-routes.js'), 'utf8'));
         expect(proj.campos.has('tpNF')).toBe(true);
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // A IRMÃ, um campo adiante: o VALOR também chega em várias formas, e o
+    // import pelo NAVEGADOR grava só `totais.vNF`. Projeção que traz apenas
+    // `valorTotal` faz a nota entrar valendo ZERO — e nada acusa.
+    //
+    // Quem soma dinheiro carrega as formas; quem só CONTA documento, não.
+    // ═══════════════════════════════════════════════════════════════════════
+    const SOMAM_DINHEIRO: Record<string, string> = {
+        'sefaz-backend/relatorios-routes.js': 'faturamento da carteira e a Declaração ASSINADA ao banco',
+        'sefaz-backend/dipam-routes.js': 'base do FUNRURAL e da DIPAM',
+    };
+
+    it('quem SOMA valor carrega as formas em que o valor chega', () => {
+        const faltas: string[] = [];
+        for (const [rel, oQue] of Object.entries(SOMAM_DINHEIRO)) {
+            const src = readFileSync(join(RAIZ, rel), 'utf8');
+            for (const { linha, campos } of projecoes(src)) {
+                // `totais.vNF` é a forma do import pelo navegador — é ela que
+                // some quando a projeção traz só o campo cru.
+                if (!campos.has('totais.vNF')) faltas.push(`${rel}:${linha} (${oQue})`);
+            }
+        }
+        if (faltas.length) {
+            throw new Error(
+                '\n\n🚧 PROJEÇÃO QUE SOMA DINHEIRO SEM AS FORMAS DO VALOR\n\n'
+                + faltas.map((x) => `  · ${x}`).join('\n')
+                + '\n\nO import pelo NAVEGADOR grava só `totais.vNF` — nunca `valorTotal`. Sem ela\n'
+                + 'na projeção, essas notas entram valendo ZERO e ninguém percebe.\n',
+            );
+        }
+    });
+
+    it('e o relatório lê pelo DONO, não pelo campo cru', () => {
+        const src = readFileSync(join(RAIZ, 'sefaz-backend/relatorios-routes.js'), 'utf8');
+        expect(src).toContain('valorDoDocumento');
+        expect(src).not.toMatch(/Number\(d\.valorTotal\)/);
     });
 
     it('toda exceção declarada tem motivo escrito', () => {
