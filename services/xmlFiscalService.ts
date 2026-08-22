@@ -35,6 +35,13 @@ import {
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
+// A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
+// fica gravada como 'saida' até o backfill passar, e este painel é o número
+// que a equipe compara com o livro e com o SPED.
+// @ts-ignore — módulo backend com .d.ts próprio
+import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+
+const direcaoDoDocumento = (d: any): string => (direcaoEfetivaDoc(d) as string) || '';
 // @ts-ignore — módulo backend com .d.ts próprio
 import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
@@ -927,8 +934,13 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
         t.quantidade++;
         t.valor += valor;
         out.valorTotal += valor;
-        if (d.direcao === 'entrada') { out.entradas++; out.valorEntradas += valor; }
-        else if (d.direcao === 'saida') { out.saidas++; out.valorSaidas += valor; }
+        // 🚨 A DIREÇÃO PELA RÉGUA: a compra de produtor rural (art. 136) fica
+        // gravada como 'saida' e entrava aqui como SAÍDA, inflando o
+        // faturamento do painel — que é o número que a equipe compara com o
+        // livro e com o SPED, ambos já corrigidos.
+        const dirDoc = direcaoDoDocumento(d);
+        if (dirDoc === 'entrada') { out.entradas++; out.valorEntradas += valor; }
+        else if (dirDoc === 'saida') { out.saidas++; out.valorSaidas += valor; }
 
         if (d.chave) {
             if (seenChaves.has(d.chave)) out.duplicados++;
@@ -937,8 +949,9 @@ export function summarize(docs: DocumentoFiscal[]): DashboardSummary {
 
         const comp = getCompetenciaDocumento(d) || 'sem-competencia';
         const c = out.porCompetencia[comp] ||= { entradas: 0, saidas: 0, valorEntradas: 0, valorSaidas: 0 };
-        if (d.direcao === 'entrada') { c.entradas++; c.valorEntradas += valor; }
-        else if (d.direcao === 'saida') { c.saidas++; c.valorSaidas += valor; }
+        const dirComp = direcaoDoDocumento(d);
+        if (dirComp === 'entrada') { c.entradas++; c.valorEntradas += valor; }
+        else if (dirComp === 'saida') { c.saidas++; c.valorSaidas += valor; }
 
         // Top Empresas: fallback CNPJ formatado quando empresaNome vier vazio
         // (docs antigos importados antes do importer popular empresaNome, OU

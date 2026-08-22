@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A DEDUP DO ART. 136 NÃO RODAVA PARA NOTA NENHUMA — a compra dobrava, em
+  DOIS livros** (22/08, terceira leva do eixo da direção). Dois defeitos que se
+  sustentavam:
+  🔴 o **Livro de Entradas** filtrava `d.direcao === 'entrada'` — campo CRU. A
+  nota própria de entrada fica gravada como `'saida'`, então ela **não chegava
+  ao Livro de Entradas** (aparecia no de SAÍDAS) e, por tabela, **nunca chegava
+  à dedup** logo abaixo;
+  🔴 e a `ehNotaPropriaDeEntrada` do `livroNotaProdutor.ts` exigia
+  `direcao === 'entrada'` — **o contrário do dono no backend**. Função com o
+  MESMO NOME respondendo diferente, que é o começo de duas respostas
+  divergentes (a lição do `perguntarDebitosJaEnviados`, 18/08).
+  🔴 Resultado: a nota do PRODUTOR ficava **sem par** e entrava no livro, com a
+  própria contada do outro lado. A compra de produtor rural contava **duas
+  vezes**, em livros diferentes — que é exatamente o que a dedup de 11/08
+  existe para impedir.
+  📌 **E O TESTE PASSAVA**: o fixture usava `direcao: 'entrada'`, a forma
+  PÓS-backfill. Ele descrevia um mundo que a produção não vive. Agora o
+  fixture é a forma REAL do banco (`'saida'` + `empresaCnpj`), com o caso
+  pós-backfill ao lado e o `tpNF=0` de TERCEIRO barrado.
+  ⚠️ **Fixture que não é a forma gravada é teste verde sobre defeito vivo** —
+  é a armadilha das duas formas atacando o TESTE, não o código.
+
 - **🚨 A CENTRAL DE DOCUMENTOS DIZIA "SAÍDA" NA NOTA QUE O SPED ESCRITURA COMO
   ENTRADA** (22/08, fechando o eixo da direção onde ele mais aparece). Depois
   de o SPED, o `.FML`, o preflight e os relatórios passarem a ler pela régua,
