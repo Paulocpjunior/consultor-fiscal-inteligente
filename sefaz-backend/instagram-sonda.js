@@ -136,6 +136,6 @@ export function concluirSondaInstagram(resultados = []) {
  * que JÁ está pronta hoje, independente do que a sonda encontrar.
  */
 export const SOBRE_RESTRINGIR_ATENDENTES = {
-    titulo: 'A parte de "só alguns atendentes" já está pronta — é a mesma peça do WhatsApp',
-    texto: 'O catálogo de canais e as filas de atendimento (⚙️ → 👥) já resolvem isso: um canal novo (o Instagram seria um) pode ficar amarrado a UMA fila, e só quem tem aquela fila enxerga as conversas dela — igual já funciona pra Recepção, Fiscal, RH etc. Isso não depende da sonda: é trabalho que já existe.',
+    titulo: 'O "só alguns atendentes" do Instagram é POR USUÁRIO — a lista mora nesta aba',
+    texto: 'Decisão do Paulo (22/08): as DMs do Instagram são limitadas por USUÁRIO, não por departamento. A lista "Quem atende as DMs" (logo abaixo, admin edita) decide quem vê, abre e responde conversa 📷 — inclusive o push segue a mesma régua. Lista vazia = sem restrição (vale a regra de filas de sempre).',
 };

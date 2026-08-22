@@ -167,6 +167,54 @@ describe('enviarTextoInstagram', () => {
     });
 });
 
+describe('📷 Instagram restrito POR USUÁRIO (Paulo, 22/08: "limitado por usuario e nao por dpto")', () => {
+    const { resolverConfig, podeAtenderInstagram } = require('../sefaz-backend/whatsapp-atendimento.js');
+    const { destinatariosDoPush } = require('../sefaz-backend/whatsapp-push.js');
+
+    it('lista vazia = sem restrição; com lista, SÓ quem está nela (sem diferenciar caixa)', () => {
+        expect(podeAtenderInstagram({ instagramAtendentes: [] }, 'qualquer@sp.com')).toBe(true);
+        const cfg = { instagramAtendentes: ['juliana.gomes@spassessoriacontabil.com.br', 'rhsp@spassessoriacontabil.com.br'] };
+        expect(podeAtenderInstagram(cfg, 'juliana.gomes@spassessoriacontabil.com.br')).toBe(true);
+        expect(podeAtenderInstagram(cfg, 'RHSP@spassessoriacontabil.com.br')).toBe(true);
+        expect(podeAtenderInstagram(cfg, 'outro@spassessoriacontabil.com.br')).toBe(false);
+        // Sem e-mail identificado NÃO passa — porta restrita não abre pro anônimo.
+        expect(podeAtenderInstagram(cfg, null)).toBe(false);
+    });
+
+    it('resolverConfig sanitiza a lista: minúsculas, sem duplicata, sem entrada que não é e-mail', () => {
+        const r = resolverConfig({ instagramAtendentes: ['  Juliana.Gomes@SP.com ', 'juliana.gomes@sp.com', 'não-é-email', ''] });
+        expect(r.instagramAtendentes).toEqual(['juliana.gomes@sp.com']);
+        // Campo ausente na config antiga = sem restrição (nada some em silêncio).
+        expect(resolverConfig({}).instagramAtendentes).toEqual([]);
+    });
+
+    it('o push segue a MESMA régua: quem está fora da lista não é avisado da DM 📷', () => {
+        const usuarios = [
+            { uid: 'a', email: 'juliana.gomes@sp.com', role: 'user', papelAtendimento: 'colaborador', filasAtendimento: ['recepcao'], tokens: ['t1'], prefs: {} },
+            { uid: 'b', email: 'fora@sp.com', role: 'user', papelAtendimento: 'colaborador', filasAtendimento: ['recepcao'], tokens: ['t2'], prefs: {} },
+        ];
+        const config = { instagramAtendentes: ['juliana.gomes@sp.com'] };
+        const { alvos, fora } = destinatariosDoPush({
+            usuarios, config,
+            conversa: { canal: 'instagram', fila: null },
+        });
+        expect(alvos.map((a: { email: string }) => a.email)).toEqual(['juliana.gomes@sp.com']);
+        expect(fora.some((f: { email: string; motivo: string }) => f.email === 'fora@sp.com' && /lista restrita/.test(f.motivo))).toBe(true);
+    });
+
+    it('fiação: listagem, thread, resposta e podeVerConversa passam pela régua; a ⚙️ → 📷 edita a lista', () => {
+        const rotasFonte = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rotasFonte).toContain('podeAtenderInstagram(cfgAtendimento');
+        // Thread e resposta recusam com o CAMINHO (nunca só a porta fechada).
+        expect((rotasFonte.match(/RECUSA_INSTAGRAM/g) || []).length).toBeGreaterThanOrEqual(3);
+        const podeVer = rotasFonte.slice(rotasFonte.indexOf('async function podeVerConversa'), rotasFonte.indexOf('const RECUSA_INSTAGRAM'));
+        expect(podeVer).toContain('podeAtenderInstagram');
+        const telaFonte = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+        expect(telaFonte).toContain('Quem atende as DMs');
+        expect(telaFonte).toContain('instagramAtendentes');
+    });
+});
+
 describe('assinatura do webhook com DUAS chaves (app principal + app do Instagram)', () => {
     // O caso de uso "login do Instagram" assina com a chave do app do
     // Instagram — recusá-la deixaria a DM invisível ATÉ pro diagnóstico
