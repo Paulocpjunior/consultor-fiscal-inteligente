@@ -32,7 +32,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
-    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento,
+    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem,
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
@@ -212,7 +212,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     for (const nota of notas) {
         if (ehEmissaoPropriaDoc(nota, empresa.cnpj)) continue;
         for (const item of (nota.itens || [])) {
-            const codItem = item.cProd || item.codigo || item.cFiscal || `ITEM-${item.nItem || '?'}`;
+            const codItem = codItemDoItem(item);
             if (!itensMap.has(codItem)) {
                 itensMap.set(codItem, {
                     codItem,

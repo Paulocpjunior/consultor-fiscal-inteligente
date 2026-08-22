@@ -5,6 +5,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O `COD_ITEM` TINHA QUATRO RÉGUAS — e ele é a CHAVE que liga o item ao
+  cadastro do 0200** (22/08). O 0200 é a Tabela de Identificação do Item; C170
+  e A170 **apontam** para ela. Nas DUAS famílias de arquivo os dois lados
+  respondiam coisas diferentes, e o PVA já cobrou as duas consequências desta
+  casa: *"Campo obrigatório · COD_ITEM"* (MANTOAN, **36 recusas**, 18/08) e o
+  **item ÓRFÃO**, declarado no 0200 e referenciado por ninguém (PWR, 19/08).
+  🔴 **O retrato de antes**: o **0200** (os dois orquestradores) usava
+  `cProd || codigo || cFiscal || ITEM-n`; o **C170 do EFD ICMS/IPI**,
+  `cProd || codigo || ITEM-n` — **sem o `cFiscal`**; e o **C170 e o A170 do
+  EFD-Contribuições**, `cProd || codigo || ''` — **saindo VAZIO**. Item que
+  chega só com `cFiscal` fazia o 0200 dizer `7803` e o C170 `ITEM-1`.
+  🔴 **E havia uma QUINTA divergência escondida no próprio `ITEM-n`**: o 0200
+  lê o `nItem` que veio no XML e o C170 do ICMS/IPI usava o **contador do
+  laço**. Batia por coincidência quando a ordem do array casava com o número do
+  item; fora disso, `ITEM-3` × `ITEM-1` — órfão garantido.
+  ✂️ `codItemDoItem` nasce em `sped-selecao-documentos.js` (a casa das decisões
+  de item/documento que as DUAS famílias leem), e **quem manda é o 0200**,
+  porque ele é o CADASTRO: quem aponta se ajusta a quem é apontado. Nunca
+  devolve vazio.
+  📌 **A trava é por VARREDURA** — lista de arquivos envelhece no primeiro
+  registro novo, e envelhece em SILÊNCIO, que é exatamente como esta divergência
+  sobreviveu a duas rodadas de PVA.
+  ⚠️ **Pendência NOMEADA, não corrigida**: item sem `nItem` cai em `ITEM-?`, e
+  dois produtos distintos nessa situação colapsam num cadastro só. É o
+  comportamento que o 0200 já tinha; trocar uma chave de cadastro sem caso real
+  seria pior que a colisão.
+
 - **🚨 O FORMATADOR DE VALOR DO SPED ENCOLHIA O NÚMERO EM SILÊNCIO** (22/08,
   varrendo o gêmeo da data — mesmo módulo, mesma classe). `formatValue` fazia
   **`parseFloat(value)` cru**, e o `parseFloat` lê só o PREFIXO que entende. As

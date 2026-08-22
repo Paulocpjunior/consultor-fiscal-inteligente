@@ -73,3 +73,13 @@ export function ehItemDeServico(item: unknown): boolean;
  * série; nunca o '1' que o bloco D inventava.
  */
 export function serieDoDocumento(nota: unknown): string;
+
+/**
+ * COD_ITEM — a CHAVE que liga o item ao cadastro do 0200.
+ *
+ * O 0200 é a Tabela de Identificação do Item; C170 e A170 apontam para ela.
+ * Tinha QUATRO cópias divergentes (22/08), e as duas consequências já foram
+ * cobradas pelo PVA: "Campo obrigatório · COD_ITEM" (MANTOAN, 36 recusas) e o
+ * item ÓRFÃO declarado e não referenciado (PWR). Nunca devolve vazio.
+ */
+export function codItemDoItem(item: unknown): string;

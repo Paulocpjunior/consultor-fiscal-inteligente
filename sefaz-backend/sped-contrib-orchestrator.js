@@ -31,7 +31,7 @@ import { acharFichaCompetencia } from './ipi-varredura.js';
 import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
-import { tipoItemDoDocumento, TIPO_ITEM_SERVICO } from './sped-selecao-documentos.js';
+import { tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
 import { participanteDoDocumento } from './participante-doc-helper.js';
 
@@ -176,7 +176,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const unidadesMap = new Map();
     for (const nota of notas) {
         for (const item of (nota.itens || [])) {
-            const codItem = item.cProd || item.codigo || item.cFiscal || `ITEM-${item.nItem || '?'}`;
+            const codItem = codItemDoItem(item);
             if (!itensMap.has(codItem)) {
                 itensMap.set(codItem, {
                     codItem,
