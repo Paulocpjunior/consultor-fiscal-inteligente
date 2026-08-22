@@ -253,7 +253,7 @@ export const MANUAL: PassoManual[] = [
             'Anexo e áudio de SAÍDA ainda não saem pelo Instagram (o botão nem aparece). Precisa mandar arquivo? Combine outro canal com o cliente (e-mail ou WhatsApp).',
             'Transferir, assumir, nota interna e encerrar funcionam igual ao WhatsApp — só a pesquisa de avaliação e o aviso automático de transferência não saem no Instagram.',
         ],
-        atencao: 'O recebimento é ligado UMA vez pelo admin (⚙️ → 📷, botão 📡). Se DM não estiver chegando, é lá que se confere.',
+        atencao: 'O Instagram é atendido por uma LISTA de usuários (⚙️ → 📷) — não está vendo as conversas 📷? Peça a um admin pra te incluir. E o recebimento é ligado UMA vez pelo admin (botão 📡): DM não chegando se confere lá.',
     },
 ];
 
@@ -262,6 +262,7 @@ export const REVISOES: Revisao[] = [
     {
         data: '2026-08-22',
         itens: [
+            '👤 As DMs do Instagram são atendidas por uma LISTA de usuários (⚙️ → 📷 → "Quem atende as DMs", admin edita): só quem está nela vê, abre e responde conversa 📷 — o push segue a mesma regra. Lista vazia = sem restrição.',
             '📷 DMs do Instagram no MESMO inbox: mensagem no @spassessoriacontabil entra como conversa com o selo 📷, cai na triagem da Recepção e responde-se por TEXTO na própria tela — fila, assumir, transferir, nota interna e relatório funcionam igual. O bot NÃO roda nas DMs (o menu numérico é do WhatsApp); quem conduz é gente.',
             '📡 O recebimento das DMs nasce DESLIGADO: o admin liga em ⚙️ → 📷 Instagram, no botão "Ligar recebimento das DMs". Antes do clique, nada muda.',
             '⏱ Janela do Instagram: fora da janela que a Meta dá, NÃO existe template — a tela diz isso e a saída é aguardar o cliente escrever de novo. Anexo e áudio de SAÍDA no Instagram ficam pra próxima fase (o botão nem aparece).',

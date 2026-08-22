@@ -751,7 +751,10 @@ describe('⚡ respostas rápidas viraram CONFIG — eram 4 frases cravadas na te
     it('o composer lê do estado, não de frases cravadas — e a rota /conversas as carrega', () => {
         expect(tela).toMatch(/respostasRapidas\.map\(\(q\)/);
         expect(tela).not.toMatch(/\['Bom dia! Tudo bem\?'/);
-        expect(rotas).toMatch(/respostasRapidas = resolverConfig\(cfgDoc\.data\(\)\)\.respostasRapidas/);
+        // A INTENÇÃO, não a forma literal (lição das travas de 22/08): a rota
+        // resolve a config e é DELA que as respostas rápidas saem.
+        expect(rotas).toMatch(/cfgAtendimento = resolverConfig\(cfgDoc\.data\(\)\)/);
+        expect(rotas).toMatch(/respostasRapidas = cfgAtendimento\.respostasRapidas/);
     });
 });
 

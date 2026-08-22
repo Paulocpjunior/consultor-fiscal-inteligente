@@ -51,7 +51,7 @@ import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
-    resolverConfig, papelValido, podeEncerrar,
+    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
 } from './whatsapp-atendimento.js';
 import {
     interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
@@ -435,7 +435,8 @@ router.get('/conversas', requireAuth, async (req, res) => {
         // uma leitura a mais aqui evita uma rota nova + um fetch por tela.
         const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get()
             .catch(() => ({ data: () => null }));
-        const respostasRapidas = resolverConfig(cfgDoc.data()).respostasRapidas;
+        const cfgAtendimento = resolverConfig(cfgDoc.data());
+        const respostasRapidas = cfgAtendimento.respostasRapidas;
         let docsConversas = [];
         let cursorConv = null;
         while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
@@ -478,7 +479,11 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 naoLidas: x.naoLidas || 0,
                 atualizadoEm: x.atualizadoEm || null,
             };
-        }).filter((cv) => conversaVisivel(minhasFilas, cv.fila));
+        }).filter((cv) => conversaVisivel(minhasFilas, cv.fila)
+            // 📷 DM do Instagram é POR USUÁRIO (Paulo, 22/08) — a régua vem
+            // da config; lista vazia = sem restrição. Aplica-se POR CIMA da
+            // regra de filas, nunca no lugar dela.
+            && (cv.canal !== 'instagram' || podeAtenderInstagram(cfgAtendimento, req.user?.email)));
         return res.json({
             ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel, respostasRapidas,
             limiteLeitura: docsConversas.length >= TETO_LEITURA_CONVERSAS ? TETO_LEITURA_CONVERSAS : null,
@@ -496,6 +501,12 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
     try {
         const numero = idConversaDoParam(req.params.numero);
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        // 📷 Instagram é por USUÁRIO: a thread não abre pela URL pra quem a
+        // lista esconde (o gate mora na MESMA régua da listagem).
+        if (ehConversaInstagram(numero)) {
+            const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
+            if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
+        }
         const snap = await getDb().collection('whatsapp_mensagens')
             .where('conversaId', '==', numero).limit(500).get();
         const mensagens = snap.docs.map((d) => {
@@ -682,6 +693,14 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
         const db = getDb();
         const conv = await db.collection('whatsapp_conversas').doc(numero).get();
         const ehIg = ehConversaInstagram(numero) || conv.data()?.canal === 'instagram';
+        // 📷 Instagram é por USUÁRIO — quem está fora da lista não responde
+        // (mesma régua da listagem/thread; recusa com o caminho).
+        if (ehIg) {
+            const cfgDocIg = await db.collection('whatsapp_config').doc('atendimento').get().catch(() => ({ data: () => null }));
+            if (!podeAtenderInstagram(resolverConfig(cfgDocIg.data()), req.user?.email)) {
+                return res.status(403).json(RECUSA_INSTAGRAM);
+            }
+        }
         const ate = Date.parse(conv.data()?.janela24hAte || '');
         if (!Number.isFinite(ate) || ate <= Date.now()) {
             return res.status(422).json({
@@ -1467,8 +1486,23 @@ router.post('/contatos/:numero/compartilhar', requireAuth, async (req, res) => {
 async function podeVerConversa(db, user, numero) {
     const { filas } = await perfilAtendimento(db, user);
     const conv = await db.collection('whatsapp_conversas').doc(numero).get();
-    return { ok: conversaVisivel(filas, conv.data()?.fila || null), conversa: conv.data() || {} };
+    const dados = conv.data() || {};
+    let ok = conversaVisivel(filas, dados.fila || null);
+    // 📷 DM do Instagram é POR USUÁRIO — a MESMA régua da listagem, senão a
+    // lista esconderia a conversa e o anexo/mensagem abriria pela URL.
+    if (ok && (dados.canal === 'instagram' || ehConversaInstagram(numero))) {
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get().catch(() => ({ data: () => null }));
+        ok = podeAtenderInstagram(resolverConfig(cfgDoc.data()), user?.email);
+    }
+    return { ok, conversa: dados };
 }
+
+/** Recusa padrão do Instagram restrito — com o caminho, nunca só a porta. */
+const RECUSA_INSTAGRAM = {
+    ok: false,
+    error: 'As DMs do Instagram são atendidas por uma lista restrita de usuários — e você não está nela.',
+    acao: 'Peça a um admin pra te incluir em ⚙️ → 📷 Instagram → "Quem atende as DMs".',
+};
 
 router.get('/conversas/:numero/midia/:mensagemId', requireAuth, async (req, res) => {
     try {

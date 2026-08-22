@@ -22,7 +22,7 @@
 //   que está esperando.
 // ============================================================================
 
-import { filasVisiveis, conversaVisivel, dentroDoHorario } from './whatsapp-atendimento.js';
+import { filasVisiveis, conversaVisivel, dentroDoHorario, podeAtenderInstagram } from './whatsapp-atendimento.js';
 
 /** Erros do FCM que significam "este token não existe mais". */
 const TOKENS_MORTOS = new Set([
@@ -63,6 +63,9 @@ export function destinatariosDoPush({
             departamentos: u.departamentos || [], filasAtendimento: u.filasAtendimento || [],
         });
         if (!conversaVisivel(filas, conversa.fila || null)) { motivo('a conversa é de uma fila que ele não atende'); continue; }
+        // 📷 DM do Instagram é POR USUÁRIO (a mesma régua do inbox) — avisar
+        // quem não pode abrir a conversa é convite pra um 403.
+        if (conversa.canal === 'instagram' && !podeAtenderInstagram(config, u.email)) { motivo('o Instagram é atendido por lista restrita e ele não está nela'); continue; }
         if (!noExpediente && prefs.pushForaDoExpediente !== true) { motivo('fora do expediente (push 24h desligado)'); continue; }
 
         alvos.push({ uid: u.uid, email: u.email || null, tokens: [...new Set(u.tokens)] });
