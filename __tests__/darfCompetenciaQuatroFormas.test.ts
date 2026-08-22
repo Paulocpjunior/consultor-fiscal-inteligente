@@ -75,3 +75,32 @@ describe('🚨 competência ilegível NÃO vira a data de hoje', () => {
         expect(p).toBeTruthy();
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 E O DARE-SP CONHECIA DUAS DAS QUATRO
+//
+// A referência do DARE (`MM/AAAA`) era normalizada a partir de `MM/AAAA` e
+// `AAAA-MM` — e recusava `202607` (colagem de arquivo) e `AAAA-MM-DD` (a forma
+// que a ficha financeira grava), devolvendo *"Referência inválida"* sobre
+// competências legítimas.
+//
+// ✅ E o que ele JÁ FAZIA CERTO fica declarado: ilegível devolve **null** e
+// quem chama RECUSA com o motivo. Ao contrário do DARF, aqui a ausência nunca
+// virou a data de hoje — este era o desenho certo desde sempre.
+// ═══════════════════════════════════════════════════════════════════════════
+// @ts-expect-error — módulo backend .js sem .d.ts
+import { normalizarReferencia } from '../sefaz-backend/dare-sp.js';
+
+describe('🚨 a referência do DARE lê as quatro formas', () => {
+    it('todas viram MM/AAAA', () => {
+        for (const forma of ['07/2026', '2026-07', '202607', '2026-07-15']) {
+            expect({ forma, ref: normalizarReferencia(forma) }).toEqual({ forma, ref: '07/2026' });
+        }
+    });
+
+    it('e o ilegível continua devolvendo null — nunca uma referência inventada', () => {
+        for (const lixo of ['', 'julho', '13/2026', '2026-13', null, undefined]) {
+            expect({ lixo, ref: normalizarReferencia(lixo as any) }).toEqual({ lixo, ref: null });
+        }
+    });
+});
