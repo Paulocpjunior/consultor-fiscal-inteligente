@@ -92,6 +92,26 @@ export async function testarEmailGraph(): Promise<{ ok: boolean; error?: string;
     }
 }
 
+/**
+ * Prévia do resumo diário — SÓ COLETA, não manda e-mail nenhum.
+ *
+ * 🚨 A rota existia desde sempre e nenhuma tela a chamava (varredura de
+ * `rotaTemChamada`, 22/08). O efeito prático: para conferir os números do
+ * resumo, o único caminho era **disparar o e-mail de verdade** — o que enche a
+ * caixa de quem testa e, pior, ensina que "conferir" e "enviar" são a mesma
+ * ação. Aqui elas voltam a ser duas.
+ */
+export async function previaResumoDiario(): Promise<{ ok: boolean; error?: string; resumo?: any }> {
+    try {
+        const res = await fetch(`${BASE}/previa-resumo`, { headers: await authHeaders() });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+        return { ok: true, resumo: data };
+    } catch (err: any) {
+        return { ok: false, error: err?.message || 'Falha na chamada' };
+    }
+}
+
 /** Dispara o resumo diário de capturas (coleta + envia e-mail). Backend usa o e-mail do admin logado. */
 export async function testarResumoDiario(): Promise<{ ok: boolean; error?: string; resumo?: any }> {
     try {

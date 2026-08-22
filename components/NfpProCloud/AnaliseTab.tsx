@@ -23,6 +23,7 @@ import type { NfpAnaliseEmpresa } from '../../types';
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
 import { cardStyle, inputStyle, labelSmall, btnStyle, btnStyleSave } from './_common';
 import ManualSituacaoFiscalForm, { type NfpManualSituacaoFiscalPayload } from './ManualSituacaoFiscalForm';
+import ConsultasAvulsas from './ConsultasAvulsas';
 
 interface ProspectData {
     cnpj: string;
@@ -226,6 +227,13 @@ const AnaliseTab: React.FC<Props> = ({
                     </p>
                 )}
             </div>
+
+            {/* ─── Consultas avulsas ─────────────────────────────────────────
+                Mora AQUI, e não numa aba própria, porque é aqui que a pessoa
+                está quando a varredura falha em UMA das cinco consultas — o
+                caminho tem de nascer onde a dúvida nasce (a lição do card CFOP
+                que não levava ao CFOP, 18/08). */}
+            {hasActiveSelection && <ConsultasAvulsas cnpj={activeCnpj} />}
 
             {/* ─── Análise da IA — mesma para os dois fluxos ─────────────────── */}
             {analise && (

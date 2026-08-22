@@ -49,6 +49,48 @@ export async function analisarEmpresaCompleta(cnpj: string, regime?: string, uf?
     return res.json();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 AS TRÊS CONSULTAS AVULSAS — rotas que existiam e que a tela nunca chamou
+//
+// A varredura de `rotaTemChamada` (22/08) achou `/situacao-fiscal`,
+// `/divida-ativa` e `/cnds-publicas` sem NENHUM caminho na interface: a tela do
+// NFP só chamava `/analise-completa`. Isso importa porque a completa é um
+// `Promise.allSettled` de CINCO consultas — quando UMA cai (SERPRO fora,
+// timeout do portal), não havia como repetir SÓ ela: ou se refazia a varredura
+// inteira, queimando quota paga nas quatro que já tinham dado certo, ou se
+// ficava sem o pedaço.
+//
+// ⚠️ AS TRÊS SÃO CONSULTA PURA — não gravam a análise. Quem grava é o botão da
+// varredura. Prometer o contrário faria alguém consultar, ver o número na tela
+// e achar que ele entrou no plano de ação.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function consultarNfp(caminho: string, cnpj: string): Promise<any> {
+    const res = await fetch(`${API_BASE}${caminho}`, {
+        method: 'POST',
+        headers: await authHeaders(),
+        body: JSON.stringify({ cnpj }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Erro ${res.status} em ${caminho}`);
+    return body;
+}
+
+/** Situação fiscal (SERPRO — consome quota paga). Consulta pura, não grava. */
+export async function consultarSituacaoFiscal(cnpj: string): Promise<any> {
+    return consultarNfp('/situacao-fiscal', cnpj);
+}
+
+/** Dívida ativa da União (SERPRO — consome quota paga). Consulta pura. */
+export async function consultarDividaAtiva(cnpj: string): Promise<any> {
+    return consultarNfp('/divida-ativa', cnpj);
+}
+
+/** CNDs pelos portais PÚBLICOS — não consome quota SERPRO. Consulta pura. */
+export async function consultarCndsPublicas(cnpj: string): Promise<any> {
+    return consultarNfp('/cnds-publicas', cnpj);
+}
+
 /**
  * Salva (ou atualiza) a análise de uma empresa.
  *

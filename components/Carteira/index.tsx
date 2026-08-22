@@ -15,7 +15,7 @@ import {
     type VinculoCarteira,
     type PapelCarteira,
 } from '../../services/carteiraService';
-import { testarResumoDiario } from '../../services/notificacoesService';
+import { testarResumoDiario, previaResumoDiario } from '../../services/notificacoesService';
 import { resumirCarteira, resumoCarteiraCsv } from '../../services/carteiraResumo';
 import GuiaDoMes from './GuiaDoMes';
 
@@ -190,6 +190,26 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         }
     };
 
+    // 👁 Conferir os números SEM disparar e-mail. Antes desta tela o único
+    // caminho era mandar o resumo de verdade — ou seja, conferir e enviar eram
+    // a mesma ação, e quem só queria ver o número enchia a própria caixa.
+    const [previa, setPrevia] = useState<{ carregando: boolean; texto: string | null }>({ carregando: false, texto: null });
+    const handlePreviaResumo = async () => {
+        setPrevia({ carregando: true, texto: null });
+        const r = await previaResumoDiario();
+        if (r.ok) {
+            const total = r.resumo?.totalCapturas ?? 0;
+            const falhas = r.resumo?.totalFalhas ?? r.resumo?.falhas?.length ?? 0;
+            setPrevia({
+                carregando: false,
+                texto: `${total} captura(s) e ${falhas} falha(s) nas últimas 24h. `
+                    + 'Nenhum e-mail foi enviado — isto é só a coleta.',
+            });
+        } else {
+            setPrevia({ carregando: false, texto: `⛔ ${r.error || 'falha ao coletar'}` });
+        }
+    };
+
     // Colaborador não atribui ninguém — pra ele a tela É o guia do mês.
     if (!isAdmin) {
         return (
@@ -240,14 +260,28 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
             <>
 
             <div className="mb-4">
-                <button
-                    onClick={handleTestarEmail}
-                    disabled={testandoEmail}
-                    className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
-                >
-                    {testandoEmail ? 'Enviando...' : 'Testar resumo diário'}
-                </button>
-                <span className="ml-2 text-xs text-slate-400">Diagnóstico — envia o resumo de capturas das últimas 24h para sua caixa.</span>
+                <div className="flex gap-2 flex-wrap items-center">
+                    <button
+                        onClick={handlePreviaResumo}
+                        disabled={previa.carregando}
+                        className="px-3 py-1.5 bg-slate-600 text-white rounded text-xs hover:bg-slate-700 disabled:opacity-50"
+                    >
+                        {previa.carregando ? 'Coletando...' : '👁 Prévia (não envia)'}
+                    </button>
+                    <button
+                        onClick={handleTestarEmail}
+                        disabled={testandoEmail}
+                        className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                        {testandoEmail ? 'Enviando...' : '✉️ Testar resumo diário'}
+                    </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                    Diagnóstico. A prévia só COLETA os números; o teste ENVIA o resumo das últimas 24h para a sua caixa.
+                </p>
+                {previa.texto && (
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{previa.texto}</p>
+                )}
             </div>
 
             {/* ── Resumo: total por colaborador × pendências de cadastro ── */}

@@ -31,6 +31,37 @@ export async function getResumoConsolidado(user: User | null): Promise<EmissaoRe
     return res.json();
 }
 
+/** Estado do freio de emissão (kill-switch por env do Cloud Run). */
+export interface EmissaoGuardStatus {
+    tudoBloqueado: boolean;
+    porTipo: Record<string, boolean>;
+}
+
+/**
+ * 🚨 O FREIO DE EMISSÃO SÓ SE VIA ABRINDO O CLOUD RUN.
+ *
+ * A rota `/guard-status` existia e nenhuma tela a chamava (varredura de
+ * `rotaTemChamada`, 22/08) — o próprio comentário dela dizia "admin vê quais
+ * tipos estão bloqueados sem precisar abrir o Cloud Run", e o caminho para ver
+ * nunca existiu. Com o freio ligado, quem emite recebe **HTTP 423** com uma
+ * mensagem que parece defeito do app; a causa é uma env var que ninguém no
+ * escritório consegue consultar.
+ *
+ * Falha ao consultar devolve **null**, nunca "liberado": afirmar liberação por
+ * causa de uma rede que piscou é o contrário do farol honesto.
+ */
+export async function getGuardStatus(user: User | null): Promise<EmissaoGuardStatus | null> {
+    try {
+        const res = await fetch(`${BASE}/guard-status`, { headers: await authHeaders(user) });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || typeof data.tudoBloqueado !== 'boolean') return null;
+        return { tudoBloqueado: data.tudoBloqueado, porTipo: data.porTipo || {} };
+    } catch {
+        return null;
+    }
+}
+
 export async function getCatalogo(user: User | null, regime: string): Promise<CatalogoEmissaoItem[]> {
     const res = await fetch(`${BASE}/catalogo?regime=${encodeURIComponent(regime)}`, {
         headers: await authHeaders(user),
