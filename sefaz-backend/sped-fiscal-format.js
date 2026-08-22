@@ -11,6 +11,8 @@
 // - Linhas: separadores |campo1|campo2|...|, terminadas em |\r\n.
 // ============================================================================
 
+import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+
 /**
  * Formata data pra DDMMAAAA.
  *
@@ -34,32 +36,14 @@
  * não há o que recuperar. Quem tem a string não deve convertê-la antes.
  */
 function formatDate(value) {
-    if (!value) return '';
-    if (typeof value === 'string') {
-        // ISO com ou sem hora — a data é o prefixo, no fuso do emitente.
-        const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (iso) return iso[3] + iso[2] + iso[1];
-        // Forma brasileira, que aparece em colagem e em cadastro manual.
-        const br = value.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-        if (br) return br[1] + br[2] + br[3];
-        const d = new Date(value);
-        if (isNaN(d.getTime())) return '';
-        return emUtc(d);
-    }
-    if (value instanceof Date) return emUtc(value);
-    // Firestore Timestamp (ou qualquer coisa com toDate) — data não se perde
-    // em silêncio num campo que o PVA cobra.
-    if (typeof value?.toDate === 'function') {
-        const d = value.toDate();
-        return d instanceof Date && !isNaN(d.getTime()) ? emUtc(d) : '';
-    }
-    return '';
-}
-
-function emUtc(d) {
-    const dia = String(d.getUTCDate()).padStart(2, '0');
-    const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
-    return `${dia}${mes}${d.getUTCFullYear()}`;
+    // ⚠️ QUEM RESPONDE "que dia o documento declara" é o DONO. Aqui só se
+    // TRADUZ para a forma do SPED (DDMMAAAA) — a LEITURA da data é a mesma do
+    // `.FML`, e ter duas fazia o mesmo documento sair com dias diferentes em
+    // dois arquivos do mesmo mês.
+    const iso = dataDeclaradaDoDocumento(value);
+    if (!iso) return '';
+    const [ano, mes, dia] = iso.split('-');
+    return `${dia}${mes}${ano}`;
 }
 
 /** Formata competencia YYYY-MM pra DDMMAAAA do primeiro dia do mes. */

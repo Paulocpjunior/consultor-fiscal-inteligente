@@ -98,6 +98,14 @@ export function valorDoDocumento(nota: unknown): number;
 export function valorDoDocumentoServico(nota: unknown): number;
 
 /**
+ * QUE DIA o documento DECLARA — lido do TEXTO, nunca de conversão de fuso.
+ * Devolve 'AAAA-MM-DD' ou '' quando não há data legível. A FORMA final
+ * (DDMMAAAA do SPED, AAAAMMDD do .FML, dd/mm/aaaa da tela) é de quem escreve;
+ * o que não pode ter duas respostas é o DIA.
+ */
+export function dataDeclaradaDoDocumento(bruto: unknown): string;
+
+/**
  * ISS da NFS-e nas QUATRO formas gravadas (`valores.iss` do navegador,
  * `valorIss`/`issDevido` do portal e do ADN, `totais.vISS` do ABRASF).
  * Devolve NaN quando nenhuma forma tem número.

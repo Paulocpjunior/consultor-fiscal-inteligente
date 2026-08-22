@@ -172,3 +172,111 @@ describe('🚨 nota sem data legível fica de FORA do .FML, nomeada', () => {
         expect(r.conteudo).toContain('20260710');
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A CLASSE SÓ FECHA COM VARREDURA — o teste cruzado prova os DOIS que eu
+// conhecia; ele não impede o TERCEIRO
+//
+// Em 22/08 o gerador do SPED e o do `.FML` foram corrigidos e travados por um
+// teste que alimenta os dois com as mesmas entradas e exige o MESMO DIA. Isso
+// prova o que existe — e não vê quem nasce depois. A varredura achou o
+// terceiro: o **relatório de análise de XMLs do SAGE** lia
+// `new Date(dhEmi).toLocaleDateString('pt-BR')`, ou seja *"que dia era no fuso
+// de QUEM ABRIU A TELA"* — e é justamente ele que o colaborador compara com o
+// arquivo.
+//
+// ✂️ A leitura virou UMA (`dataDeclaradaDoDocumento`, na casa das leituras de
+// documento), e cada lugar só TRADUZ para a forma dele. A decisão de 22/08 era
+// não criar um módulo novo para partilhar cinco linhas por causa da armadilha
+// do `.d.ts` à mão — o obstáculo sumiu ao pôr a régua onde o `.d.ts` já existe.
+// ═══════════════════════════════════════════════════════════════════════════
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join, relative } from 'path';
+import { dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+
+const RAIZ_APP = join(__dirname, '..');
+
+describe('🚨 o DONO da data lê o TEXTO, nunca o fuso', () => {
+    it('a nota das 22h30 de Brasília declara 31/07, não 01/08', () => {
+        expect(dataDeclaradaDoDocumento('2026-07-31T22:30:00-03:00')).toBe('2026-07-31');
+    });
+
+    // O caso que o BRT também erra — foi ele que mostrou que "acertar por
+    // acidente" não é acertar.
+    it('e a de Manaus às 23h30 declara 31/07 igual', () => {
+        expect(dataDeclaradaDoDocumento('2026-07-31T23:30:00-04:00')).toBe('2026-07-31');
+    });
+
+    it('lê a forma brasileira de colagem e de cadastro manual', () => {
+        expect(dataDeclaradaDoDocumento('05/08/2026')).toBe('2026-08-05');
+    });
+
+    it('Timestamp do Firestore não vira data VAZIA', () => {
+        const ts = { toDate: () => new Date(Date.UTC(2026, 6, 10, 12)) };
+        expect(dataDeclaradaDoDocumento(ts)).toBe('2026-07-10');
+    });
+
+    // ⚠️ Campo de data NÃO recebe default: ausência devolve vazio, e quem
+    // escreve decide se bloqueia (o SPED e o `.FML` bloqueiam).
+    it('ausência e lixo devolvem vazio, nunca a data de hoje', () => {
+        for (const x of [null, undefined, '', 'abc', {}]) {
+            expect(dataDeclaradaDoDocumento(x)).toBe('');
+        }
+    });
+});
+
+describe('🚨 ninguém mais lê a data do documento por conversão de fuso', () => {
+    // ⚠️ Assinatura ESTREITA: só `new Date(<campo de data de documento>)`
+    // seguido de leitura de DIA/MÊS. Cálculo de IDADE (`getTime()`) é outra
+    // pergunta e não casa — trava que grita sobre código certo é trava
+    // desligada.
+    const PROIBIDO = /new Date\([^)]*(dhEmi|dataEmissao|dtEmi|dEmi|dataFatoGerador)[^)]*\)\s*\.\s*(getDate|getUTCDate|getMonth|getUTCMonth|getFullYear|getUTCFullYear|toLocaleDateString|toLocaleString)/;
+
+    const DECLARADOS: Record<string, string> = {
+        // O DONO é o único que pode: ele existe justamente para converter o
+        // que já perdeu o fuso (Date/Timestamp), e faz isso em UTC declarado.
+        'sefaz-backend/xml-metadata-helper.js': 'é o dono da régua',
+    };
+
+    const arquivos = (dir: string, out: string[] = []): string[] => {
+        for (const nome of readdirSync(dir)) {
+            if (nome === 'node_modules' || nome.startsWith('.')) continue;
+            const caminho = join(dir, nome);
+            if (statSync(caminho).isDirectory()) { arquivos(caminho, out); continue; }
+            if (/\.(ts|tsx|js)$/.test(nome) && !nome.endsWith('.d.ts')) out.push(caminho);
+        }
+        return out;
+    };
+
+    it('varre o código de produção (varredura vazia é trava falsa)', () => {
+        const todos = ['components', 'services', 'sefaz-backend'].flatMap(p => arquivos(join(RAIZ_APP, p)));
+        expect(todos.length).toBeGreaterThan(100);
+    });
+
+    it('nenhum leitor novo converte o fuso para descobrir o DIA', () => {
+        const infratores: string[] = [];
+        for (const p of ['components', 'services', 'sefaz-backend']) {
+            for (const arquivo of arquivos(join(RAIZ_APP, p))) {
+                const rel = relative(RAIZ_APP, arquivo).replace(/\\/g, '/');
+                if (DECLARADOS[rel]) continue;
+                // Prosa não é código — a mesma decisão da varredura de órfãs.
+                const src = readFileSync(arquivo, 'utf8')
+                    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+                if (PROIBIDO.test(src)) infratores.push(rel);
+            }
+        }
+        if (infratores.length) {
+            throw new Error(
+                '\n\n🚧 DATA DE DOCUMENTO LIDA POR CONVERSÃO DE FUSO\n\n'
+                + infratores.map((x) => `  · ${x}`).join('\n')
+                + '\n\nO `dhEmi` chega com o fuso do EMITENTE. `new Date(...)` + `getDate()`/\n'
+                + '`toLocaleDateString()` responde "que dia era no MEU fuso naquele instante" —\n'
+                + 'outra pergunta. O backend roda no Cloud Run (UTC) e a nota das 22h ia com a\n'
+                + 'data do dia seguinte; na VIRADA DO MÊS ela cai em outra competência e o PVA\n'
+                + 'recusa. Fora da virada, a data sai errada e ninguém confere data a olho.\n\n'
+                + 'Use `dataDeclaradaDoDocumento` (sefaz-backend/xml-metadata-helper.js) e\n'
+                + 'traduza para a forma do seu arquivo/tela.\n',
+            );
+        }
+    });
+});
