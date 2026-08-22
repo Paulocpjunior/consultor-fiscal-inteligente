@@ -82,13 +82,57 @@ function formatCompetenciaFim(competencia) {
     return `${String(ultimoDia).padStart(2, '0')}${m[2]}${m[1]}`;
 }
 
-/** Formata valor numerico pra string SPED (ponto decimal, sem milhar). */
+/**
+ * Formata valor numerico pra string SPED (virgula decimal, sem milhar).
+ *
+ * 🚨 O `parseFloat` CRU ENCOLHIA O NÚMERO EM SILÊNCIO (22/08). Ele lê só o
+ * prefixo que entende, e as duas formas em que um valor chega como TEXTO neste
+ * projeto são justamente as que ele erra:
+ *
+ *   · `'1.234,56'` (pt-BR, como sai de e-Fiscal, PDF e colagem) → **1.234**,
+ *     ou seja **`1,23`** no arquivo — mil vezes menos;
+ *   · `'1234,56'`  (digitado sem milhar)                        → **1234**,
+ *     ou seja os centavos somem.
+ *
+ * Nas duas o arquivo sai com um número ERRADO e plausível, que é o pior
+ * desfecho: o PVA aceita, e ninguém confere valor a olho. Número é lido pela
+ * MESMA régua do resto da casa — `parseValorMoeda` responde "que número é
+ * este?" para texto digitado; aqui vale a mesma leitura, porque a origem do
+ * texto é a mesma pessoa ou o mesmo relatório.
+ *
+ * ⚠️ Ilegível continua saindo **''** (ausência), nunca zero: campo de valor não
+ * recebe default, e '' o PVA acusa — número errado, não.
+ */
 function formatValue(value, decimals = 2) {
     if (value === null || value === undefined || value === '') return '';
-    const n = parseFloat(value);
-    if (isNaN(n)) return '';
+    const n = typeof value === 'number' ? value : numeroDeTexto(value);
+    if (n === null || !Number.isFinite(n)) return '';
     // SPED Fiscal exige virgula como separador decimal (NT 2024.001 item a)
     return n.toFixed(decimals).replace('.', ',');
+}
+
+/**
+ * Texto → número, cobrindo as formas em que o valor chega de verdade: pt-BR
+ * com milhar, pt-BR sem milhar, e a forma JS com ponto decimal. Devolve null
+ * para o que não é número — nunca um prefixo.
+ */
+function numeroDeTexto(value) {
+    const t = String(value).trim().replace(/^R\$\s*/i, '').replace(/\s/g, '');
+    if (!t) return null;
+    const sinal = t.startsWith('-') ? -1 : 1;
+    const s = t.replace(/^[+-]/, '');
+    if (!/^[\d.,]+$/.test(s)) return null;
+    let normalizado;
+    if (s.includes(',')) {
+        // Vírgula presente ⇒ pt-BR: pontos são milhar, vírgula é decimal.
+        normalizado = s.replace(/\./g, '').replace(',', '.');
+    } else if ((s.match(/\./g) || []).length === 1 && /^\d+\.\d{1,2}$/.test(s)) {
+        normalizado = s;                      // decimal JS ("1234.56")
+    } else {
+        normalizado = s.replace(/\./g, '');   // "1.234" / "1.234.567" ⇒ milhar
+    }
+    const n = Number(normalizado);
+    return Number.isFinite(n) ? sinal * n : null;
 }
 
 /**
