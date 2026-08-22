@@ -229,6 +229,52 @@ export function auditarSaidaSped(linhas) {
         }
     }
 
+    // ── 4. Valor NEGATIVO em campo de valor ─────────────────────────────────
+    //
+    // 🚨 O leiaute do SPED não carrega SINAL: quando um saldo pode ir para os
+    // dois lados, ele tem DOIS campos (devedor e credor), e quando um ajuste
+    // soma ou abate, quem diz isso é o CÓDIGO da tabela 5.1.1 — nunca o sinal
+    // do número. Um "-1.234,56" no arquivo é sempre uma destas duas coisas:
+    //
+    //   · uma subtração que passou do zero e ninguém segurou (foi o caso do
+    //     E210 em 21/08 — dedução maior que o saldo devedor, que agora sai
+    //     NOMEADA em vez de virar crédito a transportar);
+    //   · um valor escrito no campo do lado errado (o E110 campo 11, 02/08,
+    //     que recebia o saldo CREDOR num campo de saldo DEVEDOR).
+    //
+    // Nos dois o número é plausível e o erro é invisível a olho. A verificação
+    // mora AQUI porque a auditoria roda em TODO arquivo gerado, nas duas
+    // famílias — e ela não lista registro por registro de propósito: lista
+    // envelhece no primeiro registro novo, e envelhece em silêncio.
+    const negativas = [];
+    for (const l of lista) {
+        const p = partes(l);
+        for (let i = 2; i < p.length - 1; i++) {
+            // Estreito: só o que É um número SPED negativo. Código de ajuste,
+            // data e texto não casam.
+            if (/^-\d{1,15}(\.\d{3})*(,\d{1,6})?$/.test(String(p[i]).trim())) {
+                negativas.push({ reg: registroDe(l), pos: i, valor: p[i] });
+            }
+        }
+    }
+    for (const n of negativas.slice(0, 5)) {
+        suspeitas.push({
+            registro: n.reg,
+            tipo: 'valor-negativo',
+            gravidade: 'bloqueia',
+            detalhe: `${n.reg}: o campo ${n.pos} saiu NEGATIVO (${n.valor}). O leiaute do SPED não usa sinal — `
+                + 'saldo que muda de lado tem campo próprio (devedor × credor) e ajuste que abate é dito pelo '
+                + 'CÓDIGO, não pelo sinal. Isto é subtração que passou do zero, ou valor escrito no campo do '
+                + 'lado errado.',
+        });
+    }
+    if (negativas.length > 5) {
+        suspeitas.push({
+            registro: '?', tipo: 'valor-negativo', gravidade: 'bloqueia',
+            detalhe: `…e mais ${negativas.length - 5} campo(s) negativo(s) no mesmo arquivo.`,
+        });
+    }
+
     return { suspeitas, ok: suspeitas.length === 0 };
 }
 

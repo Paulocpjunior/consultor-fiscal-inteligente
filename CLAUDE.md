@@ -5,6 +5,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O FORMATADOR DE VALOR DO SPED ENCOLHIA O NÚMERO EM SILÊNCIO** (22/08,
+  varrendo o gêmeo da data — mesmo módulo, mesma classe). `formatValue` fazia
+  **`parseFloat(value)` cru**, e o `parseFloat` lê só o PREFIXO que entende. As
+  duas formas em que um valor chega como TEXTO neste projeto são justamente as
+  que ele erra: **`'1.234,56'`** (pt-BR — do e-Fiscal, de PDF, de colagem) vira
+  **1.234**, ou seja o arquivo declara **`1,23`**; e **`'1234,56'`** (digitado
+  sem milhar) vira **1234**, ou seja **os centavos somem**.
+  🔴 **Nas duas o arquivo sai com um número ERRADO E PLAUSÍVEL** — o pior
+  desfecho: o PVA aceita e ninguém confere valor a olho. É a família do
+  `VL_OPR` sem o IPI (20/08), o erro que o validador não recusa e só aparece na
+  fiscalização. Agora o texto passa pela MESMA leitura de `parseValorMoeda`
+  (pt-BR com milhar, sem milhar, e ponto decimal JS), e o ilegível continua
+  saindo **VAZIO** — campo de valor não recebe default, e `''` o PVA acusa;
+  número errado, não.
+  ✂️ **E A IRMÃ ENTROU NA AUDITORIA: valor NEGATIVO.** O leiaute do SPED **não
+  carrega sinal** — saldo que muda de lado tem DOIS campos (devedor × credor),
+  e ajuste que abate é dito pelo **CÓDIGO** da 5.1.1. Um `-1.234,56` é sempre
+  uma de duas coisas, e as duas já morderam: **subtração que passou do zero**
+  (o E210 de 21/08, dedução maior que o saldo devedor) ou **valor no campo do
+  lado errado** (o E110 campo 11, de 02/08, recebendo o saldo CREDOR num campo
+  de saldo DEVEDOR).
+  📌 **Ela mora na AUDITORIA, que roda em TODO arquivo gerado das DUAS
+  famílias** — a lição de 21/08: trava nasce onde roda para todos os arquivos
+  daquela família, senão protege o cliente que já quebrou e deixa o próximo
+  descoberto. E **não lista registro por registro**: lista envelhece no
+  primeiro registro novo, e envelhece em silêncio.
+  ⚠️ A assinatura é ESTREITA de propósito (`-` + número no formato SPED): código
+  de ajuste, data, chave e razão social **não** casam. **Nasce VERDE** — as 365
+  suítes passam, ou seja nenhum gerador de hoje emite negativo.
+
 - **🚨 A NOTA EMITIDA ÀS 22h SAÍA NO SPED COM A DATA DO DIA SEGUINTE** (22/08).
   O `dhEmi` da NF-e chega com o fuso do EMITENTE
   (`2026-07-31T22:30:00-03:00`); o formatador fazia `new Date(...)` e lia
