@@ -217,7 +217,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   código de tabela estadual que alguém digitou.
   ⚠️ O app **continua não deduzindo** nenhum dos dois: vencimento e código de
   receita da GNRE e o COD_AJ da 5.3 são ESTADUAIS.
-<<<<<<< HEAD
   🔴 **(19) E A VARREDURA INVERSA — "a tela grava × ninguém lê" — pegou o
   `IND_PERFIL`.** O modal tinha o campo de PERFIL do EFD desde sempre: a pessoa
   escolhia, salvava, e o 0000 saía com **'A' cravado** (o comentário dizia
@@ -242,8 +241,6 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   exatamente o "vai e vem o dia todo" de 20/08.
   ⚠️ E a do bloco M diz os DOIS números de propósito: em 19/08 o sintoma do PVA
   apontou o M200 (que estava certo) quando o vazio era o F600.
-=======
->>>>>>> origin/main
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
