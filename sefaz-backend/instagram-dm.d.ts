@@ -71,6 +71,8 @@ export function assinaturasDoApp(
   daPagina?: Array<{ appId: string; campos: string[] }> | null;
 }>;
 
+export const GRAPH_IG_BASE: string;
+
 export interface EnvioInstagram {
   ok: boolean;
   messageId?: string;

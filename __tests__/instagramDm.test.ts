@@ -149,6 +149,48 @@ describe('enviarTextoInstagram', () => {
         expect(r.ok).toBe(false);
         expect(r.janelaFechada).toBe(true);
     });
+
+    it('com INSTAGRAM_ACCESS_TOKEN (caso de uso "login do Instagram") o envio sai pelo graph.instagram.com', async () => {
+        // O painel de 22/08 mostrou o app do Instagram próprio (API_Oficial-IG):
+        // nesse modo o token é da CONTA e o host é outro — sem este caminho, a
+        // resposta sairia pela API da Página com o token errado.
+        const d = deps([{ ok: true, corpo: { message_id: 'mid.ig-login' } }]);
+        const r = await enviarTextoInstagram(
+            { para: 'ig_17845550001111111', texto: 'Bom dia!' },
+            { ...d, igToken: 'IGAA-token-da-conta' } as never,
+        );
+        expect(r).toEqual({ ok: true, messageId: 'mid.ig-login' });
+        const envio = d.chamadas[0];
+        expect(envio.url).toContain('graph.instagram.com');
+        expect(envio.url).toContain('/me/messages');
+        expect((envio.init?.headers as Record<string, string>).Authorization).toBe('Bearer IGAA-token-da-conta');
+    });
+});
+
+describe('assinatura do webhook com DUAS chaves (app principal + app do Instagram)', () => {
+    // O caso de uso "login do Instagram" assina com a chave do app do
+    // Instagram — recusá-la deixaria a DM invisível ATÉ pro diagnóstico
+    // (401 antes do evento cru). Qualquer chave configurada que bater vale.
+    const { createHmac } = require('crypto');
+    const corpo = Buffer.from('{"object":"instagram"}');
+    const header = (chave: string) => `sha256=${createHmac('sha256', chave).update(corpo).digest('hex')}`;
+
+    it('aceita a assinatura da SEGUNDA chave e recusa chave nenhuma', () => {
+        const { assinaturaValida } = require('../sefaz-backend/whatsapp-webhook.js');
+        expect(assinaturaValida(corpo, header('segredo-ig'), ['segredo-principal', 'segredo-ig'])).toBe(true);
+        expect(assinaturaValida(corpo, header('segredo-principal'), ['segredo-principal', 'segredo-ig'])).toBe(true);
+        expect(assinaturaValida(corpo, header('outra-coisa'), ['segredo-principal', 'segredo-ig'])).toBe(false);
+        expect(assinaturaValida(corpo, header('segredo-ig'), [null, ''])).toBe(false);
+        // Forma antiga (string única) continua valendo — leitor não muda.
+        expect(assinaturaValida(corpo, header('so-uma'), 'so-uma')).toBe(true);
+    });
+
+    it('a rota do webhook passa AS DUAS chaves e a config conhece a env nova', () => {
+        const webhookRotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        expect(webhookRotas).toContain('[cfg.appSecret, cfg.instagramAppSecret]');
+        const nucleoWebhook = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook.js'), 'utf8');
+        expect(nucleoWebhook).toContain('INSTAGRAM_APP_SECRET');
+    });
 });
 
 // ─── FIAÇÃO (varredura de fonte) ────────────────────────────────────────────
@@ -215,7 +257,10 @@ describe('fiação das DMs do Instagram', () => {
         expect(nucleo).toContain('subscribed_apps?fields=subscribed_fields');
         expect(tela).toContain('O que a Meta diz que está assinado');
         expect(tela).toContain('Solicitações de mensagem');
-        expect(tela).toContain('instagram_manage_messages');
+        // O painel de 22/08 revelou o caso de uso "login do Instagram": app do
+        // Instagram próprio, chave própria, webhook na tela do caso de uso —
+        // a dica da tela tem que apontar pra LÁ, com a env da chave.
+        expect(tela).toContain('INSTAGRAM_APP_SECRET');
     });
 
     it('o 📡 existe: rota /instagram/ligar (admin) + estado persistido + botão na tela', () => {

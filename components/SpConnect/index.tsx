@@ -2042,9 +2042,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     </p>
                                                 ) : (igEventos && igEventos.doInstagram === 0 && (
                                                     <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
-                                                        <p className="font-bold">A assinatura está de pé e mesmo assim nada chega. Os dois suspeitos que sobram:</p>
-                                                        <p>• <strong>Solicitações de mensagem</strong>: a DM de quem a conta não segue cai em "Message requests", e a Meta pode não avisar enquanto a solicitação não for aceita. Abra o Instagram oficial do @spassessoriacontabil, ACEITE a solicitação da DM de teste e peça pra pessoa mandar OUTRA mensagem.</p>
-                                                        <p>• <strong>Nível de acesso da permissão</strong>: em developers.facebook.com → API_Oficial → Revisão do app → Permissões e recursos, confira <code>instagram_manage_messages</code> — se estiver em "Acesso padrão", a Meta só entrega DM de quem tem papel no app; "Acesso avançado" libera o público.</p>
+                                                        <p className="font-bold">A assinatura está de pé e mesmo assim nada chega. Suspeitos, na ordem:</p>
+                                                        <p>• <strong>Caso de uso "login do Instagram"</strong> (descoberto em 22/08): o app tem um app do Instagram PRÓPRIO (API_Oficial-IG) e o webhook desse modo se configura NA TELA DO CASO DE USO (seção "Configurar webhooks"), com a URL <code>…run.app/api/whatsapp/webhook</code> e o MESMO verify token do Cloud Run — e a chave secreta DELE precisa estar no Cloud Run como <code>INSTAGRAM_APP_SECRET</code>, senão a DM chega e é recusada com 401 antes do evento cru.</p>
+                                                        <p>• <strong>Solicitações de mensagem</strong>: DM de quem a conta não segue cai em "Message requests" — abra o Instagram oficial, ACEITE a solicitação e peça OUTRA mensagem.</p>
+                                                        <p>• <strong>App publicado</strong>: o próprio painel avisa que o app precisa estar com status de publicado para receber webhooks.</p>
                                                     </div>
                                                 ))}
                                             </div>
