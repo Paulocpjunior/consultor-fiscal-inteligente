@@ -23,6 +23,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   recusadas com mensagem de formato) e a ausência devolve **null** — campo de
   data não recebe default, a régua de 06/08. Quem monta a guia RECUSA com o
   motivo.
+  ✅ **E O DARE-SP JÁ ESTAVA CERTO NO QUE IMPORTA** — ele conhecia duas das
+  quatro formas, mas o ilegível SEMPRE devolveu **null** e a emissão recusa com
+  a frase. É o desenho que as outras guias deviam ter tido desde o começo, e
+  fica declarado no teste para não ser "uniformizado" para pior. Ganhou só as
+  duas formas que faltavam.
+  📌 **A conta da varredura de competência**: as guias e os dois SPED passaram
+  pelo MESMO dono. O que se aprendeu é que a competência circula em quatro
+  formas legítimas e **cada porta conhecia um subconjunto diferente** — não é
+  descuido de um lugar, é a régua morando em cinco cabeças.
 
 - **🚨 A COMPETÊNCIA ENTRAVA NA GERAÇÃO SEM CONFERÊNCIA DE FORMA — e o arquivo
   saía VAZIO dizendo que a empresa não teve movimento** (22/08). As portas do

@@ -24,6 +24,7 @@
 //       pluga aqui em cima sem mudar a validação.
 // ============================================================================
 
+import { competenciaTarefa } from './competencia.js';
 // Portal oficial de emissão (entrada pública; sem parâmetros fabricados).
 export const PORTAL_DARE_URL = 'https://www3.fazenda.sp.gov.br/DARE/';
 
@@ -57,20 +58,15 @@ export const CODIGOS_DARE_ICMS = {
 
 /** Normaliza referência para 'MM/AAAA'. Aceita 'MM/AAAA' e 'AAAA-MM'. */
 export function normalizarReferencia(ref) {
-  const s = String(ref || '').trim();
-  let m = s.match(/^(\d{2})\/(\d{4})$/);
-  if (m) {
-    const mes = Number(m[1]);
-    if (mes >= 1 && mes <= 12) return `${m[1]}/${m[2]}`;
-    return null;
-  }
-  m = s.match(/^(\d{4})-(\d{2})$/);
-  if (m) {
-    const mes = Number(m[2]);
-    if (mes >= 1 && mes <= 12) return `${m[2]}/${m[1]}`;
-    return null;
-  }
-  return null;
+  // ⚠️ AS QUATRO FORMAS, pelo dono. Este parse conhecia duas (`MM/AAAA` e
+  // `AAAA-MM`) e recusava `202607` (colagem de arquivo) e `AAAA-MM-DD` (a
+  // forma que a ficha financeira grava) — competências legítimas voltando com
+  // "referência inválida".
+  //
+  // ✅ E o que ele JÁ FAZIA CERTO fica: ilegível devolve **null**, e quem
+  // chama RECUSA com o motivo. Ao contrário do DARF, aqui a ausência nunca
+  // virou data de hoje — é o desenho que o resto da casa copiou.
+  return competenciaTarefa(ref);
 }
 
 /**
