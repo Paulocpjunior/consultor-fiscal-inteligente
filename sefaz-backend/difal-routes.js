@@ -83,7 +83,11 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 // emitente sai das 2 primeiras posições da chave (cUF). Sem
                 // isso a varredura só enxergava as notas importadas por XML e
                 // dizia "1 cliente" onde havia mais (caso 04/08).
-                .select('empresaId', 'empresaCnpj', 'status', 'modelo', 'tpNF', 'valorTotal', 'chave',
+                // 🚨 `eventos`/`cStat`: `docCancelado` decide na leitura, e o
+                // cancelamento chega por EVENTO com o `status` ainda
+                // 'autorizado'. Sem eles, o DIFAL de aquisição é apurado sobre
+                // compra que não existiu — imposto A PAGAR, a direção cara.
+                .select('empresaId', 'empresaCnpj', 'status', 'cStat', 'eventos', 'modelo', 'tpNF', 'valorTotal', 'chave',
                     'emitente.cnpjCpf', 'emitente.uf', 'cnpjEmit', 'ufEmit', 'codMunEmit',
                     'totais.vST', 'totais.vBCST'),
             { label: `difal varredura ${competencia}`, maxDocs: 80000 },

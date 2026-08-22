@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A PROJEÇÃO CEGAVA A RÉGUA — as três apurações corrigidas ONTEM
+  respondiam como se o campo não existisse** (22/08). Em 21/08 o crédito
+  acumulado, o **DIFAL de aquisição** e o **FUNRURAL/DIPAM** passaram a
+  perguntar por `docCancelado`. A varredura das **projeções** mostrou que
+  nenhuma das três consultas trazia `eventos` nem `cStat` no `.select()` — e o
+  cancelamento chega por **EVENTO**, com o `status` ainda `'autorizado'`.
+  🔴 Ou seja: régua certa, leitor certo, e a **nota cancelada continuava gerando
+  imposto** — DIFAL a pagar sobre compra que não existiu, FUNRURAL sobre nota
+  cancelada, crédito de ICMS a maior. **Campo fora da projeção some da leitura**,
+  e a régua responde *"não cancelada"* com toda confiança.
+  ⚠️ **E a QUARTA era o farol**: a **Rotina do Mês** (o guia do colaborador)
+  conta as canceladas pela mesma régua e dizia **"0 cancelada(s)"**, fechando a
+  etapa de validação em VERDE. Farol honesto mentindo é pior que farol nenhum.
+  ⚠️ No crédito acumulado faltava também o **`tpNF`**, que é o que
+  `direcaoEfetivaDoc` usa para reconhecer a nota PRÓPRIA de entrada (art. 136) —
+  sem ele o ICMS dela entra do lado errado, que é o achado 16 de novo.
+  ✂️ `CAMPOS_PARA_DOC_CANCELADO` nasce **junto do dono** (no
+  `xml-metadata-helper`) e `projecaoNaoCegaARegua.test.ts` cobra o trio de quem
+  consulta `documentos_fiscais`. **Exceção se declara COM o motivo** — as oito
+  de hoje são diagnóstico/adoção/NFS-e (que não tem evento), nenhuma decide
+  imposto. Provada removendo os campos do DIFAL de propósito.
+  📌 **REGRA QUE FICA: consertar o LEITOR não fecha a classe se a CONSULTA não
+  traz o campo.** Régua nova que lê um campo nasce declarando de quais campos
+  ela depende, e a projeção que a alimenta é conferida no MESMO PR — é a irmã
+  da regra do `.d.ts` e da whitelist do #382.
 - **🚨 A CLASSE QUE A CASA DECLAROU FECHADA — E ESTAVA ABERTA EM NOVE LUGARES**
   (22/08). A regra de 07/08 é literal, e está escrita DENTRO do
   `empresa-por-cnpj.js`: *"nunca consultar Firestore por igualdade de CNPJ neste
