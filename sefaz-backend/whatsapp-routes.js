@@ -2397,6 +2397,27 @@ router.get('/instagram/estado', requireAdmin, async (_req, res) => {
             console.warn('[whatsapp/instagram/estado] verificação não lida:', e.message);
         }
 
+        // 📋 E o último POST RECUSADO por assinatura: "a Meta bateu e a chave
+        // não conferiu" ≠ "a Meta nunca bateu" — sem este doc os dois eram o
+        // mesmo silêncio.
+        let postRecusado = null;
+        try {
+            const p = await db.collection('whatsapp_config').doc('webhook_post_recusado').get();
+            if (p.exists) postRecusado = p.data();
+        } catch (e) {
+            console.warn('[whatsapp/instagram/estado] post recusado não lido:', e.message);
+        }
+
+        // Presença (nunca o valor) das envs do caso de uso "login do
+        // Instagram" NA REVISÃO QUE ESTÁ SERVINDO — env adicionada pelo
+        // console fica a 0% até o deploy da esteira, e "adicionei" ≠ "está
+        // no ar" (lição de 17/08).
+        const cfgWebhookIg = configWebhook();
+        const envs = {
+            instagramAppSecret: Boolean(cfgWebhookIg.instagramAppSecret),
+            instagramAccessToken: Boolean(String(process.env.INSTAGRAM_ACCESS_TOKEN || '').trim()),
+        };
+
         // 🔬 O que a META diz que está assinado (degrau seguinte do
         // diagnóstico: interruptor ligado + zero cru ⇒ conferir a assinatura
         // NA FONTE, não na nossa memória do clique). Best-effort: null =
@@ -2409,7 +2430,7 @@ router.get('/instagram/estado', requireAdmin, async (_req, res) => {
             console.warn('[whatsapp/instagram/estado] assinaturas não lidas:', e.message);
         }
 
-        return res.json({ ok: true, estado: doc.exists ? doc.data() : null, eventos, assinaturas, verificacao });
+        return res.json({ ok: true, estado: doc.exists ? doc.data() : null, eventos, assinaturas, verificacao, postRecusado, envs });
     } catch (e) {
         console.error('[whatsapp/instagram/estado]', e);
         return res.status(500).json({ ok: false, error: e.message });

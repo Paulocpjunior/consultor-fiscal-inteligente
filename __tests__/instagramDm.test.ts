@@ -206,6 +206,21 @@ describe('assinatura do webhook com DUAS chaves (app principal + app do Instagra
         expect(telaConnect).toContain('Último aperto de mão');
         expect(telaConnect).toContain('NAVEGADOR');
     });
+
+    it('o 401 do POST fica gravado e a tela mostra a presença das envs na revisão que SERVE', () => {
+        // "A Meta bateu e a chave não conferiu" ≠ "a Meta nunca bateu" — sem o
+        // doc do 401 os dois eram o mesmo silêncio. E env adicionada pelo
+        // console fica a 0% até o deploy da esteira: presença (nunca o valor)
+        // sai dita na aba.
+        const webhookRotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        expect(webhookRotas).toContain("doc('webhook_post_recusado')");
+        const rotasAdmin = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rotasAdmin).toContain("doc('webhook_post_recusado')");
+        expect(rotasAdmin).toContain('instagramAccessToken: Boolean');
+        const telaConnect = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+        expect(telaConnect).toContain('ASSINATURA não conferiu');
+        expect(telaConnect).toContain('Envs no ar');
+    });
 });
 
 // ─── FIAÇÃO (varredura de fonte) ────────────────────────────────────────────
