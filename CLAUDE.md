@@ -80,8 +80,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   cancelamento do leiaute nacional da NFS-e **não está provado neste repo** —
   carimbá-lo de memória seria inventar código de tabela oficial. O evento fica
   gravado e FIEL; fecha com um evento real de cancelamento vindo do ADN.
-  🚩 **E O ACERVO JÁ CAPTURADO CONTINUA TORTO** — a correção vale da próxima
-  rodada em diante. O XML bruto está no Storage (`storagePath`), então dá para
+  ✂️ **E A LEITURA PASSOU A RESPONDER PELO ACERVO ANTIGO**: `detectTipo` (a
+  régua da lista) perguntava `tipo === 'NFSe'`, não casava com o rótulo antigo e
+  caía no default `'NFe'` — a NFS-e do ADN já capturada aparecia como nota de
+  **MERCADORIA**. Agora ela pergunta ao dono (`ehNotaDeServico`), que conhece as
+  formas raras. **Campo gravado pode não existir na forma que o leitor espera —
+  quem responde é a régua da LEITURA.**
+  🚩 **E O ACERVO JÁ CAPTURADO CONTINUA TORTO nos demais campos** — a correção
+  da gravação vale da próxima rodada em diante. O XML bruto está no Storage (`storagePath`), então dá para
   reler, como o ♻️ faz com as notas vazias; não foi feito neste PR. Enquanto
   isso, quem consulta por rótulo precisa das DUAS formas — foi o que a tese de
   recuperação do ISS passou a fazer.
