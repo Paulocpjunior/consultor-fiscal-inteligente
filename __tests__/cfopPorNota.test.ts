@@ -127,9 +127,18 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
         expect(leitor('components/Relatorios/index.tsx')).toMatch(/cfopDoLancamento\(d, c, direcao,/);
     });
 
+    // ⚠️ ESTE TESTE TRAVAVA A FORMA LITERAL DA CHAMADA e por isso reprovou a
+    // própria correção de 22/08, que trocou `d.direcao` por `direcaoDoDoc(d)`
+    // (a direção gravada MENTE na nota própria de entrada — art. 136). O que
+    // ele existe para garantir é a INTENÇÃO: o DOCUMENTO chega como 4º
+    // argumento, senão o CFOP informado na NF não vence o override. Travar a
+    // fonte impediria a correção — é a mesma troca do IND_REG_CUM, que
+    // prendia o '9' no texto do arquivo.
     it('Exportar SAGE passa o documento nas DUAS saídas (.FML e planilha)', () => {
         const f = leitor('services/iobSageExportService.ts');
-        expect((f.match(/cfopParaEscriturar\(it\.cfop, d\.direcao, ctxCfop, d\)/g) || []).length).toBe(2);
+        expect((f.match(/cfopParaEscriturar\(it\.cfop, [^,]+, ctxCfop, d\)/g) || []).length).toBe(2);
+        // E a direção NÃO pode voltar a ser lida crua nessas duas chamadas.
+        expect(f).not.toMatch(/cfopParaEscriturar\(it\.cfop, d\.direcao/);
     });
 
     it('SPED C170 e C190 passam a nota', () => {
