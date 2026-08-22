@@ -43,6 +43,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **O validador do app já sabia** (*"C170: UNID 'X' nao cadastrada no
   0190"*) — mas ele roda DEPOIS, sobre o arquivo pronto. **Conferência que
   existe não substitui régua única**: ela conta o erro, não o impede.
+  ✂️ **E A TABELA DE DESCRIÇÃO ERA A TERCEIRA CÓPIA — já divergida.** O
+  `UNIDADES_PADRAO` existia nos DOIS orquestradores, e o do EFD ICMS/IPI tinha
+  **`CM: CENTIMETRO`** que o do EFD-Contribuições não tinha: item em CM saía
+  descrito *"CENTIMETRO"* num arquivo e *"CM"* no outro. É a divergência do
+  `getContadorPadrao` (20/08) na MESMA dupla de orquestradores. As duas cópias
+  foram **DELETADAS** — código morto é a isca para alguém reativar a régua
+  velha.
   ⚠️ `normalizarUnidade` devolve **''** para ausência de propósito: o default
   `'UN'` continua onde já estava (0190, 0200 e C170) e o **H010 segue sem
   default** — inventar a unidade do inventário mudaria a leitura da

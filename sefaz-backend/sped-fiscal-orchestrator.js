@@ -33,7 +33,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem,
-    unidadeDoItem,
+    unidadeDoItem, descreverUnidade,
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
@@ -626,28 +626,6 @@ export async function montarBlocos({ dados }) {
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-const UNIDADES_PADRAO = {
-    'UN': 'UNIDADE',
-    'KG': 'QUILOGRAMA',
-    'L': 'LITRO',
-    'LT': 'LITRO',
-    'M': 'METRO',
-    'M2': 'METRO QUADRADO',
-    'M3': 'METRO CUBICO',
-    'CX': 'CAIXA',
-    'PC': 'PECA',
-    'PCT': 'PACOTE',
-    'PAR': 'PAR',
-    'DZ': 'DUZIA',
-    'TON': 'TONELADA',
-    'G': 'GRAMA',
-    'ML': 'MILILITRO',
-    'CM': 'CENTIMETRO',
-};
-
-function descreverUnidade(codigo) {
-    return UNIDADES_PADRAO[codigo.toUpperCase()] || codigo.toUpperCase();
-}
 
 
 /**
