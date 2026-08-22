@@ -5,6 +5,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 NO DARF, A COMPETÊNCIA ILEGÍVEL VIRAVA VENCIMENTO = HOJE — e só a ORDEM
+  de duas chamadas segurava o defeito** (22/08, terceira parada da varredura de
+  competência). `parseCompetencia`, no construtor do payload, casava só
+  `AAAA-MM`; as outras formas que o app usa DE VERDADE — `202607` (colagem de
+  arquivo), `07/2026` (catálogo e tarefas) e `AAAA-MM-DD` (a ficha grava as
+  duas) — caíam no `null`, e daí `calcularVencimentoDarf` devolvia
+  **`new Date()`**: guia vencendo no dia da emissão, sobre débito de outro
+  período.
+  ⚠️ **Hoje isso não sai errado por SORTE**: `periodoApuracaoSicalc`, duas
+  linhas adiante, LANÇA antes de alguém usar o vencimento. Ou seja, o arquivo
+  depende de a segunda chamada vir depois da primeira — trocar duas linhas de
+  lugar tornaria isso um defeito VIVO e SILENCIOSO, porque ninguém confere data
+  de vencimento a olho. **Defeito que só não acontece pela ordem das linhas é
+  defeito, não é margem.**
+  ✂️ O parse passou a usar o dono das quatro formas (as legítimas param de ser
+  recusadas com mensagem de formato) e a ausência devolve **null** — campo de
+  data não recebe default, a régua de 06/08. Quem monta a guia RECUSA com o
+  motivo.
+
 - **🚨 A COMPETÊNCIA ENTRAVA NA GERAÇÃO SEM CONFERÊNCIA DE FORMA — e o arquivo
   saía VAZIO dizendo que a empresa não teve movimento** (22/08). As portas do
   **EFD-Contribuições** e do **EFD ICMS/IPI** só perguntavam se a competência
