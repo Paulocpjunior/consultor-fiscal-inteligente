@@ -318,8 +318,13 @@ export interface EstadoInstagram {
     pageId: string; igId: string | null; igUsername: string | null;
 }
 
+/** Contagem de eventos CRUS do IG no webhook — null = não deu pra conferir. */
+export interface EventosInstagram {
+    amostra: number; doInstagram: number; ultimoEm: string | null;
+}
+
 export const estadoInstagram = () =>
-    req<{ estado: EstadoInstagram | null }>('/api/admin/whatsapp/instagram/estado');
+    req<{ estado: EstadoInstagram | null; eventos?: EventosInstagram | null }>('/api/admin/whatsapp/instagram/estado');
 
 /** 📡 Liga o recebimento das DMs (assina webhook + Página na Meta). Idempotente. */
 export const ligarInstagram = () =>

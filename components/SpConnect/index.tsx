@@ -21,7 +21,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
-    estadoInstagram, ligarInstagram, EstadoInstagram,
+    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
@@ -381,6 +381,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // 📡 Recebimento das DMs — nasce DESLIGADO; o botão assina o webhook na
     // Meta e o estado persistido é o que diz "ligado em …, por …".
     const [igEstado, setIgEstado] = useState<EstadoInstagram | null>(null);
+    const [igEventos, setIgEventos] = useState<EventosInstagram | null | undefined>(undefined);
     const [igEstadoLido, setIgEstadoLido] = useState(false);
     const [igLigando, setIgLigando] = useState(false);
     const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
@@ -388,7 +389,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
         (async () => {
             const r = await estadoInstagram();
-            if (r.ok) { setIgEstado(r.estado || null); setIgEstadoLido(true); }
+            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgEstadoLido(true); }
         })();
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
@@ -1967,6 +1968,39 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         {igLigando ? 'Assinando na Meta…' : igEstado ? '📡 Religar (re-afirmar assinatura)' : '📡 Ligar recebimento das DMs'}
                                     </button>
                                     {igLigarErro && <p className="text-[11px] text-red-600 dark:text-red-400">{igLigarErro}</p>}
+
+                                    {/* 📨 A entrega tem DUAS metades e este bloco diz em qual
+                                        o problema está: os eventos CRUS são gravados ANTES de
+                                        qualquer processamento, então "zero cru" = a Meta não
+                                        entregou (conserto do lado de LÁ); "tem cru e não tem
+                                        conversa" = o processamento é NOSSO. */}
+                                    {igEstado && igEventos !== undefined && (
+                                        igEventos === null ? (
+                                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                                ⚠️ Não deu pra conferir os eventos recebidos (a leitura falhou) — recarregue; sem conferir, não dá pra afirmar de que lado está o problema.
+                                            </p>
+                                        ) : igEventos.doInstagram > 0 ? (
+                                            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                                📨 A Meta ESTÁ entregando: {igEventos.doInstagram} evento(s) do Instagram entre os {igEventos.amostra} webhooks mais recentes
+                                                {igEventos.ultimoEm ? ` (último em ${new Date(igEventos.ultimoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''}.
+                                                Se a conversa 📷 não aparece na lista, o problema é do NOSSO processamento — reporte com este print.
+                                            </p>
+                                        ) : (
+                                            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 space-y-1">
+                                                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                                                    🚫 Nenhum evento do Instagram chegou (conferido nos {igEventos.amostra} webhooks mais recentes) — a Meta não está entregando a DM.
+                                                </p>
+                                                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                                                    O conserto é do lado de LÁ, nesta ordem:
+                                                </p>
+                                                <ol className="text-[11px] text-amber-800 dark:text-amber-300 list-decimal ml-4 space-y-0.5">
+                                                    <li><strong>No app do Instagram</strong> (@spassessoriacontabil, no celular): Configurações → Mensagens e respostas a stories → Controles de mensagem → ligar <strong>"Permitir acesso às mensagens"</strong> (ferramentas conectadas). Esse interruptor nasce DESLIGADO e sem ele a Meta não manda NENHUMA DM ao webhook — é a causa nº 1.</li>
+                                                    <li><strong>No painel de developers</strong> (developers.facebook.com → app API_Oficial → Webhooks): no seletor de objeto, escolha <strong>Instagram</strong> e confira se o campo <strong>messages</strong> aparece como assinado.</li>
+                                                    <li>Depois de mexer, mande OUTRA DM de teste e recarregue esta aba — este contador é a prova.</li>
+                                                </ol>
+                                            </div>
+                                        )
+                                    )}
                                 </div>
 
                                 {sondaIg && (
