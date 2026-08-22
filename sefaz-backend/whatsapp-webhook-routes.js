@@ -538,6 +538,22 @@ router.post('/webhook', async (req, res) => {
     // a DM invisível até pro diagnóstico (401 antes do evento cru).
     if (!assinaturaValida(req.rawBody, req.headers['x-hub-signature-256'], [cfg.appSecret, cfg.instagramAppSecret])) {
         console.warn('[whatsapp/webhook POST] assinatura inválida — descartado');
+        // 📋 O 401 fica GRAVADO (um doc só, sem o payload — corpo não
+        // assinado é conteúdo não confiável): "a Meta bateu e a chave não
+        // conferiu" e "a Meta nunca bateu" eram o MESMO silêncio, e é
+        // exatamente a diferença entre INSTAGRAM_APP_SECRET errada e o
+        // webhook do caso de uso nem configurado.
+        setImmediate(async () => {
+            try {
+                await getDb().collection('whatsapp_config').doc('webhook_post_recusado').set({
+                    em: new Date().toISOString(),
+                    motivo: 'assinatura-nao-confere',
+                    objeto: typeof req.body?.object === 'string' ? String(req.body.object).slice(0, 60) : null,
+                });
+            } catch (e) {
+                console.warn('[whatsapp/webhook POST] diagnóstico do 401 não gravado:', e.message);
+            }
+        });
         return res.sendStatus(401);
     }
 

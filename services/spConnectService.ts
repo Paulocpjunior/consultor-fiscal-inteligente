@@ -341,6 +341,10 @@ export const estadoInstagram = () =>
         eventos?: EventosInstagram | null;
         assinaturas?: AssinaturasInstagram | null;
         verificacao?: VerificacaoWebhook | null;
+        /** Último POST recusado por assinatura — "a Meta bateu e a chave não conferiu". */
+        postRecusado?: { em: string; motivo: string; objeto: string | null } | null;
+        /** PRESENÇA (nunca o valor) das envs do modo "login do Instagram" na revisão que serve. */
+        envs?: { instagramAppSecret: boolean; instagramAccessToken: boolean };
     }>('/api/admin/whatsapp/instagram/estado');
 
 /** 📡 Liga o recebimento das DMs (assina webhook + Página na Meta). Idempotente. */
