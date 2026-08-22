@@ -33,7 +33,7 @@ import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
 // Régua ÚNICA: o modelo vem dela (o campo cru não existe em nota capturada) e
 // o cancelamento vem de `docCancelado` (o campo `status` mente por evento).
 import { ehNotaDeMercadoria } from './sped-selecao-documentos.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 
 const ZERO = '0,00';
@@ -54,7 +54,14 @@ export function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
     // estiver zerado (parser legado), os itens ainda têm os valores.
     let total = 0;
     for (const nota of notas || []) {
-        if (nota.direcao !== direcao) continue;
+        // 🚨 A TERCEIRA LEITURA CRUA DA MESMA LINHA, achada em 21/08: a
+        // DIREÇÃO. A nota PRÓPRIA DE ENTRADA (art. 136, tpNF=0 — compra de
+        // produtor rural, importação) tem a EMPRESA como emitente e fica
+        // gravada como 'saida' até o backfill do sync-cron passar. Lendo o
+        // campo cru, o ICMS dela era somado como **DÉBITO** em vez de
+        // CRÉDITO — imposto a maior nas DUAS pontas do E110, e é justamente o
+        // caso que a NOVA ERA e a EDUARDO GUERRA têm às dezenas por mês.
+        if (direcaoEfetivaDoc(nota) !== direcao) continue;
         // 🚨 DUAS LEITURAS CRUAS QUE MENTIAM, as duas nesta linha (19/08):
         //  (1) `status !== 'autorizado'` — o cancelamento chega por EVENTO e o
         //      campo continua 'autorizado', então cancelada ENTRAVA na apuração;
@@ -107,12 +114,43 @@ function formatMesRef(competenciaFim) {
     return `${m[2]}${m[1]}`;
 }
 
+/**
+ * E116 — a obrigação do ICMS a recolher (código de receita + VENCIMENTO).
+ *
+ * 🚨 OS DOIS CAMPOS QUE O COMENTÁRIO CHAMAVA DE "SOBRESCRITÍVEIS" NÃO TINHAM
+ * ONDE SER PREENCHIDOS (21/08, varredura dos campos lidos × campos graváveis).
+ * `icmsCodRec` e `icmsDiaVencimento` eram lidos de `dadosFiscais` e **não
+ * estavam na whitelist nem em tela nenhuma** — a régua caía SEMPRE no default.
+ * É a mesma "rota sem botão" do `IND_NAT_PJ`, e aqui o campo é uma DATA DE
+ * PAGAMENTO: o dia 20 é o de SP, e o prazo do ICMS varia por UF e por CPR
+ * (código de prazo de recolhimento) do próprio contribuinte.
+ *
+ * O app continua NÃO ADIVINHANDO o prazo — o que mudou é o silêncio: quando o
+ * default entra, ele sai DITO, com o lugar de corrigir.
+ */
 function buildE116(dados, vlIcmsRecolher) {
     const df = dados?.empresa?.dadosFiscais || {};
     const uf = (df.uf || '').toUpperCase();
     const codRec = df.icmsCodRec || COD_REC_PADRAO_POR_UF[uf] || '';
     const diaVcto = parseInt(df.icmsDiaVencimento || DIA_VENCIMENTO_PADRAO, 10);
     const dtVcto = calcularDataVencimento(dados.competenciaFim, diaVcto);
+
+    if (Array.isArray(dados.warnings)) {
+        if (!String(df.icmsDiaVencimento || '').trim()) {
+            dados.warnings.push(
+                `E116: o vencimento do ICMS saiu no dia ${DIA_VENCIMENTO_PADRAO} (o de SP) porque a empresa não `
+                + 'tem "Dia de vencimento do ICMS" cadastrado. O prazo varia por UF e pelo CPR do próprio '
+                + 'contribuinte — confira e preencha em Empresas → Dados Fiscais.',
+            );
+        }
+        if (!String(df.icmsCodRec || '').trim() && !COD_REC_PADRAO_POR_UF[uf]) {
+            dados.warnings.push(
+                `E116: sem código de receita do ICMS para a UF ${uf || '(não cadastrada)'} — o campo saiu VAZIO. `
+                + 'Ele é de tabela ESTADUAL e o app não o deduz: preencha "Código de receita do ICMS" em '
+                + 'Empresas → Dados Fiscais.',
+            );
+        }
+    }
 
     return fmt.buildLine([
         'E116',

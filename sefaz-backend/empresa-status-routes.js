@@ -563,6 +563,14 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // inclusive nas imunes/isentas (varredura de 21/08). Tabela 3.1.3 do
     // leiaute: o número vem do cadastro, o app não deduz.
     'indNatPJ',
+    // ICMS a recolher (E116): código de receita ESTADUAL e dia de vencimento.
+    // O gerador dizia que os dois eram "sobrescritíveis via dadosFiscais" e
+    // eles não estavam aqui nem em tela — a régua caía sempre no default (dia
+    // 20, o de SP). O prazo varia por UF e pelo CPR do contribuinte.
+    'icmsCodRec', 'icmsDiaVencimento',
+    // Regime de apuração de PIS/COFINS quando ele NÃO decorre do regime
+    // tributário (o caso '3 — ambos', que a derivação não tem como saber).
+    'regimeApuracaoPisCofins',
     // Cod.Cliente — o código da empresa no E-Fiscal (Paulo, 04/08): CHAVE da
     // migração do PG12 (schema e{código} ↔ CNPJ). 4 dígitos com zero à
     // esquerda, 0001–9999, ÚNICO na carteira — validação em cod-cliente.js e

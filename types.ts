@@ -1513,6 +1513,21 @@ export interface EmpresaDadosFiscais {
      */
     indNatPJ?: string;
     /**
+     * E116 — obrigação do ICMS a recolher. O código de receita é de tabela
+     * ESTADUAL e o dia de vencimento varia por UF e pelo CPR do contribuinte:
+     * o gerador dizia que os dois eram "sobrescritíveis" e nenhum tinha onde
+     * ser preenchido (varredura de 21/08). Sem cadastro o arquivo sai com o
+     * default DITO no aviso, nunca em silêncio.
+     */
+    icmsCodRec?: string;
+    icmsDiaVencimento?: string;
+    /**
+     * Regime de apuração de PIS/COFINS: '1' não-cumulativo, '2' cumulativo,
+     * '3' ambos. Em branco, o app DERIVA do regime tributário — este campo só
+     * existe para o caso que a derivação não tem como saber (o '3').
+     */
+    regimeApuracaoPisCofins?: '1' | '2' | '3' | '';
+    /**
      * CNAE principal e data de abertura nasceram na tela de CRIAÇÃO da empresa
      * (top-level do doc) e não tinham onde ser editados depois — a conferência
      * de cadastro cobrava um campo sem tela (31/07). O modal Dados Fiscais

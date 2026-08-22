@@ -178,6 +178,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **divergência de valor contra um SPED CERTO**. Alarme falso que aparece
   justamente quando está tudo certo é o que ensina a equipe a ignorar a
   conferência que existe para pegar o erro de verdade. Os quatro leem o dono.
+  🔴 **(16) E O E110 SOMAVA A NOTA PRÓPRIA DE ENTRADA COMO DÉBITO.**
+  `somarImpostoPorDirecao` é quem soma o **débito e o crédito de ICMS do E110**
+  e o **IPI do E520** — duas leituras cruas dessa MESMA linha já tinham sido
+  corrigidas em 19/08 (o status e o modelo), e a TERCEIRA, a **direção**, ficou.
+  A nota do art. 136 (tpNF=0) fica gravada como 'saida' até o backfill passar:
+  o ICMS dela entrava como DÉBITO em vez de CRÉDITO — imposto a maior nas DUAS
+  pontas, e é o caso que a NOVA ERA e a EDUARDO GUERRA têm às dezenas por mês.
+  📌 **LIÇÃO: linha que já teve duas correções merece a varredura INTEIRA** —
+  eu tinha consertado dois campos ali e não perguntei quantos mais liam cru.
+  🔴 **(17) E A VARREDURA NOVA — "campo que o gerador LÊ e ninguém pode
+  preencher" — ACHOU MAIS TRÊS.** O eixo nasceu do `IND_NAT_PJ` e virou script:
+  cruzar todo `dadosFiscais.X` lido no backend contra a whitelist de gravação.
+  **`icmsCodRec` e `icmsDiaVencimento`** (o E116, que é a obrigação do ICMS **a
+  recolher**) eram lidos com o comentário *"sobrescritível via dadosFiscais"* e
+  não estavam na whitelist nem em tela: a régua caía SEMPRE no default — **dia
+  20, que é o de SP**, num campo que é DATA DE PAGAMENTO e varia por UF e pelo
+  CPR do contribuinte. E **`regimeApuracaoPisCofins`**, que é o único jeito de
+  declarar o regime **'3 — ambos'** (a derivação pelo regime tributário só sabe
+  1 e 2). Os três entraram na whitelist + modal no MESMO PR, e o default do
+  E116 passou a sair **DITO**; UF sem código de receita cadastrado sai com o
+  campo **VAZIO** e nomeada — código estadual não se inventa.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
