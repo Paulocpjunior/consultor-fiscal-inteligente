@@ -5,6 +5,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A CAPTURA DO ADN GRAVAVA UMA NOTA QUE NENHUM LEITOR DO APP ENXERGA**
+  (22/08). O trilho da **NFS-e Nacional** escreve em `documentos_fiscais` — a
+  MESMA coleção de tudo — e gravava só o que o parser dele extraiu:
+  `tipo: 'nfseNacional'`, `prestadorCnpj`, `tomadorCnpj`, `valorServico`,
+  `valorIss`. **Sem `direcao`, sem `competencia`, sem `status`, sem
+  `valorTotal` e sem os blocos de participante.**
+  🔴 **A nota EXISTIA e não aparecia em lugar nenhum**: sem `direcao` some do
+  filtro Entradas/Saídas, do Livro, do Resumo por CFOP, da aba de Serviços e do
+  bloco A do EFD-Contribuições; sem `competencia` fica fora de **TODA** consulta
+  por competência, que é como o app recorta o mês; e o `detectTipo` da lista não
+  conhece aquele rótulo, então caía no default `'NFe'` — a NFS-e aparecia como
+  nota de **MERCADORIA**, com valor 0,00.
+  📌 **É o eixo INVERSO do que a casa vinha varrendo**: eu estava corrigindo
+  LEITORES que perguntavam por uma forma só; aqui o defeito é do **ESCRITOR**,
+  que não grava as formas que os donos lêem. **Trilho de captura novo nasce
+  gravando os campos que os DONOS pedem** — direção, competência, rótulo, valor
+  e participante —, senão a nota entra e some.
+  ⚠️ E nada foi inventado: a direção sai de comparar prestador/tomador com o
+  CNPJ da empresa (o que o importador do portal de SP já faz), a competência sai
+  da data de emissão, e **o que não dá para derivar fica de FORA e volta
+  NOMEADO** em `lacunas` — empresa que não é parte não ganha direção chutada
+  (seria a nota no livro errado), e data ilegível não vira competência (nota na
+  competência errada some do mês certo E aparece no errado).
+  🔴 **E O EVENTO ESTAVA APAGANDO A NOTA**: o `docId` é a CHAVE nos dois casos —
+  e a chave do evento é a **da NFS-e a que ele se refere**. Com `merge: true` e
+  `tipo: meta.tipoDoc`, o evento reescrevia o `tipo` do documento para
+  `'eventoNfseNacional'`: **a nota deixava de ser nota**. É a família do stub que
+  o merge ressuscitava (11/08), na direção contrária. Agora ele entra em
+  **`eventos[]`** — o array que `docCancelado` já lê — sem tocar na identidade.
+  🚩 **PENDÊNCIA NOMEADA, NÃO CORRIGIDA**: isso **não** faz o cancelamento pelo
+  ADN ser detectado. `docCancelado` reconhece o **110111** da NF-e, e o código de
+  cancelamento do leiaute nacional da NFS-e **não está provado neste repo** —
+  carimbá-lo de memória seria inventar código de tabela oficial. O evento fica
+  gravado e FIEL; fecha com um evento real de cancelamento vindo do ADN.
+  🚩 **E O ACERVO JÁ CAPTURADO CONTINUA TORTO** — a correção vale da próxima
+  rodada em diante. O XML bruto está no Storage (`storagePath`), então dá para
+  reler, como o ♻️ faz com as notas vazias; não foi feito neste PR. Enquanto
+  isso, quem consulta por rótulo precisa das DUAS formas — foi o que a tese de
+  recuperação do ISS passou a fazer.
+
 - **🚨 O CRUZAMENTO CFI × SPED GRITAVA "NÃO ESCRITURADA" EM TODA CANCELADA POR
   EVENTO — sobre um arquivo CERTO** (22/08). O DESENHO já estava certo e
   escrito no cabeçalho do módulo desde sempre: *"só cruza NF-e capturadas com
