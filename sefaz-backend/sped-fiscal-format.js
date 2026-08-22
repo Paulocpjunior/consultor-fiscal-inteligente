@@ -11,28 +11,55 @@
 // - Linhas: separadores |campo1|campo2|...|, terminadas em |\r\n.
 // ============================================================================
 
-/** Formata data ISO (YYYY-MM-DD) ou Date pra DDMMAAAA. */
+/**
+ * Formata data pra DDMMAAAA.
+ *
+ * 🚨 A DATA DO DOCUMENTO É A DO EMITENTE — nunca a convertida para UTC.
+ *
+ * O `dhEmi` da NF-e chega com o fuso do emitente (`2026-07-31T22:30:00-03:00`).
+ * A versão anterior fazia `new Date(...)` e lia `getUTCDate()`: a nota emitida
+ * às 22h30 de Brasília vira **01/08** em UTC, porque lá já é o dia seguinte.
+ *
+ * O efeito é de duas gravidades:
+ *   · nota emitida depois das **21h** sai no arquivo com a data do dia
+ *     SEGUINTE — errado, e ninguém percebe;
+ *   · na VIRADA DO MÊS ela sai com a data de OUTRA competência, e aí o PVA
+ *     recusa ("data fora do período da escrituração").
+ *
+ * A data que o documento fiscal declara é a do texto — `2026-07-31` —, então
+ * é o TEXTO que responde. Converter para outro fuso é reescrever o que a nota
+ * diz.
+ *
+ * ⚠️ `Date` continua lido em UTC porque um `Date` já perdeu o fuso de origem:
+ * não há o que recuperar. Quem tem a string não deve convertê-la antes.
+ */
 function formatDate(value) {
     if (!value) return '';
-    let d;
-    if (value instanceof Date) {
-        d = value;
-    } else if (typeof value === 'string') {
-        // Aceita ISO completo ou apenas YYYY-MM-DD
-        d = new Date(value);
-        if (isNaN(d.getTime())) {
-            // Fallback: tenta parsing manual YYYY-MM-DD
-            const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (m) return m[3] + m[2] + m[1];
-            return '';
-        }
-    } else {
-        return '';
+    if (typeof value === 'string') {
+        // ISO com ou sem hora — a data é o prefixo, no fuso do emitente.
+        const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return iso[3] + iso[2] + iso[1];
+        // Forma brasileira, que aparece em colagem e em cadastro manual.
+        const br = value.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (br) return br[1] + br[2] + br[3];
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return '';
+        return emUtc(d);
     }
+    if (value instanceof Date) return emUtc(value);
+    // Firestore Timestamp (ou qualquer coisa com toDate) — data não se perde
+    // em silêncio num campo que o PVA cobra.
+    if (typeof value?.toDate === 'function') {
+        const d = value.toDate();
+        return d instanceof Date && !isNaN(d.getTime()) ? emUtc(d) : '';
+    }
+    return '';
+}
+
+function emUtc(d) {
     const dia = String(d.getUTCDate()).padStart(2, '0');
     const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const ano = d.getUTCFullYear();
-    return `${dia}${mes}${ano}`;
+    return `${dia}${mes}${d.getUTCFullYear()}`;
 }
 
 /** Formata competencia YYYY-MM pra DDMMAAAA do primeiro dia do mes. */
