@@ -52,7 +52,12 @@ describe('cruzarSpedComCapturadas — cenários centrais', () => {
         expect(r.resumo.naoEscrituradas).toBe(1);    // D
         expect(r.resumo.semCaptura).toBe(1);         // C
         expect(r.resumo.divergenciasValor).toBe(1);  // B
-        expect(r.resumo.descartadasCapturadas).toBe(1); // CANC
+        // ⚠️ TROCADO em 22/08: a cancelada saía no MESMO contador do documento
+        // torto (sem chave). São causas com ações opostas — "não conferi porque
+        // foi cancelada" × "não conferi porque o documento está torto" —, e um
+        // número só fazia as duas parecerem a mesma coisa na tela.
+        expect(r.resumo.canceladasNaoConferidas).toBe(1); // CANC
+        expect(r.resumo.descartadasCapturadas).toBe(0);
     });
 
     it('NÃO ESCRITURADA é ERRO (omissão de escrituração)', () => {

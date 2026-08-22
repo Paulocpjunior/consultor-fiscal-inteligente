@@ -152,6 +152,17 @@ const CruzarComCapturadas: React.FC<Props> = ({ currentUser }) => {
                         <Kpi label="NÃO escrituradas" value={String(data.resumo.naoEscrituradas)} accent={data.resumo.naoEscrituradas ? 'danger' : 'success'} />
                         <Kpi label="Sem captura" value={String(data.resumo.semCaptura)} accent={data.resumo.semCaptura ? 'warning' : undefined} />
                         <Kpi label="Valor diverge" value={String(data.resumo.divergenciasValor)} accent={data.resumo.divergenciasValor ? 'danger' : 'success'} />
+                        {/* 🚨 O QUE NÃO DEU PARA COMPARAR APARECE COM NÚMERO.
+                            Ausência de alarme não pode ser indistinguível de
+                            "os números batem" — é a régua de 22/08, e a
+                            cancelada por evento é o caso mais comum: o C100
+                            dela sai sem valores por determinação do Guia. */}
+                        {data.resumo.canceladasNaoConferidas > 0 && (
+                            <Kpi label="Canceladas/denegadas (fora da conferência)" value={String(data.resumo.canceladasNaoConferidas)} accent="warning" />
+                        )}
+                        {data.resumo.semValorCapturado > 0 && (
+                            <Kpi label="XML sem valor (não conferido)" value={String(data.resumo.semValorCapturado)} accent="warning" />
+                        )}
                         {capturadasInfo && capturadasInfo.descartadas > 0 && (
                             <Kpi label="Capturadas s/ chave (descartadas)" value={String(capturadasInfo.descartadas)} />
                         )}

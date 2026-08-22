@@ -18,7 +18,7 @@
 const C100 = { COD_SIT: 5, NUM_DOC: 7, CHV_NFE: 8, VL_DOC: 11 };
 // Valor do documento em TODAS as formas (o import pelo navegador grava só
 // `totais.vNF`) — régua única.
-import { valorDoDocumento } from './xml-metadata-helper.js';
+import { valorDoDocumento, docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const COD_SIT_EFETIVO = new Set(['00', '01', '06', '07', '08']);
 
@@ -58,9 +58,30 @@ function indexarSpedFiscal(parsed) {
 function indexarCapturadas(nfes) {
     const idx = new Map();
     let descartadas = 0;
+    // Contado À PARTE: "não deu para conferir porque foi cancelada" e "não deu
+    // para conferir porque o documento está torto" pedem ações opostas, e um
+    // número só faria as duas parecerem a mesma coisa.
+    let descartadasCanceladas = 0;
     for (const n of (nfes || [])) {
         if (!n) continue;
+        // 🚨 O DESENHO JÁ ESTAVA CERTO NO CABEÇALHO — a LEITURA é que era cega.
+        //
+        // O módulo diz, desde sempre: *"só cruza NF-e capturadas com
+        // status='autorizado' (canceladas, denegadas, inutilizadas não devem
+        // estar no SPED — incluir geraria falso-positivo)"*. Só que o
+        // cancelamento por **EVENTO** não muda o `status` (régua de 11/08, MV
+        // LIDER 639), então a cancelada passava por este filtro.
+        //
+        // 🔴 E o falso-positivo que o cabeçalho previa acontecia do jeito mais
+        // alarmante: o C100 de cancelada sai com **COD_SIT 02**, que não está
+        // em `COD_SIT_EFETIVO`, logo ela nem entra no índice do SPED — e a
+        // nota capturada virava **`NAO_ESCRITURADA`, severidade ERRO**
+        // (*"capturada e NÃO encontrada na escrituração"*) sobre um arquivo
+        // CERTO. É a mensagem mais grave da tela, disparando justamente
+        // quando está tudo certo — o jeito de ensinar a equipe a ignorar a
+        // conferência que existe para pegar a omissão de verdade.
         const status = String(n.status || '').toLowerCase();
+        if (docCancelado(n)) { descartadasCanceladas++; continue; }
         if (status && status !== 'autorizado' && status !== 'autorizada') { descartadas++; continue; }
         const chave = String(n.chave || n.chaveAcesso || n.chNFe || '').replace(/\D/g, '');
         if (chave.length !== 44) { descartadas++; continue; }
@@ -73,13 +94,17 @@ function indexarCapturadas(nfes) {
             idx.set(chave, {
                 chave,
                 numDoc: String(n.numero || n.nNF || n.numDoc || ''),
-                direcao: n.direcao || null,
+                // A direção pela RÉGUA: este achado é lido LADO A LADO com o
+                // registro do SPED, e o SPED declara a compra de produtor rural
+                // (art. 136) como ENTRADA. Dizer "saída" aqui faria a
+                // conferência discordar do arquivo que ela confere.
+                direcao: direcaoEfetivaDoc(n) || null,
                 valor,
                 competencia: n.competencia || null,
             });
         }
     }
-    return { idx, descartadas };
+    return { idx, descartadas, descartadasCanceladas };
 }
 
 /**
@@ -162,6 +187,10 @@ export function cruzarSpedComCapturadas(parsedSped, nfesCapturadas, opts = {}) {
             naoEscrituradas: achados.filter(a => a.tipo === 'NAO_ESCRITURADA').length,
             semCaptura: achados.filter(a => a.tipo === 'SEM_CAPTURA').length,
             semValorCapturado: achados.filter(a => a.tipo === 'SEM_VALOR_CAPTURADO').length,
+            // ⚠️ DITO, nunca silêncio: a cancelada sai da conferência por
+            // desenho, mas o número aparece na tela — ausência de alarme não
+            // pode ser indistinguível de "os números batem".
+            canceladasNaoConferidas: X.descartadasCanceladas,
             divergenciasValor,
             descartadasCapturadas: X.descartadas,
             ignoradosSped: S.ignorados,
@@ -174,6 +203,7 @@ function zerResumo() {
     return {
         totalSped: 0, totalCapturadas: 0, emAmbos: 0,
         naoEscrituradas: 0, semCaptura: 0, divergenciasValor: 0,
+        semValorCapturado: 0, canceladasNaoConferidas: 0,
         descartadasCapturadas: 0, ignoradosSped: 0,
     };
 }
