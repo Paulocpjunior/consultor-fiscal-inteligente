@@ -64,6 +64,42 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (o DOCUMENTO chega como argumento) **mais** a proibição explícita do campo
   cru — que é o que elas deveriam ter dito desde o começo.
 
+- **🚨 A TRAVA DO APATEL COBRIA UM ARQUIVO — e a classe estava viva na PORTA
+  QUE GRAVA DOCUMENTO FISCAL** (22/08). Em 21/08 a regra ficou escrita: *"input
+  de valor NUNCA é controlado por `String(número)`"* (o campo re-parseia o
+  próprio texto exibido, a tecla da vírgula devolve o inteiro, o render apaga a
+  vírgula e os dígitos seguintes grudam — "1234,50" vira **123450**, tecla a
+  tecla). Só que a trava foi escrita como **LISTA de um arquivo**
+  (`components/Relatorios/index.tsx`) — o vício de 13/08 —, e o
+  **✍️ Lançar nota sem XML** tinha o mesmo defeito em TRÊS campos: o **valor do
+  item**, a **alíquota do ISS** e o **ISS devido**.
+  🔴 **E O PIOR ERA O CAMPO QUE PARECIA SEGURO**: o *valor total da nota* já
+  guardava texto, mas passava por uma **SEGUNDA CÓPIA** da régua (`num()`), que
+  apagava **TODO** ponto — então a forma JS com ponto decimal (`3241688.71`,
+  que é como sai de export de sistema) virava **324.168.871**. O mesmo 100× do
+  APATEL, no campo que alimenta livro, SPED, DIPAM e relatórios. E o item tinha
+  ainda uma TERCEIRA cópia inline (`parseFloat(v.replace(',','.')) || 0`), que
+  não tirava o milhar (colar `1.234,56` gravava **R$ 1,23**) e transformava
+  ilegível em **ZERO** — num campo de valor, que é a regra de 06/08.
+  ✂️ `services/valorDigitado.ts` vira o dono da pergunta ("que número a pessoa
+  digitou?"); `declaracaoFaturamento.ts` **re-exporta**, então quem já importava
+  de lá não muda. Os três campos guardam TEXTO, o número é derivado na
+  gravação, o **eco do que o app ENTENDEU** aparece ao lado (a outra metade da
+  correção do APATEL — aqui vale dobrado, porque isto vira documento fiscal) e
+  **ilegível é RECUSA com o campo nomeado**, nunca zero.
+  📌 **REGRA QUE FICA: régua nova nasce com a trava por VARREDURA, não por
+  lista** — `valorDigitadoNaTela.test.ts` varre `components/**` atrás da
+  CONJUNÇÃO que produz o defeito (campo de TEXTO cujo `value` re-renderiza um
+  número **e** cujo `onChange` converte). Nasce VERDE, com zero falso positivo.
+  ⚠️ **E ELA NÃO ENTROU EM `REGUAS_VIGIADAS`, de propósito**: a assinatura da
+  conversão pt-BR casa com **37 arquivos** que fazem OUTRA pergunta — converter
+  texto de ARQUIVO (linha de SPED, CSV do portal, PDF do e-Fiscal), onde a
+  forma é fixa e conhecida. **Régua única é o dono da MESMA pergunta, não o
+  dono mais próximo** (a lição do `ufDoDestinatarioDoc`), e trava que grita
+  sobre código certo é trava que a equipe desliga.
+  ✅ `type="number"` fica fora da varredura com o motivo: ali o navegador recusa
+  a vírgula antes de chegar ao React, então o round-trip não gruda dígito.
+
 - **🚨 O EXPORTAR SAGE DECIDIA O LADO DO LIVRO PELO CAMPO CRU** (22/08). A nota
   PRÓPRIA DE ENTRADA (art. 136 — a compra de produtor rural PF, que o
   adquirente emite) fica gravada como `direcao: 'saida'` até o backfill do

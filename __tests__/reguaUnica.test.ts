@@ -70,6 +70,16 @@ interface Regua {
 }
 
 const REGUAS_VIGIADAS: Regua[] = [
+    // ⚠️ `services/valorDigitado.ts` (o valor que a PESSOA digitou) NÃO entra
+    // aqui, e o motivo é a régua desta casa: régua única é o dono da MESMA
+    // pergunta, não o dono mais próximo. A assinatura da conversão pt-BR
+    // (`replace(/\./g,'').replace(',','.')`) casa com 37 arquivos que fazem
+    // OUTRA pergunta — converter texto de ARQUIVO (linha de SPED, CSV do
+    // portal de NFS-e, PDF do e-Fiscal), onde a forma é fixa e conhecida.
+    // Acusá-los faria a trava gritar sobre código certo, e trava que grita sem
+    // motivo é trava desligada. Quem fecha aquela classe é
+    // `valorDigitadoNaTela.test.ts`, que varre o defeito de verdade: campo de
+    // TEXTO controlado por um NÚMERO.
     {
         nome: 'A NORMALIZAÇÃO da competência — quatro formas, uma resposta',
         dono: 'sefaz-backend/competencia.js',

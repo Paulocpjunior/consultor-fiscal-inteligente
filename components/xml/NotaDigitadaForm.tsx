@@ -18,6 +18,7 @@ import {
     validarNotaDigitada, montarNotaDigitada, idNotaDigitada, podeGravarSobre,
     type ItemDigitado, type ServicoDigitado,
 } from '../../services/notaDigitada';
+import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitado';
 import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
 import type { User } from '../../types';
@@ -29,7 +30,17 @@ interface Props {
     onImported?: () => void;
 }
 
-const itemVazio = (): ItemDigitado => ({ cfop: '', vProd: null });
+/**
+ * 🚨 O ITEM COMO ELE VIVE NA TELA — o valor é TEXTO, nunca número.
+ *
+ * Campo de dinheiro ligado a `String(número)` re-formata a cada tecla e COME a
+ * vírgula: "1234,50" vira 123450 tecla a tecla, sem nenhum erro aparecer. É o
+ * caso APATEL (21/08), que saiu num documento assinado — e estava vivo aqui,
+ * numa porta que grava DOCUMENTO FISCAL. O número é derivado na gravação.
+ */
+type ItemNaTela = Omit<ItemDigitado, 'vProd'> & { vProdTexto: string };
+
+const itemVazio = (): ItemNaTela => ({ cfop: '', vProdTexto: '' });
 
 const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImported }) => {
     const { empresa } = useEmpresaAtiva();
@@ -47,34 +58,61 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const [participanteDoc, setParticipanteDoc] = useState('');
     const [participanteUf, setParticipanteUf] = useState('');
     const [valorTotal, setValorTotal] = useState('');
-    const [itens, setItens] = useState<ItemDigitado[]>([itemVazio()]);
+    // Alíquota e ISS também são rascunho de TEXTO — o campo de % sofria o mesmo
+    // round-trip: "2,5" virava 25.
+    const [aliquotaTexto, setAliquotaTexto] = useState('');
+    const [valorIssTexto, setValorIssTexto] = useState('');
+    const [itens, setItens] = useState<ItemNaTela[]>([itemVazio()]);
     const [erros, setErros] = useState<string[]>([]);
     const [salvando, setSalvando] = useState(false);
     const [salva, setSalva] = useState<string | null>(null);
 
     if (!empresa) return <EmpresaAtivaFixa rotulo="Lançar nota" />;
 
-    const setItem = (idx: number, patch: Partial<ItemDigitado>) =>
+    const setItem = (idx: number, patch: Partial<ItemNaTela>) =>
         setItens(prev => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
 
-    const num = (v: string): number | null => {
-        const t = String(v || '').replace(/\./g, '').replace(',', '.').trim();
-        if (!t) return null;
-        const n = parseFloat(t);
-        return isNaN(n) ? null : n;
+    /**
+     * O que a pessoa digitou e o app NÃO entendeu. Ilegível vira RECUSA com o
+     * campo nomeado — nunca zero, nunca `parseFloat(...) || 0`: num campo que
+     * alimenta livro, SPED e DIPAM, o zero de conveniência é a nota entrando a
+     * menor sem nada acusar.
+     */
+    const ilegiveis = (): string[] => {
+        const fora: string[] = [];
+        const conferir = (rotulo: string, texto: string) => {
+            if (String(texto || '').trim() && parseValorMoeda(texto) === null) {
+                fora.push(`${rotulo}: não entendi "${texto}". Use o formato 1234,56 (ou deixe vazio).`);
+            }
+        };
+        conferir(especie === 'servico' ? 'Valor dos serviços' : 'Valor total da nota', valorTotal);
+        if (especie === 'servico') {
+            conferir('Alíquota do ISS', aliquotaTexto);
+            conferir('ISS devido', valorIssTexto);
+        } else {
+            itens.forEach((it, idx) => conferir(`Item ${idx + 1} — valor`, it.vProdTexto));
+        }
+        return fora;
     };
 
     const salvar = async () => {
         setErros([]); setSalva(null);
+        const naoEntendidos = ilegiveis();
+        if (naoEntendidos.length) { setErros(naoEntendidos); return; }
         const input = {
-            especie, servico,
+            especie,
+            servico: {
+                ...servico,
+                aliquota: parseValorMoeda(aliquotaTexto),
+                valorIss: parseValorMoeda(valorIssTexto),
+            },
             empresaId: empresa.id,
             empresaCnpj: empresa.cnpj,
             empresaNome: empresa.nome,
             direcao, numero, serie, dhEmi, chave,
             participanteNome, participanteDoc, participanteUf,
-            valorTotal: num(valorTotal),
-            itens: itens.map(it => ({ ...it, vProd: typeof it.vProd === 'number' ? it.vProd : num(String(it.vProd ?? '')) })),
+            valorTotal: parseValorMoeda(valorTotal),
+            itens: itens.map(({ vProdTexto, ...resto }) => ({ ...resto, vProd: parseValorMoeda(vProdTexto) })),
             digitadaPorEmail: currentUser.email || '',
             // Sem o UID o Firestore RECUSA a criação — a regra de
             // `documentos_fiscais` exige createdBy == auth.uid no CREATE, e não
@@ -103,7 +141,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             onImported?.();
             setNumero(''); setChave(''); setValorTotal(''); setItens([itemVazio()]);
             setParticipanteNome(''); setParticipanteDoc(''); setParticipanteUf('');
-            setServico({ discriminacao: '' });
+            setServico({ discriminacao: '' }); setAliquotaTexto(''); setValorIssTexto('');
         } catch (e: any) {
             setErros([`Falha ao gravar: ${e?.message || 'erro desconhecido'}.`]);
         } finally {
@@ -113,6 +151,21 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
 
     const campo = 'w-full p-2 text-sm rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600';
     const rotulo = 'text-[10px] uppercase font-bold block mb-1 text-slate-500 dark:text-slate-400';
+
+    /**
+     * O que o app ENTENDEU, ao lado do campo — a outra metade da correção do
+     * APATEL. Aqui vale dobrado: o que se digita nesta tela vira DOCUMENTO
+     * FISCAL, e a interpretação tem de ser visível antes de gravar.
+     */
+    const Eco: React.FC<{ texto: string; sufixo?: string }> = ({ texto, sufixo }) => {
+        const eco = ecoDoValorDigitado(texto);
+        if (!eco) return null;
+        return (
+            <p className={`text-[10px] mt-0.5 ${eco.ok ? 'text-slate-500 dark:text-slate-400' : 'text-red-600 dark:text-red-400'}`}>
+                {eco.ok ? `${eco.texto}${sufixo || ''}` : `⚠ ${eco.texto}`}
+            </p>
+        );
+    };
 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
@@ -212,15 +265,17 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                         </div>
                         <div>
                             <label className={rotulo}>Alíquota ISS (%)</label>
-                            <input value={servico.aliquota ?? ''}
-                                onChange={e => setServico(s2 => ({ ...s2, aliquota: e.target.value === '' ? null : num(e.target.value) }))}
+                            <input value={aliquotaTexto}
+                                onChange={e => setAliquotaTexto(e.target.value)}
                                 className={campo} placeholder="vazio ≠ zero" />
+                            <Eco texto={aliquotaTexto} sufixo="%" />
                         </div>
                         <div>
                             <label className={rotulo}>ISS devido (R$)</label>
-                            <input value={servico.valorIss ?? ''}
-                                onChange={e => setServico(s2 => ({ ...s2, valorIss: e.target.value === '' ? null : num(e.target.value) }))}
+                            <input value={valorIssTexto}
+                                onChange={e => setValorIssTexto(e.target.value)}
                                 className={campo} placeholder="vazio ≠ zero" />
+                            <Eco texto={valorIssTexto} />
                         </div>
                         <label className="flex items-center gap-2 text-xs mt-5">
                             <input type="checkbox" checked={!!servico.issRetido}
@@ -252,9 +307,12 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                             <input value={it.cfop} onChange={e => setItem(idx, { cfop: e.target.value })} className={campo} placeholder="CFOP" />
                             <input value={it.ncm || ''} onChange={e => setItem(idx, { ncm: e.target.value })} className={campo} placeholder="NCM (opcional)" />
                             <input value={it.xProd || ''} onChange={e => setItem(idx, { xProd: e.target.value })} className={`${campo} md:col-span-2`} placeholder="Descrição" />
-                            <input value={it.vProd === null || it.vProd === undefined ? '' : String(it.vProd)}
-                                onChange={e => setItem(idx, { vProd: e.target.value === '' ? null : (parseFloat(e.target.value.replace(',', '.')) || 0) })}
-                                className={campo} placeholder="Valor" />
+                            <div>
+                                <input value={it.vProdTexto}
+                                    onChange={e => setItem(idx, { vProdTexto: e.target.value })}
+                                    className={campo} placeholder="Valor" />
+                                <Eco texto={it.vProdTexto} />
+                            </div>
                             {itens.length > 1 && (
                                 <button onClick={() => setItens(p => p.filter((_, i) => i !== idx))}
                                     className="text-xs text-red-500">remover</button>
@@ -269,6 +327,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 <div>
                     <label className={rotulo}>{especie === 'servico' ? 'Valor dos serviços' : 'Valor total da nota'}</label>
                     <input value={valorTotal} onChange={e => setValorTotal(e.target.value)} className={campo} placeholder="0,00" />
+                    <Eco texto={valorTotal} />
                 </div>
                 <button onClick={salvar} disabled={salvando}
                     className="btn-press px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50">
