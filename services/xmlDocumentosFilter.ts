@@ -18,6 +18,15 @@
  */
 
 import type { DocumentoFiscal } from '../types';
+// 🚨 A DIREÇÃO SE LÊ PELA RÉGUA, e aqui isso decide se a nota APARECE: filtrando
+// por ENTRADAS, a compra de produtor rural (art. 136) sumia — ela fica gravada
+// como 'saida' até o backfill passar — e aparecia ao filtrar por SAÍDAS. É a
+// mesma régua que o SPED, o `.FML` e o `getView` da lista já usam.
+// @ts-ignore — módulo backend com .d.ts próprio
+import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+
+/** A direção EFETIVA do documento — nunca o campo cru. */
+const direcaoDoDoc = (d: DocumentoFiscal): string => (direcaoEfetivaDoc(d) as string) || '';
 
 /** Subconjunto de filtros que o filtro em memória entende. */
 export interface DocumentosFiltroMem {
@@ -101,12 +110,12 @@ export function applyDocumentosFilters(
                 let isEntradaForTerm = termInDest;
                 let isSaidaForTerm = termInEmit;
                 if (!termInDest && !termInEmit && termIsEmpresa) {
-                    isEntradaForTerm = d.direcao === 'entrada';
-                    isSaidaForTerm = d.direcao === 'saida';
+                    isEntradaForTerm = direcaoDoDoc(d) === 'entrada';
+                    isSaidaForTerm = direcaoDoDoc(d) === 'saida';
                 }
                 if (filters.direcao === 'entrada' && !isEntradaForTerm) return false;
                 if (filters.direcao === 'saida' && !isSaidaForTerm) return false;
-            } else if (d.direcao !== filters.direcao) {
+            } else if (direcaoDoDoc(d) !== filters.direcao) {
                 return false;
             }
         }

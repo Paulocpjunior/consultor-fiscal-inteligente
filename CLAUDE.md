@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A CENTRAL DE DOCUMENTOS DIZIA "SAÍDA" NA NOTA QUE O SPED ESCRITURA COMO
+  ENTRADA** (22/08, fechando o eixo da direção onde ele mais aparece). Depois
+  de o SPED, o `.FML`, o preflight e os relatórios passarem a ler pela régua,
+  sobrou **a tela onde o colaborador PROCURA o documento** — e ela era a pior
+  das quatro:
+  🔴 **o FILTRO fazia a nota SUMIR**: pedindo **ENTRADAS**, a compra de
+  produtor rural (art. 136) não aparecia — ela fica gravada como `'saida'` até
+  o backfill passar —, e aparecia ao pedir **SAÍDAS**. Em todo cliente que
+  compra de produtor, aquelas notas eram invisíveis na lista de entradas.
+  🔴 E a **lista, o CSV e o PDF** leem `getView(d).direcao`, que preferia o
+  campo cru — inclusive a **contraparte** do CSV, derivada de
+  `direcao === 'entrada'`: com a direção errada, a coluna trazia o lado errado
+  do documento.
+  ✂️ `getView` (o dono da leitura da tela) e `applyDocumentosFilters` passaram
+  a chamar `direcaoEfetivaDoc`. ⚠️ **O fallback pelo CNPJ continua**: resumo
+  (resNFe) chega sem direção legível, e é ele que responde ali — o dono entra
+  ANTES, não no lugar.
+  📌 **REGRA QUE FICA: o eixo de uma régua não fecha no gerador — fecha em quem
+  PROCURA o documento.** Livro certo com tela que esconde a nota é a mesma
+  divergência de sempre, na forma mais cara: a pessoa conclui que a captura
+  falhou.
+
 - **🚨 O CÓDIGO MORTO DO SPED **ERA A RÉGUA VELHA** — e uma trava estava
   escrita sem nunca ter sido ligada** (22/08). A varredura de declarações
   órfãs no `sefaz-backend/` achou seis, e a triagem por RISCO deu duas
