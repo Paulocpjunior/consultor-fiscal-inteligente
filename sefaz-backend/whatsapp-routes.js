@@ -526,7 +526,11 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
 // Regra da Meta: conversa iniciada pela empresa SÓ sai por template. Template
 // COM documento fica de fora aqui de propósito: guia viaja pelas telas de
 // guia (rito #293) — o SP Connect inicia CONVERSA, não entrega imposto.
-router.post('/conversas/iniciar', requireAuth, async (req, res) => {
+// O modal de envio dos apps irmãos usa esta mesma porta. `autorizar` mantém a
+// validação forte: token Firebase assinado, projeto explicitamente permitido,
+// e-mail verificado e domínio do escritório. As demais rotas do inbox seguem
+// exclusivas do CFI, pois o irmão só inicia a conversa — não lê o atendimento.
+router.post('/conversas/iniciar', autorizar, async (req, res) => {
     try {
         const p = req.body || {};
         const departamento = String(p.departamento || '').trim().toLowerCase();
@@ -642,7 +646,8 @@ router.post('/conversas/iniciar', requireAuth, async (req, res) => {
                 em: admin.firestore.FieldValue.serverTimestamp(),
                 departamento, template: nomeTemplate,
                 numeroEnviado: numero, messageId: envio.messageId,
-                por: req.user?.email || null, projetoOrigem: 'sp-connect',
+                por: req.user?.email || null,
+                projetoOrigem: req.user?.projectId || (req._ehAdmin ? 'cfi' : 'sp-connect'),
                 referencia: 'conversa-iniciada', temDocumento: false,
             });
         } catch (e) { console.warn('[whatsapp/iniciar] auditoria falhou:', e.message); }
