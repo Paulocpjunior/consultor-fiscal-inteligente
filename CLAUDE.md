@@ -5,6 +5,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A COLUNA DA CONTRAPARTE LIA O CAMPO CRU NA MESMA LINHA EM QUE O SELO DA
+  DIREÇÃO JÁ VINHA DO DONO** (22/08, quarta leva do eixo). A lista de
+  documentos e o PDF dela pintavam o selo com `getView(d).direcao` (a régua) e
+  escolhiam entre *emitente* e *destinatário* com `d.direcao` (o campo cru) —
+  duas leituras do mesmo fato **na mesma linha**.
+  🔴 **E é do tipo mais traiçoeiro: hoje o campo cru ACERTA por acidente.** A
+  nota própria de entrada está gravada como `'saida'`, então o `=== 'entrada'`
+  dá falso e a tela mostra o destinatário, que É a contraparte. No dia em que o
+  backfill do sync-cron virar a direção, a MESMA linha passa a mostrar o
+  **emitente — o próprio cliente**.
+  ⚠️ **E A CORREÇÃO "ÓBVIA" PRODUZ O DEFEITO NA HORA**: trocar por
+  `direcaoEfetivaDoc` (que responde ENTRADA) faz a coluna mostrar o próprio
+  cliente imediatamente. **A pergunta não é "qual a direção", é "em qual LADO
+  está a contraparte"** — e ela já tinha dono no backend
+  (`participanteDoDocumento`, do C100/0150). `ladoDaContraparte` é a MESMA
+  régua na forma que a tela precisa: o arquivo quer o objeto, a tela quer
+  escolher entre duas colunas já normalizadas.
+  ✂️ Junto foi o **nome da EMPRESA** quando falta `empresaNome` — ele é o lado
+  OPOSTO, e virou a mesma régua lida ao contrário em vez de uma segunda
+  condição que divergiria no mesmo dia.
+  🔴 **E O "ONDE ESTÁ A NOTA?" MANDAVA PROCURAR DO LADO ERRADO**: a rota
+  `localizar-doc` devolvia `direcao: d.direcao` cru — e ela é justamente a tela
+  que o colaborador abre **quando o filtro não achou o documento**. Ela dizia
+  *saída* enquanto o filtro da lista, corrigido no mesmo dia, mostra a nota em
+  ENTRADAS. O `tpNF` passou a viajar junto: **campo fora da resposta some da
+  leitura de quem quiser conferi-la depois** (`DocLocalizado` não o tinha, então
+  a régua ali era cega por construção).
+  ✅ E o **bloco A do EFD-Contribuições** passou a ler pela régua como o C100 e
+  o C170 do MESMO arquivo — ali só entra NFS-e (sem `tpNF`), então a resposta é
+  idêntica; o que não pode é um bloco perguntar de um jeito e o vizinho de
+  outro.
+
 - **🚨 O ISS CHEGAVA EM QUATRO FORMAS E TODO MUNDO LIA UMA — a do NAVEGADOR,
   que é a MINORIA das notas** (22/08, o eixo da direção aplicado ao ISS). A
   varredura mostrou o fato que explica tudo: **só o import pelo navegador**

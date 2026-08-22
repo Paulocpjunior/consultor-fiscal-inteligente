@@ -19,6 +19,19 @@ export function participanteDoDocumento(
 ): Record<string, unknown> | null;
 
 /**
+ * EM QUAL LADO está a contraparte — a MESMA régua acima, na forma que a TELA
+ * precisa (escolher entre as duas colunas já normalizadas da view).
+ *
+ * ⚠️ NÃO se resolve pela direção EFETIVA: na nota própria de entrada a direção
+ * é ENTRADA e a contraparte mora no DESTINATÁRIO — trocar por
+ * `direcaoEfetivaDoc` faria a lista mostrar o nome do PRÓPRIO cliente.
+ */
+export function ladoDaContraparte(
+    d: unknown,
+    empresaCnpj?: string,
+): 'emitente' | 'destinatario';
+
+/**
  * Emissão PRÓPRIA (IND_EMIT = 0) — saída OU nota própria de entrada (tpNF=0).
  * Régua única do IND_EMIT do C100, da existência do C170 (Guia 3.2.3, Exceção
  * 2) e da coleta de itens do 0200: os três têm que concordar.

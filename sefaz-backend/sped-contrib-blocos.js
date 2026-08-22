@@ -330,7 +330,12 @@ export function buildBlocoA(dados) {
         // já existe: `normalizarParticipantesDoc` monta o aninhado a partir dos
         // campos chatos. Reimplementar aqui seria a segunda cópia de sempre.
         const nota = normalizarParticipantesDoc(notaCrua);
-        const direcao = nota.direcao;
+        // ⚠️ Pela RÉGUA, como o C100 e o C170 deste MESMO arquivo. Aqui só
+        // entra NFS-e (o `filtrarNotasBlocoA` já garante), e NFS-e não tem
+        // `tpNF` — então a resposta é a mesma. O que não pode é o bloco A
+        // perguntar de um jeito e os blocos vizinhos de outro: é assim que os
+        // dois começam a divergir no dia em que a régua aprende um caso novo.
+        const direcao = direcaoEfetivaDoc(nota);
         const indOper = direcao === 'saida' ? '1' : '0';
         const indEmit = direcao === 'saida' ? '0' : '1';
 

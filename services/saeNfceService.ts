@@ -260,7 +260,14 @@ export interface DocLocalizado {
     cnpjEmit: string | null;
     cnpjDest: string | null;
     xNomeEmit: string | null;
+    /**
+     * Direção pela RÉGUA (`direcaoEfetivaDoc` no backend), não o campo cru — a
+     * compra de produtor rural (art. 136) fica gravada como 'saida' e mandaria
+     * procurar do lado errado justamente nesta tela, que é o "onde está a nota?".
+     */
     direcao: string | null;
+    /** `tpNF` do documento — é ele que sustenta a direção acima. */
+    tpNF: string | null;
     valorTotal: number | null;
     tipoDoc: string | null;
     temItens: boolean | null;
