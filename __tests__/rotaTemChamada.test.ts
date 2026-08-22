@@ -65,11 +65,11 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     // "sim, todas com botão"). Se a chamada sumir da tela, a varredura acusa.
     '/sincronizar-uma': 'ÓRFÃ — caixa postal de UMA empresa, sem botão',
     '/sync-targeted': 'ÓRFÃ — sincronização dirigida, sem botão',
-    '/previa-resumo': 'ÓRFÃ — prévia do resumo de notificações, sem tela',
-    '/guard-status': 'ÓRFÃ — status do guard de emissão, sem tela',
-    '/situacao-fiscal': 'ÓRFÃ — a tela do NFP só chama /analise-completa',
-    '/divida-ativa': 'ÓRFÃ — idem',
-    '/cnds-publicas': 'ÓRFÃ — idem',
+    // ✂️ 22/08: `/previa-resumo` ganhou o "👁 Prévia (não envia)" na Carteira e
+    // `/guard-status` virou o banner do freio na Central de Emissões.
+    // ✂️ 22/08: as TRÊS do NFP saíram daqui — ganharam o card "🔎 Consultas
+    // avulsas" na aba Análise, que é onde a pessoa está quando a varredura
+    // completa falha em UMA das cinco consultas.
 };
 
 function varrer(dir: string, exts: string[], out: string[] = []): string[] {

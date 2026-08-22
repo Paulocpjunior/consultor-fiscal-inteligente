@@ -14,6 +14,7 @@ import {
 import { listarDarfs, marcarDarfPago } from '../../services/darfService';
 import { getEmpresas as getEmpresasLucro } from '../../services/lucroPresumidoService';
 import DarfModal from './DarfModal';
+import EmissaoGuardBanner from './EmissaoGuardBanner';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 import { paraEmpresaOptions } from '../../services/empresaOption';
 
@@ -121,6 +122,9 @@ const TaxEmissionDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                     + Emitir DARF
                 </button>
             </div>
+
+            {/* O freio de emissão — antes só se via abrindo o Cloud Run. */}
+            <EmissaoGuardBanner currentUser={currentUser} />
 
             {/* Cards consolidados */}
             {resumo && (

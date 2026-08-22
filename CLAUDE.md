@@ -32,6 +32,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   lê o que aparece. 🐛 E ele pegou um detalhe que só existe no DOM: o "não" do
   texto vai em `<strong>`, então o parágrafo é **partido em três nós** e regex
   que atravessa a fronteira nunca casa — quem responde é o `textContent`.
+  ✂️ **2ª LEVA — NFP, prévia do resumo e o FREIO DE EMISSÃO**, os três com o
+  mesmo desenho (o botão nasce ONDE a dúvida nasce, régua do card CFOP de
+  18/08):
+  🔹 **NFP** (*"e NFP tbm deve ser corrigido"*): `/situacao-fiscal`,
+  `/divida-ativa` e `/cnds-publicas` existiam e a tela só chamava
+  `/analise-completa` — que é um `allSettled` de **CINCO** consultas. Quando UMA
+  caía (SERPRO fora, timeout do portal), ou se refazia a varredura inteira
+  **queimando quota PAGA** nas quatro que já tinham dado certo, ou se ficava sem
+  o pedaço. Card **🔎 Consultas avulsas** na aba Análise, dizendo (a) que é
+  **consulta pura, não grava** — senão a pessoa vê o número e conclui que ele
+  entrou no plano de ação —, (b) **qual clique gasta quota** (SERPRO × portal
+  público) e (c) que resultado vazio **não prova** ausência de débito.
+  🔹 **`/previa-resumo`**: conferir os números do resumo diário exigia
+  **disparar o e-mail de verdade** — conferir e enviar eram a MESMA ação, e quem
+  só queria ver o número enchia a própria caixa. Nasceu o **👁 Prévia (não
+  envia)** ao lado do ✉️ Testar, com a diferença escrita entre os dois.
+  🔹 **`/guard-status`**: o comentário da rota dizia *"admin vê quais tipos
+  estão bloqueados sem precisar abrir o Cloud Run"* — e o caminho para ver
+  **nunca existiu**. Com o freio ligado, quem emite leva **HTTP 423** com uma
+  frase que parece defeito do app. Banner no topo da Central de Emissões:
+  bloqueado sai VERMELHO **com a env var que destrava na frase** (trava sem
+  caminho é trava que a equipe contorna), liberado sai numa linha discreta
+  (alarme permanente em estado normal ensina a ignorar alarme) e **falha ao
+  consultar NÃO vira "liberado"** — diz que não conferiu.
+  🚩 **SOBRAM DUAS, e elas exigem BACKEND antes do botão**: `/sincronizar-uma` e
+  `/sync-targeted` são autenticadas pelo **segredo do cron** (`x-cron-secret`).
+  Botão exige uma porta NOVA autenticada por admin — o segredo **nunca** vai ao
+  navegador (ele já vazou 2× em cola de terminal). É o mesmo desenho do
+  🚚 CT-e → `POST /sync-cte-one`.
 - **🚨 A VARREDURA DOS LEITORES DE DOCUMENTO ACHOU TRÊS DEFEITOS QUE NINGUÉM
   TINHA VISTO** (21/08, à noite — Paulo: *"pode varrer a noite toda"*). Depois
   de fechar a classe da FICHA, apliquei o mesmo método ao DOCUMENTO: levantar os
