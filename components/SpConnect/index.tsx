@@ -21,7 +21,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
-    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram,
+    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
@@ -382,6 +382,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Meta e o estado persistido é o que diz "ligado em …, por …".
     const [igEstado, setIgEstado] = useState<EstadoInstagram | null>(null);
     const [igEventos, setIgEventos] = useState<EventosInstagram | null | undefined>(undefined);
+    const [igAssinaturas, setIgAssinaturas] = useState<AssinaturasInstagram | null>(null);
+    const [igVerificacao, setIgVerificacao] = useState<VerificacaoWebhook | null>(null);
     const [igEstadoLido, setIgEstadoLido] = useState(false);
     const [igLigando, setIgLigando] = useState(false);
     const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
@@ -389,7 +391,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
         (async () => {
             const r = await estadoInstagram();
-            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgEstadoLido(true); }
+            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgVerificacao(r.verificacao ?? null); setIgEstadoLido(true); }
         })();
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
@@ -2001,6 +2003,69 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </div>
                                         )
                                     )}
+
+                                    {/* 📋 Último aperto de mão no GET do webhook: navegador ×
+                                        Meta com token errado × Meta ok — os três viram o mesmo
+                                        "Forbidden" pra quem olha de fora (caso de 22/08). */}
+                                    {igEstado && igVerificacao && (
+                                        <p className={`text-[11px] ${igVerificacao.ok ? 'text-emerald-700 dark:text-emerald-300' : igVerificacao.pareceNavegador ? 'text-slate-500 dark:text-slate-400' : 'text-red-700 dark:text-red-300 font-bold'}`}>
+                                            📋 Último aperto de mão no webhook ({new Date(igVerificacao.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}):{' '}
+                                            {igVerificacao.ok
+                                                ? '✅ verificado com sucesso — o token colado na Meta confere.'
+                                                : igVerificacao.pareceNavegador
+                                                    ? 'foi um NAVEGADOR abrindo a URL (sem os parâmetros da Meta) — o "Forbidden" aí é o comportamento certo, não é erro.'
+                                                    : `🔴 a Meta tentou verificar e foi RECUSADA — ${igVerificacao.motivo || 'motivo não registrado'}. Se o motivo é o verify_token, o valor colado no painel não é o da env WHATSAPP_WEBHOOK_VERIFY_TOKEN (confira espaço no fim e se não copiou o NOME do secret em vez do VALOR).`}
+                                        </p>
+                                    )}
+
+                                    {/* 🔬 O que a META diz que está assinado — pergunta à fonte,
+                                        não à nossa memória do clique no 📡. */}
+                                    {igEstado && (() => {
+                                        if (!igAssinaturas) {
+                                            return (
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                    🔬 Não deu pra perguntar à Meta o que está assinado (a consulta falhou) — recarregue pra tentar de novo.
+                                                </p>
+                                            );
+                                        }
+                                        const subIg = igAssinaturas.doApp.find((s) => s.objeto === 'instagram');
+                                        const cobre = Boolean(subIg && subIg.ativa && subIg.campos.includes('messages'));
+                                        return (
+                                            <div className={`rounded-lg border px-3 py-2 space-y-1 ${cobre
+                                                ? 'border-slate-200 dark:border-slate-700'
+                                                : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'}`}>
+                                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                                    🔬 O que a Meta diz que está assinado (app {igAssinaturas.appId}):
+                                                </p>
+                                                {igAssinaturas.doApp.length === 0 && (
+                                                    <p className="text-[11px] text-red-700 dark:text-red-300">Nenhuma assinatura de webhook no app — clique o 📡 de novo.</p>
+                                                )}
+                                                {igAssinaturas.doApp.map((s) => (
+                                                    <p key={s.objeto} className="text-[11px] text-slate-600 dark:text-slate-300">
+                                                        • <strong>{s.objeto}</strong> → campos: {s.campos.join(', ') || '—'} · {s.ativa ? '✅ ativa' : '🔴 INATIVA'}
+                                                        {s.callback ? ` · callback …${s.callback.slice(-40)}` : ''}
+                                                    </p>
+                                                ))}
+                                                {igAssinaturas.daPagina && (
+                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                        Página assinada por: {igAssinaturas.daPagina.map((a) => `app ${a.appId} (${a.campos.join(', ') || 'sem campos'})`).join(' · ') || 'nenhum app'}
+                                                    </p>
+                                                )}
+                                                {!cobre ? (
+                                                    <p className="text-[11px] font-bold text-red-700 dark:text-red-300">
+                                                        A assinatura do objeto instagram com o campo <code>messages</code> NÃO está de pé do lado da Meta — clique o 📡 de novo; se persistir, o painel de Webhooks do app é quem resolve.
+                                                    </p>
+                                                ) : (igEventos && igEventos.doInstagram === 0 && (
+                                                    <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                                                        <p className="font-bold">A assinatura está de pé e mesmo assim nada chega. Suspeitos, na ordem:</p>
+                                                        <p>• <strong>Caso de uso "login do Instagram"</strong> (descoberto em 22/08): o app tem um app do Instagram PRÓPRIO (API_Oficial-IG) e o webhook desse modo se configura NA TELA DO CASO DE USO (seção "Configurar webhooks"), com a URL <code>…run.app/api/whatsapp/webhook</code> e o MESMO verify token do Cloud Run — e a chave secreta DELE precisa estar no Cloud Run como <code>INSTAGRAM_APP_SECRET</code>, senão a DM chega e é recusada com 401 antes do evento cru.</p>
+                                                        <p>• <strong>Solicitações de mensagem</strong>: DM de quem a conta não segue cai em "Message requests" — abra o Instagram oficial, ACEITE a solicitação e peça OUTRA mensagem.</p>
+                                                        <p>• <strong>App publicado</strong>: o próprio painel avisa que o app precisa estar com status de publicado para receber webhooks.</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 {sondaIg && (

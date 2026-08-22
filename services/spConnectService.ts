@@ -323,8 +323,25 @@ export interface EventosInstagram {
     amostra: number; doInstagram: number; ultimoEm: string | null;
 }
 
+/** O que a META diz que está assinado (fonte, não a memória do clique). */
+export interface AssinaturasInstagram {
+    appId: string;
+    doApp: { objeto: string; ativa: boolean; callback: string | null; campos: string[] }[];
+    daPagina: { appId: string; campos: string[] }[] | null;
+}
+
+/** Último aperto de mão no GET do webhook — navegador × Meta × token errado. */
+export interface VerificacaoWebhook {
+    em: string; ok: boolean; motivo: string | null; pareceNavegador: boolean;
+}
+
 export const estadoInstagram = () =>
-    req<{ estado: EstadoInstagram | null; eventos?: EventosInstagram | null }>('/api/admin/whatsapp/instagram/estado');
+    req<{
+        estado: EstadoInstagram | null;
+        eventos?: EventosInstagram | null;
+        assinaturas?: AssinaturasInstagram | null;
+        verificacao?: VerificacaoWebhook | null;
+    }>('/api/admin/whatsapp/instagram/estado');
 
 /** 📡 Liga o recebimento das DMs (assina webhook + Página na Meta). Idempotente. */
 export const ligarInstagram = () =>

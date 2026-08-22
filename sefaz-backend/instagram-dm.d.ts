@@ -54,6 +54,25 @@ export function ligarRecebimentoInstagram(
   deps?: Record<string, unknown>
 ): Promise<ResultadoLigarRecebimento>;
 
+export interface AssinaturaDoApp {
+  objeto: string;
+  ativa: boolean;
+  callback: string | null;
+  campos: string[];
+}
+
+export function assinaturasDoApp(
+  deps?: Record<string, unknown>
+): Promise<{
+  ok: boolean;
+  erro?: string;
+  appId?: string;
+  doApp?: AssinaturaDoApp[];
+  daPagina?: Array<{ appId: string; campos: string[] }> | null;
+}>;
+
+export const GRAPH_IG_BASE: string;
+
 export interface EnvioInstagram {
   ok: boolean;
   messageId?: string;

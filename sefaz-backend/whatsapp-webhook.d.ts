@@ -3,6 +3,8 @@
 export interface ConfigWebhook {
     verifyToken: string;
     appSecret: string;
+    /** Chave do app do Instagram (caso de uso "login do Instagram") — vazia = modo não usado. */
+    instagramAppSecret: string;
 }
 
 export interface MensagemRecebida {
@@ -40,7 +42,7 @@ export function responderVerificacao(
 export function assinaturaValida(
     rawBody: Buffer | string | undefined,
     headerAssinatura: string | string[] | undefined,
-    appSecret: string,
+    appSecret: string | Array<string | null | undefined>,
 ): boolean;
 export function extrairEventos(payload: unknown): {
     valido: boolean;

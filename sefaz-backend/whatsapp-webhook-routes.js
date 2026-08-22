@@ -54,6 +54,29 @@ function getDb() {
 // ─── GET: handshake de assinatura do webhook no painel da Meta ──────────────
 router.get('/webhook', (req, res) => {
     const r = responderVerificacao(req.query, configWebhook());
+
+    // 📋 O último aperto de mão fica GRAVADO (caso de 22/08: "Forbidden" no
+    // painel da Meta e ninguém sabia se era o navegador batendo sem os
+    // parâmetros ou o verify token colado errado — as duas caras eram o
+    // mesmo 403, e a resposta estava só no log do Cloud Run). Um doc só,
+    // sobrescrito; o TOKEN nunca é gravado — só o motivo. Best-effort e
+    // pós-resposta: a Meta quer o challenge rápido, e diagnóstico não pode
+    // atrasar nem derrubar o handshake real.
+    const temHub = Boolean(req.query?.['hub.mode'] || req.query?.['hub.verify_token'] || req.query?.['hub.challenge']);
+    setImmediate(async () => {
+        try {
+            await getDb().collection('whatsapp_config').doc('webhook_verificacao').set({
+                em: new Date().toISOString(),
+                ok: r.ok,
+                motivo: r.ok ? null : r.motivo,
+                // Sem hub.* nenhum = alguém abriu a URL no navegador — não é a Meta.
+                pareceNavegador: !temHub,
+            });
+        } catch (e) {
+            console.warn('[whatsapp/webhook GET] diagnóstico não gravado:', e.message);
+        }
+    });
+
     if (!r.ok) {
         console.warn('[whatsapp/webhook GET] verificação recusada:', r.motivo);
         return res.sendStatus(403);
@@ -509,7 +532,11 @@ router.post('/webhook', async (req, res) => {
         console.warn('[whatsapp/webhook POST] sem config:', faltas.join('; '));
         return res.sendStatus(503);
     }
-    if (!assinaturaValida(req.rawBody, req.headers['x-hub-signature-256'], cfg.appSecret)) {
+    // As DUAS chaves valem: a do app principal (WhatsApp/Messenger) e a do
+    // app do Instagram do caso de uso "login do Instagram" — cada produto
+    // assina o MESMO endpoint com a sua. Recusar a segunda foi o que deixaria
+    // a DM invisível até pro diagnóstico (401 antes do evento cru).
+    if (!assinaturaValida(req.rawBody, req.headers['x-hub-signature-256'], [cfg.appSecret, cfg.instagramAppSecret])) {
         console.warn('[whatsapp/webhook POST] assinatura inválida — descartado');
         return res.sendStatus(401);
     }
