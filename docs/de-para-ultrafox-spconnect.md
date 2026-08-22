@@ -42,8 +42,8 @@ Linha marcada **[?]** não conta como coberta nem como faltante: conta como
 | Enviar áudio | ✔ **[?]** | 🎤 no composer: grava, mostra o tempo, deixa OUVIR antes de enviar e para sozinho no teto. Formato escolhido entre os que a Meta aceita (ogg/opus → mp4 no Safari) | ✅ **16/08** |
 | Status de entrega (✓ ✓✓ lido) | ✔ **[print]** | carimbo real vindo do webhook, por mensagem | ✅ |
 | Marcar conversa como lida | ✔ **[print]** | abrir É ler (zera o contador) | ✅ |
-| Respostas rápidas | ✔ **[?]** | 4 frases fixas no código (⚡), **não configuráveis** | 🟡 |
-| Buscar dentro de uma conversa | **[?]** | busca só na LISTA, não dentro da thread | 🟡 |
+| Respostas rápidas | ✔ **[?]** | chips ⚡ do composer, **editáveis na ⚙️ → 🤖** (uma frase por linha, pra equipe inteira; lista vazia = sem chips, escolha) | ✅ **21/08** |
+| Buscar dentro de uma conversa | **[?]** | 🔍 na thread: filtra os balões carregados, sem acento/caixa, acha também pelo NOME do anexo (currículo se procura pelo nome), com contagem "N de M" | ✅ **21/08** |
 | Nota interna (o cliente não vê) | **[?]** | ✅ balão âmbar dizendo que o cliente não vê | 🆕 |
 | Histórico da conversa preservado | ✔ **[produção]** | toda mensagem gravada (`whatsapp_mensagens`, id = wamid) | ✅ |
 
@@ -126,8 +126,9 @@ neste documento (e, quando faltar, vira fila de construção):
 
 1. ✅ ~~**Áudio**~~ — **RESPONDIDO/FEITO 16/08**: gravar e enviar áudio sai
    por nós (🎤 no composer).
-2. **Respostas rápidas**: existem frases salvas na Ultra Fox que a equipe
-   usa direto? Se sim, quero a lista — vira cadastro editável.
+2. ✅ ~~**Respostas rápidas**~~ — **FECHADA POR CONSTRUÇÃO 21/08**: o
+   cadastro editável existe (⚙️ → 🤖, uma frase por linha). A LISTA de
+   frases da Ultra Fox, se houver, o admin digita lá — não depende de mim.
 3. ✅ ~~**Etiquetas/tags**~~ — **RESPONDIDO/FEITO 17/08**: o Paulo pediu as
    flags nomeando as que quer (*"Leads, Clientes, Marketing, Colaboradores,
    Candidatos, entre outros"*), então alguém usa. Elas são do **CONTATO**,

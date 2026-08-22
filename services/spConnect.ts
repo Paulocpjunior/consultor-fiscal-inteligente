@@ -23,6 +23,8 @@ export interface ConfigAtendimento {
     menu: { opcao: string; fila: string; rotulo: string }[];
     /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
     imagensPorFila: Record<string, string>;
+    /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */
+    respostasRapidas: string[];
 }
 
 /**
@@ -181,6 +183,21 @@ export function filtrarConversas(
             || c.numero.includes(b.replace(/\D/g, '') || '§')
             || (c.ultimaMensagem?.resumo || '').toLowerCase().includes(b);
     });
+}
+
+/**
+ * 🔍 Busca DENTRO da conversa (Paulo, 21/08 — pendência 🟡 do de-para: a
+ * busca só alcançava a lista). Pura, sobre as mensagens CARREGADAS da
+ * thread; casa sem acento e sem caixa (o atendente digita "voce", a
+ * mensagem tem "você") no texto E no nome do arquivo do anexo. Termo vazio
+ * devolve tudo — a busca desligada não é filtro.
+ */
+export function filtrarMensagensDaThread(mensagens: MensagemInbox[], termo: string): MensagemInbox[] {
+    const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const t = norm(termo.trim());
+    if (!t) return mensagens;
+    return mensagens.filter((m) => norm(m.texto || '').includes(t)
+        || norm(m.midia?.nomeArquivo || '').includes(t));
 }
 
 /** Iniciais pro avatar (nome > número). Nunca vazio. */
