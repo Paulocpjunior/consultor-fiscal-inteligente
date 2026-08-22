@@ -29,7 +29,7 @@ import {
     codItemDoItem, unidadeDoItem,
 } from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
-import { docCancelado, ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
+import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
 // leem daqui; eram três leituras, e as três discordavam do manual.
@@ -319,8 +319,12 @@ function buildC100(nota, dados) {
     // aqui de novo foi o que fez a NOTA PRÓPRIA DE ENTRADA (importação da
     // REALITY 0899 · 07/2026) sair com COD_PART = a própria empresa E
     // IND_EMIT=1, quando a chave diz que quem emitiu foi ela (IND_EMIT=0).
-    const indOper = nota.direcao === 'saida' ? '1' : '0';
+    // 🚨 IND_OPER PELA RÉGUA, não pelo campo cru (22/08). A nota PRÓPRIA DE
+    // ENTRADA (art. 136) fica gravada como 'saida', e este campo saía **1
+    // (saída)** — no MESMO registro cujo IND_EMIT logo abaixo já reconhecia a
+    // emissão própria de entrada. O arquivo se contradizia sozinho.
     const propriaDeEntrada = ehNotaPropriaDeEntrada(nota, dados?.empresa?.cnpj).sim;
+    const indOper = direcaoEfetivaDoc(nota) === 'saida' ? '1' : '0';
     const participante = participanteDoDocumento(nota, dados?.empresa?.cnpj);
 
     // 🚨 O COD_MOD SAI DA RÉGUA (PVA da PS VIDROS 07/2026, 19/08: *"O modelo da
@@ -353,7 +357,7 @@ function buildC100(nota, dados) {
     // (tpNF=0 emitida pela empresa — importação, compra de produtor rural)
     // é emissão PRÓPRIA mesmo sendo entrada: o e-Fiscal aceito da REALITY
     // declara |C100|0|0|…| nas duas notas de importação.
-    const indEmit = (nota.direcao === 'saida' || propriaDeEntrada) ? '0' : '1';
+    const indEmit = (direcaoEfetivaDoc(nota) === 'saida' || propriaDeEntrada) ? '0' : '1';
     /** Campo que a NFC-e não pode informar — vazio, nunca 0,00. */
     const soNfe = (valor) => (ehNfce ? '' : valor);
 
@@ -437,7 +441,13 @@ function buildC100(nota, dados) {
  *  37 COD_CTA         Codigo conta contabil (vazio)
  */
 function buildC170(item, nItem, nota) {
-    const cfopLancado = convertCfopParaEntrada(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados, nota);
+    // 🚨 A CORRELAÇÃO RECEBE A DIREÇÃO DA RÉGUA. Com o campo cru, a compra de
+    // produtor rural saía com **CFOP 5102** no C170 e no C190 — enquanto o
+    // `.FML` do SAGE grava 1102 e o E110 já soma como crédito. Dois arquivos
+    // do mesmo mês declarando CFOPs diferentes para a MESMA nota.
+    const cfopLancado = convertCfopParaEntrada(
+        item.cfop || item.CFOP || '0000', direcaoEfetivaDoc(nota), nota._dados, nota,
+    );
     // 🔁 O CST SEGUE O CFOP ESCRITURADO — Paulo, 18/08: "a nota vai vir 5102,
     // vamos registrar como 1556; aí que está a chave do SPED: o CST do
     // fornecedor vai vir como 00, temos que indicar 90 para essas operações".
@@ -518,7 +528,8 @@ function buildC190sFromNota(nota) {
 
     for (const item of (nota.itens || [])) {
         const cfopRaw = String(item.cfop || item.CFOP || '0000');
-        const cfop = convertCfopParaEntrada(cfopRaw, nota.direcao, nota._dados, nota);
+        // Mesma régua do C170 — e é o C190 que a apuração soma.
+        const cfop = convertCfopParaEntrada(cfopRaw, direcaoEfetivaDoc(nota), nota._dados, nota);
         // O C190 agrupa por CST+CFOP: usar o CST cru aqui e o convertido no
         // C170 faria os dois registros do MESMO item discordarem — e é o C190
         // que a apuração soma.

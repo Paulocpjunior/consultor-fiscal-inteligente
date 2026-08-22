@@ -147,10 +147,20 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
         expect(f).not.toMatch(/cfopParaEscriturar\(it\.cfop, d\.direcao/);
     });
 
-    it('SPED C170 e C190 passam a nota', () => {
+    // ⚠️ QUARTA VEZ QUE ESTA TRAVA LITERAL MORDE (22/08). Ela prendia
+    // `nota.direcao` no texto — e esse campo É o defeito: a nota PRÓPRIA de
+    // entrada fica gravada como 'saida', então a correlação devolvia **5102**
+    // no C170 e no C190 do SPED enquanto o `.FML` gravava 1102.
+    //
+    // O que ela existe para garantir é a INTENÇÃO: o DOCUMENTO chega à
+    // correlação (senão o CFOP informado na NF é ignorado) e a direção vem da
+    // RÉGUA. Trava que prende a FORMA impede a correção que a régua manda.
+    it('SPED C170 e C190 passam a nota, e a direção vem da RÉGUA', () => {
         const f = leitor('sefaz-backend/sped-fiscal-blocoC.js');
-        expect(f).toMatch(/convertCfopParaEntrada\(item\.cfop \|\| item\.CFOP \|\| '0000', nota\.direcao, nota\._dados, nota\)/);
-        expect(f).toMatch(/convertCfopParaEntrada\(cfopRaw, nota\.direcao, nota\._dados, nota\)/);
+        expect(f).toMatch(/convertCfopParaEntrada\([\s\S]{0,80}item\.CFOP \|\| '0000', direcaoEfetivaDoc\(nota\), nota\._dados, nota,?\s*\)/);
+        expect(f).toMatch(/convertCfopParaEntrada\(cfopRaw, direcaoEfetivaDoc\(nota\), nota\._dados, nota\)/);
+        // O campo CRU não pode voltar a alimentar a correlação.
+        expect(f).not.toMatch(/convertCfopParaEntrada\([^)]*nota\.direcao/);
         // E o wrapper tem que chamar a régua COM documento, não a correlação crua.
         expect(f).toMatch(/cfopDoLancamento\(doc, rawCfop, direcao,/);
     });
