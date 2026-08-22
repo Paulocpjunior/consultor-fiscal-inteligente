@@ -384,6 +384,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [igEventos, setIgEventos] = useState<EventosInstagram | null | undefined>(undefined);
     const [igAssinaturas, setIgAssinaturas] = useState<AssinaturasInstagram | null>(null);
     const [igVerificacao, setIgVerificacao] = useState<VerificacaoWebhook | null>(null);
+    const [igPostRecusado, setIgPostRecusado] = useState<{ em: string; motivo: string; objeto: string | null } | null>(null);
+    const [igEnvs, setIgEnvs] = useState<{ instagramAppSecret: boolean; instagramAccessToken: boolean } | null>(null);
     const [igEstadoLido, setIgEstadoLido] = useState(false);
     const [igLigando, setIgLigando] = useState(false);
     const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
@@ -391,7 +393,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
         (async () => {
             const r = await estadoInstagram();
-            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgVerificacao(r.verificacao ?? null); setIgEstadoLido(true); }
+            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgVerificacao(r.verificacao ?? null); setIgPostRecusado(r.postRecusado ?? null); setIgEnvs(r.envs ?? null); setIgEstadoLido(true); }
         })();
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
@@ -2002,6 +2004,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 </ol>
                                             </div>
                                         )
+                                    )}
+
+                                    {/* 🔑 As DUAS envs do modo "login do Instagram" — presença na
+                                        revisão que está SERVINDO ("adicionei no console" ≠ "está
+                                        no ar", lição de 17/08). */}
+                                    {igEstado && igEnvs && (
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                                            🔑 Envs no ar: INSTAGRAM_APP_SECRET {igEnvs.instagramAppSecret ? '✅' : '🔴 AUSENTE'} · INSTAGRAM_ACCESS_TOKEN {igEnvs.instagramAccessToken ? '✅' : '🔴 AUSENTE'}
+                                            {(!igEnvs.instagramAppSecret || !igEnvs.instagramAccessToken) && (
+                                                <span className="block text-red-700 dark:text-red-300 font-bold">
+                                                    Env ausente na revisão que está servindo — se você já adicionou no console, falta o deploy da esteira levá-la a 100% (peça o "pode disparar").
+                                                </span>
+                                            )}
+                                        </p>
+                                    )}
+
+                                    {/* 📋 Último POST recusado por assinatura: "a Meta bateu e a
+                                        chave não conferiu" ≠ "a Meta nunca bateu". */}
+                                    {igEstado && igPostRecusado && (
+                                        <p className="text-[11px] font-bold text-red-700 dark:text-red-300">
+                                            📮 A Meta BATEU no webhook ({new Date(igPostRecusado.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{igPostRecusado.objeto ? ` · objeto "${igPostRecusado.objeto}"` : ''}) e a ASSINATURA não conferiu — o valor em INSTAGRAM_APP_SECRET não é a "Chave secreta do app do Instagram" (ou a env não está no ar). Corrija a chave e peça nova DM.
+                                        </p>
                                     )}
 
                                     {/* 📋 Último aperto de mão no GET do webhook: navegador ×
