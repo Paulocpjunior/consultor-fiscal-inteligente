@@ -43,6 +43,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **O validador do app já sabia** (*"C170: UNID 'X' nao cadastrada no
   0190"*) — mas ele roda DEPOIS, sobre o arquivo pronto. **Conferência que
   existe não substitui régua única**: ela conta o erro, não o impede.
+  🔴 **E A VARREDURA DA DUPLA ACHOU O CASO EM QUE A CÓPIA JÁ TINHA CUSTADO: o
+  0150 e o 0190.** Os dois têm o **MESMO leiaute** nas duas famílias (só o 0000
+  é de fato diferente — um tem COD_VER/IND_PERFIL, o outro
+  TIPO_ESCRIT/IND_NAT_PJ) e estavam escritos byte a byte duas vezes. E a
+  denúncia do **COD_MUN faltando** — a recusa de 18/08, **30 participantes** da
+  MANTOAN — tinha entrado **SÓ no EFD-Contribuições**: o 0150 do EFD ICMS/IPI é
+  o MESMO registro, com a MESMA obrigatoriedade, e ficava **MUDO**. A próxima
+  empresa gastaria a mesma volta de PVA com outro CNPJ.
+  📌 **REGRA QUE FICA: recusa aprendida entra na prevalidação no MESMO PR — e
+  em TODAS as famílias onde o registro é o mesmo.** Meia trava protege o
+  cliente que já quebrou e deixa o próximo descoberto (a lição de 21/08, agora
+  do lado do bloco 0). `sped-bloco0-cadastros.js` é o dono.
+  ⚠️ A decisão do Paulo continua na frase do aviso: **o app NÃO preenche** —
+  inventar município é afirmar o domicílio de terceiro, e o `'9999999'` que o
+  PVA sugere significa *"NÃO domiciliado no Brasil"*.
   ✂️ **E O BLOCO 9 INTEIRO ERA UMA SEGUNDA CÓPIA, linha por linha.** Ele é a
   **aritmética de FECHAMENTO**: o 9900 conta cada tipo de registro, o 9990 as
   linhas do próprio bloco e o **9999 o ARQUIVO INTEIRO** — os três conferidos

@@ -22,6 +22,11 @@ import * as fmt from './sped-fiscal-format.js';
 import {
     ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA, normalizarUnidade,
 } from './sped-selecao-documentos.js';
+// 0150 e 0190 têm o MESMO leiaute nas duas famílias — e a cópia já tinha
+// custado a recusa do COD_MUN, corrigida em metade delas.
+import {
+    build0150, build0190, avisoParticipantesSemMunicipio,
+} from './sped-bloco0-cadastros.js';
 
 const VERSAO_LEIAUTE = '020';  // Leiaute 020 vigente desde 01/01/2026
 
@@ -81,9 +86,15 @@ function buildBloco0(dados) {
     linhas.push(build0100(dados));
 
     // ── 0150 — Participantes ────────────────────────────────────────────
+    // 🚨 O COD_MUN FALTANDO É RECUSA DO PVA (MANTOAN, 18/08, 30 ocorrências) —
+    // e a denúncia vivia SÓ no EFD-Contribuições. O 0150 é o MESMO registro
+    // nas duas famílias: trava que roda em metade delas deixa a próxima
+    // empresa gastar a mesma volta de PVA com outro CNPJ.
     for (const p of dados.participantes || []) {
         linhas.push(build0150(p));
     }
+    const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
+    if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
 
     // ── 0190 — Unidades de Medida ───────────────────────────────────────
     for (const u of dados.unidades || []) {
@@ -252,63 +263,7 @@ function build0100(dados) {
     ]);
 }
 
-/**
- * 0150 — Tabela de Cadastro do Participante
- * Um registro por participante unico (cliente + fornecedor).
- *
- * Campos:
- *  01 REG          '0150'
- *  02 COD_PART     Codigo unico do participante   max 60
- *  03 NOME         Razao social/Nome              max 100
- *  04 COD_PAIS     Codigo pais (1058 = Brasil)    max 5
- *  05 CNPJ         CNPJ                           14 digitos
- *  06 CPF          CPF (vazio se PJ)              11 digitos
- *  07 IE           Inscricao Estadual             max 14
- *  08 COD_MUN      Codigo Municipio IBGE          7 digitos
- *  09 SUFRAMA      Codigo Suframa (vazio)         9 digitos
- *  10 END          Endereco                       max 60
- *  11 NUM          Numero                         max 10
- *  12 COMPL        Complemento                    max 60
- *  13 BAIRRO       Bairro                         max 60
- */
-function build0150(p) {
-    // PF tem cpf preenchido e cnpj vazio (e vice-versa). IE so se aplica a PJ.
-    const cnpjStr = fmt.sanitizeCnpjCpf(p.cnpj || '');
-    const cpfStr = fmt.sanitizeCnpjCpf(p.cpf || '');
-    const ieStr = cpfStr ? '' : fmt.sanitizeString(p.ie || '', 14);
-    return fmt.buildLine([
-        '0150',
-        fmt.sanitizeString(p.codPart, 60),
-        fmt.sanitizeString(p.nome, 100),
-        '1058',  // Brasil
-        cnpjStr,
-        cpfStr,
-        ieStr,
-        fmt.sanitizeString(p.codMunIBGE || '', 7),
-        '',  // SUFRAMA
-        fmt.sanitizeString(p.logradouro || '', 60),
-        fmt.sanitizeString(p.numero || '', 10),
-        fmt.sanitizeString(p.complemento || '', 60),
-        fmt.sanitizeString(p.bairro || '', 60),
-    ]);
-}
 
-/**
- * 0190 — Identificacao das Unidades de Medida
- * Um registro por unidade unica usada nos itens.
- *
- * Campos:
- *  01 REG    '0190'
- *  02 UNID   Codigo unidade (UN, KG, L, etc)   max 6
- *  03 DESCR  Descricao                          max 100
- */
-function build0190(u) {
-    return fmt.buildLine([
-        '0190',
-        fmt.sanitizeString(u.codigo, 6),
-        fmt.sanitizeString(u.descricao || u.codigo, 100),
-    ]);
-}
 
 /**
  * 0200 — Tabela de Identificacao do Item
