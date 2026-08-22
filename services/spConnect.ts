@@ -65,6 +65,8 @@ export interface ConversaResumo {
     transferidaDe?: string | null;
     /** Por qual NÚMERO do escritório a conversa entrou (2º número em diante). */
     canalId?: string | null;
+    /** 'whatsapp' (padrão) ou 'instagram' (DM — selo 📷, composer só texto). */
+    canal?: string;
     situacao: string;
     janela24hAte: string | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;
@@ -137,8 +139,11 @@ export function carimboStatus(statusEntrega: string | null | undefined): {
 }
 
 /** Nome de exibição: nome do perfil > número formatado. Nunca string vazia. */
-export function nomeExibicao(c: Pick<ConversaResumo, 'nome' | 'numero'>): string {
+export function nomeExibicao(c: Pick<ConversaResumo, 'nome' | 'numero'> & { canal?: string }): string {
     if (c.nome && c.nome.trim()) return c.nome.trim();
+    // DM do Instagram sem nome de perfil: o id (ig_1784…) NÃO é telefone —
+    // formatá-lo como número mentiria; "Instagram" diz o que a conversa é.
+    if (c.canal === 'instagram') return 'Instagram';
     return formatarNumeroBr(c.numero);
 }
 

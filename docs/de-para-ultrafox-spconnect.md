@@ -104,7 +104,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | App de celular / tablet | ✔ app próprio **[Paulo]** | **PWA** — instala na tela inicial pelo navegador, e com a chave VAPID publicada avisa com o app fechado (ver §3) | 🟡 **cobre o uso, não é loja** |
 | Rodar dentro do Teams | ✕ | app do tenant pronto (`teams-app/`, zip em `/sp-connect-teams.zip`) | 🆕 |
 | Vários NÚMEROS de WhatsApp | **[?]** | **apto desde 16/08**: catálogo de canais (o de hoje segue vindo do env e é o padrão), entrada roteada pelo `phone_number_id` da Meta e cadastro na ⚙️ — o token do 2º número vive no Cloud Run, nunca no banco. Falta só o número existir | ✅ apto |
-| Outros canais — Instagram | **[?]** | ⚙️ → 📷 **SONDA** se o token alcança Página+Instagram vinculado (18/08). **Não linka nada** de propósito — achar a conta não prova permissão de mensagem, só identidade | 🟡 a 1ª sonda real (21/08) deu **sem-pagina** — o token só tinha ativos de WhatsApp. **Destravado em 22/08 [Paulo]**: casos de uso Messenger+Instagram no app API_Oficial, Página e IG atribuídos ao usuário do sistema cfi-whatsapp, token regenerado com `pages_*`/`instagram_*` e rotacionado no secret `whatsapp-cloud-token`. Próximo: re-sondar; veredito bom ⇒ construir as DMs no inbox |
+| Outros canais — Instagram | **[?]** | **DMs no MESMO inbox (construído 22/08)**: a sonda ✅ conta-encontrada [Paulo, print — Página "SP Assessoria Contábil" · @spassessoriacontabil] destravou a fase 2 no mesmo dia. Conversa `ig_{IGSID}` com selo 📷 nas MESMAS coleções — fila, assumir, transferir, nota e relatório funcionam sem mudar nada; **o bot NÃO roda nas DMs** (menu numérico é contrato do WhatsApp), a DM cai na triagem da Recepção e gente conduz. Resposta por TEXTO na janela da Meta (fora dela não há template no IG — espera-se o cliente escrever). Recebimento nasce **DESLIGADO**: liga no 📡 da ⚙️ → 📷 | 🟡 construído; falta o **clique no 📡** + uma DM real de teste. Anexo/áudio de SAÍDA no IG é fase futura (recusa nomeada na tela) |
 | Outros canais — Wix (site) | **[?]** | nenhum | 🔴 depende de saber qual recurso do Wix ele quer dizer (chat widget é API própria, sem nada em comum com a Meta) |
 | **Chamada de voz/vídeo** (liberada pela Meta Brasil) | **[?]** | ⚙️ → ☎️ **SONDA** o estado real na Meta e relata, com o cru da resposta. **Não liga nada de propósito** | 🟡 **decisão do Paulo, não construção**: ligar abre o botão de ligar no WhatsApp de TODOS os clientes, e sem destino que atenda (HitPhone/ramal) é telefone tocando no vazio — o cliente lê como "a SP não me atende", não como recurso desligado |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
@@ -148,13 +148,12 @@ neste documento (e, quando faltar, vira fila de construção):
 6. ✅ ~~**Bot / sub-níveis**~~ — **FECHADA POR CONSTRUÇÃO 22/08**: o
    mecanismo de sub-menu (1 nível) existe e é editável; se a Ultra Fox tinha
    árvores mais fundas, o conteúdo o admin monta na ⚙️.
-7. ✅ ~~**Outros canais**~~ — **RESPONDIDO PARCIALMENTE 18/08**: Paulo quer
-   Instagram (DM) e o site no Wix. Instagram entrou como SONDA (não linka
-   nada ainda — primeiro se confirma se o token alcança a conta, depois vem
-   a implementação de verdade). Wix ainda é pergunta aberta: **qual recurso
-   do Wix** — o chat widget do próprio site (API própria da Wix, projeto do
-   zero) ou os botões de WhatsApp/Instagram que o site já usa pra abrir
-   conversa (esses já caem nos canais acima, de graça)?
+7. ✅ ~~**Outros canais**~~ — **Instagram CONSTRUÍDO 22/08** (sonda ✅ →
+   DMs no inbox no mesmo dia; falta o clique no 📡 e uma DM real — ver a
+   linha do §5). Wix ainda é pergunta aberta: **qual recurso do Wix** — o
+   chat widget do próprio site (API própria da Wix, projeto do zero) ou os
+   botões de WhatsApp/Instagram que o site já usa pra abrir conversa (esses
+   já caem nos canais acima, de graça)?
 8. **Vários números**: existe mais de um número ligado nela?
 
 ## 8. O que DECIDE o corte
