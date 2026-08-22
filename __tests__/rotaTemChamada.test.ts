@@ -56,15 +56,26 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     '/empresas-a3': 'agente local cfi-a3',
     '/upload-batch': 'agente local cfi-a3',
 
-    // ── SEM CAMINHO NA INTERFACE — órfãs de verdade, NOMEADAS ──────────────
+    // ── Portas de cron cuja operação TEM botão por uma porta de admin ──────
     //
-    // Não foram apagadas: remover rota que talvez alguém chame por fora é
-    // decisão do Paulo. O que não pode é a próxima sessão lê-las como entrega.
+    // ✅ 22/08: as SETE órfãs de 21/08 foram todas fechadas (Paulo: "sim, todas
+    // com botão, e NFP tbm deve ser corrigido"). O que sobra aqui embaixo não é
+    // órfã: é a porta do CRON de uma operação que a tela alcança por outra
+    // porta, autenticada por admin — o segredo do cron não vai ao navegador.
     // ✂️ 22/08: as TRÊS da manifestação saíram daqui — ganharam o card
     // "🔎 Fila da manifestação" no Diagnóstico da captura (autorização do Paulo:
     // "sim, todas com botão"). Se a chamada sumir da tela, a varredura acusa.
-    '/sincronizar-uma': 'ÓRFÃ — caixa postal de UMA empresa, sem botão',
-    '/sync-targeted': 'ÓRFÃ — sincronização dirigida, sem botão',
+    // ✂️ 22/08: as duas eram autenticadas pelo SEGREDO DO CRON, e o segredo
+    // nunca vai ao navegador (já vazou 2× em cola de terminal). Ganharam
+    // botão por uma porta de ADMIN, cada uma do jeito que ela pede:
+    //  · `/sincronizar-uma` é a MESMA operação de `/sincronizar` (admin), que
+    //    já existia — o que faltava era o botão "🔄 Só esta empresa" na Caixa
+    //    Postal; a rota do cron fica como smoke test do Scheduler.
+    //  · `/sync-targeted` ganhou a irmã `/sync-targeted-now` (admin, em
+    //    background), porque o laço dorme 90s por empresa e uma resposta
+    //    síncrona estouraria o navegador. O LAÇO é um só.
+    '/sincronizar-uma': 'smoke test do Cloud Scheduler — o botão usa /sincronizar (admin)',
+    '/sync-targeted': 'disparo pelo Scheduler — o botão usa /sync-targeted-now (admin)',
     // ✂️ 22/08: `/previa-resumo` ganhou o "👁 Prévia (não envia)" na Carteira e
     // `/guard-status` virou o banner do freio na Central de Emissões.
     // ✂️ 22/08: as TRÊS do NFP saíram daqui — ganharam o card "🔎 Consultas

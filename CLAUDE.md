@@ -56,11 +56,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   caminho é trava que a equipe contorna), liberado sai numa linha discreta
   (alarme permanente em estado normal ensina a ignorar alarme) e **falha ao
   consultar NÃO vira "liberado"** — diz que não conferiu.
-  🚩 **SOBRAM DUAS, e elas exigem BACKEND antes do botão**: `/sincronizar-uma` e
-  `/sync-targeted` são autenticadas pelo **segredo do cron** (`x-cron-secret`).
-  Botão exige uma porta NOVA autenticada por admin — o segredo **nunca** vai ao
-  navegador (ele já vazou 2× em cola de terminal). É o mesmo desenho do
-  🚚 CT-e → `POST /sync-cte-one`.
+  ✅ **3ª LEVA — AS DUAS DO CRON FECHARAM, e a régua aqui é a da PORTA**:
+  `/sincronizar-uma` e `/sync-targeted` são autenticadas pelo **segredo do
+  cron**, que **nunca** vai ao navegador (ele já vazou 2× em cola de terminal).
+  Botão exige porta de ADMIN — o desenho do 🚚 CT-e.
+  🔹 **`/sincronizar-uma` não precisou de rota nova**: ela é a MESMA operação de
+  `/sincronizar` (admin), que já existia — o buraco era só o BOTÃO. A Caixa
+  Postal só tinha *"Sincronizar Todas"*, ou seja, conferir a caixa de UM cliente
+  exigia disparar as 213. Nasceu o **🔄 Só esta empresa** no detalhe da
+  mensagem; a rota do cron fica declarada como smoke test do Scheduler.
+  🔹 **`/sync-targeted` ganhou a irmã `/sync-targeted-now`** (admin, em
+  background pelo MESMO `withCronHeartbeat` do cron) + card **🎯 Captura
+  dirigida**. ⚠️ **O laço é UM SÓ** (`executarSyncDirigido`) e a varredura prova:
+  duas portas com dois laços divergiriam no **respiro de 90s**, que é o que
+  evita o **cStat 656** da SEFAZ — e divergiriam em silêncio. A régua da lista
+  saiu para o módulo PURO `cnpjs-dirigidos.js` porque `sync-routes.js` puxa
+  firebase-admin e **não carrega no jest** (régua dentro de rota é régua sem
+  prova).
+  ⚠️ **E a tela responde "COMEÇOU", nunca "capturou"** — 90s × N corre em
+  background, com o tempo estimado DITO antes do clique (rodada de 45 min sem
+  aviso é lida como "travou") e teto de 30 CNPJs **recusado com o número**, não
+  cortado calado. CNPJ que não é cliente volta NOMEADO em `naoEncontrados`:
+  sumir faria "processadas: 3" passar por "as 5 rodaram".
+  📌 **AS SETE FECHARAM NO MESMO DIA** — e a lista de exceções da varredura
+  encolheu de 29 para 21, com o que sobra sendo cron/túnel/agente de verdade.
 - **🚨 A VARREDURA DOS LEITORES DE DOCUMENTO ACHOU TRÊS DEFEITOS QUE NINGUÉM
   TINHA VISTO** (21/08, à noite — Paulo: *"pode varrer a noite toda"*). Depois
   de fechar a classe da FICHA, apliquei o mesmo método ao DOCUMENTO: levantar os

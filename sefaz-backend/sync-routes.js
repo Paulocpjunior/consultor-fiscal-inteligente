@@ -30,6 +30,10 @@ import { certA1MetadataValido, selecionarCertA1PorBase } from './cert-base-helpe
 import { umaPorRaizPorCiclo } from './raiz-throttle-helper.js';
 import { secretsMatch } from './cron-secret.js';
 import { ehSaidaMod55 } from './cobertura-saida.js';
+import {
+  normalizarCnpjsDirigidos, minutosEstimadosDirigida,
+  LIMITE_CNPJS_DIRIGIDOS, RESPIRO_ENTRE_EMPRESAS_MS,
+} from './cnpjs-dirigidos.js';
 
 const router = express.Router();
 
@@ -278,18 +282,22 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
 // Ordena ASC por NSU pendente, sleep 90s entre empresas, para em cStat=656.
 // Responde sincrono (cliente espera).
 // ============================================================================
-router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) => {
-  const cnpjs = (req.body?.cnpjs || []).map(c => String(c).replace(/\D/g, ''));
-  if (!cnpjs.length) return res.status(400).json({ error: 'cnpjs array vazio' });
-
-  const SLEEP_MS = parseInt(req.body?.sleepMs || '90000', 10);
-  const PARAR_EM_656 = req.body?.pararEm656 !== false; // default true
-
-  console.log(`[sync-targeted] init — ${cnpjs.length} cnpjs, sleep=${SLEEP_MS}ms, pararEm656=${PARAR_EM_656}`);
-
-  // Resolve empresaId pra cada cnpj
+/**
+ * 🚨 O LAÇO DIRIGIDO É UM SÓ — duas PORTAS, nunca duas cópias.
+ *
+ * A varredura de rotas (22/08) achou `/sync-targeted` sem caminho na
+ * interface, e a autorização do Paulo foi "todas com botão". Mas o segredo do
+ * cron NUNCA vai ao navegador (ele já vazou 2× em cola de terminal), então o
+ * botão exige uma porta PRÓPRIA de admin — o mesmo desenho do 🚚 CT-e.
+ *
+ * Duas portas com dois laços seriam a armadilha de sempre: a captura pelo
+ * Scheduler e a captura pelo botão divergiriam no ritmo (é ele que evita o
+ * 656) sem ninguém ver. Por isso o laço mora AQUI e as duas rotas o chamam.
+ */
+async function executarSyncDirigido({ cnpjs, sleepMs, pararEm656, capturadoPor, marcador = 'sync-targeted' }) {
   const db = fa().firestore();
   const alvos = [];
+  const naoEncontrados = [];
   for (const cnpj of cnpjs) {
     let found = null;
     for (const col of ['simples_empresas', 'lucro_empresas']) {
@@ -302,54 +310,126 @@ router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) 
       }
     }
     if (found) alvos.push(found);
-    else console.warn(`[sync-targeted] CNPJ ${cnpj} nao encontrado em simples/lucro_empresas`);
+    else {
+      // CNPJ que não é cliente não some do resultado: sumir faria alguém ler
+      // "processadas: 3" como se as 5 pedidas tivessem rodado.
+      naoEncontrados.push(cnpj);
+      console.warn(`[${marcador}] CNPJ ${cnpj} nao encontrado em simples/lucro_empresas`);
+    }
   }
 
-  console.log(`[sync-targeted] ${alvos.length}/${cnpjs.length} CNPJs resolvidos`);
+  console.log(`[${marcador}] ${alvos.length}/${cnpjs.length} CNPJs resolvidos`);
 
   const resultados = [];
   let totalNovos = 0;
-  let parouEm656 = false;
+  let parou656 = false;
   let idx = 0;
 
   for (const emp of alvos) {
     idx++;
-    console.log(`[sync-targeted] (${idx}/${alvos.length}) ${emp.cnpj} ${emp.nome}`);
+    console.log(`[${marcador}] (${idx}/${alvos.length}) ${emp.cnpj} ${emp.nome}`);
     try {
-      const r = await sincronizarEmpresa({
-        empresaId: emp.id, empresaCnpj: emp.cnpj,
-        capturadoPor: { uid: 'sync-targeted', email: 'cron@spassessoriacontabil', fonte: 'manual' },
-      });
+      const r = await sincronizarEmpresa({ empresaId: emp.id, empresaCnpj: emp.cnpj, capturadoPor });
       resultados.push({ cnpj: emp.cnpj, nome: emp.nome, ...r });
       if (r.ok) {
         totalNovos += (r.novosXmls || 0);
-        console.log(`[sync-targeted]   OK novos=${r.novosXmls} dup=${r.duplicados} err=${r.erros}`);
+        console.log(`[${marcador}]   OK novos=${r.novosXmls} dup=${r.duplicados} err=${r.erros}`);
       } else {
-        console.warn(`[sync-targeted]   FALHA: ${r.motivo}`);
-        if (PARAR_EM_656 && /656|Consumo Indevido/i.test(r.motivo || '')) {
-          console.warn('[sync-targeted] ABORT — cStat=656 detectado, parando');
-          parouEm656 = true;
+        console.warn(`[${marcador}]   FALHA: ${r.motivo}`);
+        if (pararEm656 && /656|Consumo Indevido/i.test(r.motivo || '')) {
+          console.warn(`[${marcador}] ABORT — cStat=656 detectado, parando`);
+          parou656 = true;
           break;
         }
       }
     } catch (e) {
-      console.error(`[sync-targeted]   EXCECAO: ${e.message}`);
+      console.error(`[${marcador}]   EXCECAO: ${e.message}`);
       resultados.push({ cnpj: emp.cnpj, nome: emp.nome, ok: false, motivo: e.message });
     }
 
-    if (idx < alvos.length && !parouEm656) {
-      console.log(`[sync-targeted]   sleep ${SLEEP_MS}ms...`);
-      await new Promise(r => setTimeout(r, SLEEP_MS));
+    if (idx < alvos.length && !parou656) {
+      console.log(`[${marcador}]   sleep ${sleepMs}ms...`);
+      await new Promise(r => setTimeout(r, sleepMs));
     }
   }
 
-  return res.json({
-    ok: !parouEm656,
-    parouEm656,
+  return {
+    ok: !parou656,
+    parouEm656: parou656,
     processadas: resultados.length,
     totalSolicitadas: alvos.length,
+    naoEncontrados,
     totalNovosXmls: totalNovos,
     resultados,
+  };
+}
+
+router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) => {
+  const cnpjs = normalizarCnpjsDirigidos(req.body?.cnpjs);
+  if (!cnpjs.length) return res.status(400).json({ error: 'cnpjs array vazio' });
+
+  const SLEEP_MS = parseInt(req.body?.sleepMs || '90000', 10);
+  const PARAR_EM_656 = req.body?.pararEm656 !== false; // default true
+
+  console.log(`[sync-targeted] init — ${cnpjs.length} cnpjs, sleep=${SLEEP_MS}ms, pararEm656=${PARAR_EM_656}`);
+
+  const r = await executarSyncDirigido({
+    cnpjs, sleepMs: SLEEP_MS, pararEm656: PARAR_EM_656,
+    capturadoPor: { uid: 'sync-targeted', email: 'cron@spassessoriacontabil', fonte: 'manual' },
+  });
+  return res.json(r);
+});
+
+// ── POST /sync-targeted-now ─────────────────────────────────────────────────
+// A porta de ADMIN da captura dirigida — o botão "🎯 Captura dirigida".
+//
+// ⚠️ RESPONDE NA HORA E TRABALHA EM BACKGROUND, de propósito: o laço dorme
+// 90s entre empresas (é esse respiro que evita o cStat 656 da SEFAZ), então
+// 10 CNPJs levam ~15 min. Uma rota síncrona estouraria o timeout do navegador
+// e do Cloud Run, e a pessoa concluiria que "não funcionou" no meio de uma
+// captura que está andando. O heartbeat é o MESMO do cron (`sefaz_cron_logs`),
+// senão a rodada do botão não apareceria na saúde dos crons.
+router.post('/sync-targeted-now', requireAuth, express.json(), async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores' });
+  }
+  const cnpjs = normalizarCnpjsDirigidos(req.body?.cnpjs);
+  if (!cnpjs.length) {
+    return res.status(400).json({ error: 'Informe ao menos um CNPJ de 14 dígitos.' });
+  }
+  if (cnpjs.length > LIMITE_CNPJS_DIRIGIDOS) {
+    // O teto é do TEMPO, não do gosto: 90s por empresa. Dizer o número em vez
+    // de cortar calado — lista truncada em silêncio é "0 de 388" outra vez.
+    return res.status(400).json({
+      error: `São ${cnpjs.length} CNPJs e o máximo por rodada é ${LIMITE_CNPJS_DIRIGIDOS} `
+        + `(90s de respiro entre empresas, para não bater no 656 da SEFAZ). Divida em rodadas.`,
+    });
+  }
+
+  const pararEm656 = req.body?.pararEm656 !== false;
+  await withCronHeartbeat({
+    collection: 'sefaz_cron_logs',
+    fonte: 'admin-dirigida',
+    res,
+    respostaImediata: {
+      cnpjs: cnpjs.length,
+      minutosEstimados: minutosEstimadosDirigida(cnpjs.length),
+    },
+    metadados: { adminEmail: req.user.email, cnpjsSolicitados: cnpjs.length },
+  }, async () => {
+    const r = await executarSyncDirigido({
+      cnpjs, sleepMs: RESPIRO_ENTRE_EMPRESAS_MS, pararEm656,
+      capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'dirigida-admin' },
+      marcador: 'sync-targeted-now',
+    });
+    return {
+      totalEmpresas: r.totalSolicitadas,
+      sucessos: r.resultados.filter(x => x.ok).length,
+      falhas: r.resultados.filter(x => !x.ok).length,
+      totalNovosXmls: r.totalNovosXmls,
+      parouEm656: r.parouEm656,
+      naoEncontrados: r.naoEncontrados,
+    };
   });
 });
 

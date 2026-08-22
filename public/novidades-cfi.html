@@ -133,6 +133,34 @@
     transmitido é assunto de <strong>retificação</strong>, e isso se decide cliente a cliente com
     o Paulo. Se um número mudar em relação ao mês passado, é esta correção — e o aviso da geração
     diz qual foi.</div>
+
+    <h3>6. Sete telas que faltavam — botões para coisas que o app já sabia fazer</h3>
+    <p>Uma varredura das rotas do servidor achou <strong>sete operações que existiam e não tinham
+    caminho na tela</strong>. Todas ganharam botão:</p>
+    <div class="onde">📍 <strong>Central de XMLs → Captura</strong> (admin)<br>
+    · <strong>🔎 Fila da manifestação</strong> — veja QUEM está esperando Ciência e manifeste
+      <strong>uma</strong> chave quando ela trava (antes só existia o lote). Sem Ciência a SEFAZ
+      não entrega o XML completo, e resumo preso é livro a menor.<br>
+    · <strong>🎯 Captura dirigida</strong> — force a captura numa <strong>lista</strong> de
+      empresas (cole os CNPJs), sem disparar a carteira inteira.<br><br>
+    📍 <strong>Caixa Postal</strong> → abra a mensagem → <strong>🔄 Só esta empresa</strong>:
+    atualiza a caixa de UM cliente, em vez de sincronizar as 213.<br><br>
+    📍 <strong>NFP Pro Cloud → aba Análise → 🔎 Consultas avulsas</strong>: repita
+    <strong>uma</strong> consulta (situação fiscal, dívida ativa, CNDs) quando ela falha dentro da
+    varredura — sem refazer as outras quatro, que já custaram consulta paga.<br><br>
+    📍 <strong>Carteira → Atribuição → 👁 Prévia (não envia)</strong>: confira os números do
+    resumo diário <strong>sem</strong> disparar o e-mail.<br><br>
+    📍 <strong>Central de Emissões</strong>: o estado do <strong>freio de emissão</strong> agora
+    aparece no topo. Se ele estiver ligado, emitir devolve erro — e isso <em>não é defeito do
+    app</em>; a tela diz qual chave o Paulo precisa liberar.</div>
+    <div class="alerta">⚠️ <strong>Duas coisas para não confundir.</strong> Manifestar é
+    <strong>irreversível na SEFAZ</strong> — o app pergunta antes. E a captura dirigida responde
+    “<strong>começou</strong>”, não “capturou”: ela dorme 90s entre empresas (é esse respiro que
+    evita o bloqueio 656 da SEFAZ), então 10 CNPJs levam ~15 min e o resultado aparece na Saúde
+    dos crons.</div>
+    <div class="ganho">💡 Uma <strong>fila vazia</strong> na manifestação e um resultado
+    <strong>vazio</strong> no NFP não provam que não há pendência — as duas telas dizem isso na
+    cara. Ausência não é prova.</div>
 </section>
 
 <section>

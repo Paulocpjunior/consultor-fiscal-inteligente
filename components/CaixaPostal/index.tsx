@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User, CaixaPostalMensagem, CaixaPostalResumo, CaixaPostalCategoria, CaixaPostalFonte } from '../../types';
 import {
-    getResumo, listarMensagens, sincronizarTodas, marcarComoLida,
+    getResumo, listarMensagens, sincronizarTodas, sincronizarEmpresa, marcarComoLida,
     categoriaLabel, categoriaColor, isCritica,
     fonteLabel, fonteBadgeColor, fonteDotColor,
 } from '../../services/caixaPostalService';
@@ -62,6 +62,25 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
             onShowToast?.(`Erro: ${e.message}`);
         } finally {
             setSyncing(false);
+        }
+    };
+
+    // 🚨 SINCRONIZAR UMA EMPRESA NÃO TINHA BOTÃO — só existia "Sincronizar
+    // Todas" (213 empresas). Para conferir UMA caixa, o caminho era disparar a
+    // carteira inteira: lento, e consome janela dos órgãos por causa de uma
+    // dúvida sobre um cliente só. A rota admin `/sincronizar` já existia; o que
+    // faltava era o caminho na tela (varredura de rotas, 22/08).
+    const [syncEmpresa, setSyncEmpresa] = useState<string | null>(null);
+    const handleSincronizarEmpresa = async (msg: CaixaPostalMensagem) => {
+        setSyncEmpresa(msg.empresaId);
+        try {
+            await sincronizarEmpresa(currentUser, msg.empresaId, msg.empresaCnpj);
+            onShowToast?.(`Caixa de ${msg.empresaNome || msg.empresaCnpj} sincronizada.`);
+            await carregar();
+        } catch (e: any) {
+            onShowToast?.(`Erro ao sincronizar ${msg.empresaCnpj}: ${e.message}`);
+        } finally {
+            setSyncEmpresa(null);
         }
     };
 
@@ -325,6 +344,14 @@ const CaixaPostalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => 
                                 className="btn-press px-4 py-2 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
                             >
                                 Fechar
+                            </button>
+                            <button
+                                onClick={() => handleSincronizarEmpresa(selecionada)}
+                                disabled={syncEmpresa === selecionada.empresaId}
+                                className="btn-press px-4 py-2 bg-slate-600 text-white font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap"
+                                title="Atualiza a caixa postal SÓ desta empresa — sem disparar a carteira inteira"
+                            >
+                                {syncEmpresa === selecionada.empresaId ? 'Sincronizando...' : '🔄 Só esta empresa'}
                             </button>
                             {!selecionada.dataLeitura && (
                                 <button
