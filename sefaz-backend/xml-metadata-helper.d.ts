@@ -48,6 +48,12 @@ export function ehNotaPropriaDeEntrada(
  * cancelada). Decide na LEITURA pelo status, pelo cStat legado da própria nota
  * (101/151) e pelos eventos[] de cancelamento (110111 com cStat 135/155).
  */
+/**
+ * Campos que uma projeção `.select()` precisa carregar para que
+ * `docCancelado` consiga responder — o cancelamento chega por EVENTO, e sem
+ * `eventos` a régua diz "não cancelada" com toda confiança.
+ */
+export const CAMPOS_PARA_DOC_CANCELADO: readonly string[];
 export function docCancelado(d: unknown): boolean;
 export const CSTAT_EVENTO_CANCELAMENTO: Set<string>;
 
@@ -85,6 +91,8 @@ export function decidirDirecaoPorTpNF(
  *
  * ⚠️ `valores.liquido` fica FORA: na NFS-e ele é o líquido de retenções.
  */
+/** Campos que uma projeção precisa carregar para `valorDoDocumento` responder. */
+export const CAMPOS_PARA_VALOR_DO_DOCUMENTO: readonly string[];
 export function valorDoDocumento(nota: unknown): number;
 /** Nome antigo da MESMA função (a pergunta nunca foi específica de serviço). */
 export function valorDoDocumentoServico(nota: unknown): number;

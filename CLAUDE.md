@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📌 `.d.ts` À MÃO: AS DUAS DIREÇÕES NÃO CUSTAM IGUAL — e só uma é
+  silenciosa** (22/08, varredura dos 8 pares `.js`/`.d.ts` escritos à mão).
+  · **`.js` exporta e o `.d.ts` não declara** ⇒ quem importar do TypeScript leva
+  **erro de compilação**: o gate pega, é ALTO. Hoje há ~25 nomes assim em 8
+  arquivos e **não foram corrigidos de propósito** — corrigir em massa é
+  trabalho sem consequência, e a régua da casa é triagem por RISCO.
+  · **`.d.ts` declara e o `.js` não exporta mais** ⇒ o TypeScript compila feliz
+  e o import estoura **em produção, no primeiro clique**. É o silencioso, e é
+  esse que `dtsNaoPrometeFantasma.test.ts` fecha. **Hoje há ZERO** — a trava
+  nasce VERDE, que é como trava deve nascer.
+  🐛 **E ela nasceu fraca**: a 1ª versão só perguntava se o nome APARECIA no
+  `.js`, então tirar o `export` de uma função que continua declarada passava
+  batido — justamente o caso que ela existe para pegar. **Trava que não grita
+  quando devia é pior que trava nenhuma: ela dá sensação de cobertura.** Agora
+  compara os nomes EXPORTADOS dos dois lados; provada tirando o `export` do
+  `docCancelado` de propósito.
+  ⚠️ E as duas constantes de projeção que nasceram hoje
+  (`CAMPOS_PARA_DOC_CANCELADO`, `CAMPOS_PARA_VALOR_DO_DOCUMENTO`) entraram no
+  `.d.ts` no mesmo dia — eu quase repeti a regra de 20/08 que estava aplicando.
+
 - **🚨 A TRAVA QUE IMPEDE COBRAR O CLIENTE DUAS VEZES CONSULTAVA POR IGUALDADE
   DE COMPETÊNCIA — e a gravação normaliza** (22/08). `impostos_enviados` grava
   `competencia: normalizarCompetencia(...)` (= `AAAA-MM`), e a rota que confere
