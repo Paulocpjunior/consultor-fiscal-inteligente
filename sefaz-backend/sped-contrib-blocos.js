@@ -1336,38 +1336,16 @@ export function buildBloco1_Contrib(_dados) {
 
 // ═══════════════════════════════════════════════════════════════════════
 // BLOCO 9 — Controle e Encerramento do Arquivo
+//
+// 🚨 ERA UMA SEGUNDA CÓPIA, LINHA POR LINHA (22/08). O bloco 9 é ARITMÉTICA DE
+// FECHAMENTO — o 9900 conta cada tipo de registro, o 9990 conta as linhas do
+// próprio bloco e o 9999 conta o ARQUIVO INTEIRO. O PVA confere os três, e o
+// mecanismo é o MESMO nas duas famílias: ele lê os registros que de fato
+// saíram, não uma lista.
+//
+// As duas implementações eram idênticas — e é justamente aí que a segunda
+// cópia é perigosa: não há defeito HOJE, e a próxima correção entra numa só.
+// É o que aconteceu com o `getContadorPadrao` (20/08) e com o
+// `UNIDADES_PADRAO`, nesta mesma dupla de arquivos.
 // ═══════════════════════════════════════════════════════════════════════
-
-export function buildBloco9_Contrib(linhasAnteriores) {
-    const linhas = [];
-
-    linhas.push(fmt.buildLine(['9001', '0']));
-
-    const contagem = {};
-    for (const linha of linhasAnteriores) {
-        const parts = linha.split('|');
-        if (parts.length >= 2 && parts[1]) {
-            const tipo = parts[1];
-            contagem[tipo] = (contagem[tipo] || 0) + 1;
-        }
-    }
-
-    const tiposDistintos = Object.keys(contagem).sort();
-    const num9900 = tiposDistintos.length + 4;
-    contagem['9001'] = 1;
-    contagem['9900'] = num9900;
-    contagem['9990'] = 1;
-    contagem['9999'] = 1;
-
-    for (const tipo of Object.keys(contagem).sort()) {
-        linhas.push(fmt.buildLine(['9900', tipo, contagem[tipo]]));
-    }
-
-    const linhasBloco9 = linhas.length + 2;
-    linhas.push(fmt.buildLine(['9990', linhasBloco9]));
-
-    const totalLinhas = linhasAnteriores.length + linhas.length + 1;
-    linhas.push(fmt.buildLine(['9999', totalLinhas]));
-
-    return linhas;
-}
+export { buildBloco9 as buildBloco9_Contrib } from './sped-fiscal-bloco9.js';
