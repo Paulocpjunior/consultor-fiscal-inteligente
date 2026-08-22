@@ -44,7 +44,7 @@ import {
 } from './lgpd-titular.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
-import { montarCatalogoCanais, credenciaisDoCanal, validarCanal } from './whatsapp-canais.js';
+import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
 import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
 import { registrarToken } from './whatsapp-push.js';
@@ -730,11 +730,18 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
             });
         }
 
-        // 📷 DM do Instagram sai pela Graph da PÁGINA; WhatsApp, pela WABA.
-        // O resto do fluxo (gravação, auto-assumir, thread) é o MESMO.
+        // 📷 DM do Instagram sai pela Graph da PÁGINA; WhatsApp, pela WABA —
+        // e pelo MESMO NÚMERO em que o cliente falou (2º número em diante):
+        // responder pelo principal abriria OUTRA conversa no cliente.
+        let depsEnvio = {};
+        if (!ehIg) {
+            const canal = await cfgDeEnvioDaConversa(db, conv.data());
+            if (canal.erro) return res.status(503).json({ ok: false, error: canal.erro });
+            if (canal.cfg) depsEnvio = { cfg: canal.cfg };
+        }
         const envio = ehIg
             ? await enviarTextoInstagram({ para: numero, texto })
-            : await enviarTextoLivre({ para: numero, texto });
+            : await enviarTextoLivre({ para: numero, texto }, depsEnvio);
         if (!envio.ok) {
             if (ehIg && envio.janelaFechada) {
                 return res.status(422).json({
@@ -956,7 +963,12 @@ router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
                     avisoCliente = 'janela-fechada';
                 } else {
                     const texto = String(cfg.mensagens.transferencia || '').replace('{fila}', rotuloPara);
-                    const envio = await enviarTextoLivre({ para: numero, texto });
+                    // Pelo MESMO número da conversa; canal quebrado só derruba
+                    // o AVISO (a transferência já aconteceu) — dito no desfecho.
+                    const canal = await cfgDeEnvioDaConversa(db, conv.data());
+                    const envio = canal.erro
+                        ? { ok: false, erro: canal.erro }
+                        : await enviarTextoLivre({ para: numero, texto }, canal.cfg ? { cfg: canal.cfg } : {});
                     if (envio.ok) {
                         avisoCliente = 'enviado';
                         await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
@@ -1041,7 +1053,12 @@ router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
                     if (!Number.isFinite(ate) || ate <= Date.now()) {
                         avaliacao = 'janela-fechada';
                     } else {
-                        const envio = await enviarTextoLivre({ para: numero, texto: cfg.mensagens.avaliacao });
+                        // Pesquisa pelo MESMO número da conversa; canal quebrado
+                        // vira 'falhou' (o encerramento já aconteceu).
+                        const canal = await cfgDeEnvioDaConversa(db, conv);
+                        const envio = canal.erro
+                            ? { ok: false, erro: canal.erro }
+                            : await enviarTextoLivre({ para: numero, texto: cfg.mensagens.avaliacao }, canal.cfg ? { cfg: canal.cfg } : {});
                         if (envio.ok) {
                             avaliacao = 'enviada';
                             await convRef.set({ aguardandoAvaliacao: true }, { merge: true });
@@ -1606,13 +1623,19 @@ router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
         if (!v.ok) return res.status(422).json({ ok: false, error: v.erro, acao: v.acao });
         const legenda = String(p.legenda || '').trim();
 
+        // Pelo MESMO número da conversa — o upload de mídia também é por
+        // número: subir num e mandar por outro a Meta recusa.
+        const canal = await cfgDeEnvioDaConversa(db, conversa);
+        if (canal.erro) return res.status(503).json({ ok: false, error: canal.erro });
+        const depsEnvio = canal.cfg ? { cfg: canal.cfg } : {};
+
         let mediaId;
         try {
-            mediaId = await subirMidiaWhatsapp({ base64, nomeArquivo: v.nome, mime: p.mime });
+            mediaId = await subirMidiaWhatsapp({ base64, nomeArquivo: v.nome, mime: p.mime }, depsEnvio);
         } catch (e) {
             return res.status(422).json({ ok: false, error: e.message, acao: 'Confira o arquivo e tente de novo.' });
         }
-        const envio = await enviarMidiaWhatsapp({ para: numero, tipo: v.tipo, mediaId, nomeArquivo: v.nome, legenda });
+        const envio = await enviarMidiaWhatsapp({ para: numero, tipo: v.tipo, mediaId, nomeArquivo: v.nome, legenda }, depsEnvio);
         if (!envio.ok) {
             const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
             return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });

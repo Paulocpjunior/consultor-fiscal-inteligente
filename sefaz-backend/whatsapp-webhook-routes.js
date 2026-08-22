@@ -36,7 +36,7 @@ import {
 } from './whatsapp-webhook.js';
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre, enviarMidiaWhatsapp } from './whatsapp-cloud.js';
 import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaValida } from './whatsapp-atendimento.js';
-import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado } from './whatsapp-canais.js';
+import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
 
@@ -419,7 +419,11 @@ async function capturarAvaliacao(db, msg) {
         // Reusa o cfg já lido acima — duas leituras do mesmo doc no mesmo
         // fluxo é desperdício, e é como duas verdades nascem.
         const config = cfgAval;
-        const envio = await enviarTextoLivre({ para: msg.de, texto: config.mensagens.avaliacaoObrigado });
+        // Pelo MESMO número da conversa (2º número em diante) — canal
+        // quebrado só cala o agradecimento, a nota já está gravada.
+        const canalEnv = await cfgDeEnvioDaConversa(db, conversa);
+        if (canalEnv.erro) { console.warn('[whatsapp/avaliacao] agradecimento não saiu:', canalEnv.erro); return true; }
+        const envio = await enviarTextoLivre({ para: msg.de, texto: config.mensagens.avaliacaoObrigado }, canalEnv.cfg ? { cfg: canalEnv.cfg } : {});
         if (envio.ok) {
             await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
                 conversaId: msg.de, direcao: 'saida', tipo: 'text',
@@ -449,6 +453,12 @@ async function rodarBot(db, msg) {
 
         const convRef = db.collection('whatsapp_conversas').doc(msg.de);
         const conversa = (await convRef.get()).data() || {};
+        // O bot responde pelo MESMO número em que o cliente falou (2º número
+        // em diante). Canal quebrado cala o bot NESTA conversa, nomeado no
+        // log — responder pelo número errado seria pior que não responder.
+        const canalEnv = await cfgDeEnvioDaConversa(db, conversa);
+        if (canalEnv.erro) { console.warn('[whatsapp/bot] bot calado nesta conversa:', canalEnv.erro); return; }
+        const depsEnvio = canalEnv.cfg ? { cfg: canalEnv.cfg } : {};
         const acoes = decidirAutomacao({
             // `numero` decide o ALCANCE: no modo piloto o bot só responde aos
             // números cadastrados — é o que deixa a Ultra Fox de pé sem o
@@ -487,7 +497,7 @@ async function rodarBot(db, msg) {
                 // nunca mediaId — é a imagem FIXA reenviada sempre, e a Meta
                 // busca por link sob demanda, sem depender de upload prévio
                 // nem de quanto tempo um mediaId permanece válido lá.
-                const envio = await enviarMidiaWhatsapp({ para: msg.de, tipo: 'image', link: acao.url });
+                const envio = await enviarMidiaWhatsapp({ para: msg.de, tipo: 'image', link: acao.url }, depsEnvio);
                 if (envio.ok) {
                     await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
                         conversaId: msg.de, direcao: 'saida', tipo: 'image',
@@ -503,7 +513,7 @@ async function rodarBot(db, msg) {
                     console.warn('[whatsapp/bot] imagem de fila não saiu:', envio.erro);
                 }
             } else if (acao.tipo === 'responder') {
-                const envio = await enviarTextoLivre({ para: msg.de, texto: acao.texto });
+                const envio = await enviarTextoLivre({ para: msg.de, texto: acao.texto }, depsEnvio);
                 if (envio.ok) {
                     await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
                         conversaId: msg.de, direcao: 'saida', tipo: 'text',

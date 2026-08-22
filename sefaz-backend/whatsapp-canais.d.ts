@@ -32,6 +32,12 @@ export function montarCatalogoCanais(p?: {
 export function canalDoEvento(catalogo: CatalogoCanais, phoneNumberId: unknown):
     { canalId: string | null; conhecido: boolean; phoneNumberId?: string; motivo: string | null };
 export function canalDaConversa(catalogo: CatalogoCanais, conversa?: Record<string, unknown>): CanalWhatsapp | null;
+/** Credenciais de ENVIO da conversa (mesmo número em que o cliente falou). */
+export function cfgDeEnvioDaConversa(
+    db: unknown,
+    conversa: Record<string, unknown> | null | undefined,
+    env?: Env,
+): Promise<{ cfg?: { token: string; phoneNumberId: string; wabaId?: string | null } | null; erro?: string }>;
 export function credenciaisDoCanal(canal: CanalWhatsapp | null | undefined, env?: Env):
     { pronto: boolean; faltas: string[]; cfg?: { token: string; phoneNumberId: string | null; wabaId: string | null } };
 export function validarCanal(d?: Record<string, unknown>):
