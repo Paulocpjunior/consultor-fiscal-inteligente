@@ -23,6 +23,7 @@ import { enviarTemplateWhatsapp, configWhatsapp, faltasDaConfig } from './whatsa
 import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates.js';
 import { nomeArquivoGuia } from './nome-arquivo-guia.js';
 import { conferirDebitosJaEnviados, avisoDeRepeticao } from './debito-ja-enviado.js';
+import { formasDaCompetencia } from './competencia.js';
 
 const router = Router();
 
@@ -404,9 +405,30 @@ router.post('/debitos-ja-enviados', requireAuth, async (req, res) => {
             return res.status(403).json({ ok: false, error: 'Empresa fora da sua carteira.' });
         }
         const db = fa().firestore();
+        // 🚨 A GRAVAÇÃO NORMALIZA A COMPETÊNCIA E A CONSULTA PERGUNTAVA PELO
+        // TEXTO CRU. Pedindo `07/2026` (ou `202607`), a igualdade achava ZERO
+        // envios anteriores, a trava respondia "nunca foi enviado" e a MESMA
+        // cobrança saía de novo — que é exatamente o que ela existe para
+        // impedir (caso HYPE, 17/08: o 1082 indo em duplicidade).
+        //
+        // ⚠️ A consulta cobre TODAS as formas em que o registro pode estar
+        // gravado, não só a normalizada: envio antigo, anterior à normalização,
+        // guarda o texto como veio. Perder ESSE registro é a mesma conta
+        // dobrada, um mês mais tarde.
+        const formas = formasDaCompetencia(competencia);
+        if (!formas.length) {
+            // Competência ilegível NÃO vira "nunca foi enviado": isso liberaria
+            // a segunda cobrança justamente quando não dá para conferir.
+            return res.status(400).json({
+                ok: false,
+                error: `Competência "${competencia}" não reconhecida — use AAAA-MM (ex.: 2026-07). `
+                    + 'Sem ela não dá para conferir se este débito já foi enviado, e seguir sem conferir '
+                    + 'é o caminho da cobrança em duplicidade.',
+            });
+        }
         const snap = await db.collection('impostos_enviados')
             .where('empresaCnpj', '==', cnpj)
-            .where('competencia', '==', competencia)
+            .where('competencia', 'in', formas.slice(0, 10))
             .limit(300)
             .get();
         const enviosAnteriores = snap.docs.map((d) => {

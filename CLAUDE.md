@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TRAVA QUE IMPEDE COBRAR O CLIENTE DUAS VEZES CONSULTAVA POR IGUALDADE
+  DE COMPETÊNCIA — e a gravação normaliza** (22/08). `impostos_enviados` grava
+  `competencia: normalizarCompetencia(...)` (= `AAAA-MM`), e a rota que confere
+  o débito repetido perguntava `where('competencia','==', <texto cru da
+  requisição>)`. Pedindo **`07/2026`** ou **`202607`**, ela achava **ZERO envios
+  anteriores**, respondia *"nunca foi enviado"* e liberava a **MESMA cobrança** —
+  que é exatamente o que ela existe para impedir (caso HYPE, 17/08, o 1082 indo
+  em duplicidade). É a irmã do CNPJ em duas formas, no campo que decide dinheiro.
+  ✂️ A consulta passou a cobrir **todas as formas GRAVADAS** (`formasDaCompetencia`),
+  não só a normalizada — envio antigo, anterior à normalização, guarda o texto
+  como veio, e perder ESSE registro é a mesma conta dobrada um mês depois. E
+  **competência ilegível RECUSA** com o motivo: virar "nunca foi enviado" seria
+  liberar a segunda cobrança justamente quando não dá para conferir.
+  🔴 **A CAUSA DE FUNDO ERAM DUAS RÉGUAS COM O MESMO NOME**: `envio-imposto.js`
+  aceitava `AAAAMM` e **recusava `AAAA-MM-DD`** (a forma que a ficha usa); o
+  `ipi-varredura.js` fazia o **contrário**. Cada uma devolvia **null** para a
+  forma que a outra entendia — e null aqui não falha, **some**. `competencia.js`
+  virou dono das quatro formas e entrou em `REGUAS_VIGIADAS`.
+  ⚠️ **`assertCompetencia`/`partesDaCompetencia` do catálogo NÃO são a terceira
+  cópia** e ficam declaradas como exceção: elas respondem *"esta entrada está no
+  formato que o catálogo exige?"* e **lançam** de propósito. Régua única é o dono
+  da MESMA pergunta, não o dono mais próximo — a lição do `ufDoDestinatarioDoc`.
+
 - **🚨 A CONFERÊNCIA CFI × SPED PULAVA O CONFRONTO DE VALOR — CALADA, e
   justamente na maioria das notas** (22/08). A tela montava o input lendo **só
   `d.totais?.vNF`**, e a captura pela SEFAZ grava **`valorTotal`**: em toda nota
