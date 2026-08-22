@@ -73,6 +73,22 @@ describe('🚨 bloco D (ICMS/IPI) — o CT-e como ele chega da captura', () => {
         expect(campos[3]).toBe('1');   // IND_EMIT: terceiros
     });
 
+    // 🚨 SER saía `nota.serie || '1'` — série INVENTADA em todo CT-e sem o
+    // campo gravado, num campo que o PVA confere contra a chave (recusa de
+    // 20/08 na PWR, do lado do C100). A chave não mente: série nas posições
+    // 23-25 — na do teste, `...5700100000000317...` ⇒ 001.
+    it('SER sai da CHAVE quando o campo não foi gravado — nunca o "1" inventado', () => {
+        const semSerie = cteCapturado({ serie: undefined });
+        const campos = d100De(buildBlocoD(dados([semSerie])) as never);
+        expect(campos[7]).toBe('001');
+        expect(campos[7]).not.toBe('1');
+    });
+
+    it('série gravada vence e sai com as TRÊS posições', () => {
+        const campos = d100De(buildBlocoD(dados([cteCapturado({ serie: '3' })])) as never);
+        expect(campos[7]).toBe('003');
+    });
+
     it('sem CT-e no período o bloco continua vazio', () => {
         const linhas = buildBlocoD(dados([]));
         expect(linhas.find((l: string) => l.startsWith('|D001|'))).toBe('|D001|1|\r\n');

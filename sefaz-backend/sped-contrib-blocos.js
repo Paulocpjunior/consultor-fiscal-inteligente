@@ -22,7 +22,10 @@ import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 // DONO — o mesmo leitor que alimenta o R-4020. Segunda cópia divergiria.
 import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
-import { selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico } from './sped-selecao-documentos.js';
+import {
+    selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
+    serieDoDocumento,
+} from './sped-selecao-documentos.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import { modeloDoDoc } from './participante-doc-helper.js';
 // CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
@@ -558,7 +561,7 @@ export function buildBlocoC_Contrib(dados) {
             // não grava `modelo` (lição da PS VIDROS 0896, 19/08).
             modeloDoDoc(nota),
             '00',                                          // COD_SIT (cancelada já saiu acima)
-            serieDoC100(nota.serie),                       // SER — três posições
+            serieDoDocumento(nota),                       // SER — três posições
             fmt.sanitizeString(nota.numero || '', 9),
             fmt.sanitizeString(chave, 44),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
@@ -719,7 +722,9 @@ export function buildBlocoD_Contrib(dados) {
             'D100',
             indOper, indEmit, codPart,
             '57', '00',
-            fmt.sanitizeString(nota.serie || '1', 3),
+            // SER pela régua — o '1' cravado inventava a série de todo CT-e
+            // que chegasse sem o campo; a chave carrega a série (23-25).
+            serieDoDocumento(nota),
             '',
             fmt.sanitizeString(nota.numero || '', 9),
             fmt.sanitizeString(nota.chaveAcesso || nota.chave || '', 44),

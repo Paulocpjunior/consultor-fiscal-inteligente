@@ -50,3 +50,26 @@ export function ehNotaDeServico(d: unknown): boolean;
  *   (CFOP 5929/6929) escritura por outra regra, ressalva do próprio manual.
  */
 export function codSitDoDocumento(d: unknown, uf?: string): string;
+
+/** Tabela 4.1.1 — Tipo do Item: 09 = Serviços. */
+export const TIPO_ITEM_SERVICO: string;
+/** Tabela 4.1.1 — Tipo do Item: 00 = Mercadoria para Revenda. */
+export const TIPO_ITEM_MERCADORIA_REVENDA: string;
+
+/**
+ * TIPO_ITEM do item, pelo DOCUMENTO em que ele veio — serviço é 09, e o 0200
+ * dele não leva NCM (Guia 3.2.3, 0200 campo 08: "Não existe COD-NCM para
+ * serviços"). Mercadoria continua '00': a destinação real (01 matéria-prima,
+ * 04 produto acabado) não está no XML e não se deduz.
+ */
+export function tipoItemDoDocumento(nota: unknown): string;
+
+/** O item já classificado é de serviço? */
+export function ehItemDeServico(item: unknown): boolean;
+
+/**
+ * SER — série do documento com as três posições que o PVA cobra, lida do campo
+ * gravado ou, na falta dele, da CHAVE (posições 23-25). '000' quando não há
+ * série; nunca o '1' que o bloco D inventava.
+ */
+export function serieDoDocumento(nota: unknown): string;

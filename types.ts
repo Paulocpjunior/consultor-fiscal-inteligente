@@ -1503,6 +1503,16 @@ export interface EmpresaDadosFiscais {
     contribuinteIpi?: 'sim' | 'nao' | '';
     classEstabIpi?: string;
     /**
+     * IND_NAT_PJ — natureza da PJ, campo 13 do registro 0000 do
+     * EFD-Contribuições (Tabela 3.1.3 do leiaute).
+     *
+     * 🚨 O gerador LIA este campo desde sempre e ele não existia em tela
+     * nenhuma nem na whitelist: caía SEMPRE no '00', que declara "sociedade
+     * empresária em geral" — inclusive nas entidades imunes/isentas (varredura
+     * de 21/08). Código de tabela oficial: vem do cadastro, o app não deduz.
+     */
+    indNatPJ?: string;
+    /**
      * CNAE principal e data de abertura nasceram na tela de CRIAÇÃO da empresa
      * (top-level do doc) e não tinham onde ser editados depois — a conferência
      * de cadastro cobrava um campo sem tela (31/07). O modal Dados Fiscais

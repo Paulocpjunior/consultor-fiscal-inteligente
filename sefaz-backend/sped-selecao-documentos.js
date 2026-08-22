@@ -232,3 +232,76 @@ export function codSitDoDocumento(nota, uf) {
     );
     return ehSubstituicaoCupom ? '08' : base;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 TIPO_ITEM — o 0200 declarava SERVIÇO como "mercadoria para revenda"
+//
+// Varredura noturna dos leitores de DOCUMENTO (21/08). Os DOIS orquestradores
+// montavam o item do 0200 com `tipo: '00'` cravado, e '00' é **Mercadoria para
+// Revenda** — inclusive no item SINTÉTICO que representa a NFS-e sem
+// discriminação (`SERV-GENERICO`), que existe justamente porque o documento é
+// de SERVIÇO. É a família do COD_GEN '00' e do 'PARTSEM': default de campo
+// fiscal é invenção com outro nome.
+//
+// O Guia Prático 3.2.3 é literal sobre o serviço (registro C321, ao explicar o
+// serviço de competência municipal): *"deverá ser criado o correspondente item
+// no registro 0200, cujo conteúdo do campo TIPO_ITEM será igual '09'
+// (Serviços)"*. E o campo 08 do mesmo 0200: *"Não existe COD-NCM para
+// serviços"* — por isso o NCM do item de serviço sai VAZIO, nunca o
+// '00000000' que o gerador escrevia (NCM fabricado é a mesma invenção, um
+// campo adiante).
+//
+// ⚠️ O QUE ESTA RÉGUA **NÃO** FAZ, de propósito: adivinhar o tipo da
+// MERCADORIA. Numa indústria, matéria-prima é 01 e produto acabado é 04 — e
+// isso **não está no XML** (o fornecedor não declara a destinação que a
+// mercadoria terá aqui, exatamente como no caso KALUNGA do CFOP). Deduzir pelo
+// ramo produziria o 1405 de novo, num campo que o Bloco K cruza. Enquanto não
+// houver cadastro por item, mercadoria continua '00' — pendência NOMEADA aqui,
+// não conserto silencioso.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Tabela 4.1.1 — Tipo do Item. Só os dois que esta régua decide. */
+export const TIPO_ITEM_SERVICO = '09';
+export const TIPO_ITEM_MERCADORIA_REVENDA = '00';
+
+/**
+ * TIPO_ITEM do item, pelo DOCUMENTO em que ele veio.
+ *
+ * ⚠️ Lê pelo mesmo `ehNotaDeServico` do bloco A. O CT-e não passa por aqui
+ * porque não tem `itens[]` — se um dia tiver, ele é serviço igualmente, e a
+ * régua a usar é a do FUNRURAL (`ehDocumentoDeServico`), não esta.
+ */
+export function tipoItemDoDocumento(nota) {
+    return ehNotaDeServico(nota) ? TIPO_ITEM_SERVICO : TIPO_ITEM_MERCADORIA_REVENDA;
+}
+
+/** O item é de serviço? (o 0200 dele não leva NCM — Guia 3.2.3, 0200 campo 08) */
+export function ehItemDeServico(item) {
+    return String(item?.tipo || '') === TIPO_ITEM_SERVICO;
+}
+
+/**
+ * SER — a série do documento, com as TRÊS posições que o PVA cobra.
+ *
+ * 🚨 O bloco D escrevia `nota.serie || '1'`: série **1 INVENTADA** em todo CT-e
+ * que chegasse sem o campo gravado. E o C100 caía em '000' na mesma situação —
+ * o que é o certo quando a nota realmente não tem série, e é uma DIVERGÊNCIA
+ * quando ela tem: *"o PVA confere a série contra a que está DENTRO da chave"*
+ * (recusa de 20/08, PWR).
+ *
+ * A chave não mente: a série mora nas posições **23-25** dela, ao lado do
+ * modelo (21-22) e do número (26-34) — as mesmas posições que o ♻️ já usa para
+ * recuperar o número da nota que chegou só como resumo.
+ *
+ * Guia Prático 3.2.3, C100 campo 07: *"campo de preenchimento obrigatório com
+ * três posições … Se não existir Série … informar 000"* — por isso '000' é a
+ * resposta final, nunca '1'.
+ */
+export function serieDoDocumento(nota) {
+    const gravada = String(nota?.serie ?? '').replace(/\D/g, '');
+    if (gravada) return gravada.padStart(3, '0').slice(-3);
+    const chave = String(nota?.chave || nota?.chaveAcesso || nota?.chNFe || nota?.chCTe || '')
+        .replace(/\D/g, '');
+    if (chave.length === 44) return chave.slice(22, 25);
+    return '000';
+}
