@@ -63,10 +63,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   do C190** (o CT-e traz o código do TRANSPORTADOR — 5352 — e quem TOMA o frete
   escritura 1352). CT-e sem CFOP legível **não entra** e sai NOMEADO, com a
   ação (♻️), em vez de entrar com natureza inventada.
+  🔴 **(8) O `COD_SIT` TINHA DUAS RÉGUAS — e a do bloco D declarava REGIME
+  ESPECIAL por default.** `statusParaCodSit` existia nos dois geradores: o C
+  mandava '00' (regular) para status desconhecido e o D mandava **'08'**, que
+  significa *"documento emitido por regime especial ou norma específica"* e tem
+  regras PRÓPRIAS de preenchimento (Exceção 4). A tabela é a MESMA para C100 e
+  D100. ✂️ `codSitDoDocumento` virou dona (na seleção), e as duas cópias foram
+  **deletadas** — código morto é a isca para alguém reativar a régua velha.
+  🐛 **E o teste da régua nova pegou um defeito PRÉ-EXISTENTE do bloco C**: ele
+  perguntava `docCancelado` ANTES do status, e `docCancelado` trata
+  denegado/inutilizado como cancelamento (para efeito de "não conta no livro",
+  que é o uso dela) — então a nota **DENEGADA saía com COD_SIT 02** em vez de
+  **04**. São fatos diferentes: denegada é a SEFAZ RECUSANDO a autorização (a
+  nota nunca valeu); cancelada é a nota que existiu e foi cancelada. Agora o
+  status específico vem primeiro e o `docCancelado` só decide o caso que ele
+  existe para resolver — o cancelamento por EVENTO, em que o status continua
+  'autorizado'.
   📌 **REGRA QUE FICA: bloco/gerador sem teste é bloco sem prova** — o D era o
   único do EFD-Contribuições sem nenhum, e era justamente onde estavam três
   defeitos de uma vez. E **default de campo fiscal é invenção com outro nome**:
-  'PARTSEM', '5352', '000' e o COD_GEN '00' saíram todos da mesma cabeça.
+  'PARTSEM', '5352', '000', '08' e o COD_GEN '00' saíram todos da mesma cabeça
+  — cinco dos oito achados da noite eram exatamente isso.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão

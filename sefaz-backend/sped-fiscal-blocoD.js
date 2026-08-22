@@ -14,7 +14,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
-import { selecionarCtesBlocoD } from './sped-selecao-documentos.js';
+import { selecionarCtesBlocoD, codSitDoDocumento } from './sped-selecao-documentos.js';
 // Réguas DONAS da leitura do documento — o CT-e capturado grava os campos
 // achatados, e ler só a forma aninhada fazia o COD_PART cair num literal.
 import {
@@ -49,16 +49,6 @@ export function cstDoCte(nota) {
 /**
  * Mapeia status interno -> COD_SIT do registro D100 (mesmo do C100).
  */
-function statusParaCodSit(status) {
-    const map = {
-        'autorizado': '00',
-        'cancelado': '02',
-        'denegado': '04',
-        'inutilizado': '05',
-        'extemporaneo': '01',
-    };
-    return map[status] || '08';  // 08 = situacao especial OEC
-}
 
 /**
  * Filtra documentos que entram no Bloco D.
@@ -108,8 +98,11 @@ function buildD100(notaCrua, dados) {
     // 'PARTSEM' — um participante INVENTADO, que o 0150 nunca teria.
     const nota = normalizarParticipantesDoc(notaCrua);
     const t = nota.totais || {};
-    // O cancelamento chega por EVENTO: o campo `status` continua 'autorizado'.
-    const codSit = docCancelado(nota) ? '02' : statusParaCodSit(nota.status);
+    // COD_SIT pela régua ÚNICA — a mesma do C100 (a tabela é a mesma). Este
+    // bloco tinha a SEGUNDA cópia, e ela devolvia '08' (regime especial) para
+    // status desconhecido: afirmação sobre a natureza do documento, feita por
+    // default. Cobre o cancelamento por evento.
+    const codSit = codSitDoDocumento(nota, dados.empresa?.dadosFiscais?.uf);
 
     const indOper = direcaoEfetivaDoc(nota) === 'saida' ? '1' : '0';
 

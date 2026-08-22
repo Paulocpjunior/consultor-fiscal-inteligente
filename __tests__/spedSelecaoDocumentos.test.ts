@@ -18,7 +18,7 @@
 // ============================================================================
 import {
     ehNotaDeMercadoria, ehConhecimentoDeTransporte, selecionarNotasBlocoC,
-    selecionarCtesBlocoD, avisosDaSelecao, ehResumoSefaz,
+    selecionarCtesBlocoD, avisosDaSelecao, ehResumoSefaz, codSitDoDocumento,
 } from '../sefaz-backend/sped-selecao-documentos.js';
 // @ts-expect-error — módulo .js do backend (sem tipos)
 import { somarIcmsPorDirecao } from '../sefaz-backend/sped-fiscal-blocoE.js';
@@ -516,5 +516,61 @@ describe('🚨 emissão própria não leva C170 — nem na entrada (Exceção 2)
         expect(blocoC).toMatch(/ehEmissaoPropriaDoc\(nota, dados\?\.empresa\?\.cnpj\)/);
         expect(orq).toMatch(/ehEmissaoPropriaDoc\(nota, empresa\.cnpj\)/);
         expect(orq).not.toMatch(/nota\.direcao === 'saida'\) continue/);
+    });
+});
+
+// ═══ COD_SIT — uma tabela, uma régua (C100 e D100) ═════════════════════════
+//
+// 21/08, varredura dos DEFAULTS: `statusParaCodSit` existia DUAS vezes. O
+// bloco C mandava '00' (regular) para status desconhecido; o bloco D mandava
+// **'08'** — que significa "documento emitido por regime especial ou norma
+// específica" e tem regras próprias de preenchimento (Guia 3.2.3, Exceção 4).
+// Declarar regime especial por default é afirmar sobre a natureza do
+// documento: a mesma família do 'PARTSEM' e do CFOP '5352'.
+describe('🚨 COD_SIT tem UMA régua para os dois blocos', () => {
+    it('status desconhecido é REGULAR (00), nunca regime especial (08)', () => {
+        expect(codSitDoDocumento({ status: 'coisa-nova' })).toBe('00');
+        expect(codSitDoDocumento({})).toBe('00');
+    });
+
+    it('cancelamento por EVENTO vira 02 mesmo com status "autorizado"', () => {
+        expect(codSitDoDocumento({
+            status: 'autorizado', eventos: [{ tpEvento: '110111', cStat: '135' }],
+        })).toBe('02');
+    });
+
+    // 🐛 DEFEITO PRÉ-EXISTENTE que este teste pegou: `docCancelado` trata
+    // denegado/inutilizado como cancelamento (para efeito de "não conta no
+    // livro", que é o uso dela), e o bloco C perguntava por ela ANTES do
+    // status — então a nota DENEGADA saía com COD_SIT 02 em vez de 04. São
+    // fatos diferentes: denegada é a SEFAZ RECUSANDO a autorização (a nota
+    // nunca valeu); cancelada é a nota que existiu e foi cancelada.
+    it('denegado, inutilizado e extemporâneo mantêm os códigos próprios', () => {
+        expect(codSitDoDocumento({ status: 'denegado' })).toBe('04');
+        expect(codSitDoDocumento({ status: 'inutilizado' })).toBe('05');
+        expect(codSitDoDocumento({ status: 'extemporaneo' })).toBe('01');
+    });
+
+    it('e a DENEGADA não vira cancelada nem com evento de cancelamento junto', () => {
+        expect(codSitDoDocumento({
+            status: 'denegado', eventos: [{ tpEvento: '110111', cStat: '135' }],
+        })).toBe('04');
+    });
+
+    it('nota em substituição ao cupom (5929) é 08 — e no PARANÁ não é', () => {
+        const nf = { status: 'autorizado', itens: [{ cfop: '5929' }] };
+        expect(codSitDoDocumento(nf, 'SP')).toBe('08');
+        expect(codSitDoDocumento(nf, 'PR')).toBe('00');
+    });
+
+    it('🚨 e não sobrou CÓPIA da régua nos geradores', () => {
+        const fs = require('fs');
+        const path = require('path');
+        for (const arq of ['sped-fiscal-blocoC.js', 'sped-fiscal-blocoD.js']) {
+            const fonte = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/', arq), 'utf8');
+            // Código morto é a isca para alguém reativar a régua velha.
+            expect(fonte).not.toMatch(/function statusParaCodSit/);
+            expect(fonte).toMatch(/codSitDoDocumento\(/);
+        }
     });
 });
