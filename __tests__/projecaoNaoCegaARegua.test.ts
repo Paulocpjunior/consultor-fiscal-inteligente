@@ -18,7 +18,7 @@
 // ============================================================================
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { CAMPOS_PARA_DOC_CANCELADO } from '../sefaz-backend/xml-metadata-helper.js';
+import { CAMPOS_PARA_DOC_CANCELADO, CAMPOS_PARA_ISS_DO_DOCUMENTO } from '../sefaz-backend/xml-metadata-helper.js';
 
 const RAIZ = join(__dirname, '..');
 
@@ -60,7 +60,14 @@ function projecoes(src: string): Array<{ linha: number; campos: Set<string> }> {
     const out: Array<{ linha: number; campos: Set<string> }> = [];
     // Preserva o número de linhas (troca o comentário por vazio, não o apaga).
     const limpo = src.replace(/\/\/[^\n]*/g, '');
-    const re = /collection\('documentos_fiscais'\)(?:.|\n){0,900}?\.select\(((?:.|\n){0,900}?)\)/g;
+    // 🐛 A JANELA ERA CURTA E A TRAVA EMUDECIA — pego ao ligar a régua do ISS.
+    // O `.select(` da Rotina do Mês passa de 900 caracteres (ela pede ~25
+    // campos), então o corpo dele caía FORA da captura e a varredura
+    // simplesmente não via aquela projeção: nem acusava, nem conferia.
+    // **Trava que não grita quando devia é pior que trava nenhuma — ela dá
+    // sensação de cobertura.** Os comentários já são removidos antes, então a
+    // janela maior não traz prosa junto.
+    const re = /collection\('documentos_fiscais'\)(?:.|\n){0,900}?\.select\(((?:.|\n){0,3000}?)\)/g;
     for (const m of limpo.matchAll(re)) {
         const campos = new Set<string>();
         for (const c of m[1].matchAll(/'([^']+)'/g)) {
@@ -161,6 +168,43 @@ describe('🚨 projeção que alimenta docCancelado carrega o que ela lê', () =
         const src = readFileSync(join(RAIZ, 'sefaz-backend/relatorios-routes.js'), 'utf8');
         expect(src).toContain('valorDoDocumento');
         expect(src).not.toMatch(/Number\(d\.valorTotal\)/);
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 A TERCEIRA IRMÃ: o ISS chega em QUATRO formas, e SÓ o import pelo
+    // NAVEGADOR grava o objeto `valores{}`. Projeção que traz uma forma só faz
+    // a régua responder "não achei" e o painel somar ZERO — indistinguível de
+    // "esta empresa não teve ISS".
+    //
+    // ⚠️ `totais.vISSRetido` (a forma do ABRASF) faltava nas DUAS consultas que
+    // decidem o ISS da carteira, e ela é justamente a do RETIDO.
+    // ═══════════════════════════════════════════════════════════════════════
+    const SOMAM_ISS: Record<string, string> = {
+        'sefaz-backend/nfse-sp-routes.js': 'ISS a recolher da carteira (aba 🏛️ ISS SP)',
+        'sefaz-backend/rotina-fiscal-routes.js': 'as etapas da Rotina do Mês, que dizem se o mês fechou',
+    };
+
+    it('quem SOMA ISS carrega as quatro formas em que ele chega', () => {
+        const faltas: string[] = [];
+        for (const [rel, oQue] of Object.entries(SOMAM_ISS)) {
+            const src = readFileSync(join(RAIZ, rel), 'utf8');
+            const comIss = projecoes(src).filter((p) => p.campos.has('valorIss') || p.campos.has('valores.iss'));
+            expect({ rel, temProjecaoDeIss: comIss.length > 0 }).toEqual({ rel, temProjecaoDeIss: true });
+            for (const { linha, campos } of comIss) {
+                const faltam = [...CAMPOS_PARA_ISS_DO_DOCUMENTO].filter((c: string) => !campos.has(c));
+                if (faltam.length) faltas.push(`${rel}:${linha} (${oQue}) — faltam ${faltam.join(', ')}`);
+            }
+        }
+        if (faltas.length) {
+            throw new Error(
+                '\n\n🚧 PROJEÇÃO QUE SOMA ISS SEM AS FORMAS EM QUE ELE CHEGA\n\n'
+                + faltas.map((x) => `  · ${x}`).join('\n')
+                + '\n\nSó o import pelo NAVEGADOR grava `valores{}`. O portal de SP grava\n'
+                + '`valorIss`/`issDevido` achatados, o ABRASF grava `totais.vISS`/`totais.vISSRetido`\n'
+                + 'e o ADN grava `valorIss`. Sem as formas na projeção, `issDoDocumento` responde\n'
+                + 'NaN e o painel soma ZERO — indistinguível de "não teve ISS".\n',
+            );
+        }
     });
 
     it('toda exceção declarada tem motivo escrito', () => {

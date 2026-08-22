@@ -5,6 +5,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🐛 A TRAVA DA PROJEÇÃO TINHA UMA JANELA CURTA — e EMUDECIA na consulta mais
+  importante** (22/08, pego ao ligar a régua do ISS). `projecaoNaoCegaARegua`
+  captura o `.select(` por regex com teto de **900 caracteres**, e o da **Rotina
+  do Mês** passa disso (ela pede ~25 campos). Resultado: aquela projeção caía
+  FORA da captura — a varredura não a acusava **nem a conferia**, e quem lesse o
+  teste verde concluiria que estava coberta.
+  📌 **REGRA QUE FICA: trava que não grita quando devia é pior que trava
+  nenhuma — ela dá sensação de cobertura.** É a MESMA lição do
+  `dtsNaoPrometeFantasma`, que nasceu fraco e passava batido justo no caso que
+  ele existia para pegar. Janela para 3000; os comentários já eram removidos
+  antes, então ela não traz prosa junto.
+  ✂️ E a régua do ISS entrou na varredura (`CAMPOS_PARA_ISS_DO_DOCUMENTO`): as
+  DUAS consultas que decidem o ISS da carteira — a aba 🏛️ ISS SP e a **Rotina do
+  Mês** — traziam três das quatro formas e **faltava justamente `totais.vISSRetido`**,
+  a forma do ABRASF, que é a do RETIDO.
+
 - **🚨 A CAPTURA DO ADN GRAVAVA UMA NOTA QUE NENHUM LEITOR DO APP ENXERGA**
   (22/08). O trilho da **NFS-e Nacional** escreve em `documentos_fiscais` — a
   MESMA coleção de tudo — e gravava só o que o parser dele extraiu:

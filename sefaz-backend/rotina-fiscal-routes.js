@@ -266,7 +266,10 @@ router.get('/painel', requireAuth, async (req, res) => {
                     // (valores.iss). Ler só uma zera metade da base.
                     'tipo', 'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
                     'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
-                    'totais.vISS',
+                    // `totais.vISSRetido` é a forma do ABRASF — faltava, e sem
+                    // ela o ISS RETIDO daquele trilho some (a régua responde
+                    // "não achei" e o painel soma zero). CAMPOS_PARA_ISS_DO_DOCUMENTO.
+                    'totais.vISS', 'totais.vISSRetido',
                     // POR QUE o ISS está zerado (iss-zerado-causa.js). Tudo já
                     // é gravado pelo importer — nenhuma captura nova.
                     'aliquotaServicos', 'valorServicos', 'valorDeducoes', 'valorTotal',
