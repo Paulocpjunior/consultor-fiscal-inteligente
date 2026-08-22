@@ -224,6 +224,44 @@ export async function fetchNfseMunicipiosCaminho(): Promise<NfseMunicipiosGuia> 
     return res.json();
 }
 
+export interface CapturaDirigidaResult {
+    ok: boolean;
+    motivo?: string;
+    logId?: string;
+    cnpjs?: number;
+    minutosEstimados?: number;
+}
+
+/**
+ * 🎯 Captura dirigida — força a captura numa LISTA de CNPJs.
+ *
+ * A rota `/sync-targeted` existia e só o cron a alcançava (varredura de rotas,
+ * 22/08). O botão fala com a porta de ADMIN (`/sync-targeted-now`), porque o
+ * segredo do cron nunca vai ao navegador.
+ *
+ * ⚠️ Ela RESPONDE NA HORA e trabalha em background: o laço dorme 90s entre
+ * empresas (é o respiro que evita o cStat 656 da SEFAZ). O `ok` aqui significa
+ * "a rodada COMEÇOU", nunca "capturou" — quem responde pelo resultado é o log
+ * da rodada, na Saúde dos crons.
+ */
+export async function capturaDirigidaAgora(cnpjs: string[]): Promise<CapturaDirigidaResult> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/sync-targeted-now', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpjs }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, motivo: data.error || data.erro || `HTTP ${res.status}` };
+    return {
+        ok: true,
+        motivo: data.motivo,
+        logId: data.logId,
+        cnpjs: data.cnpjs,
+        minutosEstimados: data.minutosEstimados,
+    };
+}
+
 export async function forcarCapturaAgora(fonte: 'sefazNfe' | 'nfseSp' | 'nfseNacional' | 'saidaCofre'): Promise<{ ok: boolean; motivo?: string }> {
     const token = await getToken();
     const paths: Record<typeof fonte, string> = {

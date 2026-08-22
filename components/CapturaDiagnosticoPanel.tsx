@@ -17,6 +17,7 @@ import { avaliarSaudeCaptura, avaliarSaudeCofreSaida } from '../services/captura
 import {
     fetchCapturaDiagnostico,
     forcarCapturaAgora,
+    capturaDirigidaAgora,
     type CapturaDiagnostico,
     type CapturaStatus,
     type CronLog,
@@ -516,6 +517,7 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
             {isAdmin && <ConferenciaChavesPanel />}
             {isAdmin && <ManifestarPendentesCard />}
             {isAdmin && <FilaManifestacaoCard />}
+            {isAdmin && <CapturaDirigidaCard />}
         </div>
     );
 };
@@ -803,6 +805,103 @@ export const FilaManifestacaoCard: React.FC = () => {
                     </div>
                 )
             )}
+        </div>
+    );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 CAPTURA DIRIGIDA — a última das sete rotas órfãs
+//
+// `/sync-targeted` existia e só o CRON a alcançava. Sem ela, forçar a captura
+// de um punhado de empresas (as 🎯 prioritárias da Cobertura de Saída, a fila
+// de migração) significava disparar a carteira INTEIRA — que é o botão do lado.
+//
+// ⚠️ TRÊS COISAS QUE A TELA DIZ, e nenhuma é enfeite:
+//  · **90s entre empresas** é o respiro que evita o cStat **656** da SEFAZ
+//    (limite DELA). Por isso a estimativa de tempo aparece ANTES do clique.
+//  · **A rodada corre em background** — o botão devolve "começou", nunca
+//    "capturou". Confundir os dois é o "deploy verde = capturou nota" de 22/07.
+//  · **Para no 656**: insistir contra o rate-limit da SEFAZ piora, não melhora.
+// ═══════════════════════════════════════════════════════════════════════════
+export const CapturaDirigidaCard: React.FC = () => {
+    const [texto, setTexto] = useState('');
+    const [enviando, setEnviando] = useState(false);
+    const [msg, setMsg] = useState<string | null>(null);
+    const [erro, setErro] = useState<string | null>(null);
+
+    // Aceita colagem de qualquer forma (vírgula, ponto-e-vírgula, quebra de
+    // linha, com ou sem máscara) — quem cola vem de uma lista, não digita.
+    const cnpjs = texto.split(/[\s,;]+/)
+        .map(s => s.replace(/\D/g, ''))
+        .filter(s => s.length === 14);
+    const unicos = Array.from(new Set(cnpjs));
+    const minutos = unicos.length > 1 ? Math.ceil((unicos.length - 1) * 90 / 60) : 0;
+
+    const disparar = async () => {
+        setErro(null); setMsg(null);
+        if (!unicos.length) {
+            setErro('Cole ao menos um CNPJ de 14 dígitos.');
+            return;
+        }
+        if (!window.confirm(
+            `Forçar captura em ${unicos.length} empresa(s)?\n\n`
+            + `A rodada leva cerca de ${minutos} min (90s de respiro entre empresas, `
+            + `para não bater no limite 656 da SEFAZ) e corre em segundo plano.`,
+        )) return;
+        setEnviando(true);
+        try {
+            const r = await capturaDirigidaAgora(unicos);
+            if (!r.ok) { setErro(r.motivo || 'falha ao iniciar'); return; }
+            setMsg(
+                `✓ Rodada INICIADA para ${r.cnpjs ?? unicos.length} empresa(s) — cerca de `
+                + `${r.minutosEstimados ?? minutos} min. Ela corre em segundo plano: isto diz que `
+                + `COMEÇOU, não que capturou. O resultado aparece na Saúde dos crons`
+                + `${r.logId ? ` (rodada ${r.logId})` : ''}.`,
+            );
+        } catch (e: any) {
+            setErro(e?.message || 'erro');
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    return (
+        <div className="mt-4 p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">🎯 Captura dirigida</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-2">
+                Força a captura numa <strong>lista</strong> de empresas, sem disparar a carteira inteira.
+                Cole os CNPJs (vírgula, ponto-e-vírgula ou um por linha). Máximo de 30 por rodada.
+            </p>
+            <textarea
+                value={texto}
+                onChange={e => setTexto(e.target.value)}
+                rows={3}
+                placeholder="31.947.349/0001-69, 44388152000189"
+                className="w-full text-xs p-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+            />
+            <div className="flex items-center gap-2 flex-wrap mt-2">
+                <button
+                    onClick={disparar}
+                    disabled={enviando}
+                    className="btn-press px-3 py-1.5 bg-sky-600 text-white rounded text-xs font-bold hover:bg-sky-700 disabled:opacity-50 whitespace-nowrap"
+                >
+                    {enviando ? 'Iniciando...' : '🎯 Forçar captura nesta lista'}
+                </button>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {unicos.length
+                        ? `${unicos.length} CNPJ(s) reconhecido(s) · ~${minutos} min`
+                        : 'nenhum CNPJ de 14 dígitos reconhecido ainda'}
+                </span>
+            </div>
+            {erro && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">⛔ {erro}</p>
+            )}
+            {msg && (
+                <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{msg}</p>
+            )}
+            <p className="mt-2 text-[11px] text-slate-400">
+                A rodada PARA no primeiro cStat 656 (limite da SEFAZ) — insistir contra o rate-limit piora.
+            </p>
         </div>
     );
 };
