@@ -250,6 +250,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **Dados Fiscais**. `avisoApontaLugarReal.test.ts` barra caminho de campo do
   Firestore dentro de mensagem de usuário — e foi ela que achou a quarta, que
   eu não tinha visto.
+  📌 **(22) E A REGRA DE 13/08 — "rota sem botão não é funcionalidade, é código
+  morto com cara de entrega" — GANHOU TRAVA.** Ela estava escrita e nunca tinha
+  varredura. `rotaTemChamada.test.ts` cruza as **273 rotas** do backend contra
+  as chamadas do frontend: rota nova sem caminho na interface quebra a build, a
+  menos que seja declarada COM o motivo (cron do Scheduler, túnel de app irmão,
+  agente `cfi-a3`). Provada criando uma rota órfã de propósito.
+  🚩 **E o retrato de hoje tem SETE órfãs de verdade**, agora NOMEADAS na
+  própria lista: `/manifest-one` (manifestar UM documento — a tela só tem o
+  lote), `/manifest-elegiveis`, `/manifest-reset-falhas-infra`,
+  `/sincronizar-uma`, `/sync-targeted`, `/previa-resumo`, `/guard-status`, mais
+  três do NFP (`/situacao-fiscal`, `/divida-ativa`, `/cnds-publicas` — a tela só
+  chama `/analise-completa`). **Não apaguei nenhuma**: remover rota que talvez
+  alguém chame por fora é decisão do Paulo. Nomear já impede que a próxima
+  sessão as leia como entrega pronta.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
