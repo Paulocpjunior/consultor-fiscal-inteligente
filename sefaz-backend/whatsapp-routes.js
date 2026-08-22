@@ -2358,8 +2358,34 @@ router.post('/instagram/ligar', requireAdmin, async (req, res) => {
 // dizer se já foi clicado).
 router.get('/instagram/estado', requireAdmin, async (_req, res) => {
     try {
-        const doc = await getDb().collection('whatsapp_config').doc('instagram').get();
-        return res.json({ ok: true, estado: doc.exists ? doc.data() : null });
+        const db = getDb();
+        const doc = await db.collection('whatsapp_config').doc('instagram').get();
+
+        // 📨 DIAGNÓSTICO DE ENTREGA (caso real de 22/08: "mandaram uma DM e
+        // não chegou"). O webhook grava TODO evento CRU antes de processar,
+        // então dá pra separar as duas metades do problema: se NENHUM evento
+        // object=instagram está nos crus, a Meta não está entregando (o
+        // conserto é do lado de lá — interruptor de mensagens do Instagram,
+        // webhook do painel, modo do app); se está e a conversa não aparece,
+        // o defeito é NOSSO processamento. Sem isso as duas caras são o mesmo
+        // silêncio. Filtro em memória sobre os N mais recentes de propósito:
+        // where('payload.object'…) exigiria índice pra uma tela de admin.
+        let eventos = { amostra: 0, doInstagram: 0, ultimoEm: null };
+        try {
+            const snap = await db.collection('whatsapp_webhook_eventos')
+                .orderBy('recebidoEm', 'desc').limit(200).get();
+            const ig = snap.docs.filter((d) => d.data()?.payload?.object === 'instagram');
+            eventos = {
+                amostra: snap.size,
+                doInstagram: ig.length,
+                ultimoEm: ig.length ? (ig[0].data().recebidoEm || null) : null,
+            };
+        } catch (e) {
+            console.warn('[whatsapp/instagram/estado] leitura dos eventos crus falhou:', e.message);
+            eventos = null;   // "não conferi" ≠ "zero" — a tela diz a diferença
+        }
+
+        return res.json({ ok: true, estado: doc.exists ? doc.data() : null, eventos });
     } catch (e) {
         console.error('[whatsapp/instagram/estado]', e);
         return res.status(500).json({ ok: false, error: e.message });
