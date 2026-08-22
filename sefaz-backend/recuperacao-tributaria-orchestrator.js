@@ -1,5 +1,6 @@
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
+import { issDoDocumento } from './xml-metadata-helper.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -302,23 +303,36 @@ async function analisarDasSegregacao(empresaId, empresa) {
 // ─── Análise: ISS Local Incorreto ────────────────────────────────────────
 async function analisarIssLocal(empresaId, empresa) {
     const db = fa().firestore();
-    const nfseSnap = await fetchAllDocs(
-        db.collection('documentos_fiscais')
-            .where('empresaId', '==', empresaId)
-            .where('tipo', '==', 'NFSe'),
-        { label: 'recuperacao/iss' },
-    );
+    // 🚨 O RÓTULO TEM DUAS FORMAS — e a consulta conhecia UMA. A NFS-e do
+    // **ADN** (NFS-e Nacional) grava `tipo: 'nfseNacional'`, então ela nunca
+    // chegava aqui: a tese saía "sem_oportunidade" sem ter olhado essas notas.
+    // Duas igualdades (as duas usam índice) e união por id — varrer a coleção
+    // inteira custaria leitura em toda NF-e da empresa, por nada.
+    const porId = new Map();
+    for (const rotulo of ['NFSe', 'nfseNacional']) {
+        const snap = await fetchAllDocs(
+            db.collection('documentos_fiscais')
+                .where('empresaId', '==', empresaId)
+                .where('tipo', '==', rotulo),
+            { label: `recuperacao/iss ${rotulo}` },
+        );
+        snap.forEach(d => porId.set(d.id, d.data()));
+    }
 
     const itens = [];
     let totalRecuperavel = 0;
     const ufEmpresa = empresa.dadosFiscais?.uf || '';
 
-    nfseSnap.forEach(d => {
-        const doc = d.data();
+    porId.forEach(doc => {
         if (doc._merged_into || doc._deleted) return; // ignora docs marcados como duplicata
         const tomadorUf = doc.tomador?.uf || doc.destinatario?.uf || '';
         const prestadorUf = doc.prestador?.uf || doc.emitente?.uf || '';
-        const issValor = doc.valores?.iss || 0;
+        // 🚨 `doc.valores?.iss` é a forma que SÓ o import pelo navegador grava.
+        // Lendo uma só, `issValor` era 0 em toda nota do portal/ABRASF/ADN e o
+        // `> 0` abaixo descartava tudo — a tese afirmava "sem oportunidade"
+        // sobre notas que ela nunca leu.
+        const issBruto = issDoDocumento(doc);
+        const issValor = Number.isFinite(issBruto) ? issBruto : 0;
 
         if (issValor > 0 && tomadorUf && prestadorUf && tomadorUf !== prestadorUf) {
             const recuperavel = issValor * 0.5; // Estimativa conservadora

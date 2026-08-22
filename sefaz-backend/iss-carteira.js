@@ -23,6 +23,7 @@
 // ============================================================================
 
 import { resumirCausasIssZerado, divergenciaRegimePelaNota } from './iss-zerado-causa.js';
+import { issDoDocumento, issRetidoDoDocumento } from './xml-metadata-helper.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -34,16 +35,23 @@ export const SITUACOES = [
 
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
-/** Primeiro candidato numérico de verdade. Ausente ≠ zero: sem candidato, `undefined`. */
-const primeiroNumero = (...cands) => {
-    for (const x of cands) {
-        if (x === undefined || x === null || x === '') continue;
-        if (Number.isFinite(Number(x))) return Number(x);
-    }
-    return undefined;
-};
 
 const ehNfse = (d) => /NFSe/i.test(String(d?.tipoDoc || d?.tipo || ''));
+
+/**
+ * ⚠️ AS QUATRO FORMAS DO ISS MORAM NO DONO, não aqui.
+ *
+ * Este módulo escreveu a régua em 06/08 e, em 22/08, a varredura achou a
+ * MESMA sequência (`v.iss → valorIss → issDevido → totais.vISS`) copiada no
+ * `issSpApuracao` e a leitura de UMA forma só em três relatórios. Quem
+ * responde agora é `issDoDocumento` (na casa das leituras de documento, onde
+ * o `valorDoDocumento` também foi parar).
+ *
+ * O adaptador existe porque aqui a AUSÊNCIA importa: `undefined` distingue
+ * "nota sem o campo gravado" de "ISS zero", e é essa diferença que alimenta
+ * `semValorGravado`. O dono devolve NaN pelo mesmo motivo — só muda a forma.
+ */
+const ouUndefined = (n) => (Number.isFinite(n) ? n : undefined);
 
 /**
  * ISS de uma competência, POR EMPRESA, lido dos documentos.
@@ -89,8 +97,8 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
         // que só tem tomado fica como "sem movimento".
         if (d.direcao === 'entrada') {
             const flag = v.issRetido === true || d.issRetido === true;
-            const ret = primeiroNumero(v.valorIssRetido, d.valorIssRetido);
-            const iss = primeiroNumero(v.iss, d.valorIss, d.issDevido, d.totais?.vISS);
+            const ret = ouUndefined(issRetidoDoDocumento(d));
+            const iss = ouUndefined(issDoDocumento(d));
             const valor = ret !== undefined ? ret : (flag && iss !== undefined ? iss : 0);
             if (!valor) continue;
             const a = pegar(empresaId);
@@ -100,9 +108,9 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
         }
         if (d.direcao !== 'saida') continue;
 
-        const devido = primeiroNumero(v.iss, d.valorIss, d.issDevido, d.totais?.vISS);
+        const devido = ouUndefined(issDoDocumento(d));
         const flag = v.issRetido === true || d.issRetido === true;
-        const ret = primeiroNumero(v.valorIssRetido, d.valorIssRetido);
+        const ret = ouUndefined(issRetidoDoDocumento(d));
         const retido = ret !== undefined ? ret : (flag ? (devido || 0) : 0);
 
         const a = pegar(empresaId);

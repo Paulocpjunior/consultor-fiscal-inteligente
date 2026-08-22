@@ -349,3 +349,73 @@ export function valorDoDocumento(nota) {
  * LÍQUIDO de retenções, e o VL_DOC do arquivo é o BRUTO.
  */
 export const valorDoDocumentoServico = valorDoDocumento;
+
+/**
+ * 🚨 O ISS DA NFS-e CHEGA EM QUATRO FORMAS — e os relatórios liam UMA
+ *
+ * A varredura de 22/08 mostrou que **só o import pelo NAVEGADOR**
+ * (`xmlParserService`) grava o objeto `valores{}`. Os trilhos que trazem a
+ * maior parte das notas gravam ACHATADO ou em `totais`:
+ *
+ *   · portal de SP (CSV/TXT **e** o WS legado) → `valorIss` · `issDevido` ·
+ *     `issRetido` (BOOLEANO, sem valor separado);
+ *   · **ABRASF** → `totais.vISS` · `totais.vISSRetido`;
+ *   · **ADN** (NFS-e Nacional) → `valorIss`;
+ *   · navegador → `valores.iss` · `valores.valorIssRetido`.
+ *
+ * 🔴 Lendo só `valores.*`, o **ISS destacado** do relatório de impostos e as
+ * colunas de ISS das abas de Serviços saíam **0,00** para toda nota que não
+ * veio pelo navegador — que é a esmagadora maioria. Zero num relatório de
+ * imposto destacado é indistinguível de *"não teve ISS"*, e é a família do
+ * `valorDoDocumento` (a mesma armadilha, um campo adiante).
+ *
+ * ⚠️ **`issAPagar`/`issPago` ficam de FORA, de propósito**: eles respondem
+ * *"quanto falta pagar"*, não *"quanto o documento destacou"* — que é a
+ * pergunta desta régua. Misturar os dois faria a nota já paga aparecer com
+ * ISS zero.
+ *
+ * ⚠️ E o **retido** só é afirmado quando existe VALOR. O `issRetido` booleano
+ * do portal diz que houve retenção e **não diz quanto** — quem precisa da
+ * marca lê `issRetidoDeclarado`, e somar `0` como se fosse o valor retido
+ * seria declarar retenção nenhuma sobre nota que teve.
+ *
+ * Devolve **NaN** quando nenhuma forma tem número, pelo mesmo motivo do
+ * `valorDoDocumento`: "não teve ISS" e "não achei o ISS" são fatos diferentes.
+ */
+export const CAMPOS_PARA_ISS_DO_DOCUMENTO = Object.freeze([
+    'valorIss', 'issDevido', 'valores.iss', 'totais.vISS',
+    'valores.valorIssRetido', 'totais.vISSRetido', 'valorIssRetido',
+    'issRetido',
+]);
+
+function primeiroNumero(candidatos) {
+    for (const c of candidatos) {
+        if (c === null || c === undefined || c === '') continue;
+        const v = typeof c === 'number' ? c : parseFloat(String(c).replace(',', '.'));
+        if (Number.isFinite(v)) return v;
+    }
+    return NaN;
+}
+
+/** ISS DESTACADO no documento (o devido), em todas as formas gravadas. */
+export function issDoDocumento(doc) {
+    const d = doc || {};
+    return primeiroNumero([d.valores?.iss, d.valorIss, d.issDevido, d.totais?.vISS]);
+}
+
+/** ISS RETIDO pelo tomador — só quando o documento traz o VALOR. */
+export function issRetidoDoDocumento(doc) {
+    const d = doc || {};
+    return primeiroNumero([d.valores?.valorIssRetido, d.valorIssRetido, d.totais?.vISSRetido]);
+}
+
+/**
+ * O documento DECLARA retenção de ISS? — inclui o booleano do portal, que
+ * afirma o fato sem dizer o valor.
+ */
+export function issRetidoDeclarado(doc) {
+    const d = doc || {};
+    if (d.issRetido === true || d.valores?.issRetido === true) return true;
+    const v = issRetidoDoDocumento(d);
+    return Number.isFinite(v) && v > 0;
+}

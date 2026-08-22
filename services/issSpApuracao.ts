@@ -16,6 +16,11 @@
  * somar tudo faria o cliente pagar duas vezes o mesmo imposto.
  */
 import type { DocumentoFiscal, IssConfig } from '../types';
+// 🚨 AS QUATRO FORMAS DO ISS têm UM dono. A sequência
+// `valores.iss → valorIss → issDevido → totais.vISS` estava escrita aqui E no
+// `iss-carteira.js`, e três relatórios liam só a primeira — a do import pelo
+// NAVEGADOR, que é a minoria das notas.
+import { issDoDocumento, issRetidoDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 
 /** Código IBGE de São Paulo capital — única praça coberta (Paulo, 05/08). */
 export const COD_MUN_SP_CAPITAL = '3550308';
@@ -137,6 +142,13 @@ const primeiro = (...vs: Array<unknown>): number | undefined => {
 };
 
 /**
+ * O dono devolve NaN para ausência; aqui a ausência é `undefined`, porque é
+ * ela que alimenta `semValorGravado` — "nota sem o campo" e "ISS zero" são
+ * fatos diferentes. Só a forma muda.
+ */
+const ouUndefined = (n: number): number | undefined => (Number.isFinite(n) ? n : undefined);
+
+/**
  * Apura o ISS próprio da competência a partir das NFS-e EMITIDAS pela empresa.
  *
  * @param docs      documentos da competência (a função filtra o que serve)
@@ -165,9 +177,11 @@ export function apurarIssSp(
         // Ler só uma zera metade da base — foi o que aconteceu no 1º teste do
         // Paulo (4 notas de 4 com "não gravado" e tomador vazio), e é a MESMA
         // armadilha que já mordeu no DIFAL e na 🚦. Aqui a régua lê as duas.
-        const issDevido = primeiro(v.iss, x.valorIss, x.issDevido, (d.totais as any)?.vISS);
+        // ⚠️ A sequência das quatro formas MORAVA AQUI e no `iss-carteira` —
+        // duas cópias da mesma pergunta. Quem responde é o dono.
+        const issDevido = ouUndefined(issDoDocumento(d));
         const retidoFlag = v.issRetido === true || x.issRetido === true;
-        const retido = primeiro(v.valorIssRetido, x.valorIssRetido)
+        const retido = ouUndefined(issRetidoDoDocumento(d))
             ?? (retidoFlag ? issDevido : 0);
         const parte: any = x.tomador || d.destinatario || {};
         const nomeTomador = parte?.nome || x.tomadorNome || x.xNomeDest || '—';
@@ -208,8 +222,8 @@ export function apurarIssSp(
         // Só entra o que foi efetivamente RETIDO: nota tomada sem retenção não
         // gera obrigação nenhuma pra tomadora, e listá-la seria ruído.
         const flag = v.issRetido === true || x.issRetido === true;
-        const retido = primeiro(v.valorIssRetido, x.valorIssRetido);
-        const issDaNota = primeiro(v.iss, x.valorIss, x.issDevido, (d.totais as any)?.vISS);
+        const retido = ouUndefined(issRetidoDoDocumento(d));
+        const issDaNota = ouUndefined(issDoDocumento(d));
         const valorRetido = retido ?? (flag ? issDaNota : undefined);
         if (!valorRetido) continue;
 

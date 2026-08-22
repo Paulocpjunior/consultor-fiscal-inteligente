@@ -96,3 +96,15 @@ export const CAMPOS_PARA_VALOR_DO_DOCUMENTO: readonly string[];
 export function valorDoDocumento(nota: unknown): number;
 /** Nome antigo da MESMA função (a pergunta nunca foi específica de serviço). */
 export function valorDoDocumentoServico(nota: unknown): number;
+
+/**
+ * ISS da NFS-e nas QUATRO formas gravadas (`valores.iss` do navegador,
+ * `valorIss`/`issDevido` do portal e do ADN, `totais.vISS` do ABRASF).
+ * Devolve NaN quando nenhuma forma tem número.
+ */
+export const CAMPOS_PARA_ISS_DO_DOCUMENTO: readonly string[];
+export function issDoDocumento(doc: unknown): number;
+/** ISS retido pelo tomador — só quando o documento traz o VALOR. */
+export function issRetidoDoDocumento(doc: unknown): number;
+/** O documento DECLARA retenção de ISS (inclui o booleano do portal). */
+export function issRetidoDeclarado(doc: unknown): boolean;

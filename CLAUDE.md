@@ -5,6 +5,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O ISS CHEGAVA EM QUATRO FORMAS E TODO MUNDO LIA UMA — a do NAVEGADOR,
+  que é a MINORIA das notas** (22/08, o eixo da direção aplicado ao ISS). A
+  varredura mostrou o fato que explica tudo: **só o import pelo navegador**
+  (`xmlParserService`) grava o objeto `valores{}`. Os trilhos que trazem a
+  esmagadora maioria das NFS-e gravam de outro jeito — o **portal de SP** (CSV
+  e o WS legado) grava `valorIss`/`issDevido` ACHATADOS (e `issRetido`
+  **BOOLEANO**, sem valor separado), o **ABRASF** grava `totais.vISS`, e o
+  **ADN** grava `valorIss` **com `tipo: 'nfseNacional'`**.
+  🔴 **O custo, leitor a leitor**: o relatório de **ICMS/IPI/ISS destacados**
+  somava ISS **0,00** na carteira inteira; as abas **Serviços tomados/prestados
+  e Retenções** imprimiam a coluna zerada **e** — pelo `d.tipo === 'NFSe'` — a
+  nota do ADN **sumia inteira** das três; a **NFTS** (declaração de serviços
+  TOMADOS de SP) perdia justamente o prestador de fora do município; e a tese de
+  **recuperação do ISS** exige `issValor > 0`, então respondia
+  *"sem_oportunidade"* sem ter lido nota nenhuma.
+  🔴 **E O MAIS CARO ERA UMA TRAVA DIZENDO VIA LIVRE**: `contarRetencoesTomadas`
+  (o insumo do **Reinf** na DCTFWeb) lia só `valores.*`, então em toda NFS-e do
+  portal o total dava ZERO → `seloReinf` = `sem-movimento` → `vereditoInsumos` =
+  **'pronto'**, *"os três insumos confirmados, pode fechar sem retrabalho"*,
+  sobre competência COM retenção. A trava respondia verde exatamente no caso que
+  ela existe para barrar — e a ressalva agravava, mandando *"notas antigas…
+  reimportar o XML"* sobre nota atual cujo dado estava no campo ao lado.
+  ✂️ `issDoDocumento` / `issRetidoDoDocumento` / `issRetidoDeclarado` nascem no
+  `xml-metadata-helper` — a casa das leituras de documento, para onde o
+  `valorDoDocumento` foi em 21/08 pela MESMA razão — e entram em
+  `REGUAS_VIGIADAS`. Ausência devolve **NaN**, nunca zero.
+  ⚠️ **`issAPagar`/`issPago` ficam FORA, de propósito**: eles respondem *"quanto
+  FALTA pagar"*, não *"quanto o documento destacou"* — a nota já quitada
+  apareceria com ISS zero. E **o booleano do portal não vira valor**: ele afirma
+  a retenção e não diz quanto, então quem precisa da marca lê
+  `issRetidoDeclarado`; somar `0` como se fosse o retido seria declarar retenção
+  nenhuma sobre nota que teve.
+  📌 **E A SEQUÊNCIA CERTA JÁ EXISTIA — copiada em DOIS lugares** (`iss-carteira
+  .js`, desde 06/08, e `issSpApuracao.ts`), enquanto três leitores liam uma
+  forma só. É o retrato de como a régua diverge: não por alguém saber menos, mas
+  por a resposta morar em três cabeças. As duas cópias passaram a delegar e o
+  `primeiroNumero` órfão foi **DELETADO**.
+  🐛 **E A TRAVA NOVA GRITOU SOBRE O ARQUIVO JÁ CORRIGIDO**: `reguaUnica` lia o
+  arquivo INTEIRO, comentário incluído — as assinaturas antigas eram formas de
+  CÓDIGO (`export function …`) e isso nunca aparecera; a do ISS casa nomes de
+  CAMPO e acusou os três comentários que EXPLICAM a correção, ou seja mandava
+  apagar a explicação para o teste passar. A varredura passou a ler **código,
+  não prosa** — a mesma decisão que a varredura de órfãs já tinha tomado.
+  Provada revertendo uma delegação de propósito.
+
 - **🚨 A DEDUP DO ART. 136 NÃO RODAVA PARA NOTA NENHUMA — a compra dobrava, em
   DOIS livros** (22/08, terceira leva do eixo da direção). Dois defeitos que se
   sustentavam:
