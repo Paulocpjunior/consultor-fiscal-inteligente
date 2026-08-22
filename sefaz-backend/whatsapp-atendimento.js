@@ -212,6 +212,16 @@ export function configPadraoAtendimento() {
         },
         // Menu numérico → fila. Espelha o menu de 8 opções em uso hoje.
         menu: FILAS_ATENDIMENTO.map((f, i) => ({ opcao: String(i + 1), fila: f.id, rotulo: f.rotulo })),
+        // ⚡ Respostas rápidas do composer (Paulo, 21/08: "vamos relacionar o
+        // que falta e completar" — era a pendência da pergunta 2 do de-para).
+        // Estas 4 são as que viviam CRAVADAS na tela; o admin edita na ⚙️ e
+        // lista gravada VAZIA é escolha (some os chips), não volta ao padrão.
+        respostasRapidas: [
+            'Bom dia! Tudo bem?',
+            'Recebido, já estamos verificando.',
+            'Pode nos enviar o comprovante, por favor?',
+            'Ficamos à disposição!',
+        ],
         // 🖼️ Imagem enviada junto da confirmação do departamento (Paulo,
         // 20/08, olhando a Ultra Fox: a arte "GESTÃO DE PESSOAS" que ela
         // manda depois do cliente escolher "3"). Mapa fila→URL; fila sem
@@ -285,6 +295,11 @@ export function resolverConfig(gravada) {
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,
+        // Ao contrário do menu (vazio = triagem morta ⇒ volta ao padrão),
+        // respostas rápidas VAZIAS são escolha legítima — só some o atalho.
+        respostasRapidas: Array.isArray(gravada.respostasRapidas)
+            ? gravada.respostasRapidas.map((s) => String(s ?? '').trim()).filter(Boolean).slice(0, 20)
+            : p.respostasRapidas,
         // Entrada com fila inválida ou URL vazia é DESCARTADA, não gravada —
         // mesma régua do menu: dado torto não vira "imagem quebrada" na
         // conversa do cliente.

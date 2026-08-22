@@ -725,6 +725,36 @@ describe('🚨 a lista de conversas não pode ter teto SECO — "Todas · 100" n
     });
 });
 
+describe('⚡ respostas rápidas viraram CONFIG — eram 4 frases cravadas na tela', () => {
+    // Pergunta 2 do de-para, fechada por construção (21/08, "vamos relacionar
+    // o que falta e completar"): o mecanismo é editável; a LISTA quem digita
+    // é o admin, na ⚙️ → 🤖.
+    const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+    const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    it('o padrão traz as 4 frases que estavam cravadas — config antiga não muda nada', () => {
+        expect(configPadraoAtendimento().respostasRapidas).toEqual([
+            'Bom dia! Tudo bem?',
+            'Recebido, já estamos verificando.',
+            'Pode nos enviar o comprovante, por favor?',
+            'Ficamos à disposição!',
+        ]);
+        expect(resolverConfig({}).respostasRapidas).toHaveLength(4);
+    });
+
+    it('lista gravada VAZIA é escolha (some os chips) — diferente do menu, que volta ao padrão', () => {
+        expect(resolverConfig({ respostasRapidas: [] }).respostasRapidas).toEqual([]);
+        // Linha em branco e espaço não viram chip vazio.
+        expect(resolverConfig({ respostasRapidas: ['  Oi  ', '', '   '] }).respostasRapidas).toEqual(['Oi']);
+    });
+
+    it('o composer lê do estado, não de frases cravadas — e a rota /conversas as carrega', () => {
+        expect(tela).toMatch(/respostasRapidas\.map\(\(q\)/);
+        expect(tela).not.toMatch(/\['Bom dia! Tudo bem\?'/);
+        expect(rotas).toMatch(/respostasRapidas = resolverConfig\(cfgDoc\.data\(\)\)\.respostasRapidas/);
+    });
+});
+
 describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — não atrás de clique', () => {
     // Paulo, 21/08, comparando print a print (Ultra Fox × SP Connect): lá o
     // comprovante fotografado já vinha na tela; aqui exigia "abrir anexo".

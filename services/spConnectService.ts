@@ -25,6 +25,8 @@ export const listarConversas = () =>
         papel: 'admin' | 'gestor' | 'colaborador';
         /** Teto de leitura atingido (nº do teto) — a lista mostra as N mais recentes, não a carteira toda. */
         limiteLeitura?: number | null;
+        /** ⚡ Frases do composer (config resolvida — vai de carona porque todo atendente já lê esta rota). */
+        respostasRapidas?: string[];
     }>('/api/admin/whatsapp/conversas');
 
 export const listarMensagens = (numero: string) =>
