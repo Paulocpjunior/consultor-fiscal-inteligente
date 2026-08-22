@@ -305,3 +305,39 @@ export function serieDoDocumento(nota) {
     if (chave.length === 44) return chave.slice(22, 25);
     return '000';
 }
+
+/**
+ * COD_ITEM — a CHAVE que liga o item ao cadastro do 0200.
+ *
+ * 🚨 ELA TINHA QUATRO CÓPIAS, E AS QUATRO DIVERGIAM (22/08). O 0200 é a Tabela
+ * de Identificação do Item; C170 e A170 APONTAM para ela. Quando os dois lados
+ * respondem coisas diferentes, o PVA devolve as DUAS recusas que esta casa já
+ * pagou — *"Campo obrigatório · COD_ITEM"* (MANTOAN, 36 recusas, 18/08) e o
+ * item ÓRFÃO, declarado no 0200 e referenciado por ninguém (PWR, 19/08).
+ *
+ * O retrato de antes:
+ *
+ *   · **0200** (os DOIS orquestradores): `cProd || codigo || cFiscal || ITEM-n`
+ *   · **C170 do EFD ICMS/IPI**: `cProd || codigo || ITEM-n` — **sem o cFiscal**
+ *   · **C170 do EFD-Contribuições**: `cProd || codigo || ''` — **pode sair VAZIO**
+ *   · **A170 do EFD-Contribuições**: `cProd || codigo || ''` — idem
+ *
+ * E havia uma quinta divergência escondida no `ITEM-n`: o 0200 usa o `nItem`
+ * que veio no XML, e o C170 do ICMS/IPI usava o **contador do laço**. Item que
+ * chegasse com `nItem` "3" na terceira posição do array batia por coincidência;
+ * fora disso, o 0200 dizia `ITEM-3` e o C170 `ITEM-1` — órfão garantido.
+ *
+ * Quem manda é o 0200, porque ele é o CADASTRO: quem aponta se ajusta a quem é
+ * apontado. Nunca devolve vazio — campo obrigatório sem valor é recusa certa.
+ *
+ * ⚠️ **Pendência NOMEADA, não corrigida**: item sem `nItem` cai em `ITEM-?`, e
+ * dois produtos distintos nessa situação colapsam num cadastro só. É o
+ * comportamento que o 0200 já tinha; mudá-lo sem um caso real seria trocar uma
+ * chave de cadastro no escuro, que é pior que a colisão.
+ */
+export function codItemDoItem(item) {
+    const i = item || {};
+    const direto = i.cProd || i.codigo || i.cFiscal;
+    if (direto) return String(direto);
+    return `ITEM-${i.nItem || '?'}`;
+}

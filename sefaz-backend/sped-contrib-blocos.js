@@ -24,7 +24,7 @@ import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
-    serieDoDocumento,
+    serieDoDocumento, codItemDoItem,
 } from './sped-selecao-documentos.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import {
@@ -393,7 +393,7 @@ export function buildBlocoA(dados) {
         const itensDoDoc = (nota.itens || []).length
             ? nota.itens.map((item, i) => ({
                 nItem: item.nItem || String(i + 1),
-                cod: item.cProd || item.codigo || '',
+                cod: codItemDoItem(item),
                 descr: item.xProd || item.descricao || '',
                 valor: parseFloat(item.vProd || item.valor || 0),
                 item,
@@ -635,7 +635,7 @@ export function buildBlocoC_Contrib(dados) {
             linhas.push(fmt.buildLine([
                 'C170',
                 item.nItem || '1',                                    //  2 NUM_ITEM
-                fmt.sanitizeString(item.cProd || item.codigo || '', 60), //  3 COD_ITEM
+                fmt.sanitizeString(codItemDoItem(item), 60),            //  3 COD_ITEM
                 fmt.sanitizeString(item.xProd || item.descricao || '', 255), // 4 DESCR_COMPL
                 fmt.formatValue(item.qCom || item.quantidade || 1, 5), //  5 QTD
                 fmt.sanitizeString((item.uCom || item.unidade || 'UN').toUpperCase(), 6), // 6 UNID
