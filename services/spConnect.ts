@@ -20,7 +20,8 @@ export interface ConfigAtendimento {
     avaliacaoEscala: number;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
-    menu: { opcao: string; fila: string; rotulo: string }[];
+    /** `submenu` = opção-PORTA (1 nível): escolher abre as sub-opções; a fila do item é o fallback se o sub-menu esvaziar. */
+    menu: { opcao: string; fila: string; rotulo: string; submenu?: { opcao: string; fila: string; rotulo: string }[] }[];
     /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
     imagensPorFila: Record<string, string>;
     /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */

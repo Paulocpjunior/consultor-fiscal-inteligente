@@ -269,6 +269,46 @@ export async function listarTemplatesAprovados(deps = {}) {
 }
 
 /**
+ * 📝 Submete um template NOVO à aprovação da Meta (Paulo, 21/08). A validação
+ * de forma é do `validarNovoTemplateMeta` (puro, roda ANTES na rota) — aqui é
+ * só o POST. A resposta da Meta traz `id` e `status` (normalmente PENDING:
+ * aprovação leva de minutos a ~24h; recusa vem com o motivo no Gerenciador).
+ * Depois de APROVADO, ele aparece sozinho na lista "Aprovados na Meta".
+ */
+export async function criarTemplateNaMeta({ nome, idioma, categoria, corpo, exemplos = [] }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal do WhatsApp não configurado.', faltas: faltasDaConfig(cfg) };
+    }
+    const w = await descobrirWabaId(cfg, doFetch);
+    if (!w.ok) {
+        return { ok: false, erro: `Não foi possível descobrir a conta (WABA): ${w.erro}` };
+    }
+    const components = [{
+        type: 'BODY',
+        text: corpo,
+        // A Meta EXIGE exemplo quando há variável — sem ele a submissão volta 400.
+        ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}),
+    }];
+    const resp = await doFetch(`${GRAPH_BASE}/${w.wabaId}/message_templates`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nome, language: idioma, category: categoria, components }),
+    });
+    const c = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+        // A recusa da Meta vai CRUA junto da tradução — é ela que diz o campo.
+        return {
+            ok: false,
+            erro: c?.error?.error_user_msg || c?.error?.message || `HTTP ${resp.status}`,
+            detalheMeta: c?.error || null,
+        };
+    }
+    return { ok: true, id: c.id || null, status: String(c.status || 'PENDING').toUpperCase(), categoria: c.category || categoria };
+}
+
+/**
  * Traduz UM template da Meta para o que o cadastro precisa saber.
  *
  * `variaveis` é a CONTAGEM lida do corpo ({{1}}, {{2}}…), não um palpite: é ela

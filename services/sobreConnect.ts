@@ -260,6 +260,9 @@ export const REVISOES: Revisao[] = [
             '🗄 Tudo que não é texto (foto, áudio, vídeo, documento) passa a ser arquivado SOZINHO no SharePoint, na pasta "SP Connect/{ano}/{mês}/{contato}" — inclusive de quem não é cliente (currículo, lead). O admin pode antecipar a rodada em ⚙️ → 🗄 SharePoint.',
             '⚡ As respostas rápidas do composer viraram configuração: o admin edita as frases em ⚙️ → 🤖 (uma por linha) e valem pra equipe inteira.',
             '🔍 Busca DENTRO da conversa: campo no topo da thread filtra as mensagens (sem acento/caixa) e acha também pelo nome do anexo — currículo se procura pelo nome.',
+            '📝 Criar template NOVO da Meta sem sair do app: na ⚙️ Config Admin (seção de templates), o formulário submete pra aprovação da Meta — aprovado, ele aparece sozinho na lista e é só vincular ao departamento.',
+            '📈 Relatório de atendimento (botão 📈, admin/gestor): volume por fila e por atendente, tempo de 1ª resposta HUMANA e — o número que mais importa — quantas conversas ficaram SEM resposta humana no período.',
+            '↳ Sub-menus no bot: uma opção do menu pode abrir sub-opções (ex.: "2 - Gestão" → Impostos/Contábil), com "0 - Voltar". Configura na ⚙️ → 🤖, botão "↳ sub" na linha da opção.',
         ],
     },
     {

@@ -63,7 +63,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Cliente pedir outro departamento no meio | **[?]** | `#menu` reapresenta o menu em qualquer estado **e libera a condução** (volta pra triagem sem dono — pedir outro depto e ficar com o atendente do anterior é conversa torta) | ✅ |
 | **O bot não fala por cima de atendimento em andamento** | **[?]** — o bot dela roda no mesmo número e não foi observado invadindo | conversa com atendente (`atribuidoA`) não recebe saudação nem menu; `#sair`/`#menu` do CLIENTE seguem valendo, e o aviso de fora de horário também | 🆕 **17/08** — sem isso, o dia do corte mandaria menu por cima de toda conversa em andamento |
 | **Fila do menu sem ninguém do departamento** | **[?]** | a ⚙️ 🤖 lista as opções órfãs ANTES de ligar o alcance 🌐, separando "ninguém do departamento" de "ninguém enxerga"; a ⚙️ 👥 mostra o placar por fila | 🆕 **17/08** — sem isso o cliente é encaminhado para um lugar sem dono e espera, sem ninguém saber |
-| Fluxo de bot além do menu (sub-menus, perguntas encadeadas) | **[?]** | só a triagem de um nível | 🟡 depende do §7 |
+| Fluxo de bot além do menu (sub-menus, perguntas encadeadas) | **[?]** | ↳ sub-menus de UM nível (opção-porta → sub-opções → fila), com "0 - Voltar", editáveis na ⚙️ → 🤖; `#menu` zera tudo | ✅ **22/08** |
 | **O bot do SP Connect nasce DESLIGADO** | — | chave na ⚙️, com **alcance**: 🧪 só os números de teste × 🌐 todos | ⚠️ **de propósito**: os dois apps ficam assinados na WABA (decisão do Paulo) e recebem a MESMA mensagem, então o alcance é quem evita menu em dobro. **No teste real de 17/08 o bot da Ultra Fox NÃO respondeu** [produção] — observado num número, não é garantia |
 
 ## 3. Gestão do atendimento
@@ -78,7 +78,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Perfis de acesso (admin/gestor/colaborador) | **[?]** | 3 papéis com a régua do Paulo (16/08): gestor vê/atende/encerra tudo e não configura | ✅ |
 | **Avaliação do atendimento (nota)** | **[?]** | pesquisa pós-encerramento + painel 📊 (média, distribuição, últimas) | 🆕 (chave nasce desligada) |
 | Etiquetas/tags | **[?]** | **📇 → 🏷 (17/08)**: catálogo Lead · Cliente · Marketing · Colaborador · Candidato · Fornecedor · Parceiro · Ex-cliente, editável pelo admin. Filtro por etiqueta com a contagem de cada uma, e "sem etiqueta" como fila de trabalho | ✅ **respondeu a pergunta 3 do §7** — o Paulo pediu, então alguém usa |
-| Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | só avaliações; volume e tempo **não** existem | 🔴 depende do §7 |
+| Relatórios de atendimento (volume, tempo de resposta, por fila) | ✔ **[?]** | 📈 (admin/gestor): volume por fila/atendente, tempo de 1ª resposta HUMANA (bot não conta) e conversas SEM resposta humana — 7/30/90 dias | ✅ **22/08** — era o último 🔴 |
 | Notificação sonora / pop-up de mensagem nova | ✔ **[Paulo, 16/08]** | **som** (sintetizado, sem arquivo externo), **pop-up do navegador** (clique abre a conversa) e **contador no título da aba** — a mesma mensagem nunca apita duas vezes, a conversa aberta não apita e a 1ª carga aprende sem apitar | ✅ **16/08** |
 | Push no CELULAR com o app fechado | ✔ (app instalado) **[Paulo, 16/08]** | **pronto** — service worker, cadastro do aparelho, escolha de quem recebe (a MESMA régua de fila do inbox) e envio pelo FCM; fora do expediente só quem pediu | 🟡 a `VITE_FIREBASE_VAPID_KEY` **já viaja no deploy** (`deploy-app.yml`, secret + build-arg — conferido 20/08). Quem responde se o push está DE PÉ é a barra de avisos do próprio app: se ela oferecer "📱 Avisar também no celular", está; se disser pendente, o secret está vazio |
 | Presença (online/ausente) do atendente | **[?]** | — | 🟡 |
@@ -114,7 +114,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Função | Ultra Fox | SP Connect | Status |
 |---|---|---|---|
 | Configurar mensagens automáticas | ✔ **[?]** | ⚙️ → 🤖: saudação, menu, confirmação, fora de horário, `#sair`, transferência, avaliação | ✅ |
-| Gerenciar templates aprovados | ✔ **[?]** | cadastro por departamento **+** leitura direta dos aprovados na Meta | ✅ |
+| Gerenciar templates aprovados | ✔ **[?]** | cadastro por departamento **+** leitura direta dos aprovados na Meta **+ criação de template novo pela tela** (submete à aprovação da Meta; status volta na resposta) | ✅ **22/08** |
 | Auditoria de quem fez o quê | **[?]** | envio, transferência, vínculo, encerramento e importação carimbam quem e quando | 🆕 |
 | Diagnóstico do canal (webhook, assinatura) | **[?]** | painel 📡 na ⚙️ Config Admin do CFI | 🆕 |
 | Suporte / dependência de fornecedor | fornecedor externo | código da casa | 🆕 |
@@ -137,14 +137,17 @@ neste documento (e, quando faltar, vira fila de construção):
    continua sendo outra coisa, e **não foi construída**: a situação da
    conversa hoje é aberta/resolvida + fila. Se a equipe usa etiqueta de
    estado na Ultra Fox, isso ainda é pergunta aberta.
-4. **Relatórios**: qual relatório da Ultra Fox alguém realmente abre? (não
-   quero reproduzir tela que nunca foi lida — a lição do e-Fiscal)
+4. ✅ ~~**Relatórios**~~ — **FECHADA POR ORDEM DIRETA 22/08** ("vamos tocar
+   do 1 ao 5"): construído o 📈 mínimo que responde as três perguntas de
+   gestão (volume, tempo de 1ª resposta, sem-resposta). Tela que ninguém
+   abrir a gente remove — medir antes de inchar.
 5. ✅ ~~**Notificação**~~ — **RESPONDIDO 16/08**: a Ultra Fox faz **som,
    pop-up e notificação no celular** (quando instalado), e a decisão do
    Paulo é fazer os TRÊS: *"quanto mais notificação melhor, evita desculpa
    que o colaborador não viu, não recebeu, e o cliente reclama"*.
-6. **Bot**: o menu tem sub-níveis (opção que abre outro menu) ou é só o de
-   8 opções que vi no print?
+6. ✅ ~~**Bot / sub-níveis**~~ — **FECHADA POR CONSTRUÇÃO 22/08**: o
+   mecanismo de sub-menu (1 nível) existe e é editável; se a Ultra Fox tinha
+   árvores mais fundas, o conteúdo o admin monta na ⚙️.
 7. ✅ ~~**Outros canais**~~ — **RESPONDIDO PARCIALMENTE 18/08**: Paulo quer
    Instagram (DM) e o site no Wix. Instagram entrou como SONDA (não linka
    nada ainda — primeiro se confirma se o token alcança a conta, depois vem

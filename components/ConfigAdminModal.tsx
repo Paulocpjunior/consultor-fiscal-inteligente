@@ -11,7 +11,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
     listarTemplates, salvarTemplate, desativarTemplate, statusWhatsapp,
-    listarTemplatesDaMeta, statusWebhook, assinarWabaWebhook,
+    listarTemplatesDaMeta, statusWebhook, assinarWabaWebhook, criarTemplateNaMeta,
     WhatsappTemplate, TemplateVariavel, TemplateDaMeta, WebhookStatus,
 } from '../services/whatsappTemplatesService';
 import { dataHoraSp } from '../services/spConnect';
@@ -75,6 +75,29 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
     const [msg, setMsg] = useState<{ texto: string; tipo: 'ok' | 'erro' } | null>(null);
     // Quem vê o painel de auditoria é o BACKEND que diz (nem todo admin vê).
     const [donoDaAuditoria, setDonoDaAuditoria] = useState(false);
+    // 📝 Criar template NOVO na Meta (submissão pra aprovação, 21/08).
+    const [novoMeta, setNovoMeta] = useState({ nome: '', idioma: 'pt_BR', categoria: 'UTILITY', corpo: '', exemplos: '' });
+    const [metaEnviando, setMetaEnviando] = useState(false);
+    const [metaResultado, setMetaResultado] = useState<{ ok: boolean; texto: string } | null>(null);
+    const submeterNovoMeta = async () => {
+        setMetaEnviando(true); setMetaResultado(null);
+        try {
+            const r = await criarTemplateNaMeta({
+                nome: novoMeta.nome, idioma: novoMeta.idioma, categoria: novoMeta.categoria,
+                corpo: novoMeta.corpo,
+                exemplos: novoMeta.exemplos.split('\n').map((s) => s.trim()).filter(Boolean),
+            });
+            if (!r.ok) {
+                setMetaResultado({ ok: false, texto: `${r.error || 'A Meta recusou.'}${(r as any).detalhes?.length ? ` — ${(r as any).detalhes.join(' · ')}` : ''}` });
+                return;
+            }
+            setMetaResultado({
+                ok: true,
+                texto: `✓ Submetido à Meta — status ${r.status || 'PENDING'}. Quando aprovar, ele aparece sozinho na lista "Aprovados na Meta" acima (recarregue), e aí é só linkar ao departamento.`,
+            });
+            setNovoMeta({ nome: '', idioma: 'pt_BR', categoria: 'UTILITY', corpo: '', exemplos: '' });
+        } finally { setMetaEnviando(false); }
+    };
     const [auditoriaAberta, setAuditoriaAberta] = useState(false);
     const [salvando, setSalvando] = useState(false);
     // O id do doc é `departamento__nome`, então renomear CRIA outro template.
@@ -732,6 +755,61 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                     o LINKA e diz o que cada variável significa.
                                 </span>
                             </div>
+                        </div>
+
+                        {/* 📝 Criar template NOVO na Meta (Paulo, 21/08) — submete pra
+                            aprovação sem sair do app. Aprovado, ele aparece na lista de
+                            cima sozinho, e aí é só linkar ao departamento. */}
+                        <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-3">
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                📝 Criar template NOVO na Meta (submeter pra aprovação)
+                            </p>
+                            <p className="text-[10px] text-slate-400 mb-2">
+                                A aprovação é da Meta (minutos a ~24h). Variáveis no corpo são {'{{1}}'}, {'{{2}}'}… —
+                                com variável, o exemplo de cada uma é obrigatório (é o que o revisor da Meta lê).
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <label className="text-[11px] text-slate-500">
+                                    Nome (minúsculas, dígitos e _)
+                                    <input value={novoMeta.nome} onChange={(e) => setNovoMeta((f) => ({ ...f, nome: e.target.value }))}
+                                        placeholder="aviso_guia_pronta" className={`${inp} font-mono`} />
+                                </label>
+                                <label className="text-[11px] text-slate-500">
+                                    Idioma
+                                    <input value={novoMeta.idioma} onChange={(e) => setNovoMeta((f) => ({ ...f, idioma: e.target.value }))}
+                                        placeholder="pt_BR" className={inp} />
+                                </label>
+                                <label className="text-[11px] text-slate-500">
+                                    Categoria
+                                    <select value={novoMeta.categoria} onChange={(e) => setNovoMeta((f) => ({ ...f, categoria: e.target.value }))} className={inp}>
+                                        <option value="UTILITY">UTILITY — aviso de serviço (guia, documento, status)</option>
+                                        <option value="MARKETING">MARKETING — divulgação/oferta</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <label className="text-[11px] text-slate-500 block mt-2">
+                                Corpo da mensagem
+                                <textarea value={novoMeta.corpo} onChange={(e) => setNovoMeta((f) => ({ ...f, corpo: e.target.value }))}
+                                    rows={3} className={inp} placeholder={'Olá {{1}}! A guia de {{2}} está pronta.'} />
+                            </label>
+                            {/\{\{\s*\d+\s*\}\}/.test(novoMeta.corpo) && (
+                                <label className="text-[11px] text-slate-500 block mt-2">
+                                    Exemplos das variáveis (um por linha, na ordem {'{{1}}'}, {'{{2}}'}…)
+                                    <textarea value={novoMeta.exemplos} onChange={(e) => setNovoMeta((f) => ({ ...f, exemplos: e.target.value }))}
+                                        rows={2} className={inp} placeholder={'Maria\ncompetência 08/2026'} />
+                                </label>
+                            )}
+                            <div className="mt-2 flex items-center gap-2">
+                                <button onClick={submeterNovoMeta} disabled={metaEnviando || !novoMeta.nome.trim() || !novoMeta.corpo.trim()}
+                                    className="px-3 py-1.5 text-sm rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold disabled:opacity-50">
+                                    {metaEnviando ? 'Enviando à Meta…' : '📝 Submeter à Meta'}
+                                </button>
+                            </div>
+                            {metaResultado && (
+                                <p className={`mt-2 text-[11px] ${metaResultado.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
+                                    {metaResultado.texto}
+                                </p>
+                            )}
                         </div>
                     </section>
                 </div>
