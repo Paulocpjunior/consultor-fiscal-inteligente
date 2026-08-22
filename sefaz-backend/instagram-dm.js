@@ -23,6 +23,10 @@
 //   thread com buraco.
 // - Token NUNCA vai ao banco (regra dos canais): o token de PÁGINA usado no
 //   envio é derivado na hora do token do sistema e cacheado só em memória.
+// - ATIVAÇÃO (22/08): as envs INSTAGRAM_APP_SECRET / INSTAGRAM_ACCESS_TOKEN
+//   entram pelo Secret Manager + referência no serviço, e SÓ valem depois de
+//   um deploy da ESTEIRA (revisão do console fica a 0%). O 🔑 da ⚙️ → 📷 é o
+//   juiz — enquanto mostrar 🔴, DM de teste é desperdício.
 // ============================================================================
 
 import { GRAPH_BASE, configWhatsapp } from './whatsapp-cloud.js';
