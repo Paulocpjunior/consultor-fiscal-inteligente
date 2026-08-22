@@ -10,7 +10,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../../types';
 import type { EmpresaXmlOption } from '../../services/xmlFiscalService';
-import { carregarAjustes, salvarAjustes } from '../../services/spedAjustesService';
+import {
+    carregarConfigAjustes, salvarAjustes, type ObrigacaoStUf,
+} from '../../services/spedAjustesService';
 import {
     validarCodigoAjuste, TIPOS_AJUSTE, type AjusteApuracao,
 } from '../../sefaz-backend/sped-ajustes-apuracao.js';
@@ -41,6 +43,14 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
     const [carregado, setCarregado] = useState('');
     const [loading, setLoading] = useState(false);
     const [salvando, setSalvando] = useState(false);
+    // 🚨 OS DOIS CAMPOS QUE O GERADOR LIA E NINGUÉM PODIA PREENCHER (21/08).
+    // Eles moram no MESMO documento dos ajustes — são configuração de
+    // apuração da competência, não merecem coleção própria (o mesmo desenho
+    // que o código do C197 já tinha). Sem eles o C197 e o E250 NUNCA saíam, e
+    // o aviso da geração mandava "informe no cadastro" — um cadastro que não
+    // existia em tela nenhuma.
+    const [difalCodigo, setDifalCodigo] = useState('');
+    const [obrigacoesSt, setObrigacoesSt] = useState<Array<{ uf: string } & ObrigacaoStUf>>([]);
 
     const empresa = empresas.find(e => e.id === empresaId) || null;
     const uf = (empresa?.uf || '').toUpperCase();
@@ -50,8 +60,15 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
         if (!empresaId || !competencia) return;
         let alive = true;
         setLoading(true);
-        carregarAjustes(empresaId, competencia)
-            .then(l => { if (alive) { setAjustes(l); setCarregado(chave); } })
+        carregarConfigAjustes(empresaId, competencia)
+            .then(cfg => {
+                if (!alive) return;
+                setAjustes(cfg.ajustes);
+                setDifalCodigo(cfg.difalCodigoAjusteC197 || '');
+                setObrigacoesSt(Object.entries(cfg.obrigacoesStPorUf || {})
+                    .map(([uf, o]) => ({ uf, dtVcto: o.dtVcto || '', codRec: o.codRec || '' })));
+                setCarregado(chave);
+            })
             .catch(e => onShowToast?.(`Falha ao carregar ajustes: ${e.message}`))
             .finally(() => { if (alive) setLoading(false); });
         return () => { alive = false; };
@@ -84,9 +101,26 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
         setSalvando(true);
         try {
             const limpos = ajustes.filter(a => a.codigo || a.descricao || a.valor);
-            await salvarAjustes({ empresaId, empresaCnpj: empresa.cnpj, competencia, ajustes: limpos });
+            // Só a UF com os DOIS campos vira obrigação: o E250 exige vencimento
+            // E código de receita, e meia obrigação não se declara.
+            const stMap: Record<string, ObrigacaoStUf> = {};
+            for (const o of obrigacoesSt) {
+                const uf = o.uf.trim().toUpperCase();
+                const dt = o.dtVcto.replace(/\D/g, '');
+                const cod = o.codRec.trim();
+                if (uf.length === 2 && dt.length === 8 && cod) stMap[uf] = { dtVcto: dt, codRec: cod };
+            }
+            await salvarAjustes({
+                empresaId, empresaCnpj: empresa.cnpj, competencia, ajustes: limpos,
+                difalCodigoAjusteC197: difalCodigo,
+                obrigacoesStPorUf: stMap,
+            });
             setAjustes(limpos);
-            onShowToast?.(`Ajustes salvos (${limpos.length}). Eles entram no PRÓXIMO arquivo gerado desta competência.`);
+            const nSt = Object.keys(stMap).length;
+            onShowToast?.(`Ajustes salvos (${limpos.length})`
+                + `${difalCodigo ? ' · código do C197' : ''}`
+                + `${nSt ? ` · ${nSt} obrigação(ões) de ST` : ''}`
+                + '. Entram no PRÓXIMO arquivo gerado desta competência.');
         } catch (e: any) {
             onShowToast?.(`Falha ao salvar: ${e.message}`);
         } finally {
@@ -179,8 +213,84 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
 
                     <p className="text-[11px] pt-1" style={{ color: 'var(--text-muted)' }}>
                         Os ajustes entram no E110/E111 do próximo arquivo gerado desta competência (mensal ou dentro do trimestre).
-                        Código de OUTRA UF ou de ST é recusado aqui — ST/DIFAL (E220/E310) ainda não são gerados pelo CFI e devem ser lançados no PVA.
+                        Código de OUTRA UF é recusado aqui — a tabela 5.1.1 é estadual.
                     </p>
+
+                    {/* ═══ OS DOIS CAMPOS QUE O GERADOR LIA E NINGUÉM PODIA PREENCHER ═══
+                        O C197 do DIFAL e o E250 do ST dependem de códigos de tabela
+                        ESTADUAL. O app não os deduz — mas até 21/08 o aviso mandava
+                        "informe no cadastro" e o cadastro não existia. */}
+                    <div className="pt-4 mt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                        <h4 className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-secondary)' }}>
+                            Obrigações e códigos estaduais
+                        </h4>
+                        <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+                            O app <strong>não deduz</strong> código de tabela estadual. Sem eles, o C197 do DIFAL e o
+                            E250 do ST ficam de fora do arquivo e a geração avisa.
+                        </p>
+
+                        <div className="flex flex-wrap items-end gap-3 mb-4">
+                            <div className="min-w-[280px]">
+                                <label className="text-[10px] uppercase font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>
+                                    Código de ajuste do C197 (DIFAL de aquisição) — tabela 5.3
+                                </label>
+                                <input
+                                    value={difalCodigo}
+                                    onChange={e => setDifalCodigo(e.target.value.toUpperCase())}
+                                    placeholder="Ex.: SP70000001"
+                                    className="w-full px-3 py-2 text-sm rounded-lg"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                            </div>
+                        </div>
+
+                        <label className="text-[10px] uppercase font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>
+                            ICMS-ST a recolher por UF de destino (E250) — uma GNRE por estado
+                        </label>
+                        {obrigacoesSt.map((o, i) => (
+                            <div key={i} className="flex flex-wrap items-center gap-2 mb-2">
+                                <input
+                                    value={o.uf}
+                                    onChange={e => setObrigacoesSt(prev => prev.map((x, k) => k === i
+                                        ? { ...x, uf: e.target.value.toUpperCase().slice(0, 2) } : x))}
+                                    placeholder="UF"
+                                    className="w-[70px] px-3 py-2 text-sm rounded-lg text-center"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    value={o.dtVcto}
+                                    onChange={e => setObrigacoesSt(prev => prev.map((x, k) => k === i
+                                        ? { ...x, dtVcto: e.target.value.replace(/\D/g, '').slice(0, 8) } : x))}
+                                    placeholder="Vencimento DDMMAAAA"
+                                    className="w-[190px] px-3 py-2 text-sm rounded-lg"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    value={o.codRec}
+                                    onChange={e => setObrigacoesSt(prev => prev.map((x, k) => k === i
+                                        ? { ...x, codRec: e.target.value } : x))}
+                                    placeholder="Código de receita da GNRE"
+                                    className="flex-1 min-w-[200px] px-3 py-2 text-sm rounded-lg"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <button
+                                    onClick={() => setObrigacoesSt(prev => prev.filter((_, k) => k !== i))}
+                                    className="px-3 py-2 text-xs font-bold rounded-lg"
+                                    style={{ background: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border-default)' }}
+                                    title="Remover"
+                                >✕</button>
+                            </div>
+                        ))}
+                        <button
+                            onClick={() => setObrigacoesSt(prev => [...prev, { uf: '', dtVcto: '', codRec: '' }])}
+                            className="px-4 py-2 text-xs font-bold rounded-lg"
+                            style={{ background: 'var(--bg-card)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                        >＋ Adicionar UF</button>
+                        <p className="text-[11px] pt-2" style={{ color: 'var(--text-muted)' }}>
+                            A linha só vira E250 com os TRÊS campos preenchidos — meia obrigação não se declara.
+                            Use o <strong>💾 Salvar ajustes</strong> acima: os três blocos gravam no mesmo lugar.
+                        </p>
+                    </div>
                 </div>
             )}
             {loading && <p className="text-xs text-center py-4" style={{ color: 'var(--text-muted)' }}>Carregando ajustes…</p>}

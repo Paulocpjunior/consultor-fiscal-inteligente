@@ -233,8 +233,9 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
             } else {
                 avisos.push(
                     `ST de ${g.uf}: R$ ${dec(ap.icmsRecolher)} a recolher, mas o E250 não foi gerado — `
-                    + 'falta o vencimento e o código de receita da GNRE dessa UF no cadastro. '
-                    + 'Informe-os ou lance a obrigação no PVA antes de transmitir.',
+                    + 'falta o vencimento e o código de receita da GNRE dessa UF. '
+                    + 'Cadastre em SPED Fiscal → aba Ajustes E111 → "ICMS-ST a recolher por UF" '
+                    + '(ou lance a obrigação no PVA antes de transmitir).',
                 );
             }
         }

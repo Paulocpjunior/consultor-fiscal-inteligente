@@ -199,6 +199,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   1 e 2). Os três entraram na whitelist + modal no MESMO PR, e o default do
   E116 passou a sair **DITO**; UF sem código de receita cadastrado sai com o
   campo **VAZIO** e nomeada — código estadual não se inventa.
+  🔴 **(18) E A VARREDURA GANHOU UM SEGUNDO CRUZAMENTO — "o gerador lê × o
+  orquestrador passa" — que achou DOIS CADASTROS INEXISTENTES.** É o defeito do
+  `saldoCredorIpiAnterior` (19/08, PWR) virado script. O **E250** (a guia do
+  ICMS-ST) lia `obrigacoesStPorUf` e **nenhum orquestrador passava**: o registro
+  NUNCA saiu. O **C197** do DIFAL lia `difalCodigoAjusteC197`, que o
+  orquestrador passava e **nenhuma tela gravava**. Nos dois, o aviso mandava
+  *"informe no cadastro"* — e o cadastro não existia em tela nenhuma.
+  📌 **Mensagem que manda a pessoa a um lugar inexistente é PIOR que silêncio**:
+  ela procura, não acha e conclui que o app está quebrado.
+  ✂️ Os dois ganharam casa na aba **Ajustes E111** (que já era dona daquele
+  documento — o mesmo desenho que o código do C197 já previa), o orquestrador
+  passou a ler o ST, e os dois avisos passaram a dizer **ONDE**.
+  ⚠️ **E A GRAVAÇÃO VIROU MERGE**: o doc `sped_ajustes_apuracao` tem TRÊS donos
+  (ajustes do E111, código do C197, obrigações de ST). O `setDoc` sem merge
+  apagaria o que o outro gravou — calado, que é o pior jeito de perder um
+  código de tabela estadual que alguém digitou.
+  ⚠️ O app **continua não deduzindo** nenhum dos dois: vencimento e código de
+  receita da GNRE e o COD_AJ da 5.3 são ESTADUAIS.
   🔴 **(4) E A VARREDURA ACHOU UM DEFEITO QUE EU TINHA CRIADO DE MANHÃ**: ao
   corrigir o `IND_EMIT` da nota PRÓPRIA DE ENTRADA para '0', deixei a decisão
   do **C170** lendo `direcao === 'saida'` — o arquivo passou a dizer "emissão
