@@ -121,3 +121,55 @@ describe('credenciais e cadastro — o token NUNCA entra no banco', () => {
         expect(validarCanal({ id: 'rh', phoneNumberId: PNID, rotulo: 'RH', envToken: 'WHATSAPP_CLOUD_TOKEN_2' }).ok).toBe(true);
     });
 });
+
+// ─── 🚨 A resposta sai pelo MESMO número em que o cliente falou (22/08) ─────
+// Na véspera do 2º número (o fixo 3155-1554) entrar: TODOS os envios usavam o
+// número padrão do env — responder uma conversa do canal 2 abriria OUTRA
+// conversa no cliente, vinda do número principal. `cfgDeEnvioDaConversa` é o
+// dono; /responder, /anexo, avisos, pesquisa e o BOT passam por ele.
+describe('cfgDeEnvioDaConversa — o canal de SAÍDA é o da conversa', () => {
+    const { cfgDeEnvioDaConversa } = require('../sefaz-backend/whatsapp-canais.js');
+    const dbCom = (doc: { exists: boolean; id?: string; dados?: Record<string, unknown> }) => ({
+        collection: () => ({
+            doc: () => ({
+                get: async () => ({ exists: doc.exists, id: doc.id, data: () => doc.dados }),
+            }),
+        }),
+    });
+
+    it('conversa do número padrão (canalId ausente ou "principal") usa o env de sempre', async () => {
+        expect(await cfgDeEnvioDaConversa(dbCom({ exists: false }), {})).toEqual({ cfg: null });
+        expect(await cfgDeEnvioDaConversa(dbCom({ exists: false }), { canalId: 'principal' })).toEqual({ cfg: null });
+    });
+
+    it('conversa de canal cadastrado responde com as credenciais DELE', async () => {
+        const db = dbCom({ exists: true, id: 'linha-1554', dados: { rotulo: 'Linha 1554', phoneNumberId: '111222333', envToken: 'TOKEN_TESTE_CANAL' } });
+        const r = await cfgDeEnvioDaConversa(db, { canalId: 'linha-1554' }, { TOKEN_TESTE_CANAL: 'tok-do-canal' });
+        expect(r.erro).toBeUndefined();
+        expect(r.cfg).toMatchObject({ token: 'tok-do-canal', phoneNumberId: '111222333' });
+    });
+
+    it('canal sumido ou incompleto é RECUSA nomeada — mandar por OUTRO número em silêncio é o defeito', async () => {
+        const sumido = await cfgDeEnvioDaConversa(dbCom({ exists: false }), { canalId: 'linha-x' });
+        expect(sumido.erro).toContain('não está mais cadastrado');
+        const semToken = await cfgDeEnvioDaConversa(
+            dbCom({ exists: true, id: 'linha-1554', dados: { rotulo: 'Linha 1554', phoneNumberId: '111222333', envToken: 'TOKEN_QUE_NAO_EXISTE' } }),
+            { canalId: 'linha-1554' }, {},
+        );
+        expect(semToken.erro).toContain('incompleto');
+    });
+
+    it('fiação: os caminhos de ENVIO passam pelo dono (responder, anexo, avisos, pesquisa e bot)', () => {
+        const { readFileSync } = require('fs');
+        const { join } = require('path');
+        const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        // responder + aviso de transferência + pesquisa + anexo = 4 chamadas.
+        expect((rotas.match(/cfgDeEnvioDaConversa\(/g) || []).length).toBeGreaterThanOrEqual(4);
+        const webhook = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        // bot + agradecimento da avaliação = 2 chamadas; e as saídas do bot
+        // carregam o depsEnvio (responder do bot e imagem de fila).
+        expect((webhook.match(/cfgDeEnvioDaConversa\(/g) || []).length).toBeGreaterThanOrEqual(2);
+        expect(webhook).toContain("enviarTextoLivre({ para: msg.de, texto: acao.texto }, depsEnvio)");
+        expect(webhook).toContain("link: acao.url }, depsEnvio)");
+    });
+});

@@ -120,6 +120,40 @@ export function canalDaConversa(catalogo, conversa = {}) {
 }
 
 /**
+ * 🚨 As credenciais de ENVIO de uma conversa — a resposta sai pelo MESMO
+ * número em que o cliente falou (22/08, na véspera do 2º número entrar:
+ * todos os envios usavam o número padrão, então responder uma conversa do
+ * canal 2 abriria OUTRA conversa no cliente, vinda do número principal).
+ *
+ * Dono ÚNICO da decisão — /responder, /anexo, avisos de transferência,
+ * pesquisa e o BOT passam todos por aqui (o db entra injetado pra régua
+ * continuar testável). Devolve:
+ *   { cfg: null }  → conversa do número padrão: envio usa o ENV de sempre;
+ *   { cfg }        → credenciais do canal da conversa;
+ *   { erro }       → canal sumiu do cadastro ou está incompleto — RECUSA
+ *                    nomeada, porque mandar por OUTRO número em silêncio é
+ *                    exatamente o defeito que esta régua fecha.
+ */
+export async function cfgDeEnvioDaConversa(db, conversa, env = process.env) {
+    const canalId = conversa?.canalId || null;
+    if (!canalId || canalId === CANAL_PADRAO_ID) return { cfg: null };
+    let doc = null;
+    try {
+        doc = await db.collection('whatsapp_canais').doc(canalId).get();
+    } catch (e) {
+        return { erro: `Não deu pra ler o cadastro do canal "${canalId}" (${e.message}) — responder por OUTRO número abriria outra conversa no cliente; tente de novo.` };
+    }
+    if (!doc?.exists) {
+        return { erro: `Esta conversa entrou pelo canal "${canalId}", que não está mais cadastrado em ⚙️ → 📞 — responder por outro número abriria OUTRA conversa no cliente. Recadastre o canal.` };
+    }
+    const cred = credenciaisDoCanal({ id: doc.id, ...doc.data() }, env);
+    if (!cred.pronto) {
+        return { erro: `O canal "${doc.data().rotulo || canalId}" desta conversa está incompleto: ${cred.faltas.join('; ')}. Corrija em ⚙️ → 📞 (e no Cloud Run, se for o token).` };
+    }
+    return { cfg: cred.cfg };
+}
+
+/**
  * Credenciais efetivas de um canal (o valor do token vem do ENV, sempre).
  * Canal sem token no Cloud Run devolve `pronto:false` com a env que falta —
  * "não configurado" sem dizer O QUE falta manda a pessoa adivinhar.

@@ -652,7 +652,7 @@ describe('🖼️ imagensPorFila — ação produzida pelo núcleo tem que ter Q
 
     it("o executor do bot (rodarBot) trata 'enviarImagem' e manda por LINK", () => {
         expect(rotas).toMatch(/acao\.tipo === 'enviarImagem'/);
-        expect(rotas).toMatch(/enviarMidiaWhatsapp\(\{ para: msg\.de, tipo: 'image', link: acao\.url \}\)/);
+        expect(rotas).toMatch(/enviarMidiaWhatsapp\(\{ para: msg\.de, tipo: 'image', link: acao\.url \}, depsEnvio\)/);
     });
 
     it('existe rota PÚBLICA que serve o banner (a Meta busca sem token nosso)', () => {
