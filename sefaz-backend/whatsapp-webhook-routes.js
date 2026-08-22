@@ -350,13 +350,20 @@ async function rodarBot(db, msg) {
         for (const acao of acoes) {
             const agora = new Date().toISOString();
             if (acao.tipo === 'definirFila') {
-                await convRef.set({ fila: acao.fila, atualizadoEm: agora }, { merge: true });
+                // Fila escolhida FECHA o sub-menu junto — estado de sub-menu
+                // sobrando faria o próximo dígito do cliente cair no lugar errado.
+                await convRef.set({ fila: acao.fila, submenuAberto: null, atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'gravarProtocolo') {
                 await convRef.set({ protocolo: acao.protocolo, atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'marcarAusenciaEnviada') {
                 await convRef.set({ ausenciaAvisadaEm: acao.dia }, { merge: true });
+            } else if (acao.tipo === 'abrirSubmenu') {
+                await convRef.set({ submenuAberto: String(acao.opcao), atualizadoEm: agora }, { merge: true });
+            } else if (acao.tipo === 'fecharSubmenu') {
+                await convRef.set({ submenuAberto: null, atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'resetarTriagem') {
-                await convRef.set({ fila: null, atualizadoEm: agora }, { merge: true });
+                // #menu zera a triagem INTEIRA — inclusive sub-menu aberto.
+                await convRef.set({ fila: null, submenuAberto: null, atualizadoEm: agora }, { merge: true });
             } else if (acao.tipo === 'liberarConducao') {
                 // Cliente pediu #menu: a conversa volta pra triagem SEM dono,
                 // igual à transferência. Quem conduzia continua no histórico.

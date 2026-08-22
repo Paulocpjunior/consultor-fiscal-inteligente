@@ -375,3 +375,63 @@ describe('a tela escolhe da Meta em vez de pedir digitação', () => {
         expect(tela).toMatch(/significado de cada variável/);
     });
 });
+
+// 📝 Criar template NOVO na Meta (Paulo, 21/08: "existe a possibilidade de
+// cadastro pelo nosso app?"). A validação roda ANTES da rede — recusa da
+// Meta custa a fila de aprovação de novo.
+import { validarNovoTemplateMeta, CATEGORIAS_TEMPLATE_META } from '../sefaz-backend/whatsapp-templates.js';
+
+describe('validarNovoTemplateMeta', () => {
+    const base = { nome: 'aviso_guia_pronta', idioma: 'pt_BR', categoria: 'UTILITY', corpo: 'Olá {{1}}! A guia de {{2}} está pronta.', exemplos: ['Maria', '08/2026'] };
+
+    it('template válido passa, com a contagem de variáveis lida do corpo', () => {
+        const r = validarNovoTemplateMeta(base);
+        expect(r.ok).toBe(true);
+        expect(r.variaveis).toBe(2);
+        expect(r.template.nome).toBe('aviso_guia_pronta');
+    });
+
+    it('corpo fixo passa SEM exemplos — e exemplos sem variável são recusados (sobra que confunde o revisor)', () => {
+        expect(validarNovoTemplateMeta({ ...base, corpo: 'Sua guia está pronta.', exemplos: [] }).ok).toBe(true);
+        expect(validarNovoTemplateMeta({ ...base, corpo: 'Sua guia está pronta.', exemplos: ['Maria'] }).ok).toBe(false);
+    });
+
+    it('variável com BURACO ({{1}} e {{3}}) é recusada — a Meta exige sequência', () => {
+        const r = validarNovoTemplateMeta({ ...base, corpo: 'Olá {{1}}, veja {{3}}.', exemplos: ['a', 'b'] });
+        expect(r.ok).toBe(false);
+        expect(r.erros.join(' ')).toContain('sem buraco');
+    });
+
+    it('com variável, exemplo de CADA uma é obrigatório (é o que o revisor da Meta lê)', () => {
+        expect(validarNovoTemplateMeta({ ...base, exemplos: ['Maria'] }).ok).toBe(false);
+        expect(validarNovoTemplateMeta({ ...base, exemplos: [] }).ok).toBe(false);
+    });
+
+    it('AUTHENTICATION fica FORA nomeada (fluxo de OTP da Meta, outro cadastro)', () => {
+        expect(CATEGORIAS_TEMPLATE_META).toEqual(['UTILITY', 'MARKETING']);
+        const r = validarNovoTemplateMeta({ ...base, categoria: 'AUTHENTICATION' });
+        expect(r.ok).toBe(false);
+        expect(r.erros.join(' ')).toContain('OTP');
+    });
+
+    it('nome fora do padrão da Meta e corpo vazio são recusados com a regra na frase', () => {
+        expect(validarNovoTemplateMeta({ ...base, nome: 'Aviso Guia!' }).erros.join(' ')).toContain('minúsculas');
+        expect(validarNovoTemplateMeta({ ...base, corpo: '' }).ok).toBe(false);
+    });
+});
+
+describe('📝 fiação do criar-template (rota + tela)', () => {
+    const rotas = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const modal = readFileSync(join(process.cwd(), 'components/ConfigAdminModal.tsx'), 'utf8');
+
+    it('a rota POST /templates-meta valida ANTES e chama o criador', () => {
+        expect(rotas).toMatch(/router\.post\('\/templates-meta', requireAdmin/);
+        expect(rotas).toMatch(/validarNovoTemplateMeta\(req\.body/);
+        expect(rotas).toMatch(/criarTemplateNaMeta\(v\.template\)/);
+    });
+
+    it('a tela tem o formulário que chama a rota (rota sem botão não é funcionalidade)', () => {
+        expect(modal).toMatch(/criarTemplateNaMeta\(\{/);
+        expect(modal).toMatch(/Submeter à Meta/);
+    });
+});

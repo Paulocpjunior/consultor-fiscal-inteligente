@@ -272,8 +272,17 @@ export function resolverConfig(gravada) {
     const p = configPadraoAtendimento();
     if (!gravada || typeof gravada !== 'object') return p;
     // Item de menu com fila inválida é filtrado; se NADA sobrar, volta ao
-    // padrão — menu vazio seria triagem morta em silêncio.
-    const menuGravado = Array.isArray(gravada.menu) ? gravada.menu.filter((m) => filaValida(m.fila)) : [];
+    // padrão — menu vazio seria triagem morta em silêncio. Sub-opções passam
+    // pela MESMA régua; sub-menu que ficar vazio é REMOVIDO (a opção volta a
+    // ser direta, com a fila do próprio item — porta pra lugar nenhum não
+    // pode existir).
+    const menuGravado = Array.isArray(gravada.menu)
+        ? gravada.menu.filter((m) => filaValida(m.fila)).map((m) => {
+            const sub = Array.isArray(m.submenu) ? m.submenu.filter((s) => filaValida(s.fila)) : [];
+            const { submenu, ...resto } = m;
+            return sub.length ? { ...resto, submenu: sub } : resto;
+        })
+        : [];
     return {
         botAtivo: typeof gravada.botAtivo === 'boolean' ? gravada.botAtivo : p.botAtivo,
         // 🚨 RETROCOMPATIBILIDADE: config gravada ANTES deste campo existir e
@@ -447,7 +456,31 @@ export function interpretarEscolha(texto, config) {
     const t = String(texto || '').trim().replace(/[.)]$/, '');
     if (!/^\d{1,2}$/.test(t)) return null;
     const item = (config.menu || []).find((m) => String(m.opcao) === t);
-    return item ? { fila: item.fila, rotulo: item.rotulo } : null;
+    if (!item) return null;
+    return {
+        fila: item.fila,
+        rotulo: item.rotulo,
+        opcao: String(item.opcao),
+        // ↳ Opção-PORTA: tem sub-opções — quem escolhe ela ainda não escolheu
+        // fila nenhuma (item 5 da lista de 21/08, sub-menus).
+        submenu: Array.isArray(item.submenu) && item.submenu.length ? item.submenu : null,
+    };
+}
+
+/** Texto do SUB-menu de uma opção — sempre com o 0 de voltar, senão o cliente
+ *  que entrou no lugar errado fica preso digitando número inválido. */
+export function montarTextoSubmenu(config, item) {
+    const linhas = (item.submenu || []).map((s) => `${s.opcao} - ${s.rotulo}`);
+    return `${item.rotulo}\n\n${config.mensagens.menuCabecalho}\n\n${linhas.join('\n')}\n0 - Voltar ao menu anterior`;
+}
+
+/** Resposta do cliente DENTRO de um sub-menu. '0' = voltar (caso próprio). */
+export function interpretarEscolhaSubmenu(texto, item) {
+    const t = String(texto || '').trim().replace(/[.)]$/, '');
+    if (!/^\d{1,2}$/.test(t)) return null;
+    if (t === '0') return { voltar: true };
+    const sub = (item.submenu || []).find((s) => String(s.opcao) === t);
+    return sub ? { fila: sub.fila, rotulo: sub.rotulo } : null;
 }
 
 // ─── O CÉREBRO: decide as ações do bot pra UMA mensagem recebida ────────────
@@ -500,15 +533,46 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
     // Conversa SEM fila E SEM dono = está na triagem. Com dono, quem conduz é
     // gente: o bot não saúda, não mostra menu e não define fila por cima.
     if (!conversa.fila && !emConducaoHumana(conversa)) {
-        const escolha = interpretarEscolha(texto, config);
-        if (escolha) {
-            acoes.push({ tipo: 'definirFila', fila: escolha.fila });
+        // A confirmação de fila é UMA só, escolhida no menu OU no sub-menu —
+        // função local pra não nascer a segunda cópia da ordem imagem→texto.
+        const confirmarFila = (fila, rotulo) => {
+            acoes.push({ tipo: 'definirFila', fila });
             // Imagem ANTES do texto — é a ordem que a Ultra Fox usa (a arte
             // do departamento, depois o "aguarde"). Fila sem imagem
             // cadastrada pula esta ação, sem falha nem substituto genérico.
-            const imagem = config.imagensPorFila?.[escolha.fila];
-            if (imagem) acoes.push({ tipo: 'enviarImagem', url: imagem, fila: escolha.fila });
-            acoes.push({ tipo: 'responder', texto: renderMensagem(config.mensagens.confirmacaoFila, { fila: escolha.rotulo }) });
+            const imagem = config.imagensPorFila?.[fila];
+            if (imagem) acoes.push({ tipo: 'enviarImagem', url: imagem, fila });
+            acoes.push({ tipo: 'responder', texto: renderMensagem(config.mensagens.confirmacaoFila, { fila: rotulo }) });
+        };
+
+        // ↳ DENTRO de um sub-menu aberto (item 5 de 21/08): o dígito se lê
+        // pelas sub-opções, '0' volta ao menu principal, e inválido
+        // reapresenta o SUB-menu (não o principal — o cliente está lá).
+        const porta = conversa.submenuAberto
+            ? (config.menu || []).find((m) => String(m.opcao) === String(conversa.submenuAberto)
+                && Array.isArray(m.submenu) && m.submenu.length)
+            : null;
+        if (porta) {
+            const sub = interpretarEscolhaSubmenu(texto, porta);
+            if (sub?.voltar) {
+                acoes.push({ tipo: 'fecharSubmenu' });
+                acoes.push({ tipo: 'responder', texto: montarTextoMenu(config) });
+            } else if (sub) {
+                acoes.push({ tipo: 'fecharSubmenu' });
+                confirmarFila(sub.fila, sub.rotulo);
+            } else {
+                acoes.push({ tipo: 'responder', texto: montarTextoSubmenu(config, porta) });
+            }
+            return acoes;
+        }
+
+        const escolha = interpretarEscolha(texto, config);
+        if (escolha && escolha.submenu) {
+            // Opção-porta: abre o sub-menu — fila NENHUMA foi escolhida ainda.
+            acoes.push({ tipo: 'abrirSubmenu', opcao: escolha.opcao });
+            acoes.push({ tipo: 'responder', texto: montarTextoSubmenu(config, { rotulo: escolha.rotulo, submenu: escolha.submenu }) });
+        } else if (escolha) {
+            confirmarFila(escolha.fila, escolha.rotulo);
         } else {
             // 1º contato ganha protocolo + saudação; sempre reapresenta o menu.
             if (!conversa.protocolo && protocoloNovo) {

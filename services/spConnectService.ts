@@ -386,3 +386,27 @@ export interface ResultadoArquivoSp {
 }
 export const arquivarMidiasNoSharePoint = (maxDocs?: number) =>
     post<ResultadoArquivoSp>('/api/admin/whatsapp/arquivo-sp', maxDocs ? { maxDocs } : {});
+
+/**
+ * 📈 Relatório de atendimento (admin/gestor): volume por fila/atendente e
+ * tempo de 1ª resposta HUMANA. A conta é do backend (núcleo puro) — a tela
+ * só desenha. `parcial` ≠ null = o período estourou o teto de leitura e o
+ * número é PISO, não total.
+ */
+export interface RelatorioAtendimento {
+    dias: number;
+    conversasComMovimento: number;
+    recebidas: number;
+    enviadasHumanas: number;
+    enviadasBot: number;
+    semRespostaHumana: number;
+    porFila: {
+        fila: string; conversas: number; recebidas: number; enviadasHumanas: number;
+        enviadasBot: number; respondidas: number; semRespostaHumana: number;
+        tempoMedio1aRespostaMin: number | null;
+    }[];
+    porAtendente: { atendente: string; enviadas: number; conversas: number }[];
+    parcial?: number | null;
+}
+export const relatorioAtendimento = (dias: number) =>
+    req<RelatorioAtendimento>(`/api/admin/whatsapp/relatorio?dias=${dias}`);

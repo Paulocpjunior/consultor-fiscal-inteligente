@@ -109,3 +109,9 @@ export function assinarWaba(deps?: Record<string, unknown>): Promise<{
 }>;
 export function interpretarAppsAssinados(corpo: unknown): { id: string | null; nome: string | null }[];
 export const GRAPH_BASE: string;
+
+// 📝 Criar template NOVO na Meta (a validação de forma é do whatsapp-templates).
+export function criarTemplateNaMeta(
+    p: { nome: string; idioma: string; categoria: string; corpo: string; exemplos?: string[] },
+    deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
+): Promise<{ ok: boolean; id?: string | null; status?: string; categoria?: string; erro?: string; detalheMeta?: unknown; faltas?: string[] }>;

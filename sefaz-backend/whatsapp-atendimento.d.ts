@@ -12,7 +12,8 @@ export interface ConfigAtendimento {
     avaliacaoAtiva: boolean;
     horario: { dias: number[]; turnos: { inicio: string; fim: string }[] };
     mensagens: Record<string, string>;
-    menu: { opcao: string; fila: string; rotulo: string }[];
+    /** `submenu` = opção-PORTA (1 nível): escolher abre as sub-opções; a fila do item é o fallback se o sub-menu esvaziar. */
+    menu: { opcao: string; fila: string; rotulo: string; submenu?: { opcao: string; fila: string; rotulo: string }[] }[];
     /** Imagem enviada junto da confirmação de fila (URL pública). Fila sem entrada = só texto. */
     imagensPorFila: Record<string, string>;
     /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */
@@ -21,13 +22,15 @@ export interface ConfigAtendimento {
 
 export interface AcaoBot {
     tipo: 'responder' | 'definirFila' | 'gravarProtocolo' | 'marcarAusenciaEnviada' | 'resetarTriagem'
-        | 'resolverConversa' | 'marcarAguardandoAvaliacao' | 'liberarConducao' | 'enviarImagem';
+        | 'resolverConversa' | 'marcarAguardandoAvaliacao' | 'liberarConducao' | 'enviarImagem'
+        | 'abrirSubmenu' | 'fecharSubmenu';
     texto?: string;
     fila?: string;
     protocolo?: string;
     dia?: string;
     por?: string;
     url?: string;
+    opcao?: string;
 }
 
 export const PAPEIS_ATENDIMENTO: string[];
@@ -54,7 +57,16 @@ export function dentroDoHorario(horario: ConfigAtendimento['horario'], agora?: D
 export function gerarProtocolo(agora?: Date, aleatorio?: number): string;
 export function renderMensagem(template: string, dados?: Record<string, string | null | undefined>): string;
 export function montarTextoMenu(config: ConfigAtendimento): string;
-export function interpretarEscolha(texto: string, config: ConfigAtendimento): { fila: string; rotulo: string } | null;
+export function interpretarEscolha(texto: string, config: ConfigAtendimento):
+    { fila: string; rotulo: string; opcao: string; submenu: { opcao: string; fila: string; rotulo: string }[] | null } | null;
+export function montarTextoSubmenu(
+    config: ConfigAtendimento,
+    item: { rotulo: string; submenu?: { opcao: string; fila: string; rotulo: string }[] },
+): string;
+export function interpretarEscolhaSubmenu(
+    texto: string,
+    item: { submenu?: { opcao: string; fila: string; rotulo: string }[] },
+): { voltar: true } | { fila: string; rotulo: string } | null;
 /** Cobertura de UMA fila: quem é do departamento × quem só enxerga tudo. */
 export interface CoberturaFila {
     fila: string;
