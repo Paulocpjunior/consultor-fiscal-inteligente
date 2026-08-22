@@ -110,6 +110,31 @@ const EnviosImpostoPainel: React.FC = () => {
                         </div>
                     ))}
 
+                    {/* 🚨 NÃO CONFERIDO ≠ COMPLETO. Envio sem registro das
+                        etapas entrava em "completos" e o resumo afirmava
+                        "todos completos" — o que a rodada nunca estabeleceu.
+                        Ausência de alarme não pode parecer "está tudo certo". */}
+                    {(dados.naoConferidos?.length ?? 0) > 0 && (
+                        <div className="border border-sky-300 dark:border-sky-700 bg-sky-50/60 dark:bg-sky-900/10 rounded-lg p-3">
+                            <p className="text-xs font-bold text-sky-800 dark:text-sky-300">
+                                {dados.naoConferidos?.length}× envio sem registro das etapas do rito
+                            </p>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                                Não é pendência nem envio completo: a auditoria destes não guarda o resultado do
+                                arquivamento ou da baixa — é o caso dos envios anteriores ao rito. Confira na pasta
+                                IMPOSTOS do cliente e na aba Vencimentos antes de dar a competência por fechada.
+                            </p>
+                            <details className="mt-1">
+                                <summary className="text-[11px] cursor-pointer text-slate-500 dark:text-slate-400">
+                                    Ver envios ({dados.naoConferidos?.length})
+                                </summary>
+                                <ul className="mt-1 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5 max-h-40 overflow-y-auto">
+                                    {(dados.naoConferidos || []).map((e, i) => <li key={i}>{e}</li>)}
+                                </ul>
+                            </details>
+                        </div>
+                    )}
+
                     {(dados.semGestorEmCopia?.length ?? 0) > 0 && (
                         <div className="border border-red-300 dark:border-red-700 bg-red-50/60 dark:bg-red-900/10 rounded-lg p-3">
                             <p className="text-xs font-bold text-red-800 dark:text-red-300">

@@ -99,3 +99,77 @@ describe('montarPainelEnvios', () => {
         expect(p.resumo).toMatch(/Nenhum imposto enviado/);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 ENVIO SEM REGISTRO DA ETAPA NÃO É ENVIO COMPLETO (22/08)
+//
+// `pendenciaSharePoint`/`pendenciaBaixa` devolvem **null** quando não há status
+// gravado — e o painel lia esse null como "etapa cumprida". Resultado: o envio
+// entrava em `completos` e o resumo afirmava *"todos completos (arquivados e
+// com baixa)"*, uma afirmação que a rodada NUNCA estabeleceu.
+//
+// É a mesma família da conferência CFI × SPED que pulava o confronto de valor
+// em silêncio: **ausência de alarme não pode ser indistinguível de "está tudo
+// certo"**. Auditoria gravada antes do rito #293 existir cai exatamente aqui.
+// ═══════════════════════════════════════════════════════════════════════════
+/** Envio como a auditoria antiga gravou: sem o registro das etapas do rito. */
+const semRito = (over: any = {}) => {
+    const e: any = envio();
+    delete e.sharePoint;
+    delete e.baixa;
+    // O override vem DEPOIS do delete — senão ele é apagado junto (pego pelo
+    // próprio teste quando eu tentei manter só a baixa).
+    return { ...e, ...over };
+};
+
+describe('🚨 não conferido ≠ completo', () => {
+    it('envio sem registro das etapas NÃO entra em completos', () => {
+        const p = montarPainelEnvios([envio(), semRito({ tipo: 'DARF' })], { competencia: '2026-07' });
+        expect(p.total).toBe(2);
+        expect(p.completos).toBe(1);
+        expect(p.incompletos).toBe(0);
+        expect(p.naoConferidos).toHaveLength(1);
+    });
+
+    it('e o resumo para de afirmar "todos completos"', () => {
+        const p = montarPainelEnvios([envio(), semRito()], { competencia: '2026-07' });
+        expect(p.resumo).not.toMatch(/todos completos/);
+        expect(p.resumo).toMatch(/sem registro das etapas/);
+        // Farol honesto: com envio que não dá para conferir, não é verde.
+        expect(p.farol).toBe('atencao');
+    });
+
+    it('a linha diz QUAL etapa não tem registro', () => {
+        const so = montarPainelEnvios([semRito({ baixa: { status: 'baixada' } })]);
+        expect(so.naoConferidos[0]).toMatch(/sem registro de arquivamento/);
+        expect(so.naoConferidos[0]).not.toMatch(/e baixa/);
+    });
+
+    // ⚠️ `sem-pdf` é desfecho LEGÍTIMO (envio sem anexo, como aviso de guia já
+    // paga) — ele não pode virar "não conferido".
+    it('sem-pdf continua contando como completo', () => {
+        const p = montarPainelEnvios([envio({ sharePoint: { status: 'sem-pdf' } })]);
+        expect(p.completos).toBe(1);
+        expect(p.naoConferidos).toHaveLength(0);
+        expect(p.farol).toBe('ok');
+    });
+
+    // Pendência de verdade continua sendo pendência, não "não conferido".
+    it('pendência real não vira não-conferido', () => {
+        const p = montarPainelEnvios([envio({ sharePoint: { status: 'sem-config' } })]);
+        expect(p.incompletos).toBe(1);
+        expect(p.naoConferidos).toHaveLength(0);
+    });
+
+    it('e a TELA mostra o bloco — flag que ninguém lê é a classe que isto fecha', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fs = require('fs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const path = require('path');
+        const src = fs.readFileSync(
+            path.resolve(__dirname, '..', 'components/EnviosImpostoPainel.tsx'), 'utf8',
+        );
+        expect(src).toContain('naoConferidos');
+        expect(src).toMatch(/sem registro das etapas do rito/);
+    });
+});

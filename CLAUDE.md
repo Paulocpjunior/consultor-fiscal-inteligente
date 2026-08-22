@@ -35,6 +35,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **REGRA QUE FICA: no SPED, declaração órfã se TRIA, não se apaga em
   bloco** — ou ela some (era a régua velha), ou ela é LIGADA (era a trava que
   faltava). A varredura fica, e o que não foi triado fica **NOMEADO** em vez
+  de ganhar motivo inventado.
+  🔴 **E A TRIAGEM DAS DUAS ÚLTIMAS ACHOU O DEFEITO QUE ELAS ESCONDIAM.**
+  `spOk`/`baixaOk` do painel de envio estavam superadas por
+  `pendenciaSharePoint`/`pendenciaBaixa` — que respondem a mesma pergunta E
+  devolvem o motivo. Só que essas duas devolvem **null quando NÃO HÁ status
+  gravado**, e o painel lia esse null como *"etapa cumprida"*: o envio entrava
+  em `completos` e o resumo afirmava **"todos completos (arquivados e com
+  baixa)"** — o que a rodada nunca estabeleceu. Auditoria gravada ANTES do
+  rito #293 existir cai exatamente aí.
+  ✂️ Nasceu `naoConferidos`: nem completo, nem pendência — **ação própria**
+  (conferir a pasta IMPOSTOS e a aba Vencimentos), com a linha dizendo QUAL
+  etapa não tem registro, e o farol saindo do verde enquanto houver um. É a
+  mesma correção do selo da conferência CFI × SPED, no mesmo dia: **ausência
+  de alarme não pode ser indistinguível de "está tudo certo"**.
+  ⚠️ `sem-pdf` continua sendo desfecho LEGÍTIMO (envio sem anexo, como aviso de
+  guia já paga) — ele não vira "não conferido".
+  📌 E o bloco entrou **na TELA no mesmo PR**: flag que ninguém lê é
+  exatamente a classe que este PR fecha.
   de ganhar motivo inventado: sobraram **quatro pendentes**, e duas delas
   (`spOk`/`baixaOk` do painel de envio) têm cara da MESMA classe — conferência
   do rito #293 escrita e nunca ligada.

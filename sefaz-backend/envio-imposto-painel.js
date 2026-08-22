@@ -11,9 +11,24 @@
 // (ex.: "12 empresas sem pasta do SharePoint" é UMA tarefa, não 12 mistérios).
 // ============================================================================
 
-/** Etapa cumprida? `arquivado`/`baixada` são os únicos desfechos completos. */
-function spOk(e) { return e?.sharePoint?.status === 'arquivado'; }
-function baixaOk(e) { return e?.baixa?.status === 'baixada'; }
+/**
+ * 🚨 ENVIO SEM REGISTRO DA ETAPA NÃO É ENVIO COMPLETO — é envio NÃO CONFERIDO.
+ *
+ * `pendenciaSharePoint`/`pendenciaBaixa` devolvem null quando não há status
+ * gravado, e o painel lia esse null como "etapa cumprida": o envio entrava em
+ * `completos` e o resumo afirmava *"todos completos (arquivados e com baixa)"*
+ * — uma afirmação que a rodada NUNCA estabeleceu.
+ *
+ * É a mesma família da conferência CFI × SPED que pulava o confronto de valor
+ * em silêncio (22/08): **ausência de alarme não pode ser indistinguível de
+ * "está tudo certo"**. Auditoria antiga, gravada antes do rito #293 existir,
+ * cai exatamente aqui.
+ *
+ * ⚠️ `sem-pdf` continua sendo desfecho LEGÍTIMO, não lacuna: há envio sem
+ * anexo (aviso de guia já paga), e não há o que arquivar.
+ */
+const semRegistroSharePoint = (e) => !e?.sharePoint?.status;
+const semRegistroBaixa = (e) => !e?.baixa?.status;
 
 /**
  * Motivo legível + ação pra cada pendência de SharePoint.
@@ -89,6 +104,9 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         total: lista.length,
         completos: 0,
         incompletos: 0,
+        // Envio sem registro de etapa: não dá para dizer que o rito fechou.
+        // Ele NÃO conta como completo nem como pendência — tem ação própria.
+        naoConferidos: [],
         porTipo: {},
         // causa → { qtd, acao, empresas: [...] }: a equipe ataca por CAUSA.
         pendencias: {},
@@ -107,8 +125,20 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         if (Number.isFinite(Number(e.valor))) painel.valorTotal += Number(e.valor);
 
         const problemas = [pendenciaSharePoint(e), pendenciaBaixa(e)].filter(Boolean);
-        if (problemas.length === 0) painel.completos++;
-        else painel.incompletos++;
+        const semRegistro = semRegistroSharePoint(e) || semRegistroBaixa(e);
+        if (problemas.length > 0) painel.incompletos++;
+        else if (semRegistro) {
+            const faltam = [
+                semRegistroSharePoint(e) ? 'arquivamento' : null,
+                semRegistroBaixa(e) ? 'baixa' : null,
+            ].filter(Boolean).join(' e ');
+            if (painel.naoConferidos.length < 200) {
+                painel.naoConferidos.push(
+                    `${e.empresaNome || e.empresaCnpj || '—'} · ${tipo} ${e.competencia || ''}`.trim()
+                    + ` (sem registro de ${faltam})`,
+                );
+            }
+        } else painel.completos++;
 
         for (const p of problemas) {
             const bucket = painel.pendencias[p.causa] || (painel.pendencias[p.causa] = { qtd: 0, acao: p.acao, empresas: [] });
@@ -135,11 +165,19 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
     painel.valorTotal = Math.round(painel.valorTotal * 100) / 100;
     // Farol: sem envio nenhum é 'vazio' (não é verde — não houve trabalho);
     // qualquer pendência é 'atencao'; tudo completo é 'ok'.
-    painel.farol = painel.total === 0 ? 'vazio' : (painel.incompletos > 0 ? 'atencao' : 'ok');
+    const naoConferidos = painel.naoConferidos.length;
+    painel.farol = painel.total === 0 ? 'vazio'
+        : (painel.incompletos > 0 || naoConferidos > 0) ? 'atencao' : 'ok';
     painel.resumo = painel.total === 0
         ? 'Nenhum imposto enviado nesta competência ainda.'
-        : painel.incompletos === 0
+        : painel.incompletos === 0 && naoConferidos === 0
             ? `${painel.total} envio(s), todos completos (arquivados e com baixa).`
-            : `${painel.completos} de ${painel.total} envio(s) completos — ${painel.incompletos} ficaram pela metade.`;
+            : painel.incompletos === 0
+                // Sem pendência, mas com envio que não dá para conferir: o
+                // absoluto some da frase — dizer "todos completos" aqui seria
+                // afirmar o que a rodada não estabeleceu.
+                ? `${painel.completos} de ${painel.total} envio(s) completos — ${naoConferidos} sem registro das etapas do rito.`
+                : `${painel.completos} de ${painel.total} envio(s) completos — ${painel.incompletos} ficaram pela metade`
+                  + `${naoConferidos ? ` e ${naoConferidos} sem registro das etapas` : ''}.`;
     return painel;
 }
