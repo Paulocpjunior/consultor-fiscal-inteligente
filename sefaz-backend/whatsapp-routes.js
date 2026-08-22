@@ -60,6 +60,9 @@ import {
 import { detectarAnexo, PASTA_MIDIA } from './whatsapp-import-lote.js';
 import { CANDIDATOS_SONDA as CANDIDATOS_SONDA_IG, interpretarSondaInstagram, concluirSondaInstagram, SOBRE_RESTRINGIR_ATENDENTES } from './instagram-sonda.js';
 import { configWebhook, faltasDaConfigWebhook } from './whatsapp-webhook.js';
+import {
+    idConversaDoParam, ehConversaInstagram, enviarTextoInstagram, ligarRecebimentoInstagram,
+} from './instagram-dm.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -467,6 +470,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 atribuidoA: x.atribuidoA || null,
                 transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
                 canalId: x.canalId || null,               // por qual número do escritório entrou
+                canal: x.canal || 'whatsapp',             // 'instagram' = DM (selo 📷 na tela)
                 situacao: x.status || 'aberta',
                 janela24hAte: x.janela24hAte || null,
                 ultimaMensagem: x.ultimaMensagem || null,
@@ -489,7 +493,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
 // e 500 docs de mensagem são leves — índice entra se o volume provar precisar.
 router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         const snap = await getDb().collection('whatsapp_mensagens')
             .where('conversaId', '==', numero).limit(500).get();
@@ -504,6 +508,9 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
                     nomeArquivo: x.midia.nomeArquivo || null,
                     mime: x.midia.mime || null,
                     baixada: Boolean(x.midia.storagePath),
+                    // Link direto (banner de fila; anexo de DM do Instagram,
+                    // que vem por URL da CDN da Meta e não passa pelo Storage).
+                    link: x.midia.link || null,
                 } : null,
                 timestamp: x.timestamp || x.recebidoEm || null,
                 statusEntrega: x.statusEntrega || null,
@@ -665,7 +672,7 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
 // fica gravado na mensagem (auditoria de atendimento).
 router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const texto = String(req.body?.texto ?? '').trim();
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         if (!texto) return res.status(400).json({ ok: false, error: 'Escreva a mensagem antes de enviar.' });
@@ -673,12 +680,17 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
 
         const db = getDb();
         const conv = await db.collection('whatsapp_conversas').doc(numero).get();
+        const ehIg = ehConversaInstagram(numero) || conv.data()?.canal === 'instagram';
         const ate = Date.parse(conv.data()?.janela24hAte || '');
         if (!Number.isFinite(ate) || ate <= Date.now()) {
             return res.status(422).json({
                 ok: false,
                 error: 'A janela de 24h desta conversa está fechada — texto livre não sai.',
-                acao: 'Envie por template aprovado (ou aguarde o cliente escrever, o que reabre a janela).',
+                // No Instagram NÃO existe template aprovado como saída — fora
+                // da janela só resta esperar o cliente escrever de novo.
+                acao: ehIg
+                    ? 'No Instagram não há template: aguarde o cliente escrever de novo (isso reabre a janela).'
+                    : 'Envie por template aprovado (ou aguarde o cliente escrever, o que reabre a janela).',
                 janelaFechada: true,
             });
         }
@@ -698,8 +710,19 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
             });
         }
 
-        const envio = await enviarTextoLivre({ para: numero, texto });
+        // 📷 DM do Instagram sai pela Graph da PÁGINA; WhatsApp, pela WABA.
+        // O resto do fluxo (gravação, auto-assumir, thread) é o MESMO.
+        const envio = ehIg
+            ? await enviarTextoInstagram({ para: numero, texto })
+            : await enviarTextoLivre({ para: numero, texto });
         if (!envio.ok) {
+            if (ehIg && envio.janelaFechada) {
+                return res.status(422).json({
+                    ok: false, error: 'A Meta recusou: a janela de resposta do Instagram fechou.',
+                    acao: 'Aguarde o cliente escrever de novo — no Instagram não há template.',
+                    janelaFechada: true,
+                });
+            }
             const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
             return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
         }
@@ -714,6 +737,7 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
             timestamp: agora,
             statusEntrega: 'enviado',   // o webhook promove pra entregue/lido
             enviadoPor: req.user?.email || null,
+            ...(ehIg ? { canal: 'instagram' } : {}),
         };
         await db.collection('whatsapp_mensagens').doc(envio.messageId).set(msg, { merge: true });
         await db.collection('whatsapp_conversas').doc(numero).set({
@@ -735,7 +759,7 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
 // pra sempre.
 router.post('/conversas/:numero/lida', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         await getDb().collection('whatsapp_conversas').doc(numero)
             .set({ naoLidas: 0 }, { merge: true });
@@ -839,8 +863,11 @@ router.delete('/atendimento-config/imagem-fila/:fila', requireAdmin, async (req,
 });
 
 /** Helper das ações: atualiza a conversa e responde o novo estado. */
+// idConversaDoParam em vez do replace(/\D/g,'') cru: o id do Instagram
+// (ig_178…) passa INTEIRO — o replace o transformaria em número de telefone
+// e a ação cairia na conversa errada.
 async function acaoConversa(req, res, patch, extra = {}) {
-    const numero = String(req.params.numero || '').replace(/\D/g, '');
+    const numero = idConversaDoParam(req.params.numero);
     if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
     const agora = new Date().toISOString();
     await getDb().collection('whatsapp_conversas').doc(numero).set(
@@ -862,7 +889,7 @@ async function acaoConversa(req, res, patch, extra = {}) {
 //     mas é DITA na resposta.
 router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const fila = String(req.body?.fila || '').trim().toLowerCase();
         const recado = String(req.body?.recado || '').trim();
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
@@ -893,12 +920,17 @@ router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
             texto: textoNota, midia: null, timestamp: agora, enviadoPor: quem,
         });
 
-        // Aviso ao cliente: melhor esforço, com o desfecho NOMEADO.
+        // Aviso ao cliente: melhor esforço, com o desfecho NOMEADO. No
+        // Instagram ele fica de fora (o texto sairia pela API da Página e a
+        // frase fala de "atendimento no WhatsApp") — a transferência em si
+        // funciona igual, e o desfecho diz o porquê em vez de sumir calado.
         let avisoCliente = 'desligado';
+        const ehIgFila = ehConversaInstagram(numero) || conv.data()?.canal === 'instagram';
+        if (ehIgFila) avisoCliente = 'indisponivel-no-instagram';
         try {
             const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
             const cfg = resolverConfig(cfgDoc.data());
-            if (cfg.avisarClienteTransferencia) {
+            if (cfg.avisarClienteTransferencia && !ehIgFila) {
                 const ate = Date.parse(conv.data()?.janela24hAte || '');
                 if (!Number.isFinite(ate) || ate <= Date.now()) {
                     avisoCliente = 'janela-fechada';
@@ -945,7 +977,7 @@ router.post('/conversas/:numero/assumir', requireAuth, async (req, res) => {
 // convite vai NOMEADO na resposta (enviada · janela-fechada · desligada).
 router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const s = String(req.body?.situacao || '').trim();
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         if (!['aberta', 'resolvida'].includes(s)) return res.status(400).json({ ok: false, error: 'situação deve ser aberta ou resolvida' });
@@ -974,8 +1006,13 @@ router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
         }, { merge: true });
 
         // Pesquisa de satisfação no encerramento (chave nasce desligada).
+        // No Instagram a pesquisa fica de FORA (a nota 1-5 é lida pelo
+        // webhook do WhatsApp; no IG a resposta cairia como DM comum e a nota
+        // nunca seria capturada — pedir e não ouvir é pior que não pedir).
         let avaliacao = 'desligada';
-        if (s === 'resolvida') {
+        const ehIgSit = ehConversaInstagram(numero) || conv.canal === 'instagram';
+        if (ehIgSit && s === 'resolvida') avaliacao = 'indisponivel-no-instagram';
+        if (s === 'resolvida' && !ehIgSit) {
             try {
                 const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
                 const cfg = resolverConfig(cfgDoc.data());
@@ -1011,7 +1048,7 @@ router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
 // Nota interna: vive na thread mas NUNCA sai pro cliente (direcao 'interna').
 router.post('/conversas/:numero/nota', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const texto = String(req.body?.texto ?? '').trim();
         if (!numero || !texto) return res.status(400).json({ ok: false, error: 'Escreva a nota.' });
         const agora = new Date().toISOString();
@@ -1026,7 +1063,7 @@ router.post('/conversas/:numero/nota', requireAuth, async (req, res) => {
 // Vincular contato ↔ cliente do cadastro (grava QUEM vinculou — é afirmação).
 router.post('/conversas/:numero/vincular', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const empresaId = String(req.body?.empresaId || '').trim();
         const empresaNome = String(req.body?.empresaNome || '').trim() || null;
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
@@ -1434,7 +1471,7 @@ async function podeVerConversa(db, user, numero) {
 
 router.get('/conversas/:numero/midia/:mensagemId', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const mensagemId = String(req.params.mensagemId || '').trim();
         if (!numero || !mensagemId) return res.status(400).json({ ok: false, error: 'conversa ou mensagem inválida' });
 
@@ -1487,10 +1524,20 @@ router.get('/conversas/:numero/midia/:mensagemId', requireAuth, async (req, res)
 // Enviar ANEXO na conversa (dentro da janela de 24h, como o texto livre).
 router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         const p = req.body || {};
         const base64 = String(p.base64 || '');
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        if (ehConversaInstagram(numero)) {
+            // Fase 1 do Instagram é TEXTO — subir mídia usa outra API (a da
+            // Página) e não foi construída ainda. Recusa nomeada > envio que
+            // parece ter saído e nunca chega.
+            return res.status(422).json({
+                ok: false,
+                error: 'Anexo em DM do Instagram ainda não é suportado — esta fase responde TEXTO.',
+                acao: 'Responda por texto; se o cliente precisar de arquivo, combine outro canal (e-mail ou WhatsApp).',
+            });
+        }
         if (!base64) return res.status(400).json({ ok: false, error: 'Escolha o arquivo antes de enviar.' });
 
         const db = getDb();
@@ -1589,7 +1636,7 @@ router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
 // composto — entra se o volume provar precisar.
 router.get('/conversas/:numero/cliente', requireAuth, async (req, res) => {
     try {
-        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        const numero = idConversaDoParam(req.params.numero);
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         const db = getDb();
         const contato = (await db.collection('whatsapp_contatos').doc(numero).get()).data() || {};
@@ -2277,6 +2324,44 @@ router.get('/instagram/sondar', requireAdmin, async (_req, res) => {
         return res.json({ ok: true, conclusao: concluirSondaInstagram(sondas), sondas, sobreRestringirAtendentes: SOBRE_RESTRINGIR_ATENDENTES });
     } catch (e) {
         console.error('[whatsapp/instagram/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📡 LIGA o recebimento das DMs (assina o webhook `instagram` no app + a
+// Página no app). Idempotente — religar só re-afirma. O estado persistido em
+// whatsapp_config/instagram é o que a ⚙️ → 📷 mostra ("ligado em ..., por
+// ..."), porque botão que não muda nada visível é beco (família do "Já
+// importado" sem estado).
+router.post('/instagram/ligar', requireAdmin, async (req, res) => {
+    try {
+        const r = await ligarRecebimentoInstagram();
+        if (!r.ok) return res.status(422).json({ ok: false, error: r.erro });
+        const estado = {
+            ligadoEm: new Date().toISOString(),
+            ligadoPor: req.user?.email || null,
+            appId: r.appId,
+            callback: r.callback,
+            pageId: r.pageId,
+            igId: r.igId,
+            igUsername: r.igUsername,
+        };
+        await getDb().collection('whatsapp_config').doc('instagram').set(estado, { merge: true });
+        return res.json({ ok: true, ...estado });
+    } catch (e) {
+        console.error('[whatsapp/instagram/ligar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Estado do recebimento (a ⚙️ → 📷 lê ao abrir — sem isso o 📡 não teria como
+// dizer se já foi clicado).
+router.get('/instagram/estado', requireAdmin, async (_req, res) => {
+    try {
+        const doc = await getDb().collection('whatsapp_config').doc('instagram').get();
+        return res.json({ ok: true, estado: doc.exists ? doc.data() : null });
+    } catch (e) {
+        console.error('[whatsapp/instagram/estado]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

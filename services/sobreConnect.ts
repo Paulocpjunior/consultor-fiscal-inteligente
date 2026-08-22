@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-21';
+export const SOBRE_VERSAO = '2026-08-22';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -245,10 +245,28 @@ export const MANUAL: PassoManual[] = [
         ],
         atencao: 'Não está enxergando uma fila que deveria? É cadastro: peça ao admin em ⚙️ → 👥 Atendentes.',
     },
+    {
+        titulo: '13. DM do Instagram (selo 📷)',
+        passos: [
+            'Mensagem no Instagram da SP (@spassessoriacontabil) entra na MESMA lista, com o selo 📷 — cai na Recepção, sem bot: quem responde é gente, direto na thread.',
+            'A resposta é por TEXTO, dentro da janela que a Meta dá. Janela fechada? No Instagram NÃO existe template — aguarde o cliente escrever de novo (isso reabre).',
+            'Anexo e áudio de SAÍDA ainda não saem pelo Instagram (o botão nem aparece). Precisa mandar arquivo? Combine outro canal com o cliente (e-mail ou WhatsApp).',
+            'Transferir, assumir, nota interna e encerrar funcionam igual ao WhatsApp — só a pesquisa de avaliação e o aviso automático de transferência não saem no Instagram.',
+        ],
+        atencao: 'O recebimento é ligado UMA vez pelo admin (⚙️ → 📷, botão 📡). Se DM não estiver chegando, é lá que se confere.',
+    },
 ];
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-08-22',
+        itens: [
+            '📷 DMs do Instagram no MESMO inbox: mensagem no @spassessoriacontabil entra como conversa com o selo 📷, cai na triagem da Recepção e responde-se por TEXTO na própria tela — fila, assumir, transferir, nota interna e relatório funcionam igual. O bot NÃO roda nas DMs (o menu numérico é do WhatsApp); quem conduz é gente.',
+            '📡 O recebimento das DMs nasce DESLIGADO: o admin liga em ⚙️ → 📷 Instagram, no botão "Ligar recebimento das DMs". Antes do clique, nada muda.',
+            '⏱ Janela do Instagram: fora da janela que a Meta dá, NÃO existe template — a tela diz isso e a saída é aguardar o cliente escrever de novo. Anexo e áudio de SAÍDA no Instagram ficam pra próxima fase (o botão nem aparece).',
+        ],
+    },
     {
         data: '2026-08-21',
         itens: [
