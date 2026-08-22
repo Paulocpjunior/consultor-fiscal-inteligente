@@ -86,3 +86,35 @@ export function formasDaCompetencia(comp) {
     if (cru && !formas.includes(cru)) formas.push(cru);
     return formas;
 }
+
+/**
+ * 🚨 A COMPETÊNCIA ENTRAVA NA GERAÇÃO SEM CONFERÊNCIA DE FORMA — e o arquivo
+ * saía VAZIO dizendo que a empresa não teve movimento (22/08).
+ *
+ * As portas do **EFD-Contribuições** e do **EFD ICMS/IPI** só perguntavam se a
+ * competência EXISTIA. Chegando `07/2026` ou `202607`, o
+ * `where('competencia','==',…)` de `documentos_fiscais` — que grava sempre
+ * `AAAA-MM` — devolvia **ZERO documentos**; o orquestrador avisava *"não tem
+ * documentos fiscais no período; arquivo será gerado com estrutura mínima"* e
+ * **o arquivo saía mesmo assim**, declarando nada à Receita.
+ *
+ * 🔴 É a ausência PLAUSÍVEL no lugar mais caro: empresa sem movimento é caso
+ * legítimo, então o aviso não parece defeito. Mesma família do caso HYPE
+ * (17/08), em que a consulta por igualdade de competência liberou a MESMA
+ * cobrança duas vezes.
+ *
+ * ⚠️ **Normaliza em vez de recusar as outras formas** — `07/2026` e `202607`
+ * dizem a mesma competência, e é para isso que o dono existe. O que RECUSA é o
+ * ILEGÍVEL: competência chutada é arquivo entregue no mês errado.
+ *
+ * @returns {{ok: true, competencia: string} | {ok: false, erro: string}}
+ */
+export function competenciaParaGerarArquivo(bruta) {
+    const n = normalizarCompetencia(bruta);
+    if (n) return { ok: true, competencia: n };
+    return {
+        ok: false,
+        erro: `Competência inválida: "${String(bruta ?? '')}". Use AAAA-MM (ex.: 2026-07). `
+            + 'Sem competência legível o arquivo sairia VAZIO — e vazio, aqui, é uma afirmação à Receita.',
+    };
+}

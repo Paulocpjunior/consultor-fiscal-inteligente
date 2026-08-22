@@ -5,6 +5,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A COMPETÊNCIA ENTRAVA NA GERAÇÃO SEM CONFERÊNCIA DE FORMA — e o arquivo
+  saía VAZIO dizendo que a empresa não teve movimento** (22/08). As portas do
+  **EFD-Contribuições** e do **EFD ICMS/IPI** só perguntavam se a competência
+  EXISTIA (`if (!competencia) …`). Chegando `07/2026` ou `202607`, o
+  `where('competencia','==',…)` de `documentos_fiscais` — que grava sempre
+  `AAAA-MM` — devolvia **ZERO documentos**; o orquestrador empilhava o aviso
+  *"não tem documentos fiscais no período; arquivo será gerado com estrutura
+  mínima"* e **o arquivo saía mesmo assim**, declarando nada à Receita.
+  🔴 **É a ausência PLAUSÍVEL no lugar mais caro**: empresa sem movimento é caso
+  legítimo, então aquele aviso não parece defeito — parece a verdade. Mesma
+  família do caso HYPE (17/08), em que a consulta por igualdade de competência
+  achou ZERO envios e liberou a MESMA cobrança.
+  ⚠️ **A régua NORMALIZA em vez de recusar as outras formas** — `07/2026` e
+  `202607` dizem a mesma competência, e é para isso que o dono existe
+  (`competenciaParaGerarArquivo`, em `competencia.js`). O que **RECUSA** é o
+  ILEGÍVEL, com a consequência na frase: competência chutada é arquivo entregue
+  no mês errado.
+  📌 **E entrou nas DUAS famílias no MESMO PR** — meia trava protege o cliente
+  que já quebrou e deixa o próximo descoberto, agora do lado da PORTA. No EFD
+  ICMS/IPI os **três** campos de período passam (o trimestral usa
+  início+fim), e o **range compara STRING**, então forma diferente não filtra
+  "quase certo": não casa com nada.
+  ⚠️ E o **nome do arquivo** saía da forma CRUA da requisição — um `07/2026`
+  viraria nome de arquivo com barra.
+  🐛 A trava de nomes do backend (20/08) pegou um import que faltou nesta mesma
+  correção, antes de subir.
+
 - **📌 TESTE CRUZADO PROVA OS DOIS QUE VOCÊ CONHECE; SÓ A VARREDURA IMPEDE O
   TERCEIRO** (22/08, fechando a classe da DATA). Pela manhã o gerador do SPED e
   o do `.FML` foram corrigidos e travados por um teste que alimenta os DOIS com
