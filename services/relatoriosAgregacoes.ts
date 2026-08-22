@@ -20,7 +20,13 @@ import { correlacionarCfop, cfopDoLancamento } from '../sefaz-backend/cfop-corre
 // status; merge stub→nota ressuscitava a cancelada). docCancelado decide na
 // LEITURA olhando também eventos[]/cStat — bug 11/08, MV LIDER 639: cancelada
 // contada no Livro de Saídas e no fechamento.
-import { docCancelado, direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+import {
+    docCancelado, direcaoEfetivaDoc,
+    // 🚨 O ISS chega em QUATRO formas e este relatório lia UMA (`valores.*`,
+    // que só o import pelo NAVEGADOR grava). Toda NFS-e do portal, do ABRASF
+    // e do ADN imprimia ISS 0,00 — indistinguível de "não teve ISS".
+    issDoDocumento, issRetidoDoDocumento,
+} from '../sefaz-backend/xml-metadata-helper.js';
 // RÉGUA ÚNICA das retenções federais nas DUAS formas (achatada do portal ×
 // objeto do XML): o CSV do portal grava `valorIr`/`valorInss`/`valorCsll` na
 // RAIZ, e este relatório só lia `valores.*` — 67 notas da CLUDE com IR/INSS
@@ -30,6 +36,13 @@ import { lerRetencoesFederaisDoDoc } from '../sefaz-backend/reinf-retencoes-pj.j
 // base é o TOTAL das três (CSRF); PIS 1,65% + COFINS 7,60% é o tributo da
 // OPERAÇÃO do prestador, não retenção (casos CLINIPAR e ATLAS, 07/08).
 import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coerencia.js';
+// 🚨 "É NOTA DE SERVIÇO?" — o rótulo `tipo === 'NFSe'` é a forma MAIS RARA.
+// A NFS-e do **ADN** (NFS-e Nacional) grava `tipo: 'nfseNacional'` e a do
+// portal por CSV/TXT grava `prestador`/`tomador`. Perguntando pelo rótulo
+// cru, esses documentos sumiam de TRÊS relatórios de uma vez — ISS destacado,
+// Serviços tomados/prestados e **Retenções**. É o achado (2) de 21/08, que
+// fechou no bloco A do EFD-Contribuições e ficou vivo aqui.
+import { ehNotaDeServico } from '../sefaz-backend/sped-selecao-documentos.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -176,9 +189,14 @@ export function resumoImpostos(docs: DocumentoFiscal[]): ResumoImpostos {
     };
     for (const d of docs) {
         if (!docValido(d)) continue;
-        if (d.tipo === 'NFSe') {
-            if (d.direcao === 'saida') out.iss.prestados = r2(out.iss.prestados + (d.valores?.iss || 0));
-            else out.iss.retidoTomados = r2(out.iss.retidoTomados + (d.valores?.valorIssRetido || 0));
+        // ⚠️ Quem responde "é serviço?" é o DONO — e ele é o mesmo que separa
+        // o bloco A do C. O ISS de toda NFS-e do ADN saía ZERO daqui, e zero
+        // num relatório de imposto destacado é indistinguível de "não teve".
+        if (ehNotaDeServico(d)) {
+            const iss = issDoDocumento(d);
+            const retido = issRetidoDoDocumento(d);
+            if (direcaoDoc(d) === 'saida') out.iss.prestados = r2(out.iss.prestados + (Number.isFinite(iss) ? iss : 0));
+            else out.iss.retidoTomados = r2(out.iss.retidoTomados + (Number.isFinite(retido) ? retido : 0));
             continue;
         }
         const icms = (d.itens || []).reduce((a, i) => a + (i.vICMS || 0), 0) || d.totais?.vICMS || 0;
@@ -240,7 +258,10 @@ export interface LinhaServico {
 
 export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
     return docs
-        .filter(d => docValido(d) && d.tipo === 'NFSe' && d.direcao === direcao)
+        // 🔴 Era `d.tipo === 'NFSe'`: a NFS-e do ADN (`tipo: 'nfseNacional'`)
+        // sumia das TRÊS abas que saem daqui — Serviços tomados, prestados e
+        // **Retenções**, que é a que alimenta a conferência do R-4020.
+        .filter(d => docValido(d) && ehNotaDeServico(d) && direcaoDoc(d) === direcao)
         .map(d => {
             const parte: any = direcao === 'saida' ? (d.tomador || d.destinatario) : (d.prestador || d.emitente);
             const v = d.valores || {};
@@ -259,8 +280,10 @@ export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'sa
                 doc: String(parte?.cnpjCpf || '').replace(/\D/g, ''),
                 municipio: parte?.municipio || '',
                 base,
-                iss: v.iss || 0,
-                issRetido: v.valorIssRetido || 0,
+                // As quatro formas do ISS, lidas pelo DONO — era aqui que a
+                // coluna saía 0,00 em toda nota que não veio pelo navegador.
+                iss: Number.isFinite(issDoDocumento(d)) ? issDoDocumento(d) : 0,
+                issRetido: Number.isFinite(issRetidoDoDocumento(d)) ? issRetidoDoDocumento(d) : 0,
                 // PIS/COFINS da OPERAÇÃO não são retenção: fora das colunas e
                 // dos totais, mostrados à parte (senão o relatório afirma
                 // retenção que ninguém reteve — o erro que o R-4020 já barra).

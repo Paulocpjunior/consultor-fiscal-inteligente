@@ -102,6 +102,40 @@ const REGUAS_VIGIADAS: Regua[] = [
         ],
     },
     {
+        nome: 'O ISS do documento — QUATRO formas, uma resposta',
+        dono: 'sefaz-backend/xml-metadata-helper.js',
+        comoUsar: "import { issDoDocumento, issRetidoDoDocumento } from 'sefaz-backend/xml-metadata-helper.js'",
+        porque: '22/08: a varredura mostrou que **só o import pelo NAVEGADOR** grava o objeto `valores{}` — o '
+            + 'portal de SP (CSV e WS) grava `valorIss`/`issDevido` achatados, o ABRASF grava `totais.vISS` e '
+            + 'o ADN grava `valorIss`. Três leitores perguntavam só por `valores.iss`: o relatório de '
+            + '**ICMS/IPI/ISS destacados** somava ISS 0,00, as abas de Serviços e **Retenções** imprimiam a '
+            + 'coluna zerada, e a tese de recuperação do ISS respondia "sem_oportunidade" sem ter lido nota '
+            + 'nenhuma. E a sequência certa já existia — copiada em DOIS lugares (`iss-carteira.js` e '
+            + '`issSpApuracao.ts`), que é como a régua começa a divergir.',
+        assinaturas: [
+            // A sequência das formas reimplementada: `valorIss` ou `issDevido`
+            // ao lado de `valores.iss` / `totais.vISS`.
+            /valorIss\b[^\n]*\bissDevido\b/,
+            /issDevido\b[^\n]*\bvISS\b/,
+        ],
+        permitido: [
+            // Os IMPORTADORES: eles ESCREVEM as formas (é deles que a régua
+            // nasce). Ler o próprio parse não é reimplementar a leitura.
+            'sefaz-backend/nfse-sp-csv-importer.js',
+            'sefaz-backend/nfse-sp-importer.js',
+            'sefaz-backend/nfse-nacional-dfe-importer.js',
+            'services/notaDigitada.ts',
+            'services/xmlParserService.ts',
+            // Projeções `.select()`: elas LISTAM os campos que a régua precisa,
+            // não decidem valor. Tirá-los da projeção é que cegaria a régua.
+            'sefaz-backend/rotina-fiscal-routes.js',
+            'sefaz-backend/nfse-sp-routes.js',
+            // Parser do PDF do e-Fiscal: `valorIss` ali é COLUNA do relatório
+            // impresso, não campo de documento gravado.
+            'services/efiscalPdfParserService.ts',
+        ],
+    },
+    {
         nome: 'A leitura da FICHA por competência — mesReferencia tem TRÊS formas',
         dono: 'sefaz-backend/ipi-varredura.js',
         comoUsar: "import { acharFichaCompetencia } from 'sefaz-backend/ipi-varredura.js'",
@@ -574,6 +608,22 @@ function arquivosDeProducao(): string[] {
 
 const ARQUIVOS = arquivosDeProducao();
 
+/**
+ * 🚨 MENÇÃO EM PROSA NÃO É SEGUNDA CÓPIA — a varredura lê CÓDIGO.
+ *
+ * A trava lia o arquivo INTEIRO, comentário incluído. Enquanto as assinaturas
+ * eram formas de código (`export function normalizarCompetencia`) isso nunca
+ * apareceu; a régua do ISS, que casa nomes de CAMPO, acusou na hora os três
+ * comentários que EXPLICAM a correção — ou seja, ela gritaria justamente sobre
+ * o arquivo já corrigido, mandando apagar a explicação para o teste passar.
+ *
+ * É a mesma decisão que a varredura de declarações órfãs já tinha tomado
+ * ("comentário fora: menção em prosa não é uso"), e a razão é a de sempre:
+ * trava que grita sem motivo é trava que a equipe desliga.
+ */
+const semComentarios = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
 describe('MATA-BURRO: régua fiscal mora num lugar só', () => {
     it('a varredura enxerga o código de produção (se ela vier vazia, a trava é falsa)', () => {
         // Trava da trava: um teste que não lê nada passa sempre, e passar
@@ -593,7 +643,7 @@ describe('MATA-BURRO: régua fiscal mora num lugar só', () => {
                 if (arquivo === donoResolvido) continue;
                 const rel = relative(RAIZ, arquivo).split('\\').join('/');
                 if (regua.permitido?.includes(rel)) continue;
-                const conteudo = readFileSync(arquivo, 'utf8');
+                const conteudo = semComentarios(readFileSync(arquivo, 'utf8'));
                 for (const assinatura of regua.assinaturas) {
                     if (assinatura.test(conteudo)) {
                         infratores.push(`${rel}  (casou com ${assinatura})`);

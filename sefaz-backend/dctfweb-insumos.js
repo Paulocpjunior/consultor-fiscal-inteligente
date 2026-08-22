@@ -20,6 +20,10 @@
 //   indeterminado       → a consulta falhou — diz o motivo, NÃO afirma nada
 // ============================================================================
 
+import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
+import { ehNotaDeServico } from './sped-selecao-documentos.js';
+import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
+
 export const DEPARTAMENTO_INSUMO = {
     esocial: { departamento: 'dp-folha', rotulo: '👥 DP/Folha — eSocial' },
     reinf: { departamento: 'contabil', rotulo: '📊 Contábil — EFD-Reinf' },
@@ -148,21 +152,58 @@ export function vereditoInsumos(selos, opts = {}) {
 
 /**
  * Conta as NFS-e tomadas COM retenção na competência — a régua é a MESMA do
- * R-4020 (valores.ir/inss/csll/pis/cofins/valorIssRetido > 0). Recebe os docs
- * já lidos; não consulta nada (núcleo puro).
+ * R-4020. Recebe os docs já lidos; não consulta nada (núcleo puro).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 🚨 ELA LIA UMA FORMA SÓ — e por isso a TRAVA dizia VERDE justamente quando
+ * havia retenção
+ *
+ * Duas leituras cruas, e as duas produzem a MESMA ausência plausível:
+ *
+ *  ① **as retenções** — o importador do CSV do portal de SP grava
+ *    `valorIr`/`valorInss`/`valorCsll` **ACHATADOS na raiz** e esta contagem
+ *    lia só `valores.*`. Em toda NFS-e tomada daquele trilho (que é o trilho
+ *    de SP) o total dava **ZERO**;
+ *  ② **o rótulo** — `d.tipo !== 'NFSe'` é a forma mais rara: a NFS-e do
+ *    **ADN** (NFS-e Nacional) grava `tipo: 'nfseNacional'`, então ela sumia
+ *    inteira. É o achado (2) de 21/08, que fechou no bloco A e ficou vivo
+ *    aqui.
+ *
+ * 🔴 **O CUSTO É O PIOR POSSÍVEL, porque esta é a TRAVA do fechamento**: com
+ * zero notas, `seloReinf` responde `sem-movimento`, `vereditoInsumos` responde
+ * **'pronto'** — *"os três insumos confirmados, a DCTFWeb pode ser fechada sem
+ * retrabalho"* — e a competência fecha SEM as retenções do Reinf. Retificação
+ * na certa, dita como via livre.
+ *
+ * ⚠️ E a ressalva agravava: ela mandava *"notas antigas… reimportar o XML
+ * confirma"* sobre nota **atual e completa**, cujo dado estava do lado, no
+ * campo achatado. Aviso que aponta a ação errada gasta o tempo de quem lê.
+ *
+ * ⚠️ **A leitura de `status` continua CRUA, e isso é decisão declarada** (a
+ * mesma exceção da varredura de cancelamento): na NFS-e não existe evento —
+ * quem informa o cancelamento é o próprio documento, então ali o campo é a
+ * fonte, não uma segunda régua.
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 export function contarRetencoesTomadas(docs, competencia) {
     let totalNotasComRetencao = 0;
     let semCamposGravados = 0;
     for (const d of docs || []) {
-        if (!d || d.tipo !== 'NFSe' || d.direcao !== 'entrada') continue;
+        if (!d || !ehNotaDeServico(d) || direcaoEfetivaDoc(d) !== 'entrada') continue;
         if (competencia && d.competencia !== competencia) continue;
         if (['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d.status)) continue;
         const v = d.valores || {};
-        const federaisGravados = v.ir !== undefined || v.inss !== undefined || v.csll !== undefined;
+        const fed = lerRetencoesFederaisDoDoc(d);
+        const federaisGravados = fed.ir !== undefined || fed.inss !== undefined
+            || fed.csllOuTotal !== undefined;
         if (!federaisGravados) semCamposGravados += 1;
-        const retido = (v.valorIssRetido || 0) + (v.ir || 0) + (v.inss || 0) + (v.csll || 0)
-            + (v.issRetido === true ? 0.01 : 0);
+        // ⚠️ `csllOuTotal` mantém o NOME HONESTO do dono: no export do portal
+        // este campo é o TOTAL das três federais, não a CSLL. Aqui só se
+        // pergunta "houve retenção?", então somar o total não distorce nada —
+        // o rateio é problema do R-4020, e é lá que ele está resolvido.
+        const retido = (d.valorIssRetido ?? v.valorIssRetido ?? 0)
+            + (fed.ir ?? 0) + (fed.inss ?? 0) + (fed.csllOuTotal ?? 0)
+            + ((d.issRetido ?? v.issRetido) === true ? 0.01 : 0);
         if (retido > 0) totalNotasComRetencao += 1;
     }
     return { totalNotasComRetencao, semCamposGravados };

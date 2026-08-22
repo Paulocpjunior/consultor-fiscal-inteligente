@@ -20,7 +20,8 @@ import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { parseCsvNftsSp } from './nfts-sp-csv-parser.js';
 import { cruzarServicosComNfts } from './nfts-cruzamento.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, issRetidoDoDocumento } from './xml-metadata-helper.js';
+import { ehNotaDeServico } from './sped-selecao-documentos.js';
 
 const router = express.Router();
 const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -48,8 +49,11 @@ async function carregarServicosTomados(db, empresaId, competencia) {
     snap.forEach((s) => {
         const d = s.data() || {};
         if (docCancelado(d)) return;
-        if (d.tipo !== 'NFSe') return;
-        if (d.direcao !== 'entrada') return;
+        // 🚨 `d.tipo !== 'NFSe'` era a forma MAIS RARA: a NFS-e do ADN grava
+        // `tipo: 'nfseNacional'` e sumia da declaração de serviços TOMADOS —
+        // que é justamente onde entra o prestador de fora do município.
+        if (!ehNotaDeServico(d)) return;
+        if (direcaoEfetivaDoc(d) !== 'entrada') return;
         const parte = d.prestador || d.emitente || {};
         const v = d.valores || {};
         out.push({
@@ -61,7 +65,8 @@ async function carregarServicosTomados(db, empresaId, competencia) {
             codMunIBGE: parte.codMunIBGE || d.codMunIBGE || '',
             origem: d.origem || '',
             base: v.baseCalculo ?? d.valorTotal ?? 0,
-            issRetido: v.valorIssRetido || 0,
+            // O ISS retido também tem quatro formas — lido pelo DONO.
+            issRetido: Number.isFinite(issRetidoDoDocumento(d)) ? issRetidoDoDocumento(d) : 0,
         });
     });
     return out;
