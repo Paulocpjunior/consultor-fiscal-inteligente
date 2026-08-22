@@ -33,6 +33,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem,
+    unidadeDoItem,
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
@@ -218,7 +219,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                     codItem,
                     descricao: item.xProd || item.descricao || codItem,
                     codBarra: item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : '',
-                    unidade: (item.uCom || item.unidade || 'UN').toUpperCase().substring(0, 6),
+                    unidade: unidadeDoItem(item),
                     // TIPO_ITEM pela régua: serviço é '09' (Guia 3.2.3). A
                     // MERCADORIA continua '00' porque a destinação real
                     // (matéria-prima, produto acabado) não está no XML — ver a
@@ -231,7 +232,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                     cest: item.CEST || item.cest || '',
                 });
             }
-            const unidade = (item.uCom || item.unidade || 'UN').toUpperCase().substring(0, 6);
+            const unidade = unidadeDoItem(item);
             if (!unidadesMap.has(unidade)) {
                 unidadesMap.set(unidade, {
                     codigo: unidade,

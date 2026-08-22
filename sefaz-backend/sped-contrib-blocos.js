@@ -24,7 +24,7 @@ import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
-    serieDoDocumento, codItemDoItem,
+    serieDoDocumento, codItemDoItem, unidadeDoItem,
 } from './sped-selecao-documentos.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import {
@@ -638,7 +638,7 @@ export function buildBlocoC_Contrib(dados) {
                 fmt.sanitizeString(codItemDoItem(item), 60),            //  3 COD_ITEM
                 fmt.sanitizeString(item.xProd || item.descricao || '', 255), // 4 DESCR_COMPL
                 fmt.formatValue(item.qCom || item.quantidade || 1, 5), //  5 QTD
-                fmt.sanitizeString((item.uCom || item.unidade || 'UN').toUpperCase(), 6), // 6 UNID
+                unidadeDoItem(item),                                    //  6 UNID
                 fmt.formatValue(vlItem),                              //  7 VL_ITEM
                 fmt.formatValue(item.vDesc || 0),                     //  8 VL_DESC
                 IND_MOV_COM_MOVIMENTACAO,                             //  9 IND_MOV

@@ -83,3 +83,13 @@ export function serieDoDocumento(nota: unknown): string;
  * item ÓRFÃO declarado e não referenciado (PWR). Nunca devolve vazio.
  */
 export function codItemDoItem(item: unknown): string;
+
+/**
+ * UNID na forma canônica do 0190 (maiúscula, sem espaço nas pontas, 6 chars).
+ * Devolve '' para ausência — o default 'UN' é decisão de cada registro, e o
+ * H010 segue sem default de propósito.
+ */
+export function normalizarUnidade(u: unknown): string;
+
+/** A unidade do item de documento, já na forma que o 0190 cadastra. */
+export function unidadeDoItem(item: unknown): string;

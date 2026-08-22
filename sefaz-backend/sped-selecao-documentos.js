@@ -40,6 +40,7 @@
 // o C100, sem filhos — ela ENTRA.
 // ============================================================================
 
+import * as fmt from './sped-fiscal-format.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { isResumoSchema, isResumoTipoDoc } from './gravacao-nfe-regua.js';
 import { docCancelado } from './xml-metadata-helper.js';
@@ -340,4 +341,41 @@ export function codItemDoItem(item) {
     const direto = i.cProd || i.codigo || i.cFiscal;
     if (direto) return String(direto);
     return `ITEM-${i.nItem || '?'}`;
+}
+
+/**
+ * UNID — a outra CHAVE do mesmo par: ela liga o item ao cadastro do **0190**.
+ *
+ * 🚨 MESMA DOENÇA DO `COD_ITEM`, um campo adiante (22/08). O 0190 é a Tabela de
+ * Unidade de Medida; C170, H010 e o UNID_INV do 0200 apontam para ela — e as
+ * cinco escritas normalizavam de jeitos diferentes:
+ *
+ *   · **0190** (os dois orquestradores): `.toUpperCase().substring(0,6)` —
+ *     **sem trim**, então `'UN '` do XML era cadastrado COM o espaço;
+ *   · **C170** (as duas famílias): `sanitizeString(upper, 6)` — **com trim**,
+ *     referenciando `'UN'`. Cadastro `'UN '` × referência `'UN'`: o C170
+ *     aponta para unidade que o 0190 não tem, e o 0190 declara uma que
+ *     ninguém referencia. As DUAS recusas do PVA, de uma vez;
+ *   · **UNID_INV do 0200**: `sanitizeString(item.unidade || 'UN', 6)` — **sem
+ *     `toUpperCase`**, então `'un'` no cadastro do item nunca casava com o
+ *     `'UN'` do 0190;
+ *   · e a rota do editor tinha uma quarta forma (`String(...).slice(0,6)`).
+ *
+ * O próprio validador do app já sabia a consequência — *"C170: UNID 'X' nao
+ * cadastrada no 0190"* —, mas ele roda DEPOIS, sobre o arquivo pronto.
+ *
+ * ⚠️ **Devolve '' para ausência, de propósito**: o default `'UN'` continua onde
+ * já estava (0190, 0200 e C170), e o **H010 segue sem default** — inventar a
+ * unidade do inventário mudaria a leitura da QUANTIDADE, que é outra ordem de
+ * erro. O que esta régua uniformiza é a FORMA da chave, não a política de
+ * ausência.
+ */
+export function normalizarUnidade(u) {
+    return fmt.sanitizeString(String(u ?? '').toUpperCase(), 6);
+}
+
+/** A unidade do item de documento, já na forma que o 0190 cadastra. */
+export function unidadeDoItem(item) {
+    const i = item || {};
+    return normalizarUnidade(i.uCom || i.unidade) || 'UN';
 }

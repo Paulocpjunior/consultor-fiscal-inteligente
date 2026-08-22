@@ -20,6 +20,9 @@
 
 import * as fmt from './sped-fiscal-format.js';
 import { planejarBlocoH, dataInventario, inventarioExigido } from './sped-bloco-h.js';
+// UNID é CHAVE do 0190 — a forma dela é a MESMA em todo registro que a
+// referencia, senão o H010 aponta para unidade que a Tabela não cadastrou.
+import { normalizarUnidade } from './sped-selecao-documentos.js';
 
 /**
  * Constroi o Bloco H inteiro.
@@ -70,7 +73,7 @@ export function buildBlocoH(dados) {
             linhas.push(fmt.buildLine([
                 'H010',
                 fmt.sanitizeString(item.codItem, 60),
-                fmt.sanitizeString(item.unidade, 6),
+                normalizarUnidade(item.unidade),
                 fmt.formatValue(item.qtd, 3),
                 fmt.formatValue(item.vlUnit, 6),
                 fmt.formatValue(item.vlItem, 2),
