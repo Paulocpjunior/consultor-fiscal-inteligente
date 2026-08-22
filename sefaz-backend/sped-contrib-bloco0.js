@@ -18,6 +18,12 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+// 0150 e 0190 têm o MESMO leiaute nas duas famílias, e o aviso do COD_MUN
+// (recusa de 18/08) vivia só aqui — o EFD ICMS/IPI ficava mudo sobre o
+// MESMO registro. Dono único.
+import {
+    build0150, build0190, avisoParticipantesSemMunicipio,
+} from './sped-bloco0-cadastros.js';
 // IND_REG_CUM sai do que o arquivo PRODUZIU (F550 × blocos A/C/D).
 import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
 // TIPO_ITEM/NCM do item de serviço — régua única, a mesma que os dois
@@ -65,11 +71,7 @@ function buildBloco0Contrib(dados) {
     // O que o app passa a fazer é DENUNCIAR na geração, com a lista e a
     // contagem, em vez de deixar a descoberta para o PVA depois do upload.
     // (Regra de 06/08: cadastro faltando é ALERTA, nunca contorno.)
-    const semMunicipio = [];
     for (const p of dados.participantes || []) {
-        if (!String(p?.codMunIBGE || '').replace(/\D/g, '')) {
-            semMunicipio.push(String(p?.nome || p?.codPart || '(sem nome)'));
-        }
         linhas.push(build0150(p));
     }
 
@@ -83,16 +85,8 @@ function buildBloco0Contrib(dados) {
         linhas.push(build0200(item));
     }
 
-    if (semMunicipio.length && Array.isArray(dados.warnings)) {
-        dados.warnings.push(
-            `Bloco 0: ${semMunicipio.length} participante(s) sem código de município (COD_MUN) — o PVA `
-            + `recusa cada um: ${semMunicipio.slice(0, 8).join(', ')}`
-            + `${semMunicipio.length > 8 ? ` e mais ${semMunicipio.length - 8}` : ''}. `
-            + 'O app NÃO preenche: inventar município é afirmar o domicílio de terceiro, e o "9999999" '
-            + 'que o PVA sugere significa NÃO domiciliado no Brasil. Complete no cadastro do '
-            + 'participante ou ajuste no arquivo antes de transmitir.',
-        );
-    }
+    const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
+    if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
     const totalBloco = linhas.length + 1;
@@ -281,40 +275,7 @@ function build0140(dados) {
     ]);
 }
 
-/**
- * 0150 — Tabela de Cadastro do Participante
- */
-function build0150(p) {
-    const cnpjStr = fmt.sanitizeCnpjCpf(p.cnpj || '');
-    const cpfStr = fmt.sanitizeCnpjCpf(p.cpf || '');
-    const ieStr = cpfStr ? '' : fmt.sanitizeString(p.ie || '', 14);
-    return fmt.buildLine([
-        '0150',
-        fmt.sanitizeString(p.codPart, 60),
-        fmt.sanitizeString(p.nome, 100),
-        '1058',  // Brasil
-        cnpjStr,
-        cpfStr,
-        ieStr,
-        fmt.sanitizeString(p.codMunIBGE || '', 7),
-        '',  // SUFRAMA
-        fmt.sanitizeString(p.logradouro || '', 60),
-        fmt.sanitizeString(p.numero || '', 10),
-        fmt.sanitizeString(p.complemento || '', 60),
-        fmt.sanitizeString(p.bairro || '', 60),
-    ]);
-}
 
-/**
- * 0190 — Identificacao das Unidades de Medida
- */
-function build0190(u) {
-    return fmt.buildLine([
-        '0190',
-        fmt.sanitizeString(u.codigo, 6),
-        fmt.sanitizeString(u.descricao || u.codigo, 100),
-    ]);
-}
 
 /**
  * 0200 — Tabela de Identificacao do Item
