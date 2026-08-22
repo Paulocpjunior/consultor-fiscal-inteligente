@@ -21,7 +21,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
-    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram,
+    estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
@@ -383,6 +383,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [igEstado, setIgEstado] = useState<EstadoInstagram | null>(null);
     const [igEventos, setIgEventos] = useState<EventosInstagram | null | undefined>(undefined);
     const [igAssinaturas, setIgAssinaturas] = useState<AssinaturasInstagram | null>(null);
+    const [igVerificacao, setIgVerificacao] = useState<VerificacaoWebhook | null>(null);
     const [igEstadoLido, setIgEstadoLido] = useState(false);
     const [igLigando, setIgLigando] = useState(false);
     const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
@@ -390,7 +391,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
         (async () => {
             const r = await estadoInstagram();
-            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgEstadoLido(true); }
+            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgVerificacao(r.verificacao ?? null); setIgEstadoLido(true); }
         })();
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
@@ -2001,6 +2002,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 </ol>
                                             </div>
                                         )
+                                    )}
+
+                                    {/* 📋 Último aperto de mão no GET do webhook: navegador ×
+                                        Meta com token errado × Meta ok — os três viram o mesmo
+                                        "Forbidden" pra quem olha de fora (caso de 22/08). */}
+                                    {igEstado && igVerificacao && (
+                                        <p className={`text-[11px] ${igVerificacao.ok ? 'text-emerald-700 dark:text-emerald-300' : igVerificacao.pareceNavegador ? 'text-slate-500 dark:text-slate-400' : 'text-red-700 dark:text-red-300 font-bold'}`}>
+                                            📋 Último aperto de mão no webhook ({new Date(igVerificacao.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}):{' '}
+                                            {igVerificacao.ok
+                                                ? '✅ verificado com sucesso — o token colado na Meta confere.'
+                                                : igVerificacao.pareceNavegador
+                                                    ? 'foi um NAVEGADOR abrindo a URL (sem os parâmetros da Meta) — o "Forbidden" aí é o comportamento certo, não é erro.'
+                                                    : `🔴 a Meta tentou verificar e foi RECUSADA — ${igVerificacao.motivo || 'motivo não registrado'}. Se o motivo é o verify_token, o valor colado no painel não é o da env WHATSAPP_WEBHOOK_VERIFY_TOKEN (confira espaço no fim e se não copiou o NOME do secret em vez do VALOR).`}
+                                        </p>
                                     )}
 
                                     {/* 🔬 O que a META diz que está assinado — pergunta à fonte,

@@ -330,11 +330,17 @@ export interface AssinaturasInstagram {
     daPagina: { appId: string; campos: string[] }[] | null;
 }
 
+/** Último aperto de mão no GET do webhook — navegador × Meta × token errado. */
+export interface VerificacaoWebhook {
+    em: string; ok: boolean; motivo: string | null; pareceNavegador: boolean;
+}
+
 export const estadoInstagram = () =>
     req<{
         estado: EstadoInstagram | null;
         eventos?: EventosInstagram | null;
         assinaturas?: AssinaturasInstagram | null;
+        verificacao?: VerificacaoWebhook | null;
     }>('/api/admin/whatsapp/instagram/estado');
 
 /** 📡 Liga o recebimento das DMs (assina webhook + Página na Meta). Idempotente. */
