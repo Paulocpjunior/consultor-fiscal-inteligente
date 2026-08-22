@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O EXPORTAR SAGE DECIDIA O LADO DO LIVRO PELO CAMPO CRU** (22/08). A nota
+  PRÓPRIA DE ENTRADA (art. 136 — a compra de produtor rural PF, que o
+  adquirente emite) fica gravada como `direcao: 'saida'` até o backfill do
+  sync-cron passar; quem decide na LEITURA é `direcaoEfetivaDoc`, pelo `tpNF`.
+  O gerador do `.FML` importava `docCancelado` e **não** a régua da direção, e
+  lia o campo cru em três lugares que decidem o arquivo: o **E/S da linha**, o
+  participante cadastrado como **cliente × fornecedor**, e a **direção passada
+  à correlação de CFOP** (que escolhe entre 5xxx e 1xxx). É o caso EDUARDO
+  GUERRA de 31/07 (#384) — corrigido no import e na régua, e deixado vivo no
+  leitor que GERA O ARQUIVO. Só o participante tinha a exceção, escrita à mão
+  ali dentro.
+  ⚠️ **Duas leituras cruas ficaram, com o motivo declarado NO TESTE**:
+  `usaDestinatario` pergunta em QUAL BLOCO está a contraparte (não o lado do
+  livro, e a exceção já está explícita ao lado), e a derivação da UF da empresa
+  procura uma nota com chave — a própria entrada também foi emitida pela
+  empresa, então a chave carrega a MESMA UF.
+  📌 **E A TRAVA DE 17/08 REPROVOU A PRÓPRIA CORREÇÃO**: `cfopPorNota.test.ts`
+  prendia a **forma literal** `cfopParaEscriturar(it.cfop, d.direcao, ...)`
+  quando o que ela existe para garantir é a INTENÇÃO (o DOCUMENTO chega como 4º
+  argumento). Trocada pela intenção **mais** a proibição do campo cru — é a
+  mesma lição do `IND_REG_CUM`, que travava o `'9'` no texto do arquivo:
+  **teste que trava a FONTE impede a correção que a régua manda fazer**.
+
 - **📌 `.d.ts` À MÃO: AS DUAS DIREÇÕES NÃO CUSTAM IGUAL — e só uma é
   silenciosa** (22/08, varredura dos 8 pares `.js`/`.d.ts` escritos à mão).
   · **`.js` exporta e o `.d.ts` não declara** ⇒ quem importar do TypeScript leva

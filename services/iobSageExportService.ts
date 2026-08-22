@@ -10,7 +10,7 @@ import { LAYOUT } from './iobSageLayoutData';
 import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
-import { docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -336,6 +336,22 @@ export function definirUfPorParticipante(mapa: Record<string, string>): void {
     ufResolvidaPorCnpj = mapa || {};
 }
 
+/**
+ * 🚨 A DIREÇÃO GRAVADA PODE MENTIR — e aqui ela decide o LIVRO do cliente.
+ *
+ * A nota PRÓPRIA DE ENTRADA (art. 136, I, "a" do RICMS/SP — a compra de
+ * produtor rural PF, que o adquirente emite) fica gravada como `'saida'` até o
+ * backfill do sync-cron passar. Quem decide na LEITURA é `direcaoEfetivaDoc`,
+ * pelo `tpNF`, e este arquivo lia o campo CRU em quase todo lugar: o E/S da
+ * linha do .FML, o cadastro do participante como cliente × fornecedor e a
+ * direção passada à correlação de CFOP.
+ *
+ * É o caso EDUARDO GUERRA de 31/07 (#384) — corrigido no import e na régua, e
+ * deixado vivo no leitor que gera o arquivo. Só o participante tinha a
+ * exceção, escrita à mão logo abaixo.
+ */
+const direcaoDoDoc = (d: any): string => direcaoEfetivaDoc(d) as string;
+
 export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
     const x: any = d as any;
     // NOTA PRÓPRIA DE ENTRADA (tpNF=0): o cliente emite a nota da compra
@@ -393,10 +409,10 @@ function buildE010(d: DocumentoFiscal): string {
     }
     const part = participanteDoDoc(d);
     if (!part) {
-        throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${d.direcao === 'entrada' ? 'emitente' : 'destinatário'} — não dá pra cadastrar o participante no E-Fiscal.`);
+        throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${direcaoDoDoc(d) === 'entrada' ? 'emitente' : 'destinatário'} — não dá pra cadastrar o participante no E-Fiscal.`);
     }
-    const isCliente = d.direcao === 'saida';
-    const isFornecedor = d.direcao === 'entrada';
+    const isCliente = direcaoDoDoc(d) === 'saida';
+    const isFornecedor = direcaoDoDoc(d) === 'entrada';
 
     return buildRecord(L('E010'), {
         'CÓDIGO DO CLIENTE/FORNECEDOR': codigoParticipante(part.cnpjCpf),
@@ -546,7 +562,7 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
     const consumidor = motivoConsumidor !== null;
     const part = consumidor ? null : participanteDoDoc(d);
     if (!part && !consumidor) {
-        throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${d.direcao === 'entrada' ? 'emitente' : 'destinatário'}.`);
+        throw new Error(`nota ${d.numero || d.chave}: sem CNPJ do ${direcaoDoDoc(d) === 'entrada' ? 'emitente' : 'destinatário'}.`);
     }
     if (consumidor && !codConsumidor) {
         throw new Error(
@@ -565,7 +581,7 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
     const ufConsumidor = sanitizeAlfa(ufEmpresa || '').slice(0, 2).toUpperCase()
         || ufDaChave(d.chave);
     return {
-        es: d.direcao === 'entrada' ? 'E' : 'S',
+        es: direcaoDoDoc(d) === 'entrada' ? 'E' : 'S',
         especie,
         serie: serieDaNota(d),
         subserie: '',
@@ -655,7 +671,7 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
     // Agrupa itens por CFOP.
     const porCfop = new Map<string, DocumentoFiscalItem[]>();
     for (const it of d.itens || []) {
-        const cfop = cfopParaEscriturar(it.cfop, d.direcao, ctxCfop, d) || '0000';
+        const cfop = cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d) || '0000';
         if (!porCfop.has(cfop)) porCfop.set(cfop, []);
         porCfop.get(cfop)!.push(it);
     }
@@ -763,7 +779,7 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': cfopParaEscriturar(it.cfop, d.direcao, ctxCfop, d),
+            'CFOP': cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d),
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,
