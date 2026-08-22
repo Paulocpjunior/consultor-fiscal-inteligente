@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📌 TESTE CRUZADO PROVA OS DOIS QUE VOCÊ CONHECE; SÓ A VARREDURA IMPEDE O
+  TERCEIRO** (22/08, fechando a classe da DATA). Pela manhã o gerador do SPED e
+  o do `.FML` foram corrigidos e travados por um teste que alimenta os DOIS com
+  as mesmas entradas e exige o **mesmo dia**. Isso prova o que existe — e não vê
+  quem nasce depois. A varredura achou o **terceiro**: o relatório de análise de
+  XMLs do SAGE lia `new Date(dhEmi).toLocaleDateString('pt-BR')`, ou seja *"que
+  dia era no fuso de QUEM ABRIU A TELA"* — e é justamente ele que o colaborador
+  compara com o arquivo. E achou o **quarto**, na lista de XMLs por
+  entrada/saída.
+  ✂️ `dataDeclaradaDoDocumento` nasce no `xml-metadata-helper` (a casa das
+  leituras de documento, ao lado de `valorDoDocumento` e `issDoDocumento`) e
+  devolve **'AAAA-MM-DD'**; cada lugar só **TRADUZ** para a forma dele —
+  `DDMMAAAA` no SPED, `AAAAMMDD` no `.FML`, `dd/mm/aaaa` na tela. **O que não
+  pode ter duas respostas é o DIA, não o formato.**
+  ⚠️ **E ISSO REVISA UMA DECISÃO DO MESMO DIA, com o motivo**: de manhã ficou
+  escrito *"os dois formatadores moram em mundos diferentes; criar um módulo só
+  para partilhar cinco linhas traria de volta a armadilha do `.d.ts` à mão"*. O
+  obstáculo era o MÓDULO NOVO — ele some ao pôr a régua onde o `.d.ts` **já
+  existe**: o backend importa o `.js`, o front importa pelo tipo. O teste
+  cruzado continua de pé e agora passa por construção.
+  ⚠️ A assinatura da varredura é ESTREITA de propósito: só `new Date(<campo de
+  data de documento>)` seguido de leitura de DIA/MÊS. **Cálculo de IDADE
+  (`getTime()`) não casa** — ele é outra pergunta e independe de fuso; acusá-lo
+  seria alarme sobre código certo. Provada revertendo o relatório do SAGE.
+
 - **🐛 A TRAVA DA PROJEÇÃO TINHA UMA JANELA CURTA — e EMUDECIA na consulta mais
   importante** (22/08, pego ao ligar a régua do ISS). `projecaoNaoCegaARegua`
   captura o `.select(` por regex com teto de **900 caracteres**, e o da **Rotina

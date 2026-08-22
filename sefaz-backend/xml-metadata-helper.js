@@ -351,6 +351,56 @@ export function valorDoDocumento(nota) {
 export const valorDoDocumentoServico = valorDoDocumento;
 
 /**
+ * 🚨 QUE DIA ESTE DOCUMENTO DECLARA? — a resposta é o TEXTO, nunca uma
+ * conversão de fuso
+ *
+ * O `dhEmi` da NF-e chega com o fuso do EMITENTE (`2026-07-31T22:30:00-03:00`).
+ * Quem fizer `new Date(...)` e ler `getUTCDate()`/`getDate()` está perguntando
+ * *"que dia era, no MEU fuso, no instante em que a nota foi emitida?"* — que é
+ * outra pergunta. Em 22/08 isso saía errado nos DOIS sentidos: o gerador do
+ * SPED rodava no Cloud Run (UTC) e a nota das 22h ia com a data do dia
+ * seguinte; o `.FML` acertava por acidente porque saía do navegador em BRT, e
+ * erraria na primeira nota de **Manaus** (−04:00) emitida às 23h30.
+ *
+ * 🔴 Na virada do mês os dois viram OUTRA COMPETÊNCIA — e aí o PVA recusa. Fora
+ * da virada, a data sai errada e **ninguém confere data a olho**.
+ *
+ * Devolve **'AAAA-MM-DD'**, ou `''` quando não há data legível. A FORMA final
+ * (`DDMMAAAA` do SPED, `AAAAMMDD` do `.FML`, `dd/mm/aaaa` da tela) é de quem
+ * escreve — o que não pode ter duas respostas é o DIA.
+ *
+ * ⚠️ O `Date` continua sendo lido em **UTC**, e isso é decisão: um `Date` já
+ * perdeu o fuso de origem, então não há o que recuperar. Quem TEM a string não
+ * deve convertê-la antes de chegar aqui.
+ */
+export function dataDeclaradaDoDocumento(bruto) {
+    if (bruto == null || bruto === '') return '';
+    if (typeof bruto === 'string') {
+        const iso = bruto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+        // Forma brasileira — aparece em colagem e em cadastro manual.
+        const br = bruto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+        const d = new Date(bruto);
+        return Number.isNaN(d.getTime()) ? '' : emUtcISO(d);
+    }
+    if (bruto instanceof Date) return Number.isNaN(bruto.getTime()) ? '' : emUtcISO(bruto);
+    // Timestamp do Firestore — data em branco num campo que o PVA cobra é
+    // recusa, então ela não se perde em silêncio.
+    if (typeof bruto?.toDate === 'function') {
+        const d = bruto.toDate();
+        return d instanceof Date && !Number.isNaN(d.getTime()) ? emUtcISO(d) : '';
+    }
+    return '';
+}
+
+function emUtcISO(d) {
+    return `${String(d.getUTCFullYear()).padStart(4, '0')}`
+        + `-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+        + `-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
  * 🚨 O ISS DA NFS-e CHEGA EM QUATRO FORMAS — e os relatórios liam UMA
  *
  * A varredura de 22/08 mostrou que **só o import pelo NAVEGADOR**

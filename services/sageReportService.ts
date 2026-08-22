@@ -1,4 +1,14 @@
 import * as XLSX from 'xlsx';
+// A data que o documento DECLARA — lida do TEXTO, a mesma régua do SPED e do
+// `.FML`. Sem ela, este relatório mostrava outro dia para a mesma nota.
+import { dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+
+/** 'AAAA-MM-DD' → 'dd/mm/aaaa'. Vazio continua vazio (data não se inventa). */
+const dataBR = (iso: string): string => {
+    if (!iso) return '';
+    const [ano, mes, dia] = iso.split('-');
+    return `${dia}/${mes}/${ano}`;
+};
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -332,7 +342,12 @@ function parseSingleXml(xmlText: string, fileName: string): SageNota | null {
         chave,
         cfop,
         valor: vNF,
-        dataEmissao: dhEmi ? new Date(dhEmi).toLocaleDateString('pt-BR') : '',
+        // 🚨 A DATA SAI DO TEXTO, não de conversão de fuso. `new Date(dhEmi)`
+        // + `toLocaleDateString` responde "que dia era no fuso de QUEM ABRIU a
+        // tela" — e a nota de Manaus (−04:00) emitida às 23h30 aparecia aqui
+        // um dia depois da que o SPED e o `.FML` escrituram. Este relatório é
+        // o que o colaborador compara com aqueles arquivos.
+        dataEmissao: dataBR(dataDeclaradaDoDocumento(dhEmi) as string),
         dataEntradaSaida: '',
         sourceTab: fileName,
         sourceRow: 0,

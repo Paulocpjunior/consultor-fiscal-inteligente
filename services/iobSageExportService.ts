@@ -10,7 +10,7 @@ import { LAYOUT } from './iobSageLayoutData';
 import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
-import { docCancelado, direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -87,28 +87,18 @@ const onlyDigits = (s: string | undefined) => (s || '').replace(/\D+/g, '');
  * não há o que recuperar. Devolve **''** para o ilegível — data não se chuta.
  */
 export function dataDeclaradaAAAAMMDD(bruto: unknown): string {
-    if (bruto == null || bruto === '') return '';
-    if (typeof bruto === 'string') {
-        const iso = bruto.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (iso) return `${iso[1]}${iso[2]}${iso[3]}`;
-        const br = bruto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-        if (br) return `${br[3]}${br[2]}${br[1]}`;
-        const d = new Date(bruto);
-        return Number.isNaN(d.getTime()) ? '' : emUtcAAAAMMDD(d);
-    }
-    if (bruto instanceof Date) return Number.isNaN(bruto.getTime()) ? '' : emUtcAAAAMMDD(bruto);
-    const comToDate = bruto as { toDate?: () => Date };
-    if (typeof comToDate?.toDate === 'function') {
-        const d = comToDate.toDate();
-        return d instanceof Date && !Number.isNaN(d.getTime()) ? emUtcAAAAMMDD(d) : '';
-    }
-    return '';
-}
-
-function emUtcAAAAMMDD(d: Date): string {
-    return `${d.getUTCFullYear()}`.padStart(4, '0')
-        + String(d.getUTCMonth() + 1).padStart(2, '0')
-        + String(d.getUTCDate()).padStart(2, '0');
+    // ⚠️ QUEM RESPONDE "que dia o documento declara" é o DONO
+    // (`dataDeclaradaDoDocumento`, no `xml-metadata-helper`). Aqui só se TRADUZ
+    // para a forma do `.FML` (AAAAMMDD).
+    //
+    // Em 22/08 a decisão registrada foi manter as duas leituras separadas
+    // porque criar um módulo novo para partilhar cinco linhas traria de volta a
+    // armadilha do `.d.ts` à mão. O obstáculo sumiu ao pôr a régua na casa das
+    // leituras de documento, que JÁ TEM `.d.ts`: o backend importa o `.js` e o
+    // front importa pelo tipo. O teste cruzado continua exigindo que os dois
+    // digam o MESMO DIA — agora por construção.
+    const iso = dataDeclaradaDoDocumento(bruto) as string;
+    return iso ? iso.replace(/-/g, '') : '';
 }
 
 /**

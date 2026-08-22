@@ -7,8 +7,15 @@ import { formatCurrency } from '../../services/xmlParserService';
 // que o SPED, o `.FML` e a lista de documentos usam. Aqui o resumo por
 // competência já contava pelo dono e estes relatórios liam o campo cru: dois
 // números do mesmo fato na mesma tela.
-import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { ladoDaContraparte } from '../../sefaz-backend/participante-doc-helper.js';
+
+/** 'AAAA-MM-DD' → 'dd/mm/aaaa'. Vazio continua vazio — data não se inventa. */
+const dataBR = (iso: string): string => {
+    if (!iso) return '';
+    const [ano, mes, dia] = iso.split('-');
+    return `${dia}/${mes}/${ano}`;
+};
 
 interface Props {
     currentUser: User;
@@ -204,7 +211,11 @@ function renderRelatorio(id: RelatorioId, docs: DocumentoFiscal[], summary: Retu
                 <th>Data</th><th>Empresa</th><th>Nº</th><th>Contraparte</th><th className="text-right">Valor</th>
             </tr></thead><tbody className="divide-y divide-slate-100">
                 {list.slice(0, 200).map(d => (<tr key={d.id}>
-                    <td className="py-1">{new Date(d.dhEmi).toLocaleDateString('pt-BR')}</td>
+                    {/* 🚨 A data sai do TEXTO. `new Date(dhEmi).toLocaleDateString`
+                        responde "que dia era no fuso de QUEM ABRIU a tela" — e a
+                        nota de Manaus (−04:00) das 23h30 aparecia aqui um dia
+                        depois da que o SPED e o `.FML` escrituram. */}
+                    <td className="py-1">{dataBR(dataDeclaradaDoDocumento(d.dhEmi) as string)}</td>
                     <td>{d.empresaNome}</td>
                     <td className="font-mono">{d.numero}</td>
                     {/* ⚠️ A contraparte NÃO se deduz de "estou no relatório de
