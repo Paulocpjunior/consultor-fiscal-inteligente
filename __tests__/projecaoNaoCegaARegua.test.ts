@@ -49,6 +49,7 @@ function varrer(dir: string, out: string[] = []): string[] {
     return out;
 }
 
+<<<<<<< HEAD
 /**
  * Cada `.select(...)` que sai de uma consulta a `documentos_fiscais`.
  *
@@ -63,12 +64,23 @@ function projecoes(src: string): Array<{ linha: number; campos: Set<string> }> {
     const limpo = src.replace(/\/\/[^\n]*/g, '');
     const re = /collection\('documentos_fiscais'\)(?:.|\n){0,900}?\.select\(((?:.|\n){0,900}?)\)/g;
     for (const m of limpo.matchAll(re)) {
+=======
+/** Cada `.select(...)` que sai de uma consulta a `documentos_fiscais`. */
+function projecoes(src: string): Array<{ linha: number; campos: Set<string> }> {
+    const out: Array<{ linha: number; campos: Set<string> }> = [];
+    const re = /collection\('documentos_fiscais'\)(?:.|\n){0,900}?\.select\(((?:.|\n){0,700}?)\)/g;
+    for (const m of src.matchAll(re)) {
+>>>>>>> origin/main
         const campos = new Set<string>();
         for (const c of m[1].matchAll(/'([^']+)'/g)) {
             campos.add(c[1]);
             campos.add(c[1].split('.')[0]);   // 'totais.vICMS' → 'totais'
         }
+<<<<<<< HEAD
         out.push({ linha: limpo.slice(0, m.index).split('\n').length, campos });
+=======
+        out.push({ linha: src.slice(0, m.index).split('\n').length, campos });
+>>>>>>> origin/main
     }
     return out;
 }
@@ -126,6 +138,7 @@ describe('🚨 projeção que alimenta docCancelado carrega o que ela lê', () =
         expect(proj.campos.has('tpNF')).toBe(true);
     });
 
+<<<<<<< HEAD
     // ═══════════════════════════════════════════════════════════════════════
     // A IRMÃ, um campo adiante: o VALOR também chega em várias formas, e o
     // import pelo NAVEGADOR grava só `totais.vNF`. Projeção que traz apenas
@@ -164,6 +177,8 @@ describe('🚨 projeção que alimenta docCancelado carrega o que ela lê', () =
         expect(src).not.toMatch(/Number\(d\.valorTotal\)/);
     });
 
+=======
+>>>>>>> origin/main
     it('toda exceção declarada tem motivo escrito', () => {
         for (const [rel, motivo] of Object.entries(SEM_PERGUNTA_DE_CANCELAMENTO)) {
             expect({ rel, ok: motivo.trim().length >= 10 }).toEqual({ rel, ok: true });
