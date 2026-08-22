@@ -191,6 +191,21 @@ describe('assinatura do webhook com DUAS chaves (app principal + app do Instagra
         const nucleoWebhook = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook.js'), 'utf8');
         expect(nucleoWebhook).toContain('INSTAGRAM_APP_SECRET');
     });
+
+    it('o GET do webhook grava o último aperto de mão e a tela separa navegador × Meta × token errado', () => {
+        // "Forbidden" tem três caras (22/08): navegador sem os parâmetros,
+        // Meta com token errado, e — quando dá certo — nem aparece. O doc
+        // gravado (sem o token, só o motivo) é o que deixa a ⚙️ → 📷 dizer
+        // qual foi, sem ninguém abrir log de Cloud Run.
+        const webhookRotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        expect(webhookRotas).toContain("doc('webhook_verificacao')");
+        expect(webhookRotas).toContain('pareceNavegador');
+        const rotasAdmin = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rotasAdmin).toContain("doc('webhook_verificacao')");
+        const telaConnect = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+        expect(telaConnect).toContain('Último aperto de mão');
+        expect(telaConnect).toContain('NAVEGADOR');
+    });
 });
 
 // ─── FIAÇÃO (varredura de fonte) ────────────────────────────────────────────

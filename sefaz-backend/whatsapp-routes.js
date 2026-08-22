@@ -2386,6 +2386,17 @@ router.get('/instagram/estado', requireAdmin, async (_req, res) => {
             eventos = null;   // "não conferi" ≠ "zero" — a tela diz a diferença
         }
 
+        // 📋 O último APERTO DE MÃO no GET do webhook (gravado pela própria
+        // rota pública): distingue "navegador abriu a URL" de "a Meta tentou
+        // verificar e o token não conferiu" — os dois viram o mesmo 403.
+        let verificacao = null;
+        try {
+            const v = await db.collection('whatsapp_config').doc('webhook_verificacao').get();
+            if (v.exists) verificacao = v.data();
+        } catch (e) {
+            console.warn('[whatsapp/instagram/estado] verificação não lida:', e.message);
+        }
+
         // 🔬 O que a META diz que está assinado (degrau seguinte do
         // diagnóstico: interruptor ligado + zero cru ⇒ conferir a assinatura
         // NA FONTE, não na nossa memória do clique). Best-effort: null =
@@ -2398,7 +2409,7 @@ router.get('/instagram/estado', requireAdmin, async (_req, res) => {
             console.warn('[whatsapp/instagram/estado] assinaturas não lidas:', e.message);
         }
 
-        return res.json({ ok: true, estado: doc.exists ? doc.data() : null, eventos, assinaturas });
+        return res.json({ ok: true, estado: doc.exists ? doc.data() : null, eventos, assinaturas, verificacao });
     } catch (e) {
         console.error('[whatsapp/instagram/estado]', e);
         return res.status(500).json({ ok: false, error: e.message });
