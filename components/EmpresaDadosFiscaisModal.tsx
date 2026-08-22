@@ -373,6 +373,48 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                     entidade for cooperativa, imune ou isenta. O app não deduz este código.
                                 </p>
                             </div>
+                            {/* 🚨 O gerador do E116 chamava os dois de "sobrescritíveis
+                                via dadosFiscais" e nenhum tinha onde ser preenchido: a
+                                régua caía sempre no default — dia 20, que é o de SP.
+                                O prazo do ICMS varia por UF e pelo CPR do contribuinte. */}
+                            <Field
+                                label="Código de receita do ICMS (E116)"
+                                value={dados.icmsCodRec || ''}
+                                onChange={v => handleField('icmsCodRec', v)}
+                                placeholder="Ex.: 046-2 (SP) — tabela do estado"
+                            />
+                            <div>
+                                <Field
+                                    label="Dia de vencimento do ICMS"
+                                    value={dados.icmsDiaVencimento || ''}
+                                    onChange={v => handleField('icmsDiaVencimento', v.replace(/\D/g, '').slice(0, 2))}
+                                    placeholder="Em branco = dia 20 (o de SP)"
+                                />
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Vai no E116 do SPED Fiscal. O prazo varia por UF e pelo CPR do contribuinte —
+                                    em branco o arquivo sai com o dia 20 e a geração avisa.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-slate-500 dark:text-slate-400">
+                                    Regime de apuração PIS/COFINS
+                                </label>
+                                <select
+                                    value={dados.regimeApuracaoPisCofins || ''}
+                                    onChange={e => handleField('regimeApuracaoPisCofins', e.target.value)}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                >
+                                    <option value="">Deriva do regime tributário (Real = 1, Presumido = 2)</option>
+                                    <option value="1">1 — Não-cumulativo</option>
+                                    <option value="2">2 — Cumulativo</option>
+                                    <option value="3">3 — Ambos (regimes concomitantes)</option>
+                                </select>
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Só preencha quando for diferente do que o regime indica — o caso "ambos" é o
+                                    que a derivação não tem como saber. Ele decide CST, alíquotas e o COD_CONT do
+                                    M210/M610 do EFD-Contribuições.
+                                </p>
+                            </div>
                         </div>
                     </Section>
 
