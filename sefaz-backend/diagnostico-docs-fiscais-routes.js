@@ -22,6 +22,9 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
+// Valor do documento em TODAS as formas (o import pelo navegador grava só
+// `totais.vNF`) — régua única.
+import { valorDoDocumento } from './xml-metadata-helper.js';
 const router = express.Router();
 
 function fa() {
@@ -60,7 +63,7 @@ router.get('/', requireAuth, async (req, res) => {
             const chave = String(dados.chave || dados.chaveAcesso || '').replace(/\D/g, '');
             const competencia = String(dados.competencia || '');
             const direcao = String(dados.direcao || '');
-            const valor = Number(dados.valorTotal ?? dados.vNF ?? 0);
+            const valor = Number(valorDoDocumento(dados)) || 0;
             const empresaCnpj = String(dados.empresaCnpj || '').replace(/\D/g, '');
             const empresaId2 = String(dados.empresaId || '');
             const empresaNome = String(dados.empresaNome || dados.empresa || '');

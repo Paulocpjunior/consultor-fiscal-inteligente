@@ -118,3 +118,39 @@ describe('cruzarSpedComCapturadas — variações de shape e guardas', () => {
         expect(r.resumo.naoEscrituradas).toBe(0);
     });
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A NOTA IMPORTADA PELO NAVEGADOR VALIA 0,00 NA CONFERÊNCIA
+//
+// O `xmlParserService` grava só `totais.vNF` — nunca `valorTotal` — e este
+// cruzamento lia as formas na mão. A nota entrava valendo zero e o cruzamento
+// acusava divergência contra um SPED **certo**: o alarme falso que aparece
+// justamente quando está tudo certo, e que ensina a equipe a ignorar a
+// conferência que existe para pegar o erro de verdade.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 valor do documento capturado — as duas formas', () => {
+    // ═══════════════════════════════════════════════════════════════════════
+    // O `xmlParserService` (import pelo NAVEGADOR) grava só `totais.vNF` —
+    // nunca `valorTotal` — e este cruzamento lia as formas na mão. A nota
+    // entrava valendo 0,00 e o cruzamento acusava DIVERGÊNCIA DE VALOR contra
+    // um SPED certo: o alarme falso que aparece justamente quando está tudo
+    // certo, e que ensina a equipe a ignorar a conferência.
+    // ═══════════════════════════════════════════════════════════════════════
+    const sped = spedFiscal([c100(A, '1000,00', { numDoc: '100' })]);
+
+    it('nota importada pelo NAVEGADOR (só totais.vNF) FECHA com o SPED', () => {
+        const r = cruzarSpedComCapturadas(sped, [
+            { chave: A, numero: '100', status: 'autorizado', totais: { vNF: 1000 } },
+        ]);
+        expect(r.resumo.divergenciasValor).toBe(0);
+        expect(r.resumo.emAmbos).toBe(1);
+    });
+
+    it('e a divergência de verdade continua sendo acusada', () => {
+        const r = cruzarSpedComCapturadas(sped, [
+            { chave: A, numero: '100', status: 'autorizado', totais: { vNF: 1500 } },
+        ]);
+        expect(r.resumo.divergenciasValor).toBe(1);
+    });
+});

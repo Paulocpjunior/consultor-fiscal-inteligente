@@ -21,6 +21,9 @@ import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
+// Valor do documento em TODAS as formas (o import pelo navegador grava só
+// `totais.vNF`) — régua única.
+import { valorDoDocumento } from './xml-metadata-helper.js';
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -315,7 +318,7 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
                 chave,
                 numero: doc.numero || doc.nNF || '',
                 status: doc.status || null,
-                valorTotal: Number(doc.valorTotal ?? doc.vNF ?? 0) || 0,
+                valorTotal: Number(valorDoDocumento(doc)) || 0,
                 direcao: doc.direcao || null,
                 modelo: doc.modelo || doc.mod || null,
                 dataEmissao: doc.dataEmissao || doc.dhEmi || null,
