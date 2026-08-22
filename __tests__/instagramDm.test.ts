@@ -205,6 +205,19 @@ describe('fiação das DMs do Instagram', () => {
         expect(tela).toContain('a Meta não está entregando');
     });
 
+    it('o 🔬 pergunta à META o que está assinado (fonte, não a memória do clique)', () => {
+        // Degrau 2 do caso de 22/08: interruptor ligado + zero cru ⇒ conferir
+        // a assinatura NA FONTE. A rota chama assinaturasDoApp e a tela mostra
+        // o que a Meta respondeu, com os dois suspeitos restantes nomeados.
+        expect(rotas).toContain('assinaturasDoApp()');
+        const nucleo = readFileSync(join(__dirname, '..', 'sefaz-backend/instagram-dm.js'), 'utf8');
+        expect(nucleo).toContain('/subscriptions?access_token=');
+        expect(nucleo).toContain('subscribed_apps?fields=subscribed_fields');
+        expect(tela).toContain('O que a Meta diz que está assinado');
+        expect(tela).toContain('Solicitações de mensagem');
+        expect(tela).toContain('instagram_manage_messages');
+    });
+
     it('o 📡 existe: rota /instagram/ligar (admin) + estado persistido + botão na tela', () => {
         expect(rotas).toContain("router.post('/instagram/ligar', requireAdmin");
         expect(rotas).toContain("router.get('/instagram/estado', requireAdmin");
