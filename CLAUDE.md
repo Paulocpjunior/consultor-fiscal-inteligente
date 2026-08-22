@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CRUZAMENTO CFI × SPED GRITAVA "NÃO ESCRITURADA" EM TODA CANCELADA POR
+  EVENTO — sobre um arquivo CERTO** (22/08). O DESENHO já estava certo e
+  escrito no cabeçalho do módulo desde sempre: *"só cruza NF-e capturadas com
+  status='autorizado' (canceladas, denegadas, inutilizadas não devem estar no
+  SPED — incluir geraria falso-positivo)"*. A **LEITURA** é que era cega — o
+  cancelamento por EVENTO não muda o `status`, então a cancelada passava.
+  🔴 **E o falso-positivo que o próprio cabeçalho previa saía do jeito mais
+  alarmante**: o C100 de cancelada tem **COD_SIT 02**, que não está em
+  `COD_SIT_EFETIVO`, logo ela nem entra no índice do SPED — e a nota capturada
+  virava **`NAO_ESCRITURADA`, severidade ERRO** (*"capturada e NÃO encontrada
+  na escrituração"*), a mensagem mais grave da tela, disparando com os dois
+  lados certos.
+  ✂️ Quem responde é `docCancelado`, e o descarte é **CONTADO À PARTE**
+  (`canceladasNaoConferidas`) com KPI próprio: *"não conferi porque foi
+  cancelada"* e *"não conferi porque o documento está torto"* pedem ações
+  opostas — um número só faz as duas parecerem a mesma coisa. Trocar um alarme
+  falso por um silêncio falso não é correção.
+  ⚠️ Um teste que exigia a cancelada no contador MISTURADO foi **TROCADO** —
+  ele descrevia a premissa que este PR corrige.
+  ✂️ Junto: os relatórios **Entradas/Saídas** da Central de XMLs filtravam pelo
+  campo cru enquanto o *resumo por competência* da mesma tela já contava pelo
+  dono — dois números do mesmo fato na mesma tela —, e a coluna de contraparte
+  deles deduzia o lado do **nome do relatório** ("estou em entradas ⇒ emitente"),
+  que na nota própria de entrada é o PRÓPRIO cliente.
+
 - **🚨 A COLUNA DA CONTRAPARTE LIA O CAMPO CRU NA MESMA LINHA EM QUE O SELO DA
   DIREÇÃO JÁ VINHA DO DONO** (22/08, quarta leva do eixo). A lista de
   documentos e o PDF dela pintavam o selo com `getView(d).direcao` (a régua) e

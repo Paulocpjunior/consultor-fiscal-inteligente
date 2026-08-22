@@ -165,6 +165,13 @@ export interface CruzamentoCapturados {
         totalSped: number; totalCapturadas: number; emAmbos: number;
         naoEscrituradas: number; semCaptura: number;
         semValorCapturado: number; divergenciasValor: number;
+        /**
+         * Capturadas CANCELADAS (inclusive por evento, que não muda o
+         * `status`). Saem da conferência por desenho — não devem estar no
+         * SPED —, mas o número aparece na tela: ausência de alarme não pode
+         * ser indistinguível de "os números batem".
+         */
+        canceladasNaoConferidas: number;
         descartadasCapturadas: number; ignoradosSped: number;
     };
     achados: AchadoCapturados[];

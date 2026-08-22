@@ -3,6 +3,12 @@ import { getView } from '../../services/xmlDocumentoView';
 import type { User, DocumentoFiscal } from '../../types';
 import { listDocumentos, listErros, summarize } from '../../services/xmlFiscalService';
 import { formatCurrency } from '../../services/xmlParserService';
+// A direção pela RÉGUA e o LADO da contraparte pelo dono — as mesmas leituras
+// que o SPED, o `.FML` e a lista de documentos usam. Aqui o resumo por
+// competência já contava pelo dono e estes relatórios liam o campo cru: dois
+// números do mesmo fato na mesma tela.
+import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { ladoDaContraparte } from '../../sefaz-backend/participante-doc-helper.js';
 
 interface Props {
     currentUser: User;
@@ -148,8 +154,13 @@ function buildReportData(id: RelatorioId, docs: DocumentoFiscal[], summary: Retu
     switch (id) {
         case 'competencia': return summary.porCompetencia;
         case 'empresa': return summary.porEmpresa;
-        case 'entradas': return docs.filter(d => d.direcao === 'entrada');
-        case 'saidas': return docs.filter(d => d.direcao === 'saida');
+        // 🚨 Pela RÉGUA: o resumo por competência ao lado já conta pelo dono
+        // (`direcaoDoDocumento`), e estes dois liam o campo cru — a compra de
+        // produtor rural (art. 136) caía no relatório de SAÍDAS enquanto o
+        // contador acima já a somava nas entradas. Dois números do mesmo fato
+        // na mesma tela.
+        case 'entradas': return docs.filter(d => direcaoEfetivaDoc(d) === 'entrada');
+        case 'saidas': return docs.filter(d => direcaoEfetivaDoc(d) === 'saida');
         case 'cfops': return summary.cfops;
         case 'ncms': return summary.ncms;
         case 'erros': return erros;
@@ -187,7 +198,7 @@ function renderRelatorio(id: RelatorioId, docs: DocumentoFiscal[], summary: Retu
         );
     }
     if (id === 'entradas' || id === 'saidas') {
-        const list = docs.filter(d => d.direcao === (id === 'entradas' ? 'entrada' : 'saida'));
+        const list = docs.filter(d => direcaoEfetivaDoc(d) === (id === 'entradas' ? 'entrada' : 'saida'));
         return list.length === 0 ? <p className="text-xs text-slate-400">Sem dados.</p> : (
             <table className="w-full text-xs"><thead><tr className="text-left text-slate-500">
                 <th>Data</th><th>Empresa</th><th>Nº</th><th>Contraparte</th><th className="text-right">Valor</th>
@@ -196,7 +207,12 @@ function renderRelatorio(id: RelatorioId, docs: DocumentoFiscal[], summary: Retu
                     <td className="py-1">{new Date(d.dhEmi).toLocaleDateString('pt-BR')}</td>
                     <td>{d.empresaNome}</td>
                     <td className="font-mono">{d.numero}</td>
-                    <td>{id === 'entradas' ? (getView(d).emitente.nome || '—') : (getView(d).destinatario.nome || '—')}</td>
+                    {/* ⚠️ A contraparte NÃO se deduz de "estou no relatório de
+                        entradas": na nota própria de entrada quem está no
+                        emitente é o PRÓPRIO cliente. Quem responde é o dono. */}
+                    <td>{ladoDaContraparte(d, d.empresaCnpj) === 'emitente'
+                        ? (getView(d).emitente.nome || '—')
+                        : (getView(d).destinatario.nome || '—')}</td>
                     <td className="text-right font-bold">{formatCurrency(getView(d).valores.total)}</td>
                 </tr>))}
             </tbody></table>
