@@ -1,10 +1,8 @@
 import express from 'express';
-import { listarDas } from './das-orchestrator.js';
-import { listarDeclaracoes } from './dctfweb-orchestrator.js';
-import { listarMensagensLocais } from './caixa-postal-orchestrator.js';
 import { getDasMode } from './das-provider.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
 import { getProviderMode as getCaixaPostalMode } from './caixa-postal-provider.js';
+import { consultarPagamentosTributarios } from './fiscal-payments-connector.js';
 
 const router = express.Router();
 const BRIDGE_TOKEN = String(process.env.FISCAL_GATEWAY_TOKEN || process.env.PLANO_CONTAS_INTERNAL_TOKEN || '').trim();
@@ -39,6 +37,17 @@ router.get('/status', (_req, res) => {
         das: { mode: getDasMode(), ok: true },
         dctfweb: { mode: getDctfwebMode(), ok: true },
         caixaPostal: { mode: getCaixaPostalMode(), ok: true },
+        pagamentos: {
+            contrato: 'fiscal_pagamentos_v1',
+            fontes: ['CFI_DAS', 'CFI_DARF', 'DCTFWEB', 'COMPROVANTES_OFICIAIS'],
+            politica: 'somente_comprovante_oficial_contabilizavel',
+            adaptadores: {
+                receita_ecac: 'credencial_disponivel_consulta_automatica_nao_configurada',
+                fgts_digital: 'nao_configurado',
+                estadual: 'nao_configurado',
+                municipal: 'nao_configurado',
+            },
+        },
     });
 });
 
@@ -47,29 +56,16 @@ router.post('/fiscal/sync', requireBridgeToken, express.json({ limit: '1mb' }), 
     if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'cnpj invalido' });
 
     try {
-        const [dasResult, dctfwebResult, caixaResult] = await Promise.allSettled([
-            listarDas({ empresaId: cnpj, competencia: req.body?.competencia }),
-            listarDeclaracoes({ empresaCnpj: cnpj }),
-            listarMensagensLocais({ empresaCnpj: cnpj, naoLidas: true }),
-        ]);
-
-        const erros = [];
-        if (dasResult.status === 'rejected') erros.push({ fonte: 'DAS', erro: dasResult.reason?.message || String(dasResult.reason) });
-        if (dctfwebResult.status === 'rejected') erros.push({ fonte: 'DCTFWeb', erro: dctfwebResult.reason?.message || String(dctfwebResult.reason) });
-        if (caixaResult.status === 'rejected') erros.push({ fonte: 'CaixaPostal', erro: caixaResult.reason?.message || String(caixaResult.reason) });
-
+        const resultado = await consultarPagamentosTributarios(cnpj, {
+            competencia: req.body?.competencia,
+        });
         res.json({
-            ok: erros.length === 0,
-            cnpj,
+            ...resultado,
             modes: {
                 das: getDasMode(),
                 dctfweb: getDctfwebMode(),
                 caixaPostal: getCaixaPostalMode(),
             },
-            das: dasResult.status === 'fulfilled' ? dasResult.value : [],
-            dctfweb: dctfwebResult.status === 'fulfilled' ? dctfwebResult.value : [],
-            caixaPostal: caixaResult.status === 'fulfilled' ? caixaResult.value : [],
-            erros,
         });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
