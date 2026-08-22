@@ -191,7 +191,8 @@ export function montarC197Difal({
         avisos.push(
             `${porNota.length} nota(s) de entrada interestadual geram DIFAL de aquisição `
             + `(R$ ${dec(totalDifal)}), mas o C197 não foi gerado — falta o código de ajuste `
-            + '(tabela 5.3 do seu estado) no cadastro. Informe-o ou lance o ajuste no PVA. '
+            + '(tabela 5.3 do seu estado). Cadastre em SPED Fiscal → aba Ajustes E111 → '
+            + '"Obrigações e códigos estaduais", ou lance o ajuste no PVA. '
             + 'Código de ajuste não se inventa: errado, o PVA aceita e o Fisco glosa depois.',
         );
     }

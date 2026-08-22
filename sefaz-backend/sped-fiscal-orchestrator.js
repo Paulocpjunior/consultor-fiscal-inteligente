@@ -462,6 +462,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // ajuste de documento, não merece coleção própria. Sem o código da tabela
     // 5.3 do estado, o C197 não é gerado (o aviso sai na geração).
     let difalCfg = {};
+    // 🚨 E250 — a obrigação do ICMS-ST a recolher, POR UF. O gerador lia
+    // `dados.obrigacoesStPorUf` e **ninguém passava** (varredura de 21/08):
+    // o E250 nunca saía e o aviso mandava "informe no cadastro", um cadastro
+    // que não existia. Mora no MESMO doc dos ajustes, como o código do C197.
+    let obrigacoesStPorUf = {};
     if (regime === 'lucro') {
         try {
             const comps = listarCompetenciasPeriodo(periodoInicio, periodoFim);
@@ -471,6 +476,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             for (const s of snaps) {
                 if (s.exists) ajustesApuracao.push(...(s.data().ajustes || []));
                 if (s.exists && s.data().difalCodigoAjusteC197) difalCfg = s.data();
+                if (s.exists && s.data().obrigacoesStPorUf) {
+                    obrigacoesStPorUf = { ...obrigacoesStPorUf, ...s.data().obrigacoesStPorUf };
+                }
             }
             const clsPrev = classificarAjustes(ajustesApuracao, (empresa.dadosFiscais?.uf || '').toUpperCase());
             for (const erro of clsPrev.erros) {
@@ -559,6 +567,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         origemSaldoIpi,
         ajustesApuracao,
         difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
+        obrigacoesStPorUf,
         difalCodObservacao: difalCfg.difalCodObservacao || '',
         difalAliqInternaPadrao: difalCfg.difalAliqInternaPadrao || 18,
         difalAliqInternaPorChave: difalCfg.difalAliqInternaPorChave || {},
