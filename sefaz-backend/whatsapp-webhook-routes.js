@@ -509,7 +509,11 @@ router.post('/webhook', async (req, res) => {
         console.warn('[whatsapp/webhook POST] sem config:', faltas.join('; '));
         return res.sendStatus(503);
     }
-    if (!assinaturaValida(req.rawBody, req.headers['x-hub-signature-256'], cfg.appSecret)) {
+    // As DUAS chaves valem: a do app principal (WhatsApp/Messenger) e a do
+    // app do Instagram do caso de uso "login do Instagram" — cada produto
+    // assina o MESMO endpoint com a sua. Recusar a segunda foi o que deixaria
+    // a DM invisível até pro diagnóstico (401 antes do evento cru).
+    if (!assinaturaValida(req.rawBody, req.headers['x-hub-signature-256'], [cfg.appSecret, cfg.instagramAppSecret])) {
         console.warn('[whatsapp/webhook POST] assinatura inválida — descartado');
         return res.sendStatus(401);
     }

@@ -30,6 +30,13 @@ export function configWebhook(env = process.env) {
     return {
         verifyToken: String(env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || '').trim(),
         appSecret: String(env.WHATSAPP_APP_SECRET || '').trim(),
+        // 📷 O caso de uso "API do Instagram com login do Instagram" tem um
+        // app do Instagram PRÓPRIO (descoberto no painel em 22/08:
+        // API_Oficial-IG), com CHAVE SECRETA PRÓPRIA — o webhook dele assina
+        // com ela, não com a do app principal. Sem esta env a DM chegaria e
+        // seria recusada com 401 ANTES do evento cru, invisível pro
+        // diagnóstico. Vazia = modo não usado, nada muda.
+        instagramAppSecret: String(env.INSTAGRAM_APP_SECRET || '').trim(),
     };
 }
 
@@ -66,14 +73,18 @@ export function responderVerificacao(query, cfg) {
  * assinatura nunca bateria).
  */
 export function assinaturaValida(rawBody, headerAssinatura, appSecret) {
-    if (!appSecret || !rawBody) return false;
+    // Aceita UMA chave ou uma LISTA (o app principal e o app do Instagram
+    // assinam com chaves diferentes no mesmo endpoint) — qualquer uma que
+    // bater vale; nenhuma configurada continua sendo recusa.
+    const chaves = (Array.isArray(appSecret) ? appSecret : [appSecret]).filter(Boolean);
+    if (!chaves.length || !rawBody) return false;
     const header = String(headerAssinatura || '');
     if (!header.startsWith('sha256=')) return false;
     const recebida = header.slice('sha256='.length);
-    const esperada = createHmac('sha256', appSecret)
-        .update(rawBody)
-        .digest('hex');
-    return secretsMatch(recebida, esperada);
+    return chaves.some((chave) => {
+        const esperada = createHmac('sha256', chave).update(rawBody).digest('hex');
+        return secretsMatch(recebida, esperada);
+    });
 }
 
 /** Timestamp da Meta (segundos, string) → ISO. Torto vira null, nunca chute. */

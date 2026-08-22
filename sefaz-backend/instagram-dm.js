@@ -261,21 +261,43 @@ export async function assinaturasDoApp(deps = {}) {
  * também — fora dela a API recusa, e a resposta volta TRADUZIDA (a tela já
  * sabe dizer "janela fechada").
  */
+// A versão acompanha a do GRAPH_BASE — duas versões divergindo entre receber
+// e responder é a armadilha das duas formas em roupa de URL.
+export const GRAPH_IG_BASE = `https://graph.instagram.com/${GRAPH_BASE.split('/').pop()}`;
+
 export async function enviarTextoInstagram({ para, texto }, deps = {}) {
     const igsid = String(para || '').replace(/^ig_/, '').replace(/\D/g, '');
     const corpo = String(texto ?? '').trim();
     if (!igsid) return { ok: false, erro: 'Destinatário do Instagram inválido.' };
     if (!corpo) return { ok: false, erro: 'Escreva a mensagem antes de enviar.' };
-    const pag = await paginaDoInstagram(deps);
-    if (!pag.ok) return { ok: false, erro: pag.erro };
     const doFetch = deps.fetchImpl || fetch;
-    const token = pag.pagina.pageToken || (deps.cfg || configWhatsapp(deps.env)).token;
-    const r = await doFetch(`${GRAPH_BASE}/${pag.pagina.pageId}/messages`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient: { id: igsid }, messaging_type: 'RESPONSE', message: { text: corpo } }),
-    });
-    const resp = await r.json().catch(() => ({}));
+    const payload = JSON.stringify({ recipient: { id: igsid }, messaging_type: 'RESPONSE', message: { text: corpo } });
+
+    // 🥇 Caso de uso "login do Instagram" (o que o painel do app usa, 22/08):
+    // o token é da CONTA do Instagram (gerado na seção 2 do painel, guardado
+    // no Cloud Run — nunca no banco) e o envio sai pelo graph.instagram.com.
+    const tokenIg = deps.igToken ?? String((deps.env || process.env).INSTAGRAM_ACCESS_TOKEN || '').trim();
+    let r; let resp;
+    if (tokenIg) {
+        r = await doFetch(`${GRAPH_IG_BASE}/me/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${tokenIg}`, 'Content-Type': 'application/json' },
+            body: payload,
+        });
+        resp = await r.json().catch(() => ({}));
+    } else {
+        // 🥈 Caminho da PÁGINA (caso de uso com login do Facebook): token de
+        // página derivado na hora, cache só em memória.
+        const pag = await paginaDoInstagram(deps);
+        if (!pag.ok) return { ok: false, erro: pag.erro };
+        const token = pag.pagina.pageToken || (deps.cfg || configWhatsapp(deps.env)).token;
+        r = await doFetch(`${GRAPH_BASE}/${pag.pagina.pageId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: payload,
+        });
+        resp = await r.json().catch(() => ({}));
+    }
     if (!r.ok) {
         const m = resp?.error?.message || `HTTP ${r.status}`;
         const janela = /outside.*window|allowed window|24 ?h/i.test(m) || resp?.error?.code === 10;

@@ -10,7 +10,7 @@ import {
     caminhoStorageMidia,
 } from '../sefaz-backend/whatsapp-webhook.js';
 
-const CFG = { verifyToken: 'meu-token-de-verificacao', appSecret: 'segredo-do-app' };
+const CFG = { verifyToken: 'meu-token-de-verificacao', appSecret: 'segredo-do-app', instagramAppSecret: '' };
 
 describe('configWebhook / faltas', () => {
     it('lê as envs e lista o que falta com a ação', () => {
@@ -35,7 +35,7 @@ describe('responderVerificacao (GET da Meta)', () => {
     it('recusa token errado, modo errado e config ausente', () => {
         expect(responderVerificacao({ 'hub.mode': 'subscribe', 'hub.verify_token': 'outro', 'hub.challenge': '1' }, CFG).ok).toBe(false);
         expect(responderVerificacao({ 'hub.mode': 'unsubscribe', 'hub.verify_token': CFG.verifyToken }, CFG).ok).toBe(false);
-        expect(responderVerificacao({ 'hub.mode': 'subscribe', 'hub.verify_token': '' }, { verifyToken: '', appSecret: '' }).ok).toBe(false);
+        expect(responderVerificacao({ 'hub.mode': 'subscribe', 'hub.verify_token': '' }, { verifyToken: '', appSecret: '', instagramAppSecret: '' }).ok).toBe(false);
     });
 });
 
