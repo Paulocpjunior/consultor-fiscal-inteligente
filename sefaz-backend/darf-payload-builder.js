@@ -22,6 +22,7 @@
 // ============================================================================
 
 import { sugerirCodigoReceita } from './darf-codigos-receita.js';
+import { normalizarCompetencia } from './competencia.js';
 import { ajustarDiaUtil } from './calendario-obrigacoes.js';
 
 const DARF_ID_SISTEMA = process.env.SERPRO_DARF_SISTEMA || 'SICALC';
@@ -52,10 +53,21 @@ export function ultimoDiaDoMes(ano, mes) {
 }
 
 /** '2026-06' -> { ano: 2026, mes: 6 } (null se inválida) */
+/**
+ * ⚠️ AS QUATRO FORMAS DA COMPETÊNCIA, pelo dono.
+ *
+ * Este parse conhecia só `AAAA-MM`. As outras formas que o app usa de verdade
+ * — `202607` (colagem de arquivo), `07/2026` (catálogo e tarefas) e
+ * `AAAA-MM-DD` (a ficha financeira grava as duas) — caíam no `null`, e daí:
+ * o vencimento virava **HOJE** e o período de apuração **lançava**. Ou seja, a
+ * emissão do DARF era recusada com uma mensagem de formato para uma
+ * competência que o resto do app entende.
+ */
 function parseCompetencia(competencia) {
-    const m = String(competencia).match(/^(\d{4})-(\d{2})$/);
-    if (!m) return null;
-    return { ano: parseInt(m[1]), mes: parseInt(m[2]) };
+    const n = normalizarCompetencia(competencia);
+    if (!n) return null;
+    const [ano, mes] = n.split('-');
+    return { ano: parseInt(ano, 10), mes: parseInt(mes, 10) };
 }
 
 function ehTrimestral(codigoReceita, tributo, periodicidade) {
@@ -73,7 +85,12 @@ function ehTrimestral(codigoReceita, tributo, periodicidade) {
  */
 export function calcularVencimentoDarf(competencia, tributo, periodicidade = 'trimestral', codigoReceita = '') {
     const pa = parseCompetencia(competencia);
-    if (!pa) return new Date().toISOString().slice(0, 10);
+    // 🚨 CAMPO DE DATA NÃO RECEBE DEFAULT. Aqui a ausência virava **HOJE** —
+    // um DARF vencendo no dia em que foi emitido, sobre débito de outro
+    // período. Hoje isso só não sai porque `periodoApuracaoSicalc`, duas
+    // linhas adiante, lança antes; ou seja, o arquivo depende da ORDEM de duas
+    // chamadas. É a família do `|| new Date()` do `.FML` (22/08).
+    if (!pa) return null;
     let { ano, mes } = pa;
 
     if (ehTrimestral(codigoReceita, tributo, periodicidade)) {
@@ -202,6 +219,15 @@ export function montarPayloadDarfSerpro(req) {
 
     const vencimento = req.vencimento
         || calcularVencimentoDarf(competencia, req.tributo, req.periodicidade, codigoReceita);
+    // Sem vencimento derivável a guia NÃO SAI — e a recusa diz o que faltou.
+    // Antes daqui ela saía com a data de HOJE, que é uma afirmação sobre o
+    // prazo do cliente.
+    if (!vencimento) {
+        throw new Error(
+            `competencia inválida: "${competencia}" — sem ela não dá para calcular o vencimento do DARF. `
+            + 'Use AAAA-MM (ex.: 2026-07).',
+        );
+    }
     const { tipoPA, dataPA } = periodoApuracaoSicalc(
         competencia, req.tributo, req.periodicidade, codigoReceita
     );
