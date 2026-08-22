@@ -818,7 +818,11 @@ export function coletarRetencoesF600(notas, warnings) {
 
     for (const notaCrua of (notas || [])) {
         if (docCancelado(notaCrua) || notaCrua.status === 'denegado') continue;
-        if (notaCrua.direcao !== 'saida') continue;
+        // A retenção SOFRIDA é do que a empresa PRESTOU — e a nota própria de
+        // entrada (art. 136) fica gravada como 'saida' até o backfill passar.
+        // Lida crua, uma COMPRA entrava nesta coleta e saía nomeada num aviso
+        // de "ficou de fora" que não faz sentido nenhum para quem lê.
+        if (direcaoEfetivaDoc(notaCrua) !== 'saida') continue;
         // 🚨 AS DUAS FORMAS, PELA DÉCIMA VEZ — caso HS PROJETOS 07/2026 (19/08):
         // esta coleta lia só `valores.pis/cofins` (forma ANINHADA) e a NFS-e do
         // portal grava `valorPis`/`valorCofins` ACHATADOS na raiz. Resultado:

@@ -14,11 +14,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   *"saída"* com um CFOP **1xxx** ao lado), **ICMS/IPI destacados** (o ICMS ia ao
   **DÉBITO** em vez do crédito — o achado 16 outra vez, errando para os dois
   lados), **Por participante**, **Por produto** e **Por UF**.
+  🔴 **E O EIXO AINDA TINHA DOIS GERADORES**: o **E510 (IPI)** do SPED Fiscal
+  lia `nota.direcao` cru onde decide DOIS campos do arquivo — o CFOP e, o mais
+  caro, o **CST de escrituração**, que na ENTRADA converte o CST de saída do
+  fornecedor (IN RFB 932/2009: 50→00, 51→01…). A nota própria de entrada ia ao
+  E510 com o CFOP e o CST **da operação do fornecedor**. E a coleta do **F600**
+  filtrava saída pelo campo cru, deixando uma COMPRA entrar na conta da
+  retenção sofrida e sair nomeada num aviso sem sentido para quem lê.
   📌 **REGRA QUE FICA: corrigir o GERADOR sem corrigir quem CONFERE cria a
   divergência que a casa mais paga.** O eixo da direção só fechou quando
   gerador, preflight, conferência e relatórios passaram a ler o MESMO dono.
   ✅ Ficam cruas, com o motivo no teste: `contraparteDoc` (já trata a própria
   entrada explicitamente) e as leituras de **NFS-e**, que não têm `tpNF`.
+  🚩 **E A CLASSE NÃO ESTÁ FECHADA — restam ~60 leituras cruas de `direcao`**
+  no repo, e elas **não foram triadas uma a uma**. O que foi corrigido é o que
+  produz ARQUIVO FISCAL e o que a equipe compara com ele. O resto é, em boa
+  parte, domínio onde o campo não mente (NFS-e, direção de MENSAGEM, formulário
+  de lançamento manual) — mas isso é hipótese, não varredura feita.
+  📌 **E A TRAVA LITERAL MORDEU TRÊS VEZES NO MESMO DIA** (`cfopPorNota.test.ts`,
+  nas três chamadas de correlação): teste que prende a FORMA da chamada reprova
+  a correção que a régua manda fazer. As três foram trocadas pela INTENÇÃO
+  (o DOCUMENTO chega como argumento) **mais** a proibição explícita do campo
+  cru — que é o que elas deveriam ter dito desde o começo.
 
 - **🚨 O EXPORTAR SAGE DECIDIA O LADO DO LIVRO PELO CAMPO CRU** (22/08). A nota
   PRÓPRIA DE ENTRADA (art. 136 — a compra de produtor rural PF, que o

@@ -27,6 +27,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 function num(v) {
     const n = parseFloat(v);
@@ -95,10 +96,17 @@ export function montarLinhasE510(notas, deps = {}) {
                 if (vIpi > 0) itensComIpiSemCst += 1;
                 continue;
             }
-            const cfop = String(conv(item.cfop || item.CFOP || '0000', nota.direcao, nota._dados, nota));
+            // 🚨 A DIREÇÃO GRAVADA PODE MENTIR, e aqui ela decide DOIS campos
+            // do arquivo: o CFOP e — o mais caro — o CST de escrituração, que
+            // na ENTRADA converte o CST de saída do fornecedor (IN RFB
+            // 932/2009: 50→00, 51→01…). A nota PRÓPRIA DE ENTRADA (art. 136)
+            // fica gravada como 'saida' até o backfill passar; lida crua, ela
+            // ia ao E510 com o CFOP e o CST da operação DO FORNECEDOR.
+            const direcaoNota = direcaoEfetivaDoc(nota) || nota.direcao;
+            const cfop = String(conv(item.cfop || item.CFOP || '0000', direcaoNota, nota._dados, nota));
             // CST de ESCRITURAÇÃO: entrada converte o CST de saída do fornecedor.
-            const cst = cstIpiEscrituracao(item.cstIpi, nota.direcao);
-            if (nota.direcao !== 'entrada' && cst === '99') saidasOutras += 1;
+            const cst = cstIpiEscrituracao(item.cstIpi, direcaoNota);
+            if (direcaoNota !== 'entrada' && cst === '99') saidasOutras += 1;
             const key = `${cfop}|${cst}`;
             if (!grupos.has(key)) {
                 grupos.set(key, { cfop, cst, vlCont: 0, vlBc: 0, vlIpi: 0 });
