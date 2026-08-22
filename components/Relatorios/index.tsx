@@ -411,7 +411,13 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
     );
 
     const { linhas, excluidas } = useMemo(() => {
-        const filtrados = docs.filter(d => d.direcao === direcao && docValido(d)
+        // 🚨 O LIVRO FILTRAVA PELO CAMPO CRU (22/08). A nota PRÓPRIA DE ENTRADA
+        // (art. 136) fica gravada como 'saida', então ela NÃO chegava ao Livro
+        // de Entradas — aparecia no de SAÍDAS — e, por tabela, nunca chegava à
+        // dedup do art. 136 logo abaixo: a nota do PRODUTOR ficava sem par e
+        // entrava no livro, com a própria contada do outro lado. A compra
+        // dobrava, em dois livros diferentes.
+        const filtrados = docs.filter(d => direcaoEfetivaDoc(d) === direcao && docValido(d)
             && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo));
         const montar = (d: any) => {
             const contabil = d.totais?.vNF || d.valorTotal || 0;

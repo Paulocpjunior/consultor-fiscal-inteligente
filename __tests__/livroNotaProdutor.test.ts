@@ -21,10 +21,21 @@ const doProdutor = (numero: string, dia: string, valor: number) => ({
     valorTotal: valor,
 });
 
-/** Nota PRÓPRIA de entrada, emitida pelo cliente (tpNF=0) — forma ANINHADA. */
-const propria = (numero: string, dia: string, valor: number) => ({
-    numero, dhEmi: `2026-07-${dia}T10:00:00`, direcao: 'entrada', tpNF: '0',
-    emitente: { cnpjCpf: '63027940000194', nome: 'VINCENZO GUERRA BANANAS LTDA' },
+const EMPRESA = '63027940000194';
+
+/**
+ * Nota PRÓPRIA de entrada, emitida pelo cliente (tpNF=0) — forma ANINHADA.
+ *
+ * 🚨 `direcao: 'saida'` É COMO ELA FICA GRAVADA (22/08). A versão anterior
+ * deste fixture usava 'entrada' — a forma PÓS-backfill —, e por isso o teste
+ * passava enquanto a produção não deduplicava nada: o Livro de Entradas
+ * filtrava pelo campo cru, então essa nota nem chegava à dedup. O fixture
+ * agora é o caso REAL, e `empresaCnpj` vai junto porque o importer o grava.
+ */
+const propria = (numero: string, dia: string, valor: number, direcao = 'saida') => ({
+    numero, dhEmi: `2026-07-${dia}T10:00:00`, direcao, tpNF: '0',
+    empresaCnpj: EMPRESA,
+    emitente: { cnpjCpf: EMPRESA, nome: 'VINCENZO GUERRA BANANAS LTDA' },
     destinatario: { cnpjCpf: PRODUTOR, nome: 'ROSANGELA GUERRA' },
     valorTotal: valor,
 });
@@ -121,5 +132,76 @@ describe('o que NÃO pode sumir do livro', () => {
         const r = livroSemNotaDeProdutorDuplicada([fornecedor, propria('16', '18', 5200)], montar, valorDe);
         expect(r.linhas).toHaveLength(2);
         expect(r.excluidas).toEqual([]);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A DEDUP NÃO RODAVA PARA NOTA NENHUMA (22/08)
+//
+// Dois defeitos que se sustentavam:
+//
+//   · o **Livro de Entradas** filtrava `d.direcao === 'entrada'` — campo CRU.
+//     A nota própria de entrada fica gravada como 'saida', então ela NÃO
+//     chegava ao livro de entradas (aparecia no de SAÍDAS) e, por tabela,
+//     nunca chegava à dedup;
+//   · e a `ehNotaPropriaDeEntrada` DESTE arquivo exigia `direcao === 'entrada'`
+//     — o contrário do dono no backend. Uma função com o MESMO NOME
+//     respondendo diferente, que é o começo de duas respostas divergentes.
+//
+// Resultado: a nota do PRODUTOR ficava sem par e entrava no livro, com a
+// própria contada do outro lado. **A compra dobrava, em dois livros.**
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 a forma REAL do banco (pré-backfill) é reconhecida', () => {
+    it('a própria de entrada gravada como "saida" É nota própria de entrada', () => {
+        expect(ehNotaPropriaDeEntrada(propria('16', '18', 5200))).toBe(true);
+    });
+
+    it('e a pós-backfill ("entrada") também — o backfill não pode quebrar a dedup', () => {
+        expect(ehNotaPropriaDeEntrada(propria('16', '18', 5200, 'entrada'))).toBe(true);
+    });
+
+    it('a nota do PRODUTOR (tpNF=1) continua não sendo própria de entrada', () => {
+        expect(ehNotaPropriaDeEntrada(doProdutor('95', '16', 5200))).toBe(false);
+    });
+
+    // O dono barra o tpNF=0 de TERCEIRO: sem esse laço, a nota de entrada do
+    // fornecedor viraria "nossa" e a contraparte sairia do lado errado.
+    it('tpNF=0 de TERCEIRO não vira nota própria nossa', () => {
+        const deTerceiro = {
+            numero: '900', dhEmi: '2026-07-10', direcao: 'entrada', tpNF: '0',
+            empresaCnpj: EMPRESA,
+            emitente: { cnpjCpf: '99999999000199', nome: 'OUTRA EMPRESA LTDA' },
+            valorTotal: 100,
+        };
+        expect(ehNotaPropriaDeEntrada(deTerceiro)).toBe(false);
+    });
+
+    // A dedup com a forma REAL: é este o caso que a produção vive hoje.
+    it('e a dedup roda: 8 notas gravadas como no banco viram 4', () => {
+        const docs = [
+            doProdutor('95', '16', 5200), propria('16', '18', 5200),
+            doProdutor('96', '20', 5000), propria('17', '21', 5000),
+            doProdutor('97', '24', 3500), propria('18', '27', 3500),
+            doProdutor('98', '29', 5200), propria('19', '30', 5200),
+        ];
+        const r = livroSemNotaDeProdutorDuplicada(docs, montar, (d: any) => d.valorTotal);
+        expect(r.linhas).toHaveLength(4);
+        expect(r.excluidas).toHaveLength(4);
+    });
+});
+
+// 🔒 O filtro do Livro de Entradas lê pela régua — senão a nota própria nem
+// chega aqui, e a dedup fica de enfeite.
+describe('🚨 o Livro de Entradas filtra pela RÉGUA', () => {
+    it('a tela não filtra pelo campo cru', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fs = require('fs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const path = require('path');
+        const src = fs.readFileSync(
+            path.resolve(__dirname, '..', 'components/Relatorios/index.tsx'), 'utf8',
+        );
+        expect(src).toMatch(/docs\.filter\(d => direcaoEfetivaDoc\(d\) === direcao/);
+        expect(src).not.toMatch(/docs\.filter\(d => d\.direcao === direcao/);
     });
 });

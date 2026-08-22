@@ -32,6 +32,10 @@
  *   conferível; escriturar a menos, não.
  */
 
+// O DONO da pergunta — a mesma régua que o SPED, o `.FML` e a DIPAM usam.
+// @ts-ignore — módulo backend com .d.ts próprio
+import { ehNotaPropriaDeEntrada as ehNotaPropriaDeEntradaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
 /**
@@ -66,9 +70,22 @@ export function contraparteNormalizada(d: any): { nome: string; doc: string; uf:
     };
 }
 
-/** É a nota que o PRÓPRIO cliente emitiu para dar entrada (RICMS art. 136)? */
+/**
+ * É a nota que o PRÓPRIO cliente emitiu para dar entrada (RICMS art. 136)?
+ *
+ * 🚨 ESTA CÓPIA RESPONDIA O CONTRÁRIO DO DONO (22/08). Ela exigia
+ * `direcao === 'entrada'` — e essa nota fica gravada como **'saida'** até o
+ * backfill do sync-cron passar, que é justamente o caso que ela existe para
+ * reconhecer. Efeito: **a dedup do art. 136 não rodava para nota nenhuma**
+ * antes do backfill — a compra de produtor entrava DUAS vezes no livro (a nota
+ * do produtor e a própria de entrada), que é exatamente o que a dedup impede.
+ *
+ * E era uma função com o **mesmo nome** do dono no backend, respondendo
+ * diferente — o começo de duas respostas divergentes (a lição do
+ * `perguntarDebitosJaEnviados`, 18/08). Agora ela delega.
+ */
 export function ehNotaPropriaDeEntrada(d: any): boolean {
-    return String(d?.tpNF ?? '') === '0' && d?.direcao === 'entrada';
+    return !!(ehNotaPropriaDeEntradaDoc(d) as { sim: boolean })?.sim;
 }
 
 export interface NotaExcluidaDoLivro {
