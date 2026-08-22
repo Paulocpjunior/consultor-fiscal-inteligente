@@ -25,6 +25,9 @@ import { faixaDeVencimento, urgenciaFaixa, diasAteVencimento } from './cert-venc
 import { diagnosticarConfig } from './diagnostico-config-helper.js';
 import { listCertsEmpresas } from './cert-storage.js';
 
+// Valor do documento em TODAS as formas (o import pelo navegador grava só
+// `totais.vNF`) — régua única.
+import { valorDoDocumento } from './xml-metadata-helper.js';
 const router = express.Router();
 
 function fa() {
@@ -77,7 +80,7 @@ router.get('/', requireAuth, async (req, res) => {
                 else porChave.set(chave, (porChave.get(chave) || 0) + 1);
                 if (!/^\d{4}-\d{2}$/.test(String(x.competencia || ''))) semCompetencia++;
                 if (x.direcao !== 'entrada' && x.direcao !== 'saida') semDirecao++;
-                const valor = Number(x.valorTotal ?? x.vNF ?? 0);
+                const valor = Number(valorDoDocumento(x)) || 0;
                 if (!Number.isFinite(valor) || valor <= 0) semValor++;
                 if (!x.empresaId || !x.empresaCnpj) semEmpresa++;
             }

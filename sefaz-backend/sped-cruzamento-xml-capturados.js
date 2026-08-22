@@ -16,6 +16,10 @@
 // ============================================================================
 
 const C100 = { COD_SIT: 5, NUM_DOC: 7, CHV_NFE: 8, VL_DOC: 11 };
+// Valor do documento em TODAS as formas (o import pelo navegador grava só
+// `totais.vNF`) — régua única.
+import { valorDoDocumento } from './xml-metadata-helper.js';
+
 const COD_SIT_EFETIVO = new Set(['00', '01', '06', '07', '08']);
 
 function num(v) {
@@ -60,7 +64,11 @@ function indexarCapturadas(nfes) {
         if (status && status !== 'autorizado' && status !== 'autorizada') { descartadas++; continue; }
         const chave = String(n.chave || n.chaveAcesso || n.chNFe || '').replace(/\D/g, '');
         if (chave.length !== 44) { descartadas++; continue; }
-        const valor = num(n.valorTotal ?? n.vNF ?? n.valor ?? n.vlDoc ?? 0);
+        // Valor pela RÉGUA: o import pelo NAVEGADOR grava só `totais.vNF`, e
+        // ler as formas na mão fazia essas notas valerem 0,00 aqui — o
+        // cruzamento acusaria divergência contra um SPED CERTO, que é o alarme
+        // falso que ensina a equipe a ignorar a conferência.
+        const valor = num(valorDoDocumento(n) ?? 0) || num(n.vlDoc ?? 0);
         if (!idx.has(chave)) {
             idx.set(chave, {
                 chave,
