@@ -439,7 +439,7 @@ class SerproProvider {
                 mensagens: [],
                 fonte: 'prefeitura_sp',
                 status: 'nao_integrado',
-                motivo: 'CCM (inscrição municipal SP) não configurado — configure em Cadastro da empresa',
+                motivo: 'CCM (inscrição municipal SP) não configurado — preencha em Empresas → Dados Fiscais',
             };
         }
         try {

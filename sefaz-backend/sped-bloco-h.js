@@ -76,7 +76,7 @@ export function planejarBlocoH({ itens, exigido, motInv } = {}) {
         avisos.push(
             `INVENTÁRIO NÃO INFORMADO: nenhum dos ${lista.length} itens tem quantidade e valor unitário de inventário. `
             + 'O bloco H sai VAZIO de propósito — preenchê-lo com zero declararia ao Fisco que a empresa não tinha estoque. '
-            + 'Informe a contagem física da empresa antes de transmitir.',
+            + 'Informe a contagem física em SPED Fiscal → aba 📦 Inventário (Bloco H) antes de transmitir.',
         );
         return { gerar: false, itens: [], valorTotal: 0, motInv: null, avisos, motivo: 'Contagem não informada.' };
     }

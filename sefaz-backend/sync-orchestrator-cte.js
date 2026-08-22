@@ -111,7 +111,13 @@ export async function sincronizarEmpresaCte({ empresaId, empresaCnpj, capturadoP
 
   const { uf } = await carregarFlagsEmpresa(empresaId, cnpjNum);
   if (!uf) {
-    return { ok: false, motivo: 'UF não cadastrada para a empresa — preencha em dadosFiscais.uf.' };
+    // ⚠️ A mensagem diz o CAMINHO, não a chave do banco: quem lê "preencha em
+    // dadosFiscais.uf" não tem como saber onde isso fica (varredura de 21/08 —
+    // aviso que aponta um lugar tem de apontar um lugar que a pessoa acha).
+    return {
+      ok: false,
+      motivo: 'UF não cadastrada para a empresa — preencha em Empresas → Dados Fiscais.',
+    };
   }
 
   const lockToken = randomUUID();
