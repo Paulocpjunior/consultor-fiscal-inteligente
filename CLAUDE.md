@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O PAINEL AFIRMAVA "✓ CAPTURA OK" A PARTIR DE UM CAMPO DE CADASTRO — nas
+  MESMAS 202 empresas** (23/08, achado ao conferir se a porta que eu tinha
+  acabado de apontar abria). O 📋 Status de Captura por Empresa decidia com
+  `temA3Proprio = tipoCert === 'A3' && certUploaded`, e isso entrava no
+  `capturaNfeOk` que imprime **✓ Captura OK**. Ou seja: alguém marcou A3 no
+  cadastro e subiu o arquivo ⇒ a tela AFIRMA que a captura está boa — **nada
+  ali olhava se o agente `cfi-a3` alguma vez entregou um documento**.
+  🔴 **É a PRIMEIRA regra permanente deste projeto invertida** (*"validação por
+  RESULTADO, não por status"*), na família do trilho NFS-e SP que ficou semanas
+  verde com 0 sucessos e 121 falhas.
+  🐛 **E a segunda metade do custo era MINHA, do PR anterior**: horas antes eu
+  passei a mandar essas 202 para *"confira se o agente cfi-a3 rodou (Status por
+  Empresa)"* — e a tela apontada respondia **✓ Captura OK** para todas. Aviso
+  que aponta lugar que não responde é o achado 18 de 21/08 outra vez, agora com
+  o agravante de eu ter criado o ponteiro sem abrir a porta. **Conferir se a
+  porta abre faz parte de escrever o aviso.** (O emoji também estava errado —
+  a aba é 📋, não 📊; corrigido nos quatro lugares.)
+  ✂️ `captura-a3-cobertura.js` é o dono da pergunta *"o agente ENTREGOU?"*, que
+  é OUTRA pergunta de `temA3Proprio` (*"existe caminho de captura?"* — essa
+  continua sim, e segue mandando no `capturaNfeOk` e na lista de bloqueios).
+  Duas perguntas, dois donos. A tela passou a dizer *"Capturada pelo agente
+  local cfi-a3 · última entrega em dd/mm/aaaa"*, e o cabeçalho ganhou
+  `a3SemEntrega` — o número que o verde escondia.
+  ⚠️ **ÂMBAR, NÃO VERMELHO, e o motivo é régua da casa**: o agente só grava
+  `sefaz_state.ultimaSync` **quando trouxe NSU**, então a ausência prova que
+  *documento nenhum chegou por ele* — **não** prova que ele não rodou (rodada
+  sem movimento não deixa rastro). Vermelho afirmaria o que o app não mediu; a
+  frase diz exatamente essa diferença. O que não pode é continuar VERDE.
+  ⚠️ **E NENHUM SLA INVENTADO**: o app não conhece a agenda do agente, então
+  "entregou há 180 dias" devolve o FATO com a data, nunca um veredito de
+  "parado". Cravar janela aqui seria inventar prazo — o mesmo que a casa se
+  recusa a fazer com vencimento, município e código de tabela.
+  📌 **A FONTE DA SYNC É QUE DECIDE, não a data**: `ultimaSyncFonte` entrou no
+  `stateMap` no mesmo PR — sem ela, uma sync antiga do CRON EM NUVEM passaria
+  por entrega do agente local. É a armadilha das duas formas entre dois
+  **ESCRITORES** do mesmo campo. Provada removendo a checagem de propósito.
+
 - **🚨 METADE DA CARTEIRA CAPTURA POR A3 — e as duas telas do colaborador
   mandavam as 202 "destravar a captura"** (23/08, do painel de captura que o
   Paulo mandou: **202 das 404** empresas monitoradas estão bloqueadas por
