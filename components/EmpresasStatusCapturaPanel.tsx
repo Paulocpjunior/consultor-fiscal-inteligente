@@ -41,7 +41,7 @@ interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -61,11 +61,19 @@ function diasAteVencimento(iso: string | null): number | null {
     } catch { return null; }
 }
 
-const Pill: React.FC<{ ok: boolean; label: string; title?: string }> = ({ ok, label, title }) => (
+// 🚨 O TERCEIRO ESTADO EXISTE, e sem ele a tela se contradiz. A empresa A3
+// TEM caminho de captura (o agente local), então o pill saía VERDE — mesmo
+// quando o agente nunca entregou nada. Com a linha de texto dizendo "⚠ nunca
+// entregou" e o pill verde do lado, seriam duas leituras do mesmo fato na
+// mesma tela, que é o defeito que este projeto mais paga.
+// `alerta` VENCE o `ok` de propósito: caminho existe, entrega não.
+const Pill: React.FC<{ ok: boolean; label: string; title?: string; alerta?: boolean }> = ({ ok, label, title, alerta }) => (
     <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-        ok ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
+        alerta ? 'bg-amber-100 text-amber-800 border border-amber-300'
+            : ok ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
     }`}>
-        {ok ? '✓' : '✗'} {label}
+        {alerta ? '⚠' : ok ? '✓' : '✗'} {label}
     </span>
 );
 
@@ -368,7 +376,12 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 case 'sem-ccmsp': return e.nfseSpAplicavel !== false && !e.nfseSpAutorizado;
                 case 'nfse-nac-inativa': return !e.nfseNacionalDfeAtivo;
                 case 'sem-responsavel': return !e.responsaveis || e.responsaveis.length === 0;
-                case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk;
+                // ⚠️ "Tudo OK" não pode incluir a A3 que o agente nunca
+                // entregou: o filtro existe justamente para a pessoa parar de
+                // olhar essas empresas.
+                case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk
+                    && e.coberturaA3?.situacao !== 'a3-sem-entrega';
+                case 'a3-sem-entrega': return e.coberturaA3?.situacao === 'a3-sem-entrega';
                 case 'todas':
                 default: return true;
             }
@@ -466,6 +479,21 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <div className="text-xs text-green-700 font-semibold">Captura NFe OK</div>
                     <div className="text-2xl font-bold text-green-900">{r.capturaNfeOk}</div>
                     <div className="text-xs text-red-700">{r.capturaNfeBloqueada} bloqueadas ›</div>
+                    {/* 🚨 O número que o verde escondia. "Captura NFe OK" conta
+                        CAMINHO de captura, e na empresa A3 o caminho é o agente
+                        local — que pode nunca ter entregado nada. Sem esta
+                        linha o cabeçalho conta certificado e não conta
+                        captura. */}
+                    {!!r.a3SemEntrega && (
+                        <button
+                            type="button"
+                            onClick={() => setFiltro('a3-sem-entrega')}
+                            className="text-xs text-amber-700 underline text-left"
+                            title="Empresas A3 cujo agente local cfi-a3 nunca entregou documento. Não prova que ele não rodou — rodada sem movimento não deixa registro."
+                        >
+                            ⚠ {r.a3SemEntrega} A3 sem entrega do agente ›
+                        </button>
+                    )}
                 </div>
                 <div {...cardFiltro('cert-vencendo', 'bg-yellow-50 border border-yellow-300 rounded-lg p-3')}>
                     <div className="text-xs text-yellow-700 font-semibold">Cert vencendo &lt;30d / Expirado ›</div>
@@ -767,7 +795,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
                                         <div className="flex flex-col gap-1 items-center">
-                                            <Pill ok={e.capturaNfeOk} label="NFe" />
+                                            <Pill
+                                                ok={e.capturaNfeOk}
+                                                alerta={e.coberturaA3?.situacao === 'a3-sem-entrega'}
+                                                title={e.coberturaA3?.situacao === 'a3-sem-entrega'
+                                                    ? (e.coberturaA3.acao || undefined)
+                                                    : (e.coberturaA3?.texto || undefined)}
+                                                label="NFe"
+                                            />
                                             <Pill ok={e.capturaNfseSpOk} label="NFSe SP" />
                                             <Pill
                                                 ok={e.capturaNfseNacionalOk}

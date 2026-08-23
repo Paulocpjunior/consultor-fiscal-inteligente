@@ -137,3 +137,41 @@ describe('🚨 a rota entrega a cobertura, e lê a FONTE da sync', () => {
         expect(tela).toMatch(/a3-sem-entrega/);
     });
 });
+
+// ============================================================================
+// 🚨 MEIA CORREÇÃO AQUI PRODUZ O DEFEITO QUE A CASA MAIS PAGA.
+//
+// `capturaNfeOk` responde "existe CAMINHO?", e para a A3 existe (o agente
+// local) — então o PILL, o KPI, o filtro "tudo OK" e o CSV continuavam
+// dizendo verde/sim. Com a linha de texto ao lado dizendo "⚠ nunca entregou",
+// seriam DUAS LEITURAS DO MESMO FATO NA MESMA TELA.
+//
+// Corrigir só a frase e deixar o pill verde é pior que não corrigir: a tela
+// passa a se contradizer, e quem lê escolhe a metade que preferir.
+// ============================================================================
+describe('🚨 os quatro leitores do "OK" concordam com a cobertura', () => {
+    const tela = require('fs').readFileSync('components/EmpresasStatusCapturaPanel.tsx', 'utf8');
+    const svc = require('fs').readFileSync('services/empresaStatusCapturaService.ts', 'utf8');
+
+    it('o PILL tem terceiro estado, e o alerta VENCE o ok', () => {
+        // Sem isso o pill sai verde ao lado do texto âmbar.
+        expect(tela).toMatch(/alerta\?:\s*boolean/);
+        expect(tela).toMatch(/alerta\s*\?\s*'bg-amber/);
+        expect(tela).toMatch(/alerta=\{e\.coberturaA3\?\.situacao === 'a3-sem-entrega'\}/);
+    });
+
+    it('o filtro "tudo OK" exclui a A3 sem entrega', () => {
+        // Este filtro existe para a pessoa PARAR de olhar essas empresas.
+        expect(tela).toMatch(/case 'ok-tudo':[\s\S]{0,200}coberturaA3\?\.situacao !== 'a3-sem-entrega'/);
+    });
+
+    it('o KPI mostra o número que o verde escondia, e ele filtra', () => {
+        expect(tela).toMatch(/r\.a3SemEntrega/);
+        expect(tela).toMatch(/setFiltro\('a3-sem-entrega'\)/);
+    });
+
+    it('o CSV leva a coluna — exportar não pode perder a ressalva', () => {
+        expect(svc).toMatch(/'Agente A3 entregou'/);
+        expect(svc).toMatch(/a3-sem-entrega' \? 'NUNCA'/);
+    });
+});
