@@ -181,15 +181,22 @@ busca dentro da thread, CRM/Jotform.
 **Sequência recomendada**: ~~fechar os 3 bloqueantes~~ ✅ 16/08 →
 ~~ligar o bot no PILOTO, com a Ultra Fox de pé~~ ✅ 17/08 → ~~**ensaio com
 atendente real resolvendo conversa ponta a ponta**~~ ✅ **21/08 — teste
-real com várias pessoas logadas** (ver §9) → **virar o alcance para 🌐
-todos** (se ainda estiver em 🧪 piloto — conferir na ⚙️ → 🤖) → só então
-cancelar a Ultra Fox. E o backup dela entra ANTES do cancelamento —
-plataforma cancelada não devolve export. **Checklist do dia do
-cancelamento**: (1) ✅ ~~backup COMPLETO exportado e importado pelo ⚙️ →
-📥~~ — **FEITO 21/08 [Paulo]**, inclusive contatos (no dia do corte, um
-export final incremental do que chegou depois — reimportar não duplica);
-(2) alcance 🌐 confirmado e bot respondendo; (3) um dia de operação sem a
-equipe abrir a Ultra Fox — se ninguém sentiu falta, corta.
+real com várias pessoas logadas** (ver §9) → ~~**virar o alcance para 🌐
+todos**~~ ✅ **[Paulo, 22/08: "bot ja esta para todos, tudo ligado a
+dias"]** → só então cancelar a Ultra Fox. E o backup dela entra ANTES do
+cancelamento — plataforma cancelada não devolve export. **Checklist do dia
+do cancelamento**: (1) ✅ ~~backup COMPLETO exportado e importado pelo ⚙️ →
+📥~~ — **FEITO 21/08 [Paulo]**, inclusive contatos; (2) ✅ ~~alcance 🌐
+confirmado e bot respondendo~~ — **[Paulo, 22/08]** ligado "a dias", com a
+operação real inteira no SP Connect desde 21/08; (3) ✅ ~~um dia de operação
+sem a equipe abrir a Ultra Fox~~ — dias de operação real corridos.
+**⇒ SOBRAM DOIS ATOS, os dois no dia do cancelamento**: (a) o **export
+incremental FINAL** da Ultra Fox (contatos/mensagens desde 21/08) →
+⚙️ → 📥 (reimportar não duplica); (b) **cancelar** — e, cancelada,
+conferir no painel de webhook da ⚙️ Config Admin (CFI) que o app DELA
+saiu da lista de assinados da WABA: enquanto assinado, o fornecedor
+antigo continua RECEBENDO cópia de toda mensagem de cliente, o que depois
+do contrato é problema de LGPD, não de conveniência.
 
 ⚠️ **O que fica ENTRE o piloto e o 🌐 todos**: o piloto prova o bot na
 conversa de UMA pessoa que começa do zero; o 🌐 solta o bot sobre as
