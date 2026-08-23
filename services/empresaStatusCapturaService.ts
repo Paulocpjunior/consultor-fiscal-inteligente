@@ -48,6 +48,12 @@ export interface EmpresaStatusCaptura {
     ultimaSyncMs: number | null;
     ultNSU: string | null;
     cStatUltimaSync: string | null;
+    /**
+     * Empresa A3 é capturada pelo agente local `cfi-a3`, fora do cron em
+     * nuvem — e o painel dizia "✓ Captura OK" só porque alguém marcou A3 no
+     * cadastro. Aqui vem se o agente ENTREGOU, e quando.
+     */
+    coberturaA3?: import('../sefaz-backend/captura-a3-cobertura').CoberturaA3;
 }
 
 export interface EmpresaStatusResumo {
@@ -55,6 +61,9 @@ export interface EmpresaStatusResumo {
     semUf: number;
     comCertA1: number;
     comCertA3: number;
+    /** Das A3, quantas o agente local nunca entregou documento. */
+    a3SemEntrega?: number;
+    a3ComEntrega?: number;
     usandoCertEscritorio: number;
     semCertNenhum: number;
     certExpirado: number;

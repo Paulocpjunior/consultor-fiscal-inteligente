@@ -788,7 +788,23 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             aparecem só na conferência de
                                             cadastro (botão "Completar cadastro"
                                             ao lado, e o selo da Carteira). */}
-                                        {e.motivosBloqueio.length === 0 ? (
+                                        {/* 🚨 A EMPRESA A3 NÃO PODE DIZER "✓ Captura OK".
+                                            Ela não é capturada pelo cron em nuvem — quem a captura
+                                            é o agente local cfi-a3 —, e o verde saía de um campo do
+                                            CADASTRO (tipoCert === 'A3'), nunca de um documento ter
+                                            chegado. Status lido como resultado, em 202 empresas.
+                                            Agora a linha diz se o agente ENTREGOU, e quando. */}
+                                        {e.motivosBloqueio.length === 0 && e.coberturaA3?.ehA3 ? (
+                                            <span
+                                                className={e.coberturaA3.situacao === 'a3-sem-entrega'
+                                                    ? 'text-amber-700 text-xs'
+                                                    : 'text-green-700 text-xs'}
+                                                title={e.coberturaA3.acao || 'Entrega registrada pelo agente local cfi-a3.'}
+                                            >
+                                                {e.coberturaA3.situacao === 'a3-sem-entrega' ? '⚠ ' : '✓ '}
+                                                {e.coberturaA3.texto}
+                                            </span>
+                                        ) : e.motivosBloqueio.length === 0 ? (
                                             <span
                                                 className="text-green-700 text-xs"
                                                 title={'Nada bloqueia a CAPTURA desta empresa. Não é atestado de cadastro completo: '

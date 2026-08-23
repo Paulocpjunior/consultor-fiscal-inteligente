@@ -750,7 +750,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 r.preenchidas ? `${r.preenchidas} preenchida(s) do XML guardado` : '',
                 r.ganharamNumero ? `${r.ganharamNumero} ganharam o nº pela chave de acesso` : '',
                 r.soResumo ? `${r.soResumo} só têm o RESUMO da SEFAZ na base — o arquivo guardado não tem itens; importe o XML completo (Central de XMLs → Importar) e a linha dirá "COMPLETADA"` : '',
-                r.semArquivo ? `${r.semArquivo} sem arquivo guardado (buraco de captura — confira o 📊 Status por Empresa)` : '',
+                r.semArquivo ? `${r.semArquivo} sem arquivo guardado (buraco de captura — confira o 📋 Status por Empresa)` : '',
                 r.semItemNoXml ? `${r.semItemNoXml} com XML guardado sem itens legíveis — mande o caso ao time` : '',
                 r.falhas ? `${r.falhas} falha(s) de leitura` : '',
             ].filter(Boolean);

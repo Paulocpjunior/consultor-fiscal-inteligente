@@ -14,7 +14,7 @@
 //     Diagnóstico — pode ser certificado, procuração ou município sem
 //     trilho"*;
 //   · o **farol de lastro** (ficha × documentos, o caso EXPERTE de 15/08):
-//     *"destrave a captura (📊 Status por Empresa diz o bloqueio)"*.
+//     *"destrave a captura (📋 Status por Empresa diz o bloqueio)"*.
 //
 // Mandar meia carteira procurar defeito onde não há é o jeito conhecido de
 // ensinar a equipe a ignorar o farol. **Causa junto do número, sempre.**

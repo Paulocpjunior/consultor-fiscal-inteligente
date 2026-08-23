@@ -95,7 +95,7 @@ export function conferirFichaContraDocumentos({
                 situacao: 'sem-documento-agente-local', cor: 'falha',
                 mensagem: `${rotulo} na ficha SEM NENHUM documento por trás nesta competência — e esta empresa `
                     + 'captura por certificado **A3**, pelo agente local `cfi-a3` (o cron em nuvem não a alcança).',
-                acao: 'Confira se o agente cfi-a3 rodou nesta competência (📊 Status por Empresa). '
+                acao: 'Confira se o agente cfi-a3 rodou nesta competência (📋 Status por Empresa). '
                     + 'Se rodou e mesmo assim não há documento, importe os XMLs ou lance as notas '
                     + 'na aba Importar → ✍️ Lançar nota sem XML.',
             };
@@ -106,7 +106,7 @@ export function conferirFichaContraDocumentos({
             // AS TRÊS PORTAS DE ABASTECER, na ordem em que se tenta. Dizer só
             // "não há documentos" mandaria a pessoa procurar sozinha por onde
             // começar — e o caminho depende de qual das três falhou.
-            acao: 'Abasteça o banco: destrave a captura (📊 Status por Empresa diz o bloqueio), importe os XMLs, '
+            acao: 'Abasteça o banco: destrave a captura (📋 Status por Empresa diz o bloqueio), importe os XMLs, '
                 + 'ou lance as notas na aba Importar → ✍️ Lançar nota sem XML.',
         };
     }

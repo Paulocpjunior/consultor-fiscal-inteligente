@@ -30,6 +30,7 @@ import { selecionarCertA1PorBase } from './cert-base-helper.js';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 import { normalizarCodCliente } from './cod-cliente.js';
 import { validarRegimeParaGravacao } from './regime-tributario.js';
+import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
 
 const router = express.Router();
 
@@ -169,6 +170,11 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const d = doc.data();
             stateMap.set(doc.id, {
                 ultimaSyncMs: d.ultimaSync?.toMillis?.() ?? null,
+                // 🚨 QUEM escreveu decide o que a data prova. Sem a fonte, uma
+                // sync antiga do cron em nuvem passaria por entrega do agente
+                // local — e o painel voltaria a afirmar cobertura que ninguém
+                // mediu. Campo fora da leitura some da régua.
+                ultimaSyncFonte: d.ultimaSyncFonte || null,
                 ultNSU: d.ultNSU || '0',
                 cStatUltimaSync: d.cStatUltimaSync || null,
             });
@@ -198,6 +204,11 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             semUf: 0,
             comCertA1: 0,
             comCertA3: 0,
+            // Das A3, quantas o agente local NUNCA entregou documento. É o
+            // número que o "✓ Captura OK" escondia — sem ele, o cabeçalho
+            // conta certificado e não conta captura.
+            a3SemEntrega: 0,
+            a3ComEntrega: 0,
             usandoCertEscritorio: 0,
             semCertNenhum: 0,
             certExpirado: 0,
@@ -307,7 +318,20 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // Distribuicao DF-e; SEFAZ rejeita com cStat=593.
             const temA1ProprioValido = tipoCert === 'A1' && certValido && !ehEscritorio;
             const temA1MesmaRaizValido = tipoCert === 'A1-raiz' && certValido && usaA1MesmaRaiz;
+            const state = stateMap.get(emp.cnpj);
             const temA3Proprio = tipoCert === 'A3' && certUploaded;
+            // ⚠️ `temA3Proprio` responde "existe CAMINHO de captura?" — e essa
+            // resposta continua sendo sim: o agente local é caminho válido, e
+            // por isso ela segue mandando no `capturaNfeOk` e na lista de
+            // bloqueios (A3 não é bloqueio). O que ela NUNCA respondeu é
+            // "chegou documento por ele?", e era isso que a tela lia como
+            // "✓ Captura OK". Duas perguntas, dois donos.
+            const coberturaA3 = coberturaAgenteA3({
+                tipoCert,
+                certUploaded,
+                ultimaSyncMs: state?.ultimaSyncMs ?? null,
+                ultimaSyncFonte: state?.ultimaSyncFonte ?? null,
+            });
             const podeUsarCertEscritorio = certEscritorioUtilizavel && ehEscritorio;
             const usaCertEscritorio = !temA1ProprioValido && podeUsarCertEscritorio;
 
@@ -394,8 +418,6 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             const capturaNfseNacionalVia = nfseNacStatus.via;
             if (nfseNacStatus.motivo) motivosBloqueio.push(nfseNacStatus.motivo);
 
-            const state = stateMap.get(emp.cnpj);
-
             const item = {
                 id: emp.id,
                 cnpj: emp.cnpj,
@@ -434,6 +456,11 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 ultimaSyncMs: state?.ultimaSyncMs ?? null,
                 ultNSU: state?.ultNSU ?? null,
                 cStatUltimaSync: state?.cStatUltimaSync ?? null,
+                // 🚨 A empresa A3 não é capturada pelo cron em nuvem: quem a
+                // captura é o agente local. O painel dizia "✓ Captura OK" só
+                // porque alguém marcou A3 no cadastro — status lido como
+                // resultado. Agora ele diz se o agente ENTREGOU, e quando.
+                coberturaA3,
             };
             empresas.push(item);
 
@@ -442,6 +469,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (!emp.uf) resumo.semUf++;
             if (tipoCert === 'A1' || tipoCert === 'A1-raiz') resumo.comCertA1++;
             else if (tipoCert === 'A3') resumo.comCertA3++;
+            if (coberturaA3.situacao === 'a3-sem-entrega') resumo.a3SemEntrega++;
+            else if (coberturaA3.situacao === 'a3-entregue') resumo.a3ComEntrega++;
             else if (tipoCert === 'escritorio') resumo.usandoCertEscritorio++;
             else resumo.semCertNenhum++;
             if (certVenceEm) {

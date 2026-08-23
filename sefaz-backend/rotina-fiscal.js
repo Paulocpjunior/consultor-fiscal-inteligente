@@ -159,7 +159,7 @@ export function montarRotinaFiscal({
                 : 'Nenhuma nota capturada nesta competência.',
             capturaPorAgenteLocal
                 ? 'Ela é capturada pelo agente local cfi-a3, que o cron em nuvem não alcança: confira se o '
-                  + 'agente rodou nesta competência (📊 Status por Empresa) antes de procurar outro bloqueio.'
+                  + 'agente rodou nesta competência (📋 Status por Empresa) antes de procurar outro bloqueio.'
                 : (capturaAtiva
                     ? 'Rode a captura do cliente e confira o Diagnóstico — pode ser certificado, procuração ou município sem trilho.'
                     : 'A empresa não está elegível à captura automática — confira o cadastro em Status por Empresa.'),
