@@ -293,7 +293,9 @@ export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
         'CNPJ', 'Razão Social', 'Regime', 'Responsável', 'Tipo Cert', 'Cert Válido',
         'Cert Vence', 'Procuração e-CAC', 'CCM SP', 'NFSe SP Autorizado',
         'NFSe Nacional Ativo', 'Captura NFe OK', 'Captura NFSe SP OK',
-        'Captura NFSe Nacional OK', 'Motivos Bloqueio',
+        // A3 é capturada pelo agente local: "Captura NFe OK" ali diz que
+        // existe CAMINHO, não que documento chegou. A coluna separa as duas.
+        'Captura NFSe Nacional OK', 'Agente A3 entregou', 'Motivos Bloqueio',
     ];
     const fmtResponsaveis = (rs: EmpresaStatusCaptura['responsaveis']) =>
         rs.length === 0 ? 'sem responsável' : rs.map(r => `${r.nome} (${r.papel})`).join(' · ');
@@ -310,6 +312,9 @@ export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
         e.capturaNfeOk ? 'sim' : 'NÃO',
         e.capturaNfseSpOk ? 'sim' : 'NÃO',
         e.capturaNfseNacionalOk ? 'sim' : 'NÃO',
+        e.coberturaA3?.situacao === 'a3-entregue'
+            ? `sim (${new Date(e.coberturaA3.entregueEm as number).toLocaleDateString('pt-BR')})`
+            : e.coberturaA3?.situacao === 'a3-sem-entrega' ? 'NUNCA' : 'n/a',
         `"${e.motivosBloqueio.map(formatarMotivoBloqueioCaptura).join(' · ').replace(/"/g, '""')}"`,
     ].join(','));
     return [headers.join(','), ...rows].join('\n');

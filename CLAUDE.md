@@ -41,6 +41,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `stateMap` no mesmo PR — sem ela, uma sync antiga do CRON EM NUVEM passaria
   por entrega do agente local. É a armadilha das duas formas entre dois
   **ESCRITORES** do mesmo campo. Provada removendo a checagem de propósito.
+  🚨 **E CORRIGIR SÓ A FRASE TERIA CRIADO O DEFEITO QUE A CASA MAIS PAGA.**
+  `capturaNfeOk` responde *"existe CAMINHO?"* — e para a A3 existe —, então o
+  **pill NFe**, o **KPI "Captura NFe OK"**, o filtro **"tudo OK"** e o **CSV**
+  continuavam dizendo verde/sim ao lado da linha que dizia *"⚠ nunca
+  entregou"*: **duas leituras do mesmo fato na mesma tela**. Os quatro
+  passaram a concordar — o pill ganhou TERCEIRO estado (âmbar, e o alerta
+  VENCE o ok), o "tudo OK" exclui quem nunca recebeu entrega (o filtro existe
+  para a pessoa PARAR de olhar), o KPI mostra o número com clique para a lista
+  e o CSV leva a coluna (exportar não pode perder a ressalva).
+  📌 **REGRA QUE FICA: quando um booleano muda de significado, os LEITORES
+  dele entram no mesmo PR** — meia correção não deixa o defeito pela metade,
+  ela troca um erro por uma CONTRADIÇÃO, e quem lê escolhe a metade que
+  preferir. É a irmã da régua dos leitores do `cfopEscriturado` (18/08).
 
 - **🚨 METADE DA CARTEIRA CAPTURA POR A3 — e as duas telas do colaborador
   mandavam as 202 "destravar a captura"** (23/08, do painel de captura que o
