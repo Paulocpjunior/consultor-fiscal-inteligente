@@ -5,6 +5,36 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 METADE DA CARTEIRA CAPTURA POR A3 — e as duas telas do colaborador
+  mandavam as 202 "destravar a captura"** (23/08, do painel de captura que o
+  Paulo mandou: **202 das 404** empresas monitoradas estão bloqueadas por
+  certificado **A3**, que NÃO roda no cron em nuvem — quem as captura é o
+  **agente local `cfi-a3`**; as outras 42 são A1 faltando ou inválido).
+  🔴 Para essas 202, "zero documento" não aponta captura quebrada: aponta o
+  AGENTE que não rodou naquela competência. E as duas telas que decidem se
+  alguém pode parar de olhar o mês mandavam procurar defeito onde não há — a
+  **Rotina do Mês** (*"pode ser certificado, procuração ou município sem
+  trilho"*) e o **farol de lastro** (*"destrave a captura"*, o caso EXPERTE de
+  15/08, que é justamente uma empresa A3). **Meia carteira recebendo alarme com
+  ação errada é o jeito conhecido de ensinar a equipe a ignorar o farol.**
+  ⚠️ **E A SEVERIDADE NÃO CAI, de propósito**: o agente A3 escreve na MESMA
+  coleção, então documento nenhum ali continua sendo lacuna de verdade — não é
+  desenho. Baixar para âmbar (ou calar) trocaria um alarme com ação errada por
+  um **SILÊNCIO FALSO**, e a Rotina voltaria a dar a competência por fechada
+  sem lastro. É a régua do cruzamento CFI × SPED (22/08): **trocar alarme falso
+  por silêncio falso não é correção.** O teste exige `cor` e `status`
+  IDÊNTICOS aos do caso comum, e a trava foi provada estreitando a condição de
+  volta — ela acusa exatamente a linha que silenciaria as 202.
+  📌 **O tipo do certificado vira PROJEÇÃO, não consulta por empresa**: as duas
+  rotas leem `empresas_certificados` **uma vez** com `.select('tipoCert')` e
+  passam `capturaPorAgenteLocal` para o núcleo — falha na leitura devolve o
+  comportamento antigo (nunca derruba o painel da carteira inteira por um
+  cadastro torto).
+  📌 **REGRA QUE FICA: causa junto do número vale para o BLOQUEIO também.** O
+  farol já dizia *"há valor sem documento"*, que é verdade; o que faltava era
+  **por qual porta** aquele documento entraria. Alarme certo com primeira
+  parada errada custa o dia do colaborador e o crédito do farol.
+
 - **🚨 A VARREDURA DE "CAMPO QUE O GERADOR LÊ E NINGUÉM PODE PREENCHER" EXISTIA
   COMO SCRIPT E NUNCA FOI LIGADA — e o oitavo campo já estava esperando**
   (22/08). O eixo nasceu em 17/08 com o `IND_NAT_PJ` e o cruzamento virou

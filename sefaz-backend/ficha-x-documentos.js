@@ -41,10 +41,15 @@
  * @param {number|null} p.documentos quantos docs a competência tem no banco
  *                                   (null = a contagem FALHOU — não é zero!)
  * @param {string} [p.rotulo]        como o número se chama na tela ('IPI', 'A apuração'…)
- * @returns {{ situacao: 'sem-valor'|'sem-documento'|'com-lastro'|'contagem-indisponivel',
+ * @param {boolean} [p.capturaPorAgenteLocal] a empresa tem certificado **A3**
+ *   (`tipoCert === 'A3'` em `empresas_certificados`) — ver o bloco abaixo.
+ * @returns {{ situacao: 'sem-valor'|'sem-documento'|'sem-documento-agente-local'
+ *                      |'com-lastro'|'contagem-indisponivel',
  *             cor: 'ok'|'atencao'|'falha'|'neutro', mensagem: string, acao: string|null }}
  */
-export function conferirFichaContraDocumentos({ valorApurado, documentos, rotulo = 'IPI' }) {
+export function conferirFichaContraDocumentos({
+    valorApurado, documentos, rotulo = 'IPI', capturaPorAgenteLocal = false,
+}) {
     const valor = Number(valorApurado) || 0;
 
     if (valor <= 0) {
@@ -67,6 +72,34 @@ export function conferirFichaContraDocumentos({ valorApurado, documentos, rotulo
     }
 
     if (Number(documentos) === 0) {
+        // ═══════════════════════════════════════════════════════════════════
+        // 🚨 A MESMA AUSÊNCIA, COM OUTRA CAUSA — e outra primeira parada
+        //
+        // Paulo, 23/08, com o painel de captura: **202 das 404 empresas usam
+        // certificado A3**, que NÃO roda no cron em nuvem — quem as captura é
+        // o agente local `cfi-a3`. Para elas, "zero documento na nuvem" não
+        // aponta captura quebrada: aponta o agente que não rodou (ou não
+        // entregou) naquela competência.
+        //
+        // Mandar essa gente "destravar a captura" é mandar procurar defeito
+        // onde não há — em metade da carteira. Causa junto do número, sempre.
+        //
+        // ⚠️ **A SEVERIDADE NÃO CAI.** O número continua sem lastro: o agente
+        // A3 escreve na MESMA coleção, então documento nenhum ali é lacuna de
+        // verdade, não desenho. Baixar para âmbar aqui seria trocar um alarme
+        // com ação errada por um silêncio falso — e a Rotina do Mês voltaria a
+        // dar a competência por fechada.
+        // ═══════════════════════════════════════════════════════════════════
+        if (capturaPorAgenteLocal) {
+            return {
+                situacao: 'sem-documento-agente-local', cor: 'falha',
+                mensagem: `${rotulo} na ficha SEM NENHUM documento por trás nesta competência — e esta empresa `
+                    + 'captura por certificado **A3**, pelo agente local `cfi-a3` (o cron em nuvem não a alcança).',
+                acao: 'Confira se o agente cfi-a3 rodou nesta competência (📊 Status por Empresa). '
+                    + 'Se rodou e mesmo assim não há documento, importe os XMLs ou lance as notas '
+                    + 'na aba Importar → ✍️ Lançar nota sem XML.',
+            };
+        }
         return {
             situacao: 'sem-documento', cor: 'falha',
             mensagem: `${rotulo} na ficha SEM NENHUM documento por trás nesta competência — apuração sem lastro.`,

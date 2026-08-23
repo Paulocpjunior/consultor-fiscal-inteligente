@@ -108,6 +108,18 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
         // agregação count() — não baixa documento nenhum. Falha de contagem
         // vira null, NUNCA zero: zero falso acenderia "sem lastro" com o banco
         // cheio, o alarme falso que ensina a ignorar o farol.
+        // Quem captura por A3 (agente local cfi-a3): o cron em nuvem não a
+        // alcança, então "zero documento" aponta o AGENTE, não a captura. Uma
+        // leitura da coleção, a mesma do 📊 Status. Falha não apaga o alarme —
+        // ele só volta à frase genérica.
+        const empresasA3 = new Set();
+        try {
+            const certSnap = await db.collection('empresas_certificados').select('tipoCert').get();
+            certSnap.forEach((d) => { if (d.data()?.tipoCert === 'A3') empresasA3.add(d.id); });
+        } catch (e) {
+            console.warn('[ipi-varredura] tipo de certificado indisponível:', e.message);
+        }
+
         for (const l of linhas) {
             if (l.ipiApurado <= 0) { l.documentosNaCompetencia = null; l.lastro = conferirFichaContraDocumentos({ valorApurado: 0, documentos: null }); continue; }
             let docs = null;
@@ -121,7 +133,10 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
                 console.warn(`[ipi-varredura] contagem de docs falhou (${l.nome}):`, e.message);
             }
             l.documentosNaCompetencia = docs;
-            l.lastro = conferirFichaContraDocumentos({ valorApurado: l.ipiApurado, documentos: docs });
+            l.lastro = conferirFichaContraDocumentos({
+                valorApurado: l.ipiApurado, documentos: docs,
+                capturaPorAgenteLocal: empresasA3.has(l.empresaId),
+            });
         }
 
         // Fase MIT — só para quem tem IPI (indústrias; poucas empresas).
