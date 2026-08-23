@@ -10,7 +10,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { destinatariosDoPush, montarPushMensagem, tokenMorreu } from './whatsapp-push.js';
+import { destinatariosDoPush, destinatariosDoAvisoTeams, montarPushMensagem, tokenMorreu } from './whatsapp-push.js';
+import { enviarAvisoTeams } from './teams-aviso.js';
 
 export const COLECAO_TOKENS = 'whatsapp_push_tokens';
 
@@ -70,13 +71,28 @@ export async function notificarMensagem({ msg, conversa = {}, config = null, can
             // quando o push for usado em mensagem de saída (menção, etc.).
             autorDaMensagem: null,
         });
-        if (!alvos.length) return { enviados: 0, alvos: 0 };
 
         const aviso = montarPushMensagem({
             nomeContato: msg.nomePerfil, numero: msg.de,
             resumo: msg.texto || (msg.midia ? '📎 anexo' : 'nova mensagem'),
             canalRotulo,
         });
+
+        // 🔔 Aviso NATIVO do Teams (Paulo, 23/08) — MESMA audiência do push
+        // (destinatariosDoAvisoTeams reusa a régua), outra porta. Best-effort
+        // e ANTES do early-return do FCM: quem não registrou celular ainda
+        // pode ter o Teams aberto. Nasce desligado (avisoTeamsAtivo).
+        if (config?.avisoTeamsAtivo) {
+            const teams = destinatariosDoAvisoTeams({ usuarios, conversa, config, agora: new Date(), autorDaMensagem: null });
+            for (const alvo of teams.alvos) {
+                const r = await (deps.enviarTeams || enviarAvisoTeams)({
+                    email: alvo.email, titulo: aviso.titulo, corpo: aviso.corpo,
+                });
+                if (!r.ok) console.warn(`[whatsapp/teams-aviso] ${alvo.email}: ${r.etapa} — ${r.erro}`);
+            }
+        }
+
+        if (!alvos.length) return { enviados: 0, alvos: 0 };
         const messaging = deps.messaging || admin.messaging();
         let enviados = 0;
         for (const alvo of alvos) {

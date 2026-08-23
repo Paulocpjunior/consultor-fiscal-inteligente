@@ -228,6 +228,11 @@ export function configPadraoAtendimento() {
         // entrada aqui continua só com o texto — nada quebra sem imagem
         // cadastrada. Nasce vazio: imagem é a admin quem sobe, nunca chute.
         imagensPorFila: {},
+        // 🔔 Aviso NATIVO do Teams (popup+som do próprio Teams via Graph —
+        // Paulo, 23/08). Nasce DESLIGADO: depende de consent no Azure e do
+        // manifest 1.1.0 no Teams; ligado sem os dois só produziria log de
+        // recusa a cada mensagem. O botão 🧪 da ⚙️ prova antes de ligar.
+        avisoTeamsAtivo: false,
         // 📷 Quem atende as DMs do Instagram — POR USUÁRIO, não por fila
         // (Paulo, 22/08: "o instagram sera limitado por usuario e nao por
         // dpto"). Lista VAZIA = sem restrição (vale a regra de filas de
@@ -322,6 +327,7 @@ export function resolverConfig(gravada) {
         avaliacaoAtiva: typeof gravada.avaliacaoAtiva === 'boolean' ? gravada.avaliacaoAtiva : p.avaliacaoAtiva,
         avaliacaoEscala: ESCALAS_AVALIACAO.includes(Number(gravada.avaliacaoEscala))
             ? Number(gravada.avaliacaoEscala) : p.avaliacaoEscala,
+        avisoTeamsAtivo: typeof gravada.avisoTeamsAtivo === 'boolean' ? gravada.avisoTeamsAtivo : p.avisoTeamsAtivo,
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,

@@ -27,7 +27,7 @@ import {
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
-    relatorioAtendimento, RelatorioAtendimento,
+    relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -299,6 +299,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
     const setMsgCfg = (chave: string, valor: string) =>
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
+
+    // 🔔 Aviso nativo do Teams — o toggle salva NA HORA (a aba 👥 não tem o
+    // botão 💾 da 🤖, e chave que parece ligada sem estar gravada é a pior
+    // combinação). O teste manda um aviso pro PRÓPRIO usuário logado.
+    const [teamsTestando, setTeamsTestando] = useState(false);
+    const [teamsTeste, setTeamsTeste] = useState<{
+        resultado: { ok: true } | { ok: false; etapa: string; erro: string };
+        status: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+    } | null>(null);
+    const alternarAvisoTeams = async () => {
+        if (!cfg || cfgSalvando) return;
+        const novo = { ...cfg, avisoTeamsAtivo: !cfg.avisoTeamsAtivo };
+        setCfg(novo);
+        setCfgSalvando(true);
+        try {
+            const r = await salvarAtendimentoConfig(novo);
+            if (r.ok) setCfg(r.config); else setCfgErro(r.error || 'Falha ao salvar.');
+        } finally { setCfgSalvando(false); }
+    };
+    const rodarTesteTeams = async () => {
+        setTeamsTestando(true); setTeamsTeste(null);
+        try {
+            const r = await testarAvisoTeams();
+            if (r.ok) setTeamsTeste({ resultado: r.resultado, status: r.status });
+            else setTeamsTeste({ resultado: { ok: false, etapa: 'rota', erro: r.error || 'A rota não respondeu.' }, status: { graphConfigurado: false, clientId: null, teamsAppId: '' } });
+        } finally { setTeamsTestando(false); }
+    };
 
     // ── 🖼️ Imagem por fila: sobe/grava na hora (não fica pendente do
     // "Salvar configuração" — senão trocar de aba sem salvar perderia o
@@ -1810,6 +1837,47 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     TODAS as conversas; sem atribuição, valem os departamentos de módulo; os demais veem
                                     a própria fila + Recepção.
                                 </p>
+                                {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
+                                    não deixa a página mostrar popup do sistema — quem avisa lá é
+                                    o PRÓPRIO Teams (sino de Atividade, com som, aba fechada e
+                                    celular). Mesma audiência do push: filas, horário, IG restrito. */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔔 Aviso dentro do Teams (sino de Atividade)</p>
+                                        <button onClick={alternarAvisoTeams} disabled={!cfg || cfgSalvando}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full disabled:opacity-40 ${cfg?.avisoTeamsAtivo
+                                                ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                            {cfg?.avisoTeamsAtivo ? 'LIGADO' : 'desligado'}
+                                        </button>
+                                    </div>
+                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                        O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
+                                        próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
+                                        recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
+                                        Antes de ligar, prove com o teste — ele avisa <strong>só você</strong>.
+                                    </p>
+                                    <button onClick={rodarTesteTeams} disabled={teamsTestando}
+                                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
+                                    </button>
+                                    {teamsTeste && (teamsTeste.resultado.ok ? (
+                                        <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
+                                            ✅ O Graph aceitou — confira o <strong>sino de Atividade</strong> do seu Teams. Chegou lá? Pode ligar a chave.
+                                        </p>
+                                    ) : (
+                                        <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                                            <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
+                                            {/* A recusa diz o que falta — os três suspeitos, na ordem: */}
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
+                                                app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
+                                                2) o pacote do Teams ainda na versão sem <code>activities</code> — reenviar o zip 1.1.0;
+                                                3) o SP Connect não instalado no seu Teams.
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
                                 {atdErro && <p className="text-[11px] text-red-600 dark:text-red-400">{atdErro}</p>}
                                 {!atdCarregado && !atdErro && <p className="text-[11px] text-slate-400">Carregando usuários…</p>}
 
