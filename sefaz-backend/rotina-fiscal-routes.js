@@ -312,6 +312,23 @@ router.get('/painel', requireAuth, async (req, res) => {
         try { prazosMunicipais = await carregarPrazosMunicipais(db); }
         catch (e) { console.warn('[rotina] calendários municipais indisponíveis:', e.message); }
 
+        // 🚨 QUEM CAPTURA POR A3 (agente local `cfi-a3`) — 202 das 404 da
+        // carteira. UMA leitura da coleção (1 doc por empresa), a mesma que o
+        // 📊 Status já faz. Sem isso a Rotina manda metade da carteira
+        // "destravar a captura" quando o trilho está certo e o que falta é o
+        // agente ter rodado.
+        //
+        // ⚠️ Falha aqui NÃO derruba o painel e NÃO apaga o alarme: sem a
+        // leitura, a etapa volta a acender com a frase genérica — que é o
+        // estado de antes, e é o lado seguro do erro.
+        const empresasA3 = new Set();
+        try {
+            const certSnap = await db.collection('empresas_certificados').select('tipoCert').get();
+            certSnap.forEach((d) => { if (d.data()?.tipoCert === 'A3') empresasA3.add(d.id); });
+        } catch (e) {
+            console.warn('[rotina] tipo de certificado indisponível:', e.message);
+        }
+
         const rotinas = empresas.map((e) => montarRotinaFiscal({
             // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
             // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
@@ -326,6 +343,7 @@ router.get('/painel', requireAuth, async (req, res) => {
             tarefas: tarefasPorEmpresa.get(e.id) || [],
             envios: enviosPorEmpresa.get(e.id) || [],
             capturaAtiva: e.capturaAtiva,
+            capturaPorAgenteLocal: empresasA3.has(e.id),
         }));
 
         // Ordem de trabalho: quem está mais atrás aparece primeiro — é a fila

@@ -10,8 +10,17 @@ export function conferirFichaContraDocumentos(p: {
     documentos: number | null | undefined;
     /** Como o número se chama na tela ('IPI', 'Imposto apurado', 'Receita lançada'). */
     rotulo?: string;
+    /**
+     * A empresa captura por certificado **A3** (`tipoCert === 'A3'`), pelo
+     * agente local `cfi-a3` — o cron em nuvem não a alcança. São 202 das 404
+     * da carteira (medido em 23/08). Muda a CAUSA e a primeira parada, NÃO a
+     * severidade: o agente escreve na mesma coleção, então zero documento ali
+     * continua sendo lacuna.
+     */
+    capturaPorAgenteLocal?: boolean;
 }): {
-    situacao: 'sem-valor' | 'sem-documento' | 'com-lastro' | 'contagem-indisponivel';
+    situacao: 'sem-valor' | 'sem-documento' | 'sem-documento-agente-local'
+        | 'com-lastro' | 'contagem-indisponivel';
     cor: 'ok' | 'atencao' | 'falha' | 'neutro';
     mensagem: string;
     acao: string | null;

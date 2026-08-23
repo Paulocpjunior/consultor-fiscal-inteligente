@@ -139,6 +139,12 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
 export function montarRotinaFiscal({
     empresa, competencia, documentos = [], apuracao = null, tarefas = [], envios = [], capturaAtiva = true,
     dipam = null, iss = null, cobertura = null, agoraMs = Date.now(),
+    // 🚨 A empresa captura por certificado **A3** — pelo agente local
+    // `cfi-a3`, que o cron em nuvem não alcança. São **202 das 404** da
+    // carteira (painel de captura, 23/08), então mandar essa metade "rodar a
+    // captura e conferir o Diagnóstico" é mandar procurar defeito onde não há.
+    // Muda a CAUSA e a primeira parada; a etapa continua acendendo igual.
+    capturaPorAgenteLocal = false,
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
@@ -148,11 +154,16 @@ export function montarRotinaFiscal({
     let eCaptura;
     if (docs.length === 0) {
         eCaptura = etapa('captura', 'pendente',
-            'Nenhuma nota capturada nesta competência.',
-            capturaAtiva
-                ? 'Rode a captura do cliente e confira o Diagnóstico — pode ser certificado, procuração ou município sem trilho.'
-                : 'A empresa não está elegível à captura automática — confira o cadastro em Status por Empresa.',
-            { entradas, saidas, total: 0 });
+            capturaPorAgenteLocal
+                ? 'Nenhuma nota capturada nesta competência — e esta empresa captura por certificado A3.'
+                : 'Nenhuma nota capturada nesta competência.',
+            capturaPorAgenteLocal
+                ? 'Ela é capturada pelo agente local cfi-a3, que o cron em nuvem não alcança: confira se o '
+                  + 'agente rodou nesta competência (📊 Status por Empresa) antes de procurar outro bloqueio.'
+                : (capturaAtiva
+                    ? 'Rode a captura do cliente e confira o Diagnóstico — pode ser certificado, procuração ou município sem trilho.'
+                    : 'A empresa não está elegível à captura automática — confira o cadastro em Status por Empresa.'),
+            { entradas, saidas, total: 0, capturaPorAgenteLocal });
     } else if (saidas === 0) {
         // Saída não vem pela SEFAZ (Rejeição 641): depende do cofre/autXML.
         eCaptura = etapa('captura', 'atencao',
@@ -235,8 +246,13 @@ export function montarRotinaFiscal({
             valorApurado: temImposto ? apuracao.totalImpostos : apuracao.receita,
             documentos: docs.length,
             rotulo: temImposto ? 'Imposto apurado' : 'Receita lançada',
+            capturaPorAgenteLocal,
         });
-        if (lastro.situacao === 'sem-documento') {
+        // ⚠️ AS DUAS situações de ausência acendem. A do A3 (`-agente-local`)
+        // só muda a CAUSA e a primeira parada — deixá-la de fora silenciaria
+        // 202 das 404 empresas da carteira, e a Rotina voltaria a dar a
+        // competência por fechada sem lastro.
+        if (lastro.situacao === 'sem-documento' || lastro.situacao === 'sem-documento-agente-local') {
             eApuracao = piorar(eApuracao, lastro.mensagem, lastro.acao);
         }
         eApuracao.lastro = lastro;
