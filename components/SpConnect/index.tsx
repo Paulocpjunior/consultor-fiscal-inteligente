@@ -1854,7 +1854,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
                                         próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
                                         recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
-                                        Antes de ligar, prove com o teste — ele avisa <strong>só você</strong>.
+                                        <strong>Nasce ligado</strong> (alerta para a equipe nasce ativo — regra da casa); o
+                                        teste avisa <strong>só você</strong> e diz o que falta se o aviso ainda não sai.
                                     </p>
                                     <button onClick={rodarTesteTeams} disabled={teamsTestando}
                                         className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
