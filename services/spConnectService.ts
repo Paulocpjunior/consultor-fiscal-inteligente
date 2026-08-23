@@ -280,12 +280,33 @@ export interface SondaChamada {
     motivo: string; acao?: string; campo?: string; bruto?: unknown;
 }
 
+/** Horário do atendimento (o dono das mensagens) × o que a Meta tem gravado. */
+export interface HorariosChamada {
+    mensagens: { dias: number[]; turnos: { inicio: string; fim: string }[] } | null;
+    conferencia: { situacao: 'igual' | 'diverge' | 'sem-call-hours' | 'horario-ilegivel'; motivo: string };
+    calling: Record<string, unknown> | null;
+}
+
 export const sondarChamadas = () =>
     req<{
         conclusao: { veredito: SondaChamada['situacao']; motivo: string; acao?: string; respondeuPor?: string | null };
         sondas: SondaChamada[];
         antesDeLigar: { titulo: string; texto: string }[];
+        horarios?: HorariosChamada | null;
     }>('/api/admin/whatsapp/chamadas/sondar');
+
+/** 🛠 Escrita EXPLÍCITA na Meta (Paulo, 23/08) — a rota re-lê e devolve o que
+ *  ficou GRAVADO; recusa da Meta volta crua, nunca engolida. */
+export const configurarChamadas = (p:
+    { acao: 'horarios' } | { acao: 'icone'; iconeVisivel: boolean } | { acao: 'sip'; hostname: string; porta: number }) =>
+    post<{
+        acao: string;
+        aplicado: Record<string, unknown>;
+        calling: Record<string, unknown> | null;
+        conferencia: HorariosChamada['conferencia'] | null;
+        brutoGravado?: unknown;
+        bruto?: unknown;
+    }>('/api/admin/whatsapp/chamadas/configurar', p);
 
 // ── 📷 Sonda do Instagram (Paulo, 18/08) — mesma decisão: só pergunta ───────
 

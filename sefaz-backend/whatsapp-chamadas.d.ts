@@ -21,3 +21,20 @@ export function concluirSonda(resultados?: SituacaoSonda[]): {
     acao?: string;
     respondeuPor?: string | null;
 };
+
+// ── Configuração (Paulo, 23/08): payloads e conferências — a escrita é da rota.
+export interface CallHoursMeta {
+    status: 'ENABLED';
+    timezone_id: string;
+    weekly_operating_hours: { day_of_week: string; open_time: string; close_time: string }[];
+}
+export function montarCallHoursDoAtendimento(horario: unknown):
+    { ok: true; callHours: CallHoursMeta } | { ok: false; erro: string };
+export function validarSipDestino(entrada: { hostname?: string; porta?: number | string } | null | undefined):
+    { ok: true; hostname: string; porta: number } | { ok: false; erro: string };
+export function montarPayloadChamadas(mudanca?: {
+    callHours?: CallHoursMeta; iconeVisivel?: boolean; sip?: { hostname: string; porta: number };
+}): { ok: true; payload: { calling: Record<string, unknown> } } | { ok: false; erro: string };
+export function lerCallingDasSettings(corpo: unknown): Record<string, unknown> | null;
+export function conferirCallHours(callingGravado: unknown, horario: unknown):
+    { situacao: 'igual' | 'diverge' | 'sem-call-hours' | 'horario-ilegivel'; motivo: string };

@@ -11,7 +11,10 @@
 import {
     interpretarSondaChamadas, concluirSonda, acharBlocoDeChamada,
     CANDIDATOS_SONDA, ANTES_DE_LIGAR,
+    montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
+    lerCallingDasSettings, conferirCallHours,
 } from '../sefaz-backend/whatsapp-chamadas';
+import { configPadraoAtendimento } from '../sefaz-backend/whatsapp-atendimento';
 
 describe('interpretarSondaChamadas', () => {
     it('a Meta dizendo ENABLED é LIGADO, e a resposta diz em qual campo', () => {
@@ -117,9 +120,152 @@ describe('🚨 a sonda NÃO liga nada', () => {
         // Mesma prova do `/prazos-municipais/consultar`: o handler que CONSULTA
         // não pode escrever. Aqui o custo de escrever por engano é abrir a
         // chamada no WhatsApp de todos os clientes sem ninguém decidir.
+        // (Os construtores de configuração de 23/08 continuam PUROS: quem
+        // escreve é a rota /chamadas/configurar, admin, com confirmação.)
         const fonte = require('fs').readFileSync(
             require('path').join(__dirname, '..', 'sefaz-backend/whatsapp-chamadas.js'), 'utf8');
         expect(fonte).not.toMatch(/method:\s*['"](POST|DELETE|PUT|PATCH)['"]/);
         expect(fonte).not.toMatch(/\.set\(|\.update\(|\.doc\(/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Configuração da chamada (Paulo, 23/08): caminho 1 — SIP → HitPhone, e
+// "as ligações devem obedecer os MESMOS horários das mensagens".
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('🕒 montarCallHoursDoAtendimento — projeção, nunca segunda grade', () => {
+    it('o horário PADRÃO das mensagens (seg–sex, 08–12 e 13–17:30) vira a grade da Meta', () => {
+        const r = montarCallHoursDoAtendimento(configPadraoAtendimento().horario);
+        if (!r.ok) throw new Error(r.erro);
+        expect(r.callHours.status).toBe('ENABLED');
+        expect(r.callHours.timezone_id).toBe('America/Sao_Paulo');
+        // 5 dias × 2 turnos = 10 janelas, no formato HHMM da Meta.
+        expect(r.callHours.weekly_operating_hours).toHaveLength(10);
+        expect(r.callHours.weekly_operating_hours).toContainEqual(
+            { day_of_week: 'MONDAY', open_time: '0800', close_time: '1200' });
+        expect(r.callHours.weekly_operating_hours).toContainEqual(
+            { day_of_week: 'FRIDAY', open_time: '1300', close_time: '1730' });
+        // Sábado/domingo NÃO entram — mensagens não atendem, ligação também não.
+        const dias = new Set(r.callHours.weekly_operating_hours.map((w: { day_of_week: string }) => w.day_of_week));
+        expect(dias.has('SATURDAY')).toBe(false);
+        expect(dias.has('SUNDAY')).toBe(false);
+    });
+
+    it('🚨 turno ilegível RECUSA a projeção INTEIRA — grade meio-projetada abriria a chamada onde a mensagem não atende', () => {
+        const r = montarCallHoursDoAtendimento({ dias: [1, 2], turnos: [{ inicio: '08:00', fim: '12:00' }, { inicio: 'oito', fim: '18:00' }] });
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.erro).toMatch(/ilegível/i);
+    });
+
+    it('sem dias ou sem turnos recusa apontando a aba das mensagens (o dono)', () => {
+        const r = montarCallHoursDoAtendimento({ dias: [], turnos: [] });
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.erro).toMatch(/Bot e mensagens/i);
+    });
+});
+
+describe('📞 validarSipDestino — tronco torto é chamada caindo no nada', () => {
+    it('aceita hostname + porta e normaliza', () => {
+        expect(validarSipDestino({ hostname: ' SIP.HitPhone.com.br ', porta: '5061' }))
+            .toEqual({ ok: true, hostname: 'sip.hitphone.com.br', porta: 5061 });
+    });
+    it('recusa esquema, espaço, porta embutida e porta fora de faixa — com o motivo', () => {
+        expect(validarSipDestino({ hostname: 'sip://x.com', porta: 5061 }).ok).toBe(false);
+        expect(validarSipDestino({ hostname: 'sip.x.com:5061', porta: 5061 }).ok).toBe(false);
+        expect(validarSipDestino({ hostname: 'sip.x.com', porta: 0 }).ok).toBe(false);
+        expect(validarSipDestino({ hostname: 'sip.x.com', porta: 99999 }).ok).toBe(false);
+        const semPorta = validarSipDestino({ hostname: 'sip.x.com' });
+        expect(semPorta.ok).toBe(false);
+        if (!semPorta.ok) expect(semPorta.erro).toMatch(/5061/);
+    });
+});
+
+describe('montarPayloadChamadas — SÓ o pedaço pedido', () => {
+    it('ícone não arrasta call_hours nem sip junto', () => {
+        const r = montarPayloadChamadas({ iconeVisivel: false });
+        if (!r.ok) throw new Error(r.erro);
+        expect(r.payload.calling).toEqual({ call_icon_visibility: 'DISABLE_ALL' });
+    });
+    it('sip vira servers[] com status ENABLED', () => {
+        const r = montarPayloadChamadas({ sip: { hostname: 'sip.x.com', porta: 5061 } });
+        if (!r.ok) throw new Error(r.erro);
+        expect(r.payload.calling).toEqual({ sip: { status: 'ENABLED', servers: [{ hostname: 'sip.x.com', port: 5061 }] } });
+    });
+    it('pedido vazio é recusa, não payload vazio gravado na Meta', () => {
+        expect(montarPayloadChamadas({}).ok).toBe(false);
+    });
+});
+
+describe('conferirCallHours — validação por RESULTADO (o que a Meta guardou)', () => {
+    const horario = configPadraoAtendimento().horario;
+    const projecao = () => {
+        const p = montarCallHoursDoAtendimento(horario);
+        if (!p.ok) throw new Error(p.erro);
+        return p.callHours;
+    };
+
+    it('Meta com a MESMA grade ⇒ igual', () => {
+        expect(conferirCallHours({ call_hours: projecao() }, horario).situacao).toBe('igual');
+    });
+
+    it('🚨 grade defasada ⇒ DIVERGE, com o detalhe — é o alarme de quem mudou as mensagens e não reaplicou', () => {
+        const gravado = projecao();
+        gravado.weekly_operating_hours = gravado.weekly_operating_hours.filter(
+            (w: { day_of_week: string }) => w.day_of_week !== 'FRIDAY');
+        const r = conferirCallHours({ call_hours: gravado }, horario);
+        expect(r.situacao).toBe('diverge');
+        expect(r.motivo).toMatch(/FRIDAY/);
+    });
+
+    it('sem call_hours gravado ⇒ dito como "vale 24h", nunca como igual', () => {
+        const r = conferirCallHours({ status: 'ENABLED' }, horario);
+        expect(r.situacao).toBe('sem-call-hours');
+        expect(r.motivo).toMatch(/24h/);
+    });
+
+    it('lerCallingDasSettings acha o bloco calling (e devolve null dito quando não há)', () => {
+        expect(lerCallingDasSettings({ calling: { status: 'ENABLED' } })).toEqual({ status: 'ENABLED' });
+        expect(lerCallingDasSettings({ id: '1' })).toBeNull();
+    });
+});
+
+describe('🔌 fiação — a escrita mora na rota, com releitura e sem grade própria', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const rotas = fs.readFileSync(path.join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('POST /chamadas/configurar existe, é admin, e RE-LÊ as settings depois de gravar', () => {
+        const i = rotas.indexOf("'/chamadas/configurar'");
+        expect(i).toBeGreaterThan(-1);
+        const trecho = rotas.slice(i, i + 6000);
+        expect(rotas.slice(i - 200, i + 100)).toMatch(/router\.post\('\/chamadas\/configurar',\s*requireAdmin/);
+        // Duas idas ao /settings: a escrita e a releitura (validação por resultado).
+        expect((trecho.match(/\/settings`/g) || []).length).toBeGreaterThanOrEqual(2);
+        expect(trecho).toContain('lerCallingDasSettings');
+    });
+
+    it('🚨 a ação "horarios" projeta do ATENDIMENTO (resolverConfig) — nunca recebe grade do body', () => {
+        const i = rotas.indexOf("'/chamadas/configurar'");
+        const trecho = rotas.slice(i, i + 6000);
+        expect(trecho).toContain('montarCallHoursDoAtendimento(cfgAt.horario)');
+        // O body não fornece dias/turnos — a grade tem UM dono.
+        expect(trecho).not.toMatch(/req\.body[^)\n]*\b(dias|turnos|horario)\b/);
+    });
+
+    it('a sonda devolve a CONFERÊNCIA horários-mensagens × Meta', () => {
+        const i = rotas.indexOf("'/chamadas/sondar'");
+        const trecho = rotas.slice(i, i + 6000);
+        expect(trecho).toContain('conferirCallHours');
+        expect(trecho).toContain('horarios');
+    });
+
+    it('a tela pede CONFIRMAÇÃO com a consequência, e diz a regra dos mesmos horários', () => {
+        expect(tela).toContain('mesmos horários das mensagens');
+        expect(tela).toMatch(/window\.confirm\(confirmacao\)/);
+        // Ocultar/mostrar o ☎️ com o efeito no cliente escrito antes do clique.
+        expect(tela).toContain('Ocultar o botão');
+        expect(tela).toContain('tronco SIP');
     });
 });
