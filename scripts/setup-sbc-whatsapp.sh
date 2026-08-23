@@ -175,8 +175,18 @@ if ! gcloud compute instances describe "$VM" --project="$PROJECT" --zone="$ZONE"
     echo "== ⚠️ ANTES DE CONTINUAR: crie o registro DNS =="
     echo "   ${SBC_HOST}  →  A  →  ${IP}"
     read -r -p "   Registro criado e propagado? [enter para continuar] "
-    until [ "$(dig +short "$SBC_HOST" | tail -1)" = "$IP" ]; do
-        echo "   ${SBC_HOST} ainda não resolve para ${IP} — aguardando 30s (Ctrl-C para abortar)…"
+    # 🐛 A conferência pergunta à FONTE (o NS autoritativo do domínio), não ao
+    # resolvedor local: em 23/08 o Wix já respondia o IP e o cache NEGATIVO do
+    # provedor do Paulo (que guardou o "não existe" de antes do registro) segurou
+    # o laço à toa. O certbot valida pela fonte também — é ela que decide.
+    consultaDns() {
+        local ns
+        ns=$(dig +short NS "${SBC_HOST#*.}" 2>/dev/null | head -1)
+        if [ -n "$ns" ]; then dig +short "$SBC_HOST" @"$ns" 2>/dev/null | tail -1
+        else dig +short "$SBC_HOST" 2>/dev/null | tail -1; fi
+    }
+    until [ "$(consultaDns)" = "$IP" ]; do
+        echo "   ${SBC_HOST} ainda não resolve para ${IP} na FONTE (NS do domínio) — aguardando 30s (Ctrl-C para abortar)…"
         sleep 30
     done
     gcloud compute instances create "$VM" \
