@@ -190,10 +190,13 @@ describe('🔌 fiação', () => {
         expect(trecho).not.toContain('req.body');
     });
 
-    it('a chave nasce DESLIGADA e a ⚙️ tem o teste', () => {
+    it('🚨 a chave nasce LIGADA (Paulo, 23/08: "OS ALERTAS NASCEM LIGADOS SEMPRE") e a ⚙️ tem o teste', () => {
         const { configPadraoAtendimento, resolverConfig } = require('../sefaz-backend/whatsapp-atendimento');
-        expect(configPadraoAtendimento().avisoTeamsAtivo).toBe(false);
-        expect(resolverConfig({ avisoTeamsAtivo: true }).avisoTeamsAtivo).toBe(true);
+        expect(configPadraoAtendimento().avisoTeamsAtivo).toBe(true);
+        // Config gravada ANTES do campo existir também fica ligada (o merge
+        // cai no padrão) — e quem desligar de propósito é respeitado.
+        expect(resolverConfig({}).avisoTeamsAtivo).toBe(true);
+        expect(resolverConfig({ avisoTeamsAtivo: false }).avisoTeamsAtivo).toBe(false);
         const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
         expect(tela).toContain('Testar no meu Teams');
         expect(tela).toContain('alternarAvisoTeams');
