@@ -13,6 +13,7 @@ import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
     lerCallingDasSettings, conferirCallHours,
+    extrairEventosChamada, resumoDaChamada, traduzirEventoChamada,
 } from '../sefaz-backend/whatsapp-chamadas';
 import { configPadraoAtendimento } from '../sefaz-backend/whatsapp-atendimento';
 
@@ -230,6 +231,60 @@ describe('conferirCallHours — validação por RESULTADO (o que a Meta guardou)
     });
 });
 
+describe('☎️ extrairEventosChamada — tolerante, com o cru junto (leiaute não provado)', () => {
+    const payload = (call: Record<string, unknown>, field = 'calls') => ({
+        object: 'whatsapp_business_account',
+        entry: [{ changes: [{ field, value: { metadata: { phone_number_id: '116' }, calls: [call] } }] }],
+    });
+
+    it('chamada do CLIENTE: conversaId sai do from (em dígitos), direção entrada', () => {
+        const r = extrairEventosChamada(payload({
+            id: 'wacid.1', from: '+55 11 99999-0000', to: '551133371554',
+            direction: 'USER_INITIATED', event: 'terminate', timestamp: '1787480000', duration: 65,
+        }));
+        expect(r.valido).toBe(true);
+        expect(r.chamadas).toHaveLength(1);
+        const c = r.chamadas[0];
+        expect(c.conversaId).toBe('5511999990000');
+        expect(c.direcao).toBe('entrada');
+        expect(c.evento).toBe('terminate');
+        expect(c.duracaoSegundos).toBe(65);
+        expect(c.bruto).toBeTruthy(); // é do cru que sai a régua definitiva
+    });
+
+    it('chamada NOSSA (BUSINESS_INITIATED): o cliente é o TO, direção saída', () => {
+        const c = extrairEventosChamada(payload({
+            id: 'wacid.2', from: '551133371554', to: '5511888880000', direction: 'BUSINESS_INITIATED', status: 'missed',
+        })).chamadas[0];
+        expect(c.conversaId).toBe('5511888880000');
+        expect(c.direcao).toBe('saida');
+        expect(c.evento).toBe('missed');
+    });
+
+    it('🚨 evento sem id não some calado — volta em ilegiveis', () => {
+        const r = extrairEventosChamada(payload({ from: '5511999990000', event: 'connect' }));
+        expect(r.chamadas).toHaveLength(0);
+        expect(r.ilegiveis).toHaveLength(1);
+    });
+
+    it('o array calls vale mesmo com o field nomeado diferente — a substância decide', () => {
+        const r = extrairEventosChamada(payload({ id: 'x', from: '5511999990000' }, 'calling_events'));
+        expect(r.chamadas).toHaveLength(1);
+    });
+
+    it('objeto que não é da WABA devolve inválido, sem inventar chamada', () => {
+        expect(extrairEventosChamada({ object: 'instagram' }).valido).toBe(false);
+    });
+
+    it('a linha da conversa traduz o evento e formata a duração — desconhecido fica visível', () => {
+        expect(resumoDaChamada({ direcao: 'entrada', evento: 'missed', duracaoSegundos: null }))
+            .toBe('☎️ Ligação de WhatsApp do cliente — perdida');
+        expect(resumoDaChamada({ direcao: 'saida', evento: 'terminate', duracaoSegundos: 65 }))
+            .toContain('para o cliente — encerrada · 1m05s');
+        expect(traduzirEventoChamada('novo_evento_da_meta')).toBe('novo_evento_da_meta');
+    });
+});
+
 describe('🔌 fiação — a escrita mora na rota, com releitura e sem grade própria', () => {
     const fs = require('fs');
     const path = require('path');
@@ -267,5 +322,20 @@ describe('🔌 fiação — a escrita mora na rota, com releitura e sem grade pr
         // Ocultar/mostrar o ☎️ com o efeito no cliente escrito antes do clique.
         expect(tela).toContain('Ocultar o botão');
         expect(tela).toContain('tronco SIP');
+    });
+
+    it('☎️ o webhook grava o evento de chamada na conversa — e chamada NÃO abre a janela de 24h', () => {
+        const webhook = fs.readFileSync(path.join(__dirname, '..', 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        expect(webhook).toContain('extrairEventosChamada');
+        const i = webhook.indexOf('async function gravarEventoChamada');
+        expect(i).toBeGreaterThan(-1);
+        const corpo = webhook.slice(i, webhook.indexOf('\n}', i));
+        // Janela de 24h é de MENSAGEM (regra da Meta): afirmá-la por ligação
+        // liberaria texto livre que a Meta recusaria depois.
+        expect(corpo).not.toContain('janela24hAte');
+        // O cru viaja no doc — é dele que sai a régua quando o 1º evento real chegar.
+        expect(corpo).toContain('bruto');
+        // Reentrega da Meta não conta não-lida duas vezes.
+        expect(corpo).toContain('jaExiste');
     });
 });

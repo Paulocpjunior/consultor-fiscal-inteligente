@@ -38,3 +38,20 @@ export function montarPayloadChamadas(mudanca?: {
 export function lerCallingDasSettings(corpo: unknown): Record<string, unknown> | null;
 export function conferirCallHours(callingGravado: unknown, horario: unknown):
     { situacao: 'igual' | 'diverge' | 'sem-call-hours' | 'horario-ilegivel'; motivo: string };
+
+// ── Eventos de chamada no webhook (field "calls") — leiaute ainda não provado,
+//    por isso cada evento leva o bruto e o ilegível volta NOMEADO.
+export interface EventoChamada {
+    callId: string;
+    conversaId: string;
+    direcao: 'entrada' | 'saida';
+    evento: string | null;
+    duracaoSegundos: number | null;
+    timestamp: string | null;
+    phoneNumberId: string | null;
+    bruto: Record<string, unknown>;
+}
+export function traduzirEventoChamada(evento: unknown): string;
+export function extrairEventosChamada(payload: unknown):
+    { valido: boolean; chamadas: EventoChamada[]; ilegiveis: unknown[] };
+export function resumoDaChamada(c: Pick<EventoChamada, 'direcao' | 'evento' | 'duracaoSegundos'>): string;
