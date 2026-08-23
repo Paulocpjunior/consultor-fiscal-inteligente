@@ -20,7 +20,8 @@ import {
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
-    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
+    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
+    sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
@@ -353,6 +354,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [sonda, setSonda] = useState<{
         conclusao: { veredito: string; motivo: string; acao?: string; respondeuPor?: string | null };
         sondas: SondaChamada[]; antesDeLigar: { titulo: string; texto: string }[];
+        horarios?: HorariosChamada | null;
     } | null>(null);
     const [sondando, setSondando] = useState(false);
     const [sondaErro, setSondaErro] = useState<string | null>(null);
@@ -360,8 +362,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setSondando(true); setSondaErro(null);
         const r = await sondarChamadas();
         setSondando(false);
-        if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar });
+        if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar, horarios: r.horarios ?? null });
         else setSondaErro(r.error || 'A sonda não respondeu.');
+    };
+
+    // 🛠 Escrita explícita na Meta (Paulo, 23/08): horários = os das mensagens;
+    // ícone do ☎️ do cliente; tronco SIP (a resposta do HitPhone). Cada ação
+    // pede confirmação COM a consequência, e o resultado mostrado é o que a
+    // Meta GUARDOU (a rota re-lê) — validação por resultado, não por status.
+    const [aplicandoChamada, setAplicandoChamada] = useState<string | null>(null);
+    const [chamadaErro, setChamadaErro] = useState<string | null>(null);
+    const [chamadaResultado, setChamadaResultado] = useState<{ acao: string; calling: Record<string, unknown> | null } | null>(null);
+    const [sipHost, setSipHost] = useState('');
+    const [sipPorta, setSipPorta] = useState('5061');
+    const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
+        if (!window.confirm(confirmacao)) return;
+        setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
+        try {
+            const r = await configurarChamadas(p);
+            if (!r.ok) { setChamadaErro(r.error || 'A Meta recusou a gravação.'); return; }
+            setChamadaResultado({ acao: r.acao, calling: r.calling });
+            await rodarSonda(); // a tela volta a dizer o estado REAL, relido da Meta
+        } finally { setAplicandoChamada(null); }
     };
 
     // ── 📷 Sonda do Instagram: PERGUNTA à Meta, não linka nada.
@@ -1864,9 +1886,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         {cfgAba === 'chamadas' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Esta aba <strong>pergunta à Meta</strong> como está a chamada de voz/vídeo
-                                    para o nosso número — e <strong>não liga nem desliga nada</strong>. Ligar a
-                                    chamada faz aparecer o botão de ligar no WhatsApp de <strong>todos os
+                                    A <strong>sonda pergunta à Meta</strong> como está a chamada de voz/vídeo —
+                                    ela não muda nada. O que muda alguma coisa fica no bloco <strong>🛠 Gravar na
+                                    Meta</strong> abaixo, cada ação com a consequência escrita antes do clique.
+                                    Ligar a chamada faz aparecer o botão de ligar no WhatsApp de <strong>todos os
                                     clientes</strong>: é decisão sua, com o destino de atendimento definido antes,
                                     não efeito de um clique de diagnóstico.
                                 </p>
@@ -1906,6 +1929,121 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 <p className="text-[10.5px] text-amber-800 dark:text-amber-300 leading-snug">{a.texto}</p>
                                             </div>
                                         ))}
+
+                                        {/* ── 🛠 Gravar na Meta (Paulo, 23/08: caminho 1 — SIP → HitPhone;
+                                            "as ligações devem obedecer os mesmos horários das mensagens").
+                                            O que aparece depois de gravar é o que a Meta GUARDOU: a rota
+                                            re-lê as settings — validação por resultado, não por status. */}
+                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
+                                            🛠 Gravar na Meta
+                                        </p>
+                                        {chamadaErro && (
+                                            <p className="text-[11px] text-red-600 dark:text-red-400">
+                                                ⛔ A Meta recusou a gravação: {chamadaErro}
+                                            </p>
+                                        )}
+                                        {chamadaResultado && (
+                                            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                                ✓ Gravado ({chamadaResultado.acao}) — o estado abaixo já é o RELIDO da Meta.
+                                            </p>
+                                        )}
+
+                                        {/* 🕒 Horários — a grade é UMA: a das mensagens, projetada. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🕒 Horários da chamada</p>
+                                            <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                                Regra da casa: a ligação obedece os <strong>mesmos horários das mensagens</strong> —
+                                                fora deles o botão ☎️ do cliente fica indisponível, em vez de tocar no vazio.
+                                                Não existe grade própria da chamada: mudou o horário na aba 🤖, reaplique aqui
+                                                (a Meta não lê nossa configuração sozinha).
+                                            </p>
+                                            {sonda.horarios?.mensagens && (
+                                                <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                    Horário das mensagens hoje: dias {(sonda.horarios.mensagens.dias || [])
+                                                        .map((d) => ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d]).join(', ')} ·{' '}
+                                                    {(sonda.horarios.mensagens.turnos || []).map((t) => `${t.inicio}–${t.fim}`).join(' e ')}
+                                                </p>
+                                            )}
+                                            {sonda.horarios?.conferencia && (
+                                                <p className={`text-[10.5px] font-semibold ${sonda.horarios.conferencia.situacao === 'igual'
+                                                    ? 'text-emerald-700 dark:text-emerald-300'
+                                                    : 'text-amber-700 dark:text-amber-300'}`}>
+                                                    {sonda.horarios.conferencia.situacao === 'igual' ? '✅ ' : '⚠️ '}
+                                                    {sonda.horarios.conferencia.motivo}
+                                                </p>
+                                            )}
+                                            <button
+                                                onClick={() => aplicarChamada({ acao: 'horarios' },
+                                                    'Aplicar à CHAMADA os mesmos horários das mensagens?\n\nFora desses horários o botão ☎️ do cliente fica indisponível. Se um dia o horário das mensagens mudar, é preciso voltar aqui e reaplicar — a Meta não acompanha sozinha.')}
+                                                disabled={aplicandoChamada !== null}
+                                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                                {aplicandoChamada === 'horarios' ? 'Gravando…' : '🕒 Aplicar os horários das mensagens à chamada'}
+                                            </button>
+                                        </div>
+
+                                        {/* 👁 Botão ☎️ do cliente — ocultar é a saída enquanto não há destino. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">👁 Botão ☎️ no WhatsApp do cliente</p>
+                                            <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                Estado na Meta:{' '}
+                                                {sonda.horarios?.calling?.call_icon_visibility === 'DISABLE_ALL'
+                                                    ? '🙈 OCULTO — os clientes não veem o botão de ligar.'
+                                                    : sonda.horarios?.calling?.call_icon_visibility
+                                                        ? `👁 VISÍVEL (${String(sonda.horarios.calling.call_icon_visibility)}) — o cliente pode ver o ☎️ na conversa.`
+                                                        : 'não declarado pela Meta — rode a sonda.'}
+                                            </p>
+                                            {sonda.horarios?.calling?.call_icon_visibility === 'DISABLE_ALL' ? (
+                                                <button
+                                                    onClick={() => aplicarChamada({ acao: 'icone', iconeVisivel: true },
+                                                        'MOSTRAR o botão ☎️ para os clientes?\n\nSem um destino de atendimento (tronco SIP) cadastrado, quem ligar vai chamar no vazio — e a leitura do cliente é "a SP não me atende".')}
+                                                    disabled={aplicandoChamada !== null}
+                                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 disabled:opacity-40">
+                                                    {aplicandoChamada === 'icone' ? 'Gravando…' : '👁 Mostrar o botão'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => aplicarChamada({ acao: 'icone', iconeVisivel: false },
+                                                        'OCULTAR o botão ☎️ dos clientes?\n\nEles deixam de ver a opção de ligar — e cliente que já usou o botão entende o sumiço como serviço retirado. Use enquanto o destino (tronco SIP → HitPhone) não estiver cadastrado; ao cadastrar, volte aqui e mostre de novo.')}
+                                                    disabled={aplicandoChamada !== null}
+                                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 disabled:opacity-40">
+                                                    {aplicandoChamada === 'icone' ? 'Gravando…' : '🙈 Ocultar o botão (até o destino existir)'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* 📞 Tronco SIP — a resposta do HitPhone preenche aqui. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">📞 Destino da chamada (tronco SIP → HitPhone)</p>
+                                            {(() => {
+                                                const servidores = (sonda.horarios?.calling as { sip?: { servers?: { hostname?: string; port?: number }[] } } | null)?.sip?.servers;
+                                                return Array.isArray(servidores) && servidores.length > 0 ? (
+                                                    <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
+                                                        ✅ Tronco gravado na Meta: {servidores.map((s) => `${s.hostname}:${s.port}`).join(' · ')}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                                        Nenhum servidor SIP gravado — a chamada ainda não tem onde cair. É a resposta
+                                                        do <strong>suporte do HitPhone</strong> (hostname + porta, com TLS/SRTP) que
+                                                        preenche estes campos.
+                                                    </p>
+                                                );
+                                            })()}
+                                            <div className="flex gap-2 items-center flex-wrap">
+                                                <input value={sipHost} onChange={(e) => setSipHost(e.target.value)}
+                                                    placeholder="hostname SIP (ex.: sip.hitphone.com.br)"
+                                                    className="text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 w-64" />
+                                                <input value={sipPorta} onChange={(e) => setSipPorta(e.target.value)}
+                                                    placeholder="porta" inputMode="numeric"
+                                                    className="text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 w-20" />
+                                                <button
+                                                    onClick={() => aplicarChamada({ acao: 'sip', hostname: sipHost.trim(), porta: Number(sipPorta) },
+                                                        `Cadastrar o tronco SIP "${sipHost.trim()}:${sipPorta}" na Meta?\n\nA partir daí as chamadas de WhatsApp são entregues nesse servidor (o HitPhone), como uma linha própria — confira lá a rota/fila desse tronco antes de mostrar o botão aos clientes.`)}
+                                                    disabled={aplicandoChamada !== null || !sipHost.trim()}
+                                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                                    {aplicandoChamada === 'sip' ? 'Gravando…' : '📞 Cadastrar tronco SIP'}
+                                                </button>
+                                            </div>
+                                        </div>
 
                                         <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
                                             O que cada caminho respondeu

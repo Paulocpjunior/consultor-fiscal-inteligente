@@ -34,6 +34,8 @@ import {
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
+    montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
+    lerCallingDasSettings, conferirCallHours,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -2330,9 +2332,107 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
             });
         }
 
-        return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR });
+        // 🕒 Regra do Paulo (23/08): "as ligações devem obedecer os mesmos
+        // horários das mensagens". A sonda passou a trazer a CONFERÊNCIA: o
+        // horário do atendimento (o dono), o que a Meta tem gravado, e se os
+        // dois concordam — grade defasada é a leitura dupla de sempre.
+        let horarios = null;
+        try {
+            const cfgDoc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+            const cfgAt = resolverConfig(cfgDoc.exists ? cfgDoc.data() : null);
+            const brutoSettings = sondas.find((s) => s.candidato === 'settings')?.bruto;
+            const calling = lerCallingDasSettings(brutoSettings);
+            horarios = {
+                mensagens: cfgAt.horario,
+                conferencia: conferirCallHours(calling, cfgAt.horario),
+                calling,
+            };
+        } catch (e) {
+            // Falha na leitura NÃO derruba a sonda — mas é dita, nunca "igual".
+            horarios = { mensagens: null, conferencia: { situacao: 'horario-ilegivel', motivo: `Não consegui ler o horário das mensagens: ${e.message}` }, calling: null };
+        }
+
+        return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🛠 CONFIGURAR a chamada na Meta — escrita EXPLÍCITA (Paulo, 23/08, caminho 1:
+ * SIP → HitPhone). Três ações, cada uma um pedido separado:
+ *   · horarios — projeta o horário do ATENDIMENTO (o dono das mensagens) para
+ *     o call_hours da Meta. Nunca recebe grade própria: a regra é UMA grade.
+ *   · icone    — mostra/oculta o botão ☎️ no WhatsApp do cliente
+ *     (DEFAULT ↔ DISABLE_ALL). Ocultar é a saída enquanto não há destino.
+ *   · sip      — cadastra o tronco (hostname+porta que o HitPhone passar).
+ *
+ * 🚨 O formato da escrita não está provado contra a Meta: por isso TODA ação
+ * RE-LÊ as settings depois do POST e devolve o que a Meta GUARDOU (validação
+ * por resultado), e recusa da Meta volta CRUA — nunca engolida num "falhou".
+ */
+router.post('/chamadas/configurar', requireAdmin, async (req, res) => {
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token || !cfg.phoneNumberId) {
+            return res.status(400).json({ ok: false, error: 'O canal do WhatsApp não está configurado neste ambiente.' });
+        }
+        const acao = String(req.body?.acao || '');
+        let mudanca = null;
+        if (acao === 'horarios') {
+            const cfgDoc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+            const cfgAt = resolverConfig(cfgDoc.exists ? cfgDoc.data() : null);
+            const proj = montarCallHoursDoAtendimento(cfgAt.horario);
+            if (!proj.ok) return res.status(400).json({ ok: false, error: proj.erro });
+            mudanca = { callHours: proj.callHours };
+        } else if (acao === 'icone') {
+            mudanca = { iconeVisivel: req.body?.iconeVisivel === true };
+        } else if (acao === 'sip') {
+            const sip = validarSipDestino({ hostname: req.body?.hostname, porta: req.body?.porta });
+            if (!sip.ok) return res.status(400).json({ ok: false, error: sip.erro });
+            mudanca = { sip: { hostname: sip.hostname, porta: sip.porta } };
+        } else {
+            return res.status(400).json({ ok: false, error: `Ação desconhecida: "${acao}" (use horarios, icone ou sip).` });
+        }
+
+        const montado = montarPayloadChamadas(mudanca);
+        if (!montado.ok) return res.status(400).json({ ok: false, error: montado.erro });
+
+        const r = await fetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/settings`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(montado.payload),
+        });
+        const corpo = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            return res.status(502).json({
+                ok: false,
+                error: corpo?.error?.message || `A Meta recusou a gravação (HTTP ${r.status}).`,
+                bruto: corpo,
+            });
+        }
+
+        // Validação por RESULTADO: o que ficou gravado é o que a re-leitura diz.
+        let calling = null; let brutoGravado = null;
+        try {
+            const rl = await fetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/settings`, {
+                headers: { Authorization: `Bearer ${cfg.token}` },
+            });
+            brutoGravado = await rl.json().catch(() => ({}));
+            calling = lerCallingDasSettings(brutoGravado);
+        } catch { /* releitura falhou — o campo fica null e a tela diz */ }
+
+        let conferencia = null;
+        if (acao === 'horarios') {
+            const cfgDoc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+            const cfgAt = resolverConfig(cfgDoc.exists ? cfgDoc.data() : null);
+            conferencia = conferirCallHours(calling, cfgAt.horario);
+        }
+
+        return res.json({ ok: true, acao, aplicado: montado.payload.calling, calling, conferencia, brutoGravado });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/configurar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
