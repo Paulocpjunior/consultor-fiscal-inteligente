@@ -293,6 +293,87 @@ export function conferirCallHours(callingGravado, horario) {
     };
 }
 
+// ============================================================================
+// EVENTOS DE CHAMADA NO WEBHOOK (Paulo, 23/08 — "pode seguir"): a ligação
+// recebida/perdida vira LINHA NA CONVERSA do Connect, senão o cliente liga e
+// ninguém fica sabendo que ligou.
+//
+// 🚨 O leiaute do webhook `calls` NÃO está provado contra evento real (nenhuma
+// chamada chegou ainda). Por isso o extrator é TOLERANTE e leva o CRU junto de
+// cada evento: o que ele não souber ler fica NOMEADO (`ilegiveis`), nunca
+// descartado calado — é do primeiro evento real que sai a régua definitiva.
+// ============================================================================
+
+function tsChamadaParaIso(t) {
+    const n = Number(t) * (String(t || '').length > 11 ? 1 : 1000);
+    return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null;
+}
+
+/** Tradução best-effort do evento — desconhecido fica como veio, visível. */
+export function traduzirEventoChamada(evento) {
+    const mapa = {
+        connect: 'conectada', connected: 'conectada', accept: 'atendida', accepted: 'atendida',
+        terminate: 'encerrada', terminated: 'encerrada', ended: 'encerrada',
+        ringing: 'tocando', missed: 'perdida', rejected: 'recusada', reject: 'recusada',
+        failed: 'falhou', no_answer: 'não atendida', unanswered: 'não atendida',
+    };
+    const e = String(evento || '').toLowerCase();
+    return mapa[e] || (e || 'evento');
+}
+
+/**
+ * Extrai os eventos de CHAMADA do payload do webhook (field "calls"). Devolve
+ * { valido, chamadas[], ilegiveis[] } — cada chamada com o bruto junto.
+ */
+export function extrairEventosChamada(payload) {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    if (p.object !== 'whatsapp_business_account') return { valido: false, chamadas: [], ilegiveis: [] };
+    const chamadas = [];
+    const ilegiveis = [];
+    for (const entry of (Array.isArray(p.entry) ? p.entry : [])) {
+        for (const change of (Array.isArray(entry?.changes) ? entry.changes : [])) {
+            const value = change?.value || {};
+            const lista = Array.isArray(value.calls) ? value.calls : [];
+            // Aceita pelo FIELD ou pela presença do array — a Meta pode nomear
+            // o field de um jeito que ainda não vimos; o array é a substância.
+            if (change?.field !== 'calls' && !lista.length) continue;
+            const phoneNumberId = value.metadata?.phone_number_id || null;
+            for (const c of lista) {
+                const bruto = c && typeof c === 'object' ? c : { valor: c };
+                const callId = bruto.id ? String(bruto.id) : null;
+                if (!callId) { ilegiveis.push(bruto); continue; } // sem id não há idempotência
+                const direcaoCrua = String(bruto.direction || '').toUpperCase();
+                const deNegocio = direcaoCrua.includes('BUSINESS');
+                // O CLIENTE é o outro lado: na chamada que ELE inicia, é o from;
+                // na que NÓS iniciamos, é o to. Sem direção legível, from.
+                const clienteCru = deNegocio ? (bruto.to ?? bruto.from) : (bruto.from ?? bruto.to);
+                const cliente = String(clienteCru || '').replace(/\D/g, '') || null;
+                if (!cliente) { ilegiveis.push(bruto); continue; }
+                const duracao = Number(bruto.duration ?? bruto.session?.duration);
+                chamadas.push({
+                    callId,
+                    conversaId: cliente,
+                    direcao: deNegocio ? 'saida' : 'entrada',
+                    evento: String(bruto.event ?? bruto.status ?? '').toLowerCase() || null,
+                    duracaoSegundos: Number.isFinite(duracao) && duracao > 0 ? duracao : null,
+                    timestamp: tsChamadaParaIso(bruto.timestamp),
+                    phoneNumberId,
+                    bruto,
+                });
+            }
+        }
+    }
+    return { valido: true, chamadas, ilegiveis };
+}
+
+/** A linha que aparece na conversa. */
+export function resumoDaChamada(c) {
+    const lado = c.direcao === 'saida' ? 'para o cliente' : 'do cliente';
+    const dur = c.duracaoSegundos
+        ? ` · ${Math.floor(c.duracaoSegundos / 60)}m${String(c.duracaoSegundos % 60).padStart(2, '0')}s` : '';
+    return `☎️ Ligação de WhatsApp ${lado} — ${traduzirEventoChamada(c.evento)}${dur}`;
+}
+
 export const ANTES_DE_LIGAR = [
     {
         titulo: 'O botão aparece no WhatsApp DO CLIENTE',

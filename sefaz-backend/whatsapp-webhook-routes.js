@@ -39,6 +39,7 @@ import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaVa
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
+import { extrairEventosChamada, resumoDaChamada } from './whatsapp-chamadas.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -177,6 +178,47 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
         naoLidas: admin.firestore.FieldValue.increment(1),
         atualizadoEm: agora,
     }, { merge: true });
+}
+
+/**
+ * ☎️ Grava UM evento de CHAMADA como linha da conversa (Paulo, 23/08 — a
+ * ligação recebida/perdida não pode sumir do histórico). Idempotente por
+ * call+evento, e a reentrega da Meta NÃO conta não-lida duas vezes.
+ *
+ * 🚨 Chamada NÃO abre a janela de 24h — janela é de MENSAGEM (regra da Meta);
+ * afirmá-la por ligação liberaria texto livre que a Meta vai recusar depois.
+ */
+async function gravarEventoChamada(db, c) {
+    const agora = new Date().toISOString();
+    const resumo = resumoDaChamada(c);
+    const ref = db.collection('whatsapp_mensagens').doc(`call_${c.callId}_${c.evento || 'evento'}`);
+    const jaExiste = (await ref.get()).exists;
+    await ref.set({
+        conversaId: c.conversaId,
+        direcao: c.direcao,
+        tipo: 'chamada',
+        texto: resumo,
+        callId: c.callId,
+        eventoChamada: c.evento,
+        duracaoSegundos: c.duracaoSegundos,
+        timestamp: c.timestamp || agora,
+        phoneNumberId: c.phoneNumberId,
+        // O leiaute do "calls" ainda não foi provado — o CRU do evento fica no
+        // doc: é dele que sai a régua definitiva quando a primeira chamada real
+        // chegar (mesmo desenho do Jotform Sign).
+        bruto: c.bruto,
+        recebidoEm: agora,
+    }, { merge: true });
+    await db.collection('whatsapp_conversas').doc(c.conversaId).set({
+        numero: c.conversaId,
+        ultimaMensagem: { resumo, direcao: c.direcao, em: c.timestamp || agora },
+        // Ligação DO CLIENTE pede atenção como não-lida — quem perdeu a
+        // chamada precisa ver que ela existiu. Só na 1ª gravação do evento.
+        ...(!jaExiste && c.direcao === 'entrada'
+            ? { naoLidas: admin.firestore.FieldValue.increment(1) } : {}),
+        atualizadoEm: agora,
+    }, { merge: true });
+    return { jaExiste };
 }
 
 /**
@@ -622,6 +664,39 @@ router.post('/webhook', async (req, res) => {
         for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg, catalogo);
         for (const st of ev.statuses) await gravarStatus(db, st);
 
+        // ── ☎️ Eventos de CHAMADA (field "calls") — viram linha na conversa.
+        // O extrator é tolerante e o ilegível volta NOMEADO no log (o cru já
+        // está em whatsapp_webhook_eventos, gravado no passo 1).
+        const ch = extrairEventosChamada(req.body);
+        const chamadasGravadas = [];
+        for (const c of ch.chamadas) {
+            const g = await gravarEventoChamada(db, c);
+            chamadasGravadas.push({ c, ...g });
+        }
+        if (ch.ilegiveis.length) {
+            console.warn('[whatsapp/chamadas] eventos de chamada ilegíveis:', ch.ilegiveis.length,
+                '— o cru está em whatsapp_webhook_eventos (é dele que sai a régua).');
+        }
+        // 🔔 Ligação do cliente notifica como mensagem — MESMA régua de filas e
+        // horário do push (a regra do Paulo vale aqui também). Best-effort.
+        const chamadasNovasDoCliente = chamadasGravadas.filter((g) => !g.jaExiste && g.c.direcao === 'entrada');
+        if (chamadasNovasDoCliente.length) {
+            setImmediate(async () => {
+                for (const g of chamadasNovasDoCliente) {
+                    try {
+                        const conversa = (await db.collection('whatsapp_conversas').doc(g.c.conversaId).get()).data() || {};
+                        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
+                        await notificarMensagem({
+                            msg: { de: g.c.conversaId, nomePerfil: null, texto: resumoDaChamada(g.c), midia: null },
+                            conversa, config: resolverConfig(cfgDoc.data()),
+                        });
+                    } catch (e) {
+                        console.warn('[whatsapp/push] chamada falhou (webhook intacto):', e.message);
+                    }
+                }
+            });
+        }
+
         // Mídia DEPOIS da resposta (setImmediate, padrão da casa): a Meta quer
         // o 200 rápido, e o anexo é best-effort — a mensagem já está gravada.
         const comMidia = ev.mensagens.filter((m) => m.midia?.metaMediaId);
@@ -654,7 +729,7 @@ router.post('/webhook', async (req, res) => {
             });
         }
 
-        return res.status(200).json({ ok: true, mensagens: ev.mensagens.length, statuses: ev.statuses.length });
+        return res.status(200).json({ ok: true, mensagens: ev.mensagens.length, statuses: ev.statuses.length, chamadas: ch.chamadas.length });
     } catch (e) {
         // 500 de propósito: a Meta reentrega e a gravação é idempotente.
         console.error('[whatsapp/webhook POST]', e);
