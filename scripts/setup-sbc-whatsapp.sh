@@ -30,6 +30,14 @@ LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
 echo "== SBC WhatsApp → HitPhone =="
 echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT"
 
+# 0) API do Compute Engine — o projeto só rodava Cloud Run, então ela pode
+#    nunca ter sido habilitada. 🐛 Na 1ª versão isto travava MUDO (23/08): o
+#    gcloud perguntava "enable and retry? y/N" com a saída jogada em
+#    /dev/null, e o script ficava parado esperando um teclado que ninguém
+#    via. Pergunta interativa engolida é a pior forma de espera.
+echo "== Conferindo a API do Compute Engine (1ª vez pode levar ~1 min)…"
+gcloud services enable compute.googleapis.com --project="$PROJECT"
+
 # 1) IP estático — o DNS aponta para ele, então ele nasce ANTES da VM.
 if ! gcloud compute addresses describe "$IP_NAME" --project="$PROJECT" --region="$REGION" >/dev/null 2>&1; then
     gcloud compute addresses create "$IP_NAME" --project="$PROJECT" --region="$REGION"
