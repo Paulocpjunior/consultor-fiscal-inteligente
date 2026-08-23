@@ -66,6 +66,7 @@ import {
     idConversaDoParam, ehConversaInstagram, enviarTextoInstagram, ligarRecebimentoInstagram,
     assinaturasDoApp,
 } from './instagram-dm.js';
+import { enviarAvisoTeams, statusAvisoTeams } from './teams-aviso.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -821,6 +822,29 @@ router.post('/atendimento-config', requireAdmin, async (req, res) => {
         });
         return res.json({ ok: true, config: limpa });
     } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🔔 TESTE do aviso nativo do Teams (Paulo, 23/08) — manda um aviso de teste
+ * para o PRÓPRIO usuário logado (por isso requireAuth, não admin: cada um
+ * prova o seu Teams, e a rota não aceita outro destinatário). A recusa do
+ * Graph volta CRUA: é ela que diz o que falta (consent da permissão
+ * TeamsActivity.Send, manifest sem `activities`, app não instalado).
+ */
+router.post('/teams-aviso/testar', requireAuth, async (req, res) => {
+    try {
+        const email = req.user?.email;
+        if (!email) return res.status(400).json({ ok: false, error: 'Sessão sem e-mail — saia e entre de novo.' });
+        const r = await enviarAvisoTeams({
+            email,
+            titulo: '💬 SP Connect — teste',
+            corpo: 'Se você está lendo isto no sino do Teams, o aviso nativo está funcionando.',
+        });
+        return res.json({ ok: true, resultado: r, status: statusAvisoTeams() });
+    } catch (e) {
+        console.error('[whatsapp/teams-aviso/testar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
