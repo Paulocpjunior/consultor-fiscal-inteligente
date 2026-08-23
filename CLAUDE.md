@@ -135,8 +135,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Mês** — traziam três das quatro formas e **faltava justamente `totais.vISSRetido`**,
   a forma do ABRASF, que é a do RETIDO.
 
-- **🚨 A CAPTURA DO ADN GRAVAVA UMA NOTA QUE NENHUM LEITOR DO APP ENXERGA**
-  (22/08). O trilho da **NFS-e Nacional** escreve em `documentos_fiscais` — a
+- **🚨 A CAPTURA DO ADN GRAVAVA UMA NOTA QUE NENHUM LEITOR DO APP ENXERGARIA**
+  (22/08 — e ⚠️ **CORRIGIDO EM 23/08: o dano em produção é ZERO**). O painel de
+  captura do Paulo mostra **`Docs (histórico total): 0 — ADN sem movimento`**:
+  o trilho está LIGADO (38 empresas elegíveis, 38 sucessos) e **nunca capturou
+  um documento**, porque o provedor não tem nada disponível (maxNSU alcançado)
+  e 272 dos 394 municípios da carteira usam sistema próprio. Ou seja: o defeito
+  do ESCRITOR era real no código e **não produziu nota torta nenhuma**.
+  📌 **A correção continua valendo como PREVENÇÃO** — o dia em que os
+  municípios migrarem, a nota entra completa. O que NÃO vale é ler a frase
+  original como defeito vivo: eu escrevi *"a nota EXISTIA e não aparecia"* sem
+  ter o número, e o número é zero. **Impacto se mede no painel, não se deduz do
+  código.**
+  🗑️ **E o backfill do acervo do ADN SAIU da lista** — não há acervo. Também
+  sai do caminho crítico a pendência do código de cancelamento do leiaute
+  nacional: ela só volta a importar quando houver documento.
+  O trilho escreve em `documentos_fiscais` — a
   MESMA coleção de tudo — e gravava só o que o parser dele extraiu:
   `tipo: 'nfseNacional'`, `prestadorCnpj`, `tomadorCnpj`, `valorServico`,
   `valorIss`. **Sem `direcao`, sem `competencia`, sem `status`, sem
@@ -175,11 +189,9 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   **MERCADORIA**. Agora ela pergunta ao dono (`ehNotaDeServico`), que conhece as
   formas raras. **Campo gravado pode não existir na forma que o leitor espera —
   quem responde é a régua da LEITURA.**
-  🚩 **E O ACERVO JÁ CAPTURADO CONTINUA TORTO nos demais campos** — a correção
-  da gravação vale da próxima rodada em diante. O XML bruto está no Storage (`storagePath`), então dá para
-  reler, como o ♻️ faz com as notas vazias; não foi feito neste PR. Enquanto
-  isso, quem consulta por rótulo precisa das DUAS formas — foi o que a tese de
-  recuperação do ISS passou a fazer.
+  ✅ **NÃO HÁ ACERVO A CONSERTAR** (medido em 23/08: histórico total = 0). A
+  leitura pelas DUAS formas do rótulo continua nos consultores, e é barata —
+  ela cobre o dia em que o trilho começar a trazer documento.
 
 - **🚨 O CRUZAMENTO CFI × SPED GRITAVA "NÃO ESCRITURADA" EM TODA CANCELADA POR
   EVENTO — sobre um arquivo CERTO** (22/08). O DESENHO já estava certo e
