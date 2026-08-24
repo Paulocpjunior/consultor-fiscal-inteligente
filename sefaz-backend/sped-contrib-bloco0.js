@@ -224,9 +224,14 @@ function build0110(dados) {
     // CONSOLIDADA e o campo é **2**; quando vem dos blocos A/C/D, é detalhada e
     // continua **9**. Os dois saem de arquivo ACEITO: AFFITTARE 05/2026 traz 2
     // com F550, HS PROJETOS 05/2026 traz 9 escriturando documento a documento.
+    // ⚠️ E a contagem de DOCUMENTOS entra na decisão: consolidado é o arquivo
+    // que não escritura documento nenhum. Sem isto, empresa com serviços
+    // prestados E aluguel saía consolidada declarando A010/A100 — as seis
+    // recusas da PEC PRONTA ENTREGA em 07/2026.
     const indRegCum = indRegCumDoArquivo({
         regimeApuracao,
         receitaConsolidada: dados.receitaSemDocumento || 0,
+        documentosDeReceita: dados.escrituracaoConsolidada === false ? 1 : 0,
     });
     return fmt.buildLine([
         '0110',

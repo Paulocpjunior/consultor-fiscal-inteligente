@@ -5,6 +5,44 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "ALUGUEL ⇒ ARQUIVO CONSOLIDADO" ERA PREMISSA DA AFFITTARE — e quebrou
+  na PRIMEIRA empresa que tem os DOIS** (24/08, PEC PRONTA ENTREGA 1350 ·
+  07/2026: serviços prestados **e** aluguel). O PVA recusou **6 registros** —
+  1× A010 e 5× A100 — com *"O registro não deve ser informado para esse perfil
+  e/ou tipo de operação"*.
+  🔴 A causa: `indRegCumDoArquivo` devolvia **2 (CONSOLIDADO)** sempre que
+  havia receita de locação. **Consolidado é o arquivo que NÃO escritura
+  documento** — e a PEC tem cinco. O app declarou um perfil e entregou o
+  contrário dele.
+  ✅ **O GABARITO É O EFD ASSINADO DA PRÓPRIA PEC (05/2026)**, que faz o certo:
+  `|0110|2||1|9|` (**DETALHADO**), os cinco A100 de pé, e o aluguel no
+  **`F100`** — `|F100|1|||01052026|188836,42|01|188836,42|0,65|1227,44|01|
+  188836,42|3|5665,09||||||`. E o bloco 1 dele sai `|1001|1|`, **sem 1900**.
+  📌 **F550 e F100 DECLARAM A MESMA RECEITA — a diferença é de PERFIL, não de
+  valor.** F550 só existe no consolidado; F100 é o registro de "demais
+  operações" do detalhado, e CONVIVE com o bloco A. A régua passou a ser: há
+  documento de receita ⇒ detalhado + F100; não há ⇒ consolidado + F550.
+  📌 **E O 1900 É CONSEQUÊNCIA DO F550, NÃO DO ALUGUEL.** A recusa de 24/08
+  fala de *"F550 e F560"*; no detalhado não há F550, então não há obrigação —
+  e o assinado da PEC comprova, com aluguel e sem 1900. Emitir ali seria
+  inventar obrigação que a recusa não criou.
+  🚨 **A PREVALIDAÇÃO DISPAROU E O APP GEROU ASSIM MESMO.** A trava de 21/08
+  previu as SEIS recusas antes do PVA (`avisosDePerfilConsolidado` acusa A010,
+  A100 e A170). **O defeito não era o aviso: era a DECISÃO.** Aviso não
+  conserta arquivo — quando o app tem como saber a resposta certa, avisar não
+  é entrega, é passar o problema adiante.
+  📌 **E A TRAVA LITERAL MORDEU PELA QUINTA VEZ**
+  (`receitaSemDocumentoF550.test.ts`): ela prendia no TEXTO
+  `receitaSemDocumento > 0 && regimeApuracao === '2'` — e esse texto ERA o
+  defeito. Trocada pela INTENÇÃO (a exclusão vale no consolidado, e o
+  consolidado é DERIVADO da contagem de documentos), mais a proibição de
+  voltar a assumir "tem aluguel ⇒ consolidado".
+  ⚠️ **E a exclusão de ENTRADAS passou a valer SÓ no consolidado**: no
+  detalhado, tirar a entrada seria apagar escrituração legítima. Antes ela
+  dependia de `regimeApuracao === '2'` — que é o **COD_INC_TRIB** (cumulativo),
+  não o IND_REG_CUM. **Dois campos diferentes com o mesmo número 2**, lado a
+  lado no mesmo arquivo.
+
 - **🚨 HAVENDO F550, O 1900 É OBRIGATÓRIO — e o bloco 1 saía SEMPRE VAZIO**
   (24/08, AFFITTARE 1139 · 07/2026, urgente).
   ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (Paulo: *"1139 - AFFITARE - EFD

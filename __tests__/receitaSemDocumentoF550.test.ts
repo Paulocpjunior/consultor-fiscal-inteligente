@@ -207,8 +207,17 @@ describe('🚨 orquestrador — ficha casada por competência NORMALIZADA', () =
     // IND_REG_CUM 2), o A010/A100 do serviço TOMADO volta com "O registro não
     // deve ser informado para esse perfil e/ou tipo de operação". No cumulativo
     // o tomado não gera crédito — sai da escrituração, NOMEADO no aviso.
+    // ⚠️ ESTA TRAVA JÁ MORDEU A CORREÇÃO QUE ELA DEVERIA PERMITIR (24/08, PEC
+    // PRONTA ENTREGA): ela prendia a condição no TEXTO
+    // (`receitaSemDocumento > 0 && regimeApuracao === '2'`) — e esse texto ERA
+    // o defeito, porque escolhia consolidado sem perguntar se havia documento.
+    // É a família do `cfopPorNota`, que reprovou a própria correção três vezes.
+    // Agora ela guarda a INTENÇÃO: a exclusão acontece no consolidado, e o
+    // consolidado é DERIVADO (não pode voltar a ser "tem aluguel ⇒ consolidado").
     it('🚨 consolidada exclui documento de ENTRADA — antes da coleta de 0150/0200', () => {
-        expect(fonte).toMatch(/receitaSemDocumento > 0 && regimeApuracao === '2'/);
+        expect(fonte).toMatch(/escrituracaoConsolidada\s*&&\s*regimeApuracao === '2'/);
+        // O perfil se DECIDE, não se assume: a contagem de documentos entra.
+        expect(fonte).toMatch(/const escrituracaoConsolidada = [^;]*docsDeReceita === 0/);
         expect(fonte).toMatch(/direcaoEfetivaDoc\(n\) === 'saida'/);
         expect(fonte).toMatch(/não deve ser informado para esse perfil/);
         // A exclusão tem que vir ANTES da coleta de participantes/itens —
