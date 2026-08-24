@@ -217,9 +217,29 @@ describe('📞 ligar para o cliente', () => {
         expect(cloud).toMatch(/a chamada PODE ter saído/);
     });
 
-    it('o botão existe, confirma antes e só aparece com a permissão aceita', () => {
-        expect(tela).toMatch(/📞 Ligar para o cliente/);
-        expect(tela).toMatch(/O telefone do cliente vai TOCAR agora/);
+    // ⚠️ Premissa TROCADA pela RESPOSTA DA META (24/08, código 131055):
+    // "Graph API calls are not allowed for SIP enabled numbers". O botão que
+    // eu tinha acabado de escrever seria um botão que nunca funciona — em
+    // modo SIP a saída sai pelo TRONCO. A rota fica (ela é a prova, e o dia
+    // em que o número sair do modo SIP ela volta a valer), mas a tela não
+    // oferece o clique: ela DIZ como se liga.
+    it('a tela NÃO oferece ligar por API — ela diz que a saída é pelo ramal', () => {
+        expect(tela).not.toMatch(/📞 Ligar para o cliente \(atende no ramal 221\)/);
+        expect(tela).toMatch(/disque <strong>\{sel\.numero\}<\/strong> no ramal 221/);
         expect(tela).toMatch(/permissaoLigacao\?\.status === 'aceita' \?/);
+    });
+
+    it('131055 é traduzido com a arquitetura, não com "tente de novo"', () => {
+        expect(cloud).toMatch(/code === 131055/);
+        expect(cloud).toMatch(/quem disca é o tronco/);
+    });
+
+    it('o SBC tem a perna de saída, e ela RECUSA sem destino provado', () => {
+        const sbc = fs.readFileSync(path.join(process.cwd(), 'scripts/setup-sbc-whatsapp.sh'), 'utf8');
+        expect(sbc).toMatch(/META_SIP_DESTINO/);
+        expect(sbc).toMatch(/SAIDA BLOQUEADA/);
+        // Endpoint com contato vazio quebraria o pjsip e derrubaria a ENTRADA,
+        // que já funciona — por isso ele nem é escrito.
+        expect(sbc).toMatch(/saída desligada: META_SIP_DESTINO vazio/);
     });
 });
