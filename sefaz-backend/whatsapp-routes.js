@@ -56,6 +56,7 @@ import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
 } from './whatsapp-atendimento.js';
+import { ehDono } from './auditoria-dono.js';
 import {
     interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
     prepararMensagensDoTxt, idMensagemImportada,
@@ -402,18 +403,28 @@ router.post('/webhook-assinar-waba', requireAdmin, async (_req, res) => {
 // Perfil de atendimento do usuário logado: filas que enxerga (null = todas)
 // e o PAPEL (admin/gestor/colaborador). O escopo é do BACKEND — o front
 // nunca é o filtro de dados (regra da Carteira).
+// 🚨 O `if (role === 'admin') return { filas: null }` que morava AQUI era a
+// SEGUNDA CÓPIA da régua — e ela sobreviveu ao PR #995, que tirou o `role` de
+// dentro do `filasVisiveis`. Efeito: o admin parava de ser NOTIFICADO das
+// outras filas (o push já lia a régua nova) e continuava VENDO todas na
+// lista, porque nem chegava a chamar a régua. Meia correção não deixa o
+// defeito pela metade — ela troca um erro por uma CONTRADIÇÃO, e quem lê
+// escolhe a metade que preferir. Quem responde agora é a régua, e só ela.
 async function perfilAtendimento(db, user) {
-    if (user?.role === 'admin') return { filas: null, papel: 'admin', papelAtendimento: null };
     let departamentos = []; let filasAtendimento = []; let papelAtendimento = null;
     try {
         const u = await db.collection('users').doc(user.uid).get();
         departamentos = u.data()?.departamentos || [];
         filasAtendimento = u.data()?.filasAtendimento || [];
         papelAtendimento = u.data()?.papelAtendimento || null;
-    } catch { /* sem doc = só Recepção */ }
-    const papel = String(papelAtendimento || '').toLowerCase() === 'gestor' ? 'gestor' : 'colaborador';
+    } catch { /* sem doc = só as filas do cadastro central */ }
+    // `papel` é o de ADMINISTRAÇÃO (o que a tela usa pra liberar ⚙️ e
+    // encerramento) — ele continua vindo do role do CFI. O que ele NÃO decide
+    // mais é `filas`, que é visão de atendimento.
+    const papel = user?.role === 'admin' ? 'admin'
+        : (String(papelAtendimento || '').toLowerCase() === 'gestor' ? 'gestor' : 'colaborador');
     return {
-        filas: filasVisiveis({ papelAtendimento, departamentos, filasAtendimento }),
+        filas: filasVisiveis({ email: user?.email, papelAtendimento, departamentos, filasAtendimento }),
         papel,
         papelAtendimento,
     };
@@ -2264,6 +2275,10 @@ router.get('/atendentes', requireAdmin, async (_req, res) => {
                 papelAtendimento: x.papelAtendimento || 'colaborador',
                 departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
                 filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
+                // 👑 Quem é DONO vem do SERVIDOR, que é quem tem a env — a tela
+                // não recalcula. Segunda leitura do mesmo fato daria selo
+                // divergente no dia em que a lista for restringida por env.
+                dono: ehDono(x.email),
             };
         }).sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
         return res.json({ ok: true, atendentes, filas: FILAS_ATENDIMENTO });
