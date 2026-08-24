@@ -300,6 +300,13 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         participantes,
         unidades,
         receitaSemDocumento,
+        // 🚨 Havendo F550, o 1900 é OBRIGATÓRIO (recusa do PVA na AFFITTARE
+        // 07/2026). COD_MOD e COD_SIT são de TABELA OFICIAL e dependem de qual
+        // documento a empresa emite pelo aluguel — vêm do cadastro, nunca de
+        // dedução. Gerador que lê campo que ninguém passa foi o defeito do
+        // `saldoCredorIpiAnterior` (19/08, PWR): os dois viajam aqui.
+        contrib1900CodMod: empresa?.dadosFiscais?.contrib1900CodMod || '',
+        contrib1900CodSit: empresa?.dadosFiscais?.contrib1900CodSit || '',
         warnings,
     };
 }

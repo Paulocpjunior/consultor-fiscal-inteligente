@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 HAVENDO F550, O 1900 É OBRIGATÓRIO — e o bloco 1 saía SEMPRE VAZIO**
+  (24/08, AFFITTARE 1139 · 07/2026, urgente). Recusa do PVA, literal: *"Se o
+  somatório do campo Valor Total da Receita Auferida do registro F550 e F560
+  for maior que zero o registro 1900 deve ser preenchido."*
+  🔴 **É uma CONSEQUÊNCIA do F550 que ninguém previu.** O `buildBloco1_Contrib`
+  devolvia `|1001|1|` (bloco SEM DADOS) em TODO arquivo — ele ficou vazio
+  quando o 1010 de ação judicial foi removido (17/08, MANTOAN) e nunca ganhou
+  conteúdo. Enquanto a receita vinha de documento isso não aparecia; com o F550
+  no ar desde 21/08, o bloco 1 vazio virou recusa: **o arquivo declara receita
+  e não a consolida**.
+  📌 **REGRA QUE FICA: registro novo pode tornar OBRIGATÓRIO um bloco que
+  sempre saiu vazio.** O F550 foi provado sozinho, e o que faltava não estava
+  nele — estava num bloco que ninguém olhava porque nunca tinha tido conteúdo.
+  ✂️ `montar1900` nasce no dono da receita sem documento
+  (`receita-sem-documento-f550.js`) e devolve VALORES, não a linha pronta —
+  igual ao `montarF550`; formatar ali criaria uma segunda forma do número.
+  ✅ **O QUE A RÉGUA DERIVA, com o motivo**: `CNPJ` (o do F010, já no arquivo),
+  `VL_TOT_REC` (a Σ do F550/F560 — é a PRÓPRIA recusa do PVA que define essa
+  igualdade) e `CST_PIS`/`CST_COFINS` (os MESMOS do F550 — lê-los de outro
+  lugar faria o 1900 e o F550 discordarem dentro do mesmo arquivo).
+  🚨 **O QUE ELA RECUSA**: `COD_MOD` (Tabela 4.1.1) e `COD_SIT` (Tabela 4.1.2)
+  são código de TABELA OFICIAL e dependem de **QUAL documento a empresa emite
+  pelo aluguel** — o app não sabe e isso não se deduz do valor. Sem cadastro o
+  registro **NÃO SAI** e a falta vira aviso NOMEADO com a recusa literal e o
+  lugar de preencher: é o desenho do `0002`, do código 9 do ISS fixo e do
+  `IND_NAT_PJ`. Carimbá-los de memória é a família do `1405`, do `5352` e do
+  `PARTSEM` — código inventado que o PVA às vezes ACEITA, e aí o erro só
+  aparece na fiscalização.
+  ⚠️ **`QUANT_DOC` sai VAZIO de propósito**: é opcional, e nós não temos os
+  documentos (é justamente por isso que a receita vem da ficha). O arquivo do
+  e-Fiscal declarava **3** porque ELE os tinha; escrever um número aqui seria
+  afirmar uma contagem que ninguém fez.
+  📌 **Campo entrou na whitelist E no modal no MESMO PR** (regra do #382) — e
+  desta vez isso é o que faz o aviso apontar um lugar que EXISTE, que é a
+  lição do dia anterior. A recusa virou regra da **prevalidação** no mesmo PR,
+  lendo as LINHAS do arquivo gerado, com o arquivo REAL da AFFITTARE no teste.
+
 - **🚨 O PAINEL AFIRMAVA "✓ CAPTURA OK" A PARTIR DE UM CAMPO DE CADASTRO — nas
   MESMAS 202 empresas** (23/08, achado ao conferir se a porta que eu tinha
   acabado de apontar abria). O 📋 Status de Captura por Empresa decidia com

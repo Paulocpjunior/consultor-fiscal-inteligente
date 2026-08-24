@@ -342,12 +342,16 @@ export function conferirIndOrigCredDasEntradas(linhas) {
  * confirma): M200/M600 [5] = VL_RET_NC e [9] = VL_RET_CUM — só um dos dois é
  * diferente de zero, por construção; F600 [8] = VL_RET_PIS e [9] = VL_RET_COFINS.
  */
+// Número como o ARQUIVO o escreve (pt-BR: milhar com ponto, decimal com
+// vírgula). Ele mora no escopo do módulo porque mais de uma regra o lê — duas
+// cópias da mesma leitura no mesmo arquivo é como as divergências nascem.
+const num = (v) => {
+    const x = parseFloat(String(v ?? '').replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(x) ? x : 0;
+};
+
 export function conferirRetencaoDoBlocoM(linhas) {
     const erros = [];
-    const num = (v) => {
-        const n = parseFloat(String(v ?? '').replace(/\./g, '').replace(',', '.'));
-        return Number.isFinite(n) ? n : 0;
-    };
     let f600Pis = 0, f600Cofins = 0, temF600 = false;
     const retDeclarada = {};
     (Array.isArray(linhas) ? linhas : []).forEach((linha) => {
@@ -435,6 +439,39 @@ export function conferirCstPisCofins(linhas) {
     return { erros, ok: erros.length === 0 };
 }
 
+// ── R: F550/F560 com receita ⇒ o 1900 é OBRIGATÓRIO ────────────────────────
+// FONTE: recusa do PVA na AFFITTARE 17.213.641/0001-27 · 07/2026 (24/08),
+// literal: *"Se o somatório do campo Valor Total da Receita Auferida do
+// registro F550 e F560 for maior que zero o registro 1900 deve ser
+// preenchido."* O bloco 1 saía SEMPRE `|1001|1|` (sem dados) — ele ficou vazio
+// quando o 1010 de ação judicial foi removido (17/08) e nunca ganhou conteúdo.
+//
+// ⚠️ Lê as LINHAS do arquivo gerado, nunca o objeto em memória: foi auditar a
+// intenção que deixou o C100 sair com modelo 55 e chave 65 por meses.
+export function conferirConsolidacao1900(linhas) {
+    const L = Array.isArray(linhas) ? linhas : [];
+    let receita = 0;
+    let tem1900 = false;
+    L.forEach((linha) => {
+        const c = camposDaLinha(linha);
+        const reg = String(c[0] || '').trim();
+        if (reg === 'F550' || reg === 'F560') receita += num(c[1]);
+        if (reg === '1900') tem1900 = true;
+    });
+    if (!(receita > 0) || tem1900) return { erros: [] };
+    return {
+        erros: [{
+            registro: '1900',
+            fonte: 'PVA · AFFITTARE 07/2026 (24/08)',
+            mensagem: 'O arquivo declara receita no F550/F560 e NÃO tem o registro 1900. '
+                + 'O PVA recusa: "Se o somatorio do campo Valor Total da Receita Auferida do registro '
+                + 'F550 e F560 for maior que zero o registro 1900 deve ser preenchido." '
+                + 'Preencha o modelo e a situacao do documento em Empresas -> Dados Fiscais -> '
+                + '"EFD-Contribuicoes: consolidacao da receita (1900)" e gere de novo.',
+        }],
+    };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirCodItemDosItens(linhas).erros,
@@ -453,6 +490,7 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // o nome da empresa como se fosse data.
         ...conferirCodModContraChave(linhas),
         ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
+        ...conferirConsolidacao1900(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

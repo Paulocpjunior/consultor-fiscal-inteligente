@@ -591,6 +591,13 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // ("Registro filho obrigatório não foi informado · 0002" — PWR 07/2026).
     // Mesmo desenho do código 9 do ISS fixo: o número mora no cadastro.
     'classEstabIpi', 'contribuinteIpi',
+    // Consolidação da receita no 1900 do EFD-Contribuições. Havendo F550 o
+    // registro é OBRIGATÓRIO (recusa do PVA na AFFITTARE 07/2026, 24/08), e
+    // COD_MOD/COD_SIT são TABELA OFICIAL que depende de qual documento a
+    // empresa emite pelo aluguel — o app não deduz. Campo entra na whitelist
+    // E no modal no MESMO PR (regra do #382): fora daqui ele é descartado em
+    // silêncio e a tela diria "salvo" sem gravar nada.
+    'contrib1900CodMod', 'contrib1900CodSit',
     // Natureza da PJ (IND_NAT_PJ, campo 13 do 0000 do EFD-Contribuições). O
     // gerador LIA este campo desde sempre e ele não estava aqui nem na tela:
     // caía no '00' — "sociedade empresária em geral" — em toda empresa,
