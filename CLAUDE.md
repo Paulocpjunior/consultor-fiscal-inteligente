@@ -6,9 +6,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 ## Regras permanentes de operação
 
 - **🚨 HAVENDO F550, O 1900 É OBRIGATÓRIO — e o bloco 1 saía SEMPRE VAZIO**
-  (24/08, AFFITTARE 1139 · 07/2026, urgente). Recusa do PVA, literal: *"Se o
-  somatório do campo Valor Total da Receita Auferida do registro F550 e F560
-  for maior que zero o registro 1900 deve ser preenchido."*
+  (24/08, AFFITTARE 1139 · 07/2026, urgente).
+  ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (Paulo: *"1139 - AFFITARE - EFD
+  ALUGUEL F550 /1900 - MATAMOSSSSSSSSSS"*). É a **PRIMEIRA empresa a fechar o
+  EFD-Contribuições pelo caminho CONSOLIDADO** (`IND_REG_CUM 2`) — MANTOAN e HS
+  fecharam pelo DETALHADO. Ou seja: o trilho da **receita sem documento** está
+  provado ponta a ponta, da ficha ao recibo.
+  Recusa do PVA, literal: *"Se o somatório do campo Valor Total da Receita
+  Auferida do registro F550 e F560 for maior que zero o registro 1900 deve ser
+  preenchido."*
   🔴 **É uma CONSEQUÊNCIA do F550 que ninguém previu.** O `buildBloco1_Contrib`
   devolvia `|1001|1|` (bloco SEM DADOS) em TODO arquivo — ele ficou vazio
   quando o 1010 de ação judicial foi removido (17/08, MANTOAN) e nunca ganhou
@@ -41,6 +47,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   desta vez isso é o que faz o aviso apontar um lugar que EXISTE, que é a
   lição do dia anterior. A recusa virou regra da **prevalidação** no mesmo PR,
   lendo as LINHAS do arquivo gerado, com o arquivo REAL da AFFITTARE no teste.
+  📌 **E O DESENHO "O APP NÃO ESCOLHE O CÓDIGO" FOI CONFIRMADO PELO RECIBO.**
+  Eu me recusei a chutar `COD_MOD`/`COD_SIT` e mandei o Paulo lê-los na fonte;
+  ele preencheu no cadastro e o PVA aceitou **na primeira rodada**. É a quinta
+  vez que a mesma disciplina fecha um caso (código 9 do ISS fixo, M205/M605,
+  `indAquis`, `0002`, agora o 1900): **código de tabela oficial vem da FONTE ou
+  do CADASTRO, nunca da minha memória** — e recusar-se a preencher não atrasou
+  a entrega, resolveu no mesmo dia.
+  ⚠️ **O QUE ESTE CASO NÃO PROVA**: quais são os códigos certos para OUTRA
+  locadora. Eles descrevem **qual documento aquela empresa emite** pelo
+  aluguel — por isso moram no cadastro, por empresa, e não viram constante no
+  código. Generalizar o par da AFFITTARE seria o `1405` com outra roupa.
+  ⚠️ **E o gerador foi provado ANTES do PVA, rodando de verdade**: a simulação
+  ponta a ponta reproduziu o arquivo recusado byte a byte (59 linhas, `9999|59`)
+  e, com os códigos, produziu `1990|3`, `9900|1900|1`, `9990|34` e `9999|61`
+  — as três aritméticas do bloco 9 fechando. **Acrescentar UMA linha ao bloco 1
+  mexe em QUATRO contadores**; conferir só a linha nova teria deixado a próxima
+  recusa esperando.
 
 - **🚨 O PAINEL AFIRMAVA "✓ CAPTURA OK" A PARTIR DE UM CAMPO DE CADASTRO — nas
   MESMAS 202 empresas** (23/08, achado ao conferir se a porta que eu tinha
