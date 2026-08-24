@@ -170,6 +170,21 @@ EOF
 
 # 4) VM — cria se não existe. O certificado exige o DNS resolvendo, então o
 #    script PAUSA aqui até o registro A existir.
+#    🐛 A imagem é UBUNTU 24.04, não Debian: o Debian 12 REMOVEU o Asterisk
+#    dos repositórios oficiais ("Package 'asterisk' has no installation
+#    candidate", 24/08, na 1ª VM real). Uma VM antiga criada com Debian é
+#    detectada e RECRIADA — ela só contém o que este script instala, e o IP
+#    estático (reservado à parte) e o DNS sobrevivem à troca.
+IMG_FAMILY="ubuntu-2404-lts-amd64"
+IMG_PROJECT="ubuntu-os-cloud"
+if gcloud compute instances describe "$VM" --project="$PROJECT" --zone="$ZONE" >/dev/null 2>&1; then
+    licenca=$(gcloud compute instances describe "$VM" --project="$PROJECT" --zone="$ZONE" --format='value(disks[0].licenses[0])' 2>/dev/null || true)
+    if [[ "$licenca" != *ubuntu-2404* ]]; then
+        echo "== ⚠️ A VM existente não é Ubuntu 24.04 (o Debian 12 não tem o pacote asterisk)."
+        echo "   Recriando — ela só contém o que este script instala; IP e DNS ficam."
+        gcloud compute instances delete "$VM" --project="$PROJECT" --zone="$ZONE" --quiet
+    fi
+fi
 if ! gcloud compute instances describe "$VM" --project="$PROJECT" --zone="$ZONE" >/dev/null 2>&1; then
     echo ""
     echo "== ⚠️ ANTES DE CONTINUAR: crie o registro DNS =="
@@ -192,10 +207,31 @@ if ! gcloud compute instances describe "$VM" --project="$PROJECT" --zone="$ZONE"
     gcloud compute instances create "$VM" \
         --project="$PROJECT" --zone="$ZONE" \
         --machine-type=e2-small \
-        --image-family=debian-12 --image-project=debian-cloud \
+        --image-family="$IMG_FAMILY" --image-project="$IMG_PROJECT" \
         --address="$IP" --tags=sbc-whatsapp \
         --metadata-from-file=startup-script="$STARTUP"
-    echo "== VM criada — o startup script instala tudo (2–4 min)."
+    # A frase "SBC pronto" sai DENTRO da VM (startup script) — sem esta
+    # espera, o terminal do Paulo terminava antes do provisionamento e não
+    # havia como saber se deu certo. O log serial é a fonte.
+    echo "== VM criada — aguardando o provisionamento terminar (2–4 min)…"
+    pronto=""
+    for _ in $(seq 1 60); do
+        serial=$(gcloud compute instances get-serial-port-output "$VM" --project="$PROJECT" --zone="$ZONE" 2>/dev/null || true)
+        if grep -q "SBC pronto" <<< "$serial"; then pronto=sim; break; fi
+        if grep -q "no installation candidate\|certbot: error\|Some challenges have failed" <<< "$serial"; then
+            echo "== ❌ O provisionamento FALHOU dentro da VM — últimas linhas do log:"
+            grep -E "no installation candidate|certbot|error|E: " <<< "$serial" | tail -5
+            exit 1
+        fi
+        sleep 15
+    done
+    if [ -n "$pronto" ]; then
+        echo "== ✅ SBC pronto: ${SBC_HOST}:5061 (TLS) → ${HIT_HOST}:${HIT_PORT} (destino ${SBC_DESTINO})"
+    else
+        echo "== ⚠️ 15 min sem a frase 'SBC pronto' no log — confira:"
+        echo "   gcloud compute instances get-serial-port-output $VM --zone=$ZONE | tail -40"
+        exit 1
+    fi
 else
     # 5) Reinstalação idempotente da config (mudou SBC_DESTINO/HIT_*): manda o
     #    script pra VM e executa.
