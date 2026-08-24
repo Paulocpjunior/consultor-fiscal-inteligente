@@ -430,6 +430,9 @@ export interface Atendente {
     uid: string; email: string | null; nome: string | null; role: string;
     papelAtendimento: string;
     departamentos: string[]; filasAtendimento: string[];
+    /** 👑 Dono do escritório — vê tudo por construção. Quem responde é o
+     *  BACKEND (`ehDono`, que tem a env); a tela só imprime o selo. */
+    dono?: boolean;
 }
 
 export const listarAtendentes = () =>
