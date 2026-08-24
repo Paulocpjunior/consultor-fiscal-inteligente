@@ -35,6 +35,7 @@ import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
     tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, unidadeDoItem, descreverUnidade,
+    levaC170NoContribuicoes, ehNfce,
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
 import { participanteDoDocumento } from './participante-doc-helper.js';
@@ -196,9 +197,26 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     }
 
     // ─── 5. Extrai itens unicos e unidades ───
+    //
+    // 🚨 SÓ DE QUEM VAI REFERENCIÁ-LOS. O 0200 é a Tabela de Identificação do
+    // Item e o 0190 a de Unidades: quem aponta para elas é o C170/A170. Item
+    // declarado e referenciado por ninguém é item ÓRFÃO — recusa que a PWR já
+    // pagou em 19/08 —, e desde 24/08 a **NFC-e não leva C170** neste arquivo
+    // (HYPE CAFE, 572 recusas do PVA). Sem esta linha, corrigir o C170 trocaria
+    // 572 recusas por outras tantas de item órfão: na HYPE seriam quatro itens
+    // (`10`, `11`, `20`, `101`), que só existem em cupom.
+    //
+    // ⚠️ Quem responde é o MESMO dono que decide o C170 — duas perguntas
+    // ligadas não podem ter duas respostas. Item que também aparece numa nota
+    // 55 continua entrando, por ela.
     const itensMap = new Map();
     const unidadesMap = new Map();
+    let itensSoEmNfce = 0;
     for (const nota of notas) {
+        if (!levaC170NoContribuicoes(nota)) {
+            itensSoEmNfce += (nota.itens || []).length;
+            continue;
+        }
         for (const item of (nota.itens || [])) {
             const codItem = codItemDoItem(item);
             if (!itensMap.has(codItem)) {
@@ -271,6 +289,20 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     }
     if (notas.length === 0 && !receitaSemDocumento) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo ${competencia}. Arquivo sera gerado com estrutura minima.`);
+    }
+    // 🚨 A CAUSA VAI JUNTO DO NÚMERO. Quem conferir o arquivo vai ver o item do
+    // cupom sumido do 0200 e a NFC-e sem detalhe — e sem esta frase vai
+    // procurar buraco de captura. A receita continua declarada: ela está no
+    // VL_DOC/VL_PIS/VL_COFINS do C100 e no bloco M.
+    const nfceNoArquivo = notas.filter(ehNfce).length;
+    if (nfceNoArquivo > 0 && itensSoEmNfce > 0) {
+        warnings.push(
+            `${nfceNoArquivo} NFC-e (modelo 65) foram escrituradas SEM C170, e os ${itensSoEmNfce} item(ns) `
+            + 'delas ficaram fora do 0200/0190. É o leiaute: o PVA recusa o C170 de cupom com "O registro não '
+            + 'deve ser informado para o modelo de documento do Registro Pai", e item declarado sem ninguém '
+            + 'referenciá-lo vira item órfão — a recusa seguinte. A receita das NFC-e continua declarada no '
+            + 'C100 (VL_DOC/VL_PIS/VL_COFINS) e no bloco M: nada deixa de ser apurado.',
+        );
     }
     // 🚨 PERÍODO SEM RECEITA NENHUMA NÃO PASSA CALADO (21/08, AFFITTARE: o
     // arquivo saiu F001|1 + M200/M600 zerados com a locação lançada na ficha —

@@ -492,8 +492,120 @@ export function conferirConsolidacao1900(linhas) {
     };
 }
 
+// ── R: NFC-e (COD_MOD 65) não leva C170 ────────────────────────────────────
+//
+// FONTE: PVA da HYPE CAFE SERVICOS DE ALIMENTACAO 66641236000115 · 07/2026
+// (24/08) — **572 recusas**, que são 286 C170 com DUAS mensagens cada:
+//
+//   "O registro não deve ser informado para o modelo de documento do
+//    'Registro Pai'."
+//   "O registro não deve ser informado para esse perfil e/ou tipo de operação.
+//    Consulte o guia prático da EFD-Contribuições e verifique a
+//    obrigatoriedade dos registros na Seção 4 - Obrigatoriedade dos Registros."
+//
+// Os 5 C170 das três notas modelo 55 do MESMO arquivo passaram — quem decide é
+// o COD_MOD do C100 pai, e por isso a regra lê o pai, nunca a linha isolada.
+/**
+ * C170 pendurado em C100 de NFC-e.
+ *
+ * ⚠️ Ela lê o PAI porque a recusa é sobre o pai: um C170 sozinho não tem como
+ * ser julgado, e acusar por conta própria produziria alarme em arquivo certo.
+ */
+export function conferirC170DeNfce(linhas) {
+    const erros = [];
+    let modPai = '';
+    let numPai = '';
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        const reg = String(campos[0] || '').trim();
+        if (reg === 'C100') {
+            modPai = String(campos[4] || '').trim();
+            numPai = String(campos[7] || '').trim();
+            return;
+        }
+        // Registro de outro bloco fecha o pai — C170 só existe sob C100.
+        if (reg && reg !== 'C170') { modPai = ''; numPai = ''; return; }
+        if (reg !== 'C170' || modPai !== '65') return;
+        erros.push({
+            registro: 'C170', linha: i + 1,
+            fonte: 'PVA: "O registro não deve ser informado para o modelo de documento do \'Registro Pai\'" '
+                + '(HYPE CAFE 1385 · 07/2026, 24/08 — 572 recusas em 286 C170 de NFC-e).',
+            mensagem: `A NFC-e nº ${numPai || '?'} levou C170 na linha ${i + 1}, e o leiaute do `
+                + 'EFD-Contribuições não admite detalhe de item em cupom — o PVA recusa a importação com '
+                + '"O registro não deve ser informado para o modelo de documento do \'Registro Pai\'". '
+                + 'A receita da NFC-e é declarada no C100 e no bloco M; e os itens que só existem em cupom '
+                + 'têm de sair do 0200 junto, senão viram item órfão.',
+        });
+    });
+    return { erros };
+}
+
+// ── R: item do 0200 / unidade do 0190 que ninguém referencia ───────────────
+//
+// FONTE: PVA — *"Não informar item, se não referenciado em pelo menos um dos
+// demais blocos"* (PWR 1364 · 19/08, no EFD ICMS/IPI). O registro é o MESMO
+// nas duas famílias e a obrigatoriedade também; o que MUDA é quem referencia —
+// aqui são **C170 e A170** (no ICMS/IPI só o C170). Portar a regra sem trocar
+// esse conjunto acusaria todo item de NFS-e num arquivo correto.
+//
+// 📌 ELA NASCE JUNTO DA CORREÇÃO DO C170 DA NFC-e, e é por isso que existe:
+// tirar o C170 do cupom sem tirar o item do 0200 trocaria 572 recusas por
+// outras tantas de item órfão. Trava que só nasce depois da recusa chegar é
+// trava que chega tarde.
+/**
+ * Item do 0200 e unidade do 0190 sem quem os referencie.
+ */
+export function conferirCadastrosOrfaosContrib(linhas) {
+    const erros = [];
+    const lista = Array.isArray(linhas) ? linhas : [];
+    const porReg = (reg) => lista
+        .map((l, i) => ({ campos: camposDaLinha(l), linha: i + 1 }))
+        .filter(x => String(x.campos[0] || '').trim() === reg);
+
+    const itensDeclarados = porReg('0200');
+    const referenciados = new Set(
+        lista.map(camposDaLinha)
+            .filter(c => ['C170', 'A170'].includes(String(c[0] || '').trim()))
+            .map(c => String(c[2] || '').trim())
+            .filter(Boolean),
+    );
+    for (const { campos, linha } of itensDeclarados) {
+        const cod = String(campos[1] || '').trim();
+        if (!cod || referenciados.has(cod)) continue;
+        erros.push({
+            registro: '0200', linha,
+            fonte: 'PVA: "Não informar item, se não referenciado em pelo menos um dos demais blocos" '
+                + '(PWR 1364, 19/08).',
+            mensagem: `O item ${cod} está declarado no 0200 (linha ${linha}) e nenhum C170/A170 o `
+                + 'referencia — o PVA recusa item órfão. Item que só existia em NFC-e cai aqui: '
+                + 'o cupom não leva C170 neste arquivo, então o item dele também não entra no 0200.',
+        });
+    }
+
+    // A unidade é usada pelo 0200 (UNID_INV) e pelo C170/A170 (UNID).
+    const unidadesUsadas = new Set([
+        ...itensDeclarados.map(x => String(x.campos[5] || '').trim()),
+        ...lista.map(camposDaLinha)
+            .filter(c => ['C170', 'A170'].includes(String(c[0] || '').trim()))
+            .map(c => String(c[5] || '').trim()),
+    ].filter(Boolean));
+    for (const { campos, linha } of porReg('0190')) {
+        const u = String(campos[1] || '').trim();
+        if (!u || unidadesUsadas.has(u)) continue;
+        erros.push({
+            registro: '0190', linha,
+            fonte: 'PVA: "Não informar unidade, se não referenciada em pelo menos um dos demais blocos ou '
+                + 'no Registro 0200 ou 0220".',
+            mensagem: `A unidade ${u} está declarada no 0190 (linha ${linha}) e nenhum 0200/C170/A170 a usa.`,
+        });
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
+        ...conferirC170DeNfce(linhas).erros,
+        ...conferirCadastrosOrfaosContrib(linhas).erros,
         ...conferirCodItemDosItens(linhas).erros,
         ...conferirIndOrigCredDasEntradas(linhas).erros,
         ...conferirRetencaoDoBlocoM(linhas).erros,
