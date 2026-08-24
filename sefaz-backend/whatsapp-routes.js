@@ -57,6 +57,8 @@ import {
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
+import { PORTA_SIP_TLS, interpretarCertificado, concluirSondaSbc } from './sbc-sonda.js';
+import { medirSbc } from './sbc-medicao.js';
 import {
     interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
     prepararMensagensDoTxt, idMensagemImportada,
@@ -2747,6 +2749,77 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
         return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * ☎️ 🔌 SONDA DO SBC — "a Meta consegue falar com o nosso servidor?"
+ *
+ * 🚨 A sonda de settings é toda verde e a ligação é recusada na ORIGEM. Ela
+ * responde *"o que a Meta tem GRAVADO?"* — e ter gravado o hostname não é a
+ * Meta CONSEGUIR abrir TLS nele. Em modo SIP quem liga para o nosso servidor
+ * é ela; se o aperto de mão não fecha, se o certificado não é público ou se o
+ * nome não bate, ela não tem para onde mandar a chamada — e o log do Asterisk
+ * fica mudo porque nenhum INVITE chegou. Nada disso aparece em GET settings.
+ *
+ * Então esta rota FAZ O QUE A META FAZ: abre a conexão e mede. O alvo sai das
+ * settings da PRÓPRIA Meta (o hostname que ela usa), nunca de um campo
+ * digitado aqui — sondar um endereço diferente do que ela tem gravado
+ * responderia sobre outro servidor.
+ */
+router.post('/chamadas/sondar-sbc', requireAdmin, async (req, res) => {
+    const t0 = Date.now();
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token || !cfg.phoneNumberId) {
+            return res.json({
+                ok: true,
+                conclusao: {
+                    veredito: 'indeterminado',
+                    motivo: 'O canal do WhatsApp não está configurado neste ambiente.',
+                    acao: 'Sem token/phone number id não dá pra saber qual servidor a Meta usa.',
+                },
+            });
+        }
+
+        // 1) De quem a Meta liga: o servidor que ELA tem gravado.
+        let hostname = null; let porta = PORTA_SIP_TLS; let sipDaMeta = null;
+        try {
+            const r = await fetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/settings`, {
+                headers: { Authorization: `Bearer ${cfg.token}` },
+            });
+            const corpo = await r.json().catch(() => ({}));
+            sipDaMeta = lerCallingDasSettings(corpo)?.sip || null;
+            const servidor = sipDaMeta?.servers?.[0] || null;
+            hostname = servidor?.hostname || null;
+            if (servidor?.port) porta = Number(servidor.port) || PORTA_SIP_TLS;
+        } catch (e) {
+            console.warn('[whatsapp/sondar-sbc] não li as settings:', e.message);
+        }
+        // Permite sondar ANTES de cadastrar (o técnico quer saber se o servidor
+        // sobe antes de apontar a Meta pra ele). Fica DITO de onde veio o alvo.
+        const doPedido = String(req.body?.hostname || '').trim();
+        const origemDoAlvo = hostname ? 'settings da Meta' : (doPedido ? 'informado no pedido' : null);
+        if (!hostname && doPedido) {
+            hostname = doPedido;
+            porta = Number(req.body?.porta) || PORTA_SIP_TLS;
+        }
+        if (!hostname) {
+            return res.json({ ok: true, conclusao: concluirSondaSbc({}), sipDaMeta, origemDoAlvo });
+        }
+
+        const medida = await medirSbc({ hostname, porta });
+        const certificado = medida.tls.ok
+            ? interpretarCertificado({ ...medida.cert, hostname })
+            : null;
+        const conclusao = concluirSondaSbc({ hostname, porta, ...medida, certificado });
+        return res.json({
+            ok: true, hostname, porta, origemDoAlvo, sipDaMeta,
+            ...medida, certificado, conclusao, levouMs: Date.now() - t0,
+        });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/sondar-sbc]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

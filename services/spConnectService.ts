@@ -360,6 +360,34 @@ export const sondarChamadas = () =>
         horarios?: HorariosChamada | null;
     }>('/api/admin/whatsapp/chamadas/sondar');
 
+export interface SondaSbc {
+    hostname?: string | null;
+    porta?: number;
+    /** De onde saiu o alvo: as settings da Meta, ou informado no pedido. */
+    origemDoAlvo?: string | null;
+    sipDaMeta?: Record<string, unknown> | null;
+    dns?: { ok: boolean; erro?: string | null; enderecos?: string[] };
+    tcp?: { ok: boolean; erro?: string | null };
+    tls?: { ok: boolean; erro?: string | null; protocolo?: string | null };
+    cert?: {
+        autorizado?: boolean; erroAutorizacao?: string | null; sujeitoCN?: string | null;
+        emissor?: string | null; alternativos?: string[]; validoAte?: string | null;
+    };
+    sip?: { respondeu: boolean; motivo?: string; codigo?: number; frase?: string | null; servidor?: string | null } | null;
+    certificado?: { situacao: string; grave: boolean; motivo: string; acao: string | null } | null;
+    conclusao: { veredito: 'aprovado' | 'reprovado' | 'indeterminado'; motivo: string; acao: string; ressalvas?: string[] };
+    levouMs?: number;
+}
+
+/**
+ * 🔌 A Meta CONSEGUE falar com o nosso SBC? A sonda de settings responde "o
+ * que ela tem gravado"; esta abre a conexão do jeito que ela abre — DNS, TLS,
+ * certificado e um SIP OPTIONS. É o que separa "tudo verde e a ligação é
+ * recusada" de uma causa com nome.
+ */
+export const sondarSbc = (p?: { hostname?: string; porta?: number }) =>
+    post<SondaSbc>('/api/admin/whatsapp/chamadas/sondar-sbc', p || {});
+
 /** 🛠 Escrita EXPLÍCITA na Meta (Paulo, 23/08) — a rota re-lê e devolve o que
  *  ficou GRAVADO; recusa da Meta volta crua, nunca engolida. */
 export const configurarChamadas = (p:
