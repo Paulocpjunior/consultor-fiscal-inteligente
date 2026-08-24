@@ -23,7 +23,7 @@ import {
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
-    listarContatos, criarContato, atualizarContato, salvarEtiqueta,
+    listarContatos, criarContato, atualizarContato, excluirContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
@@ -774,7 +774,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [ctCarregando, setCtCarregando] = useState(false);
     const [ctErro, setCtErro] = useState<string | null>(null);
     const [ctSel, setCtSel] = useState<Contato | null>(null);
-    const [ctNovo, setCtNovo] = useState<{ numero: string; nome: string } | null>(null);
+    const [ctNovo, setCtNovo] = useState<{ numero: string; nome: string; categoria: string } | null>(null);
     const [ctMsg, setCtMsg] = useState<string | null>(null);
 
     const carregarContatos = async (opts: { busca?: string; filtro?: string } = {}) => {
@@ -860,9 +860,23 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
 
     const criarNovoContato = async () => {
         if (!ctNovo) return;
-        const r = await criarContato({ numero: ctNovo.numero, nome: ctNovo.nome });
+        // Categoria OBRIGATÓRIA (Paulo, 24/08) — o backend também recusa;
+        // conferir aqui poupa a ida e diz o que falta na hora.
+        if (!ctNovo.categoria) { setCtMsg('Escolha a categoria — ela é obrigatória.'); return; }
+        const r = await criarContato({ numero: ctNovo.numero, nome: ctNovo.nome, etiquetas: [ctNovo.categoria] });
         if (!r.ok) { setCtMsg(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
         setCtNovo(null); setCtMsg('✓ Contato criado.');
+        carregarContatos();
+    };
+
+    const excluirContatoSelecionado = async (numero: string, nome: string) => {
+        // Só gestor/admin chegam aqui (o botão não aparece pros demais) e o
+        // backend confere de novo. O confirm diz o ALCANCE: cadastro sai,
+        // conversa e mensagens FICAM (eliminação LGPD é o fluxo 🔒).
+        if (!window.confirm(`Excluir o contato "${nome}"?\n\nSai o CADASTRO (nome, categoria, observação). A conversa e as mensagens continuam — apagar dados do titular é o fluxo 🔒 LGPD. Se a pessoa escrever de novo, o contato renasce sem categoria.`)) return;
+        const r = await excluirContato(numero);
+        if (!r.ok) { setCtMsg(r.error || 'Não deu para excluir.'); return; }
+        setCtSel(null); setCtMsg('✓ Contato excluído.');
         carregarContatos();
     };
 
@@ -1524,7 +1538,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 </p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                                <button onClick={() => { setCtNovo({ numero: '', nome: '' }); setCtMsg(null); }}
+                                <button onClick={() => { setCtNovo({ numero: '', nome: '', categoria: '' }); setCtMsg(null); }}
                                     className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ➕ Novo
                                 </button>
@@ -1582,14 +1596,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         <input value={ctNovo.nome} onChange={(e) => setCtNovo({ ...ctNovo, nome: e.target.value })}
                                             placeholder="Nome" className={CAMPO} />
                                     </div>
+                                    <label className="block text-[11px] text-slate-500">
+                                        Categoria <span className="text-red-500 font-bold">*</span>
+                                        <select value={ctNovo.categoria} onChange={(e) => setCtNovo({ ...ctNovo, categoria: e.target.value })} className={CAMPO}>
+                                            <option value="">Escolha… (obrigatória)</option>
+                                            {etiquetas.map((e) => <option key={e.id} value={e.id}>{e.rotulo}</option>)}
+                                        </select>
+                                    </label>
                                     <div className="flex gap-1.5">
-                                        <button onClick={criarNovoContato}
-                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white">Criar</button>
+                                        <button onClick={criarNovoContato} disabled={!ctNovo.categoria}
+                                            title={ctNovo.categoria ? undefined : 'escolha a categoria — ela é obrigatória'}
+                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">Criar</button>
                                         <button onClick={() => setCtNovo(null)}
                                             className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">Cancelar</button>
                                     </div>
                                     <p className="text-[10px] text-slate-400">
-                                        As etiquetas se aplicam depois, clicando no contato — assim ficam gravadas com o seu nome.
+                                        A categoria é obrigatória (Paulo, 24/08). Mais etiquetas podem ser somadas depois, clicando no contato — ficam gravadas com o seu nome.
                                     </p>
                                 </div>
                             )}
@@ -1679,6 +1701,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <p className="text-[10px] text-slate-400">
                                         A etiqueta é classificação de pessoa: fica gravado quem etiquetou e quando.
                                     </p>
+                                    {(ehAdmin || papel === 'gestor') && (
+                                        <button onClick={() => excluirContatoSelecionado(ctSel.numero, ctSel.nomePerfil || formatarNumeroBr(ctSel.numero))}
+                                            className="text-[10px] font-bold px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40">
+                                            🗑 Excluir contato
+                                        </button>
+                                    )}
 
                                     {/* 🔒 Direitos do titular. Só admin — o relatório traz a
                                         conversa INTEIRA da pessoa, que o colaborador da fila X

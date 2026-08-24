@@ -23,7 +23,10 @@ const catalogo = montarCatalogoEtiquetas([]);
 describe('catálogo padrão', () => {
     it('traz as etiquetas que o Paulo pediu', () => {
         const ids = ETIQUETAS_PADRAO.map((e) => e.id);
-        ['lead', 'cliente', 'marketing', 'colaborador', 'candidato'].forEach((i) => expect(ids).toContain(i));
+        // As SEIS categorias obrigatórias (Paulo, 24/08): Clientes ·
+        // Candidato-Vagas · Leads · Marketing · Colaboradores · Ex-Colaboradores.
+        ['lead', 'cliente', 'marketing', 'colaborador', 'candidato', 'ex-colaborador']
+            .forEach((i) => expect(ids).toContain(i));
     });
 
     it('🚨 TODA etiqueta padrão já nasce com finalidade e base legal válida', () => {
@@ -91,6 +94,41 @@ describe('etiqueta do contato', () => {
     it('tira repetido e normaliza', () => {
         const r = validarEtiquetasDoContato(['Cliente', 'cliente', 'lead'], catalogo);
         expect(r.ok && r.etiquetas).toEqual(['cliente', 'lead']);
+    });
+
+    it('🚨 categoria é OBRIGATÓRIA no cadastro humano (Paulo, 24/08)', () => {
+        // Sem etiqueta nenhuma, criar/editar é RECUSADO com a lista na frase;
+        // o contato que nasce sozinho do webhook continua sem (bloquear o
+        // webhook seria perder a mensagem) — ele vai pro "sem etiqueta".
+        const r = validarEtiquetasDoContato([], catalogo, { exigirCategoria: true });
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.erro).toContain('obrigatória');
+        expect(validarEtiquetasDoContato([], catalogo).ok).toBe(true);
+        expect(validarEtiquetasDoContato(['cliente'], catalogo, { exigirCategoria: true }).ok).toBe(true);
+    });
+});
+
+describe('🗑 excluir contato é de gestor/admin — e o resto da fiação (24/08)', () => {
+    const fs = require('fs');
+    const rotas = fs.readFileSync('sefaz-backend/whatsapp-routes.js', 'utf8');
+    const tela = fs.readFileSync('components/SpConnect/index.tsx', 'utf8');
+
+    it('a rota DELETE existe e barra quem não é gestor/admin', () => {
+        expect(rotas).toMatch(/router\.delete\('\/contatos\/:numero'/);
+        expect(rotas).toMatch(/papel !== 'admin' && papel !== 'gestor'/);
+    });
+
+    it('criar e editar exigem a categoria nas ROTAS (não só na tela)', () => {
+        const ocorrencias = rotas.match(/exigirCategoria: true/g) || [];
+        expect(ocorrencias.length).toBe(2); // POST e PATCH
+    });
+
+    it('a tela tem o select obrigatório no ➕ e o 🗑 só pra gestor/admin', () => {
+        expect(tela).toMatch(/disabled=\{!ctNovo\.categoria\}/);
+        expect(tela).toMatch(/\(ehAdmin \|\| papel === 'gestor'\) && \(/);
+        expect(tela).toMatch(/Excluir contato/);
+        // O confirm diz o ALCANCE — conversa e mensagens FICAM (LGPD é 🔒).
+        expect(tela).toMatch(/A conversa e as mensagens continuam/);
     });
 });
 

@@ -35,8 +35,8 @@ export function baseLegalValida(id: unknown): boolean;
 export function normalizarIdEtiqueta(v: unknown): string;
 export function validarEtiqueta(d?: Partial<Etiqueta>): { ok: true; etiqueta: Etiqueta } | { ok: false; erro: string };
 export function montarCatalogoEtiquetas(cadastradas?: Partial<Etiqueta>[]): Etiqueta[];
-export function validarEtiquetasDoContato(ids: unknown, catalogo: Etiqueta[]):
-    { ok: true; etiquetas: string[] } | { ok: false; erro: string; desconhecidas: string[] };
+export function validarEtiquetasDoContato(ids: unknown, catalogo: Etiqueta[], opts?: { exigirCategoria?: boolean }):
+    { ok: true; etiquetas: string[] } | { ok: false; erro: string; desconhecidas?: string[] };
 export function pendenciasLgpdDoContato(contato?: ContatoComEtiquetas, catalogo?: Etiqueta[]): PendenciaLgpd[];
 export function podeEnviarPorEtiqueta(contato: ContatoComEtiquetas, etiquetaId: string, catalogo: Etiqueta[]):
     { pode: boolean; motivo?: string; acao?: string };
