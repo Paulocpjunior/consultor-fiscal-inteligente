@@ -73,3 +73,23 @@ describe('a conversa que EU conduzo é sempre minha de ver', () => {
         expect(rotas).toMatch(/\|\| \(req\.user\?\.email && cv\.atribuidoA === req\.user\.email\)/);
     });
 });
+
+// ═══ 24/08 — "as conversas estão fora de ordem" ════════════════════════════
+// A lista ORDENAVA por `atualizadoEm` (qualquer atividade, inclusive as que
+// não viram linha na conversa: assumir, vincular cliente, mudar situação) e
+// EXIBIA o horário da última MENSAGEM. Conversa que só teve ação interna
+// subia ao topo mostrando um horário velho — e a lista parecia embaralhada.
+// Duas leituras do mesmo fato na MESMA linha.
+describe('a lista ordena pelo que ela mostra', () => {
+    const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('a ordenação usa ultimaMensagem.em com atualizadoEm de reserva', () => {
+        expect(rotas).toMatch(/cv\.ultimaMensagem\?\.em \|\| cv\.atualizadoEm/);
+        expect(rotas).toMatch(/quandoExibido\(b\) - quandoExibido\(a\)/);
+    });
+
+    it('e é EXATAMENTE o campo que a tela imprime na linha', () => {
+        expect(tela).toMatch(/horaCurta\(c\.ultimaMensagem\?\.em \|\| c\.atualizadoEm, agora\)/);
+    });
+});

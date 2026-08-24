@@ -523,7 +523,21 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 naoLidas: x.naoLidas || 0,
                 atualizadoEm: x.atualizadoEm || null,
             };
-        }).filter((cv) => (conversaVisivel(minhasFilas, cv.fila)
+        });
+        // 🚨 ORDENA PELO QUE MOSTRA (24/08, Paulo: "as conversas estão fora de
+        // ordem"). A leitura ordenava por `atualizadoEm` — qualquer atividade,
+        // inclusive as que NÃO viram linha na conversa (assumir, vincular
+        // cliente, mudar situação) — e a lista exibe o horário da ÚLTIMA
+        // MENSAGEM. Resultado: conversa que só teve ação interna subia ao topo
+        // exibindo um horário velho, e a lista parecia embaralhada. Duas
+        // leituras do mesmo fato na mesma linha, que é o defeito que esta casa
+        // mais paga. Agora a ordem sai do MESMO campo que a tela mostra.
+        const quandoExibido = (cv) => {
+            const v = cv.ultimaMensagem?.em || cv.atualizadoEm;
+            return Date.parse(v || '') || 0;
+        };
+        const listaOrdenada = conversas.sort((a, b) => quandoExibido(b) - quandoExibido(a));
+        const visiveis = listaOrdenada.filter((cv) => (conversaVisivel(minhasFilas, cv.fila)
             // …ou a conversa é MINHA (em condução por mim), mesmo sem fila.
             || (req.user?.email && cv.atribuidoA === req.user.email))
             // 📷 DM do Instagram é POR USUÁRIO (Paulo, 22/08) — a régua vem
@@ -531,7 +545,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
             // regra de filas, nunca no lugar dela.
             && (cv.canal !== 'instagram' || podeAtenderInstagram(cfgAtendimento, req.user?.email)));
         return res.json({
-            ok: true, conversas, filas: FILAS_ATENDIMENTO, minhasFilas, papel, respostasRapidas,
+            ok: true, conversas: visiveis, filas: FILAS_ATENDIMENTO, minhasFilas, papel, respostasRapidas,
             limiteLeitura: docsConversas.length >= TETO_LEITURA_CONVERSAS ? TETO_LEITURA_CONVERSAS : null,
         });
     } catch (e) {
