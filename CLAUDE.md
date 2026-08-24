@@ -5,6 +5,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "UMA ESTÁ COM 4 BARRINHAS E A OUTRA COM 3" — O 0500 DO
+  EFD-CONTRIBUIÇÕES NÃO É O DO EFD ICMS/IPI** (24/08, CF BANK, o Paulo
+  comparando A OLHO o nosso arquivo com o assinado da própria empresa). O
+  registro saía com **9 campos onde o leiaute tem 8**: eu copiei o 0500 do EFD
+  **ICMS/IPI**, que carrega um `COD_CCUS` a mais no fim; o do
+  EFD-**Contribuições** termina no `NOME_CTA_REF`. É a **MESMA classe do 1010
+  de 17/08** — mesmo NÚMERO de registro, arquivo diferente, leiaute diferente,
+  e a família inteira (`C100`/`C170` com 24 e 23 campos em 20/08, `M210`/`M610`
+  com 8 em 18/08) já tinha custado três recibos.
+  🔴 **E A TRAVA DE CONTAGEM EXISTIA DESDE 18/08 — ELA FICOU MUDA.**
+  `conferirContagemDeCampos` roda em todo arquivo gerado, mas só acusa o
+  registro que está em `CAMPOS_POR_REGISTRO` — e o 0500 (e o F100, que é quem
+  APONTA para ele) nunca tinham entrado. **Trava de contagem só protege o
+  registro que está NELA**, e o silêncio dela sai NOMEADO em `naoConferidos`
+  justamente para não ser lido como aprovação. Os dois entraram agora, com a
+  fonte: o assinado do CF BANK (06/2026) e o da PEC (05/2026).
+  📌 **REGRA QUE FICA: registro NOVO entra em `CAMPOS_POR_REGISTRO` no MESMO PR
+  em que o gerador passa a emiti-lo** — é a irmã do `DETALHES_VIGIADOS` (06/08)
+  e da whitelist do #382. Sem isso, o registro nasce fora da única conferência
+  que pega erro de FORMA antes do PVA.
+  🐛 **E A MINHA PRIMEIRA CONTAGEM ENTROU ERRADA NA TABELA — pega pelo teste,
+  não pelo PVA**: escrevi `campos: 8` e `18`, contando à mão os campos DEPOIS do
+  REG. A tabela conta **incluindo o REG** (é como o PVA conta: *"Esperado 16"*
+  para um M210 que tem 15 campos adiante), então os números certos são **9** e
+  **19** — e a trava, com o número errado, acusaria justamente a linha
+  CORRIGIDA. **Contagem de campo se lê da FUNÇÃO, nunca do meu dedo**: um
+  `camposDaLinha` sobre a linha real responde em um segundo o que eu errei duas
+  vezes olhando.
+  📌 **E O ACHADO É DELE, não da minha varredura.** O nosso arquivo e o assinado
+  estavam lado a lado na tela e ele contou as barras. **Comparar com o assinado
+  da MESMA empresa acha mais do que a recusa pede** (a recusa do PVA falava do
+  COD_CTA, não da contagem) — é a mesma lição das quatro particularidades do CF
+  BANK, agora provada por um olho humano num detalhe de um caractere.
+
 - **🚨 A TERCEIRA FONTE DE RECEITA SEM DOCUMENTO: APLICAÇÃO FINANCEIRA — e o
   arquivo saía declarando ZERO** (24/08, CF BANK 1109 · instituição de
   pagamento, Paulo: *"o EFD dela é pela APLICAÇÃO FINANCEIRA … e o código da

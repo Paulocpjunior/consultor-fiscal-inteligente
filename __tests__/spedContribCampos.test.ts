@@ -295,3 +295,56 @@ describe('🚨 prevalidação do EFD-Contribuições — as três que faltavam',
         expect(rota).toContain('avisosDaPrevalidacaoContrib(linhasDoArquivo)');
     });
 });
+
+// ============================================================================
+// 🚨 O 0500 DO EFD-CONTRIBUIÇÕES NÃO É O DO EFD ICMS/IPI
+//
+// Paulo, 24/08, comparando o nosso arquivo do CF BANK com o assinado da própria
+// empresa: *"nossa diferença está aí, que uma está com 4 barrinhas e a outra
+// com 3"*. O gerador emitia NOVE campos onde o leiaute tem OITO — eu tinha
+// copiado o 0500 do EFD **ICMS/IPI**, que carrega um `COD_CCUS` a mais.
+//
+// É a MESMA classe do 1010 de 17/08: mesmo NÚMERO de registro, arquivo
+// diferente, leiaute diferente. E a trava de contagem existia desde 18/08 —
+// ela ficou MUDA porque o 0500 não estava em `CAMPOS_POR_REGISTRO`.
+// ============================================================================
+
+describe('🚨 a contagem só protege o registro que está NELA', () => {
+    /** A linha do EFD-Contribuições ACEITO do CF BANK (06/2026), byte a byte. */
+    const LINHA_0500_ASSINADA = '|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS|||';
+    /** O que o gerador emitia: o 0500 do EFD ICMS/IPI, com o COD_CCUS a mais. */
+    const LINHA_0500_ICMS_IPI = '|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS||||';
+
+    // ⚠️ 9 e 10 CONTANDO O REG (8 e 9 campos depois dele) — é assim que o PVA
+    // conta, e foi por não conferir isso que a minha primeira contagem entrou
+    // errada na tabela. Quem conta é a função, nunca o meu dedo.
+    it('o assinado tem 8 campos após o REG e passa; o do arquivo vizinho tem 9 e é ACUSADO', () => {
+        expect(camposDaLinha(LINHA_0500_ASSINADA)).toHaveLength(9);
+        expect(conferirContagemDeCampos([LINHA_0500_ASSINADA]).ok).toBe(true);
+
+        const r = conferirContagemDeCampos([LINHA_0500_ICMS_IPI]);
+        expect(r.ok).toBe(false);
+        expect(r.erros[0].esperado).toBe(9);
+        expect(r.erros[0].recebido).toBe(10);
+    });
+
+    it('o F100 entrou junto — ele é o registro que APONTA para o 0500', () => {
+        // As duas formas provadas: com conta (CF BANK) e sem conta (PEC, aceito).
+        const cfBank = '|F100|1|||30062026|21647,53|02|21647,53|0,65|140,71|02|'
+            + '21647,53|4|865,9|||30106030012|||';
+        const pec = '|F100|1|||01052026|188836,42|01|188836,42|0,65|1227,44|01|'
+            + '188836,42|3|5665,09||||||';
+        expect(camposDaLinha(cfBank)).toHaveLength(19);
+        expect(camposDaLinha(pec)).toHaveLength(19);
+        expect(conferirContagemDeCampos([cfBank, pec]).ok).toBe(true);
+    });
+
+    // 📌 O que este teste realmente trava: registro NOVO que ninguém pôs na
+    // tabela não é acusado — ele volta em `naoConferidos`, e silêncio ali não é
+    // aprovação. Foi exatamente isso que deixou o 0500 sair com 9 campos.
+    it('registro fora da tabela sai NOMEADO em vez de passar por conferido', () => {
+        const s = conferirContagemDeCampos(['|0500|a|b|c|', '|9XYZ|1|2|']);
+        expect(s.erros[0].registro).toBe('0500');   // este está na tabela: acusa
+        expect(s.naoConferidos).toContain('9XYZ');  // este não: volta nomeado
+    });
+});
