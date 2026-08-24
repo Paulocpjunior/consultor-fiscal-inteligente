@@ -173,3 +173,48 @@ describe('cfgDeEnvioDaConversa — o canal de SAÍDA é o da conversa', () => {
         expect(webhook).toContain("link: acao.url }, depsEnvio)");
     });
 });
+
+// ═══ 📱 ATIVAR o número na Cloud API (Paulo, 24/08, no 3155-1554) ═══════════
+// A Meta disse, no próprio painel, ao tentar concluir a verificação em duas
+// etapas: "A conta não existe na API de Nuvem. Use /register API para criar
+// uma conta primeiro." Número APROVADO (nome de exibição) ainda não está no
+// WhatsApp — a busca responde "este número não está no WhatsApp" e ele não
+// recebe mensagem nenhuma. O painel não faz esse passo; só a API faz.
+describe('registro do número na Cloud API', () => {
+    const fs2 = require('fs') as typeof import('fs');
+    const path2 = require('path') as typeof import('path');
+    const ler = (p: string) => fs2.readFileSync(path2.join(process.cwd(), p), 'utf8');
+    const cloud = ler('sefaz-backend/whatsapp-cloud.js');
+    const rotas = ler('sefaz-backend/whatsapp-routes.js');
+    const tela = ler('components/SpConnect/index.tsx');
+
+    it('chama o /register com o PIN de 6 dígitos', () => {
+        expect(cloud).toMatch(/\$\{numeroId\}\/register/);
+        expect(cloud).toMatch(/messaging_product: 'whatsapp', pin: codigo/);
+        expect(cloud).toMatch(/test\(codigo\)/);
+    });
+
+    it('🔒 o PIN NÃO é guardado nem cai no log', () => {
+        const rota = rotas.slice(rotas.indexOf("router.post('/canais/:id/registrar'"));
+        // Até o INÍCIO da próxima rota — cortar no primeiro `});` pararia
+        // dentro do primeiro `res.json({...})` e o teste passaria por engano.
+        const corpo = rota.slice(0, rota.indexOf("router.post('/canais'"));
+        // Nada de gravar em coleção…
+        expect(corpo).not.toMatch(/\.set\(|\.add\(|\.update\(/);
+        // …e o log leva a recusa da Meta, nunca o pin.
+        expect(corpo).toMatch(/console\.warn\('\[whatsapp\/registrar\] recusa da Meta:/);
+        expect(corpo).not.toMatch(/console\.\w+\([^)]*pin/i);
+    });
+
+    it('é ação de ADMIN e recusa canal sem credencial', () => {
+        expect(rotas).toMatch(/router\.post\('\/canais\/:id\/registrar', requireAdmin/);
+        const rota = rotas.slice(rotas.indexOf("router.post('/canais/:id/registrar'"));
+        expect(rota.slice(0, 1800)).toMatch(/cred\.pronto/);
+    });
+
+    it('a tela pede o PIN, confirma antes e manda guardá-lo no cofre', () => {
+        expect(tela).toMatch(/Ativar na Cloud API/);
+        expect(tela).toMatch(/Anote o PIN no cofre de senhas/);
+        expect(tela).toMatch(/PIN \(6 dígitos\)/);
+    });
+});
