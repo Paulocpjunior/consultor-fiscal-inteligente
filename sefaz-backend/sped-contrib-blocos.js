@@ -1015,6 +1015,9 @@ export function buildBlocoM(dados) {
     let totalPisEntrada = 0, totalCofinsEntrada = 0, totalBcEntrada = 0;
     /** Quanto de ICMS saiu da base — vai no aviso, para o número ser conferível. */
     let icmsExcluido = 0;
+    /** Desconto incondicional tirado da receita — vai no aviso, com a contagem. */
+    let descontoExcluido = 0;
+    let docsComDesconto = 0;
     /** Documento sem valor legível em nenhuma das formas — sai do total e é DITO. */
     const semValor = [];
 
@@ -1055,6 +1058,7 @@ export function buildBlocoM(dados) {
             totalBcSaida += rb.base;
             totalReceitaSaida += rb.receita;
             icmsExcluido += rb.icms;
+            if (rb.desconto > 0) { descontoExcluido += rb.desconto; docsComDesconto += 1; }
             // ⚠️ O VALOR APURADO SEGUE A BASE, não o destacado no documento. O
             // `vPIS` do XML foi calculado pelo emitente sobre a mercadoria
             // cheia; somá-lo aqui declararia contribuição sobre uma base que o
@@ -1102,6 +1106,20 @@ export function buildBlocoM(dados) {
         totalBcSaida += receitaSemDoc;
         totalPisSaida += receitaSemDoc * aliq.pis;
         totalCofinsSaida += receitaSemDoc * aliq.cofins;
+    }
+
+    // 🚨 O DESCONTO VAI DITO — com o número e a CONTAGEM de documentos.
+    // O `VL_REC_BRT` é a receita LÍQUIDA do desconto incondicional, e quando
+    // ele não aparece o arquivo declara receita a MAIOR (PWR 07/2026: 38.316,84
+    // no lugar de 37.754,60). Sem esta linha, "a receita está errada" só se
+    // responde lendo o código — e há empresa com desconto em quase toda nota.
+    if (descontoExcluido > 0 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Receita do M210/M610: o DESCONTO incondicional foi tirado da receita — bruta `
+            + `${(totalReceitaSaida + descontoExcluido).toFixed(2)} − desconto ${descontoExcluido.toFixed(2)} `
+            + `= VL_REC_BRT ${totalReceitaSaida.toFixed(2)} (${docsComDesconto} documento(s) com desconto). `
+            + 'Confira contra o C100 do PVA: o "Valor do desconto" de cada nota tem que estar nesta soma.',
+        );
     }
 
     if (icmsExcluido > 0 && Array.isArray(dados.warnings)) {
