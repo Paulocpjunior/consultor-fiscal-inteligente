@@ -225,7 +225,10 @@ describe('📞 ligar para o cliente', () => {
     // oferece o clique: ela DIZ como se liga.
     it('a tela NÃO oferece ligar por API — ela diz que a saída é pelo ramal', () => {
         expect(tela).not.toMatch(/📞 Ligar para o cliente \(atende no ramal 221\)/);
-        expect(tela).toMatch(/disque <strong>\{sel\.numero\}<\/strong> no ramal 221/);
+        expect(tela).toMatch(/A ligação de saída sai pelo <strong>tronco SIP<\/strong>/);
+        // E não promete o que ainda não anda: a saída depende do endereço da
+        // Meta, que só a primeira ligação RECEBIDA ensina.
+        expect(tela).toMatch(/Em validação: falta a primeira ligação RECEBIDA/);
         expect(tela).toMatch(/permissaoLigacao\?\.status === 'aceita' \?/);
     });
 
