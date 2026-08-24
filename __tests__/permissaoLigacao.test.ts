@@ -93,7 +93,11 @@ describe('fiação: rota, webhook e botão', () => {
 
     it('o botão existe, confirma ANTES (mensagem real ao cliente) e some quando já autorizado', () => {
         expect(tela).toContain('☎️ Pedir permissão de ligação');
-        expect(tela).toMatch(/acaoPermissaoLigacao[\s\S]{0,400}window\.confirm/);
+        // ⚠️ A forma MUDOU (24/08): era window.confirm e o webview do Teams
+        // o suprime — o botão não fazia nada. O teste prende a INTENÇÃO (há
+        // confirmação antes de mandar mensagem ao cliente), nunca a função:
+        // travar a forma foi o que reprovaria a própria correção.
+        expect(tela).toMatch(/acaoPermissaoLigacao[\s\S]{0,400}await pedirConfirmacao\(/);
         expect(tela).toContain("permissaoLigacao?.status !== 'aceita' && (");
     });
 });
