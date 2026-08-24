@@ -126,3 +126,11 @@ export function enviarPedidoPermissaoLigacao(
     messageId?: string | null; semIdDaMeta?: boolean; bruto?: unknown;
     indeterminado?: boolean; configuracaoIncompleta?: boolean; numeroEnviado?: string;
 }>;
+
+export function iniciarChamadaParaCliente(
+    p: { para: string },
+    deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; base?: string },
+): Promise<{
+    ok: boolean; callId?: string | null; erro?: string; acao?: string; code?: number | null;
+    bruto?: unknown; indeterminado?: boolean; configuracaoIncompleta?: boolean;
+}>;

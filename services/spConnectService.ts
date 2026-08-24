@@ -115,6 +115,13 @@ const urlConversa = (numero: string, acao: string) =>
     `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/${acao}`;
 
 /** ☎️ Pede ao cliente a permissão de ligação (cartão "Permitir" no WhatsApp). */
+/** ☎️ Liga para o cliente (só depois do "Permitir" dele — a trava é do backend). */
+export const ligarParaCliente = (numero: string) =>
+    post<{
+        mensagem: MensagemInbox; acao?: string; emConducaoPor?: string;
+        code?: number | null; permissao?: string; indeterminado?: boolean;
+    }>(urlConversa(numero, 'ligar'));
+
 export const pedirPermissaoLigacao = (numero: string) =>
     post<{
         mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean; emConducaoPor?: string;
