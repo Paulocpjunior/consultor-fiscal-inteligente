@@ -3096,7 +3096,11 @@ app.use(express.static(join(__dirname, 'dist'), {
         // no nome, então "immutable 1 ano" prenderia o manifest velho no
         // celular de quem já instalou o SP Connect (start_url/ícone antigos,
         // sem jeito de atualizar a não ser reinstalando).
-        if (filePath.endsWith('.html') || filePath.endsWith('version.json') || filePath.endsWith('.webmanifest')) {
+        // .zip entra na MESMA regra (caso do Paulo, 24/08: o link do pacote do
+        // Teams entregava o zip VELHO — 1.0.1 — do cache do navegador, porque
+        // sp-connect-teams.zip não tem hash no nome e caía no "immutable 1
+        // ano". Zip de app é atualizado no MESMO nome a cada versão).
+        if (filePath.endsWith('.html') || filePath.endsWith('version.json') || filePath.endsWith('.webmanifest') || filePath.endsWith('.zip')) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');
