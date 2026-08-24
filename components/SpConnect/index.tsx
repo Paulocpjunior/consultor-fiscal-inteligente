@@ -19,7 +19,7 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, registrarCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
@@ -1018,6 +1018,25 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [pinCanal, setPinCanal] = useState<Record<string, string>>({});
     const [canalMsg, setCanalMsg] = useState<Record<string, string>>({});
     const [registrando, setRegistrando] = useState<string | null>(null);
+    const conferirCanal = async (id: string) => {
+        setCanalMsg((m) => ({ ...m, [id]: '🔬 Perguntando à Meta…' }));
+        const r = await statusDoCanal(id);
+        if (!r.ok) { setCanalMsg((m) => ({ ...m, [id]: `⛔ ${r.error}` })); return; }
+        const n: any = r.numero || {};
+        // O status vem CRU da Meta de propósito: traduzir escondendo o termo
+        // dela faria a próxima busca no suporte não achar nada.
+        const partes = [
+            n.status ? `status: ${n.status}` : null,
+            n.code_verification_status ? `verificação: ${n.code_verification_status}` : null,
+            n.platform_type ? `plataforma: ${n.platform_type}` : null,
+            n.quality_rating ? `qualidade: ${n.quality_rating}` : null,
+        ].filter(Boolean).join(' · ');
+        const dica = String(n.status || '').toUpperCase() === 'CONNECTED'
+            ? ' ✅ CONECTADO na Meta — se o WhatsApp ainda disser "não está no WhatsApp", é cache do app: tente do celular ou aguarde alguns minutos.'
+            : ' ⚠️ Enquanto não estiver CONNECTED, o número não recebe mensagem.';
+        setCanalMsg((m) => ({ ...m, [id]: `${partes || 'a Meta respondeu sem os campos de status'}${dica}` }));
+    };
+
     const ativarCanal = async (id: string, rotulo: string) => {
         const pin = (pinCanal[id] || '').trim();
         if (!/^\d{6}$/.test(pin)) { setCanalMsg((m) => ({ ...m, [id]: 'O PIN tem 6 dígitos.' })); return; }
@@ -2714,6 +2733,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         <input value={pinCanal[c.id] || ''} inputMode="numeric" maxLength={6}
                                                             onChange={(e) => setPinCanal((p) => ({ ...p, [c.id]: e.target.value.replace(/\D/g, '') }))}
                                                             placeholder="PIN (6 dígitos)" className={`${CAMPO} !w-36`} />
+                                                        <button onClick={() => conferirCanal(c.id)}
+                                                            className="px-2 py-1 text-[11px] font-semibold rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 btn-press">
+                                                            🔬 Conferir na Meta
+                                                        </button>
                                                         <button onClick={() => ativarCanal(c.id, c.rotulo)} disabled={registrando === c.id}
                                                             className="px-2 py-1 text-[11px] font-semibold rounded bg-[#0e3bfa] hover:bg-[#091d8d] disabled:opacity-60 text-white btn-press">
                                                             {registrando === c.id ? '⏳ Ativando…' : '📱 Ativar na Cloud API'}

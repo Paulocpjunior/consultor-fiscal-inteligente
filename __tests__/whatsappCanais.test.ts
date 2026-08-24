@@ -218,3 +218,33 @@ describe('registro do número na Cloud API', () => {
         expect(tela).toMatch(/PIN \(6 dígitos\)/);
     });
 });
+
+// 🔬 24/08: número cadastrado, ATIVADO na Cloud API, e o cliente continuava
+// vendo "não está no WhatsApp". Deduzir dali é chute — o app do WhatsApp
+// CACHEIA esse veredito. Quem responde é a Meta.
+describe('sonda do número na Meta', () => {
+    const fs3 = require('fs') as typeof import('fs');
+    const path3 = require('path') as typeof import('path');
+    const ler2 = (p: string) => fs3.readFileSync(path3.join(process.cwd(), p), 'utf8');
+    const cloud2 = ler2('sefaz-backend/whatsapp-cloud.js');
+    const rotas2 = ler2('sefaz-backend/whatsapp-routes.js');
+    const tela2 = ler2('components/SpConnect/index.tsx');
+
+    it('pergunta os campos que separam "propagando" de "falta um passo"', () => {
+        expect(cloud2).toMatch(/code_verification_status/);
+        expect(cloud2).toMatch(/platform_type/);
+    });
+
+    it('é LEITURA pura — a rota não grava nada', () => {
+        const rota = rotas2.slice(rotas2.indexOf("router.get('/canais/:id/status'"));
+        const corpo = rota.slice(0, rota.indexOf('// 📱 ATIVAR'));
+        expect(corpo).not.toMatch(/\.set\(|\.add\(|\.update\(/);
+    });
+
+    it('a tela mostra o termo CRU da Meta (para o suporte achar) e diz o que fazer', () => {
+        expect(tela2).toMatch(/Conferir na Meta/);
+        expect(tela2).toMatch(/status: \$\{n\.status\}/);
+        expect(tela2).toMatch(/é cache do app/);
+        expect(tela2).toMatch(/Enquanto não estiver CONNECTED/);
+    });
+});
