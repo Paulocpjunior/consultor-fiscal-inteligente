@@ -73,6 +73,8 @@ export interface ConversaResumo {
     canal?: string;
     situacao: string;
     janela24hAte: string | null;
+    // ☎️ status do cartão "Permitir" (fase 2 da chamada): null = nunca pedido
+    permissaoLigacao?: { status: 'pendente' | 'aceita' | 'recusada'; pedidoEm?: string | null; em?: string | null; expiraEm?: string | null } | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;
     naoLidas: number;
     atualizadoEm: string | null;

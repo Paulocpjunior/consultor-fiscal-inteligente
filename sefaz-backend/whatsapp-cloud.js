@@ -21,6 +21,7 @@
 // ============================================================================
 
 import { montarMensagemMidia } from './whatsapp-midia.js';
+import { montarPedidoPermissaoLigacao } from './whatsapp-chamadas.js';
 
 // Exportada: o webhook baixa mídia recebida pela MESMA base (segunda cópia
 // da URL divergiria de versão em silêncio).
@@ -419,6 +420,35 @@ export async function enviarTextoLivre({ para, texto }, deps = {}) {
         });
     } catch (e) {
         return { ok: false, indeterminado: true, erro: `Rede caiu durante o envio (${e.message}) — a mensagem PODE ter saído.`, acao: 'Confira a conversa antes de reenviar: reenviar duplica.' };
+    }
+    const json = await resp.json().catch(() => ({}));
+    const r = interpretarRespostaWhatsapp(resp.status, json);
+    return { ...r, numeroEnviado: numero };
+}
+
+/**
+ * ☎️ Pedido de PERMISSÃO DE LIGAÇÃO (fase 2 da chamada). O cliente recebe um
+ * cartão "Permitir" na conversa; sem o aceite dele a Meta recusa ligação de
+ * saída. O corpo vem do dono puro (montarPedidoPermissaoLigacao) e a recusa
+ * da Meta volta CRUA — mesmo desenho do configurar chamadas.
+ */
+export async function enviarPedidoPermissaoLigacao({ para }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const numero = numeroCanonicoWhatsapp(para);
+    if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".` };
+    const doFetch = deps.fetchImpl || fetch;
+    let resp;
+    try {
+        resp = await doFetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(montarPedidoPermissaoLigacao(numero)),
+        });
+    } catch (e) {
+        return { ok: false, indeterminado: true, erro: `Rede caiu durante o envio (${e.message}) — o pedido PODE ter saído.`, acao: 'Confira a conversa antes de reenviar: reenviar duplica o cartão.' };
     }
     const json = await resp.json().catch(() => ({}));
     const r = interpretarRespostaWhatsapp(resp.status, json);

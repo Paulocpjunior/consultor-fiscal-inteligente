@@ -392,3 +392,52 @@ export const ANTES_DE_LIGAR = [
         texto: 'Cliente que já usou o botão e o encontra sumido entende como serviço retirado. A decisão vale mais tomada uma vez, com o destino pronto, do que testada e revertida.',
     },
 ];
+
+// ═══ ☎️ PERMISSÃO DE LIGAÇÃO (fase 2 — a SAÍDA) ═════════════════════════════
+// Regra da Meta: a EMPRESA só pode ligar para o cliente depois que ELE
+// autorizar — o pedido chega como um cartão "Permitir" na conversa do
+// WhatsApp dele, e a autorização vale por período limitado. Sem ela a Meta
+// recusa a chamada de saída. (Paulo, 24/08: "pode construir o botão".)
+
+/** Corpo do pedido de permissão (interactive/call_permission_request). */
+export function montarPedidoPermissaoLigacao(numero) {
+    return {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: numero,
+        type: 'interactive',
+        interactive: {
+            type: 'call_permission_request',
+            action: { name: 'call_permission_request' },
+        },
+    };
+}
+
+/**
+ * Lê a RESPOSTA do cliente no webhook de mensagem (interactive/
+ * call_permission_reply). Tolerante de propósito — o leiaute ainda não foi
+ * provado contra resposta real, então o BRUTO viaja junto e qualquer coisa
+ * fora da forma volta null (a mensagem entra como interactive comum, nunca
+ * some). `expiration_timestamp` chega em SEGUNDOS (convenção dos webhooks
+ * da Meta); só 'accept' vale como aceite — o resto é recusa.
+ */
+export function respostaDePermissaoLigacao(m) {
+    if (m?.type !== 'interactive') return null;
+    const i = m.interactive;
+    if (i?.type !== 'call_permission_reply') return null;
+    const r = i.call_permission_reply || {};
+    const exp = Number(r.expiration_timestamp);
+    return {
+        resposta: String(r.response || '').toLowerCase() === 'accept' ? 'aceita' : 'recusada',
+        expiraEm: Number.isFinite(exp) && exp > 0 ? new Date(exp * 1000).toISOString() : null,
+        bruto: i,
+    };
+}
+
+/** A linha legível que entra na conversa quando a resposta chega. */
+export function resumoDaPermissao(p) {
+    if (!p) return null;
+    return p.resposta === 'aceita'
+        ? '✅ O cliente AUTORIZOU ligações de WhatsApp'
+        : '🚫 O cliente recusou ligações de WhatsApp';
+}
