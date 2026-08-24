@@ -49,7 +49,12 @@ describe('a régua: receita ≠ base, e as duas ≠ vProd', () => {
 
     it('documento SEM itens (NFS-e do portal) tem receita = base — serviço não destaca ICMS', () => {
         const r = receitaEBaseDoDocumento({}, 2500);
-        expect(r).toEqual({ receita: 2500, base: 2500, icms: 0, temItens: false, descontoDoDocumento: 0 });
+        // `desconto`/`receitaBruta` entraram em 24/08 para o aviso da geração
+        // dizer QUANTO foi tirado (PWR) — sem itens não há desconto a tirar.
+        expect(r).toEqual({
+            receita: 2500, base: 2500, icms: 0, temItens: false,
+            descontoDoDocumento: 0, desconto: 0, receitaBruta: 2500,
+        });
     });
 });
 
@@ -261,5 +266,76 @@ describe('🚨 desconto no ITEM × só no TOTAL — as duas formas dão o mesmo 
         const m210 = campos(acha(linhas, 'M210')[0]);
         expect(brl(m210[3])).toBeCloseTo(37754.60, 2);   // VL_REC_BRT
         expect(brl(m210[4])).toBeCloseTo(30958.77, 2);   // VL_BC_CONT
+    });
+});
+
+// ============================================================================
+// 🚨 O DESCONTO SAI DITO, NÃO SÓ APLICADO
+//
+// Paulo, 24/08 (PWR): *"CONTINUA COM O VALOR DA RECEITA ERRADO, TEM QUE TIRAR
+// O DESCONTO — e olha que só tem 1 nota, tem empresa que tem MUITOS
+// descontos"*, com o M210 do PVA mostrando **VL_REC_BRT 38.316,84**.
+//
+// A régua já descontava (provado em 20/08, e este teste reproduz a linha
+// aceita). O que faltava era o app **DIZER** quanto tirou: sem o número na
+// tela, "a receita está errada" só se responde alguém lendo o código — e há
+// empresa com desconto em quase toda nota.
+//
+// Números reais da PWR 07/2026: Σ vProd 38.316,84 · Σ desconto 562,24
+// (a NF 7, do print do C100: 18.741,24 − 562,24 = 18.179,00) · Σ ICMS 6.795,83.
+// ============================================================================
+describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o app diz quanto', () => {
+    const nf = (numero: number, vProd: number, vICMS: number, vDesc = 0) => ({
+        numero: String(numero), direcao: 'saida', status: 'autorizado', competencia: '2026-07',
+        itens: [{ vProd, vICMS }],
+        totais: { vDesc, vNF: vProd - vDesc },
+    });
+    const dados = () => ({
+        empresa: { cnpj: '00000000000191' }, regimeApuracao: '2',
+        notas: [nf(7, 18741.24, 3272.22, 562.24), nf(8, 19575.60, 3523.61)],
+        warnings: [] as string[],
+    });
+
+    it('reproduz a linha PROVADA em 20/08 — receita 37.754,60 × base 30.958,77', () => {
+        const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
+        expect(l.find((x: string) => x.startsWith('|M210|')))
+            .toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+    });
+
+    // 🚨 O aviso é a metade que faltava: ele torna o número CONFERÍVEL contra o
+    // C100 do PVA sem ninguém precisar ler código.
+    it('a geração DIZ a receita bruta, o desconto e quantos documentos tinham', () => {
+        const d = dados();
+        buildBlocoM(d);
+        const aviso = d.warnings.find(w => /DESCONTO incondicional/.test(w))!;
+        expect(aviso).toBeTruthy();
+        expect(aviso).toMatch(/bruta 38316\.84/);
+        expect(aviso).toMatch(/desconto 562\.24/);
+        expect(aviso).toMatch(/VL_REC_BRT 37754\.60/);
+        expect(aviso).toMatch(/1 documento\(s\) com desconto/);
+        // Aponta ONDE conferir — aviso que não diz o lugar vira ruído.
+        expect(aviso).toMatch(/C100/);
+    });
+
+    // ⚠️ Sem desconto nenhum o aviso NÃO aparece: alarme sobre arquivo correto
+    // é o que faz a equipe parar de ler os avisos que importam.
+    it('empresa sem desconto não recebe o aviso', () => {
+        const d = { ...dados(), notas: [nf(8, 19575.60, 3523.61)] };
+        buildBlocoM(d);
+        expect(d.warnings.some(w => /DESCONTO incondicional/.test(w))).toBe(false);
+    });
+
+    // O desconto conta nas DUAS formas — a do item e a do total do documento.
+    it('conta o desconto venha ele do item ou do total do documento', () => {
+        const porItem = {
+            ...dados(),
+            notas: [{
+                numero: '7', direcao: 'saida', status: 'autorizado', competencia: '2026-07',
+                itens: [{ vProd: 18741.24, vICMS: 3272.22, vDesc: 562.24 }], totais: {},
+            }],
+            warnings: [] as string[],
+        };
+        buildBlocoM(porItem);
+        expect(porItem.warnings.find(w => /DESCONTO incondicional/.test(w))).toMatch(/desconto 562\.24/);
     });
 });

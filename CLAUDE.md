@@ -5,6 +5,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "A RECEITA CONTINUA ERRADA" — e a régua estava CERTA: o que faltava era
+  o app DIZER o número** (24/08, PWR, Paulo com o M210 do PVA mostrando
+  `VL_REC_BRT 38.316,84`: *"tem que tirar o desconto — e olha que só tem 1
+  nota, tem empresa que tem MUITOS descontos"*).
+  ✅ **INSTRUMENTEI ANTES DE CONCLUIR, e foi isso que respondeu.** Rodei o
+  gerador com os números reais da NF 7 dele (`vProd 18.741,24 · desconto
+  562,24 · ICMS 3.272,22`) e ele devolveu a linha **provada em 20/08**:
+  `|M210|51|37754,60|30958,77|…`. Nas TRÊS formas de desconto (só no item, só
+  no total do documento, nos dois) a receita sai 18.179,00 e nunca desconta
+  duas vezes. Ou seja: o arquivo que ele validou é ANTERIOR à correção.
+  📌 **REGRA QUE FICA: quando o dono reporta número errado, RODE a régua com os
+  números dele antes de procurar defeito.** Em 14/08 eu deduzi a causa de um
+  print e gastei dois deploys corrigindo o que não estava quebrado; aqui a
+  mesma pergunta se respondeu em uma execução. **Print prova o ARQUIVO, não o
+  código — e arquivo tem data.**
+  ✂️ **O QUE FALTAVA DE VERDADE ERA O NÚMERO NA TELA.** A régua descontava em
+  silêncio, então *"a receita está errada"* só se respondia com alguém lendo o
+  código. A geração passou a DIZER: *"bruta 38.316,84 − desconto 562,24 =
+  VL_REC_BRT 37.754,60 (1 documento(s) com desconto) — confira contra o C100 do
+  PVA"*. É o desenho do aviso do Tema 69, que já fazia isso com o ICMS.
+  ⚠️ **E o aviso NÃO nasce em empresa sem desconto**: alarme sobre arquivo
+  correto é o que ensina a equipe a ignorar os avisos que importam.
+  📌 **A contagem de documentos vai junto de propósito** — é a resposta ao
+  *"tem empresa que tem MUITOS descontos"*: um número só não diz se o desconto
+  apareceu em uma nota ou em cem.
+
 - **🚨 "ALUGUEL ⇒ ARQUIVO CONSOLIDADO" ERA PREMISSA DA AFFITTARE — e quebrou
   na PRIMEIRA empresa que tem os DOIS** (24/08, PEC PRONTA ENTREGA 1350 ·
   07/2026: serviços prestados **e** aluguel). O PVA recusou **6 registros** —
