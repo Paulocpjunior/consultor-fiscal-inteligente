@@ -1296,7 +1296,8 @@ router.post('/contatos', requireAuth, async (req, res) => {
         }
         const nome = String(req.body?.nome || '').trim().slice(0, 80);
         const catalogo = await lerCatalogoEtiquetas(db);
-        const v = validarEtiquetasDoContato(req.body?.etiquetas, catalogo);
+        // Categoria OBRIGATÓRIA no cadastro humano (Paulo, 24/08).
+        const v = validarEtiquetasDoContato(req.body?.etiquetas, catalogo, { exigirCategoria: true });
         if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
 
         const ref = db.collection('whatsapp_contatos').doc(numero);
@@ -1338,7 +1339,10 @@ router.patch('/contatos/:numero', requireAuth, async (req, res) => {
         const patch = { atualizadoEm: new Date().toISOString() };
 
         if (req.body?.etiquetas !== undefined) {
-            const v = validarEtiquetasDoContato(req.body.etiquetas, catalogo);
+            // Tirar a ÚLTIMA etiqueta também é recusado — categoria é
+            // obrigatória (Paulo, 24/08); trocar de categoria é marcar a
+            // nova antes de desmarcar a velha.
+            const v = validarEtiquetasDoContato(req.body.etiquetas, catalogo, { exigirCategoria: true });
             if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
             patch.etiquetas = v.etiquetas;
             patch.etiquetadoPor = req.user?.email || null;
@@ -1377,6 +1381,34 @@ router.patch('/contatos/:numero', requireAuth, async (req, res) => {
         return res.json({ ok: true, pendenciasLgpd: pendenciasLgpdDoContato(atualizado, catalogo) });
     } catch (e) {
         console.error('[whatsapp/contatos/patch]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Excluir o CADASTRO do contato — só gestor e admin (Paulo, 24/08: "os
+// contatos devem e podem ser salvos por todos usuários, porém somente os
+// gestores e admins podem excluir"). Isto apaga o cadastro (nome, etiquetas,
+// observação, consentimentos) e NADA além dele: conversa e mensagens ficam —
+// eliminação de dados do titular é o fluxo LGPD (🔒), com plano e registro.
+// Se a pessoa escrever de novo, o contato renasce sem etiquetas.
+router.delete('/contatos/:numero', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const { papel } = await perfilAtendimento(db, req.user);
+        if (papel !== 'admin' && papel !== 'gestor') {
+            return res.status(403).json({ ok: false, error: 'Excluir contato é ação de gestor ou admin — peça a um deles.' });
+        }
+        const numero = String(req.params.numero || '').replace(/\D/g, '');
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const ref = db.collection('whatsapp_contatos').doc(numero);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: 'Contato não encontrado.' });
+        // Excluir cadastro é ato com autor — fica no log do servidor.
+        console.log(`[whatsapp/contatos/delete] ${numero} excluído por ${req.user?.email || '?'} (era "${snap.data()?.nomePerfil || ''}")`);
+        await ref.delete();
+        return res.json({ ok: true });
+    } catch (e) {
+        console.error('[whatsapp/contatos/delete]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

@@ -65,22 +65,30 @@ export const ETIQUETAS_PADRAO = [
         baseLegal: 'contrato',
     },
     {
-        id: 'candidato', rotulo: 'Candidato', cor: 'violet', ordem: 5,
+        id: 'candidato', rotulo: 'Candidato - Vagas', cor: 'violet', ordem: 5,
         finalidade: 'Processo seletivo — contato sobre vaga.',
         baseLegal: 'preliminares',
     },
     {
-        id: 'fornecedor', rotulo: 'Fornecedor', cor: 'slate', ordem: 6,
+        // Paulo (24/08), fechando o catálogo de categorias obrigatórias:
+        // Clientes · Candidato-Vagas · Leads · Marketing · Colaboradores ·
+        // Ex-Colaboradores. Este era o único que faltava no padrão.
+        id: 'ex-colaborador', rotulo: 'Ex-colaborador', cor: 'red', ordem: 6,
+        finalidade: 'Guarda de histórico de quem já trabalhou no escritório, para obrigações trabalhistas do período.',
+        baseLegal: 'obrigacao',
+    },
+    {
+        id: 'fornecedor', rotulo: 'Fornecedor', cor: 'slate', ordem: 7,
         finalidade: 'Relação com prestadores e fornecedores do escritório.',
         baseLegal: 'contrato',
     },
     {
-        id: 'contador-parceiro', rotulo: 'Parceiro', cor: 'cyan', ordem: 7,
+        id: 'contador-parceiro', rotulo: 'Parceiro', cor: 'cyan', ordem: 8,
         finalidade: 'Relação com parceiros e indicadores de negócio.',
         baseLegal: 'legitimo',
     },
     {
-        id: 'ex-cliente', rotulo: 'Ex-cliente', cor: 'rose', ordem: 8,
+        id: 'ex-cliente', rotulo: 'Ex-cliente', cor: 'rose', ordem: 9,
         finalidade: 'Guarda de histórico de quem encerrou o contrato, para obrigações legais do período.',
         baseLegal: 'obrigacao',
     },
@@ -138,13 +146,26 @@ export function montarCatalogoEtiquetas(cadastradas = []) {
         .sort((a, b) => (a.ordem || 99) - (b.ordem || 99) || a.rotulo.localeCompare(b.rotulo));
 }
 
-/** Só entram etiquetas que EXISTEM no catálogo — id solto vira dado órfão. */
-export function validarEtiquetasDoContato(ids, catalogo) {
+/**
+ * Só entram etiquetas que EXISTEM no catálogo — id solto vira dado órfão.
+ * `exigirCategoria` (Paulo, 24/08: "as categorias devem ser obrigatórias"):
+ * no CADASTRO humano (criar/editar), contato sem nenhuma etiqueta é RECUSADO
+ * — sem categoria ninguém sabe se aquele número é cliente, candidato ou
+ * marketing, e é a categoria que decide o que o app cobra (consentimento).
+ * ⚠️ Só vale para a mão humana: o contato que NASCE sozinho quando o cliente
+ * escreve continua entrando sem etiqueta (bloquear o webhook seria perder a
+ * mensagem) — ele aparece no contador "sem etiqueta", que é a fila de
+ * classificação.
+ */
+export function validarEtiquetasDoContato(ids, catalogo, { exigirCategoria = false } = {}) {
     const conhecidos = new Set((catalogo || []).map((e) => e.id));
     const limpos = [...new Set((Array.isArray(ids) ? ids : []).map(normalizarIdEtiqueta).filter(Boolean))];
     const desconhecidas = limpos.filter((i) => !conhecidos.has(i));
     if (desconhecidas.length) {
         return { ok: false, erro: `Etiqueta que não existe no catálogo: ${desconhecidas.join(', ')}. Cadastre na ⚙️ antes de usar.`, desconhecidas };
+    }
+    if (exigirCategoria && limpos.length === 0) {
+        return { ok: false, erro: 'A categoria é obrigatória — escolha ao menos uma (Cliente, Candidato - Vagas, Lead, Marketing, Colaborador, Ex-colaborador…).' };
     }
     return { ok: true, etiquetas: limpos };
 }
