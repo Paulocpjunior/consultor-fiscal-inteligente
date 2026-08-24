@@ -68,3 +68,8 @@ export function montarPedidoPermissaoLigacao(numero: string): {
 };
 export function respostaDePermissaoLigacao(m: unknown): RespostaPermissaoLigacao | null;
 export function resumoDaPermissao(p: RespostaPermissaoLigacao | null): string | null;
+
+/** Corpo da chamada de SAÍDA (endpoint /calls) — sem SDP: no modo SIP a ponte é do nosso SBC. */
+export function montarChamadaParaCliente(numero: string): {
+    messaging_product: string; to: string; action: string;
+};

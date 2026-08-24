@@ -21,7 +21,7 @@
 // ============================================================================
 
 import { montarMensagemMidia } from './whatsapp-midia.js';
-import { montarPedidoPermissaoLigacao } from './whatsapp-chamadas.js';
+import { montarPedidoPermissaoLigacao, montarChamadaParaCliente } from './whatsapp-chamadas.js';
 
 // Exportada: o webhook baixa mídia recebida pela MESMA base (segunda cópia
 // da URL divergiria de versão em silêncio).
@@ -483,6 +483,49 @@ export async function enviarPedidoPermissaoLigacao({ para }, deps = {}) {
     // A resposta CRUA viaja: a recusa desta API ainda não foi vista aqui, e
     // texto traduzido esconde justamente o que faltava saber.
     return { ...r, bruto: r.ok ? undefined : json, numeroEnviado: numero };
+}
+
+/**
+ * ☎️ LIGA para o cliente (fase 2). Só depois do "Permitir" dele — a trava de
+ * permissão é da ROTA, que conhece a conversa; aqui é a porta de rede.
+ * Endpoint `/calls`, base da CHAMADA (a v20 do envio não a conhece), e a
+ * resposta CRUA volta: o leiaute não está provado contra chamada real.
+ */
+export async function iniciarChamadaParaCliente({ para }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const numero = numeroCanonicoWhatsapp(para);
+    if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".` };
+    const doFetch = deps.fetchImpl || fetch;
+    const base = deps.base || graphBaseChamadas(deps.env);
+    let resp;
+    try {
+        resp = await doFetch(`${base}/${cfg.phoneNumberId}/calls`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(montarChamadaParaCliente(numero)),
+        });
+    } catch (e) {
+        // Chamada NÃO se repete no escuro: o telefone do cliente pode já estar
+        // tocando, e insistir faz a SP ligar duas vezes.
+        return { ok: false, indeterminado: true, erro: `Rede caiu ao pedir a ligação (${e.message}) — a chamada PODE ter saído.`, acao: 'Confira o telefone antes de tentar de novo.' };
+    }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.status >= 200 && resp.status < 300 && !json?.error) {
+        // O id da chamada é o que amarra os eventos do webhook a esta ligação.
+        const callId = json?.calls?.[0]?.id || json?.id || null;
+        return { ok: true, callId, bruto: json };
+    }
+    const err = json?.error || {};
+    return {
+        ok: false,
+        code: err.code ?? null,
+        erro: err.error_data?.details || err.message || `HTTP ${resp.status}`,
+        acao: 'A recusa é da Meta — o texto acima diz o que falta.',
+        bruto: json,
+    };
 }
 
 /** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */

@@ -176,3 +176,50 @@ describe('a conversa aberta não vive de foto velha', () => {
         expect(cloud).toMatch(/a autorização vale/);
     });
 });
+
+// ═══ 📞 A SAÍDA (Paulo, 24/08: "e agora como ligar?") ══════════════════════
+// A permissão foi aceita e a tela dizia "ligue pelo ramal 221" — frase MINHA,
+// que o app não cumpria: não havia caminho de saída. O botão passa a existir
+// e a régua da Meta (só liga com o "Permitir") é trava do BACKEND, nunca só
+// da tela — quem some com o botão não impede a rota.
+describe('📞 ligar para o cliente', () => {
+    const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const cloud = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-cloud.js'), 'utf8');
+    const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+    const rota = rotas.slice(rotas.indexOf("router.post('/conversas/:numero/ligar'"));
+
+    it('sem o "Permitir" do cliente a ROTA recusa — e diz o que fazer', () => {
+        expect(rota).toMatch(/perm\?\.status !== 'aceita'/);
+        expect(rota).toMatch(/ainda não autorizou ligações/);
+        // Recusa do cliente NÃO vira "peça de novo": insistir é o que faz
+        // ele bloquear o número.
+        expect(rota).toMatch(/respeite a recusa/);
+    });
+
+    it('autorização EXPIRADA é recusa própria, não "sem permissão"', () => {
+        expect(rota).toMatch(/EXPIROU/);
+        expect(rota).toMatch(/permissao: 'expirada'/);
+    });
+
+    it('condução vale aqui também (duas vozes ligando é pior que duas escrevendo)', () => {
+        expect(rota).toMatch(/Assuma a conversa \(🙋\) antes de ligar/);
+    });
+
+    it('a chamada sai no endpoint /calls e na base da CHAMADA, sem SDP inventado', () => {
+        expect(cloud).toMatch(/\$\{base\}\/\$\{cfg\.phoneNumberId\}\/calls/);
+        expect(cloud).toMatch(/deps\.base \|\| graphBaseChamadas\(deps\.env\)/);
+        const chamadas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-chamadas.js'), 'utf8');
+        const corpo = chamadas.slice(chamadas.indexOf('export function montarChamadaParaCliente'));
+        expect(corpo.slice(0, 300)).not.toMatch(/sdp/i);
+    });
+
+    it('a rede caída NÃO manda tentar de novo (o telefone pode estar tocando)', () => {
+        expect(cloud).toMatch(/a chamada PODE ter saído/);
+    });
+
+    it('o botão existe, confirma antes e só aparece com a permissão aceita', () => {
+        expect(tela).toMatch(/📞 Ligar para o cliente/);
+        expect(tela).toMatch(/O telefone do cliente vai TOCAR agora/);
+        expect(tela).toMatch(/permissaoLigacao\?\.status === 'aceita' \?/);
+    });
+});

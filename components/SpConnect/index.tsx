@@ -19,7 +19,7 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
@@ -334,6 +334,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setMensagens((m) => [...m, r.mensagem]);
         patchSel({ permissaoLigacao: { status: 'pendente', pedidoEm: new Date().toISOString() } });
         setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
+    };
+
+    // ☎️ LIGAR para o cliente. O telefone dele TOCA — por isso confirma antes,
+    // como no pedido de permissão (e diferente de tudo que é ajuste interno).
+    const [ligando, setLigando] = useState(false);
+    const acaoLigar = async () => {
+        if (!sel || ligando) return;
+        setPermLigErro(null); setPermLigAviso(null); setPermLigConducao(false);
+        const ok = await pedirConfirmacao(
+            'O telefone do cliente vai TOCAR agora, e a ligação atende no ramal 221 (HitPhone). Ligar?',
+            'Ligar agora',
+        );
+        if (!ok) return;
+        setLigando(true);
+        setPermLigAviso('⏳ Pedindo a ligação à Meta…');
+        try {
+            const r = await ligarParaCliente(sel.numero);
+            if (!r.ok) {
+                const cod = (r as any).code != null ? ` (código ${(r as any).code})` : '';
+                setPermLigErro(`${r.error}${cod}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
+                setPermLigConducao(Boolean((r as any).emConducaoPor));
+                setPermLigAviso(null);
+                return;
+            }
+            setMensagens((m) => [...m, r.mensagem]);
+            setPermLigAviso('☎️ Ligação pedida — atenda no ramal 221 quando tocar.');
+        } finally { setLigando(false); }
     };
 
     const acaoSituacao = async () => {
@@ -3785,10 +3812,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     {sel.canal !== 'instagram' && (
                                         <div className="space-y-1">
                                             {sel.permissaoLigacao?.status === 'aceita' ? (
-                                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                                                    ✅ Ligações AUTORIZADAS pelo cliente
-                                                    {sel.permissaoLigacao.expiraEm ? ` · até ${new Date(sel.permissaoLigacao.expiraEm).toLocaleDateString('pt-BR')}` : ''} — ligue pelo ramal 221 (HitPhone).
-                                                </p>
+                                                <>
+                                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                                        ✅ Ligações AUTORIZADAS pelo cliente
+                                                        {sel.permissaoLigacao.expiraEm ? ` · até ${new Date(sel.permissaoLigacao.expiraEm).toLocaleDateString('pt-BR')}` : ''}
+                                                    </p>
+                                                    <button onClick={acaoLigar} disabled={ligando}
+                                                        className="w-full text-left text-[11px] font-semibold px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white btn-press">
+                                                        {ligando ? '⏳ Chamando…' : '📞 Ligar para o cliente (atende no ramal 221)'}
+                                                    </button>
+                                                </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (
                                                 <p className="text-[10px] text-red-500">🚫 O cliente recusou ligações — dá pra pedir de novo.</p>
                                             ) : sel.permissaoLigacao?.status === 'pendente' ? (
