@@ -37,8 +37,21 @@ export const listarConversas = () =>
         respostasRapidas?: string[];
     }>('/api/admin/whatsapp/conversas');
 
-export const listarMensagens = (numero: string) =>
-    req<{ mensagens: MensagemInbox[] }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens`);
+/**
+ * Mensagens de uma conversa — as 500 mais recentes. `antesDe` (o timestamp da
+ * mais antiga que já está na tela) traz as 500 ANTERIORES: cursor por VALOR,
+ * então mensagem que chegar no meio do caminho não desloca a janela.
+ */
+export const listarMensagens = (numero: string, antesDe?: string | null) =>
+    req<{
+        mensagens: MensagemInbox[];
+        /** Há chance de existir conversa mais antiga (página veio cheia). */
+        temMais?: boolean;
+        /** Timestamp da mais antiga desta fatia — é o cursor da próxima. */
+        maisAntiga?: string | null;
+        /** Índice ainda construindo: a fatia veio sem ordem e NÃO pagina. */
+        semOrdem?: boolean;
+    }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens${antesDe ? `?antesDe=${encodeURIComponent(antesDe)}` : ''}`);
 
 export const marcarLida = (numero: string) =>
     req<{}>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/lida`, { method: 'POST' });
