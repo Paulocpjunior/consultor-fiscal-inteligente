@@ -846,7 +846,16 @@ router.post('/conversas/:numero/pedir-permissao-ligacao', requireAuth, async (re
         const envio = await enviarPedidoPermissaoLigacao({ para: numero }, depsEnvio);
         if (!envio.ok) {
             const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
-            return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
+            // A recusa vai pro LOG inteira: é o único lugar onde a resposta
+            // crua da Meta sobrevive pra próxima sessão ler.
+            console.warn('[whatsapp/permissao-ligacao] recusa da Meta:', JSON.stringify(envio.bruto || envio.erro));
+            return res.status(status).json({
+                ok: false, error: envio.erro, acao: envio.acao,
+                // O CÓDIGO da Meta vai junto: é por ele que se acha a causa
+                // (a mensagem dela muda, o código não).
+                code: envio.code ?? null,
+                indeterminado: Boolean(envio.indeterminado),
+            });
         }
         const agora = new Date().toISOString();
         const msg = {
@@ -855,7 +864,10 @@ router.post('/conversas/:numero/pedir-permissao-ligacao', requireAuth, async (re
             midia: null, timestamp: agora, statusEntrega: 'enviado',
             enviadoPor: eu,
         };
-        await db.collection('whatsapp_mensagens').doc(envio.messageId).set(msg, { merge: true });
+        // Sem id da Meta, a linha ainda existe: id nosso, determinístico pelo
+        // instante — mensagem que sumiria do histórico é pior que id feio.
+        const docId = envio.messageId || `permreq_${numero}_${Date.parse(agora)}`;
+        await db.collection('whatsapp_mensagens').doc(docId).set(msg, { merge: true });
         await db.collection('whatsapp_conversas').doc(numero).set({
             permissaoLigacao: { status: 'pendente', pedidoEm: agora, pedidoPor: eu },
             ultimaMensagem: { resumo: '☎️ pedido de permissão de ligação', direcao: 'saida', em: agora },

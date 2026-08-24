@@ -294,17 +294,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // ☎️ Pedir a permissão de ligação (fase 2 da chamada). Confirmação antes:
     // é uma MENSAGEM real chegando no cliente, não um ajuste interno.
     const [permLigAviso, setPermLigAviso] = useState<string | null>(null);
+    const [permLigErro, setPermLigErro] = useState<string | null>(null);
     const acaoPermissaoLigacao = async () => {
         if (!sel) return;
-        setPermLigAviso(null);
+        setPermLigAviso(null); setPermLigErro(null);
         const ok = await pedirConfirmacao(
             'O cliente vai receber AGORA um cartão do WhatsApp pedindo permissão para ligações da SP. '
             + 'Se ele tocar em "Permitir", a ligação de saída fica autorizada por tempo limitado (regra da Meta).',
             'Enviar pedido',
         );
         if (!ok) return;
+        setPermLigAviso('⏳ Enviando o pedido…');
         const r = await pedirPermissaoLigacao(sel.numero);
-        if (!r.ok) { setPermLigAviso(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
+        if (!r.ok) {
+            // A recusa aparece em VERMELHO e com o CÓDIGO da Meta: em 24/08 o
+            // pedido saiu daqui, não chegou no cliente, e a única pista morava
+            // numa linha âmbar de 10px que ninguém viu — "nada aconteceu".
+            const cod = (r as any).code != null ? ` (código ${(r as any).code})` : '';
+            setPermLigErro(`${r.error}${cod}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
+            setPermLigAviso(null);
+            return;
+        }
+        setPermLigErro(null);
         setMensagens((m) => [...m, r.mensagem]);
         patchSel({ permissaoLigacao: { status: 'pendente', pedidoEm: new Date().toISOString() } });
         setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
@@ -3775,6 +3786,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 </button>
                                             )}
                                             {permLigAviso && <p className="text-[10px] text-amber-600 dark:text-amber-400">{permLigAviso}</p>}
+                                            {permLigErro && (
+                                                <p className="text-[11px] font-semibold rounded px-2 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
+                                                    ⛔ {permLigErro}
+                                                </p>
+                                            )}
                                         </div>
                                     )}
                                     <button onClick={acaoSituacao} disabled={!podeEncerrarSel}
