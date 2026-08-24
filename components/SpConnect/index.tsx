@@ -295,9 +295,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // é uma MENSAGEM real chegando no cliente, não um ajuste interno.
     const [permLigAviso, setPermLigAviso] = useState<string | null>(null);
     const [permLigErro, setPermLigErro] = useState<string | null>(null);
+    const [permLigConducao, setPermLigConducao] = useState(false);
     const acaoPermissaoLigacao = async () => {
         if (!sel) return;
-        setPermLigAviso(null); setPermLigErro(null);
+        setPermLigAviso(null); setPermLigErro(null); setPermLigConducao(false);
         const ok = await pedirConfirmacao(
             'O cliente vai receber AGORA um cartão do WhatsApp pedindo permissão para ligações da SP. '
             + 'Se ele tocar em "Permitir", a ligação de saída fica autorizada por tempo limitado (regra da Meta).',
@@ -312,6 +313,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             // numa linha âmbar de 10px que ninguém viu — "nada aconteceu".
             const cod = (r as any).code != null ? ` (código ${(r as any).code})` : '';
             setPermLigErro(`${r.error}${cod}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
+            // Trava COM caminho: conversa conduzida por outra pessoa é o caso
+            // que se resolve num clique — parede sem porta é o que faz a
+            // equipe concluir que o app está quebrado.
+            setPermLigConducao(Boolean((r as any).emConducaoPor));
             setPermLigAviso(null);
             return;
         }
@@ -3787,9 +3792,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             )}
                                             {permLigAviso && <p className="text-[10px] text-amber-600 dark:text-amber-400">{permLigAviso}</p>}
                                             {permLigErro && (
-                                                <p className="text-[11px] font-semibold rounded px-2 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
-                                                    ⛔ {permLigErro}
-                                                </p>
+                                                <div className="text-[11px] font-semibold rounded px-2 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700 space-y-1.5">
+                                                    <p>⛔ {permLigErro}</p>
+                                                    {permLigConducao && (
+                                                        <button onClick={() => { acaoAssumir(); setPermLigErro(null); setPermLigConducao(false); }}
+                                                            className="w-full px-2 py-1 rounded bg-[#0e3bfa] text-white btn-press">
+                                                            🙋 Assumir a conversa e tentar de novo
+                                                        </button>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     )}

@@ -134,3 +134,24 @@ describe('☎️ pedido de permissão: versão, aceite sem id e recusa visível'
         expect(tela).toMatch(/código \$\{\(r as any\)\.code\}/);
     });
 });
+
+// A recusa por CONDUÇÃO é a que mais acontece (a conversa quase sempre tem
+// dono) — e foi ela que apareceu no 1º teste real. Trava COM caminho: o
+// erro traz o botão de assumir, senão a pessoa lê "está em condução por
+// fulano" e não tem o que fazer na própria tela.
+describe('recusa por condução oferece o caminho', () => {
+    const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+    const svc = fs.readFileSync(path.join(process.cwd(), 'services/spConnectService.ts'), 'utf8');
+
+    it('a resposta de erro chega INTEIRA na tela (acao, code, emConducaoPor)', () => {
+        // Sem o spread, só `error` sobrevivia — a tela mostrava o problema
+        // sem o caminho, em TODA recusa do Connect.
+        expect(svc).toMatch(/return \{ \.\.\.data, ok: false, error: data\.error/);
+    });
+
+    it('condução acende o botão de assumir dentro do próprio erro', () => {
+        expect(tela).toMatch(/setPermLigConducao\(Boolean\(\(r as any\)\.emConducaoPor\)\)/);
+        expect(tela).toMatch(/Assumir a conversa e tentar de novo/);
+        expect(tela).toMatch(/acaoAssumir\(\); setPermLigErro\(null\)/);
+    });
+});
