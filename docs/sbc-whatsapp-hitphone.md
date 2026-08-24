@@ -60,7 +60,10 @@ SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh
 
 O script é **idempotente** (rodar de novo atualiza a config sem duplicar nada)
 e faz, nesta ordem: IP estático → firewall (80/tcp p/ certificado, 5061/tcp p/
-a Meta, RTP 10000–10500/udp) → VM `e2-small` (~US$ 15–20/mês) → Asterisk +
+a Meta, RTP 10000–10500/udp) → VM `e2-small` **Ubuntu 24.04** (~US$ 15–20/mês
+— ⚠️ NÃO Debian: o Debian 12 removeu o Asterisk dos repositórios oficiais, e a
+1ª VM real morreu em *"Package 'asterisk' has no installation candidate"*,
+24/08; o script detecta VM com imagem errada e a recria) → Asterisk +
 certificado Let's Encrypt (renovação automática com reload) → ponte
 TLS/SRTP ⇄ UDP/RTP apontada para `177.107.205.201:21694`.
 
