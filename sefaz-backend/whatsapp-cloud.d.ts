@@ -142,3 +142,8 @@ export function registrarNumeroNaCloudApi(
     ok: boolean; erro?: string; acao?: string; code?: number | null;
     bruto?: unknown; indeterminado?: boolean; configuracaoIncompleta?: boolean;
 }>;
+
+export function statusDoNumeroNaMeta(
+    p: { phoneNumberId: string },
+    deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch },
+): Promise<{ ok: boolean; numero?: Record<string, unknown>; erro?: string; code?: number | null; bruto?: unknown; configuracaoIncompleta?: boolean }>;

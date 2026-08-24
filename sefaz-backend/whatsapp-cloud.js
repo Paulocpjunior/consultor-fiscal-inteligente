@@ -583,6 +583,37 @@ export async function registrarNumeroNaCloudApi({ phoneNumberId, pin }, deps = {
     };
 }
 
+/**
+ * 🔬 O que a META diz sobre o número — a única resposta que não depende do
+ * cache do app do WhatsApp.
+ *
+ * Paulo (24/08): o 3155-1554 foi cadastrado, ATIVADO na Cloud API ("Número
+ * ATIVADO" na tela) e o cliente continuava vendo "este número não está no
+ * WhatsApp". Deduzir dali é chute: `status` (CONNECTED/PENDING/…),
+ * `code_verification_status` e `platform_type` são fato dela, e é isso que
+ * separa "ainda propagando" de "falta um passo".
+ */
+export async function statusDoNumeroNaMeta({ phoneNumberId }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const numeroId = String(phoneNumberId || '').trim();
+    if (!cfg.token) return { ok: false, erro: 'Token do canal não configurado.', configuracaoIncompleta: true };
+    if (!/^\d{5,}$/.test(numeroId)) return { ok: false, erro: 'ID do número inválido.' };
+    const doFetch = deps.fetchImpl || fetch;
+    const campos = 'display_phone_number,verified_name,status,code_verification_status,platform_type,quality_rating,throughput';
+    let resp;
+    try {
+        resp = await doFetch(`${GRAPH_BASE}/${numeroId}?fields=${campos}`, {
+            headers: { Authorization: `Bearer ${cfg.token}` },
+        });
+    } catch (e) {
+        return { ok: false, erro: `Rede caiu ao consultar a Meta (${e.message}).` };
+    }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.status >= 200 && resp.status < 300 && !json?.error) return { ok: true, numero: json };
+    const err = json?.error || {};
+    return { ok: false, code: err.code ?? null, erro: err.message || `HTTP ${resp.status}`, bruto: json };
+}
+
 /** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */
 export function interpretarAppsAssinados(corpo) {
     return (Array.isArray(corpo?.data) ? corpo.data : []).map((d) => ({

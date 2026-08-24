@@ -31,7 +31,7 @@ import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
-    registrarNumeroNaCloudApi,
+    registrarNumeroNaCloudApi, statusDoNumeroNaMeta,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
@@ -2141,6 +2141,27 @@ router.get('/canais', requireAuth, async (_req, res) => {
         return res.json({ ...catalogo, ok: true, canais });
     } catch (e) {
         console.error('[whatsapp/canais]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 🔬 O que a META diz do número (status, verificação, plataforma). Leitura
+// pura — nenhuma gravação. É o que separa "ainda propagando" de "falta um
+// passo", em vez de deduzir do app do WhatsApp, que CACHEIA o "não está no
+// WhatsApp" por um bom tempo.
+router.get('/canais/:id/status', requireAdmin, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim().toLowerCase();
+        const catalogo = await lerCanais(getDb());
+        const canal = catalogo.canais.find((c) => c.id === id);
+        if (!canal) return res.status(404).json({ ok: false, error: `Canal "${id}" não está cadastrado.` });
+        const cred = credenciaisDoCanal(canal, process.env);
+        if (!cred.pronto) return res.status(503).json({ ok: false, error: `Falta: ${cred.faltas.join(' · ')}` });
+        const r = await statusDoNumeroNaMeta({ phoneNumberId: canal.phoneNumberId }, { cfg: cred.cfg });
+        if (!r.ok) return res.status(502).json({ ok: false, error: r.erro, code: r.code ?? null });
+        return res.json({ ok: true, numero: r.numero });
+    } catch (e) {
+        console.error('[whatsapp/canal-status]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
