@@ -522,6 +522,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // baixa duas vezes) e são REVOGADOS ao trocar de conversa — sem isso o
     // navegador segura os blobs até o F5.
     const [midias, setMidias] = useState<Record<string, { url: string; mime: string }>>({});
+    // 🖼️ Zoom DENTRO do app, nunca aba nova: no Teams do Windows o webview não
+    // abre `blob:` em aba — ele entrega o link pro SISTEMA, que responde
+    // "você precisa de um novo app para abrir este link blob" (colaborador,
+    // 24/08). O visualizador é nosso, então funciona no Teams e no navegador.
+    const [zoom, setZoom] = useState<{ url: string; nome: string } | null>(null);
     const [midiaErro, setMidiaErro] = useState<Record<string, string>>({});
     // Virou mapa (era um id só) — imagem/gif carrega SOZINHA (abaixo), então
     // várias podem estar baixando ao mesmo tempo; um mutex de string só
@@ -1214,6 +1219,19 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         </button>
                     </div>
                     {verifStatus && <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">{verifStatus}</p>}
+                </div>
+            )}
+            {/* ── 🖼️ Visualizador de imagem (zoom no app — Teams não abre blob:) ── */}
+            {zoom && (
+                <div className="fixed inset-0 bg-black/80 z-[90] flex items-center justify-center p-4 overflow-y-auto" onClick={() => setZoom(null)}>
+                    <div className="max-w-[92vw] max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <a href={zoom.url} download={zoom.nome}
+                                className="text-[11px] font-semibold text-white/90 underline">⬇ Baixar</a>
+                            <button onClick={() => setZoom(null)} className="text-white/90 hover:text-white text-lg px-2" title="fechar">✕</button>
+                        </div>
+                        <img src={zoom.url} alt={zoom.nome} className="max-w-[92vw] max-h-[85vh] rounded-lg object-contain" />
+                    </div>
                 </div>
             )}
             {/* ── Modal ✚ Nova conversa (template aprovado) ─────────────────── */}
@@ -3326,19 +3344,23 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                             </a>
                                                         ) : midias[m.id] ? (
                                                             midias[m.id].mime.startsWith('image/') ? (
-                                                                <a href={midias[m.id].url} target="_blank" rel="noreferrer">
+                                                                <button type="button" onClick={() => setZoom({ url: midias[m.id].url, nome: m.midia?.nomeArquivo || 'imagem' })}
+                                                                    className="block cursor-zoom-in" title="ampliar">
                                                                     <img src={midias[m.id].url} alt={m.midia?.nomeArquivo || 'imagem'}
                                                                         className="rounded-lg max-h-64 w-auto" />
-                                                                </a>
+                                                                </button>
                                                             ) : midias[m.id].mime.startsWith('audio/') ? (
                                                                 <audio controls src={midias[m.id].url} className="max-w-full" />
                                                             ) : midias[m.id].mime.startsWith('video/') ? (
                                                                 <video controls src={midias[m.id].url} className="rounded-lg max-h-64" />
                                                             ) : (
-                                                                <a href={midias[m.id].url} target="_blank" rel="noreferrer"
+                                                                // Sem target="_blank": com o atributo download o clique
+                                                                // BAIXA na hora — aba nova com blob: é o que o webview
+                                                                // do Teams manda pro sistema (o erro do "novo app").
+                                                                <a href={midias[m.id].url}
                                                                     download={m.midia?.nomeArquivo || 'anexo'}
                                                                     className="text-[11px] font-semibold underline">
-                                                                    {midia} — abrir
+                                                                    {midia} — baixar
                                                                 </a>
                                                             )
                                                         ) : (
