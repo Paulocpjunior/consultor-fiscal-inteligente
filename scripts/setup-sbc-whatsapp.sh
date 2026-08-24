@@ -26,6 +26,10 @@ SBC_DESTINO="${SBC_DESTINO:-221}"                 # ramal/DID no HitPhone que re
 HIT_HOST="${HIT_HOST:-177.107.205.201}"
 HIT_PORT="${HIT_PORT:-21694}"
 LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
+# ☎️ Destino SIP da Meta para a SAÍDA (ex.: host.da.meta:5061). NASCE VAZIO de
+# propósito: o endereço se LÊ no INVITE que ela manda na primeira ligação
+# recebida (asterisk -rvvv). Chutá-lo faria o colaborador ouvir silêncio.
+META_SIP_DESTINO="${META_SIP_DESTINO:-}"
 
 echo "== SBC WhatsApp → HitPhone =="
 echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT"
@@ -58,6 +62,32 @@ done
 
 # 3) O provisionamento da VM (startup script). Ele também roda na REINSTALAÇÃO
 #    de config (passo 5), então tudo aqui é idempotente.
+if [ -n "$META_SIP_DESTINO" ]; then
+    BLOCO_META_SAIDA="[meta-saida]
+type=endpoint
+transport=transport-tls
+aors=meta-saida-aor
+disallow=all
+allow=opus
+allow=alaw
+allow=ulaw
+media_encryption=sdes
+media_encryption_optimistic=yes
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+
+[meta-saida-aor]
+type=aor
+contact=sip:${META_SIP_DESTINO}"
+    echo "== Saída HABILITADA: 221 -> ${META_SIP_DESTINO}"
+else
+    # Endpoint com contato vazio quebraria o pjsip INTEIRO (e derrubaria a
+    # ENTRADA, que já funciona) — por isso ele nem é escrito.
+    BLOCO_META_SAIDA="; saída desligada: META_SIP_DESTINO vazio — ver [de-hit]"
+    echo "== Saída DESLIGADA (META_SIP_DESTINO vazio) — a entrada não é afetada."
+fi
+
 STARTUP=$(mktemp)
 cat > "$STARTUP" <<EOF
 #!/usr/bin/env bash
@@ -148,6 +178,8 @@ force_rport=yes
 [hit-aor]
 type=aor
 contact=sip:${HIT_HOST}:${HIT_PORT}
+
+${BLOCO_META_SAIDA}
 CONF
 
 cat > /etc/asterisk/extensions.conf <<CONF
@@ -158,9 +190,23 @@ exten => _.,1,NoOp(Chamada WhatsApp da Meta -> HIT ${SBC_DESTINO})
  same => n,Hangup()
 
 [de-hit]
-; Fase de ENTRADA apenas — saída (colaborador liga) é fase futura, com o
-; pedido de permissão de ligação na conversa (regra da Meta).
-exten => _.,1,Hangup()
+; ☎️ SAÍDA — o colaborador disca do ramal 221 e a ligação vai ao WhatsApp do
+; cliente por ESTE tronco. Não é escolha de desenho: a Meta RECUSA ligação
+; iniciada por API em número SIP — "Graph API calls are not allowed for SIP
+; enabled numbers" (código 131055, provado em 24/08 com o botão do Connect).
+; Em modo SIP quem disca é o nosso SBC.
+;
+; ⚠️ O destino SIP da Meta NÃO está provado, e não se inventa: ele aparece nos
+; cabeçalhos do INVITE que ELA manda na PRIMEIRA ligação recebida
+; (asterisk -rvvv). Enquanto META_SIP_DESTINO estiver vazio, a saída RECUSA
+; com o motivo no log — melhor que discar para um endereço chutado e o
+; colaborador ouvir silêncio sem saber por quê.
+exten => _.,1,NoOp(Saida 221 -> WhatsApp)
+ same => n,GotoIf($["${META_SIP_DESTINO}" = ""]?semdestino)
+ same => n,Dial(PJSIP/meta-saida,60)
+ same => n,Hangup()
+ same => n(semdestino),Verbose(1, SAIDA BLOQUEADA: META_SIP_DESTINO vazio - leia o INVITE da Meta numa ligacao recebida e rode o script com ele)
+ same => n,Hangup()
 CONF
 
 systemctl enable asterisk
