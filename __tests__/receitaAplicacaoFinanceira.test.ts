@@ -224,8 +224,11 @@ describe('🚨 a coerência do COD_CTA é TUDO OU NADA', () => {
     it('cadastro completo: o 0500 sai E o F100 referencia a conta', () => {
         const d = base();
         const b0 = buildBloco0Contrib(d).map(semQuebra);
+        // ⚠️ TRÊS barras no fim, não quatro — a linha é BYTE A BYTE a do
+        // assinado. Foi assim que o Paulo pegou o defeito, a olho, comparando
+        // os dois arquivos: *"uma está com 4 barrinhas e a outra com 3"*.
         expect(b0.find((l: string) => l.startsWith('|0500|')))
-            .toBe('|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS||||');
+            .toBe('|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS|||');
         const f100 = buildBlocoF(d).map(semQuebra).find((l: string) => l.startsWith('|F100|'))!;
         expect(f100.split('|')[17]).toBe('30106030012');
     });
