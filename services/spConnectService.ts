@@ -108,8 +108,11 @@ const urlConversa = (numero: string, acao: string) =>
 
 /** ☎️ Pede ao cliente a permissão de ligação (cartão "Permitir" no WhatsApp). */
 export const pedirPermissaoLigacao = (numero: string) =>
-    post<{ mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean; emConducaoPor?: string }>(
-        urlConversa(numero, 'pedir-permissao-ligacao'));
+    post<{
+        mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean; emConducaoPor?: string;
+        /** Código da Meta na recusa — é por ele que se acha a causa (a mensagem dela muda, o código não). */
+        code?: number | null;
+    }>(urlConversa(numero, 'pedir-permissao-ligacao'));
 
 /** Config do atendimento (bot, horário, mensagens, menu) — leitura de qualquer logado. */
 export const atendimentoConfig = () =>
