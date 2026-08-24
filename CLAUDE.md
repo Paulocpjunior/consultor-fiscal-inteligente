@@ -5,6 +5,47 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A NFC-e NÃO LEVA C170 NO EFD-CONTRIBUIÇÕES — 572 recusas num arquivo
+  só** (24/08, HYPE CAFE 1385 · 07/2026, Paulo: *"deu esses erros de estrutura,
+  são os NFC-E"* — e ele já tinha nomeado a causa). O Relatório de Erros de
+  Importação traz **286 C170 com DUAS mensagens cada**: *"O registro não deve
+  ser informado para o modelo de documento do 'Registro Pai'."* e *"…para esse
+  perfil e/ou tipo de operação"*. O arquivo tem 182 C100 — **179 modelo 65 e 3
+  modelo 55** — e os 5 C170 das notas 55 **passaram**: quem decide é o COD_MOD
+  do PAI.
+  ✅ **E ISSO NÃO TIRA UM CENTAVO DA APURAÇÃO**, o que era a primeira dúvida
+  legítima: a receita da NFC-e é declarada no **C100** (VL_DOC/VL_PIS/VL_COFINS)
+  e no **bloco M**, que sai de `receitaEBaseDoDocumento` — nunca do C170. Os 179
+  C100 de cupom somam **19.722,70**, que é exatamente o `VL_REC_BRT` do M210 do
+  mesmo arquivo. Conferido ANTES de mexer, não deduzido.
+  🚨 **A METADE QUE QUASE FICOU: TIRAR O C170 CRIA ITEM ÓRFÃO NO 0200.** Rodei a
+  correção sobre o arquivo REAL e medi: como ele está hoje, **0 órfãos**;
+  tirando SÓ o C170 das NFC-e, aparecem **4** — `10`, `11`, `20`, `101`, que só
+  existem em cupom. Seria trocar 572 recusas por outras tantas da recusa que a
+  PWR já pagou em 19/08 (*"Não informar item, se não referenciado em pelo menos
+  um dos demais blocos"*). Por isso a coleta do 0200/0190 lê o **MESMO dono**
+  (`levaC170NoContribuicoes`) que decide o C170 — duas perguntas ligadas não
+  podem ter duas respostas.
+  📌 **REGRA QUE FICA: antes de tirar um registro do arquivo, medir o que ele
+  SUSTENTA.** Registro do SPED quase nunca vive sozinho — o C170 referencia o
+  0200, que referencia o 0190. **Meia correção não deixa o defeito pela metade:
+  ela troca uma recusa por outra**, e a segunda chega no mês seguinte parecendo
+  problema novo.
+  🚦 **AS DUAS ENTRARAM NA PREVALIDAÇÃO NO MESMO PR** — a do C170 de cupom (com
+  a recusa literal) e a do 0200/0190 órfão, que **nasce VERDE** e nasce junto da
+  correção que poderia produzi-la. ⚠️ Na do órfão, quem referencia aqui são
+  **C170 E A170** (no EFD ICMS/IPI é só o C170): portar a régua do vizinho sem
+  trocar esse conjunto acusaria todo item de NFS-e num arquivo correto.
+  ⚠️ **E O QUE ESTE CASO NÃO PROVA**: como a NFC-e se escritura no EFD **ICMS/
+  IPI** — lá as restrições são de CAMPO do C100 (`COD_PART`, ST, IPI, PIS,
+  COFINS — a regra R2, PS VIDROS 19/08), não de existência do C170. É a mesma
+  fronteira que o 0500 acabou de cobrar no mesmo dia: **mesmo registro, arquivo
+  diferente, leiaute diferente.**
+  📌 **E A CAUSA VAI JUNTO DO NÚMERO**: a geração DIZ quantas NFC-e saíram sem
+  C170, quantos itens ficaram fora do 0200 e que a receita continua declarada —
+  senão quem conferir o arquivo vê o item do cupom sumido e procura buraco de
+  captura.
+
 - **🚨 "UMA ESTÁ COM 4 BARRINHAS E A OUTRA COM 3" — O 0500 DO
   EFD-CONTRIBUIÇÕES NÃO É O DO EFD ICMS/IPI** (24/08, CF BANK, o Paulo
   comparando A OLHO o nosso arquivo com o assinado da própria empresa). O
