@@ -588,16 +588,32 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
             const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
             if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
         }
+        // ⬆️ PAGINAÇÃO — o teto de 500 cortava a conversa CALADO. Ordenar
+        // resolveu QUAIS 500 vêm (a mensagem nova sempre entra), mas a
+        // conversa antiga continuava terminando numa parede sem aviso: a
+        // pessoa rolava até o topo e concluía que o histórico não existia.
+        // `antesDe` é o timestamp da mensagem mais antiga que a tela já tem —
+        // cursor por VALOR, não por página, então mensagem que chegar no meio
+        // do caminho não desloca a janela nem duplica linha.
+        const antesDe = String(req.query.antesDe || '').trim();
         const colecao = getDb().collection('whatsapp_mensagens').where('conversaId', '==', numero);
+        const PAGINA = 500;
         let snap;
+        let ordenou = true;
         try {
             // As 500 MAIS RECENTES (a tela ordena de novo; aqui o que importa
-            // é QUAIS 500 vêm).
-            snap = await colecao.orderBy('timestamp', 'desc').limit(500).get();
+            // é QUAIS 500 vêm) — ou as 500 anteriores ao cursor.
+            const base = antesDe ? colecao.where('timestamp', '<', antesDe) : colecao;
+            snap = await base.orderBy('timestamp', 'desc').limit(PAGINA).get();
         } catch (e) {
             if (!/index/i.test(String(e?.message || ''))) throw e;
             console.warn('[whatsapp/mensagens] índice composto ainda construindo — fatia sem ordem:', e.message);
-            snap = await colecao.limit(500).get();
+            // ⚠️ Sem índice não há como paginar por valor: a fatia volta SEM
+            // ordem e um "carregar mais" aqui devolveria as MESMAS linhas.
+            // Então `temMais` sai FALSO e a tela não oferece o botão — botão
+            // que não anda é pior que botão nenhum.
+            ordenou = false;
+            snap = await colecao.limit(PAGINA).get();
         }
         const mensagens = snap.docs.map((d) => {
             const x = d.data();
@@ -624,7 +640,20 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
                 anexoNoBackup: x.anexoNoBackup || null,
             };
         }).sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
-        return res.json({ ok: true, mensagens });
+        // Página CHEIA = há chance de haver mais atrás. Meia página prova o
+        // fim. ⚠️ Isto NÃO é "tem mais N": afirmar quantidade exigiria contar
+        // a conversa inteira a cada abertura, e número que o app não mediu é
+        // justamente o que faz alguém confiar no que não foi conferido.
+        const maisAntiga = mensagens[0]?.timestamp || null;
+        return res.json({
+            ok: true,
+            mensagens,
+            temMais: ordenou && snap.size >= PAGINA && Boolean(maisAntiga),
+            maisAntiga,
+            // Dito na cara: sem índice a thread não pagina, e a tela precisa
+            // poder EXPLICAR isso em vez de só esconder o botão.
+            semOrdem: !ordenou,
+        });
     } catch (e) {
         console.error('[whatsapp/mensagens]', e);
         return res.status(500).json({ ok: false, error: e.message });

@@ -17,14 +17,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+// ⚠️ TRAVA TROCADA PELA INTENÇÃO (24/08, no mesmo dia): ela prendia o TEXTO
+// `.limit(500)`, e o 500 virou a constante `PAGINA` quando a thread ganhou
+// paginação. Teste que trava a FORMA reprova a correção seguinte — o que ele
+// existe para garantir é que a consulta ORDENE ANTES DE CORTAR, não com qual
+// número ela corta. (A régua da paginação tem trava própria em
+// threadCarregarAntigas.test.ts.)
 const trecho = rotas.slice(
     rotas.indexOf("router.get('/conversas/:numero/mensagens'"),
-    rotas.indexOf("router.get('/conversas/:numero/mensagens'") + 2000,
+    rotas.indexOf('// ─── INICIAR CONVERSA'),
 );
 
 describe('thread da conversa devolve as MAIS RECENTES', () => {
-    it('a consulta ordena por timestamp desc antes de cortar em 500', () => {
-        expect(trecho).toMatch(/orderBy\('timestamp', 'desc'\)\.limit\(500\)/);
+    it('a consulta ordena por timestamp desc antes de cortar', () => {
+        expect(trecho).toMatch(/orderBy\('timestamp', 'desc'\)\.limit\(/);
     });
 
     it('NÃO existe mais o corte cru sem ordenação como caminho principal', () => {
@@ -35,7 +41,7 @@ describe('thread da conversa devolve as MAIS RECENTES', () => {
 
     it('índice ainda construindo NÃO derruba a thread — cai na fatia antiga', () => {
         expect(trecho).toMatch(/if \(!\/index\/i\.test/);
-        expect(trecho).toMatch(/snap = await colecao\.limit\(500\)\.get\(\)/);
+        expect(trecho).toMatch(/snap = await colecao\.limit\(PAGINA\)\.get\(\)/);
     });
 });
 
