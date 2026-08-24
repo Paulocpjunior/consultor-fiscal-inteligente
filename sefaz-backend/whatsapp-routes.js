@@ -452,10 +452,27 @@ router.get('/conversas', requireAuth, async (req, res) => {
             // Sem fila nenhuma vinculada = lista VAZIA (o Firestore recusa
             // `in` com lista vazia; e a tela já diz "sem vínculo, peça ao
             // admin" — mesma régua dos gates de departamento).
-            const snap = minhasFilas.length
-                ? await db.collection('whatsapp_conversas')
-                    .where('fila', 'in', minhasFilas).limit(TETO_LEITURA_CONVERSAS).get()
-                : { docs: [] };
+            // Duas leituras que se SOMAM: as filas dele + o que está em
+            // condução por ele (que pode estar em fila nenhuma). Sem a
+            // segunda, a pessoa perde de vista a própria conversa — foi o
+            // buraco que o escopo por fila abriu hoje.
+            const meuEmail = String(req.user?.email || '').toLowerCase();
+            const [porFila, minhas] = await Promise.all([
+                minhasFilas.length
+                    ? db.collection('whatsapp_conversas')
+                        .where('fila', 'in', minhasFilas).limit(TETO_LEITURA_CONVERSAS).get()
+                    : Promise.resolve({ docs: [] }),
+                meuEmail
+                    ? db.collection('whatsapp_conversas')
+                        .where('atribuidoA', '==', req.user.email).limit(TETO_LEITURA_CONVERSAS).get()
+                    : Promise.resolve({ docs: [] }),
+            ]);
+            const vistos = new Set();
+            const snap = { docs: [...porFila.docs, ...minhas.docs].filter((d) => {
+                if (vistos.has(d.id)) return false;
+                vistos.add(d.id);
+                return true;
+            }) };
             const quando = (d) => {
                 const v = d.data().atualizadoEm;
                 return v?.toMillis ? v.toMillis() : (Date.parse(v) || 0);
@@ -505,7 +522,9 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 naoLidas: x.naoLidas || 0,
                 atualizadoEm: x.atualizadoEm || null,
             };
-        }).filter((cv) => conversaVisivel(minhasFilas, cv.fila)
+        }).filter((cv) => (conversaVisivel(minhasFilas, cv.fila)
+            // …ou a conversa é MINHA (em condução por mim), mesmo sem fila.
+            || (req.user?.email && cv.atribuidoA === req.user.email))
             // 📷 DM do Instagram é POR USUÁRIO (Paulo, 22/08) — a régua vem
             // da config; lista vazia = sem restrição. Aplica-se POR CIMA da
             // regra de filas, nunca no lugar dela.
@@ -1757,7 +1776,14 @@ async function podeVerConversa(db, user, numero) {
     const { filas } = await perfilAtendimento(db, user);
     const conv = await db.collection('whatsapp_conversas').doc(numero).get();
     const dados = conv.data() || {};
-    let ok = conversaVisivel(filas, dados.fila || null);
+    // 🚨 A CONVERSA QUE EU CONDUZO É SEMPRE MINHA DE VER (24/08). O escopo por
+    // fila que entrou hoje olhava SÓ a fila — então a conversa atribuída a
+    // alguém e ainda parada na Recepção (fila vazia) sumia da vista DELE
+    // PRÓPRIO. É o organograma real: o Jefferson atendia sozinho a
+    // Legalização e tem conversa em condução que nunca ganhou fila.
+    const meuEmail = String(user?.email || '').toLowerCase();
+    const minha = Boolean(meuEmail && String(dados.atribuidoA || '').toLowerCase() === meuEmail);
+    let ok = minha || conversaVisivel(filas, dados.fila || null);
     // 📷 DM do Instagram é POR USUÁRIO — a MESMA régua da listagem, senão a
     // lista esconderia a conversa e o anexo/mensagem abriria pela URL.
     if (ok && (dados.canal === 'instagram' || ehConversaInstagram(numero))) {
