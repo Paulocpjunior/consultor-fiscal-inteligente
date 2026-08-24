@@ -46,6 +46,13 @@ import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 // A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
 // arquivo aceito da AFFITTARE 05/2026 como fonte.
 import { montarF550, montarF100, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
+// 🚨 A TERCEIRA fonte de receita sem documento: APLICAÇÃO FINANCEIRA (CF BANK
+// 1109, 24/08). Alíquotas, CST e códigos de receita PRÓPRIOS — todos do EFD
+// assinado da própria empresa.
+import {
+    montarReceitaFinanceira, CST_APLICACAO_FINANCEIRA,
+    COD_CONT_APLICACAO_FINANCEIRA, CODIGOS_RECEITA_APLICACAO_FINANCEIRA,
+} from './receita-aplicacao-financeira.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -911,9 +918,41 @@ export function buildBlocoF(dados) {
     const f100 = consolidado
         ? null
         : montarF100({ receita: receitaSemDoc, aliqPis: aliq.pis, aliqCofins: aliq.cofins });
+    // 🚨 RECEITA DE APLICAÇÃO FINANCEIRA — a empresa cuja receita inteira é
+    // rendimento financeiro (CF BANK) saía com F001|1 e M200/M600 ZERADOS.
+    // Ela tem CST e alíquotas PRÓPRIOS (02 · 0,65% e 4%), então não se mistura
+    // com o F100 do aluguel, que usa a alíquota do regime.
+    const fin = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
     const linhas = [];
     // IND_MOV sai do que foi PRODUZIDO, nunca de constante (regra do 1001).
-    linhas.push(fmt.buildLine(['F001', (eventos.length || f550 || f100) ? '0' : '1']));
+    linhas.push(fmt.buildLine(['F001', (eventos.length || f550 || f100 || fin) ? '0' : '1']));
+
+    if (fin) {
+        linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
+        // Leiaute do EFD ASSINADO do CF BANK (06/2026):
+        // |F100|1|||30062026|21647,53|02|21647,53|0,65|140,71|02|21647,53|4|865,9|||<conta>|||
+        linhas.push(fmt.buildLine([
+            'F100',
+            '1',                                        // IND_OPER (receita)
+            '', '',                                     // COD_PART · COD_ITEM
+            fmt.formatCompetenciaFim(dados.competenciaFim || dados.competencia), // DT_OPER
+            fmt.formatValue(fin.receita),               // VL_OPER
+            fin.cst,                                    // CST_PIS (02 — diferenciada)
+            fmt.formatValue(fin.receita),               // VL_BC_PIS
+            fmt.formatValue(fin.aliqPis * 100, 2),      // ALIQ_PIS
+            fmt.formatValue(fin.pis),                   // VL_PIS
+            fin.cst,                                    // CST_COFINS
+            fmt.formatValue(fin.receita),               // VL_BC_COFINS
+            fmt.formatValue(fin.aliqCofins * 100, 2),   // ALIQ_COFINS
+            fmt.formatValue(fin.cofins),                // VL_COFINS
+            '', '',                                     // NAT_BC_CRED · IND_ORIG_CRED
+            // ⚠️ COD_CTA sai VAZIO sem cadastro: a conta contábil é da empresa
+            // e não se inventa. O arquivo da PEC foi ACEITO com F100 sem ela,
+            // então a ausência não impede a entrega.
+            String(dados.contaContabilReceitaFinanceira || ''),
+            '', '',                                     // COD_CCUS · DESC_DOC_OPER
+        ]));
+    }
 
     if (f100) {
         linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
@@ -964,7 +1003,7 @@ export function buildBlocoF(dados) {
         // F010 — estabelecimento. O arquivo aceito traz só o CNPJ. Se o F550 já
         // abriu o estabelecimento, não abre de novo: dois F010 para o mesmo
         // CNPJ é o tipo de duplicidade que o PVA recusa.
-        if (!f550 && !f100) {
+        if (!f550 && !f100 && !fin) {
             linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
         }
         // IND_NAT_REC acompanha o regime da apuração: cumulativa (Presumido)=1,
@@ -1191,7 +1230,13 @@ export function buildBlocoM(dados) {
     // "aceito não é certo": declarava a apuração na seção do regime errado, e
     // sem VL_RET_CUM a retenção do F600 não abateria nada — a recolher MAIOR
     // que o devido para toda empresa com retenção na fonte.
-    const vlContribPis = totalPisSaida;
+    // 🚨 A CONTRIBUIÇÃO DA RECEITA FINANCEIRA entra no total do M200/M600 —
+    // sem ela a empresa cuja receita inteira é rendimento (CF BANK) declarava
+    // ZERO. Ela tem alíquota e código PRÓPRIOS, então vai numa LINHA SEPARADA
+    // do M210/M610 (COD_CONT 02), não somada à apuração comum: juntar
+    // declararia parte da receita sob a alíquota errada.
+    const finM = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
+    const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
     const vlCredDescontPis = isNaoCumulativo ? Math.min(totalPisEntrada, vlContribPis) : 0;
     // A retenção declarada é a REAL (soma dos F600); o "a recolher" é que não
     // desce de zero. Cap na retenção esconderia o saldo a compensar.
@@ -1203,7 +1248,13 @@ export function buildBlocoM(dados) {
         fmt.formatValue(isNaoCumulativo ? vlContribPis : 0),      // VL_TOT_CONT_NC_PER
         fmt.formatValue(vlCredDescontPis),                        // VL_TOT_CRED_DESC
         fmt.formatValue(0),                                       // VL_TOT_CRED_DESC_ANT
-        fmt.formatValue(0),                                       // VL_TOT_CONT_NC_DEV
+        // 🚨 SAÍA 0 CRAVADO — e o registro se desmentia: campo 4 dizendo que
+        // NADA é devido no não-cumulativo com o campo 7 (a recolher) cheio.
+        // É a contribuição do período MENOS os créditos descontados; sem
+        // crédito, é ela mesma. O EFD assinado do CF BANK (06/2026) traz
+        // |M200|140,71|0|0|**140,71**|0|0|140,71|…
+        fmt.formatValue(isNaoCumulativo
+            ? Math.max(0, vlContribPis - vlCredDescontPis) : 0),  // VL_TOT_CONT_NC_DEV
         fmt.formatValue(isNaoCumulativo ? retPis : 0),            // VL_RET_NC
         fmt.formatValue(0),                                       // VL_OUT_DED_NC
         fmt.formatValue(vlRecNcPis),                              // VL_CONT_NC_REC
@@ -1248,6 +1299,18 @@ export function buildBlocoM(dados) {
     // não-cumulativo, cujo código eu não tenho de arquivo aceito, fica de fora
     // NOMEADO em vez de sair com um número deduzido. Código errado aqui declara
     // o débito na receita errada da DCTF.
+    // 🚨 O CÓDIGO DE RECEITA DA APURAÇÃO DIFERENCIADA está PROVADO (assinado
+    // do CF BANK 06/2026: |M205|08|457401| e |M605|08|798701|), então a receita
+    // financeira NÃO cai no aviso do "não-cumulativo sem código provado".
+    // ⚠️ Ele vale só para ESTA apuração — reaproveitá-lo no não-cumulativo
+    // comum declararia o débito na receita errada da DCTF.
+    if (finM) {
+        linhas.push(fmt.buildLine([
+            'M205', CODIGOS_RECEITA_APLICACAO_FINANCEIRA.numCampo,
+            CODIGOS_RECEITA_APLICACAO_FINANCEIRA.pis, fmt.formatValue(finM.pis),
+        ]));
+    }
+
     const m205 = codigosReceitaM205(isNaoCumulativo);
     if (m205 && vlRecCumPis > 0) {
         linhas.push(fmt.buildLine(['M205', m205.numCampo, m205.pis, fmt.formatValue(vlRecCumPis)]));
@@ -1280,6 +1343,26 @@ export function buildBlocoM(dados) {
         ]));
     }
 
+    // 🚨 A RECEITA FINANCEIRA É UMA LINHA SEPARADA — COD_CONT 02 (alíquota
+    // DIFERENCIADA). Somá-la à apuração comum declararia parte da receita sob
+    // a alíquota errada; o M210 é "detalhamento POR código de contribuição",
+    // e é para isso que ele aceita mais de uma linha. Leiaute e códigos: EFD
+    // ASSINADO do CF BANK 06/2026.
+    if (finM) {
+        linhas.push(fmt.buildLine([
+            'M210', COD_CONT_APLICACAO_FINANCEIRA,
+            fmt.formatValue(finM.receita),          // VL_REC_BRT
+            fmt.formatValue(finM.receita),          // VL_BC_CONT — sem exclusão aqui
+            '', '',
+            fmt.formatValue(finM.receita),          // VL_BC_CONT_AJUS
+            fmt.formatValue(finM.aliqPis * 100, 4), // ALIQ_PIS (0,65)
+            '', '',
+            fmt.formatValue(finM.pis),              // VL_CONT_APUR
+            '', '', '', '',
+            fmt.formatValue(finM.pis),              // VL_CONT_PER
+        ]));
+    }
+
     // M500 — Credito COFINS (nao-cumulativo)
     if (isNaoCumulativo && totalCofinsEntrada > 0) {
         linhas.push(fmt.buildLine([
@@ -1300,7 +1383,7 @@ export function buildBlocoM(dados) {
 
     // M600 — Contribuicao COFINS do periodo. Mesmo leiaute do M200 (provado no
     // mesmo arquivo aceito: |M600|0|0|0|0|0|0|0|528|528|0|0|0|).
-    const vlContribCofins = totalCofinsSaida;
+    const vlContribCofins = totalCofinsSaida + (finM ? finM.cofins : 0);
     const vlCredDescontCofins = isNaoCumulativo ? Math.min(totalCofinsEntrada, vlContribCofins) : 0;
     const vlRecNcCofins = isNaoCumulativo ? Math.max(vlContribCofins - vlCredDescontCofins - retCofins, 0) : 0;
     const vlRecCumCofins = isNaoCumulativo ? 0 : Math.max(vlContribCofins - retCofins, 0);
@@ -1310,7 +1393,9 @@ export function buildBlocoM(dados) {
         fmt.formatValue(isNaoCumulativo ? vlContribCofins : 0),   // VL_TOT_CONT_NC_PER
         fmt.formatValue(vlCredDescontCofins),                     // VL_TOT_CRED_DESC
         fmt.formatValue(0),                                       // VL_TOT_CRED_DESC_ANT
-        fmt.formatValue(0),                                       // VL_TOT_CONT_NC_DEV
+        // Espelho do M200 — ver o comentário lá (campo 4 saía 0 cravado).
+        fmt.formatValue(isNaoCumulativo
+            ? Math.max(0, vlContribCofins - vlCredDescontCofins) : 0), // VL_TOT_CONT_NC_DEV
         fmt.formatValue(isNaoCumulativo ? retCofins : 0),         // VL_RET_NC
         fmt.formatValue(0),                                       // VL_OUT_DED_NC
         fmt.formatValue(vlRecNcCofins),                           // VL_CONT_NC_REC
@@ -1326,6 +1411,13 @@ export function buildBlocoM(dados) {
     // aqui seria ruído).
     if (m205 && vlRecCumCofins > 0) {
         linhas.push(fmt.buildLine(['M605', m205.numCampo, m205.cofins, fmt.formatValue(vlRecCumCofins)]));
+    }
+    // O par do M205 da apuração diferenciada (receita financeira).
+    if (finM) {
+        linhas.push(fmt.buildLine([
+            'M605', CODIGOS_RECEITA_APLICACAO_FINANCEIRA.numCampo,
+            CODIGOS_RECEITA_APLICACAO_FINANCEIRA.cofins, fmt.formatValue(finM.cofins),
+        ]));
     }
 
     // M610 — Detalhamento COFINS por CST. Mesmo defeito, mesma correção: o PVA
@@ -1344,6 +1436,23 @@ export function buildBlocoM(dados) {
             '', '',                                // ajustes de contribuição
             '', '',                                // diferimento
             fmt.formatValue(totalCofinsSaida),     // VL_CONT_PER
+        ]));
+    }
+
+    // A linha de COFINS da receita financeira — espelho do M210 acima, com a
+    // alíquota de 4% do assinado.
+    if (finM) {
+        linhas.push(fmt.buildLine([
+            'M610', COD_CONT_APLICACAO_FINANCEIRA,
+            fmt.formatValue(finM.receita),
+            fmt.formatValue(finM.receita),
+            '', '',
+            fmt.formatValue(finM.receita),
+            fmt.formatValue(finM.aliqCofins * 100, 4),
+            '', '',
+            fmt.formatValue(finM.cofins),
+            '', '', '', '',
+            fmt.formatValue(finM.cofins),
         ]));
     }
 

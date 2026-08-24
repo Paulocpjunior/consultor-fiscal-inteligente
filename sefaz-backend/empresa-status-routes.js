@@ -598,6 +598,10 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // E no modal no MESMO PR (regra do #382): fora daqui ele é descartado em
     // silêncio e a tela diria "salvo" sem gravar nada.
     'contrib1900CodMod', 'contrib1900CodSit',
+    // IND_APRO_CRED do 0110 (não-cumulativo) e a conta contábil da receita
+    // financeira do F100 — os dois eram cravados/ausentes e o EFD assinado do
+    // CF BANK (24/08) mostrou que são fato DA EMPRESA.
+    'indAproCredPisCofins', 'contaContabilReceitaFinanceira',
     // Natureza da PJ (IND_NAT_PJ, campo 13 do 0000 do EFD-Contribuições). O
     // gerador LIA este campo desde sempre e ele não estava aqui nem na tela:
     // caía no '00' — "sociedade empresária em geral" — em toda empresa,

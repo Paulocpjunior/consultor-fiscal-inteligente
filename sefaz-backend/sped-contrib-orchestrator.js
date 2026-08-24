@@ -24,6 +24,8 @@ import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A receita de aluguel não tem documento — ela entra pelo F550.
 import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-documento-f550.js';
+// A TERCEIRA fonte de receita sem documento: aplicação financeira (CF BANK).
+import { receitaFinanceiraDaFicha } from './receita-aplicacao-financeira.js';
 // RÉGUA ÚNICA da leitura da ficha por competência (YYYY-MM · YYYY-MM-DD ·
 // MM/YYYY) — igualdade estrita perderia a ficha em silêncio, e uma segunda
 // cópia da normalização é o começo de duas respostas divergentes.
@@ -111,6 +113,10 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // época do lançamento, e igualdade estrita perderia a ficha em silêncio.
     const fichaDaComp = acharFichaCompetencia(empresa.fichaFinanceira, competencia);
     const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
+    // 🚨 Rendimento financeiro NÃO gera documento — e sem ele o arquivo da
+    // empresa cuja receita inteira é aplicação (CF BANK 1109) saía com
+    // M200/M600 ZERADOS. Alíquota, CST e código de receita são PRÓPRIOS.
+    const receitaAplicacaoFinanceira = receitaFinanceiraDaFicha(fichaDaComp);
     // 🚨 O PERFIL DO ARQUIVO SE DECIDE AQUI, e ele decide TRÊS coisas: o
     // IND_REG_CUM do 0110, se o aluguel vai no F550 ou no F100, e se os
     // documentos ficam ou saem.
@@ -320,6 +326,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         participantes,
         unidades,
         receitaSemDocumento,
+        receitaAplicacaoFinanceira,
+        contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',
         escrituracaoConsolidada,
         // 🚨 Havendo F550, o 1900 é OBRIGATÓRIO (recusa do PVA na AFFITTARE
         // 07/2026). COD_MOD e COD_SIT são de TABELA OFICIAL e dependem de qual
