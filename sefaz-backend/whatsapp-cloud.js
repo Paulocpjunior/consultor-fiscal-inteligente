@@ -534,6 +534,55 @@ export async function iniciarChamadaParaCliente({ para }, deps = {}) {
     };
 }
 
+/**
+ * 📱 REGISTRA o número na Cloud API — o passo que o painel da Meta NÃO faz.
+ *
+ * Paulo (24/08, ao tentar concluir a verificação em duas etapas do
+ * 3155-1554): *"A conta não existe na API de Nuvem. Use /register API para
+ * criar uma conta primeiro."* Número aprovado (nome de exibição) ainda NÃO
+ * está no WhatsApp: sem o register ele não recebe mensagem, e a busca do
+ * app responde "este número não está no WhatsApp".
+ *
+ * ⚠️ O PIN é de SEIS DÍGITOS e é a verificação em duas etapas do número —
+ * ele NÃO é guardado por nós (nem em banco, nem em log): entra na chamada e
+ * morre ali. Quem precisa dele de novo é a Meta, num futuro re-registro, e
+ * por isso a tela manda anotá-lo no cofre de senhas.
+ */
+export async function registrarNumeroNaCloudApi({ phoneNumberId, pin }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const numeroId = String(phoneNumberId || '').trim();
+    const codigo = String(pin || '').trim();
+    if (!cfg.token) return { ok: false, erro: 'Token do canal não configurado.', configuracaoIncompleta: true };
+    if (!/^\d{5,}$/.test(numeroId)) return { ok: false, erro: 'ID do número inválido.' };
+    if (!/^\d{6}$/.test(codigo)) return { ok: false, erro: 'O PIN tem exatamente 6 dígitos.' };
+    const doFetch = deps.fetchImpl || fetch;
+    let resp;
+    try {
+        resp = await doFetch(`${GRAPH_BASE}/${numeroId}/register`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messaging_product: 'whatsapp', pin: codigo }),
+        });
+    } catch (e) {
+        return { ok: false, indeterminado: true, erro: `Rede caiu durante o registro (${e.message}) — ele PODE ter acontecido.`, acao: 'Confira no painel da Meta antes de repetir.' };
+    }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.status >= 200 && resp.status < 300 && !json?.error) return { ok: true, bruto: json };
+    const err = json?.error || {};
+    const detalhe = err.error_data?.details || err.message || `HTTP ${resp.status}`;
+    return {
+        ok: false,
+        code: err.code ?? null,
+        erro: detalhe,
+        // 133005/133006 são a família do PIN e do número não elegível — a
+        // mensagem da Meta é específica e vale mais que tradução minha.
+        acao: /pin/i.test(detalhe)
+            ? 'A Meta recusou o PIN. Se o número já teve verificação em duas etapas, use o PIN antigo — ou desligue a verificação no painel e registre de novo.'
+            : 'A recusa é da Meta — o texto acima diz o que falta.',
+        bruto: json,
+    };
+}
+
 /** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */
 export function interpretarAppsAssinados(corpo) {
     return (Array.isArray(corpo?.data) ? corpo.data : []).map((d) => ({
