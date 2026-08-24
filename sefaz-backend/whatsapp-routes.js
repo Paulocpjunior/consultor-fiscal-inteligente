@@ -520,9 +520,19 @@ router.get('/conversas', requireAuth, async (req, res) => {
     }
 });
 
-// Mensagens de UMA conversa. Filtro simples + ordenação em memória de
-// propósito: where(conversaId)+orderBy(timestamp) exigiria índice composto,
-// e 500 docs de mensagem são leves — índice entra se o volume provar precisar.
+// Mensagens de UMA conversa.
+// 🚨 O `limit(500)` SEM ORDENAR ESCONDIA A MENSAGEM NOVA (Paulo, 24/08:
+// "Ivan mandou msg, o Matheus está com a conversa ABERTA e não aparece —
+// só vê pela notificação"). Sem `orderBy`, o Firestore devolve na ordem do
+// ID DO DOCUMENTO, e o id aqui é o wamid da Meta, que não é cronológico:
+// em conversa longa (as importadas da Ultra Fox têm centenas), as 500 que
+// voltavam eram uma FATIA ARBITRÁRIA, e a mensagem recém-chegada podia
+// cair fora dela — para sempre. O comentário anterior dizia que o índice
+// entraria "se o volume provar precisar": provou.
+// ⚠️ E a troca é feita SEM JANELA DE QUEBRA: o índice composto leva minutos
+// para construir e, enquanto isso, a consulta ordenada FALHA. Por isso ela
+// cai de volta na antiga quando o Firestore diz que falta índice — a thread
+// nunca fica fora do ar, e passa a ordenar sozinha quando ele ficar pronto.
 router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
     try {
         const numero = idConversaDoParam(req.params.numero);
@@ -533,8 +543,17 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
             const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
             if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
         }
-        const snap = await getDb().collection('whatsapp_mensagens')
-            .where('conversaId', '==', numero).limit(500).get();
+        const colecao = getDb().collection('whatsapp_mensagens').where('conversaId', '==', numero);
+        let snap;
+        try {
+            // As 500 MAIS RECENTES (a tela ordena de novo; aqui o que importa
+            // é QUAIS 500 vêm).
+            snap = await colecao.orderBy('timestamp', 'desc').limit(500).get();
+        } catch (e) {
+            if (!/index/i.test(String(e?.message || ''))) throw e;
+            console.warn('[whatsapp/mensagens] índice composto ainda construindo — fatia sem ordem:', e.message);
+            snap = await colecao.limit(500).get();
+        }
         const mensagens = snap.docs.map((d) => {
             const x = d.data();
             return {
