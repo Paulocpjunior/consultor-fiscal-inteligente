@@ -115,3 +115,8 @@ export function criarTemplateNaMeta(
     p: { nome: string; idioma: string; categoria: string; corpo: string; exemplos?: string[] },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<{ ok: boolean; id?: string | null; status?: string; categoria?: string; erro?: string; detalheMeta?: unknown; faltas?: string[] }>;
+
+export function enviarPedidoPermissaoLigacao(
+    p: { para: string },
+    deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch },
+): Promise<{ ok: boolean; erro?: string; acao?: string; messageId?: string; indeterminado?: boolean; configuracaoIncompleta?: boolean; numeroEnviado?: string }>;
