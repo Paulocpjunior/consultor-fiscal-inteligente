@@ -15,7 +15,15 @@ async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolea
         headers: { Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` } as any;
+    // 🚨 A RECUSA VIAJA INTEIRA (24/08). Antes só o `error` sobrevivia, e o
+    // backend manda junto o que a pessoa precisa pra RESOLVER: `acao`
+    // ("assuma a conversa antes"), `code` (o número da Meta), `emConducaoPor`,
+    // `janelaFechada`. Quem chama lê esses campos — e eles chegavam
+    // `undefined`, então a tela mostrava o problema sem o caminho. Foi assim
+    // que o pedido de permissão de ligação parou por CONDUÇÃO e a tela não
+    // disse "assuma a conversa": alarme sem ação é o que faz a pessoa
+    // concluir que o app está quebrado.
+    if (!res.ok) return { ...data, ok: false, error: data.error || `HTTP ${res.status}` } as any;
     return data;
 }
 
