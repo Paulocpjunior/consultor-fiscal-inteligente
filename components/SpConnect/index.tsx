@@ -21,6 +21,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
+    sondarSbc, SondaSbc,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, excluirContato, salvarEtiqueta,
@@ -600,6 +601,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [chamadaResultado, setChamadaResultado] = useState<{ acao: string; calling: Record<string, unknown> | null } | null>(null);
     const [sipHost, setSipHost] = useState('');
     const [sipPorta, setSipPorta] = useState('5061');
+    // 🔌 Medição do caminho até o SBC — estado PRÓPRIO, nunca misturado com o
+    // da sonda de settings: as duas respondem perguntas diferentes e juntá-las
+    // faria "gravado na Meta" passar por "a Meta alcança".
+    const [sbc, setSbc] = useState<SondaSbc | null>(null);
+    const [sondandoSbc, setSondandoSbc] = useState(false);
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
         if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
         setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
@@ -2489,6 +2495,68 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {aplicandoChamada === 'sip' ? 'Gravando…' : '📞 Cadastrar tronco SIP'}
                                                 </button>
                                             </div>
+                                        </div>
+
+                                        {/* 🔌 A META CONSEGUE FALAR COM O NOSSO SBC?
+                                            🚨 A sonda de cima é toda verde e a ligação é recusada na ORIGEM —
+                                            porque ela responde OUTRA pergunta: "o que a Meta tem GRAVADO?".
+                                            Ter gravado o hostname não é ela CONSEGUIR abrir TLS nele. Em modo
+                                            SIP quem liga para o nosso servidor é a Meta; se o aperto de mão não
+                                            fecha, se o certificado não é público ou se o nome não bate, ela
+                                            recusa antes de mandar INVITE nenhum — e por isso o log do Asterisk
+                                            fica mudo. Este botão faz o que ela faz: ABRE A CONEXÃO. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1.5">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔌 A Meta consegue falar com o nosso SBC?</p>
+                                            <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                A sonda acima diz o que a Meta tem <strong>gravado</strong>. Esta abre a conexão do
+                                                jeito que ela abre — DNS, TLS, certificado e um <em>SIP OPTIONS</em>. É o que separa
+                                                "tudo verde e a ligação recusada" de uma causa com nome.
+                                            </p>
+                                            <button
+                                                onClick={async () => {
+                                                    setSondandoSbc(true); setSbc(null);
+                                                    try {
+                                                        const r = await sondarSbc(sipHost.trim() ? { hostname: sipHost.trim(), porta: Number(sipPorta) || 5061 } : undefined);
+                                                        setSbc(r.ok ? r : ({ conclusao: { veredito: 'indeterminado', motivo: r.error || 'Falha ao sondar.', acao: 'Tente de novo; se persistir, é falha do próprio app.' } } as SondaSbc));
+                                                    } finally { setSondandoSbc(false); }
+                                                }}
+                                                disabled={sondandoSbc}
+                                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 dark:bg-slate-600 text-white disabled:opacity-40 btn-press whitespace-nowrap">
+                                                {sondandoSbc ? 'Medindo… (até 8s)' : '🔌 Testar o caminho até o SBC'}
+                                            </button>
+                                            {sbc && (
+                                                <div className={`rounded-lg px-2.5 py-2 text-[10.5px] ${sbc.conclusao.veredito === 'aprovado'
+                                                    ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200'
+                                                    : sbc.conclusao.veredito === 'reprovado'
+                                                        ? 'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                                                        : 'bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200'}`}>
+                                                    <p className="font-bold">
+                                                        {sbc.conclusao.veredito === 'aprovado' ? '✅' : sbc.conclusao.veredito === 'reprovado' ? '⛔' : '⚠️'}{' '}
+                                                        {sbc.conclusao.motivo}
+                                                    </p>
+                                                    <p className="mt-0.5">{sbc.conclusao.acao}</p>
+                                                    {sbc.conclusao.ressalvas?.map((r) => <p key={r} className="mt-0.5">• {r}</p>)}
+                                                    {/* As etapas ficam à vista: é a lista que diz ONDE parou, e é
+                                                        ela que vai junto no chamado do suporte da Meta. */}
+                                                    <ul className="mt-1.5 space-y-0.5 text-slate-600 dark:text-slate-300">
+                                                        <li>{sbc.dns?.ok ? '✓' : '✕'} DNS {sbc.hostname} {sbc.dns?.enderecos?.length ? `→ ${sbc.dns.enderecos.join(', ')}` : (sbc.dns?.erro || '')}</li>
+                                                        <li>{sbc.tcp?.ok ? '✓' : '✕'} porta {sbc.porta} {sbc.tcp?.erro || ''}</li>
+                                                        <li>{sbc.tls?.ok ? '✓' : '✕'} TLS {sbc.tls?.protocolo || sbc.tls?.erro || ''}</li>
+                                                        {sbc.certificado && (
+                                                            <li>{sbc.certificado.grave ? '✕' : '✓'} certificado — {sbc.certificado.motivo}
+                                                                {sbc.cert?.emissor ? ` (emissor: ${sbc.cert.emissor})` : ''}</li>
+                                                        )}
+                                                        <li>{sbc.sip?.respondeu ? '✓' : '✕'} SIP {sbc.sip?.respondeu
+                                                            ? `${sbc.sip.codigo}${sbc.sip.frase ? ` ${sbc.sip.frase}` : ''}${sbc.sip.servidor ? ` · ${sbc.sip.servidor}` : ''}`
+                                                            : (sbc.sip?.motivo || '')}</li>
+                                                    </ul>
+                                                    {sbc.origemDoAlvo && (
+                                                        <p className="mt-1 text-slate-500 dark:text-slate-400">
+                                                            Alvo veio de: {sbc.origemDoAlvo}.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
