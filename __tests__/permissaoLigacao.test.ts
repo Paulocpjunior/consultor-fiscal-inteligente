@@ -101,3 +101,36 @@ describe('fiação: rota, webhook e botão', () => {
         expect(tela).toContain("permissaoLigacao?.status !== 'aceita' && (");
     });
 });
+
+// ═══ 24/08 — "enviei o pedido mas nada aconteceu" ═══════════════════════════
+// O cartão não chegou no cliente e a tela não disse por quê. Três defeitos
+// de uma vez, e nenhum deles era o botão:
+//  · a CHAMADA falava a v20 do Graph, que não conhece o call_permission_request;
+//  · 2xx SEM `messages[0].id` era lido como falha ("HTTP 200") — o cartão
+//    TERIA chegado e a tela mostraria erro, que é o pior desfecho;
+//  · a recusa morava numa linha âmbar de 10px, sem o código da Meta.
+describe('☎️ pedido de permissão: versão, aceite sem id e recusa visível', () => {
+    const cloud = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-cloud.js'), 'utf8');
+    const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('o pedido usa a base do Graph da CHAMADA, não a v20 do envio', () => {
+        expect(cloud).toMatch(/deps\.base \|\| graphBaseChamadas\(deps\.env\)/);
+        expect(cloud).toMatch(/WHATSAPP_GRAPH_VERSAO_CHAMADAS \|\| 'v23\.0'/);
+        // E só ELE muda de versão: texto, template e mídia seguem no GRAPH_BASE.
+        expect(cloud).toMatch(/export const GRAPH_BASE = 'https:\/\/graph\.facebook\.com\/v20\.0'/);
+    });
+
+    it('2xx sem id da Meta é ACEITE, e a linha ainda entra no histórico', () => {
+        expect(cloud).toMatch(/semIdDaMeta: true/);
+        expect(rotas).toMatch(/envio\.messageId \|\| `permreq_/);
+    });
+
+    it('a recusa volta com CÓDIGO, vai pro log e aparece em vermelho', () => {
+        expect(rotas).toMatch(/code: envio\.code \?\? null/);
+        expect(rotas).toMatch(/console\.warn\('\[whatsapp\/permissao-ligacao\] recusa da Meta:/);
+        expect(tela).toMatch(/setPermLigErro\(/);
+        expect(tela).toMatch(/permLigErro && \(/);
+        expect(tela).toMatch(/código \$\{\(r as any\)\.code\}/);
+    });
+});
