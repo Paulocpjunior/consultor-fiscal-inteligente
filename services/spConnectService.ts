@@ -224,6 +224,10 @@ export const listarContatos = (p: { busca?: string; etiqueta?: string; semEtique
 export const criarContato = (p: { numero: string; nome?: string; etiquetas?: string[] }) =>
     post<{ numero: string; jaExiste?: boolean; acao?: string }>('/api/admin/whatsapp/contatos', p);
 
+/** Excluir o CADASTRO do contato — o backend só aceita de gestor/admin. */
+export const excluirContato = (numero: string) =>
+    post<Record<string, never>>(`/api/admin/whatsapp/contatos/${numero}`, undefined, 'DELETE');
+
 export const atualizarContato = (numero: string, p: {
     etiquetas?: string[]; nome?: string; observacao?: string;
     consentimento?: { etiqueta: string; como?: string; revogar?: boolean };
