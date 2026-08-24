@@ -11,7 +11,7 @@
 // coluna do cliente aparece só em telas largas (xl).
 // A lista se atualiza sozinha a cada 30s — atendimento não vive de F5.
 // ============================================================================
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
     importarUltrafoxLote,
@@ -84,12 +84,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [sel, setSel] = useState<ConversaResumo | null>(null);
     const [mensagens, setMensagens] = useState<MensagemInbox[]>([]);
     const [carregandoMsgs, setCarregandoMsgs] = useState(false);
+    // ⬆️ HISTÓRICO puxado à mão fica em estado PRÓPRIO. Se ele entrasse em
+    // `mensagens`, a renovação de 30s (que traz só a fatia recente) apagaria o
+    // que a pessoa acabou de carregar — e ela clicaria de novo, e de novo.
+    const [antigas, setAntigas] = useState<MensagemInbox[]>([]);
+    const [temMaisAntigas, setTemMaisAntigas] = useState(false);
+    const [carregandoAntigas, setCarregandoAntigas] = useState(false);
+    const [threadSemOrdem, setThreadSemOrdem] = useState(false);
     const [texto, setTexto] = useState('');
     const [enviando, setEnviando] = useState(false);
     const [erroEnvio, setErroEnvio] = useState<string | null>(null);
     const fimDaThread = useRef<HTMLDivElement>(null);
     const selRef = useRef<ConversaResumo | null>(null);
     selRef.current = sel;
+    const antigasRef = useRef<MensagemInbox[]>([]);
+    antigasRef.current = antigas;
+    const mensagensRef = useRef<MensagemInbox[]>([]);
+    mensagensRef.current = mensagens;
+
+    // A thread que a tela mostra = histórico puxado + fatia recente, sem
+    // repetir id (as duas fatias podem se tocar numa borda).
+    const thread = useMemo(() => {
+        const vistos = new Set<string>();
+        return [...antigas, ...mensagens]
+            .filter((m) => (m.id && vistos.has(m.id) ? false : (m.id && vistos.add(m.id), true)))
+            .sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+    }, [antigas, mensagens]);
 
     // 📧 E-mail NÃO verificado (caso recepcao@, 24/08): o backend RECUSA o
     // token com "Email não verificado" — trava de segurança correta (sem ela,
@@ -160,11 +180,38 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!silencioso) setCarregandoMsgs(true);
         try {
             const r = await listarMensagens(numero);
-            if (r.ok && selRef.current?.numero === numero) setMensagens(r.mensagens || []);
+            if (r.ok && selRef.current?.numero === numero) {
+                setMensagens(r.mensagens || []);
+                setThreadSemOrdem(Boolean(r.semOrdem));
+                // ⚠️ A renovação de 30s NÃO pode apagar o "carregar mais" que a
+                // pessoa já usou: ela recarrega só a FATIA RECENTE, e a
+                // resposta dela fala sobre essa fatia. Quem já puxou histórico
+                // mantém o que tem — o `temMais` daquela página é que manda.
+                if (!antigasRef.current.length) setTemMaisAntigas(Boolean(r.temMais));
+            }
         } finally {
             if (!silencioso) setCarregandoMsgs(false);
         }
     }, []);
+
+    // ⬆️ As 500 ANTERIORES à mais antiga que já está na tela. Cursor por
+    // VALOR (timestamp), nunca por número de página: mensagem que chega no
+    // meio do caminho não desloca a janela nem faz linha repetir.
+    const carregarAntigas = useCallback(async () => {
+        const numero = selRef.current?.numero;
+        if (!numero || carregandoAntigas) return;
+        const primeira = antigasRef.current[0] || mensagensRef.current[0];
+        if (!primeira?.timestamp) return;
+        setCarregandoAntigas(true);
+        try {
+            const r = await listarMensagens(numero, primeira.timestamp);
+            if (!r.ok || selRef.current?.numero !== numero) return;
+            setAntigas((a) => [...(r.mensagens || []), ...a]);
+            setTemMaisAntigas(Boolean(r.temMais));
+        } finally {
+            setCarregandoAntigas(false);
+        }
+    }, [carregandoAntigas]);
 
     // Atendimento não vive de F5: lista e thread aberta se renovam a cada 30s.
     useEffect(() => {
@@ -176,6 +223,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         return () => clearInterval(timer);
     }, [recarregar, carregarThread]);
 
+    // ⚠️ A rolagem para o fim segue presa à FATIA RECENTE, de propósito:
+    // carregar histórico acrescenta linhas ACIMA e não pode jogar a pessoa
+    // de volta pro rodapé — ela acabou de pedir pra ver o começo.
     useEffect(() => {
         fimDaThread.current?.scrollIntoView({ block: 'end' });
     }, [mensagens.length]);
@@ -183,6 +233,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const abrir = async (c: ConversaResumo) => {
         setSel(c);
         setMensagens([]);
+        setAntigas([]);
+        setTemMaisAntigas(false);
+        setThreadSemOrdem(false);
         setBuscaThread('');
         setErroEnvio(null);
         setAcaoErro(null);
@@ -660,11 +713,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // é só puxar do bucket. Documento/vídeo continuam por clique: são
     // maiores e o clique ali já é o comportamento esperado (baixar/abrir).
     useEffect(() => {
-        mensagens
+        // Lê a THREAD inteira: a foto do histórico puxado à mão tem que
+        // aparecer igual à da fatia recente — senão "carregar mais antigas"
+        // devolveria uma conversa de balões vazios.
+        thread
             .filter((m) => (m.tipo === 'image' || m.tipo === 'sticker') && m.midia?.baixada !== false)
             .forEach((m) => { verMidia(m); });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mensagens]);
+    }, [thread]);
 
     const [anexando, setAnexando] = useState(false);
     const inputAnexo = useRef<HTMLInputElement>(null);
@@ -3557,7 +3613,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 {buscaThread.trim() && (
                                     <>
                                         <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                                            {filtrarMensagensDaThread(mensagens, buscaThread).length} de {mensagens.length}
+                                            {filtrarMensagensDaThread(thread, buscaThread).length} de {thread.length}
                                         </span>
                                         <button onClick={() => setBuscaThread('')} className="text-slate-400 hover:text-slate-600 px-1 text-[11px]">✕</button>
                                     </>
@@ -3565,16 +3621,41 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </div>
 
                             <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-1.5">
+                                {/* ⬆️ O teto de 500 cortava a conversa CALADO: a pessoa rolava
+                                    até o topo e concluía que o histórico não existia. Agora a
+                                    parede DIZ que é parede e tem porta. */}
+                                {!carregandoMsgs && temMaisAntigas && !buscaThread.trim() && (
+                                    <div className="text-center pb-1">
+                                        <button
+                                            onClick={carregarAntigas}
+                                            disabled={carregandoAntigas}
+                                            className="text-[11px] font-semibold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 btn-press whitespace-nowrap">
+                                            {carregandoAntigas ? 'Carregando…' : '⬆️ Carregar mais antigas'}
+                                        </button>
+                                        <p className="text-[9px] text-slate-400 mt-0.5">
+                                            Esta conversa tem mais histórico — a tela mostra {thread.length} mensagem(ns).
+                                        </p>
+                                    </div>
+                                )}
+                                {/* Índice construindo: a fatia veio SEM ORDEM, então paginar
+                                    devolveria as mesmas linhas. Dizer é melhor que esconder. */}
+                                {!carregandoMsgs && threadSemOrdem && (
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded px-2 py-1 text-center">
+                                        ⚠️ O índice das mensagens ainda está sendo construído — esta conversa pode aparecer
+                                        fora de ordem e não dá para carregar o histórico agora. Costuma levar alguns minutos.
+                                    </p>
+                                )}
                                 {carregandoMsgs ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">Carregando…</p>
-                                ) : mensagens.length === 0 ? (
+                                ) : thread.length === 0 ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">Nenhuma mensagem gravada nesta conversa.</p>
-                                ) : filtrarMensagensDaThread(mensagens, buscaThread).length === 0 ? (
+                                ) : filtrarMensagensDaThread(thread, buscaThread).length === 0 ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">
                                         Nada com "{buscaThread}" nas mensagens carregadas desta conversa.
+                                        {temMaisAntigas && ' Há histórico mais antigo ainda não carregado — limpe a busca e use ⬆️ Carregar mais antigas.'}
                                     </p>
                                 ) : (
-                                    filtrarMensagensDaThread(mensagens, buscaThread).map((m) => {
+                                    filtrarMensagensDaThread(thread, buscaThread).map((m) => {
                                         const tick = carimboStatus(m.statusEntrega);
                                         const midia = rotuloMidia(m.midia, m.tipo);
                                         const saida = m.direcao === 'saida';

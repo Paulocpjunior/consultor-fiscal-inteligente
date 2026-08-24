@@ -838,9 +838,17 @@ describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — n
     // buscar de novo na Meta.
     const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
 
-    it('existe um efeito que chama verMidia sozinho pra imagem/figurinha', () => {
-        expect(tela).toMatch(/useEffect\(\(\) => \{\s*mensagens\s*\.filter\(\(m\) => \(m\.tipo === 'image' \|\| m\.tipo === 'sticker'\)/);
+    // ⚠️ TRAVA TROCADA PELA INTENÇÃO (24/08): ela prendia a lista pelo NOME
+    // (`mensagens`), e quando a thread ganhou paginação a leitura passou a ser
+    // `thread` (histórico puxado à mão + fatia recente). Prender o nome faria
+    // este teste reprovar a correção que a régua manda fazer — e, pior, deixaria
+    // passar o defeito real: ler SÓ a fatia recente devolveria uma conversa
+    // antiga de balões vazios. O que importa é que ele leia a lista EXIBIDA.
+    it('existe um efeito que chama verMidia sozinho pra imagem/figurinha da thread EXIBIDA', () => {
+        expect(tela).toMatch(/useEffect\(\(\) => \{[\s\S]{0,400}?thread\s*\n\s*\.filter\(\(m\) => \(m\.tipo === 'image' \|\| m\.tipo === 'sticker'\)/);
         expect(tela).toMatch(/\.forEach\(\(m\) => \{ verMidia\(m\); \}\);/);
+        // E a lista exibida inclui o histórico — senão a foto antiga some.
+        expect(tela).toMatch(/const thread = useMemo/);
     });
 
     it("midiaCarregando virou MAPA (era um id só) — senão a 2ª imagem trava esperando a 1ª", () => {
