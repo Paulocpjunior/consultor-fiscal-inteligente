@@ -45,3 +45,31 @@ describe('✚ Nova conversa respeita as filas do usuário', () => {
         expect(tela).toMatch(/filasChip\.some\(\(x\) => x\.id === f\.departamento\)/);
     });
 });
+
+// ═══ 24/08 — "é um organograma" ════════════════════════════════════════════
+// Paulo: "dpto. Legalização tinha somente o Jefferson, agora ele e os demais;
+// os históricos têm que ser visualizados por DEPARTAMENTO."
+//
+// O histórico já é do DEPARTAMENTO (a conversa mora na fila, e quem tem a
+// fila vê tudo o que já aconteceu nela — inclusive o que outra pessoa
+// respondeu antes). O que faltava era a ponta oposta: o escopo por fila que
+// entrou hoje olhava SÓ a fila, então a conversa ATRIBUÍDA a alguém e ainda
+// parada na Recepção sumia da vista DELE PRÓPRIO — exatamente o caso de quem
+// atendia sozinho antes de o departamento crescer.
+describe('a conversa que EU conduzo é sempre minha de ver', () => {
+    const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+
+    it('podeVerConversa libera o que está em condução por mim, sem olhar a fila', () => {
+        const trecho = rotas.slice(rotas.indexOf('async function podeVerConversa'));
+        expect(trecho.slice(0, 900)).toMatch(/minha \|\| conversaVisivel\(filas, dados\.fila \|\| null\)/);
+    });
+
+    it('a LISTA soma as filas dele + o que está atribuído a ele (sem duplicar)', () => {
+        expect(rotas).toMatch(/where\('atribuidoA', '==', req\.user\.email\)/);
+        expect(rotas).toMatch(/if \(vistos\.has\(d\.id\)\) return false;/);
+    });
+
+    it('e o filtro em memória concorda com a consulta', () => {
+        expect(rotas).toMatch(/\|\| \(req\.user\?\.email && cv\.atribuidoA === req\.user\.email\)/);
+    });
+});
