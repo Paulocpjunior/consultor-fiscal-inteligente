@@ -19,7 +19,7 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
@@ -258,6 +258,24 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
     const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
     const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
+    // ☎️ Pedir a permissão de ligação (fase 2 da chamada). Confirmação antes:
+    // é uma MENSAGEM real chegando no cliente, não um ajuste interno.
+    const [permLigAviso, setPermLigAviso] = useState<string | null>(null);
+    const acaoPermissaoLigacao = async () => {
+        if (!sel) return;
+        setPermLigAviso(null);
+        const ok = window.confirm(
+            'O cliente vai receber AGORA um cartão do WhatsApp pedindo permissão para ligações da SP. '
+            + 'Se ele tocar em "Permitir", a ligação de saída fica autorizada por tempo limitado (regra da Meta). Enviar?',
+        );
+        if (!ok) return;
+        const r = await pedirPermissaoLigacao(sel.numero);
+        if (!r.ok) { setPermLigAviso(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
+        setMensagens((m) => [...m, r.mensagem]);
+        patchSel({ permissaoLigacao: { status: 'pendente', pedidoEm: new Date().toISOString() } });
+        setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
+    };
+
     const acaoSituacao = async () => {
         if (!sel) return;
         const nova = sel.situacao === 'resolvida' ? 'aberta' : 'resolvida';
@@ -3666,6 +3684,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
                                             📝 Nota interna
                                         </button>
+                                    )}
+                                    {sel.canal !== 'instagram' && (
+                                        <div className="space-y-1">
+                                            {sel.permissaoLigacao?.status === 'aceita' ? (
+                                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                                    ✅ Ligações AUTORIZADAS pelo cliente
+                                                    {sel.permissaoLigacao.expiraEm ? ` · até ${new Date(sel.permissaoLigacao.expiraEm).toLocaleDateString('pt-BR')}` : ''} — ligue pelo ramal 221 (HitPhone).
+                                                </p>
+                                            ) : sel.permissaoLigacao?.status === 'recusada' ? (
+                                                <p className="text-[10px] text-red-500">🚫 O cliente recusou ligações — dá pra pedir de novo.</p>
+                                            ) : sel.permissaoLigacao?.status === 'pendente' ? (
+                                                <p className="text-[10px] text-amber-600 dark:text-amber-400">☎️ Pedido enviado — aguardando o cliente tocar em “Permitir”.</p>
+                                            ) : null}
+                                            {sel.permissaoLigacao?.status !== 'aceita' && (
+                                                <button onClick={acaoPermissaoLigacao}
+                                                    className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                                    ☎️ Pedir permissão de ligação
+                                                </button>
+                                            )}
+                                            {permLigAviso && <p className="text-[10px] text-amber-600 dark:text-amber-400">{permLigAviso}</p>}
+                                        </div>
                                     )}
                                     <button onClick={acaoSituacao} disabled={!podeEncerrarSel}
                                         title={podeEncerrarSel ? '' : 'Só quem conduz (ou gestor/admin) encerra — assuma a conversa primeiro'}
