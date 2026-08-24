@@ -97,3 +97,41 @@ TLS/SRTP ⇄ UDP/RTP apontada para `177.107.205.201:21694`.
 - **Chamada de SAÍDA (colaborador → cliente) fica FORA desta fase**: exige o
   pedido de permissão de ligação na conversa (regra da Meta) e a rota de
   discagem no HitPhone — entra depois que a ENTRADA estiver provada.
+
+## ☎️ A SAÍDA é do TRONCO, não da API — provado em 24/08 (código 131055)
+
+O botão "📞 Ligar para o cliente" foi escrito, subiu e a Meta respondeu:
+
+> **Graph API calls are not allowed for SIP enabled numbers** (131055)
+
+Isso **fecha a dúvida de arquitetura** que estava aberta desde o começo do
+caminho 1: com o número em modo SIP, ligação de saída **não sai por API**.
+Quem disca é este SBC — o colaborador liga do ramal 221 e o INVITE vai à Meta
+pelo mesmo tronco que a entrada usa.
+
+⚠️ **O que ainda NÃO está provado é o DESTINO SIP da Meta**, e ele não se
+inventa. Ele aparece nos cabeçalhos do INVITE que ela manda na **primeira
+ligação recebida** — por isso o teste de ENTRADA deixou de ser só validação:
+ele é o que **destrava a saída**.
+
+```
+gcloud compute ssh sbc-whatsapp --zone=us-west1-a
+sudo asterisk -rvvv      # e então ligar do celular pelo ☎️ do WhatsApp
+```
+
+No INVITE, procurar o host da Meta (linhas `INVITE sip:… SIP/2.0`, `From:`,
+`Contact:`). Com ele em mãos:
+
+```
+META_SIP_DESTINO=<host:porta> SBC_HOST=sip.spassessoriacontabil.com.br \
+  ./scripts/setup-sbc-whatsapp.sh
+```
+
+Enquanto `META_SIP_DESTINO` estiver vazio, a saída **recusa com motivo no
+log** e o endpoint nem é escrito — endpoint com contato vazio quebraria o
+`pjsip.conf` inteiro e derrubaria a **entrada**, que já funciona.
+
+📌 E a **permissão do cliente continua obrigatória** (regra da Meta, provada no
+mesmo dia: o cartão "Permitir" foi aceito às 14:34). Ela não é substituída
+pelo tronco — sem o aceite, a Meta recusa a chamada de saída seja qual for o
+caminho.

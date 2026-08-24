@@ -229,6 +229,12 @@ export function interpretarRespostaWhatsapp(status, corpo) {
     // empresa pede permissão ao MESMO cliente — é anti-insistência dela, não
     // defeito nosso. Quase sempre aparece quando o cliente JÁ respondeu e
     // alguém pede de novo; nesse caso não há o que refazer, a permissão vale.
+    // ☎️ 131055 (PROVADO em 24/08, 1ª tentativa de ligar): "Graph API calls
+    // are not allowed for SIP enabled numbers". Nosso número está em modo
+    // SIP, então ligação de saída NÃO sai por API — quem disca é o SBC. Isto
+    // FECHA a dúvida de arquitetura: não é permissão faltando nem payload
+    // errado, é a Meta dizendo que este caminho não existe pra nós.
+    else if (code === 131055) acao = 'Este número está em modo SIP: a ligação de saída não sai pela API — quem disca é o tronco (ramal 221 no HitPhone).';
     else if (code === 138009) acao = 'A Meta limita quantas vezes se pede permissão ao mesmo cliente. Se ele já autorizou, não precisa pedir de novo — a autorização vale; se recusou, respeite a recusa.';
     return { ok: false, messageId: null, code, erro: detalhe, acao };
 }

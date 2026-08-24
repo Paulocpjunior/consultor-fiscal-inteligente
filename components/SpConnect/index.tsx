@@ -3817,10 +3817,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         ✅ Ligações AUTORIZADAS pelo cliente
                                                         {sel.permissaoLigacao.expiraEm ? ` · até ${new Date(sel.permissaoLigacao.expiraEm).toLocaleDateString('pt-BR')}` : ''}
                                                     </p>
-                                                    <button onClick={acaoLigar} disabled={ligando}
-                                                        className="w-full text-left text-[11px] font-semibold px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white btn-press">
-                                                        {ligando ? '⏳ Chamando…' : '📞 Ligar para o cliente (atende no ramal 221)'}
-                                                    </button>
+                                                    {/* 🚨 NADA DE BOTÃO DE LIGAR AQUI, e o motivo é a resposta da
+                                                        Meta (24/08, código 131055): "Graph API calls are not
+                                                        allowed for SIP enabled numbers". Em modo SIP a saída NÃO
+                                                        sai por API — quem disca é o tronco. Botão que a Meta
+                                                        recusa por desenho é botão que não faz nada. */}
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                        📞 Para ligar, disque <strong>{sel.numero}</strong> no ramal 221 (HitPhone) —
+                                                        a saída vai pelo tronco SIP, não por aqui.
+                                                    </p>
                                                 </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (
                                                 <p className="text-[10px] text-red-500">🚫 O cliente recusou ligações — dá pra pedir de novo.</p>
