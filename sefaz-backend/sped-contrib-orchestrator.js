@@ -328,6 +328,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         receitaSemDocumento,
         receitaAplicacaoFinanceira,
         contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',
+        contaContabilReceitaFinanceiraNome: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNome || '',
+        contaContabilReceitaFinanceiraNivel: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNivel || '',
         escrituracaoConsolidada,
         // 🚨 Havendo F550, o 1900 é OBRIGATÓRIO (recusa do PVA na AFFITTARE
         // 07/2026). COD_MOD e COD_SIT são de TABELA OFICIAL e dependem de qual

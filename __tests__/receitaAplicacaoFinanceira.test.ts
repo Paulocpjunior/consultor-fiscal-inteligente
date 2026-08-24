@@ -70,7 +70,11 @@ describe('🚨 o F100 da receita financeira reproduz o assinado', () => {
         empresa: { cnpj: CNPJ }, regimeApuracao: '1',
         competencia: '2026-06', competenciaFim: '2026-06',
         notas: [], receitaAplicacaoFinanceira: RECEITA,
+        // ⚠️ A conta vai INTEIRA: sem nome e nível o 0500 não sai, e aí o
+        // COD_CTA também não pode sair (recusa do PVA de 24/08).
         contaContabilReceitaFinanceira: '30106030012',
+        contaContabilReceitaFinanceiraNome: 'RENDIMENTOS FINANCEIROS',
+        contaContabilReceitaFinanceiraNivel: '5',
         warnings: [] as string[], ...extra,
     });
 
@@ -94,7 +98,11 @@ describe('🚨 o F100 da receita financeira reproduz o assinado', () => {
     // ⚠️ A conta contábil é da EMPRESA e não se inventa. O arquivo da PEC foi
     // ACEITO com F100 sem ela, então a ausência não impede a entrega.
     it('sem conta contábil cadastrada o F100 sai com COD_CTA vazio', () => {
-        const l = buildBlocoF(dados({ contaContabilReceitaFinanceira: '' }))
+        const l = buildBlocoF(dados({
+            contaContabilReceitaFinanceira: '',
+            contaContabilReceitaFinanceiraNome: '',
+            contaContabilReceitaFinanceiraNivel: '',
+        }))
             .map(semQuebra).find((x: string) => x.startsWith('|F100|'))!;
         expect(l.split('|')[17]).toBe('');
     });
@@ -152,5 +160,96 @@ describe('🚨 o bloco M declara a receita financeira sob o código dela', () =>
         expect(l.some((x: string) => x.startsWith('|M210|02|'))).toBe(false);
         expect(l.some((x: string) => x.startsWith('|M205|08|457401|'))).toBe(false);
         expect(buildBlocoF(d).map(semQuebra)[0]).toBe('|F001|1|');
+    });
+});
+
+// ============================================================================
+// 🚨 O F100 APONTAVA PARA UMA CONTA QUE O ARQUIVO NÃO DECLARAVA
+//
+// 2ª rodada do PVA no CF BANK (24/08), 1 erro:
+//   "Código da conta analítica/grupo de contas inválido. Informar código no
+//    'Registro 0500' antes de utilizá-lo."  (COD_CTA 30106030012, no F100)
+//
+// Mesma família do participante do 0150 e do item do 0200 órfãos. O assinado
+// traz a linha que faltava: |0500|01012026|04|A|5|30106030012|RENDIMENTOS
+// FINANCEIROS|||
+// ============================================================================
+import { montar0500ContaReceita } from '../sefaz-backend/receita-aplicacao-financeira.js';
+// @ts-expect-error — módulo backend .js sem .d.ts
+import { buildBloco0Contrib } from '../sefaz-backend/sped-contrib-bloco0.js';
+
+describe('🚨 o 0500 declara a conta que o F100 referencia', () => {
+    const conta = {
+        codConta: '30106030012', nomeConta: 'RENDIMENTOS FINANCEIROS',
+        nivel: '5', ano: '2026',
+    };
+
+    it('reproduz a linha do assinado', () => {
+        const { campos } = montar0500ContaReceita(conta) as any;
+        expect(campos.dtAlt).toBe('01012026');
+        expect(campos.codNatCc).toBe('04');   // contas de RESULTADO
+        expect(campos.indCta).toBe('A');      // ANALÍTICA — é o que a recusa cobra
+        expect(campos.nivel).toBe('5');
+        expect(campos.codCta).toBe('30106030012');
+        expect(campos.nomeCta).toBe('RENDIMENTOS FINANCEIROS');
+    });
+
+    // ⚠️ Nome e nível são do PLANO DE CONTAS da empresa — o app não os deduz.
+    it('sem nome ou nível NÃO monta, e diz o que falta', () => {
+        const r = montar0500ContaReceita({ ...conta, nomeConta: '' }) as any;
+        expect(r.campos).toBeUndefined();
+        expect(r.falta.join(' ')).toMatch(/NOME_CTA/);
+        const r2 = montar0500ContaReceita({ ...conta, nivel: '' }) as any;
+        expect(r2.falta.join(' ')).toMatch(/NIVEL/);
+    });
+
+    it('sem conta nenhuma não é assunto do 0500', () => {
+        expect(montar0500ContaReceita({ codConta: '' })).toBeNull();
+    });
+});
+
+describe('🚨 a coerência do COD_CTA é TUDO OU NADA', () => {
+    const base = (extra: Record<string, unknown> = {}) => ({
+        empresa: { cnpj: CNPJ, nome: 'CF BANK', uf: 'SP', codMunIBGE: '3550308' },
+        contador: { nome: 'X', cpf: '1', crc: 'Y', email: 'a@b.c', codMunIBGE: '3550308' },
+        competencia: '2026-06', competenciaInicio: '2026-06', competenciaFim: '2026-06',
+        regimeApuracao: '1', notas: [], itens: [], participantes: [], unidades: [],
+        receitaAplicacaoFinanceira: RECEITA,
+        contaContabilReceitaFinanceira: '30106030012',
+        contaContabilReceitaFinanceiraNome: 'RENDIMENTOS FINANCEIROS',
+        contaContabilReceitaFinanceiraNivel: '5',
+        warnings: [] as string[], ...extra,
+    });
+
+    it('cadastro completo: o 0500 sai E o F100 referencia a conta', () => {
+        const d = base();
+        const b0 = buildBloco0Contrib(d).map(semQuebra);
+        expect(b0.find((l: string) => l.startsWith('|0500|')))
+            .toBe('|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS||||');
+        const f100 = buildBlocoF(d).map(semQuebra).find((l: string) => l.startsWith('|F100|'))!;
+        expect(f100.split('|')[17]).toBe('30106030012');
+    });
+
+    // 🚨 A trava que importa: sem o 0500, o F100 NÃO pode referenciar a conta —
+    // órfã é exatamente a recusa que este bloco existe para evitar.
+    it('cadastro incompleto: nem 0500 nem COD_CTA — e a falta é DITA', () => {
+        const d = base({ contaContabilReceitaFinanceiraNivel: '' });
+        const b0 = buildBloco0Contrib(d).map(semQuebra);
+        expect(b0.some((l: string) => l.startsWith('|0500|'))).toBe(false);
+        const f100 = buildBlocoF(d).map(semQuebra).find((l: string) => l.startsWith('|F100|'))!;
+        expect(f100.split('|')[17]).toBe('');
+        const aviso = (d.warnings as string[]).join(' ');
+        expect(aviso).toMatch(/0500/);
+        expect(aviso).toMatch(/Dados Fiscais/);
+    });
+
+    it('empresa sem conta cadastrada não ganha 0500 nem aviso', () => {
+        const d = base({
+            contaContabilReceitaFinanceira: '',
+            contaContabilReceitaFinanceiraNome: '',
+            contaContabilReceitaFinanceiraNivel: '',
+        });
+        expect(buildBloco0Contrib(d).some((l: string) => l.startsWith('|0500|'))).toBe(false);
+        expect((d.warnings as string[]).some(w => /0500/.test(w))).toBe(false);
     });
 });

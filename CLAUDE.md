@@ -37,6 +37,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   PR. (2) o **`VL_TOT_CONT_NC_DEV` (campo 4 do M200/M600) saía `0` cravado** —
   o registro se desmentia, dizendo que NADA era devido no não-cumulativo com o
   campo 7 (a recolher) cheio.
+  🔴 **2ª RODADA DO PVA — o F100 apontava para uma conta que o arquivo NÃO
+  DECLARAVA**: *"Código da conta analítica/grupo de contas inválido. Informar
+  código no 'Registro 0500' antes de utilizá-lo."* É a MESMA família do
+  participante do 0150 e do item do 0200 ÓRFÃOS — o registro referencia um
+  cadastro que o arquivo não traz. O assinado tem a linha:
+  `|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS|||`.
+  ✅ **O que a régua DERIVA, e por quê**: `COD_NAT_CC 04` (contas de RESULTADO
+  — receita sempre é), `IND_CTA A` (ANALÍTICA, que é exatamente o que a recusa
+  cobra) e `DT_ALT` = 1º de janeiro do ano, como o assinado.
+  🚨 **E A COERÊNCIA É TUDO OU NADA**: `NOME_CTA` e `NIVEL` são do PLANO DE
+  CONTAS da empresa e o app não os deduz — **sem eles o COD_CTA também NÃO sai
+  no F100**. Emitir a referência sem a declaração é justamente a recusa; e o
+  arquivo da PEC foi ACEITO com F100 sem COD_CTA, então a ausência não impede a
+  entrega. A falta vira aviso com o lugar de preencher.
   📌 **REGRA QUE FICA: comparar o nosso arquivo com o assinado da MESMA empresa
   acha mais do que a recusa pede.** A recusa não existia aqui — o arquivo
   simplesmente declarava zero —, e foi a comparação linha a linha que entregou
