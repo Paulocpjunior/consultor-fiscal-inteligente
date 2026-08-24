@@ -73,8 +73,16 @@ function buildBloco0Contrib(dados) {
     });
     if (c0500?.campos) {
         const c = c0500.campos;
+        // ⚠️ SÃO 8 CAMPOS APÓS O REG, NÃO 9 (Paulo, 24/08: *"uma está com 4
+        // barrinhas e a outra com 3"*). O 0500 do EFD **ICMS/IPI** tem um
+        // `COD_CCUS` a mais no fim; o do EFD-**Contribuições** termina no
+        // `NOME_CTA_REF`. É a MESMA classe do 1010 de 17/08 — mesmo número de
+        // registro, arquivo diferente, leiaute diferente. O assinado da própria
+        // empresa fecha em `…RENDIMENTOS FINANCEIROS|||`.
+        //   DT_ALT · COD_NAT_CC · IND_CTA · NIVEL · COD_CTA · NOME_CTA ·
+        //   COD_CTA_REF · NOME_CTA_REF
         linhas.push(fmt.buildLine([
-            '0500', c.dtAlt, c.codNatCc, c.indCta, c.nivel, c.codCta, c.nomeCta, '', '', '',
+            '0500', c.dtAlt, c.codNatCc, c.indCta, c.nivel, c.codCta, c.nomeCta, '', '',
         ]));
     } else if (c0500?.falta && Array.isArray(dados.warnings)) {
         dados.warnings.push(

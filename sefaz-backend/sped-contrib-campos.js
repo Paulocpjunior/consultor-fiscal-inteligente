@@ -47,6 +47,26 @@ import {
  * 16" para uma linha que começa em M210).
  */
 export const CAMPOS_POR_REGISTRO = {
+    // 🚨 O 0500 do EFD-Contribuições NÃO é o do EFD ICMS/IPI — este termina no
+    // NOME_CTA_REF; o do outro arquivo tem um COD_CCUS a mais. O gerador saiu
+    // com 9 e Paulo pegou a olho (24/08: *"uma está com 4 barrinhas e a outra
+    // com 3"*). É a MESMA classe do 1010 de 17/08: mesmo número de registro,
+    // leiaute de outro arquivo. Esta trava existia desde 18/08 e ficava MUDA
+    // porque o 0500 não estava nela.
+    // ⚠️ A contagem inclui o PRÓPRIO REG, porque é assim que o PVA conta (ele
+    // disse "Esperado 16" para o M210, que tem 15 campos depois do REG).
+    '0500': {
+        campos: 9,
+        fonte: 'EFD-Contribuições ACEITO do CF BANK 38406148000101 · 06/2026 (e-Fiscal, assinado): '
+            + '|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS||| — DT_ALT · COD_NAT_CC · '
+            + 'IND_CTA · NIVEL · COD_CTA · NOME_CTA · COD_CTA_REF · NOME_CTA_REF.',
+    },
+    F100: {
+        campos: 19,
+        fonte: 'EFD-Contribuições ACEITO do CF BANK 38406148000101 · 06/2026 (e-Fiscal, assinado) e da '
+            + 'PEC PRONTA ENTREGA 55070577000161 · 05/2026 — '
+            + '|F100|1|||30062026|21647,53|02|…|4|865,9|||30106030012|||.',
+    },
     F550: {
         campos: 16,
         fonte: 'EFD-Contribuições ACEITO da AFFITTARE 17213641000127 · 05/2026 (e-Fiscal, assinado): '
