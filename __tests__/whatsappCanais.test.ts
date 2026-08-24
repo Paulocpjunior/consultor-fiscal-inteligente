@@ -173,3 +173,78 @@ describe('cfgDeEnvioDaConversa — o canal de SAÍDA é o da conversa', () => {
         expect(webhook).toContain("link: acao.url }, depsEnvio)");
     });
 });
+
+// ═══ 📱 ATIVAR o número na Cloud API (Paulo, 24/08, no 3155-1554) ═══════════
+// A Meta disse, no próprio painel, ao tentar concluir a verificação em duas
+// etapas: "A conta não existe na API de Nuvem. Use /register API para criar
+// uma conta primeiro." Número APROVADO (nome de exibição) ainda não está no
+// WhatsApp — a busca responde "este número não está no WhatsApp" e ele não
+// recebe mensagem nenhuma. O painel não faz esse passo; só a API faz.
+describe('registro do número na Cloud API', () => {
+    const fs2 = require('fs') as typeof import('fs');
+    const path2 = require('path') as typeof import('path');
+    const ler = (p: string) => fs2.readFileSync(path2.join(process.cwd(), p), 'utf8');
+    const cloud = ler('sefaz-backend/whatsapp-cloud.js');
+    const rotas = ler('sefaz-backend/whatsapp-routes.js');
+    const tela = ler('components/SpConnect/index.tsx');
+
+    it('chama o /register com o PIN de 6 dígitos', () => {
+        expect(cloud).toMatch(/\$\{numeroId\}\/register/);
+        expect(cloud).toMatch(/messaging_product: 'whatsapp', pin: codigo/);
+        expect(cloud).toMatch(/test\(codigo\)/);
+    });
+
+    it('🔒 o PIN NÃO é guardado nem cai no log', () => {
+        const rota = rotas.slice(rotas.indexOf("router.post('/canais/:id/registrar'"));
+        // Até o INÍCIO da próxima rota — cortar no primeiro `});` pararia
+        // dentro do primeiro `res.json({...})` e o teste passaria por engano.
+        const corpo = rota.slice(0, rota.indexOf("router.post('/canais'"));
+        // Nada de gravar em coleção…
+        expect(corpo).not.toMatch(/\.set\(|\.add\(|\.update\(/);
+        // …e o log leva a recusa da Meta, nunca o pin.
+        expect(corpo).toMatch(/console\.warn\('\[whatsapp\/registrar\] recusa da Meta:/);
+        expect(corpo).not.toMatch(/console\.\w+\([^)]*pin/i);
+    });
+
+    it('é ação de ADMIN e recusa canal sem credencial', () => {
+        expect(rotas).toMatch(/router\.post\('\/canais\/:id\/registrar', requireAdmin/);
+        const rota = rotas.slice(rotas.indexOf("router.post('/canais/:id/registrar'"));
+        expect(rota.slice(0, 1800)).toMatch(/cred\.pronto/);
+    });
+
+    it('a tela pede o PIN, confirma antes e manda guardá-lo no cofre', () => {
+        expect(tela).toMatch(/Ativar na Cloud API/);
+        expect(tela).toMatch(/Anote o PIN no cofre de senhas/);
+        expect(tela).toMatch(/PIN \(6 dígitos\)/);
+    });
+});
+
+// 🔬 24/08: número cadastrado, ATIVADO na Cloud API, e o cliente continuava
+// vendo "não está no WhatsApp". Deduzir dali é chute — o app do WhatsApp
+// CACHEIA esse veredito. Quem responde é a Meta.
+describe('sonda do número na Meta', () => {
+    const fs3 = require('fs') as typeof import('fs');
+    const path3 = require('path') as typeof import('path');
+    const ler2 = (p: string) => fs3.readFileSync(path3.join(process.cwd(), p), 'utf8');
+    const cloud2 = ler2('sefaz-backend/whatsapp-cloud.js');
+    const rotas2 = ler2('sefaz-backend/whatsapp-routes.js');
+    const tela2 = ler2('components/SpConnect/index.tsx');
+
+    it('pergunta os campos que separam "propagando" de "falta um passo"', () => {
+        expect(cloud2).toMatch(/code_verification_status/);
+        expect(cloud2).toMatch(/platform_type/);
+    });
+
+    it('é LEITURA pura — a rota não grava nada', () => {
+        const rota = rotas2.slice(rotas2.indexOf("router.get('/canais/:id/status'"));
+        const corpo = rota.slice(0, rota.indexOf('// 📱 ATIVAR'));
+        expect(corpo).not.toMatch(/\.set\(|\.add\(|\.update\(/);
+    });
+
+    it('a tela mostra o termo CRU da Meta (para o suporte achar) e diz o que fazer', () => {
+        expect(tela2).toMatch(/Conferir na Meta/);
+        expect(tela2).toMatch(/status: \$\{n\.status\}/);
+        expect(tela2).toMatch(/é cache do app/);
+        expect(tela2).toMatch(/Enquanto não estiver CONNECTED/);
+    });
+});

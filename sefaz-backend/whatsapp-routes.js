@@ -31,6 +31,7 @@ import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
+    registrarNumeroNaCloudApi, statusDoNumeroNaMeta,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
@@ -452,10 +453,27 @@ router.get('/conversas', requireAuth, async (req, res) => {
             // Sem fila nenhuma vinculada = lista VAZIA (o Firestore recusa
             // `in` com lista vazia; e a tela já diz "sem vínculo, peça ao
             // admin" — mesma régua dos gates de departamento).
-            const snap = minhasFilas.length
-                ? await db.collection('whatsapp_conversas')
-                    .where('fila', 'in', minhasFilas).limit(TETO_LEITURA_CONVERSAS).get()
-                : { docs: [] };
+            // Duas leituras que se SOMAM: as filas dele + o que está em
+            // condução por ele (que pode estar em fila nenhuma). Sem a
+            // segunda, a pessoa perde de vista a própria conversa — foi o
+            // buraco que o escopo por fila abriu hoje.
+            const meuEmail = String(req.user?.email || '').toLowerCase();
+            const [porFila, minhas] = await Promise.all([
+                minhasFilas.length
+                    ? db.collection('whatsapp_conversas')
+                        .where('fila', 'in', minhasFilas).limit(TETO_LEITURA_CONVERSAS).get()
+                    : Promise.resolve({ docs: [] }),
+                meuEmail
+                    ? db.collection('whatsapp_conversas')
+                        .where('atribuidoA', '==', req.user.email).limit(TETO_LEITURA_CONVERSAS).get()
+                    : Promise.resolve({ docs: [] }),
+            ]);
+            const vistos = new Set();
+            const snap = { docs: [...porFila.docs, ...minhas.docs].filter((d) => {
+                if (vistos.has(d.id)) return false;
+                vistos.add(d.id);
+                return true;
+            }) };
             const quando = (d) => {
                 const v = d.data().atualizadoEm;
                 return v?.toMillis ? v.toMillis() : (Date.parse(v) || 0);
@@ -505,7 +523,9 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 naoLidas: x.naoLidas || 0,
                 atualizadoEm: x.atualizadoEm || null,
             };
-        }).filter((cv) => conversaVisivel(minhasFilas, cv.fila)
+        }).filter((cv) => (conversaVisivel(minhasFilas, cv.fila)
+            // …ou a conversa é MINHA (em condução por mim), mesmo sem fila.
+            || (req.user?.email && cv.atribuidoA === req.user.email))
             // 📷 DM do Instagram é POR USUÁRIO (Paulo, 22/08) — a régua vem
             // da config; lista vazia = sem restrição. Aplica-se POR CIMA da
             // regra de filas, nunca no lugar dela.
@@ -520,9 +540,19 @@ router.get('/conversas', requireAuth, async (req, res) => {
     }
 });
 
-// Mensagens de UMA conversa. Filtro simples + ordenação em memória de
-// propósito: where(conversaId)+orderBy(timestamp) exigiria índice composto,
-// e 500 docs de mensagem são leves — índice entra se o volume provar precisar.
+// Mensagens de UMA conversa.
+// 🚨 O `limit(500)` SEM ORDENAR ESCONDIA A MENSAGEM NOVA (Paulo, 24/08:
+// "Ivan mandou msg, o Matheus está com a conversa ABERTA e não aparece —
+// só vê pela notificação"). Sem `orderBy`, o Firestore devolve na ordem do
+// ID DO DOCUMENTO, e o id aqui é o wamid da Meta, que não é cronológico:
+// em conversa longa (as importadas da Ultra Fox têm centenas), as 500 que
+// voltavam eram uma FATIA ARBITRÁRIA, e a mensagem recém-chegada podia
+// cair fora dela — para sempre. O comentário anterior dizia que o índice
+// entraria "se o volume provar precisar": provou.
+// ⚠️ E a troca é feita SEM JANELA DE QUEBRA: o índice composto leva minutos
+// para construir e, enquanto isso, a consulta ordenada FALHA. Por isso ela
+// cai de volta na antiga quando o Firestore diz que falta índice — a thread
+// nunca fica fora do ar, e passa a ordenar sozinha quando ele ficar pronto.
 router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
     try {
         const numero = idConversaDoParam(req.params.numero);
@@ -533,8 +563,17 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
             const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
             if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
         }
-        const snap = await getDb().collection('whatsapp_mensagens')
-            .where('conversaId', '==', numero).limit(500).get();
+        const colecao = getDb().collection('whatsapp_mensagens').where('conversaId', '==', numero);
+        let snap;
+        try {
+            // As 500 MAIS RECENTES (a tela ordena de novo; aqui o que importa
+            // é QUAIS 500 vêm).
+            snap = await colecao.orderBy('timestamp', 'desc').limit(500).get();
+        } catch (e) {
+            if (!/index/i.test(String(e?.message || ''))) throw e;
+            console.warn('[whatsapp/mensagens] índice composto ainda construindo — fatia sem ordem:', e.message);
+            snap = await colecao.limit(500).get();
+        }
         const mensagens = snap.docs.map((d) => {
             const x = d.data();
             return {
@@ -1738,7 +1777,14 @@ async function podeVerConversa(db, user, numero) {
     const { filas } = await perfilAtendimento(db, user);
     const conv = await db.collection('whatsapp_conversas').doc(numero).get();
     const dados = conv.data() || {};
-    let ok = conversaVisivel(filas, dados.fila || null);
+    // 🚨 A CONVERSA QUE EU CONDUZO É SEMPRE MINHA DE VER (24/08). O escopo por
+    // fila que entrou hoje olhava SÓ a fila — então a conversa atribuída a
+    // alguém e ainda parada na Recepção (fila vazia) sumia da vista DELE
+    // PRÓPRIO. É o organograma real: o Jefferson atendia sozinho a
+    // Legalização e tem conversa em condução que nunca ganhou fila.
+    const meuEmail = String(user?.email || '').toLowerCase();
+    const minha = Boolean(meuEmail && String(dados.atribuidoA || '').toLowerCase() === meuEmail);
+    let ok = minha || conversaVisivel(filas, dados.fila || null);
     // 📷 DM do Instagram é POR USUÁRIO — a MESMA régua da listagem, senão a
     // lista esconderia a conversa e o anexo/mensagem abriria pela URL.
     if (ok && (dados.canal === 'instagram' || ehConversaInstagram(numero))) {
@@ -2095,6 +2141,62 @@ router.get('/canais', requireAuth, async (_req, res) => {
         return res.json({ ...catalogo, ok: true, canais });
     } catch (e) {
         console.error('[whatsapp/canais]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 🔬 O que a META diz do número (status, verificação, plataforma). Leitura
+// pura — nenhuma gravação. É o que separa "ainda propagando" de "falta um
+// passo", em vez de deduzir do app do WhatsApp, que CACHEIA o "não está no
+// WhatsApp" por um bom tempo.
+router.get('/canais/:id/status', requireAdmin, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim().toLowerCase();
+        const catalogo = await lerCanais(getDb());
+        const canal = catalogo.canais.find((c) => c.id === id);
+        if (!canal) return res.status(404).json({ ok: false, error: `Canal "${id}" não está cadastrado.` });
+        const cred = credenciaisDoCanal(canal, process.env);
+        if (!cred.pronto) return res.status(503).json({ ok: false, error: `Falta: ${cred.faltas.join(' · ')}` });
+        const r = await statusDoNumeroNaMeta({ phoneNumberId: canal.phoneNumberId }, { cfg: cred.cfg });
+        if (!r.ok) return res.status(502).json({ ok: false, error: r.erro, code: r.code ?? null });
+        return res.json({ ok: true, numero: r.numero });
+    } catch (e) {
+        console.error('[whatsapp/canal-status]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📱 ATIVAR o número na Cloud API (o `/register` que o painel da Meta manda
+// fazer). Sem ele o número aprovado NÃO existe no WhatsApp: não recebe
+// mensagem, e a busca responde "este número não está no WhatsApp" (Paulo,
+// 24/08, no 3155-1554).
+// 🔒 O PIN não é guardado em lugar nenhum — nem em banco, nem em log. Ele é
+// a verificação em duas etapas DO NÚMERO, e quem precisa dele de novo é a
+// Meta; a tela manda anotar no cofre de senhas.
+router.post('/canais/:id/registrar', requireAdmin, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim().toLowerCase();
+        const pin = String(req.body?.pin || '').trim();
+        if (!/^\d{6}$/.test(pin)) {
+            return res.status(400).json({ ok: false, error: 'O PIN tem exatamente 6 dígitos — é a verificação em duas etapas do número.' });
+        }
+        const catalogo = await lerCanais(getDb());
+        const canal = catalogo.canais.find((c) => c.id === id);
+        if (!canal) return res.status(404).json({ ok: false, error: `Canal "${id}" não está cadastrado.` });
+        const cred = credenciaisDoCanal(canal, process.env);
+        if (!cred.pronto) {
+            return res.status(503).json({ ok: false, error: `Falta para ativar: ${cred.faltas.join(' · ')}` });
+        }
+        const r = await registrarNumeroNaCloudApi({ phoneNumberId: canal.phoneNumberId, pin }, { cfg: cred.cfg });
+        if (!r.ok) {
+            // O PIN NUNCA vai pro log — só a recusa da Meta.
+            console.warn('[whatsapp/registrar] recusa da Meta:', JSON.stringify(r.bruto || r.erro));
+            const status = r.configuracaoIncompleta ? 503 : r.indeterminado ? 502 : 422;
+            return res.status(status).json({ ok: false, error: r.erro, acao: r.acao, code: r.code ?? null });
+        }
+        return res.json({ ok: true, rotulo: canal.rotulo });
+    } catch (e) {
+        console.error('[whatsapp/registrar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

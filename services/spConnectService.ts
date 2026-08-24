@@ -207,6 +207,20 @@ export const salvarCanal = (p: {
     numeroExibicao?: string; wabaId?: string; ativo?: boolean;
 }) => post<{ id: string; canais: CanalWhatsapp[] }>('/api/admin/whatsapp/canais', p);
 
+/**
+ * 📱 Ativa o número na Cloud API (o `/register` que o painel da Meta manda
+ * fazer). O PIN é a verificação em duas etapas DO NÚMERO — ele viaja na
+ * chamada e não é guardado em lugar nenhum.
+ */
+/** 🔬 O que a META diz do número — leitura pura (status, verificação, plataforma). */
+export const statusDoCanal = (id: string) =>
+    req<{ numero: Record<string, unknown>; code?: number | null }>(
+        `/api/admin/whatsapp/canais/${encodeURIComponent(id)}/status`);
+
+export const registrarCanal = (id: string, pin: string) =>
+    post<{ rotulo: string; acao?: string; code?: number | null }>(
+        `/api/admin/whatsapp/canais/${encodeURIComponent(id)}/registrar`, { pin });
+
 // ─── 📇 Contatos e 🏷 etiquetas ─────────────────────────────────────────────
 
 export interface Etiqueta {

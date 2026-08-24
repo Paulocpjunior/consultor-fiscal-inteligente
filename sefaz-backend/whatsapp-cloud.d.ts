@@ -134,3 +134,16 @@ export function iniciarChamadaParaCliente(
     ok: boolean; callId?: string | null; erro?: string; acao?: string; code?: number | null;
     bruto?: unknown; indeterminado?: boolean; configuracaoIncompleta?: boolean;
 }>;
+
+export function registrarNumeroNaCloudApi(
+    p: { phoneNumberId: string; pin: string },
+    deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch },
+): Promise<{
+    ok: boolean; erro?: string; acao?: string; code?: number | null;
+    bruto?: unknown; indeterminado?: boolean; configuracaoIncompleta?: boolean;
+}>;
+
+export function statusDoNumeroNaMeta(
+    p: { phoneNumberId: string },
+    deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch },
+): Promise<{ ok: boolean; numero?: Record<string, unknown>; erro?: string; code?: number | null; bruto?: unknown; configuracaoIncompleta?: boolean }>;
