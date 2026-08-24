@@ -49,6 +49,8 @@ import {
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, filtrarMensagensDaThread, iniciais, rotuloCurtoFila, dentroDeIframe,
 } from '../../services/spConnect';
+import { sendEmailVerification } from 'firebase/auth';
+import { auth } from '../../services/firebaseConfig';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
@@ -88,6 +90,44 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const fimDaThread = useRef<HTMLDivElement>(null);
     const selRef = useRef<ConversaResumo | null>(null);
     selRef.current = sel;
+
+    // 📧 E-mail NÃO verificado (caso recepcao@, 24/08): o backend RECUSA o
+    // token com "Email não verificado" — trava de segurança correta (sem ela,
+    // e-mail do domínio registrado em outro projeto Firebase alcançaria dado
+    // SERPRO). O que faltava era o CAMINHO: conta de login por SENHA nunca
+    // teve onde clicar para verificar. O banner só aparece para quem está
+    // barrado; SSO já chega verificado e nunca o vê.
+    const [emailNaoVerificado, setEmailNaoVerificado] = useState(false);
+    const [verifStatus, setVerifStatus] = useState<string | null>(null);
+    useEffect(() => {
+        setEmailNaoVerificado(Boolean(auth?.currentUser && auth.currentUser.emailVerified === false));
+    }, []);
+    const enviarVerificacao = async () => {
+        const u = auth?.currentUser;
+        if (!u) return;
+        try {
+            await sendEmailVerification(u);
+            setVerifStatus(`✉️ Enviado para ${u.email}. Abra a caixa de entrada (e o lixo eletrônico), clique no link e volte aqui.`);
+        } catch (e: any) {
+            setVerifStatus(String(e?.code || '').includes('too-many-requests')
+                ? '⏳ Muitos pedidos seguidos — o e-mail anterior ainda vale. Procure-o na caixa (e no lixo eletrônico) e aguarde alguns minutos antes de pedir outro.'
+                : `Falha ao enviar: ${e?.message || e}`);
+        }
+    };
+    const confirmarVerificacao = async () => {
+        const u = auth?.currentUser;
+        if (!u) return;
+        setVerifStatus('Conferindo…');
+        await u.reload();
+        if (u.emailVerified) {
+            // O token do Firebase cacheia ~1h e a verificação só entra em token
+            // NOVO (lição do plano-contas-iob v3.4.92) — forçar e recarregar.
+            await u.getIdToken(true);
+            window.location.reload();
+        } else {
+            setVerifStatus('Ainda consta como NÃO verificado — o link do e-mail precisa ser aberto (no navegador, logado nesta conta) antes deste botão.');
+        }
+    };
 
     const recarregar = useCallback(async (silencioso = false) => {
         if (!silencioso) setCarregando(true);
@@ -1151,6 +1191,31 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
 
     return (
         <div className="max-w-[1400px] mx-auto animate-fade-in">
+            {/* ── 📧 E-mail não verificado: sem isto o envio é RECUSADO ("Token
+                inválido: Email não verificado"). A trava do backend fica; o
+                banner é o caminho que faltava para a conta de senha. ───────── */}
+            {emailNaoVerificado && (
+                <div className="mb-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2.5">
+                    <p className="text-[12px] font-semibold text-amber-800 dark:text-amber-200">
+                        📧 Seu e-mail ainda não foi verificado — o envio de mensagens é recusado até verificar
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                        É uma trava de segurança do sistema (contas de login por senha nascem sem verificação).
+                        Peça o e-mail, abra o link que chegar em <strong>{currentUser.email || 'sua caixa'}</strong> e volte aqui.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                        <button onClick={enviarVerificacao}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded bg-amber-600 hover:bg-amber-700 text-white btn-press">
+                            📧 Enviar e-mail de verificação
+                        </button>
+                        <button onClick={confirmarVerificacao}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded border border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 btn-press">
+                            ↻ Já cliquei no link
+                        </button>
+                    </div>
+                    {verifStatus && <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">{verifStatus}</p>}
+                </div>
+            )}
             {/* ── Modal ✚ Nova conversa (template aprovado) ─────────────────── */}
             {novaAberta && (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setNovaAberta(false)}>
