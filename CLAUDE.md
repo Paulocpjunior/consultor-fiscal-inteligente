@@ -10,6 +10,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   07/2026: serviços prestados **e** aluguel). O PVA recusou **6 registros** —
   1× A010 e 5× A100 — com *"O registro não deve ser informado para esse perfil
   e/ou tipo de operação"*.
+  ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (Paulo: *"1350 - PEC ok"*). É a
+  **QUARTA empresa** com o EFD-Contribuições fechado e a **TERCEIRA FORMA de
+  arquivo provada por recibo**: detalhado só com documento (MANTOAN, HS),
+  consolidado só com F550 (AFFITTARE) e agora **detalhado com documento +
+  F100** (PEC). As três saíram do MESMO gerador.
   🔴 A causa: `indRegCumDoArquivo` devolvia **2 (CONSOLIDADO)** sempre que
   havia receita de locação. **Consolidado é o arquivo que NÃO escritura
   documento** — e a PEC tem cinco. O app declarou um perfil e entregou o
