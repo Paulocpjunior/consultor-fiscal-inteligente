@@ -359,6 +359,35 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('classEstabIpi', v)}
                                 placeholder="Só p/ contribuinte de IPI — código do registro 0002"
                             />
+                            {/* 🚨 EFD-Contribuições: havendo F550 (receita de
+                                ALUGUEL, que não gera documento capturável), o
+                                registro 1900 é OBRIGATÓRIO — recusa do PVA na
+                                AFFITTARE 07/2026. COD_MOD e COD_SIT são de
+                                TABELA OFICIAL e dependem de qual documento a
+                                empresa emite pelo aluguel: o app não deduz, e
+                                sem estes dois o 1900 não sai. Campo entra na
+                                tela E na whitelist no MESMO PR (regra do #382). */}
+                            <div className="md:col-span-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 pt-2">
+                                EFD-Contribuições: consolidação da receita (1900)
+                            </div>
+                            <Field
+                                label="Modelo do documento (1900 · COD_MOD)"
+                                value={dados.contrib1900CodMod || ''}
+                                onChange={v => handleField('contrib1900CodMod', v)}
+                                placeholder="Tabela 4.1.1 — só p/ quem tem receita no F550"
+                            />
+                            <Field
+                                label="Situação do documento (1900 · COD_SIT)"
+                                value={dados.contrib1900CodSit || ''}
+                                onChange={v => handleField('contrib1900CodSit', v)}
+                                placeholder="Tabela 4.1.2 — só p/ quem tem receita no F550"
+                            />
+                            <p className="md:col-span-2 text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                Obrigatório quando a receita entra pelo F550 (aluguel). O PVA recusa o arquivo
+                                sem o 1900. O CNPJ, o valor e os CST o app já deriva do próprio arquivo — estes
+                                dois são código de tabela oficial e dependem de qual documento a empresa emite
+                                pelo aluguel, então o app não escolhe por você.
+                            </p>
                             {/* 🚨 O gerador do BLOCO H LIA `gerarInventario` desde
                                 sempre e ele não existia em tela nenhuma nem na
                                 whitelist: `inventarioExigido` virava, na prática,

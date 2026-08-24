@@ -1503,6 +1503,23 @@ export interface EmpresaDadosFiscais {
     contribuinteIpi?: 'sim' | 'nao' | '';
     classEstabIpi?: string;
     /**
+     * 🚨 **Consolidação da receita no registro 1900 do EFD-Contribuições.**
+     *
+     * Havendo F550 (receita sem documento — aluguel), o 1900 é OBRIGATÓRIO.
+     * Recusa do PVA na AFFITTARE 07/2026 (24/08), literal: *"Se o somatório do
+     * campo Valor Total da Receita Auferida do registro F550 e F560 for maior
+     * que zero o registro 1900 deve ser preenchido."*
+     *
+     * ⚠️ COD_MOD (Tabela 4.1.1) e COD_SIT (Tabela 4.1.2) são código de TABELA
+     * OFICIAL e dependem de QUAL documento a empresa emite pelo aluguel — o app
+     * NÃO deduz. Sem cadastro o 1900 não sai e a falta vira aviso nomeado com a
+     * recusa literal do PVA (mesmo desenho do 0002 e do código 9 do ISS fixo).
+     *
+     * O CNPJ, o valor e os CST vêm do próprio arquivo — só estes dois faltavam.
+     */
+    contrib1900CodMod?: string;
+    contrib1900CodSit?: string;
+    /**
      * 🚨 Gera o **Bloco H (inventário)** fora de dezembro.
      *
      * O gerador lia este campo desde sempre e ele não existia em tela nenhuma

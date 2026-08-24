@@ -151,3 +151,96 @@ export function indRegCumDoArquivo({ regimeApuracao, receitaConsolidada = 0 } = 
     if (!cumulativo) return '';
     return n(receitaConsolidada) > 0 ? '2' : '9';
 }
+
+// ============================================================================
+// 🚨 HAVENDO F550, O 1900 É OBRIGATÓRIO — e o bloco 1 saía SEMPRE vazio
+//
+// Recusa do PVA na AFFITTARE 07/2026 (24/08, Paulo — urgente), literal:
+//
+//   "Se o somatório do campo Valor Total da Receita Auferida do registro F550
+//    e F560 for maior que zero o registro 1900 deve ser preenchido."
+//
+// O `buildBloco1_Contrib` devolvia `|1001|1|` (bloco SEM DADOS) em todo
+// arquivo — ele nasceu assim quando o 1010 de ação judicial foi removido
+// (17/08, MANTOAN) e nunca ganhou conteúdo. Com o F550 no ar desde 21/08, o
+// bloco 1 vazio virou recusa: o arquivo declara receita e não a consolida.
+//
+// 📌 O 1900 é a CONSOLIDAÇÃO dos documentos emitidos no período pela PJ do
+// Lucro Presumido. Ele não repete a apuração — ele diz, por modelo/situação de
+// documento, quanto de receita entrou.
+// ============================================================================
+
+/**
+ * Campos do 1900, na ORDEM do formulário do próprio PVA (print de 24/08):
+ *
+ *   |1900|CNPJ|COD_MOD|SER|SUB_SER|COD_SIT|VL_TOT_REC|QUANT_DOC
+ *        |CST_PIS|CST_COFINS|CFOP|INFO_COMPL|COD_CTA|
+ *
+ * Obrigatórios (marcados no formulário): CNPJ, COD_MOD, COD_SIT e VL_TOT_REC.
+ *
+ * ⚠️ **O QUE A RÉGUA DERIVA, E O QUE ELA SE RECUSA A INVENTAR.**
+ *
+ * Deriva com certeza:
+ *   · `CNPJ`       — o estabelecimento do F010, o mesmo que já sai no arquivo;
+ *   · `VL_TOT_REC` — a Σ do F550 (+F560, quando existir). É a PRÓPRIA recusa do
+ *                    PVA que define essa igualdade, então aqui não há escolha;
+ *   · `CST_PIS`/`CST_COFINS` — os MESMOS do F550 que este módulo emite. Ler de
+ *                    outro lugar faria o 1900 e o F550 discordarem no mesmo
+ *                    arquivo, que é o defeito que esta casa mais paga.
+ *
+ * **RECUSA**: `COD_MOD` (Tabela 4.1.1) e `COD_SIT` (Tabela 4.1.2) são código de
+ * TABELA OFICIAL e dependem de QUAL documento a empresa emite pelo aluguel —
+ * coisa que o app não tem como saber e que não se deduz do valor. Carimbá-los
+ * de memória é a família do `1405`, do `5352` e do `PARTSEM`: código inventado
+ * que o PVA às vezes ACEITA, e aí o erro só aparece na fiscalização.
+ * Sem cadastro, o registro NÃO SAI e a falta vira aviso NOMEADO com a recusa
+ * literal do PVA e o lugar de preencher — o mesmo desenho do `0002`, do código
+ * 9 do ISS fixo e do `IND_NAT_PJ`.
+ *
+ * ⚠️ `QUANT_DOC` fica VAZIO de propósito: é campo opcional no formulário, e nós
+ * não temos os documentos (é justamente por isso que a receita vem da ficha).
+ * O arquivo do e-Fiscal declarava 3 porque ELE tinha os três; escrever um
+ * número aqui seria afirmar uma contagem que ninguém fez.
+ *
+ * ⚠️ Devolve VALORES, não a linha pronta — quem formata é o bloco, igual ao
+ * `montarF550`. Formatar aqui criaria uma segunda forma do mesmo número.
+ *
+ * @returns {{campos: object}|{falta: string[]}|null} — ou os campos, ou o que
+ *   falta, ou null quando não há receita.
+ */
+export function montar1900({
+    cnpj, receita, codMod, codSit,
+    cstPis = CST_F550_TRIBUTADA, cstCofins = CST_F550_TRIBUTADA,
+} = {}) {
+    const rec = n(receita);
+    // Sem receita não há 1900 — e não há F550 tampouco. Bloco sem dados não se
+    // inventa (a régua do 1001, que este mesmo arquivo já aplicava).
+    if (!(rec > 0)) return null;
+
+    const doc = String(cnpj || '').replace(/\D/g, '');
+    const mod = String(codMod || '').trim();
+    const sit = String(codSit || '').trim();
+
+    const falta = [];
+    if (!doc) falta.push('CNPJ do estabelecimento');
+    if (!mod) falta.push('COD_MOD (modelo do documento — Tabela 4.1.1)');
+    if (!sit) falta.push('COD_SIT (situação do documento — Tabela 4.1.2)');
+    if (falta.length) return { falta };
+
+    return {
+        campos: {
+            cnpj: doc,
+            codMod: mod,
+            serie: '',
+            subSerie: '',
+            codSit: sit,
+            valorTotalReceita: rec,
+            quantDoc: '',            // não temos a contagem — ver acima
+            cstPis: String(cstPis),
+            cstCofins: String(cstCofins),
+            cfop: '',                // locação não tem CFOP
+            infoCompl: '',
+            codCta: '',
+        },
+    };
+}

@@ -45,7 +45,7 @@ import {
 import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 // A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
 // arquivo aceito da AFFITTARE 05/2026 como fonte.
-import { montarF550, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
+import { montarF550, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -1301,7 +1301,7 @@ export function buildBlocoM(dados) {
 // BLOCO 1 — Complemento da Escrituracao
 // ═══════════════════════════════════════════════════════════════════════
 
-export function buildBloco1_Contrib(_dados) {
+export function buildBloco1_Contrib(dados = {}) {
     // 🚨 O 1010 QUE ESTAVA AQUI ERA DE OUTRO ARQUIVO.
     //
     // Paulo, 17/08 (MANTOAN 07/2026), com o recibo do PVA: *"O número de campos
@@ -1324,6 +1324,49 @@ export function buildBloco1_Contrib(_dados) {
     // judicial referenciada, e isso é dado que ninguém cadastrou. Bloco sem
     // dados se declara SEM DADOS.
     const conteudo = [];
+
+    // 🚨 HAVENDO F550, O 1900 É OBRIGATÓRIO — recusa do PVA na AFFITTARE
+    // 07/2026 (24/08), literal: *"Se o somatório do campo Valor Total da
+    // Receita Auferida do registro F550 e F560 for maior que zero o registro
+    // 1900 deve ser preenchido."*
+    //
+    // Este bloco saía SEMPRE `|1001|1|` (sem dados) — ele ficou vazio quando o
+    // 1010 de ação judicial foi removido (17/08) e nunca ganhou conteúdo. Com
+    // o F550 no ar desde 21/08, bloco 1 vazio virou recusa: o arquivo declara
+    // receita e não a consolida.
+    const receita = Number(dados.receitaSemDocumento || 0);
+    if (receita > 0) {
+        const r = montar1900({
+            cnpj: dados.empresa?.cnpj,
+            receita,
+            codMod: dados.contrib1900CodMod,
+            codSit: dados.contrib1900CodSit,
+        });
+        if (r?.campos) {
+            const c = r.campos;
+            conteudo.push(fmt.buildLine([
+                '1900', c.cnpj, c.codMod, c.serie, c.subSerie, c.codSit,
+                fmt.formatValue(c.valorTotalReceita), c.quantDoc,
+                c.cstPis, c.cstCofins, c.cfop, c.infoCompl, c.codCta,
+            ]));
+        } else if (r?.falta) {
+            // ⚠️ NÃO SAI COM CAMPO INVENTADO. COD_MOD e COD_SIT são tabela
+            // oficial e dependem de QUAL documento a empresa emite pelo
+            // aluguel — o app não sabe, e chutar é a família do 1405. Sem
+            // cadastro o registro não sai e a falta é DITA, com a recusa
+            // literal do PVA e o lugar de preencher (o desenho do 0002).
+            dados.warnings?.push(
+                'Bloco 1: o registro 1900 NÃO foi gerado por falta de cadastro — '
+                + `${r.falta.join(' e ')}. O PVA vai RECUSAR o arquivo com: "Se o somatório do campo `
+                + 'Valor Total da Receita Auferida do registro F550 e F560 for maior que zero o registro '
+                + '1900 deve ser preenchido." Preencha em Empresas → Dados Fiscais → '
+                + '"EFD-Contribuições: consolidação da receita (1900)". '
+                + 'O app não escolhe esses códigos: eles são de tabela oficial e dependem de qual '
+                + 'documento a empresa emite pelo aluguel.',
+            );
+        }
+    }
+
     // IND_MOV: 0 = bloco COM dados · 1 = sem dados. Sai do que foi REALMENTE
     // produzido — registro novo aqui vira '0' sozinho, sem ninguém lembrar.
     return [
