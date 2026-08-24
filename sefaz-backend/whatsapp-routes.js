@@ -441,17 +441,39 @@ router.get('/conversas', requireAuth, async (req, res) => {
         const cfgAtendimento = resolverConfig(cfgDoc.data());
         const respostasRapidas = cfgAtendimento.respostasRapidas;
         let docsConversas = [];
-        let cursorConv = null;
-        while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
-            let q = db.collection('whatsapp_conversas')
-                .orderBy('atualizadoEm', 'desc').limit(PAGINA_CONVERSAS);
-            if (cursorConv) q = q.startAfter(cursorConv);
-            // eslint-disable-next-line no-await-in-loop
-            const pagina = await q.get();
-            if (pagina.empty) break;
-            docsConversas = docsConversas.concat(pagina.docs);
-            cursorConv = pagina.docs[pagina.docs.length - 1];
-            if (pagina.docs.length < PAGINA_CONVERSAS) break;
+        if (minhasFilas !== null) {
+            // 🔒 Colaborador de fila lê SÓ as filas dele já na CONSULTA
+            // (Paulo, 24/08: "ganhamos mais tempo ao carregar") — antes o
+            // servidor varria as 2000 mais recentes da carteira inteira para
+            // depois jogar fora o que ele não vê. Sem orderBy de propósito:
+            // where-in + orderBy exigiria índice composto; a ordenação sai em
+            // memória, e o conjunto aqui é pequeno por construção (as filas
+            // de departamento têm dezenas de conversas, não milhares).
+            // Sem fila nenhuma vinculada = lista VAZIA (o Firestore recusa
+            // `in` com lista vazia; e a tela já diz "sem vínculo, peça ao
+            // admin" — mesma régua dos gates de departamento).
+            const snap = minhasFilas.length
+                ? await db.collection('whatsapp_conversas')
+                    .where('fila', 'in', minhasFilas).limit(TETO_LEITURA_CONVERSAS).get()
+                : { docs: [] };
+            const quando = (d) => {
+                const v = d.data().atualizadoEm;
+                return v?.toMillis ? v.toMillis() : (Date.parse(v) || 0);
+            };
+            docsConversas = snap.docs.sort((a, b) => quando(b) - quando(a));
+        } else {
+            let cursorConv = null;
+            while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
+                let q = db.collection('whatsapp_conversas')
+                    .orderBy('atualizadoEm', 'desc').limit(PAGINA_CONVERSAS);
+                if (cursorConv) q = q.startAfter(cursorConv);
+                // eslint-disable-next-line no-await-in-loop
+                const pagina = await q.get();
+                if (pagina.empty) break;
+                docsConversas = docsConversas.concat(pagina.docs);
+                cursorConv = pagina.docs[pagina.docs.length - 1];
+                if (pagina.docs.length < PAGINA_CONVERSAS) break;
+            }
         }
         const numeros = docsConversas.map((d) => d.id);
         const contatos = new Map();
