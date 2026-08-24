@@ -30,7 +30,7 @@ import {
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
-    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp,
+    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
@@ -876,6 +876,87 @@ router.post('/conversas/:numero/pedir-permissao-ligacao', requireAuth, async (re
         return res.json({ ok: true, mensagem: { id: envio.messageId, ...msg, erroEntrega: null } });
     } catch (e) {
         console.error('[whatsapp/permissao-ligacao]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ☎️ LIGAR para o cliente (fase 2 — a saída). Só com o "Permitir" dele: a
+// regra é da Meta, e a nossa trava vem ANTES da rede porque ligar sem
+// autorização queima o número da empresa.
+// 📌 No modo SIP quem toca o ramal 221 é a PRÓPRIA Meta, entregando a voz no
+// tronco que a ENTRADA já provou — não há segundo caminho a configurar.
+router.post('/conversas/:numero/ligar', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const conv = await db.collection('whatsapp_conversas').doc(numero).get();
+        if (ehConversaInstagram(numero) || conv.data()?.canal === 'instagram') {
+            return res.status(422).json({ ok: false, error: 'Ligação é do WhatsApp — DM do Instagram não tem chamada.' });
+        }
+        const perm = conv.data()?.permissaoLigacao || null;
+        if (perm?.status !== 'aceita') {
+            return res.status(422).json({
+                ok: false,
+                error: perm?.status === 'pendente'
+                    ? 'O cliente ainda não respondeu ao pedido de permissão.'
+                    : perm?.status === 'recusada'
+                        ? 'O cliente RECUSOU ligações — respeite a recusa.'
+                        : 'Este cliente ainda não autorizou ligações da SP.',
+                acao: perm?.status === 'recusada'
+                    ? 'Fale por mensagem; insistir na ligação é o que faz o cliente bloquear o número.'
+                    : 'Use ☎️ Pedir permissão de ligação e aguarde ele tocar em "Permitir".',
+                permissao: perm?.status || 'sem-pedido',
+            });
+        }
+        // A autorização VENCE (a Meta diz até quando). Ligar depois disso é
+        // recusa dela — e a tela tem que dizer isso ANTES do telefone tocar.
+        const expira = Date.parse(perm?.expiraEm || '');
+        if (Number.isFinite(expira) && expira <= Date.now()) {
+            return res.status(422).json({
+                ok: false,
+                error: 'A autorização de ligação deste cliente EXPIROU.',
+                acao: 'Peça a permissão de novo (☎️) e aguarde o "Permitir".',
+                permissao: 'expirada',
+            });
+        }
+        const dono = conv.data()?.atribuidoA || null;
+        const eu = req.user?.email || null;
+        if (dono && dono !== eu) {
+            return res.status(409).json({
+                ok: false, error: `Esta conversa está em condução por ${dono}.`,
+                acao: 'Assuma a conversa (🙋) antes de ligar.', emConducaoPor: dono,
+            });
+        }
+        let depsEnvio = {};
+        const canal = await cfgDeEnvioDaConversa(db, conv.data());
+        if (canal.erro) return res.status(503).json({ ok: false, error: canal.erro });
+        if (canal.cfg) depsEnvio = { cfg: canal.cfg };
+        const chamada = await iniciarChamadaParaCliente({ para: numero }, depsEnvio);
+        if (!chamada.ok) {
+            console.warn('[whatsapp/ligar] recusa da Meta:', JSON.stringify(chamada.bruto || chamada.erro));
+            const status = chamada.configuracaoIncompleta ? 503 : chamada.indeterminado ? 502 : 422;
+            return res.status(status).json({
+                ok: false, error: chamada.erro, acao: chamada.acao,
+                code: chamada.code ?? null, indeterminado: Boolean(chamada.indeterminado),
+            });
+        }
+        const agora = new Date().toISOString();
+        const msg = {
+            conversaId: numero, direcao: 'saida', tipo: 'chamada',
+            texto: '☎️ Ligação para o cliente iniciada pela SP — o ramal 221 toca quando a Meta conectar',
+            midia: null, timestamp: agora, statusEntrega: null, enviadoPor: eu,
+            ...(chamada.callId ? { callId: chamada.callId } : {}),
+        };
+        const docId = chamada.callId ? `call_${chamada.callId}_saida` : `call_saida_${numero}_${Date.parse(agora)}`;
+        await db.collection('whatsapp_mensagens').doc(docId).set(msg, { merge: true });
+        await db.collection('whatsapp_conversas').doc(numero).set({
+            ultimaMensagem: { resumo: '☎️ ligação para o cliente', direcao: 'saida', em: agora },
+            atualizadoEm: agora,
+        }, { merge: true });
+        return res.json({ ok: true, mensagem: { id: docId, ...msg, erroEntrega: null } });
+    } catch (e) {
+        console.error('[whatsapp/ligar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

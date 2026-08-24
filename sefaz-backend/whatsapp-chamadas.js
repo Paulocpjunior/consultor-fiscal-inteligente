@@ -399,6 +399,32 @@ export const ANTES_DE_LIGAR = [
 // WhatsApp dele, e a autorização vale por período limitado. Sem ela a Meta
 // recusa a chamada de saída. (Paulo, 24/08: "pode construir o botão".)
 
+/**
+ * ☎️ Corpo da CHAMADA DE SAÍDA — a empresa liga para o cliente.
+ *
+ * 🚨 A PONTE COM O QUE JÁ EXISTE: no modo SIP quem toca o telefone do
+ * colaborador é a PRÓPRIA Meta — ela recebe este pedido, chama o cliente e
+ * entrega a perna de voz no NOSSO tronco (o mesmo `sip.spassessoriacontabil
+ * .com.br:5061` da entrada), que já disca o ramal 221 no HitPhone. Ou seja:
+ * a saída reaproveita o caminho provado da entrada, e não existe segundo
+ * tronco a configurar.
+ *
+ * ⚠️ SEM SDP de propósito: SDP é a descrição de mídia de quem faz a ponte de
+ * voz — no modo SIP quem faz é o nosso SBC, via INVITE da Meta. Mandar um SDP
+ * inventado daqui descreveria uma ponte que este servidor não abre.
+ *
+ * ⚠️ E O LEIAUTE NÃO ESTÁ PROVADO: a recusa da Meta volta CRUA na tela (é o
+ * desenho do tronco e do pedido de permissão) — quem ensina o campo que falta
+ * é a resposta dela, nunca a minha memória.
+ */
+export function montarChamadaParaCliente(numero) {
+    return {
+        messaging_product: 'whatsapp',
+        to: numero,
+        action: 'connect',
+    };
+}
+
 /** Corpo do pedido de permissão (interactive/call_permission_request). */
 export function montarPedidoPermissaoLigacao(numero) {
     return {
