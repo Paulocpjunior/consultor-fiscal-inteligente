@@ -38,6 +38,9 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   da MESMA empresa acha mais do que a recusa pede** (a recusa do PVA falava do
   COD_CTA, não da contagem) — é a mesma lição das quatro particularidades do CF
   BANK, agora provada por um olho humano num detalhe de um caractere.
+  ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (Paulo: *"1109 - CF BANK - EFD S/
+  RENDIMENTOS FINANCEIROS"*) — ver o mata-burro seguinte para o que o recibo
+  prova.
 
 - **🚨 A TERCEIRA FONTE DE RECEITA SEM DOCUMENTO: APLICAÇÃO FINANCEIRA — e o
   arquivo saía declarando ZERO** (24/08, CF BANK 1109 · instituição de
@@ -47,6 +50,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   rendimento financeiro — a MESMA classe do M200 zerado da MANTOAN e da
   AFFITTARE: o app monta o arquivo a partir dos DOCUMENTOS, e aqui não há
   nenhum.
+  ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (Paulo: *"1109 - CF BANK - EFD S/
+  RENDIMENTOS FINANCEIROS"*). É a **QUINTA empresa** com o EFD-Contribuições
+  fechado por recibo e a **QUARTA FORMA de arquivo provada**: detalhado só com
+  documento (MANTOAN, HS), consolidado só com F550 (AFFITTARE), detalhado com
+  documento + F100 (PEC) e agora **SEM DOCUMENTO NENHUM, com F100 de receita
+  financeira**. As quatro saem do MESMO gerador — o que muda é a régua que
+  decide o perfil, nunca um caminho paralelo por cliente.
+  📌 **E ISSO FECHA A CLASSE DA "RECEITA SEM DOCUMENTO" com três fontes
+  provadas por recibo**: locação (AFFITTARE/PEC) e aplicação financeira (CF
+  BANK). A quarta que aparecer entra pelo mesmo desenho — dono próprio, valores
+  e não linhas, e o gabarito é o assinado da PRÓPRIA empresa.
   ✅ **O GABARITO É O EFD ASSINADO DA PRÓPRIA EMPRESA (06/2026)**, que fixa as
   quatro particularidades campo a campo: `|F100|1|||30062026|21647,53|02|…|4|
   865,9|…|`, `|M205|08|457401|`, `|M605|08|798701|`, `|M210|02|…|`.
@@ -77,6 +91,10 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   participante do 0150 e do item do 0200 ÓRFÃOS — o registro referencia um
   cadastro que o arquivo não traz. O assinado tem a linha:
   `|0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS|||`.
+  ✅ **AS TRÊS RODADAS FECHARAM NO MESMO DIA** — receita zerada, conta órfã e a
+  contagem do 0500. **O que fez a diferença foi o assinado da própria empresa
+  na mão desde a primeira rodada**: cada recusa do PVA foi respondida com a
+  linha correspondente dele, nunca com dedução de leiaute.
   ✅ **O que a régua DERIVA, e por quê**: `COD_NAT_CC 04` (contas de RESULTADO
   — receita sempre é), `IND_CTA A` (ANALÍTICA, que é exatamente o que a recusa
   cobra) e `DT_ALT` = 1º de janeiro do ano, como o assinado.
