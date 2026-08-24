@@ -207,7 +207,16 @@ function build0100(dados) {
  */
 function build0110(dados) {
     const regimeApuracao = dados.regimeApuracao || '2';
-    const indAproCred = (regimeApuracao === '1' || regimeApuracao === '3') ? '2' : '';
+    // 🚨 IND_APRO_CRED SAÍA CRAVADO EM '2' (rateio proporcional) para TODA
+    // empresa do não-cumulativo — e ele declara COMO a empresa apropria o
+    // crédito, que é fato dela, não dedução do app. O EFD assinado do CF BANK
+    // (06/2026) traz **1** (apropriação DIRETA). É a família do IND_PERFIL
+    // (19/08): campo que a pessoa escolhe e o gerador ignorava.
+    // ⚠️ Fora do não-cumulativo o campo não é informado, como já era.
+    const doCadastro = String(dados.empresa?.dadosFiscais?.indAproCredPisCofins || '').trim();
+    const indAproCred = (regimeApuracao === '1' || regimeApuracao === '3')
+        ? (doCadastro === '1' || doCadastro === '2' ? doCadastro : '2')
+        : '';
     // 🚨 IND_REG_CUM = 9 — ESCRITURAÇÃO DETALHADA nos blocos A/C/D/F.
     //
     // Estava cravado em '1', que significa **regime de CAIXA, escrituração

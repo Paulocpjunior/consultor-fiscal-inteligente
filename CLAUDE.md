@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TERCEIRA FONTE DE RECEITA SEM DOCUMENTO: APLICAÇÃO FINANCEIRA — e o
+  arquivo saía declarando ZERO** (24/08, CF BANK 1109 · instituição de
+  pagamento, Paulo: *"o EFD dela é pela APLICAÇÃO FINANCEIRA … e o código da
+  receita dela de PIS/COFINS é diferente também"*). O arquivo de 07/2026 saiu
+  com `F001|1` e **M200/M600 ZERADOS** numa empresa cuja receita inteira é
+  rendimento financeiro — a MESMA classe do M200 zerado da MANTOAN e da
+  AFFITTARE: o app monta o arquivo a partir dos DOCUMENTOS, e aqui não há
+  nenhum.
+  ✅ **O GABARITO É O EFD ASSINADO DA PRÓPRIA EMPRESA (06/2026)**, que fixa as
+  quatro particularidades campo a campo: `|F100|1|||30062026|21647,53|02|…|4|
+  865,9|…|`, `|M205|08|457401|`, `|M605|08|798701|`, `|M210|02|…|`.
+  📌 **E AS ALÍQUOTAS NÃO ERAM NOVIDADE — O APP JÁ AS TINHA.**
+  `ALIQ_PIS_APLICACAO = 0,65%` e `ALIQ_COFINS_APLICACAO = 4%` viviam no
+  `lucroService`, que calcula a **GUIA**; o SPED é que não as lia. Ou seja: a
+  guia e o arquivo declarariam números diferentes sobre o MESMO rendimento —
+  o defeito que esta casa mais paga. O dono passou para o backend e a ficha
+  IMPORTA dele. Conferem centavo a centavo com o assinado (21.647,53 × 0,65% =
+  140,71 · × 4% = 865,90).
+  ⚠️ **O CÓDIGO DE RECEITA `4574`/`7987` (NUM_CAMPO 08) É DESTA APURAÇÃO, NÃO
+  DO NÃO-CUMULATIVO COMUM.** Ele veio do arquivo assinado, como o `810902`/
+  `217201` da PWR — e reaproveitá-lo para toda empresa do Lucro Real declararia
+  o débito na receita ERRADA da DCTF. O aviso do não-cumulativo sem código
+  provado continua de pé.
+  🔴 **E A COMPARAÇÃO COM O ASSINADO ACHOU MAIS DOIS DEFEITOS que ninguém tinha
+  pedido**: (1) o **`IND_APRO_CRED` do 0110 saía CRAVADO em `2`** (rateio
+  proporcional) para TODA empresa do não-cumulativo — ele declara COMO a
+  empresa apropria o crédito, que é fato dela; o assinado traz **1**
+  (apropriação direta). É a família do `IND_PERFIL` (19/08): campo que a pessoa
+  escolhe e o gerador ignorava. Virou cadastro, com whitelist e modal no MESMO
+  PR. (2) o **`VL_TOT_CONT_NC_DEV` (campo 4 do M200/M600) saía `0` cravado** —
+  o registro se desmentia, dizendo que NADA era devido no não-cumulativo com o
+  campo 7 (a recolher) cheio.
+  📌 **REGRA QUE FICA: comparar o nosso arquivo com o assinado da MESMA empresa
+  acha mais do que a recusa pede.** A recusa não existia aqui — o arquivo
+  simplesmente declarava zero —, e foi a comparação linha a linha que entregou
+  as quatro particularidades e os dois defeitos de brinde.
+
 - **🚨 "A RECEITA CONTINUA ERRADA" — e a régua estava CERTA: o que faltava era
   o app DIZER o número** (24/08, PWR, Paulo com o M210 do PVA mostrando
   `VL_REC_BRT 38.316,84`: *"tem que tirar o desconto — e olha que só tem 1

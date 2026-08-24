@@ -1,4 +1,5 @@
 import { LucroInput, LucroResult, DetalheImposto, PlanoCotas, ItemFinanceiroAvulso } from '../types';
+import { ALIQUOTAS_APLICACAO_FINANCEIRA } from '../sefaz-backend/receita-aplicacao-financeira';
 
 // Alíquotas Base
 const ALIQ_PIS_CUMULATIVO = 0.0065; // 0.65%
@@ -12,8 +13,12 @@ const ADICIONAL_IRPJ = 0.10; // 10%
 const ALIQ_CSLL = 0.09; // 9%
 
 // Alíquotas Especiais
-const ALIQ_PIS_APLICACAO = 0.0065;
-const ALIQ_COFINS_APLICACAO = 0.04;
+// 🚨 RÉGUA ÚNICA (24/08, CF BANK): estas duas alíquotas decidem a GUIA aqui e
+// o **F100/M210 do EFD-Contribuições** lá. Enquanto viviam só neste arquivo, o
+// SPED não as lia e o arquivo da CF BANK saía com M200/M600 ZERADOS numa
+// empresa cuja receita inteira é rendimento financeiro. O dono agora é o
+// backend; aqui é só a leitura.
+const { pis: ALIQ_PIS_APLICACAO, cofins: ALIQ_COFINS_APLICACAO } = ALIQUOTAS_APLICACAO_FINANCEIRA;
 const ALIQ_PIS_IMPORTACAO = 0.021;
 const ALIQ_COFINS_IMPORTACAO = 0.0965;
 
