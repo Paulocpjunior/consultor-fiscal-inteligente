@@ -177,6 +177,10 @@ describe('📦 manifest do Teams — o pacote acompanha o código', () => {
         expect(manifest.id).toBe(TEAMS_APP_EXTERNAL_ID);
     });
 
+    it('🚨 o webApplicationInfo declara o app AAD que envia — sem ele o Graph recusa o envio ("not authorized to generate notifications", provado em 24/08)', () => {
+        expect(manifest.webApplicationInfo?.id).toBe('59fd4ec9-37bd-472c-9fa7-373461dffd50');
+    });
+
     it('as activities existem com o MESMO type que o backend envia', () => {
         const tipos = (manifest.activities?.activityTypes || []).map((a: { type: string }) => a.type);
         expect(tipos).toContain(ACTIVITY_TYPE_MENSAGEM);
