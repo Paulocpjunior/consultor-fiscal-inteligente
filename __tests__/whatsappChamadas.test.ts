@@ -318,7 +318,9 @@ describe('🔌 fiação — a escrita mora na rota, com releitura e sem grade pr
 
     it('a tela pede CONFIRMAÇÃO com a consequência, e diz a regra dos mesmos horários', () => {
         expect(tela).toContain('mesmos horários das mensagens');
-        expect(tela).toMatch(/window\.confirm\(confirmacao\)/);
+        // Intenção, não forma: a confirmação passou a ser a caixa do app
+        // (window.confirm não existe no webview do Teams — 24/08).
+        expect(tela).toMatch(/await pedirConfirmacao\(confirmacao/);
         // Ocultar/mostrar o ☎️ com o efeito no cliente escrito antes do clique.
         expect(tela).toContain('Ocultar o botão');
         expect(tela).toContain('tronco SIP');

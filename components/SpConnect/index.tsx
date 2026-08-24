@@ -255,6 +255,39 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         rodarAcao(() => assumirConversa(sel.numero, liberar),
             liberar ? { atribuidoA: null } : { atribuidoA: meuEmail, transferidaDe: null });
     };
+    // 🚨 CONFIRMAÇÃO É DO APP, NUNCA `window.confirm` (Paulo, 24/08: clicou
+    // no ☎️ Pedir permissão de ligação e "nada aconteceu"). O webview do
+    // Teams — onde TODO colaborador usa o Connect — SUPRIME window.confirm
+    // sem erro nenhum: a função devolve false e a ação simplesmente não
+    // acontece. O Safari faz o mesmo depois que alguém marca "impedir novos
+    // diálogos". Botão que não faz nada é pior que botão nenhum, então a
+    // pergunta passa a ser uma caixa NOSSA, que existe em qualquer casca.
+    const [confirmPendente, setConfirmPendente] = useState<
+        { texto: string; rotuloOk: string; campo: boolean; placeholder: string; resolver: (v: string | boolean | null) => void } | null
+    >(null);
+    const [confirmTexto, setConfirmTexto] = useState('');
+    const pedirConfirmacao = (texto: string, rotuloOk = 'Confirmar') =>
+        new Promise<boolean>((resolver) => {
+            setConfirmTexto('');
+            setConfirmPendente({ texto, rotuloOk, campo: false, placeholder: '', resolver: resolver as (v: string | boolean | null) => void });
+        });
+    /** Mesma caixa, com CAMPO — substitui o window.prompt (LGPD e consentimento). */
+    const pedirTexto = (texto: string, rotuloOk = 'Gravar', placeholder = '') =>
+        new Promise<string | null>((resolver) => {
+            setConfirmTexto('');
+            setConfirmPendente({ texto, rotuloOk, campo: true, placeholder, resolver: resolver as (v: string | boolean | null) => void });
+        });
+    const responderConfirmacao = (v: boolean) => {
+        const c = confirmPendente;
+        setConfirmPendente(null);
+        // Cancelar devolve o "não" na forma que quem pediu espera: `false` pra
+        // confirmação, `null` pro campo — senão um `false` viraria texto vazio
+        // e gravaria motivo em branco num registro de LGPD. E resolve SEMPRE:
+        // promessa pendente trava o handler pra sempre, que é o defeito de
+        // origem (o botão volta a "não fazer nada").
+        if (c) c.resolver(c.campo ? (v ? confirmTexto : null) : v);
+    };
+
     // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
     const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
     const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
@@ -264,9 +297,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const acaoPermissaoLigacao = async () => {
         if (!sel) return;
         setPermLigAviso(null);
-        const ok = window.confirm(
+        const ok = await pedirConfirmacao(
             'O cliente vai receber AGORA um cartão do WhatsApp pedindo permissão para ligações da SP. '
-            + 'Se ele tocar em "Permitir", a ligação de saída fica autorizada por tempo limitado (regra da Meta). Enviar?',
+            + 'Se ele tocar em "Permitir", a ligação de saída fica autorizada por tempo limitado (regra da Meta).',
+            'Enviar pedido',
         );
         if (!ok) return;
         const r = await pedirPermissaoLigacao(sel.numero);
@@ -461,7 +495,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [sipHost, setSipHost] = useState('');
     const [sipPorta, setSipPorta] = useState('5061');
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
-        if (!window.confirm(confirmacao)) return;
+        if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
         setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
         try {
             const r = await configurarChamadas(p);
@@ -824,9 +858,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     const registrarConsentimento = async (c: Contato, etiqueta: string) => {
-        const como = window.prompt(
-            'Como o titular consentiu? (ex.: "pediu no WhatsApp em 10/08", "assinou no contrato", "marcou no formulário do site")\n\n'
-            + 'Isto fica gravado com a data e o seu nome — é a prova de que houve consentimento.');
+        const como = await pedirTexto(
+            'Como o titular consentiu? Isto fica gravado com a data e o seu nome — é a prova de que houve consentimento.',
+            'Registrar consentimento',
+            'ex.: pediu no WhatsApp em 10/08 · assinou no contrato',
+        );
         if (como == null || !como.trim()) return;
         const r = await atualizarContato(c.numero, { consentimento: { etiqueta, como } });
         if (!r.ok) { setCtMsg(r.error || 'Não deu para registrar.'); return; }
@@ -865,7 +901,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     const confirmarEliminacao = async (numero: string) => {
-        const motivo = window.prompt('Registre o pedido do titular (fica gravado com o seu nome e a data):');
+        const motivo = await pedirTexto(
+            'Registre o pedido do titular — fica gravado com o seu nome e a data.',
+            'Eliminar dados', 'ex.: titular pediu a exclusão por e-mail em 24/08',
+        );
         if (motivo == null) return;
         setLgpdOcupado(true);
         const r = await eliminarDadosTitular(numero, { confirmar: true, motivo });
@@ -891,7 +930,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         // Só gestor/admin chegam aqui (o botão não aparece pros demais) e o
         // backend confere de novo. O confirm diz o ALCANCE: cadastro sai,
         // conversa e mensagens FICAM (eliminação LGPD é o fluxo 🔒).
-        if (!window.confirm(`Excluir o contato "${nome}"?\n\nSai o CADASTRO (nome, categoria, observação). A conversa e as mensagens continuam — apagar dados do titular é o fluxo 🔒 LGPD. Se a pessoa escrever de novo, o contato renasce sem categoria.`)) return;
+        const ok = await pedirConfirmacao(
+            `Excluir o contato "${nome}"? Sai o CADASTRO (nome, categoria, observação). A conversa e as mensagens continuam — apagar dados do titular é o fluxo 🔒 LGPD. Se a pessoa escrever de novo, o contato renasce sem categoria.`,
+            'Excluir contato',
+        );
+        if (!ok) return;
         const r = await excluirContato(numero);
         if (!r.ok) { setCtMsg(r.error || 'Não deu para excluir.'); return; }
         setCtSel(null); setCtMsg('✓ Contato excluído.');
@@ -1257,6 +1300,34 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         </button>
                     </div>
                     {verifStatus && <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">{verifStatus}</p>}
+                </div>
+            )}
+            {/* ── ❓ Confirmação DO APP (window.confirm não existe no Teams) ───── */}
+            {confirmPendente && (
+                <div className="fixed inset-0 bg-black/60 z-[95] flex items-center justify-center p-4 overflow-y-auto"
+                    onClick={() => responderConfirmacao(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm my-auto p-4 space-y-3"
+                        onClick={(e) => e.stopPropagation()}>
+                        <p className="text-[12px] text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{confirmPendente.texto}</p>
+                        {confirmPendente.campo && (
+                            <input value={confirmTexto} onChange={(e) => setConfirmTexto(e.target.value)}
+                                placeholder={confirmPendente.placeholder} autoFocus className={CAMPO} />
+                        )}
+                        <div className="flex gap-2 justify-end">
+                            <button onClick={() => responderConfirmacao(false)}
+                                className="px-3 py-1.5 text-[11px] font-semibold rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 btn-press">
+                                Cancelar
+                            </button>
+                            <button onClick={() => responderConfirmacao(true)}
+                                autoFocus={!confirmPendente.campo}
+                                // Campo obrigatório: gravar consentimento/motivo
+                                // em BRANCO seria registro de LGPD sem conteúdo.
+                                disabled={confirmPendente.campo && !confirmTexto.trim()}
+                                className="px-3 py-1.5 text-[11px] font-semibold rounded bg-[#0e3bfa] text-white btn-press disabled:opacity-40 disabled:cursor-not-allowed">
+                                {confirmPendente.rotuloOk}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
             {/* ── 🖼️ Visualizador de imagem (zoom no app — Teams não abre blob:) ── */}
