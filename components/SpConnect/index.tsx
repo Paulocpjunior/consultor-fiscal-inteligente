@@ -20,13 +20,14 @@ import {
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, Atendente, ImportPreview, AvaliacaoAtendimento,
-    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, sondarInstagram, SondaInstagram,
+    ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
+    sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, salvarEtiqueta,
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
-    relatorioAtendimento, RelatorioAtendimento,
+    relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -48,6 +49,8 @@ import {
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, filtrarMensagensDaThread, iniciais, rotuloCurtoFila, dentroDeIframe,
 } from '../../services/spConnect';
+import { sendEmailVerification } from 'firebase/auth';
+import { auth } from '../../services/firebaseConfig';
 import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
@@ -87,6 +90,44 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const fimDaThread = useRef<HTMLDivElement>(null);
     const selRef = useRef<ConversaResumo | null>(null);
     selRef.current = sel;
+
+    // 📧 E-mail NÃO verificado (caso recepcao@, 24/08): o backend RECUSA o
+    // token com "Email não verificado" — trava de segurança correta (sem ela,
+    // e-mail do domínio registrado em outro projeto Firebase alcançaria dado
+    // SERPRO). O que faltava era o CAMINHO: conta de login por SENHA nunca
+    // teve onde clicar para verificar. O banner só aparece para quem está
+    // barrado; SSO já chega verificado e nunca o vê.
+    const [emailNaoVerificado, setEmailNaoVerificado] = useState(false);
+    const [verifStatus, setVerifStatus] = useState<string | null>(null);
+    useEffect(() => {
+        setEmailNaoVerificado(Boolean(auth?.currentUser && auth.currentUser.emailVerified === false));
+    }, []);
+    const enviarVerificacao = async () => {
+        const u = auth?.currentUser;
+        if (!u) return;
+        try {
+            await sendEmailVerification(u);
+            setVerifStatus(`✉️ Enviado para ${u.email}. Abra a caixa de entrada (e o lixo eletrônico), clique no link e volte aqui.`);
+        } catch (e: any) {
+            setVerifStatus(String(e?.code || '').includes('too-many-requests')
+                ? '⏳ Muitos pedidos seguidos — o e-mail anterior ainda vale. Procure-o na caixa (e no lixo eletrônico) e aguarde alguns minutos antes de pedir outro.'
+                : `Falha ao enviar: ${e?.message || e}`);
+        }
+    };
+    const confirmarVerificacao = async () => {
+        const u = auth?.currentUser;
+        if (!u) return;
+        setVerifStatus('Conferindo…');
+        await u.reload();
+        if (u.emailVerified) {
+            // O token do Firebase cacheia ~1h e a verificação só entra em token
+            // NOVO (lição do plano-contas-iob v3.4.92) — forçar e recarregar.
+            await u.getIdToken(true);
+            window.location.reload();
+        } else {
+            setVerifStatus('Ainda consta como NÃO verificado — o link do e-mail precisa ser aberto (no navegador, logado nesta conta) antes deste botão.');
+        }
+    };
 
     const recarregar = useCallback(async (silencioso = false) => {
         if (!silencioso) setCarregando(true);
@@ -299,6 +340,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const setMsgCfg = (chave: string, valor: string) =>
         setCfg((c) => (c ? { ...c, mensagens: { ...c.mensagens, [chave]: valor } } : c));
 
+    // 🔔 Aviso nativo do Teams — o toggle salva NA HORA (a aba 👥 não tem o
+    // botão 💾 da 🤖, e chave que parece ligada sem estar gravada é a pior
+    // combinação). O teste manda um aviso pro PRÓPRIO usuário logado.
+    const [teamsTestando, setTeamsTestando] = useState(false);
+    const [teamsTeste, setTeamsTeste] = useState<{
+        resultado: { ok: true } | { ok: false; etapa: string; erro: string };
+        status: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+    } | null>(null);
+    const alternarAvisoTeams = async () => {
+        if (!cfg || cfgSalvando) return;
+        const novo = { ...cfg, avisoTeamsAtivo: !cfg.avisoTeamsAtivo };
+        setCfg(novo);
+        setCfgSalvando(true);
+        try {
+            const r = await salvarAtendimentoConfig(novo);
+            if (r.ok) setCfg(r.config); else setCfgErro(r.error || 'Falha ao salvar.');
+        } finally { setCfgSalvando(false); }
+    };
+    const rodarTesteTeams = async () => {
+        setTeamsTestando(true); setTeamsTeste(null);
+        try {
+            const r = await testarAvisoTeams();
+            if (r.ok) setTeamsTeste({ resultado: r.resultado, status: r.status });
+            else setTeamsTeste({ resultado: { ok: false, etapa: 'rota', erro: r.error || 'A rota não respondeu.' }, status: { graphConfigurado: false, clientId: null, teamsAppId: '' } });
+        } finally { setTeamsTestando(false); }
+    };
+
     // ── 🖼️ Imagem por fila: sobe/grava na hora (não fica pendente do
     // "Salvar configuração" — senão trocar de aba sem salvar perderia o
     // upload que já foi pro Storage).
@@ -353,6 +421,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [sonda, setSonda] = useState<{
         conclusao: { veredito: string; motivo: string; acao?: string; respondeuPor?: string | null };
         sondas: SondaChamada[]; antesDeLigar: { titulo: string; texto: string }[];
+        horarios?: HorariosChamada | null;
     } | null>(null);
     const [sondando, setSondando] = useState(false);
     const [sondaErro, setSondaErro] = useState<string | null>(null);
@@ -360,8 +429,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setSondando(true); setSondaErro(null);
         const r = await sondarChamadas();
         setSondando(false);
-        if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar });
+        if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar, horarios: r.horarios ?? null });
         else setSondaErro(r.error || 'A sonda não respondeu.');
+    };
+
+    // 🛠 Escrita explícita na Meta (Paulo, 23/08): horários = os das mensagens;
+    // ícone do ☎️ do cliente; tronco SIP (a resposta do HitPhone). Cada ação
+    // pede confirmação COM a consequência, e o resultado mostrado é o que a
+    // Meta GUARDOU (a rota re-lê) — validação por resultado, não por status.
+    const [aplicandoChamada, setAplicandoChamada] = useState<string | null>(null);
+    const [chamadaErro, setChamadaErro] = useState<string | null>(null);
+    const [chamadaResultado, setChamadaResultado] = useState<{ acao: string; calling: Record<string, unknown> | null } | null>(null);
+    const [sipHost, setSipHost] = useState('');
+    const [sipPorta, setSipPorta] = useState('5061');
+    const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
+        if (!window.confirm(confirmacao)) return;
+        setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
+        try {
+            const r = await configurarChamadas(p);
+            if (!r.ok) { setChamadaErro(r.error || 'A Meta recusou a gravação.'); return; }
+            setChamadaResultado({ acao: r.acao, calling: r.calling });
+            await rodarSonda(); // a tela volta a dizer o estado REAL, relido da Meta
+        } finally { setAplicandoChamada(null); }
     };
 
     // ── 📷 Sonda do Instagram: PERGUNTA à Meta, não linka nada.
@@ -433,6 +522,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // baixa duas vezes) e são REVOGADOS ao trocar de conversa — sem isso o
     // navegador segura os blobs até o F5.
     const [midias, setMidias] = useState<Record<string, { url: string; mime: string }>>({});
+    // 🖼️ Zoom DENTRO do app, nunca aba nova: no Teams do Windows o webview não
+    // abre `blob:` em aba — ele entrega o link pro SISTEMA, que responde
+    // "você precisa de um novo app para abrir este link blob" (colaborador,
+    // 24/08). O visualizador é nosso, então funciona no Teams e no navegador.
+    const [zoom, setZoom] = useState<{ url: string; nome: string } | null>(null);
     const [midiaErro, setMidiaErro] = useState<Record<string, string>>({});
     // Virou mapa (era um id só) — imagem/gif carrega SOZINHA (abaixo), então
     // várias podem estar baixando ao mesmo tempo; um mutex de string só
@@ -932,6 +1026,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const abrirNova = async () => {
         setNovaAberta(true);
         setErroNova(null);
+        // O default 'fiscal' só vale pra quem VÊ o Fiscal — colaborador de
+        // outra fila abre já na fila DELE (um select cujo valor não está
+        // entre as opções renderiza vazio e o envio falharia sem causa).
+        setNc((f) => (filasChip.some((x) => x.id === f.departamento)
+            ? f
+            : { ...f, departamento: filasChip[0]?.id || f.departamento, escolha: '', variaveis: {} }));
         if (templates.length === 0 && daMeta.length === 0) {
             setCarregandoTpl(true);
             try {
@@ -1102,6 +1202,44 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
 
     return (
         <div className="max-w-[1400px] mx-auto animate-fade-in">
+            {/* ── 📧 E-mail não verificado: sem isto o envio é RECUSADO ("Token
+                inválido: Email não verificado"). A trava do backend fica; o
+                banner é o caminho que faltava para a conta de senha. ───────── */}
+            {emailNaoVerificado && (
+                <div className="mb-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2.5">
+                    <p className="text-[12px] font-semibold text-amber-800 dark:text-amber-200">
+                        📧 Seu e-mail ainda não foi verificado — o envio de mensagens é recusado até verificar
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                        É uma trava de segurança do sistema (contas de login por senha nascem sem verificação).
+                        Peça o e-mail, abra o link que chegar em <strong>{currentUser.email || 'sua caixa'}</strong> e volte aqui.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                        <button onClick={enviarVerificacao}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded bg-amber-600 hover:bg-amber-700 text-white btn-press">
+                            📧 Enviar e-mail de verificação
+                        </button>
+                        <button onClick={confirmarVerificacao}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded border border-amber-400 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 btn-press">
+                            ↻ Já cliquei no link
+                        </button>
+                    </div>
+                    {verifStatus && <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">{verifStatus}</p>}
+                </div>
+            )}
+            {/* ── 🖼️ Visualizador de imagem (zoom no app — Teams não abre blob:) ── */}
+            {zoom && (
+                <div className="fixed inset-0 bg-black/80 z-[90] flex items-center justify-center p-4 overflow-y-auto" onClick={() => setZoom(null)}>
+                    <div className="max-w-[92vw] max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <a href={zoom.url} download={zoom.nome}
+                                className="text-[11px] font-semibold text-white/90 underline">⬇ Baixar</a>
+                            <button onClick={() => setZoom(null)} className="text-white/90 hover:text-white text-lg px-2" title="fechar">✕</button>
+                        </div>
+                        <img src={zoom.url} alt={zoom.nome} className="max-w-[92vw] max-h-[85vh] rounded-lg object-contain" />
+                    </div>
+                </div>
+            )}
             {/* ── Modal ✚ Nova conversa (template aprovado) ─────────────────── */}
             {novaAberta && (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setNovaAberta(false)}>
@@ -1135,8 +1273,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
                                     {/* As 8 FILAS de atendimento, não só os 5 módulos do SaaS — a
                                         Recepção (e RH/Jurídico) também iniciam conversa; só não têm
-                                        template do CADASTRO (⚙️), então usam um Aprovado na Meta. */}
-                                    {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
+                                        template do CADASTRO (⚙️), então usam um Aprovado na Meta.
+                                        🔒 Colaborador de fila só vê AS DELE (Paulo, 24/08): iniciar
+                                        conversa por outra fila criaria um atendimento que ele mesmo
+                                        não conseguiria ver depois. */}
+                                    {filasChip.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
                                 </select>
                             </label>
                             <label className="text-[11px] text-slate-500">
@@ -1788,6 +1929,48 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     TODAS as conversas; sem atribuição, valem os departamentos de módulo; os demais veem
                                     a própria fila + Recepção.
                                 </p>
+                                {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
+                                    não deixa a página mostrar popup do sistema — quem avisa lá é
+                                    o PRÓPRIO Teams (sino de Atividade, com som, aba fechada e
+                                    celular). Mesma audiência do push: filas, horário, IG restrito. */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔔 Aviso dentro do Teams (sino de Atividade)</p>
+                                        <button onClick={alternarAvisoTeams} disabled={!cfg || cfgSalvando}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full disabled:opacity-40 ${cfg?.avisoTeamsAtivo
+                                                ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                            {cfg?.avisoTeamsAtivo ? 'LIGADO' : 'desligado'}
+                                        </button>
+                                    </div>
+                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                        O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
+                                        próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
+                                        recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
+                                        <strong>Nasce ligado</strong> (alerta para a equipe nasce ativo — regra da casa); o
+                                        teste avisa <strong>só você</strong> e diz o que falta se o aviso ainda não sai.
+                                    </p>
+                                    <button onClick={rodarTesteTeams} disabled={teamsTestando}
+                                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
+                                    </button>
+                                    {teamsTeste && (teamsTeste.resultado.ok ? (
+                                        <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
+                                            ✅ O Graph aceitou — confira o <strong>sino de Atividade</strong> do seu Teams. Chegou lá? Pode ligar a chave.
+                                        </p>
+                                    ) : (
+                                        <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                                            <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
+                                            {/* A recusa diz o que falta — os três suspeitos, na ordem: */}
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
+                                                app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
+                                                2) o pacote do Teams ainda na versão sem <code>activities</code> — reenviar o zip 1.1.0;
+                                                3) o SP Connect não instalado no seu Teams.
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
                                 {atdErro && <p className="text-[11px] text-red-600 dark:text-red-400">{atdErro}</p>}
                                 {!atdCarregado && !atdErro && <p className="text-[11px] text-slate-400">Carregando usuários…</p>}
 
@@ -1864,9 +2047,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         {cfgAba === 'chamadas' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Esta aba <strong>pergunta à Meta</strong> como está a chamada de voz/vídeo
-                                    para o nosso número — e <strong>não liga nem desliga nada</strong>. Ligar a
-                                    chamada faz aparecer o botão de ligar no WhatsApp de <strong>todos os
+                                    A <strong>sonda pergunta à Meta</strong> como está a chamada de voz/vídeo —
+                                    ela não muda nada. O que muda alguma coisa fica no bloco <strong>🛠 Gravar na
+                                    Meta</strong> abaixo, cada ação com a consequência escrita antes do clique.
+                                    Ligar a chamada faz aparecer o botão de ligar no WhatsApp de <strong>todos os
                                     clientes</strong>: é decisão sua, com o destino de atendimento definido antes,
                                     não efeito de um clique de diagnóstico.
                                 </p>
@@ -1906,6 +2090,121 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 <p className="text-[10.5px] text-amber-800 dark:text-amber-300 leading-snug">{a.texto}</p>
                                             </div>
                                         ))}
+
+                                        {/* ── 🛠 Gravar na Meta (Paulo, 23/08: caminho 1 — SIP → HitPhone;
+                                            "as ligações devem obedecer os mesmos horários das mensagens").
+                                            O que aparece depois de gravar é o que a Meta GUARDOU: a rota
+                                            re-lê as settings — validação por resultado, não por status. */}
+                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
+                                            🛠 Gravar na Meta
+                                        </p>
+                                        {chamadaErro && (
+                                            <p className="text-[11px] text-red-600 dark:text-red-400">
+                                                ⛔ A Meta recusou a gravação: {chamadaErro}
+                                            </p>
+                                        )}
+                                        {chamadaResultado && (
+                                            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                                                ✓ Gravado ({chamadaResultado.acao}) — o estado abaixo já é o RELIDO da Meta.
+                                            </p>
+                                        )}
+
+                                        {/* 🕒 Horários — a grade é UMA: a das mensagens, projetada. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🕒 Horários da chamada</p>
+                                            <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                                Regra da casa: a ligação obedece os <strong>mesmos horários das mensagens</strong> —
+                                                fora deles o botão ☎️ do cliente fica indisponível, em vez de tocar no vazio.
+                                                Não existe grade própria da chamada: mudou o horário na aba 🤖, reaplique aqui
+                                                (a Meta não lê nossa configuração sozinha).
+                                            </p>
+                                            {sonda.horarios?.mensagens && (
+                                                <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                    Horário das mensagens hoje: dias {(sonda.horarios.mensagens.dias || [])
+                                                        .map((d) => ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d]).join(', ')} ·{' '}
+                                                    {(sonda.horarios.mensagens.turnos || []).map((t) => `${t.inicio}–${t.fim}`).join(' e ')}
+                                                </p>
+                                            )}
+                                            {sonda.horarios?.conferencia && (
+                                                <p className={`text-[10.5px] font-semibold ${sonda.horarios.conferencia.situacao === 'igual'
+                                                    ? 'text-emerald-700 dark:text-emerald-300'
+                                                    : 'text-amber-700 dark:text-amber-300'}`}>
+                                                    {sonda.horarios.conferencia.situacao === 'igual' ? '✅ ' : '⚠️ '}
+                                                    {sonda.horarios.conferencia.motivo}
+                                                </p>
+                                            )}
+                                            <button
+                                                onClick={() => aplicarChamada({ acao: 'horarios' },
+                                                    'Aplicar à CHAMADA os mesmos horários das mensagens?\n\nFora desses horários o botão ☎️ do cliente fica indisponível. Se um dia o horário das mensagens mudar, é preciso voltar aqui e reaplicar — a Meta não acompanha sozinha.')}
+                                                disabled={aplicandoChamada !== null}
+                                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                                {aplicandoChamada === 'horarios' ? 'Gravando…' : '🕒 Aplicar os horários das mensagens à chamada'}
+                                            </button>
+                                        </div>
+
+                                        {/* 👁 Botão ☎️ do cliente — ocultar é a saída enquanto não há destino. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">👁 Botão ☎️ no WhatsApp do cliente</p>
+                                            <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                Estado na Meta:{' '}
+                                                {sonda.horarios?.calling?.call_icon_visibility === 'DISABLE_ALL'
+                                                    ? '🙈 OCULTO — os clientes não veem o botão de ligar.'
+                                                    : sonda.horarios?.calling?.call_icon_visibility
+                                                        ? `👁 VISÍVEL (${String(sonda.horarios.calling.call_icon_visibility)}) — o cliente pode ver o ☎️ na conversa.`
+                                                        : 'não declarado pela Meta — rode a sonda.'}
+                                            </p>
+                                            {sonda.horarios?.calling?.call_icon_visibility === 'DISABLE_ALL' ? (
+                                                <button
+                                                    onClick={() => aplicarChamada({ acao: 'icone', iconeVisivel: true },
+                                                        'MOSTRAR o botão ☎️ para os clientes?\n\nSem um destino de atendimento (tronco SIP) cadastrado, quem ligar vai chamar no vazio — e a leitura do cliente é "a SP não me atende".')}
+                                                    disabled={aplicandoChamada !== null}
+                                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 disabled:opacity-40">
+                                                    {aplicandoChamada === 'icone' ? 'Gravando…' : '👁 Mostrar o botão'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => aplicarChamada({ acao: 'icone', iconeVisivel: false },
+                                                        'OCULTAR o botão ☎️ dos clientes?\n\nEles deixam de ver a opção de ligar — e cliente que já usou o botão entende o sumiço como serviço retirado. Use enquanto o destino (tronco SIP → HitPhone) não estiver cadastrado; ao cadastrar, volte aqui e mostre de novo.')}
+                                                    disabled={aplicandoChamada !== null}
+                                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 disabled:opacity-40">
+                                                    {aplicandoChamada === 'icone' ? 'Gravando…' : '🙈 Ocultar o botão (até o destino existir)'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* 📞 Tronco SIP — a resposta do HitPhone preenche aqui. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">📞 Destino da chamada (tronco SIP → HitPhone)</p>
+                                            {(() => {
+                                                const servidores = (sonda.horarios?.calling as { sip?: { servers?: { hostname?: string; port?: number }[] } } | null)?.sip?.servers;
+                                                return Array.isArray(servidores) && servidores.length > 0 ? (
+                                                    <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
+                                                        ✅ Tronco gravado na Meta: {servidores.map((s) => `${s.hostname}:${s.port}`).join(' · ')}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                                        Nenhum servidor SIP gravado — a chamada ainda não tem onde cair. É a resposta
+                                                        do <strong>suporte do HitPhone</strong> (hostname + porta, com TLS/SRTP) que
+                                                        preenche estes campos.
+                                                    </p>
+                                                );
+                                            })()}
+                                            <div className="flex gap-2 items-center flex-wrap">
+                                                <input value={sipHost} onChange={(e) => setSipHost(e.target.value)}
+                                                    placeholder="hostname SIP (ex.: sip.hitphone.com.br)"
+                                                    className="text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 w-64" />
+                                                <input value={sipPorta} onChange={(e) => setSipPorta(e.target.value)}
+                                                    placeholder="porta" inputMode="numeric"
+                                                    className="text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 w-20" />
+                                                <button
+                                                    onClick={() => aplicarChamada({ acao: 'sip', hostname: sipHost.trim(), porta: Number(sipPorta) },
+                                                        `Cadastrar o tronco SIP "${sipHost.trim()}:${sipPorta}" na Meta?\n\nA partir daí as chamadas de WhatsApp são entregues nesse servidor (o HitPhone), como uma linha própria — confira lá a rota/fila desse tronco antes de mostrar o botão aos clientes.`)}
+                                                    disabled={aplicandoChamada !== null || !sipHost.trim()}
+                                                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                                    {aplicandoChamada === 'sip' ? 'Gravando…' : '📞 Cadastrar tronco SIP'}
+                                                </button>
+                                            </div>
+                                        </div>
 
                                         <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
                                             O que cada caminho respondeu
@@ -3054,19 +3353,23 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                             </a>
                                                         ) : midias[m.id] ? (
                                                             midias[m.id].mime.startsWith('image/') ? (
-                                                                <a href={midias[m.id].url} target="_blank" rel="noreferrer">
+                                                                <button type="button" onClick={() => setZoom({ url: midias[m.id].url, nome: m.midia?.nomeArquivo || 'imagem' })}
+                                                                    className="block cursor-zoom-in" title="ampliar">
                                                                     <img src={midias[m.id].url} alt={m.midia?.nomeArquivo || 'imagem'}
                                                                         className="rounded-lg max-h-64 w-auto" />
-                                                                </a>
+                                                                </button>
                                                             ) : midias[m.id].mime.startsWith('audio/') ? (
                                                                 <audio controls src={midias[m.id].url} className="max-w-full" />
                                                             ) : midias[m.id].mime.startsWith('video/') ? (
                                                                 <video controls src={midias[m.id].url} className="rounded-lg max-h-64" />
                                                             ) : (
-                                                                <a href={midias[m.id].url} target="_blank" rel="noreferrer"
+                                                                // Sem target="_blank": com o atributo download o clique
+                                                                // BAIXA na hora — aba nova com blob: é o que o webview
+                                                                // do Teams manda pro sistema (o erro do "novo app").
+                                                                <a href={midias[m.id].url}
                                                                     download={m.midia?.nomeArquivo || 'anexo'}
                                                                     className="text-[11px] font-semibold underline">
-                                                                    {midia} — abrir
+                                                                    {midia} — baixar
                                                                 </a>
                                                             )
                                                         ) : (

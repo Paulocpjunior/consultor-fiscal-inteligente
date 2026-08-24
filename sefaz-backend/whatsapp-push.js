@@ -55,20 +55,56 @@ export function destinatariosDoPush({
 
         if (!(u.tokens || []).length) { motivo('sem celular registrado'); continue; }
         if (prefs.push === false) { motivo('push desligado por ele'); continue; }
-        // A própria mensagem nunca volta como aviso.
-        if (autorDaMensagem && u.email && u.email === autorDaMensagem) { motivo('é o autor da mensagem'); continue; }
-        // A MESMA régua do inbox — nunca uma segunda cópia.
-        const filas = filasVisiveis({
-            role: u.role, papelAtendimento: u.papelAtendimento,
-            departamentos: u.departamentos || [], filasAtendimento: u.filasAtendimento || [],
-        });
-        if (!conversaVisivel(filas, conversa.fila || null)) { motivo('a conversa é de uma fila que ele não atende'); continue; }
-        // 📷 DM do Instagram é POR USUÁRIO (a mesma régua do inbox) — avisar
-        // quem não pode abrir a conversa é convite pra um 403.
-        if (conversa.canal === 'instagram' && !podeAtenderInstagram(config, u.email)) { motivo('o Instagram é atendido por lista restrita e ele não está nela'); continue; }
-        if (!noExpediente && prefs.pushForaDoExpediente !== true) { motivo('fora do expediente (push 24h desligado)'); continue; }
+        const veto = vetoDoAviso(u, { conversa, autorDaMensagem, config, noExpediente });
+        if (veto) { motivo(veto); continue; }
 
         alvos.push({ uid: u.uid, email: u.email || null, tokens: [...new Set(u.tokens)] });
+    }
+    return { alvos, fora, noExpediente };
+}
+
+/**
+ * As regras de AUDIÊNCIA que valem para QUALQUER aviso (push FCM ou Teams) —
+ * uma régua só, senão o celular e o Teams avisariam pessoas diferentes da
+ * mesma mensagem. Devolve o MOTIVO do veto, ou null quando pode avisar.
+ */
+function vetoDoAviso(u, { conversa, autorDaMensagem, config, noExpediente }) {
+    const prefs = u.prefs || {};
+    // A própria mensagem nunca volta como aviso.
+    if (autorDaMensagem && u.email && u.email === autorDaMensagem) return 'é o autor da mensagem';
+    // A MESMA régua do inbox — nunca uma segunda cópia.
+    const filas = filasVisiveis({
+        role: u.role, papelAtendimento: u.papelAtendimento,
+        departamentos: u.departamentos || [], filasAtendimento: u.filasAtendimento || [],
+    });
+    if (!conversaVisivel(filas, conversa.fila || null)) return 'a conversa é de uma fila que ele não atende';
+    // 📷 DM do Instagram é POR USUÁRIO (a mesma régua do inbox) — avisar
+    // quem não pode abrir a conversa é convite pra um 403.
+    if (conversa.canal === 'instagram' && !podeAtenderInstagram(config, u.email)) return 'o Instagram é atendido por lista restrita e ele não está nela';
+    if (!noExpediente && prefs.pushForaDoExpediente !== true) return 'fora do expediente (aviso 24h desligado)';
+    return null;
+}
+
+/**
+ * 🔔 Quem recebe o aviso NATIVO DO TEAMS (Paulo, 23/08: "ativar popup de
+ * notificações e audio de msg" dentro do Teams — o webview não deixa a página
+ * mostrar popup do sistema; quem mostra é o PRÓPRIO Teams, via Graph).
+ * Mesmas regras de audiência do push; o que muda é a porta: não exige token
+ * FCM (o endereço é o e-mail do tenant) e o opt-out é `prefs.avisoTeams`.
+ */
+export function destinatariosDoAvisoTeams({
+    usuarios = [], conversa = {}, autorDaMensagem = null, config = null, agora = new Date(),
+}) {
+    const alvos = [];
+    const fora = [];
+    const noExpediente = config?.horario ? dentroDoHorario(config.horario, agora) : true;
+    for (const u of usuarios) {
+        const motivo = (m) => fora.push({ uid: u.uid, email: u.email || null, motivo: m });
+        if (!u.email) { motivo('sem e-mail no cadastro (o Teams é endereçado por e-mail do tenant)'); continue; }
+        if ((u.prefs || {}).avisoTeams === false) { motivo('aviso no Teams desligado por ele'); continue; }
+        const veto = vetoDoAviso(u, { conversa, autorDaMensagem, config, noExpediente });
+        if (veto) { motivo(veto); continue; }
+        alvos.push({ uid: u.uid, email: u.email });
     }
     return { alvos, fora, noExpediente };
 }

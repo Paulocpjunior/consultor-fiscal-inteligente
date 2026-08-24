@@ -70,6 +70,17 @@ export async function getGraphToken() {
 }
 
 /**
+ * Descarta o token cacheado — o próximo getGraphToken() emite um NOVO.
+ * Existe por causa do consent (24/08, 🔔 do Teams): permissão concedida no
+ * Azure só entra em token NOVO, e o cacheado vale ~55 min — sem isto, o
+ * "Insufficient privileges" continuaria por até 1h DEPOIS do consent, e a
+ * leitura de quem testa é "o consent não funcionou".
+ */
+export function invalidarTokenGraph() {
+    _tokenCache = { value: null, expiraEm: 0 };
+}
+
+/**
  * Envia um e-mail pela caixa de `remetente` (UPN/e-mail de um usuário do tenant).
  * @param {object} p
  * @param {string} p.remetente  e-mail da caixa de origem (ex.: junior@spassessoriacontabil.com.br)

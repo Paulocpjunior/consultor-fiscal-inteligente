@@ -65,7 +65,14 @@ export function filasVisiveis({ role, papelAtendimento, departamentos = [], fila
         .map((d) => String(d || '').trim().toLowerCase())
         .filter((d) => IDS_FILAS.has(d));
     if (minhas.includes('recepcao')) return null; // Recepção atende todos
-    return [...new Set([...minhas, 'recepcao'])]; // a própria + Recepção (triagem)
+    // SÓ as filas dele — a Recepção NÃO entra mais de carona (Paulo, 24/08:
+    // "usuários que estão somente dentro de um grupo só têm acesso àquele
+    // grupo específico… as notificações devem ser enviadas de acordo com a
+    // restrição de cada usuário"). O "+ recepcao (triagem)" era desenho meu,
+    // e o custo apareceu: colaborador do Contábil carregava e era avisado
+    // das ~1.8 mil conversas da Recepção. Quem faz a triagem é a Recepção,
+    // o gestor e o admin — a conversa chega à fila pela TRANSFERÊNCIA.
+    return [...new Set(minhas)];
 }
 
 /**
@@ -228,6 +235,14 @@ export function configPadraoAtendimento() {
         // entrada aqui continua só com o texto — nada quebra sem imagem
         // cadastrada. Nasce vazio: imagem é a admin quem sobe, nunca chute.
         imagensPorFila: {},
+        // 🔔 Aviso NATIVO do Teams (popup+som do próprio Teams via Graph).
+        // 🚨 NASCE LIGADO — regra do Paulo (23/08: "OS ALERTAS NASCEM LIGADOS
+        // SEMPRE", na linha do 16/08 "quanto mais notificação melhor").
+        // Alerta pra EQUIPE nasce ativo; o que fala com o CLIENTE (bot,
+        // avaliação, aviso de transferência) é que nasce desligado. Enquanto
+        // faltar consent/zip, o envio falha em LOG nomeado — nunca derruba o
+        // webhook — e o 🧪 da ⚙️ diz o que falta.
+        avisoTeamsAtivo: true,
         // 📷 Quem atende as DMs do Instagram — POR USUÁRIO, não por fila
         // (Paulo, 22/08: "o instagram sera limitado por usuario e nao por
         // dpto"). Lista VAZIA = sem restrição (vale a regra de filas de
@@ -322,6 +337,7 @@ export function resolverConfig(gravada) {
         avaliacaoAtiva: typeof gravada.avaliacaoAtiva === 'boolean' ? gravada.avaliacaoAtiva : p.avaliacaoAtiva,
         avaliacaoEscala: ESCALAS_AVALIACAO.includes(Number(gravada.avaliacaoEscala))
             ? Number(gravada.avaliacaoEscala) : p.avaliacaoEscala,
+        avisoTeamsAtivo: typeof gravada.avisoTeamsAtivo === 'boolean' ? gravada.avisoTeamsAtivo : p.avisoTeamsAtivo,
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,

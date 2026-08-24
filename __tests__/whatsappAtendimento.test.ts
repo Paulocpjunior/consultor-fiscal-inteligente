@@ -21,16 +21,24 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
         expect(filaValida('marketing')).toBe(false);
     });
 
-    it('Recepção atende TODOS; os demais veem a própria + Recepção; admin vê tudo', () => {
+    it('Recepção atende TODOS; colaborador de fila vê SÓ as dele; admin vê tudo', () => {
         expect(filasVisiveis({ role: 'admin' })).toBeNull();
         expect(filasVisiveis({ role: 'colaborador', filasAtendimento: ['recepcao'] })).toBeNull();
-        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'] })).toEqual(['fiscal', 'recepcao']);
+        // ⚠️ Premissa TROCADA por decisão do Paulo (24/08): "usuários que
+        // estão somente dentro de um grupo só têm acesso àquele grupo
+        // específico… as notificações de acordo com a restrição de cada
+        // usuário". O "+ recepcao (triagem)" automático saiu — ele fazia o
+        // colaborador do Contábil carregar e ser avisado das ~1.8 mil
+        // conversas da Recepção. Triagem é da Recepção/gestor/admin, e a
+        // conversa chega à fila pela TRANSFERÊNCIA.
+        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'] })).toEqual(['fiscal']);
         // filasAtendimento explícita VENCE os departamentos de módulo
-        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh', 'recepcao']);
+        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh']);
     });
 
-    it('conversa sem fila é da Recepção — todo atendente a enxerga', () => {
+    it('conversa sem fila é da Recepção — só quem vê tudo (ou atende Recepção) a enxerga', () => {
         expect(conversaVisivel(['fiscal', 'recepcao'], null)).toBe(true);
+        expect(conversaVisivel(['fiscal'], null)).toBe(false);
         expect(conversaVisivel(['fiscal', 'recepcao'], 'juridico')).toBe(false);
         expect(conversaVisivel(null, 'juridico')).toBe(true);
     });

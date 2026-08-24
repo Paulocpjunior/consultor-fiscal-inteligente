@@ -162,6 +162,218 @@ export function concluirSonda(resultados = []) {
  * que a decisão tem no cliente, e ele não aparece em lugar nenhum da tela da
  * Meta.
  */
+// ============================================================================
+// CONFIGURAÇÃO DA CHAMADA (Paulo, 23/08: caminho 1 — SIP → HitPhone; e a
+// regra: *"as ligações devem obedecer os mesmos horários das mensagens"*).
+//
+// ESTE MÓDULO CONTINUA SEM I/O: aqui só nascem os PAYLOADS e as conferências.
+// Quem escreve na Meta é a rota `/chamadas/configurar` — admin, com a
+// consequência escrita antes do clique, nunca efeito de diagnóstico.
+//
+// DUAS DECISÕES DE DESENHO:
+//  · O horário NÃO é uma segunda grade: `montarCallHoursDoAtendimento` PROJETA
+//    o `config.horario` do atendimento (o mesmo que decide o `foraDeHorario`
+//    das mensagens) para o formato da Meta. Duas grades divergiriam em
+//    silêncio — "mensagem responde e ligação não" é a leitura dupla de sempre.
+//  · O formato da ESCRITA ainda não foi provado contra resposta real da Meta
+//    (a régua do payload-não-se-deduz). Por isso a rota RE-LÊ as settings
+//    depois de gravar e devolve o que a Meta GUARDOU — a conferência é por
+//    RESULTADO (`conferirCallHours`), e recusa da Meta volta CRUA na tela.
+// ============================================================================
+
+const FUSO_CHAMADAS = 'America/Sao_Paulo';
+const DIAS_META = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
+/** "HH:MM" → "HHMM" da Meta. null se ilegível — horário não recebe default. */
+function horaMeta(hhmm) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '').trim());
+    if (!m) return null;
+    const h = Number(m[1]); const min = Number(m[2]);
+    if (h > 23 || min > 59) return null;
+    return `${String(h).padStart(2, '0')}${m[2]}`;
+}
+
+/**
+ * Projeta o horário do ATENDIMENTO (dias + turnos, o dono das mensagens) para
+ * o `call_hours` da Meta. Turno ilegível RECUSA a projeção inteira — grade
+ * meio-projetada abriria a chamada em horário que a mensagem não atende.
+ */
+export function montarCallHoursDoAtendimento(horario) {
+    const dias = (horario?.dias || []).map(Number).filter((d) => d >= 0 && d <= 6);
+    const turnos = Array.isArray(horario?.turnos) ? horario.turnos : [];
+    if (!dias.length || !turnos.length) {
+        return { ok: false, erro: 'O horário das mensagens está sem dias ou sem turnos — confira a aba 🤖 Bot e mensagens antes de aplicar à chamada.' };
+    }
+    const weekly = [];
+    for (const d of [...new Set(dias)].sort((a, b) => a - b)) {
+        for (const t of turnos) {
+            const abre = horaMeta(t.inicio); const fecha = horaMeta(t.fim);
+            if (!abre || !fecha || fecha <= abre) {
+                return { ok: false, erro: `Turno ilegível no horário das mensagens ("${t.inicio}"–"${t.fim}") — corrija lá; a chamada não recebe grade deduzida.` };
+            }
+            weekly.push({ day_of_week: DIAS_META[d], open_time: abre, close_time: fecha });
+        }
+    }
+    return {
+        ok: true,
+        callHours: { status: 'ENABLED', timezone_id: FUSO_CHAMADAS, weekly_operating_hours: weekly },
+    };
+}
+
+/**
+ * Valida o destino SIP que o admin digita (a resposta do HitPhone). Recusa
+ * com o motivo — tronco torto gravado na Meta é chamada caindo no nada.
+ */
+export function validarSipDestino(entrada) {
+    const hostname = String(entrada?.hostname || '').trim().toLowerCase();
+    if (!hostname) return { ok: false, erro: 'Informe o hostname SIP que o HitPhone passar (ex.: sip.empresa.com.br).' };
+    if (/[\s/@:]|^-|\.$/.test(hostname) || !/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/.test(hostname)) {
+        return { ok: false, erro: `Hostname SIP inválido: "${entrada?.hostname}" — só o nome do servidor, sem esquema (sip:// ou https://), porta ou espaços.` };
+    }
+    const porta = Number(entrada?.porta);
+    if (!Number.isInteger(porta) || porta < 1 || porta > 65535) {
+        return { ok: false, erro: 'Informe a porta SIP que o HitPhone passar (com TLS costuma ser 5061).' };
+    }
+    return { ok: true, hostname, porta };
+}
+
+/**
+ * Monta o payload da escrita — SÓ com o pedaço pedido. A rota re-lê depois:
+ * se a semântica do POST for de substituição (e não merge) e algo sumir, isso
+ * aparece na leitura de volta, nunca fica invisível.
+ */
+export function montarPayloadChamadas(mudanca = {}) {
+    const calling = {};
+    if (mudanca.callHours) calling.call_hours = mudanca.callHours;
+    if (typeof mudanca.iconeVisivel === 'boolean') {
+        calling.call_icon_visibility = mudanca.iconeVisivel ? 'DEFAULT' : 'DISABLE_ALL';
+    }
+    if (mudanca.sip) {
+        calling.sip = { status: 'ENABLED', servers: [{ hostname: mudanca.sip.hostname, port: mudanca.sip.porta }] };
+    }
+    if (!Object.keys(calling).length) return { ok: false, erro: 'Nenhuma mudança pedida.' };
+    return { ok: true, payload: { calling } };
+}
+
+/** O bloco `calling` de uma resposta de settings (ou null, dito). */
+export function lerCallingDasSettings(corpo) {
+    const blocos = acharBlocoDeChamada(corpo);
+    const b = blocos.find((x) => /(^|\.)calling$/i.test(x.caminho));
+    return b && typeof b.valor === 'object' ? b.valor : null;
+}
+
+/**
+ * Conferência por RESULTADO: o que a Meta GUARDOU × a projeção do horário das
+ * mensagens. É ela que denuncia grade defasada (alguém mudou o horário do
+ * atendimento e não reaplicou aqui) — a Meta não lê nossa config sozinha.
+ */
+export function conferirCallHours(callingGravado, horario) {
+    const proj = montarCallHoursDoAtendimento(horario);
+    if (!proj.ok) return { situacao: 'horario-ilegivel', motivo: proj.erro };
+    const gravado = callingGravado?.call_hours;
+    if (!gravado || !Array.isArray(gravado.weekly_operating_hours)) {
+        return { situacao: 'sem-call-hours', motivo: 'A Meta não tem horário de chamada gravado — hoje o botão do cliente vale 24h.' };
+    }
+    const chave = (w) => `${String(w.day_of_week).toUpperCase()}|${w.open_time}|${w.close_time}`;
+    const meta = new Set(gravado.weekly_operating_hours.map(chave));
+    const nosso = new Set(proj.callHours.weekly_operating_hours.map(chave));
+    const faltam = [...nosso].filter((k) => !meta.has(k));
+    const sobram = [...meta].filter((k) => !nosso.has(k));
+    const fusoDiverge = gravado.timezone_id && gravado.timezone_id !== FUSO_CHAMADAS;
+    if (!faltam.length && !sobram.length && !fusoDiverge) {
+        return { situacao: 'igual', motivo: 'O horário da chamada na Meta é o MESMO das mensagens.' };
+    }
+    const detalhes = [];
+    if (fusoDiverge) detalhes.push(`fuso gravado ${gravado.timezone_id} ≠ ${FUSO_CHAMADAS}`);
+    if (faltam.length) detalhes.push(`faltam na Meta: ${faltam.join(', ')}`);
+    if (sobram.length) detalhes.push(`sobram na Meta: ${sobram.join(', ')}`);
+    return {
+        situacao: 'diverge',
+        motivo: `O horário da chamada DIVERGE do das mensagens (${detalhes.join(' · ')}). Reaplique aqui — a regra da casa é uma grade só.`,
+    };
+}
+
+// ============================================================================
+// EVENTOS DE CHAMADA NO WEBHOOK (Paulo, 23/08 — "pode seguir"): a ligação
+// recebida/perdida vira LINHA NA CONVERSA do Connect, senão o cliente liga e
+// ninguém fica sabendo que ligou.
+//
+// 🚨 O leiaute do webhook `calls` NÃO está provado contra evento real (nenhuma
+// chamada chegou ainda). Por isso o extrator é TOLERANTE e leva o CRU junto de
+// cada evento: o que ele não souber ler fica NOMEADO (`ilegiveis`), nunca
+// descartado calado — é do primeiro evento real que sai a régua definitiva.
+// ============================================================================
+
+function tsChamadaParaIso(t) {
+    const n = Number(t) * (String(t || '').length > 11 ? 1 : 1000);
+    return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null;
+}
+
+/** Tradução best-effort do evento — desconhecido fica como veio, visível. */
+export function traduzirEventoChamada(evento) {
+    const mapa = {
+        connect: 'conectada', connected: 'conectada', accept: 'atendida', accepted: 'atendida',
+        terminate: 'encerrada', terminated: 'encerrada', ended: 'encerrada',
+        ringing: 'tocando', missed: 'perdida', rejected: 'recusada', reject: 'recusada',
+        failed: 'falhou', no_answer: 'não atendida', unanswered: 'não atendida',
+    };
+    const e = String(evento || '').toLowerCase();
+    return mapa[e] || (e || 'evento');
+}
+
+/**
+ * Extrai os eventos de CHAMADA do payload do webhook (field "calls"). Devolve
+ * { valido, chamadas[], ilegiveis[] } — cada chamada com o bruto junto.
+ */
+export function extrairEventosChamada(payload) {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    if (p.object !== 'whatsapp_business_account') return { valido: false, chamadas: [], ilegiveis: [] };
+    const chamadas = [];
+    const ilegiveis = [];
+    for (const entry of (Array.isArray(p.entry) ? p.entry : [])) {
+        for (const change of (Array.isArray(entry?.changes) ? entry.changes : [])) {
+            const value = change?.value || {};
+            const lista = Array.isArray(value.calls) ? value.calls : [];
+            // Aceita pelo FIELD ou pela presença do array — a Meta pode nomear
+            // o field de um jeito que ainda não vimos; o array é a substância.
+            if (change?.field !== 'calls' && !lista.length) continue;
+            const phoneNumberId = value.metadata?.phone_number_id || null;
+            for (const c of lista) {
+                const bruto = c && typeof c === 'object' ? c : { valor: c };
+                const callId = bruto.id ? String(bruto.id) : null;
+                if (!callId) { ilegiveis.push(bruto); continue; } // sem id não há idempotência
+                const direcaoCrua = String(bruto.direction || '').toUpperCase();
+                const deNegocio = direcaoCrua.includes('BUSINESS');
+                // O CLIENTE é o outro lado: na chamada que ELE inicia, é o from;
+                // na que NÓS iniciamos, é o to. Sem direção legível, from.
+                const clienteCru = deNegocio ? (bruto.to ?? bruto.from) : (bruto.from ?? bruto.to);
+                const cliente = String(clienteCru || '').replace(/\D/g, '') || null;
+                if (!cliente) { ilegiveis.push(bruto); continue; }
+                const duracao = Number(bruto.duration ?? bruto.session?.duration);
+                chamadas.push({
+                    callId,
+                    conversaId: cliente,
+                    direcao: deNegocio ? 'saida' : 'entrada',
+                    evento: String(bruto.event ?? bruto.status ?? '').toLowerCase() || null,
+                    duracaoSegundos: Number.isFinite(duracao) && duracao > 0 ? duracao : null,
+                    timestamp: tsChamadaParaIso(bruto.timestamp),
+                    phoneNumberId,
+                    bruto,
+                });
+            }
+        }
+    }
+    return { valido: true, chamadas, ilegiveis };
+}
+
+/** A linha que aparece na conversa. */
+export function resumoDaChamada(c) {
+    const lado = c.direcao === 'saida' ? 'para o cliente' : 'do cliente';
+    const dur = c.duracaoSegundos
+        ? ` · ${Math.floor(c.duracaoSegundos / 60)}m${String(c.duracaoSegundos % 60).padStart(2, '0')}s` : '';
+    return `☎️ Ligação de WhatsApp ${lado} — ${traduzirEventoChamada(c.evento)}${dur}`;
+}
+
 export const ANTES_DE_LIGAR = [
     {
         titulo: 'O botão aparece no WhatsApp DO CLIENTE',

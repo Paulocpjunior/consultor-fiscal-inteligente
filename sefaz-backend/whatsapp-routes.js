@@ -34,6 +34,8 @@ import {
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
+    montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
+    lerCallingDasSettings, conferirCallHours,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -64,6 +66,7 @@ import {
     idConversaDoParam, ehConversaInstagram, enviarTextoInstagram, ligarRecebimentoInstagram,
     assinaturasDoApp,
 } from './instagram-dm.js';
+import { enviarAvisoTeams, statusAvisoTeams } from './teams-aviso.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -438,17 +441,39 @@ router.get('/conversas', requireAuth, async (req, res) => {
         const cfgAtendimento = resolverConfig(cfgDoc.data());
         const respostasRapidas = cfgAtendimento.respostasRapidas;
         let docsConversas = [];
-        let cursorConv = null;
-        while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
-            let q = db.collection('whatsapp_conversas')
-                .orderBy('atualizadoEm', 'desc').limit(PAGINA_CONVERSAS);
-            if (cursorConv) q = q.startAfter(cursorConv);
-            // eslint-disable-next-line no-await-in-loop
-            const pagina = await q.get();
-            if (pagina.empty) break;
-            docsConversas = docsConversas.concat(pagina.docs);
-            cursorConv = pagina.docs[pagina.docs.length - 1];
-            if (pagina.docs.length < PAGINA_CONVERSAS) break;
+        if (minhasFilas !== null) {
+            // 🔒 Colaborador de fila lê SÓ as filas dele já na CONSULTA
+            // (Paulo, 24/08: "ganhamos mais tempo ao carregar") — antes o
+            // servidor varria as 2000 mais recentes da carteira inteira para
+            // depois jogar fora o que ele não vê. Sem orderBy de propósito:
+            // where-in + orderBy exigiria índice composto; a ordenação sai em
+            // memória, e o conjunto aqui é pequeno por construção (as filas
+            // de departamento têm dezenas de conversas, não milhares).
+            // Sem fila nenhuma vinculada = lista VAZIA (o Firestore recusa
+            // `in` com lista vazia; e a tela já diz "sem vínculo, peça ao
+            // admin" — mesma régua dos gates de departamento).
+            const snap = minhasFilas.length
+                ? await db.collection('whatsapp_conversas')
+                    .where('fila', 'in', minhasFilas).limit(TETO_LEITURA_CONVERSAS).get()
+                : { docs: [] };
+            const quando = (d) => {
+                const v = d.data().atualizadoEm;
+                return v?.toMillis ? v.toMillis() : (Date.parse(v) || 0);
+            };
+            docsConversas = snap.docs.sort((a, b) => quando(b) - quando(a));
+        } else {
+            let cursorConv = null;
+            while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
+                let q = db.collection('whatsapp_conversas')
+                    .orderBy('atualizadoEm', 'desc').limit(PAGINA_CONVERSAS);
+                if (cursorConv) q = q.startAfter(cursorConv);
+                // eslint-disable-next-line no-await-in-loop
+                const pagina = await q.get();
+                if (pagina.empty) break;
+                docsConversas = docsConversas.concat(pagina.docs);
+                cursorConv = pagina.docs[pagina.docs.length - 1];
+                if (pagina.docs.length < PAGINA_CONVERSAS) break;
+            }
         }
         const numeros = docsConversas.map((d) => d.id);
         const contatos = new Map();
@@ -819,6 +844,29 @@ router.post('/atendimento-config', requireAdmin, async (req, res) => {
         });
         return res.json({ ok: true, config: limpa });
     } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🔔 TESTE do aviso nativo do Teams (Paulo, 23/08) — manda um aviso de teste
+ * para o PRÓPRIO usuário logado (por isso requireAuth, não admin: cada um
+ * prova o seu Teams, e a rota não aceita outro destinatário). A recusa do
+ * Graph volta CRUA: é ela que diz o que falta (consent da permissão
+ * TeamsActivity.Send, manifest sem `activities`, app não instalado).
+ */
+router.post('/teams-aviso/testar', requireAuth, async (req, res) => {
+    try {
+        const email = req.user?.email;
+        if (!email) return res.status(400).json({ ok: false, error: 'Sessão sem e-mail — saia e entre de novo.' });
+        const r = await enviarAvisoTeams({
+            email,
+            titulo: '💬 SP Connect — teste',
+            corpo: 'Se você está lendo isto no sino do Teams, o aviso nativo está funcionando.',
+        });
+        return res.json({ ok: true, resultado: r, status: statusAvisoTeams() });
+    } catch (e) {
+        console.error('[whatsapp/teams-aviso/testar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -2330,9 +2378,107 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
             });
         }
 
-        return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR });
+        // 🕒 Regra do Paulo (23/08): "as ligações devem obedecer os mesmos
+        // horários das mensagens". A sonda passou a trazer a CONFERÊNCIA: o
+        // horário do atendimento (o dono), o que a Meta tem gravado, e se os
+        // dois concordam — grade defasada é a leitura dupla de sempre.
+        let horarios = null;
+        try {
+            const cfgDoc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+            const cfgAt = resolverConfig(cfgDoc.exists ? cfgDoc.data() : null);
+            const brutoSettings = sondas.find((s) => s.candidato === 'settings')?.bruto;
+            const calling = lerCallingDasSettings(brutoSettings);
+            horarios = {
+                mensagens: cfgAt.horario,
+                conferencia: conferirCallHours(calling, cfgAt.horario),
+                calling,
+            };
+        } catch (e) {
+            // Falha na leitura NÃO derruba a sonda — mas é dita, nunca "igual".
+            horarios = { mensagens: null, conferencia: { situacao: 'horario-ilegivel', motivo: `Não consegui ler o horário das mensagens: ${e.message}` }, calling: null };
+        }
+
+        return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🛠 CONFIGURAR a chamada na Meta — escrita EXPLÍCITA (Paulo, 23/08, caminho 1:
+ * SIP → HitPhone). Três ações, cada uma um pedido separado:
+ *   · horarios — projeta o horário do ATENDIMENTO (o dono das mensagens) para
+ *     o call_hours da Meta. Nunca recebe grade própria: a regra é UMA grade.
+ *   · icone    — mostra/oculta o botão ☎️ no WhatsApp do cliente
+ *     (DEFAULT ↔ DISABLE_ALL). Ocultar é a saída enquanto não há destino.
+ *   · sip      — cadastra o tronco (hostname+porta que o HitPhone passar).
+ *
+ * 🚨 O formato da escrita não está provado contra a Meta: por isso TODA ação
+ * RE-LÊ as settings depois do POST e devolve o que a Meta GUARDOU (validação
+ * por resultado), e recusa da Meta volta CRUA — nunca engolida num "falhou".
+ */
+router.post('/chamadas/configurar', requireAdmin, async (req, res) => {
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token || !cfg.phoneNumberId) {
+            return res.status(400).json({ ok: false, error: 'O canal do WhatsApp não está configurado neste ambiente.' });
+        }
+        const acao = String(req.body?.acao || '');
+        let mudanca = null;
+        if (acao === 'horarios') {
+            const cfgDoc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+            const cfgAt = resolverConfig(cfgDoc.exists ? cfgDoc.data() : null);
+            const proj = montarCallHoursDoAtendimento(cfgAt.horario);
+            if (!proj.ok) return res.status(400).json({ ok: false, error: proj.erro });
+            mudanca = { callHours: proj.callHours };
+        } else if (acao === 'icone') {
+            mudanca = { iconeVisivel: req.body?.iconeVisivel === true };
+        } else if (acao === 'sip') {
+            const sip = validarSipDestino({ hostname: req.body?.hostname, porta: req.body?.porta });
+            if (!sip.ok) return res.status(400).json({ ok: false, error: sip.erro });
+            mudanca = { sip: { hostname: sip.hostname, porta: sip.porta } };
+        } else {
+            return res.status(400).json({ ok: false, error: `Ação desconhecida: "${acao}" (use horarios, icone ou sip).` });
+        }
+
+        const montado = montarPayloadChamadas(mudanca);
+        if (!montado.ok) return res.status(400).json({ ok: false, error: montado.erro });
+
+        const r = await fetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/settings`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(montado.payload),
+        });
+        const corpo = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            return res.status(502).json({
+                ok: false,
+                error: corpo?.error?.message || `A Meta recusou a gravação (HTTP ${r.status}).`,
+                bruto: corpo,
+            });
+        }
+
+        // Validação por RESULTADO: o que ficou gravado é o que a re-leitura diz.
+        let calling = null; let brutoGravado = null;
+        try {
+            const rl = await fetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/settings`, {
+                headers: { Authorization: `Bearer ${cfg.token}` },
+            });
+            brutoGravado = await rl.json().catch(() => ({}));
+            calling = lerCallingDasSettings(brutoGravado);
+        } catch { /* releitura falhou — o campo fica null e a tela diz */ }
+
+        let conferencia = null;
+        if (acao === 'horarios') {
+            const cfgDoc = await getDb().collection('whatsapp_config').doc('atendimento').get();
+            const cfgAt = resolverConfig(cfgDoc.exists ? cfgDoc.data() : null);
+            conferencia = conferirCallHours(calling, cfgAt.horario);
+        }
+
+        return res.json({ ok: true, acao, aplicado: montado.payload.calling, calling, conferencia, brutoGravado });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/configurar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

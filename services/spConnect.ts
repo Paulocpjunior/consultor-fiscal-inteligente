@@ -28,6 +28,8 @@ export interface ConfigAtendimento {
     respostasRapidas: string[];
     /** 📷 e-mails que atendem as DMs do Instagram; lista vazia = sem restrição. */
     instagramAtendentes: string[];
+    /** 🔔 Aviso NATIVO do Teams (sino de Atividade via Graph) — nasce desligado. */
+    avisoTeamsAtivo: boolean;
 }
 
 /**

@@ -232,7 +232,15 @@ app.use(helmet({
             scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "https://cdnjs.cloudflare.com"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            imgSrc: ["'self'", "data:", "https:"],
+            // blob: é como o SP Connect mostra o anexo baixado COM LOGIN
+            // (fetch → blob → object URL; <img src> não manda header). Sem
+            // ele aqui o CSP bloqueava TODA imagem recebida — miniatura e
+            // visualizador quebrados em Mac/Windows/Teams (24/08), enquanto
+            // o banner de fila (https:) aparecia normal.
+            imgSrc: ["'self'", "data:", "https:", "blob:"],
+            // áudio/vídeo recebidos saem pelo MESMO caminho de blob — sem
+            // mediaSrc eles caem no defaultSrc 'self' e quebram igual.
+            mediaSrc: ["'self'", "blob:"],
             frameSrc: ["'self'", "blob:", "https://*.firebaseapp.com", "https://apis.google.com"],
             workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
             // consultor-fiscal-proxy: o front chama o proxy SharePoint (deploy
@@ -3096,7 +3104,11 @@ app.use(express.static(join(__dirname, 'dist'), {
         // no nome, então "immutable 1 ano" prenderia o manifest velho no
         // celular de quem já instalou o SP Connect (start_url/ícone antigos,
         // sem jeito de atualizar a não ser reinstalando).
-        if (filePath.endsWith('.html') || filePath.endsWith('version.json') || filePath.endsWith('.webmanifest')) {
+        // .zip entra na MESMA regra (caso do Paulo, 24/08: o link do pacote do
+        // Teams entregava o zip VELHO — 1.0.1 — do cache do navegador, porque
+        // sp-connect-teams.zip não tem hash no nome e caía no "immutable 1
+        // ano". Zip de app é atualizado no MESMO nome a cada versão).
+        if (filePath.endsWith('.html') || filePath.endsWith('version.json') || filePath.endsWith('.webmanifest') || filePath.endsWith('.zip')) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');

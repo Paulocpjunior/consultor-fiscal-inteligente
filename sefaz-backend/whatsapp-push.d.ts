@@ -6,7 +6,7 @@ export interface UsuarioParaPush {
     papelAtendimento?: string | null;
     departamentos?: string[];
     filasAtendimento?: string[];
-    prefs?: { som?: boolean; popup?: boolean; push?: boolean; pushForaDoExpediente?: boolean };
+    prefs?: { som?: boolean; popup?: boolean; push?: boolean; pushForaDoExpediente?: boolean; avisoTeams?: boolean };
     tokens?: string[];
 }
 
@@ -19,6 +19,18 @@ export function destinatariosDoPush(p: {
     agora?: Date;
 }): {
     alvos: { uid: string; email: string | null; tokens: string[] }[];
+    fora: { uid: string; email: string | null; motivo: string }[];
+    noExpediente: boolean;
+};
+/** 🔔 Mesmas regras de audiência do push, endereçado por e-mail (Teams). */
+export function destinatariosDoAvisoTeams(p: {
+    usuarios?: UsuarioParaPush[];
+    conversa?: { fila?: string | null; canal?: string | null };
+    autorDaMensagem?: string | null;
+    config?: { horario?: { dias: number[]; turnos: { inicio: string; fim: string }[] } } | null;
+    agora?: Date;
+}): {
+    alvos: { uid: string; email: string }[];
     fora: { uid: string; email: string | null; motivo: string }[];
     noExpediente: boolean;
 };

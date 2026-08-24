@@ -1,5 +1,5 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { getAuth, setPersistence, browserSessionPersistence, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
@@ -52,6 +52,19 @@ const app: FirebaseApp = apps.length === 0
   : (apps[0] as FirebaseApp);
 
 const auth: Auth = getAuth(app);
+
+// SESSÃO POR ABA, não por navegador (Paulo, 23/08: "devem SEMPRE forçar login
+// do usuário toda vez que sair e voltar ao sistema"). O padrão do Firebase é
+// browserLocalPersistence — o login sobrevivia a fechar o navegador, então
+// quem abrisse o app dias depois entrava direto, num computador que pode ser
+// compartilhado. browserSessionPersistence encerra ao fechar a aba/navegador
+// e PRESERVA o F5: recarregar (inclusive o hard reload do UpdateBanner) não
+// derruba ninguém no meio do trabalho.
+setPersistence(auth, browserSessionPersistence).catch((e) => {
+    // Navegador sem sessionStorage (modo restrito): segue no padrão em vez de
+    // travar o login — mas DIZ, porque aí a sessão sobrevive ao fechamento.
+    console.warn('[auth] não foi possível fixar a sessão por aba:', e?.message || e);
+});
 const db: Firestore = getFirestore(app);
 const storage: FirebaseStorage | null = isFirebaseStorageConfigured
   ? getStorage(app)

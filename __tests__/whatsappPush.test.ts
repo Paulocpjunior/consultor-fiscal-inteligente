@@ -27,12 +27,17 @@ describe('quem recebe — a MESMA régua de fila do inbox', () => {
         expect(r.fora[0].motivo).toContain('fila que ele não atende');
     });
 
-    it('conversa SEM fila (Recepção) alcança todo mundo que atende', () => {
+    it('conversa SEM fila (Recepção) avisa SÓ quem atende a Recepção', () => {
+        // ⚠️ Premissa TROCADA por decisão do Paulo (24/08): "as notificações
+        // devem ser enviadas de acordo com a restrição de cada usuário". O
+        // desenho antigo avisava a casa inteira a cada mensagem da Recepção
+        // (~1.8 mil conversas) — colaborador de fila só é avisado da DELE.
         const r = destinatariosDoPush({
             usuarios: [fiscal, juridico, recepcao], conversa: { fila: null },
             config: configPadraoAtendimento(), agora: DENTRO,
         });
-        expect(r.alvos).toHaveLength(3);
+        expect(r.alvos.map((a: any) => a.uid)).toEqual(['u3']);
+        expect(r.fora.map((f: any) => f.uid).sort()).toEqual(['u1', 'u2']);
     });
 
     it('ninguém recebe push da PRÓPRIA mensagem', () => {

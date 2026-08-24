@@ -63,5 +63,10 @@ describe('injeção do manifest e cache', () => {
         expect(linhas[i]).toContain(".webmanifest");
         // …e o ramo tem que ser mesmo o do no-store.
         expect(linhas.slice(i + 1, i + 3).join('\n')).toContain('no-store');
+        // 🚨 .zip na MESMA condição (caso do Paulo, 24/08): o pacote do Teams
+        // é atualizado com o MESMO nome a cada versão — sem hash no nome, o
+        // "immutable 1 ano" entregava o zip 1.0.1 velho do cache do navegador
+        // no dia em que o 1.1.0 precisava subir.
+        expect(linhas[i]).toContain(".zip");
     });
 });

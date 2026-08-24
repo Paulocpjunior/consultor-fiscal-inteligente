@@ -269,6 +269,17 @@ export const listarEtiquetas = () =>
 export const salvarEtiqueta = (p: { rotulo: string; finalidade: string; baseLegal: string; cor?: string; ordem?: number }) =>
     post<{ etiquetas: Etiqueta[] }>('/api/admin/whatsapp/etiquetas', p);
 
+// ─── 🔔 Aviso nativo do Teams (Paulo, 23/08) ────────────────────────────────
+// O webview do Teams não deixa a página mostrar popup do sistema; quem avisa
+// lá é o PRÓPRIO Teams (sino de Atividade, via Graph). O teste manda um aviso
+// para o USUÁRIO LOGADO — a recusa do Graph volta crua, é ela que diz o que
+// falta (consent, manifest, app não instalado).
+export const testarAvisoTeams = () =>
+    post<{
+        resultado: { ok: true } | { ok: false; etapa: string; erro: string; bruto?: unknown };
+        status: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+    }>('/api/admin/whatsapp/teams-aviso/testar', {});
+
 // ─── ☎️ Chamada de voz/vídeo — SONDA, não interruptor ───────────────────────
 // Ela pergunta à Meta e relata. Ligar a chamada abre um botão no WhatsApp de
 // TODOS os clientes: é decisão do Paulo, com destino de atendimento definido
@@ -280,12 +291,33 @@ export interface SondaChamada {
     motivo: string; acao?: string; campo?: string; bruto?: unknown;
 }
 
+/** Horário do atendimento (o dono das mensagens) × o que a Meta tem gravado. */
+export interface HorariosChamada {
+    mensagens: { dias: number[]; turnos: { inicio: string; fim: string }[] } | null;
+    conferencia: { situacao: 'igual' | 'diverge' | 'sem-call-hours' | 'horario-ilegivel'; motivo: string };
+    calling: Record<string, unknown> | null;
+}
+
 export const sondarChamadas = () =>
     req<{
         conclusao: { veredito: SondaChamada['situacao']; motivo: string; acao?: string; respondeuPor?: string | null };
         sondas: SondaChamada[];
         antesDeLigar: { titulo: string; texto: string }[];
+        horarios?: HorariosChamada | null;
     }>('/api/admin/whatsapp/chamadas/sondar');
+
+/** 🛠 Escrita EXPLÍCITA na Meta (Paulo, 23/08) — a rota re-lê e devolve o que
+ *  ficou GRAVADO; recusa da Meta volta crua, nunca engolida. */
+export const configurarChamadas = (p:
+    { acao: 'horarios' } | { acao: 'icone'; iconeVisivel: boolean } | { acao: 'sip'; hostname: string; porta: number }) =>
+    post<{
+        acao: string;
+        aplicado: Record<string, unknown>;
+        calling: Record<string, unknown> | null;
+        conferencia: HorariosChamada['conferencia'] | null;
+        brutoGravado?: unknown;
+        bruto?: unknown;
+    }>('/api/admin/whatsapp/chamadas/configurar', p);
 
 // ── 📷 Sonda do Instagram (Paulo, 18/08) — mesma decisão: só pergunta ───────
 

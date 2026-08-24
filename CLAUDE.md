@@ -1509,6 +1509,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   (3) **o bot de triagem NASCE DESLIGADO** (`whatsapp_config/atendimento`,
   chave na ⚙️ do Connect): enquanto a Ultra Fox estiver de pé são DOIS bots no
   mesmo cliente — liga no dia do corte, e a Ultra Fox só cai após aceite;
+  (3b) 🚨 **ALERTAS À EQUIPE NASCEM LIGADOS, SEMPRE** (Paulo, 23/08: *"OS
+  ALERTAS NASCEM LIGADOS SEMPRE"*, na linha do 16/08 *"quanto mais notificação
+  melhor"*): notificação interna nova (som, popup, push, aviso no Teams) entra
+  ATIVA por padrão — o "nasce desligado" vale só pro que fala com o CLIENTE
+  (bot, avaliação, aviso de transferência);
   (4) **FILA ≠ DEPARTAMENTO do SaaS**: catálogo próprio de 8 filas em
   `whatsapp-atendimento.js` (Recepção vê TUDO; RH e Jurídico são filas), o
   catálogo dos 5 módulos não incha; (5) fora da janela de 24h SÓ template
