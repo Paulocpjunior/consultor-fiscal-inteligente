@@ -126,3 +126,67 @@ export function montarReceitaFinanceira({ receita } = {}) {
         aliqCofins,
     };
 }
+
+// ============================================================================
+// 🚨 O F100 APONTAVA PARA UMA CONTA QUE O ARQUIVO NÃO DECLARAVA
+//
+// Recusa do PVA no CF BANK 07/2026 (24/08), literal:
+//
+//   "Código da conta analítica/grupo de contas inválido. Informar código no
+//    'Registro 0500' antes de utilizá-lo."  (COD_CTA 30106030012, no F100)
+//
+// É a MESMA família do participante do 0150 e do item do 0200 órfãos: o
+// registro REFERENCIA um cadastro que o arquivo não traz. O assinado da própria
+// empresa (06/2026) tem a linha que faltava:
+//
+//   |0500|01012026|04|A|5|30106030012|RENDIMENTOS FINANCEIROS|||
+//
+// ⚠️ **O QUE A RÉGUA DERIVA, e por quê** — os três saem do assinado e são
+// consequência do que a conta É, não escolha:
+//   · `COD_NAT_CC = 04` (contas de RESULTADO) — receita é conta de resultado;
+//   · `IND_CTA = A` (ANALÍTICA) — é exatamente o que a recusa cobra, e só uma
+//     conta analítica pode ser referenciada por um lançamento;
+//   · `DT_ALT` = 1º de janeiro do ano da competência, como o assinado.
+//
+// 🚨 **O QUE ELA RECUSA**: o `NOME_CTA` e o `NIVEL` são do PLANO DE CONTAS da
+// empresa — o app não os conhece e não os deduz. **E a coerência é tudo ou
+// nada**: sem eles, o COD_CTA também NÃO sai no F100. Referenciar uma conta
+// sem declará-la é a recusa que este bloco existe para evitar; o arquivo da PEC
+// foi ACEITO com F100 sem COD_CTA, então a ausência não impede a entrega.
+// ============================================================================
+
+/** Natureza da conta — 04 = contas de RESULTADO (assinado do CF BANK). */
+export const COD_NAT_CC_RESULTADO = '04';
+/** Conta ANALÍTICA — a única que um lançamento pode referenciar. */
+export const IND_CTA_ANALITICA = 'A';
+
+/**
+ * O 0500 da conta da receita financeira.
+ *
+ * @returns {{campos: object}|{falta: string[]}|null} — ou os campos, ou o que
+ *   falta cadastrar, ou null quando não há conta nenhuma (aí o F100 sai sem
+ *   COD_CTA, que é caso aceito).
+ */
+export function montar0500ContaReceita({ codConta, nomeConta, nivel, ano } = {}) {
+    const cod = String(codConta || '').trim();
+    if (!cod) return null;
+
+    const nome = String(nomeConta || '').trim();
+    const niv = String(nivel || '').trim();
+    const falta = [];
+    if (!nome) falta.push('nome da conta (NOME_CTA)');
+    if (!niv) falta.push('nível da conta no plano de contas (NIVEL)');
+    if (falta.length) return { falta, codConta: cod };
+
+    const a = String(ano || '').replace(/\D/g, '').slice(0, 4);
+    return {
+        campos: {
+            dtAlt: a ? `0101${a}` : '',
+            codNatCc: COD_NAT_CC_RESULTADO,
+            indCta: IND_CTA_ANALITICA,
+            nivel: niv,
+            codCta: cod,
+            nomeCta: nome,
+        },
+    };
+}

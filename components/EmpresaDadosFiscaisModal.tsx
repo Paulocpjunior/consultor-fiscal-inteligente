@@ -405,6 +405,24 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('contaContabilReceitaFinanceira', v)}
                                 placeholder="Só p/ receita de aplicação — COD_CTA do F100"
                             />
+                            <Field
+                                label="Nome da conta (registro 0500)"
+                                value={dados.contaContabilReceitaFinanceiraNome || ''}
+                                onChange={v => handleField('contaContabilReceitaFinanceiraNome', v)}
+                                placeholder="Ex.: RENDIMENTOS FINANCEIROS"
+                            />
+                            <Field
+                                label="Nível da conta no plano de contas (0500)"
+                                value={dados.contaContabilReceitaFinanceiraNivel || ''}
+                                onChange={v => handleField('contaContabilReceitaFinanceiraNivel', v)}
+                                placeholder="Ex.: 5"
+                            />
+                            <p className="md:col-span-2 text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                Os três vão juntos: o registro 0500 declara a conta e o F100 a referencia. Faltando
+                                nome ou nível, o 0500 não sai e o F100 vai <strong>sem</strong> a conta — o PVA
+                                recusa conta referenciada sem declaração ("informar código no Registro 0500 antes
+                                de utilizá-lo").
+                            </p>
                             <p className="md:col-span-2 text-[11px] mt-1 text-slate-400 dark:text-slate-500">
                                 Obrigatório quando a receita entra pelo F550 (aluguel). O PVA recusa o arquivo
                                 sem o 1900. O CNPJ, o valor e os CST o app já deriva do próprio arquivo — estes

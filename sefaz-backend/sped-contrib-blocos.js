@@ -52,6 +52,7 @@ import { montarF550, montarF100, montar1900, CST_F550_TRIBUTADA } from './receit
 import {
     montarReceitaFinanceira, CST_APLICACAO_FINANCEIRA,
     COD_CONT_APLICACAO_FINANCEIRA, CODIGOS_RECEITA_APLICACAO_FINANCEIRA,
+    montar0500ContaReceita,
 } from './receita-aplicacao-financeira.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
@@ -893,6 +894,20 @@ export function coletarRetencoesF600(notas, warnings) {
     return { eventos, totalPis, totalCofins };
 }
 
+/**
+ * O COD_CTA que o F100 pode referenciar — VAZIO enquanto o 0500 não sair.
+ * A régua de "o que falta" mora no dono; aqui só se pergunta se ela fechou.
+ */
+function contaDeclaradaNo0500(dados) {
+    const r = montar0500ContaReceita({
+        codConta: dados.contaContabilReceitaFinanceira,
+        nomeConta: dados.contaContabilReceitaFinanceiraNome,
+        nivel: dados.contaContabilReceitaFinanceiraNivel,
+        ano: String(dados.competencia || '').slice(0, 4),
+    });
+    return r?.campos ? r.campos.codCta : '';
+}
+
 export function buildBlocoF(dados) {
     const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings);
     const eventos = ret.eventos || [];
@@ -946,10 +961,11 @@ export function buildBlocoF(dados) {
             fmt.formatValue(fin.aliqCofins * 100, 2),   // ALIQ_COFINS
             fmt.formatValue(fin.cofins),                // VL_COFINS
             '', '',                                     // NAT_BC_CRED · IND_ORIG_CRED
-            // ⚠️ COD_CTA sai VAZIO sem cadastro: a conta contábil é da empresa
-            // e não se inventa. O arquivo da PEC foi ACEITO com F100 sem ela,
-            // então a ausência não impede a entrega.
-            String(dados.contaContabilReceitaFinanceira || ''),
+            // ⚠️ COD_CTA só sai quando o 0500 SAIU — referenciar conta que o
+            // arquivo não declara é a recusa do CF BANK ("Informar código no
+            // Registro 0500 antes de utilizá-lo"). Tudo ou nada: sem o plano de
+            // contas completo, o F100 vai sem a conta, que é caso ACEITO (PEC).
+            contaDeclaradaNo0500(dados),
             '', '',                                     // COD_CCUS · DESC_DOC_OPER
         ]));
     }

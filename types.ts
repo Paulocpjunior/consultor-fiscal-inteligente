@@ -1533,6 +1533,14 @@ export interface EmpresaDadosFiscais {
      */
     contaContabilReceitaFinanceira?: string;
     /**
+     * Nome e nível da conta no PLANO DE CONTAS da empresa — o registro **0500**
+     * precisa dos dois. Sem eles o COD_CTA do F100 fica ÓRFÃO e o PVA recusa:
+     * *"Informar código no Registro 0500 antes de utilizá-lo"* (CF BANK,
+     * 24/08). É tudo ou nada: sem o 0500, o F100 sai sem a conta.
+     */
+    contaContabilReceitaFinanceiraNome?: string;
+    contaContabilReceitaFinanceiraNivel?: string;
+    /**
      * 🚨 Gera o **Bloco H (inventário)** fora de dezembro.
      *
      * O gerador lia este campo desde sempre e ele não existia em tela nenhuma
