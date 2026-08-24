@@ -198,6 +198,20 @@
         { "fieldPath": "fonte", "order": "ASCENDING" },
         { "fieldPath": "tomadorCnpj", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "whatsapp_mensagens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "conversaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
