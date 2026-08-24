@@ -225,6 +225,11 @@ export function interpretarRespostaWhatsapp(status, corpo) {
     else if (code === 131047) acao = 'Fora da janela de 24h e o template não foi aceito — o envio inicial ao cliente PRECISA ser template aprovado.';
     else if (code === 131026) acao = 'Número não tem WhatsApp ou não pode receber — confira o número do cliente no cadastro.';
     else if (code === 100 && /param/i.test(detalhe)) acao = 'Parâmetro inválido no payload — confira template e variáveis.';
+    // ☎️ 138009 (24/08, 1º aceite real): a Meta limita QUANTAS vezes a mesma
+    // empresa pede permissão ao MESMO cliente — é anti-insistência dela, não
+    // defeito nosso. Quase sempre aparece quando o cliente JÁ respondeu e
+    // alguém pede de novo; nesse caso não há o que refazer, a permissão vale.
+    else if (code === 138009) acao = 'A Meta limita quantas vezes se pede permissão ao mesmo cliente. Se ele já autorizou, não precisa pedir de novo — a autorização vale; se recusou, respeite a recusa.';
     return { ok: false, messageId: null, code, erro: detalhe, acao };
 }
 

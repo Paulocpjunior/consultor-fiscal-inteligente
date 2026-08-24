@@ -155,3 +155,24 @@ describe('recusa por condução oferece o caminho', () => {
         expect(tela).toMatch(/acaoAssumir\(\); setPermLigErro\(null\)/);
     });
 });
+
+// 24/08 — o cliente AUTORIZOU e o painel continuou dizendo "aguardando".
+describe('a conversa aberta não vive de foto velha', () => {
+    const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+    const cloud = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-cloud.js'), 'utf8');
+
+    it('o refresh de 30s ressincroniza a conversa SELECIONADA com o servidor', () => {
+        expect(tela).toMatch(/find\(\(c\) => c\.numero === selRef\.current\?\.numero\)/);
+        expect(tela).toMatch(/if \(abertaAgora\) setSel\(abertaAgora\)/);
+    });
+
+    it('o listar devolve o status da permissão (sem ele a tela nunca saberia)', () => {
+        const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rotas).toMatch(/permissaoLigacao: x\.permissaoLigacao \|\| null/);
+    });
+
+    it('138009 (limite de pedidos) vira orientação, não "tente novamente"', () => {
+        expect(cloud).toMatch(/code === 138009/);
+        expect(cloud).toMatch(/a autorização vale/);
+    });
+});
