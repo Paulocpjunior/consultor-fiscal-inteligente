@@ -602,6 +602,9 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // financeira do F100 — os dois eram cravados/ausentes e o EFD assinado do
     // CF BANK (24/08) mostrou que são fato DA EMPRESA.
     'indAproCredPisCofins', 'contaContabilReceitaFinanceira',
+    // O 0500 exige a conta INTEIRA — nome e nível vêm do plano de contas da
+    // empresa. Sem eles o COD_CTA do F100 ficaria órfão (recusa do CF BANK).
+    'contaContabilReceitaFinanceiraNome', 'contaContabilReceitaFinanceiraNivel',
     // Natureza da PJ (IND_NAT_PJ, campo 13 do 0000 do EFD-Contribuições). O
     // gerador LIA este campo desde sempre e ele não estava aqui nem na tela:
     // caía no '00' — "sociedade empresária em geral" — em toda empresa,

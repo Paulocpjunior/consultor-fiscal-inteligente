@@ -32,3 +32,21 @@ export function montarReceitaFinanceira(p?: { receita?: number | null }): {
     receita: number; pis: number; cofins: number; cst: string;
     aliqPis: number; aliqCofins: number;
 } | null;
+
+/** Natureza da conta — 04 = contas de RESULTADO. */
+export const COD_NAT_CC_RESULTADO: '04';
+/** Conta ANALÍTICA — a única que um lançamento pode referenciar. */
+export const IND_CTA_ANALITICA: 'A';
+
+/**
+ * O 0500 da conta da receita financeira. Sem NOME_CTA/NIVEL cadastrados
+ * devolve `{falta}` — e aí o COD_CTA também não sai no F100, porque
+ * referenciar conta não declarada é a recusa que o 0500 existe para evitar.
+ */
+export function montar0500ContaReceita(p?: {
+    codConta?: string | null; nomeConta?: string | null;
+    nivel?: string | number | null; ano?: string | number | null;
+}): { campos: {
+    dtAlt: string; codNatCc: string; indCta: string;
+    nivel: string; codCta: string; nomeCta: string;
+} } | { falta: string[]; codConta: string } | null;

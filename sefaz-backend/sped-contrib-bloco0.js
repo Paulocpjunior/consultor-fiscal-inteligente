@@ -26,6 +26,9 @@ import {
 } from './sped-bloco0-cadastros.js';
 // IND_REG_CUM sai do que o arquivo PRODUZIU (F550 × blocos A/C/D).
 import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
+// 🚨 O 0500 (plano de contas) — sem ele o COD_CTA do F100 fica ÓRFÃO e o PVA
+// recusa: "Informar código no Registro 0500 antes de utilizá-lo" (CF BANK).
+import { montar0500ContaReceita } from './receita-aplicacao-financeira.js';
 // TIPO_ITEM/NCM do item de serviço — régua única, a mesma que os dois
 // orquestradores usam para classificar o item.
 import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-documentos.js';
@@ -58,6 +61,30 @@ function buildBloco0Contrib(dados) {
 
     // ── 0140 — Estabelecimentos ─────────────────────────────────────────
     linhas.push(build0140(dados));
+
+    // 🚨 O 0500 vem ANTES de quem o referencia (o F100), como o 0150/0200 vêm
+    // antes do C100/A100. Ele só sai quando a conta está INTEIRA no cadastro —
+    // ver a régua em `receita-aplicacao-financeira.js`.
+    const c0500 = montar0500ContaReceita({
+        codConta: dados.contaContabilReceitaFinanceira,
+        nomeConta: dados.contaContabilReceitaFinanceiraNome,
+        nivel: dados.contaContabilReceitaFinanceiraNivel,
+        ano: String(dados.competencia || '').slice(0, 4),
+    });
+    if (c0500?.campos) {
+        const c = c0500.campos;
+        linhas.push(fmt.buildLine([
+            '0500', c.dtAlt, c.codNatCc, c.indCta, c.nivel, c.codCta, c.nomeCta, '', '', '',
+        ]));
+    } else if (c0500?.falta && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Registro 0500 (plano de contas) NÃO foi gerado: falta ${c0500.falta.join(' e ')} da conta `
+            + `${c0500.codConta}. Sem ele o COD_CTA do F100 ficaria ÓRFÃO e o PVA recusa com "Código da conta `
+            + 'analítica/grupo de contas inválido. Informar código no Registro 0500 antes de utilizá-lo." '
+            + 'Por isso o F100 sai SEM a conta — o que é aceito. Preencha em Empresas → Dados Fiscais → '
+            + '"Conta contábil da receita financeira".',
+        );
+    }
 
     // ── 0150 — Participantes ────────────────────────────────────────────
     // 🚨 COD_MUN DO PARTICIPANTE — o PVA cobra, e o app tem que cobrar ANTES.
