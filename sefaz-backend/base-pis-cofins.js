@@ -98,7 +98,10 @@ export function receitaEBaseDoDocumento(nota, valorSemItens) {
     const itens = Array.isArray(nota?.itens) ? nota.itens : [];
     if (!itens.length) {
         const v = Math.max(0, n(valorSemItens));
-        return { receita: v, base: v, icms: 0, temItens: false, descontoDoDocumento: 0 };
+        return {
+            receita: v, base: v, icms: 0, temItens: false,
+            descontoDoDocumento: 0, desconto: 0, receitaBruta: v,
+        };
     }
     let receita = 0, base = 0, icms = 0, descontoNosItens = 0;
     for (const item of itens) {
@@ -124,7 +127,15 @@ export function receitaEBaseDoDocumento(nota, valorSemItens) {
         receita -= descontoDoDocumento;
         base = Math.max(0, base - descontoDoDocumento);
     }
-    return { receita, base, icms, temItens: true, descontoDoDocumento };
+    // ⚠️ O DESCONTO SAI NOMEADO, não só aplicado. Paulo, 24/08 (PWR):
+    // *"tem que tirar o desconto — e olha que só tem 1 nota, tem empresa que
+    // tem MUITOS descontos"*. Sem o número na tela, "a receita está errada" só
+    // se resolve com alguém lendo o código; com ele, quem gera confere na hora.
+    const desconto = descontoNosItens + descontoDoDocumento;
+    return {
+        receita, base, icms, temItens: true, descontoDoDocumento,
+        desconto, receitaBruta: receita + desconto,
+    };
 }
 
 /**
