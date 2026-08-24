@@ -2142,9 +2142,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         {cfgAba === 'atendentes' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Clique nas filas de cada pessoa — salva na hora. Quem tem <strong>Recepção</strong> vê
-                                    TODAS as conversas; sem atribuição, valem os departamentos de módulo; os demais veem
-                                    a própria fila + Recepção.
+                                    Clique nas filas de cada pessoa — salva na hora. Cada um vê e é avisado <strong>só das
+                                    filas marcadas</strong>. Quem precisa ver TODAS: <strong>⭐ Gestor</strong> ou a fila
+                                    <strong>Recepção</strong>. Sem nenhuma fila marcada, a pessoa só vê o que ela mesma
+                                    conduz. <em>Ser admin do CFI configura o app, mas não dá visão do inbox inteiro.</em>
                                 </p>
                                 {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
                                     não deixa a página mostrar popup do sistema — quem avisa lá é
@@ -2221,7 +2222,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <div className="flex items-center justify-between gap-2">
                                                 <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
                                                     {a.nome || a.email || a.uid}
-                                                    {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600">admin · tudo</span>}
+                                                    {/* 🚨 O selo dizia "admin · tudo" e virou MENTIRA em 24/08: administrar
+                                                        o CFI deixou de dar visão do inbox inteiro. Ele agora diz o que o
+                                                        papel FAZ (configura, encerra qualquer atendimento) — a visão sai
+                                                        das filas ao lado, como em todo mundo. */}
+                                                    {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600" title="Administra o app (⚙️, cadastros) e pode encerrar qualquer atendimento. A VISÃO das conversas segue as filas marcadas — marque ⭐ Gestor ou a fila Recepção para ver todas.">admin do app</span>}
                                                 </p>
                                                 {a.role !== 'admin' && (
                                                     <button
