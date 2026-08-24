@@ -232,7 +232,15 @@ app.use(helmet({
             scriptSrc: ["'self'", "https://apis.google.com", "https://www.gstatic.com", "https://cdnjs.cloudflare.com"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            imgSrc: ["'self'", "data:", "https:"],
+            // blob: é como o SP Connect mostra o anexo baixado COM LOGIN
+            // (fetch → blob → object URL; <img src> não manda header). Sem
+            // ele aqui o CSP bloqueava TODA imagem recebida — miniatura e
+            // visualizador quebrados em Mac/Windows/Teams (24/08), enquanto
+            // o banner de fila (https:) aparecia normal.
+            imgSrc: ["'self'", "data:", "https:", "blob:"],
+            // áudio/vídeo recebidos saem pelo MESMO caminho de blob — sem
+            // mediaSrc eles caem no defaultSrc 'self' e quebram igual.
+            mediaSrc: ["'self'", "blob:"],
             frameSrc: ["'self'", "blob:", "https://*.firebaseapp.com", "https://apis.google.com"],
             workerSrc: ["'self'", "https://cdnjs.cloudflare.com", "blob:"],
             // consultor-fiscal-proxy: o front chama o proxy SharePoint (deploy
