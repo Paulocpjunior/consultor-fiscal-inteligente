@@ -4647,10 +4647,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   concordância, cláusulas por tipo — NUNCA altera o documento; cópia por
   e-mail ao gestor (jefferson@) com colaborador em CC; auditoria em
   legalizacao_contratos_analises (arquivo NÃO é armazenado na análise, só o
-  resumo). **ENVIOS AO CLIENTE PAUSADOS desde 28/07** (Paulo: clientes já
-  receberam comunicados; regularizar o Jotform antes): chave `alertasAtivos`
-  em Ajustes nasce DESLIGADA e o cron respeita — sync roda, nenhum e-mail
-  sai; religar só na aba Ajustes. **Jotform Sign** (v1.0.17): a API do
+  resumo). **ENVIOS AO CLIENTE — pausados de 28/07 até serem RELIGADOS; em
+  24/08 estão ATIVOS** (o print do alerta recebido por um cliente prova):
+  a chave `alertasAtivos` em Ajustes nasce DESLIGADA e o cron respeita —
+  sync roda, nenhum e-mail sai. **Não repetir "pausados" como fato**: quem
+  responde é a chave em Ajustes, não este arquivo (é o vício do "0/388").
+  🚨 **E O ALERTA SAÍA DA CAIXA PESSOAL DO PAULO** (24/08, com o print do
+  e-mail que chegou ao cliente assinado por *"Paulo Pereira Junior
+  <junior@...>"*: *"os alertas por email estao ok, so nao podem ter o meu
+  email como remetente"*). A causa NÃO estava no código de alerta: o
+  `deploy.yml` da Legalização **ESPELHA `GRAPH_REMETENTE` do serviço do
+  CFI**, e lá esse valor é o junior@ — ou seja, **o remetente de um app era
+  decidido por uma env de OUTRO app**, e mudaria junto com ele sem ninguém
+  perceber. ✂️ `remetenteDeAlertas` (no `legalizacao-helper.js`, módulo
+  PURO — o orquestrador usa `import.meta` e **não carrega no jest**, e
+  régua sem prova é régua que volta) com precedência **cadastro em Ajustes
+  > `LEGALIZACAO_REMETENTE` deste serviço > gestor do departamento**; campo
+  *"Quem ASSINA o e-mail ao cliente"* na aba Ajustes, só domínio do
+  escritório, vazio APAGA. **`GRAPH_REMETENTE` saiu da lista espelhada** —
+  as CREDENCIAIS do Graph seguem vindo do CFI, só a CAIXA não.
+  📌 **REGRA QUE FICA: env espelhada de outro app é DEPENDÊNCIA INVISÍVEL —
+  o que identifica o app (remetente, nome, logo, gestor) nunca se herda.**
+  Trava por VARREDURA (o backend inteiro proibido de ler
+  `process.env.GRAPH_REMETENTE`, e todo campo `remetente:` tem que vir do
+  dono), provada revertendo um envio de propósito.
+  🐛 E no caminho ela achou defeito MEU: dois envios ao gestor (análise de
+  contrato e webhook do Sign) referenciavam `ajustes` **fora de escopo** —
+  ReferenceError no envio, dentro de try/catch, ou seja e-mail que
+  simplesmente não sairia. **Jotform Sign** (v1.0.17): a API do
   Jotform NÃO cria nem baixa documentos do Sign (limitação da plataforma,
   verificada 28/07) ⇒ o trilho é WEBHOOK. Fluxo: análise → colaborador
   corrige → "Validar e arquivar" anexa a versão FINAL (vai pro Cofre
