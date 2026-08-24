@@ -55,3 +55,16 @@ export function traduzirEventoChamada(evento: unknown): string;
 export function extrairEventosChamada(payload: unknown):
     { valido: boolean; chamadas: EventoChamada[]; ilegiveis: unknown[] };
 export function resumoDaChamada(c: Pick<EventoChamada, 'direcao' | 'evento' | 'duracaoSegundos'>): string;
+
+// ☎️ Permissão de ligação (fase 2 — saída)
+export interface RespostaPermissaoLigacao {
+    resposta: 'aceita' | 'recusada';
+    expiraEm: string | null;
+    bruto: unknown;
+}
+export function montarPedidoPermissaoLigacao(numero: string): {
+    messaging_product: string; recipient_type: string; to: string; type: string;
+    interactive: { type: string; action: { name: string } };
+};
+export function respostaDePermissaoLigacao(m: unknown): RespostaPermissaoLigacao | null;
+export function resumoDaPermissao(p: RespostaPermissaoLigacao | null): string | null;

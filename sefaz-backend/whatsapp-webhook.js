@@ -24,6 +24,7 @@
 
 import { createHmac } from 'crypto';
 import { secretsMatch } from './cron-secret.js';
+import { respostaDePermissaoLigacao } from './whatsapp-chamadas.js';
 
 /** Config do webhook — envs próprias, separadas das do envio. */
 export function configWebhook(env = process.env) {
@@ -164,6 +165,8 @@ export function extrairEventos(payload) {
                     respostaA: m.context?.id || null,
                     timestamp: tsParaIso(m.timestamp),
                     phoneNumberId,
+                    // ☎️ resposta ao cartão "Permitir" (null em mensagem comum)
+                    permissaoLigacao: respostaDePermissaoLigacao(m),
                 });
             }
 

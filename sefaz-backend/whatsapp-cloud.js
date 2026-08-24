@@ -21,10 +21,25 @@
 // ============================================================================
 
 import { montarMensagemMidia } from './whatsapp-midia.js';
+import { montarPedidoPermissaoLigacao } from './whatsapp-chamadas.js';
 
 // Exportada: o webhook baixa mídia recebida pela MESMA base (segunda cópia
 // da URL divergiria de versão em silêncio).
 export const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
+/**
+ * ☎️ A CHAMADA fala uma versão MAIS NOVA do Graph, e isso é decisão, não
+ * descuido (24/08): o `call_permission_request` nasceu com a Calling API, que
+ * é posterior à v20 usada pelo resto do envio. Mandar um `interactive` que a
+ * versão não conhece devolve "parâmetro inválido" — e foi assim que o pedido
+ * de permissão saiu daqui sem nada chegar no cliente.
+ * ⚠️ SÓ o pedido de permissão usa esta base: subir a versão do envio INTEIRO
+ * sem prova mexeria em texto, template e mídia, que funcionam hoje.
+ * O env destrava sem deploy se a Meta pedir outra.
+ */
+export function graphBaseChamadas(env = process.env) {
+    const v = String(env.WHATSAPP_GRAPH_VERSAO_CHAMADAS || 'v23.0').trim();
+    return `https://graph.facebook.com/${v}`;
+}
 
 /** Lê a configuração do canal a partir do ambiente. */
 export function configWhatsapp(env = process.env) {
@@ -423,6 +438,46 @@ export async function enviarTextoLivre({ para, texto }, deps = {}) {
     const json = await resp.json().catch(() => ({}));
     const r = interpretarRespostaWhatsapp(resp.status, json);
     return { ...r, numeroEnviado: numero };
+}
+
+/**
+ * ☎️ Pedido de PERMISSÃO DE LIGAÇÃO (fase 2 da chamada). O cliente recebe um
+ * cartão "Permitir" na conversa; sem o aceite dele a Meta recusa ligação de
+ * saída. O corpo vem do dono puro (montarPedidoPermissaoLigacao) e a recusa
+ * da Meta volta CRUA — mesmo desenho do configurar chamadas.
+ */
+export async function enviarPedidoPermissaoLigacao({ para }, deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    if (!cfg.token || !cfg.phoneNumberId) {
+        return { ok: false, erro: 'Canal WhatsApp não configurado.', configuracaoIncompleta: true };
+    }
+    const numero = numeroCanonicoWhatsapp(para);
+    if (!numero) return { ok: false, erro: `Número de WhatsApp inválido: "${para}".` };
+    const doFetch = deps.fetchImpl || fetch;
+    const base = deps.base || graphBaseChamadas(deps.env);
+    let resp;
+    try {
+        resp = await doFetch(`${base}/${cfg.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(montarPedidoPermissaoLigacao(numero)),
+        });
+    } catch (e) {
+        return { ok: false, indeterminado: true, erro: `Rede caiu durante o envio (${e.message}) — o pedido PODE ter saído.`, acao: 'Confira a conversa antes de reenviar: reenviar duplica o cartão.' };
+    }
+    const json = await resp.json().catch(() => ({}));
+    const r = interpretarRespostaWhatsapp(resp.status, json);
+    // 🚨 ACEITE SEM `messages[0].id` É ACEITE. O leitor comum exige o id para
+    // dar ok — e o id é a identidade da MENSAGEM. Este pedido não é mensagem
+    // comum, e o dia em que a Meta responder 200 sem ele, a régua antiga
+    // diria "HTTP 200" como se fosse erro: o cartão TERIA chegado ao cliente
+    // e a tela mostraria falha, que é o pior desfecho (reenviar duplica).
+    if (!r.ok && resp.status >= 200 && resp.status < 300 && !json?.error) {
+        return { ok: true, messageId: null, semIdDaMeta: true, bruto: json, numeroEnviado: numero };
+    }
+    // A resposta CRUA viaja: a recusa desta API ainda não foi vista aqui, e
+    // texto traduzido esconde justamente o que faltava saber.
+    return { ...r, bruto: r.ok ? undefined : json, numeroEnviado: numero };
 }
 
 /** Achata a resposta do subscribed_apps pra lista de nomes/ids (puro, testável). */

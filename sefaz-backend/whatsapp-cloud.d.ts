@@ -109,9 +109,20 @@ export function assinarWaba(deps?: Record<string, unknown>): Promise<{
 }>;
 export function interpretarAppsAssinados(corpo: unknown): { id: string | null; nome: string | null }[];
 export const GRAPH_BASE: string;
+/** Base do Graph da CHAMADA (v23+ por padrão — a v20 do envio não conhece o call_permission_request). */
+export function graphBaseChamadas(env?: Record<string, string | undefined>): string;
 
 // 📝 Criar template NOVO na Meta (a validação de forma é do whatsapp-templates).
 export function criarTemplateNaMeta(
     p: { nome: string; idioma: string; categoria: string; corpo: string; exemplos?: string[] },
     deps?: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; cfg?: ConfigWhatsapp },
 ): Promise<{ ok: boolean; id?: string | null; status?: string; categoria?: string; erro?: string; detalheMeta?: unknown; faltas?: string[] }>;
+
+export function enviarPedidoPermissaoLigacao(
+    p: { para: string },
+    deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; base?: string },
+): Promise<{
+    ok: boolean; erro?: string; acao?: string; code?: number | null;
+    messageId?: string | null; semIdDaMeta?: boolean; bruto?: unknown;
+    indeterminado?: boolean; configuracaoIncompleta?: boolean; numeroEnviado?: string;
+}>;

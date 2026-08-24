@@ -29,7 +29,7 @@ import {
 } from './whatsapp-templates.js';
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
-    listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, normalizarNumeroBr,
+    listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp,
 } from './whatsapp-cloud.js';
 import {
@@ -500,6 +500,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 canal: x.canal || 'whatsapp',             // 'instagram' = DM (selo 📷 na tela)
                 situacao: x.status || 'aberta',
                 janela24hAte: x.janela24hAte || null,
+                permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
                 ultimaMensagem: x.ultimaMensagem || null,
                 naoLidas: x.naoLidas || 0,
                 atualizadoEm: x.atualizadoEm || null,
@@ -803,6 +804,78 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
         return res.json({ ok: true, autoAssumida: !dono, mensagem: { id: envio.messageId, ...msg, erroEntrega: null } });
     } catch (e) {
         console.error('[whatsapp/responder]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ☎️ Pedir PERMISSÃO DE LIGAÇÃO (fase 2 da chamada — Paulo, 24/08). O
+// cliente recebe o cartão "Permitir"; a resposta volta pelo webhook e vira
+// linha na conversa + carimbo em `permissaoLigacao`. Mesmas travas do
+// responder: janela de 24h (fora dela a Meta recusa o interactive) e
+// condução (pedir ligação numa conversa de outro atendente é a segunda voz).
+router.post('/conversas/:numero/pedir-permissao-ligacao', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const conv = await db.collection('whatsapp_conversas').doc(numero).get();
+        if (ehConversaInstagram(numero) || conv.data()?.canal === 'instagram') {
+            return res.status(422).json({ ok: false, error: 'Ligação é do WhatsApp — DM do Instagram não tem chamada.' });
+        }
+        const ate = Date.parse(conv.data()?.janela24hAte || '');
+        if (!Number.isFinite(ate) || ate <= Date.now()) {
+            return res.status(422).json({
+                ok: false,
+                error: 'A janela de 24h está fechada — o pedido de permissão não sai.',
+                acao: 'Aguarde o cliente escrever (reabre a janela) ou inicie por template.',
+                janelaFechada: true,
+            });
+        }
+        const dono = conv.data()?.atribuidoA || null;
+        const eu = req.user?.email || null;
+        if (dono && dono !== eu) {
+            return res.status(409).json({
+                ok: false, error: `Esta conversa está em condução por ${dono}.`,
+                acao: 'Assuma a conversa (🙋) antes de pedir a permissão.', emConducaoPor: dono,
+            });
+        }
+        let depsEnvio = {};
+        const canal = await cfgDeEnvioDaConversa(db, conv.data());
+        if (canal.erro) return res.status(503).json({ ok: false, error: canal.erro });
+        if (canal.cfg) depsEnvio = { cfg: canal.cfg };
+        const envio = await enviarPedidoPermissaoLigacao({ para: numero }, depsEnvio);
+        if (!envio.ok) {
+            const status = envio.configuracaoIncompleta ? 503 : envio.indeterminado ? 502 : 422;
+            // A recusa vai pro LOG inteira: é o único lugar onde a resposta
+            // crua da Meta sobrevive pra próxima sessão ler.
+            console.warn('[whatsapp/permissao-ligacao] recusa da Meta:', JSON.stringify(envio.bruto || envio.erro));
+            return res.status(status).json({
+                ok: false, error: envio.erro, acao: envio.acao,
+                // O CÓDIGO da Meta vai junto: é por ele que se acha a causa
+                // (a mensagem dela muda, o código não).
+                code: envio.code ?? null,
+                indeterminado: Boolean(envio.indeterminado),
+            });
+        }
+        const agora = new Date().toISOString();
+        const msg = {
+            conversaId: numero, direcao: 'saida', tipo: 'permissao-ligacao',
+            texto: '☎️ Pedido de permissão de ligação enviado — o cliente vê o cartão "Permitir" no WhatsApp',
+            midia: null, timestamp: agora, statusEntrega: 'enviado',
+            enviadoPor: eu,
+        };
+        // Sem id da Meta, a linha ainda existe: id nosso, determinístico pelo
+        // instante — mensagem que sumiria do histórico é pior que id feio.
+        const docId = envio.messageId || `permreq_${numero}_${Date.parse(agora)}`;
+        await db.collection('whatsapp_mensagens').doc(docId).set(msg, { merge: true });
+        await db.collection('whatsapp_conversas').doc(numero).set({
+            permissaoLigacao: { status: 'pendente', pedidoEm: agora, pedidoPor: eu },
+            ultimaMensagem: { resumo: '☎️ pedido de permissão de ligação', direcao: 'saida', em: agora },
+            atualizadoEm: agora,
+        }, { merge: true });
+        return res.json({ ok: true, mensagem: { id: envio.messageId, ...msg, erroEntrega: null } });
+    } catch (e) {
+        console.error('[whatsapp/permissao-ligacao]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

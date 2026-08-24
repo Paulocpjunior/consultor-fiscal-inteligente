@@ -39,7 +39,7 @@ import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaVa
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
-import { extrairEventosChamada, resumoDaChamada } from './whatsapp-chamadas.js';
+import { extrairEventosChamada, resumoDaChamada, resumoDaPermissao } from './whatsapp-chamadas.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -139,6 +139,10 @@ async function catalogoDeCanais(db) {
 
 async function gravarMensagemRecebida(db, msg, catalogo = null) {
     const agora = new Date().toISOString();
+    // ☎️ Resposta ao cartão "Permitir": vira texto legível na linha (o
+    // interactive cru não tem título) e carimba a conversa — é o que o botão
+    // da tela lê para saber se a ligação de saída está autorizada.
+    if (msg.permissaoLigacao && !msg.texto) msg.texto = resumoDaPermissao(msg.permissaoLigacao);
     // De qual número esta mensagem veio? A Meta diz no payload — é fonte.
     const canal = catalogo ? canalDoEvento(catalogo, msg.phoneNumberId) : { canalId: null, conhecido: true, motivo: null };
     if (catalogo && !canal.conhecido) console.warn('[whatsapp/canais]', canal.motivo);
@@ -177,6 +181,13 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
         janela24hAte: janela24hAte(msg.timestamp || agora),
         naoLidas: admin.firestore.FieldValue.increment(1),
         atualizadoEm: agora,
+        ...(msg.permissaoLigacao ? {
+            permissaoLigacao: {
+                status: msg.permissaoLigacao.resposta,           // 'aceita' | 'recusada'
+                em: msg.timestamp || agora,
+                expiraEm: msg.permissaoLigacao.expiraEm || null, // null = a Meta não disse
+            },
+        } : {}),
     }, { merge: true });
 }
 
