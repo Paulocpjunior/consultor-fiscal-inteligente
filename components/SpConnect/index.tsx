@@ -1026,6 +1026,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const abrirNova = async () => {
         setNovaAberta(true);
         setErroNova(null);
+        // O default 'fiscal' só vale pra quem VÊ o Fiscal — colaborador de
+        // outra fila abre já na fila DELE (um select cujo valor não está
+        // entre as opções renderiza vazio e o envio falharia sem causa).
+        setNc((f) => (filasChip.some((x) => x.id === f.departamento)
+            ? f
+            : { ...f, departamento: filasChip[0]?.id || f.departamento, escolha: '', variaveis: {} }));
         if (templates.length === 0 && daMeta.length === 0) {
             setCarregandoTpl(true);
             try {
@@ -1267,8 +1273,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="w-full px-2 py-1.5 text-[12px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
                                     {/* As 8 FILAS de atendimento, não só os 5 módulos do SaaS — a
                                         Recepção (e RH/Jurídico) também iniciam conversa; só não têm
-                                        template do CADASTRO (⚙️), então usam um Aprovado na Meta. */}
-                                    {filas.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
+                                        template do CADASTRO (⚙️), então usam um Aprovado na Meta.
+                                        🔒 Colaborador de fila só vê AS DELE (Paulo, 24/08): iniciar
+                                        conversa por outra fila criaria um atendimento que ele mesmo
+                                        não conseguiria ver depois. */}
+                                    {filasChip.map((f) => <option key={f.id} value={f.id}>{rotuloCurtoFila(f.id)}</option>)}
                                 </select>
                             </label>
                             <label className="text-[11px] text-slate-500">
