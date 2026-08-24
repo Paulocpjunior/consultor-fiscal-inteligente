@@ -1,7 +1,7 @@
 {
     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
     "manifestVersion": "1.16",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "id": "957eb31d-719a-4ea5-adc6-de5f41be6219",
     "packageName": "br.com.spassessoriacontabil.spconnect",
     "developer": {
@@ -29,11 +29,17 @@
             "name": "SP Connect",
             "contentUrl": "https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/connect",
             "websiteUrl": "https://consultor-fiscal-inteligente-631239634290.us-west1.run.app/connect",
-            "scopes": ["personal"]
+            "scopes": [
+                "personal"
+            ]
         }
     ],
-    "permissions": ["identity"],
-    "devicePermissions": ["media"],
+    "permissions": [
+        "identity"
+    ],
+    "devicePermissions": [
+        "media"
+    ],
     "activities": {
         "activityTypes": [
             {
@@ -46,5 +52,9 @@
     "validDomains": [
         "consultor-fiscal-inteligente-631239634290.us-west1.run.app",
         "app.spassessoriacontabil.com.br"
-    ]
+    ],
+    "webApplicationInfo": {
+        "id": "59fd4ec9-37bd-472c-9fa7-373461dffd50",
+        "resource": "https://app.spassessoriacontabil.com.br"
+    }
 }
