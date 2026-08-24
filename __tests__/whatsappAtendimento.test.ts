@@ -873,3 +873,82 @@ describe('administrar o app ≠ atender todas as filas', () => {
         expect(filasVisiveis({ role: 'admin', papelAtendimento: 'gestor', filasAtendimento: ['legalizacao'] } as any)).toBeNull();
     });
 });
+
+// ═══ 24/08 — "Eu não! Meu acesso é full" ═══════════════════════════════════
+// A separação de admin × atendimento tirou a visão total de TODO admin, e o
+// dono do escritório caiu junto. O acesso dele volta — mas por CONSTRUÇÃO,
+// nunca por marcação na ⚙️: régua que mora em campo editável é régua que
+// alguém desmarca sem querer, e foi exatamente esse o defeito do dia.
+describe('👑 o dono vê tudo por construção', () => {
+    const DONO = 'junior@spassessoriacontabil.com.br';
+
+    it('sem fila nenhuma e sem ser gestor, o dono continua vendo TUDO', () => {
+        expect(filasVisiveis({ email: DONO } as any)).toBeNull();
+        expect(conversaVisivel(filasVisiveis({ email: DONO } as any), 'fiscal')).toBe(true);
+    });
+
+    it('e o caixa alto/baixo do e-mail não muda a resposta', () => {
+        expect(filasVisiveis({ email: 'JUNIOR@SPassessoriacontabil.com.BR' } as any)).toBeNull();
+    });
+
+    it('admin comum NÃO herda isso — a exceção é do dono, não do papel', () => {
+        expect(filasVisiveis({
+            email: 'bruno.pellegrino@spassessoriacontabil.com.br',
+            role: 'admin', filasAtendimento: ['legalizacao'],
+        } as any)).toEqual(['legalizacao']);
+    });
+
+    it('quem responde é o MESMO dono do relatório restrito (nunca 2ª lista)', () => {
+        const nucleo = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-atendimento.js'), 'utf8');
+        expect(nucleo).toMatch(/import \{ ehDono \} from '\.\/auditoria-dono\.js'/);
+        // Uma lista de e-mails privilegiados escrita AQUI seria o começo de
+        // duas respostas divergentes sobre quem manda na casa.
+        expect(nucleo).not.toMatch(/@spassessoriacontabil\.com\.br/);
+    });
+});
+
+// ═══ 24/08 — a SEGUNDA PORTA que o PR #995 deixou viva ═════════════════════
+// 🚨 Tirar o `role` de dentro do `filasVisiveis` NÃO fechou a classe: a rota
+// tinha um atalho PRÓPRIO (`if (role === 'admin') return { filas: null }`) que
+// nem chegava a chamar a régua. Resultado: o admin parou de ser NOTIFICADO
+// das outras filas (o push já lia a régua nova) e continuava VENDO todas na
+// lista. Meia correção não deixa o defeito pela metade — ela troca um erro
+// por uma CONTRADIÇÃO, e quem lê escolhe a metade que preferir.
+describe('a régua da visão tem UMA porta', () => {
+    const rotas = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const perfil = rotas.slice(
+        rotas.indexOf('async function perfilAtendimento'),
+        rotas.indexOf('async function perfilAtendimento') + 1400,
+    );
+
+    it('perfilAtendimento não decide `filas` por role — só pela régua', () => {
+        expect(perfil).toMatch(/filas: filasVisiveis\(\{ email: user\?\.email,/);
+        expect(perfil).not.toMatch(/role === 'admin'\) return \{ filas: null/);
+    });
+
+    it('o role continua decidindo o que é ADMINISTRAÇÃO (o `papel` da tela)', () => {
+        expect(perfil).toMatch(/user\?\.role === 'admin' \? 'admin'/);
+    });
+
+    it('e o push manda o mesmo e-mail para a mesma régua', () => {
+        const push = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-push.js'), 'utf8');
+        expect(push).toMatch(/filasVisiveis\(\{ email: u\.email,/);
+    });
+});
+
+// ⚙️ E o clique que resolve tem que EXISTIR: o ⭐ Gestor era escondido
+// justamente para quem tem role admin — herança de quando admin via tudo de
+// graça. Aviso que aponta um lugar tem de apontar um lugar que a pessoa ACHA.
+describe('o ⭐ Gestor existe para quem precisa dele', () => {
+    const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('o botão não é mais escondido por ser admin', () => {
+        expect(tela).not.toMatch(/\{a\.role !== 'admin' && \(/);
+        expect(tela).toMatch(/\{!a\.dono && \(/);
+    });
+
+    it('e o selo do dono sai do BACKEND, não de uma lista na tela', () => {
+        expect(tela).toMatch(/a\.dono && <span/);
+        expect(tela).not.toMatch(/junior@spassessoriacontabil/);
+    });
+});

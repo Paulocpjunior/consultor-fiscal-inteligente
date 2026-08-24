@@ -22,6 +22,8 @@
 //   executa (envia/grava) é a rota. É o que torna o bot testável de verdade.
 // ============================================================================
 
+import { ehDono } from './auditoria-dono.js';
+
 const FUSO = 'America/Sao_Paulo';
 
 /** Catálogo de FILAS de atendimento (id estável; rótulo é o que o cliente vê). */
@@ -52,8 +54,16 @@ export function filaValida(id) {
 // ⚠️ Consequência que se diz na cara: admin sem fila marcada e sem ser gestor
 // passa a ver só o que conduz. Quem precisa da visão total do inbox marca
 // GESTOR (⭐) ou a fila Recepção — é um clique, e fica declarado.
+// 👑 A ÚNICA EXCEÇÃO É O DONO (Paulo, 24/08: "eu não! meu acesso é full").
+// E ela é DE CONSTRUÇÃO, não de cadastro: o acesso do dono não pode depender
+// de uma marcação na ⚙️ que qualquer admin desmarca sem querer — foi
+// exatamente esse o defeito de hoje, com a régua morando num campo editável.
+// Quem responde é `ehDono` (`auditoria-dono.js`), o MESMO dono do relatório
+// restrito — segunda lista de e-mails privilegiados seria o começo de duas
+// respostas divergentes sobre quem manda na casa.
 // admin (role do CFI)  = administra (⚙️ e cadastros) e encerra qualquer
 //                        atendimento; a VISÃO segue as filas dele;
+// dono do escritório   = vê tudo, sempre, sem depender de marcação;
 // gestor               = vê tudo, atende tudo, encerra qualquer atendimento,
 //                        SÓ NÃO altera configuração;
 // colaborador (padrão) = só as filas linkadas, transfere, encerra APENAS o
@@ -69,9 +79,14 @@ export function papelValido(p) {
  * (users.filasAtendimento); sem atribuição, os departamentos de MÓDULO valem
  * como fila (os 5 ids coincidem de propósito). Devolve null = TODAS.
  */
-export function filasVisiveis({ papelAtendimento, departamentos = [], filasAtendimento = [] }) {
+export function filasVisiveis({ email, papelAtendimento, departamentos = [], filasAtendimento = [] }) {
     // ⚠️ `role` NÃO entra aqui de propósito — ver o comentário dos papéis
     // acima. Quem administra o CFI não herda o inbox do escritório inteiro.
+    // 👑 O DONO vê tudo por construção. O `typeof process` existe porque este
+    // módulo é importado TAMBÉM pelo bundle do navegador (a tela usa
+    // `coberturaDasFilas`): sem env, valem os donos padrão — e o navegador
+    // nunca AUTORIZA nada, quem decide acesso é o backend.
+    if (ehDono(email, typeof process !== 'undefined' ? process.env : {})) return null;
     if (String(papelAtendimento || '').toLowerCase() === 'gestor') return null; // gestor vê tudo
     const minhas = (filasAtendimento.length ? filasAtendimento : departamentos)
         .map((d) => String(d || '').trim().toLowerCase())

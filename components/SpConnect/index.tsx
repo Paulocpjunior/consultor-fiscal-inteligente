@@ -2227,8 +2227,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         papel FAZ (configura, encerra qualquer atendimento) — a visão sai
                                                         das filas ao lado, como em todo mundo. */}
                                                     {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600" title="Administra o app (⚙️, cadastros) e pode encerrar qualquer atendimento. A VISÃO das conversas segue as filas marcadas — marque ⭐ Gestor ou a fila Recepção para ver todas.">admin do app</span>}
+                                                    {/* 👑 O dono vê tudo por CONSTRUÇÃO — o selo existe pra ninguém
+                                                        tentar "arrumar" o acesso dele mexendo em fila ou papel. */}
+                                                    {a.dono && <span className="ml-1.5 text-[9px] font-bold text-violet-600" title="Dono do escritório: vê e atende TODAS as filas sempre, sem depender de marcação. Não há o que configurar aqui.">👑 dono · tudo</span>}
                                                 </p>
-                                                {a.role !== 'admin' && (
+                                                {/* 🚨 O ⭐ era ESCONDIDO justo para o admin — herança de quando
+                                                    admin via tudo de graça. Com a separação de 24/08 isso virou
+                                                    beco: o admin que precisa do inbox inteiro não tinha o botão
+                                                    que resolve. Só o DONO fica sem ele, porque nele não muda nada. */}
+                                                {!a.dono && (
                                                     <button
                                                         onClick={async () => {
                                                             const novo = a.papelAtendimento === 'gestor' ? 'colaborador' : 'gestor';
