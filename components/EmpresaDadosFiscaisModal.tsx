@@ -382,6 +382,29 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('contrib1900CodSit', v)}
                                 placeholder="Tabela 4.1.2 — só p/ quem tem receita no F550"
                             />
+                            {/* 🚨 O 0110 declarava rateio proporcional para TODA
+                                empresa do não-cumulativo, e o EFD assinado do CF
+                                BANK mostra apropriação DIRETA. É fato da empresa. */}
+                            <div>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                    Apropriação do crédito (0110 · não-cumulativo)
+                                </label>
+                                <select
+                                    className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-sm"
+                                    value={dados.indAproCredPisCofins || ''}
+                                    onChange={e => handleField('indAproCredPisCofins', e.target.value)}
+                                >
+                                    <option value="">— (padrão: rateio proporcional)</option>
+                                    <option value="1">1 — Apropriação direta</option>
+                                    <option value="2">2 — Rateio proporcional</option>
+                                </select>
+                            </div>
+                            <Field
+                                label="Conta contábil da receita financeira"
+                                value={dados.contaContabilReceitaFinanceira || ''}
+                                onChange={v => handleField('contaContabilReceitaFinanceira', v)}
+                                placeholder="Só p/ receita de aplicação — COD_CTA do F100"
+                            />
                             <p className="md:col-span-2 text-[11px] mt-1 text-slate-400 dark:text-slate-500">
                                 Obrigatório quando a receita entra pelo F550 (aluguel). O PVA recusa o arquivo
                                 sem o 1900. O CNPJ, o valor e os CST o app já deriva do próprio arquivo — estes

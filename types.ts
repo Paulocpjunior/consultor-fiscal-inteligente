@@ -1520,6 +1520,19 @@ export interface EmpresaDadosFiscais {
     contrib1900CodMod?: string;
     contrib1900CodSit?: string;
     /**
+     * 🚨 **IND_APRO_CRED do 0110** — como a empresa apropria o crédito no
+     * regime NÃO-cumulativo: `1` = apropriação DIRETA · `2` = rateio
+     * proporcional. O gerador cravava `2` para todo mundo; o EFD assinado do
+     * CF BANK (06/2026) traz `1`. É fato da empresa, não dedução do app.
+     */
+    indAproCredPisCofins?: '1' | '2' | '';
+    /**
+     * Conta contábil da RECEITA FINANCEIRA — vai no `COD_CTA` do F100 quando a
+     * receita é de aplicação financeira (CF BANK). Opcional: o arquivo da PEC
+     * foi aceito com F100 sem ela.
+     */
+    contaContabilReceitaFinanceira?: string;
+    /**
      * 🚨 Gera o **Bloco H (inventário)** fora de dezembro.
      *
      * O gerador lia este campo desde sempre e ele não existia em tela nenhuma
