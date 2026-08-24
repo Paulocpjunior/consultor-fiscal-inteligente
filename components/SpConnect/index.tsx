@@ -19,7 +19,7 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, registrarCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
@@ -1013,6 +1013,34 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [multiCanal, setMultiCanal] = useState(false);
     const [canalErro, setCanalErro] = useState<string | null>(null);
     const [canalForm, setCanalForm] = useState({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+    // 📱 Ativar na Cloud API: PIN de 6 dígitos, por canal. Ele NÃO é guardado —
+    // some do estado assim que a Meta responde.
+    const [pinCanal, setPinCanal] = useState<Record<string, string>>({});
+    const [canalMsg, setCanalMsg] = useState<Record<string, string>>({});
+    const [registrando, setRegistrando] = useState<string | null>(null);
+    const ativarCanal = async (id: string, rotulo: string) => {
+        const pin = (pinCanal[id] || '').trim();
+        if (!/^\d{6}$/.test(pin)) { setCanalMsg((m) => ({ ...m, [id]: 'O PIN tem 6 dígitos.' })); return; }
+        const ok = await pedirConfirmacao(
+            `Ativar "${rotulo}" na Cloud API com este PIN? Anote o PIN no cofre de senhas — a Meta pode pedi-lo de novo, e nós NÃO o guardamos.`,
+            'Ativar número',
+        );
+        if (!ok) return;
+        setRegistrando(id);
+        setCanalMsg((m) => ({ ...m, [id]: '⏳ Registrando na Meta…' }));
+        try {
+            const r = await registrarCanal(id, pin);
+            if (!r.ok) {
+                const cod = (r as any).code != null ? ` (código ${(r as any).code})` : '';
+                setCanalMsg((m) => ({ ...m, [id]: `⛔ ${r.error}${cod}${(r as any).acao ? ` — ${(r as any).acao}` : ''}` }));
+                return;
+            }
+            setCanalMsg((m) => ({ ...m, [id]: '✅ Número ATIVADO na Cloud API — mande uma mensagem de teste para ele.' }));
+            setPinCanal((p) => ({ ...p, [id]: '' }));
+            const lista = await listarCanais();
+            if (lista.ok) setCanais(lista.canais || []);
+        } finally { setRegistrando(null); }
+    };
     const [salvandoCanal, setSalvandoCanal] = useState(false);
     const carregarCanais = useCallback(async () => {
         const r = await listarCanais();
@@ -2671,6 +2699,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </p>
                                             {!c.pronto && (c.faltas || []).length > 0 && (
                                                 <p className="text-[10px] text-red-600 dark:text-red-400">falta: {(c.faltas || []).join(' · ')}</p>
+                                            )}
+                                            {/* 📱 Número aprovado ainda NÃO está no WhatsApp: sem o
+                                                `/register` da Cloud API ele não recebe mensagem, e o
+                                                painel da Meta não faz esse passo — ela mesma manda
+                                                usar a API (Paulo, 24/08, no 3155-1554). */}
+                                            {c.pronto && c.origem !== 'env' && (
+                                                <div className="mt-1.5 border-t border-slate-200 dark:border-slate-700 pt-1.5 space-y-1">
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                        📱 Número novo só recebe mensagem depois de <strong>ativado na Cloud API</strong>.
+                                                        Escolha um PIN de 6 dígitos (verificação em duas etapas do número) e guarde-o no cofre — nós não o guardamos.
+                                                    </p>
+                                                    <div className="flex gap-1.5">
+                                                        <input value={pinCanal[c.id] || ''} inputMode="numeric" maxLength={6}
+                                                            onChange={(e) => setPinCanal((p) => ({ ...p, [c.id]: e.target.value.replace(/\D/g, '') }))}
+                                                            placeholder="PIN (6 dígitos)" className={`${CAMPO} !w-36`} />
+                                                        <button onClick={() => ativarCanal(c.id, c.rotulo)} disabled={registrando === c.id}
+                                                            className="px-2 py-1 text-[11px] font-semibold rounded bg-[#0e3bfa] hover:bg-[#091d8d] disabled:opacity-60 text-white btn-press">
+                                                            {registrando === c.id ? '⏳ Ativando…' : '📱 Ativar na Cloud API'}
+                                                        </button>
+                                                    </div>
+                                                    {canalMsg[c.id] && <p className="text-[10px] text-slate-600 dark:text-slate-300">{canalMsg[c.id]}</p>}
+                                                </div>
                                             )}
                                         </div>
                                     ))}

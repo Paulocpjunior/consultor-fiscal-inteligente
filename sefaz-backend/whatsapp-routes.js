@@ -31,6 +31,7 @@ import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
+    registrarNumeroNaCloudApi,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
@@ -2140,6 +2141,41 @@ router.get('/canais', requireAuth, async (_req, res) => {
         return res.json({ ...catalogo, ok: true, canais });
     } catch (e) {
         console.error('[whatsapp/canais]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📱 ATIVAR o número na Cloud API (o `/register` que o painel da Meta manda
+// fazer). Sem ele o número aprovado NÃO existe no WhatsApp: não recebe
+// mensagem, e a busca responde "este número não está no WhatsApp" (Paulo,
+// 24/08, no 3155-1554).
+// 🔒 O PIN não é guardado em lugar nenhum — nem em banco, nem em log. Ele é
+// a verificação em duas etapas DO NÚMERO, e quem precisa dele de novo é a
+// Meta; a tela manda anotar no cofre de senhas.
+router.post('/canais/:id/registrar', requireAdmin, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim().toLowerCase();
+        const pin = String(req.body?.pin || '').trim();
+        if (!/^\d{6}$/.test(pin)) {
+            return res.status(400).json({ ok: false, error: 'O PIN tem exatamente 6 dígitos — é a verificação em duas etapas do número.' });
+        }
+        const catalogo = await lerCanais(getDb());
+        const canal = catalogo.canais.find((c) => c.id === id);
+        if (!canal) return res.status(404).json({ ok: false, error: `Canal "${id}" não está cadastrado.` });
+        const cred = credenciaisDoCanal(canal, process.env);
+        if (!cred.pronto) {
+            return res.status(503).json({ ok: false, error: `Falta para ativar: ${cred.faltas.join(' · ')}` });
+        }
+        const r = await registrarNumeroNaCloudApi({ phoneNumberId: canal.phoneNumberId, pin }, { cfg: cred.cfg });
+        if (!r.ok) {
+            // O PIN NUNCA vai pro log — só a recusa da Meta.
+            console.warn('[whatsapp/registrar] recusa da Meta:', JSON.stringify(r.bruto || r.erro));
+            const status = r.configuracaoIncompleta ? 503 : r.indeterminado ? 502 : 422;
+            return res.status(status).json({ ok: false, error: r.erro, acao: r.acao, code: r.code ?? null });
+        }
+        return res.json({ ok: true, rotulo: canal.rotulo });
+    } catch (e) {
+        console.error('[whatsapp/registrar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
