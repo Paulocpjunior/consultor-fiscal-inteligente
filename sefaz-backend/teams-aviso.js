@@ -22,7 +22,7 @@
 //    O botão 🧪 da ⚙️ é a PROVA — a recusa do Graph volta CRUA na tela.
 // ============================================================================
 
-import { getGraphToken, isGraphConfigured } from './graph-provider.js';
+import { getGraphToken, isGraphConfigured, invalidarTokenGraph } from './graph-provider.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 // O MESMO id do teams-app/manifest.json — é por ele que se acha a instalação.
@@ -79,37 +79,55 @@ export async function enviarAvisoTeams({ email, titulo, corpo }, deps = {}) {
     if (!(deps.configurado ?? isGraphConfigured())) {
         return { ok: false, etapa: 'graph-nao-configurado', erro: 'faltam GRAPH_CLIENT_ID/TENANT_ID/CLIENT_SECRET no ambiente.' };
     }
+
+    const tentar = async (token) => {
+        const destino = await resolverDestino(String(email || '').trim().toLowerCase(), token, fetcher);
+        if (!destino.ok) return destino;
+        const r = await fetcher(`${GRAPH}/users/${destino.userId}/teamwork/sendActivityNotification`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                topic: {
+                    source: 'entityUrl',
+                    value: `${GRAPH}/users/${destino.userId}/teamwork/installedApps/${destino.installId}`,
+                },
+                activityType: ACTIVITY_TYPE_MENSAGEM,
+                previewText: { content: String(corpo || 'nova mensagem').slice(0, 150) },
+                templateParameters: [{ name: 'resumo', value: String(titulo || 'SP Connect').slice(0, 100) }],
+            }),
+        });
+        if (r.status === 204) return { ok: true };
+        const corpoErro = await r.json().catch(() => ({}));
+        // Instalação pode ter sido removida depois de cacheada — não reusar.
+        if (r.status === 404) cache.delete(String(email || '').trim().toLowerCase());
+        return {
+            ok: false,
+            etapa: 'envio',
+            erro: corpoErro?.error?.message || `HTTP ${r.status}`,
+            bruto: corpoErro,
+        };
+    };
+
     let token;
     try { token = deps.token ?? await getGraphToken(); } catch (e) {
         return { ok: false, etapa: 'token', erro: e.message };
     }
-
-    const destino = await resolverDestino(String(email || '').trim().toLowerCase(), token, fetcher);
-    if (!destino.ok) return destino;
-
-    const r = await fetcher(`${GRAPH}/users/${destino.userId}/teamwork/sendActivityNotification`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            topic: {
-                source: 'entityUrl',
-                value: `${GRAPH}/users/${destino.userId}/teamwork/installedApps/${destino.installId}`,
-            },
-            activityType: ACTIVITY_TYPE_MENSAGEM,
-            previewText: { content: String(corpo || 'nova mensagem').slice(0, 150) },
-            templateParameters: [{ name: 'resumo', value: String(titulo || 'SP Connect').slice(0, 100) }],
-        }),
-    });
-    if (r.status === 204) return { ok: true };
-    const corpoErro = await r.json().catch(() => ({}));
-    // Instalação pode ter sido removida depois de cacheada — não reusar.
-    if (r.status === 404) cache.delete(String(email || '').trim().toLowerCase());
-    return {
-        ok: false,
-        etapa: 'envio',
-        erro: corpoErro?.error?.message || `HTTP ${r.status}`,
-        bruto: corpoErro,
-    };
+    const primeira = await tentar(token);
+    // 🔁 "Insufficient privileges" com token CACHEADO pode ser só o consent
+    // recém-dado no Azure (permissão nova não entra em token velho, e o cache
+    // vale ~55 min). Renova UMA vez e tenta de novo — sem isto o 🧪 falharia
+    // por até 1h depois do consent, parecendo que o consent não funcionou.
+    if (!primeira.ok && /insufficient|unauthorized|401|403/i.test(String(primeira.erro))) {
+        try {
+            (deps.invalidarToken || invalidarTokenGraph)();
+            const tokenNovo = deps.tokenNovo ?? await getGraphToken();
+            if (tokenNovo && tokenNovo !== token) {
+                const segunda = await tentar(tokenNovo);
+                return segunda.ok ? segunda : { ...segunda, renovouToken: true };
+            }
+        } catch { /* renovação falhou — vale a primeira resposta */ }
+    }
+    return primeira;
 }
 
 /** O que a ⚙️ mostra: pré-requisitos e o clientId que o manifest precisa. */
