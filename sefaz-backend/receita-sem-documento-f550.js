@@ -146,11 +146,56 @@ export function receitaDeDocumentosNoPeriodo(notas, direcaoEfetiva) {
  * ⚠️ Só vale para o regime CUMULATIVO (COD_INC_TRIB 2 ou 3); fora dele o campo
  * não é informado, como já era.
  */
-export function indRegCumDoArquivo({ regimeApuracao, receitaConsolidada = 0 } = {}) {
+export function indRegCumDoArquivo({
+    regimeApuracao, receitaConsolidada = 0, documentosDeReceita = 0,
+} = {}) {
     const cumulativo = regimeApuracao === '2' || regimeApuracao === '3';
     if (!cumulativo) return '';
-    return n(receitaConsolidada) > 0 ? '2' : '9';
+    // 🚨 A PREMISSA "receita do F550 ⇒ não há documento" ERA DA AFFITTARE, e
+    // quebrou na primeira empresa que tem os DOIS (PEC PRONTA ENTREGA 1350,
+    // 07/2026): serviços prestados (5 documentos) + aluguel. O arquivo saiu
+    // CONSOLIDADO (2) declarando A010/A100, e o PVA recusou os seis registros
+    // com *"O registro não deve ser informado para esse perfil e/ou tipo de
+    // operação"*.
+    //
+    // Consolidado é o arquivo que NÃO escritura documento. Havendo documento
+    // de receita, a escrituração é DETALHADA (9) e o aluguel entra pelo
+    // **F100**, não pelo F550 — é o que o EFD assinado da própria PEC
+    // (05/2026) faz: `|0110|2||1|9|`, cinco A100 e `|F100|...188836,42...|`.
+    return (n(receitaConsolidada) > 0 && n(documentosDeReceita) === 0) ? '2' : '9';
 }
+
+/**
+ * O ALUGUEL no arquivo **DETALHADO** — registro F100.
+ *
+ * F550 e F100 declaram a MESMA receita, e a diferença não é de valor: é de
+ * PERFIL do arquivo. F550 só existe no consolidado (que não pode ter
+ * documento); F100 é o registro de "demais operações" do detalhado, e convive
+ * com o bloco A.
+ *
+ * FONTE do leiaute, campo a campo — EFD-Contribuições ASSINADO da própria PEC
+ * PRONTA ENTREGA 55.070.577/0001-61 · 05/2026:
+ *
+ *   |F100|1|||01052026|188836,42|01|188836,42|0,65|1227,44|01|188836,42|3|5665,09||||||
+ *
+ * ⚠️ `IND_OPER = 1` vem DESSE arquivo, não de tabela que eu tenha aqui — é a
+ * régua da casa: arquivo aceito > leiaute deduzido. `COD_PART` e `COD_ITEM`
+ * saem VAZIOS (o aluguel não tem documento nem item), e `DT_OPER` é o 1º dia
+ * da competência, como o arquivo assinado faz — a receita é do PERÍODO, não
+ * de um dia.
+ *
+ * ⚠️ Devolve VALORES, não a linha — igual ao `montarF550`.
+ */
+export function montarF100({ receita, aliqPis, aliqCofins } = {}) {
+    const rec = n(receita);
+    if (!(rec > 0)) return null;
+    const pis = Math.round(rec * n(aliqPis) * 100) / 100;
+    const cofins = Math.round(rec * n(aliqCofins) * 100) / 100;
+    return { receita: rec, pis, cofins, indOper: IND_OPER_F100_RECEITA };
+}
+
+/** IND_OPER do F100 — o valor do arquivo assinado da PEC 05/2026. */
+export const IND_OPER_F100_RECEITA = '1';
 
 // ============================================================================
 // 🚨 HAVENDO F550, O 1900 É OBRIGATÓRIO — e o bloco 1 saía SEMPRE vazio
