@@ -16,6 +16,20 @@ export function ehNotaDeMercadoria(d: unknown): boolean;
 /** CT-e (57) / CT-e OS (67) — bloco D. */
 export function ehConhecimentoDeTransporte(d: unknown): boolean;
 
+/** COD_MOD da NFC-e. */
+export const COD_MOD_NFCE: '65';
+
+/** A NFC-e (COD_MOD 65). */
+export function ehNfce(d: unknown): boolean;
+
+/**
+ * O documento leva C170 no EFD-**Contribuições**? NFC-e não leva — recusa
+ * literal do PVA (HYPE CAFE 1385 · 07/2026, 572 recusas em 286 C170).
+ * Quem lê isto lê TAMBÉM na coleta do 0200: item de documento sem C170 vira
+ * item órfão, que é a recusa seguinte.
+ */
+export function levaC170NoContribuicoes(nota: unknown): boolean;
+
 export interface SelecaoBlocoC<T = any> {
     /** As que se escrituram (cancelada entra: C100 sem filhos). */
     notas: T[];

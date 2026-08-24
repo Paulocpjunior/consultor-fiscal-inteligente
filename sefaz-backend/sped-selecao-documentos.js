@@ -108,6 +108,43 @@ export function ehConhecimentoDeTransporte(d) {
     return ['57', '67'].includes(modeloDoDoc(d));
 }
 
+/** COD_MOD da NFC-e — cupom eletrônico, venda ao consumidor. */
+export const COD_MOD_NFCE = '65';
+
+/** A NFC-e (COD_MOD 65). */
+export function ehNfce(d) {
+    return modeloDoDoc(d) === COD_MOD_NFCE;
+}
+
+/**
+ * O documento leva **C170** (detalhe do item) no EFD-**Contribuições**?
+ *
+ * 🚨 NÃO, quando é NFC-e. Recusa do PVA, LITERAL (HYPE CAFE 1385 · 07/2026,
+ * 24/08): *"O registro não deve ser informado para o modelo de documento do
+ * 'Registro Pai'."* e *"O registro não deve ser informado para esse perfil
+ * e/ou tipo de operação"* — **286 C170, cada um com as duas mensagens, 572
+ * recusas**, todos filhos de um C100 com COD_MOD 65. Os 5 C170 das três notas
+ * modelo 55 do mesmo arquivo passaram.
+ *
+ * ⚠️ **E ISSO NÃO TIRA UM CENTAVO DA APURAÇÃO**: a receita da NFC-e é declarada
+ * no C100 (VL_DOC/VL_PIS/VL_COFINS) e no bloco M, que sai de
+ * `receitaEBaseDoDocumento` — não do C170. No arquivo da HYPE, os 179 C100 de
+ * NFC-e somam exatamente o `VL_REC_BRT 19.722,70` do M210.
+ *
+ * 🚨 **A CONSEQUÊNCIA OBRIGATÓRIA, no MESMO PR**: item que só existia em NFC-e
+ * sai do **0200**, senão vira item ÓRFÃO — declarado na Tabela de Identificação
+ * e referenciado por ninguém, que é a recusa que a PWR já pagou em 19/08. Na
+ * HYPE são quatro (`10`, `11`, `20`, `101`). Vale igual para a UNID do 0190.
+ *
+ * ⚠️ **Isto é do EFD-Contribuições.** No EFD ICMS/IPI a NFC-e tem restrições
+ * PRÓPRIAS, e elas são de CAMPO do C100 (`COD_PART`, ST, IPI, PIS, COFINS —
+ * regra R2 da prevalidação, PS VIDROS 19/08), não de existência do C170.
+ * Portar uma família para a outra é o defeito que o 0500 acabou de cobrar.
+ */
+export function levaC170NoContribuicoes(nota) {
+    return !ehNfce(nota);
+}
+
 /**
  * Separa as notas do bloco C entre as que se escrituram e as que NÃO têm como
  * ser escrituradas — cada grupo com ação própria.

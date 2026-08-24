@@ -24,7 +24,7 @@ import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
-    serieDoDocumento, codItemDoItem, unidadeDoItem,
+    serieDoDocumento, codItemDoItem, unidadeDoItem, levaC170NoContribuicoes,
 } from './sped-selecao-documentos.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import {
@@ -624,7 +624,16 @@ export function buildBlocoC_Contrib(dados) {
         // ⚠️ O CST_ICMS e o CFOP saem das MESMAS RÉGUAS do EFD ICMS/IPI. Dois
         // arquivos declarando CFOP diferente para o mesmo item seria a
         // divergência que este projeto mais paga.
+        //
+        // 🚨 E A NFC-e NÃO LEVA C170 (HYPE CAFE 1385 · 07/2026, 24/08): o PVA
+        // recusou **572 vezes** — 286 C170, cada um com as duas mensagens
+        // (*"não deve ser informado para o modelo de documento do Registro
+        // Pai"* e *"…para esse perfil e/ou tipo de operação"*). Quem responde é
+        // o DONO, e a coleta do 0200 lê o MESMO dono: item de documento sem
+        // C170 declarado na Tabela de Identificação vira item ÓRFÃO, que é a
+        // recusa seguinte (a PWR pagou essa em 19/08).
         // ═══════════════════════════════════════════════════════════════════
+        if (!levaC170NoContribuicoes(nota)) continue;
         for (const item of (nota.itens || [])) {
             const vlItem = parseFloat(item.vProd || item.valor || 0);
             const cfopLancado = convertCfopParaEntrada(
