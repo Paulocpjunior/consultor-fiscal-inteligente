@@ -65,7 +65,14 @@ export function filasVisiveis({ role, papelAtendimento, departamentos = [], fila
         .map((d) => String(d || '').trim().toLowerCase())
         .filter((d) => IDS_FILAS.has(d));
     if (minhas.includes('recepcao')) return null; // Recepção atende todos
-    return [...new Set([...minhas, 'recepcao'])]; // a própria + Recepção (triagem)
+    // SÓ as filas dele — a Recepção NÃO entra mais de carona (Paulo, 24/08:
+    // "usuários que estão somente dentro de um grupo só têm acesso àquele
+    // grupo específico… as notificações devem ser enviadas de acordo com a
+    // restrição de cada usuário"). O "+ recepcao (triagem)" era desenho meu,
+    // e o custo apareceu: colaborador do Contábil carregava e era avisado
+    // das ~1.8 mil conversas da Recepção. Quem faz a triagem é a Recepção,
+    // o gestor e o admin — a conversa chega à fila pela TRANSFERÊNCIA.
+    return [...new Set(minhas)];
 }
 
 /**
