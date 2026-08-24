@@ -45,7 +45,7 @@ import {
 import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 // A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
 // arquivo aceito da AFFITTARE 05/2026 como fonte.
-import { montarF550, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
+import { montarF550, montarF100, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
 
 // ─── Aliquotas PIS/COFINS por regime ────────────────────────────────────
 const ALIQUOTAS = {
@@ -893,13 +893,50 @@ export function buildBlocoF(dados) {
     // 🚨 A RECEITA SEM DOCUMENTO (aluguel) — sem ela o M200/M600 sai ZERADO
     // numa empresa que fatura todo mês (AFFITTARE 1139, 20/08). A régua e a
     // fonte moram em `receita-sem-documento-f550.js`.
-    const f550 = montarF550({
-        receita: dados.receitaSemDocumento || 0,
-        aliqPis: aliq.pis, aliqCofins: aliq.cofins,
-    });
+    // 🚨 F550 × F100: os DOIS declaram o aluguel, e a escolha é de PERFIL do
+    // arquivo, não de valor.
+    //   · CONSOLIDADO (IND_REG_CUM 2) — arquivo sem documento nenhum: F550.
+    //   · DETALHADO   (IND_REG_CUM 9) — há documento de receita: F100, que
+    //     convive com o bloco A.
+    // A premissa "receita de aluguel ⇒ arquivo consolidado" era da AFFITTARE e
+    // quebrou na PEC PRONTA ENTREGA (07/2026), que tem serviços prestados E
+    // aluguel: o arquivo saiu consolidado declarando A010/A100 e o PVA recusou
+    // os SEIS registros. O EFD assinado da própria PEC (05/2026) mostra a saída
+    // certa: `|0110|2||1|9|`, os cinco A100 de pé e o aluguel no F100.
+    const consolidado = dados.escrituracaoConsolidada !== false;
+    const receitaSemDoc = dados.receitaSemDocumento || 0;
+    const f550 = consolidado
+        ? montarF550({ receita: receitaSemDoc, aliqPis: aliq.pis, aliqCofins: aliq.cofins })
+        : null;
+    const f100 = consolidado
+        ? null
+        : montarF100({ receita: receitaSemDoc, aliqPis: aliq.pis, aliqCofins: aliq.cofins });
     const linhas = [];
     // IND_MOV sai do que foi PRODUZIDO, nunca de constante (regra do 1001).
-    linhas.push(fmt.buildLine(['F001', (eventos.length || f550) ? '0' : '1']));
+    linhas.push(fmt.buildLine(['F001', (eventos.length || f550 || f100) ? '0' : '1']));
+
+    if (f100) {
+        linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
+        // Leiaute campo a campo do EFD ASSINADO da PEC 05/2026:
+        // |F100|1|||01052026|188836,42|01|188836,42|0,65|1227,44|01|188836,42|3|5665,09||||||
+        linhas.push(fmt.buildLine([
+            'F100',
+            f100.indOper,                          // IND_OPER (do arquivo assinado)
+            '',                                    // COD_PART — aluguel não tem
+            '',                                    // COD_ITEM — idem
+            fmt.formatCompetenciaInicio(dados.competenciaInicio || dados.competencia), // DT_OPER — 1º dia, como o assinado
+            fmt.formatValue(f100.receita),         // VL_OPER
+            CST_F550_TRIBUTADA,                    // CST_PIS
+            fmt.formatValue(f100.receita),         // VL_BC_PIS
+            fmt.formatValue(aliq.pis * 100, 2),    // ALIQ_PIS
+            fmt.formatValue(f100.pis),             // VL_PIS
+            CST_F550_TRIBUTADA,                    // CST_COFINS
+            fmt.formatValue(f100.receita),         // VL_BC_COFINS
+            fmt.formatValue(aliq.cofins * 100, 2), // ALIQ_COFINS
+            fmt.formatValue(f100.cofins),          // VL_COFINS
+            '', '', '', '', '',                    // NAT_BC_CRED..DESC_DOC_OPER
+        ]));
+    }
 
     if (f550) {
         linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
@@ -927,7 +964,7 @@ export function buildBlocoF(dados) {
         // F010 — estabelecimento. O arquivo aceito traz só o CNPJ. Se o F550 já
         // abriu o estabelecimento, não abre de novo: dois F010 para o mesmo
         // CNPJ é o tipo de duplicidade que o PVA recusa.
-        if (!f550) {
+        if (!f550 && !f100) {
             linhas.push(fmt.buildLine(['F010', String(dados.empresa?.cnpj || '').replace(/\D/g, '')]));
         }
         // IND_NAT_REC acompanha o regime da apuração: cumulativa (Presumido)=1,
@@ -1334,7 +1371,14 @@ export function buildBloco1_Contrib(dados = {}) {
     // 1010 de ação judicial foi removido (17/08) e nunca ganhou conteúdo. Com
     // o F550 no ar desde 21/08, bloco 1 vazio virou recusa: o arquivo declara
     // receita e não a consolida.
-    const receita = Number(dados.receitaSemDocumento || 0);
+    // ⚠️ O 1900 é consequência do **F550**, e a recusa do PVA fala só de
+    // "F550 e F560". No arquivo DETALHADO o aluguel vai no F100 e o bloco 1
+    // fica sem dados — é o que o EFD assinado da PEC 05/2026 faz
+    // (`|1001|1|`, sem 1900), e ele tem aluguel. Emitir o 1900 ali seria
+    // inventar obrigação que a recusa não criou.
+    const receita = (dados.escrituracaoConsolidada !== false)
+        ? Number(dados.receitaSemDocumento || 0)
+        : 0;
     if (receita > 0) {
         const r = montar1900({
             cnpj: dados.empresa?.cnpj,

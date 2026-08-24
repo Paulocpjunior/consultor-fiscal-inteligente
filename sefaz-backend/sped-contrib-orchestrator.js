@@ -111,8 +111,24 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // época do lançamento, e igualdade estrita perderia a ficha em silêncio.
     const fichaDaComp = acharFichaCompetencia(empresa.fichaFinanceira, competencia);
     const receitaSemDocumento = receitaDeLocacao(fichaDaComp);
+    // 🚨 O PERFIL DO ARQUIVO SE DECIDE AQUI, e ele decide TRÊS coisas: o
+    // IND_REG_CUM do 0110, se o aluguel vai no F550 ou no F100, e se os
+    // documentos ficam ou saem.
+    //
+    // CONSOLIDADO só quando NÃO há documento de receita. A premissa
+    // "aluguel ⇒ consolidado" era da AFFITTARE e quebrou na PEC PRONTA
+    // ENTREGA (07/2026), que tem serviços prestados E aluguel: o arquivo saiu
+    // consolidado declarando A010/A100 e o PVA recusou os seis registros com
+    // "O registro não deve ser informado para esse perfil e/ou tipo de
+    // operação". O EFD assinado da própria PEC (05/2026) mostra a saída certa:
+    // detalhado (9), os cinco A100 de pé, e o aluguel no F100.
+    const docsDeReceita = receitaDeDocumentosNoPeriodo(notas, direcaoEfetivaDoc).quantidade;
+    const escrituracaoConsolidada = receitaSemDocumento > 0 && docsDeReceita === 0;
     let entradasForaDaConsolidada = 0;
-    if (receitaSemDocumento > 0 && regimeApuracao === '2') {
+    // ⚠️ A exclusão de ENTRADAS só vale no consolidado — que é o arquivo que
+    // não escritura documento NENHUM. No detalhado tirar a entrada seria
+    // apagar escrituração legítima.
+    if (escrituracaoConsolidada && regimeApuracao === '2') {
         const antes = notas.length;
         notas = notas.filter(n => direcaoEfetivaDoc(n) === 'saida');
         entradasForaDaConsolidada = antes - notas.length;
@@ -268,11 +284,15 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     }
     if (receitaSemDocumento > 0) {
         const doc = receitaDeDocumentosNoPeriodo(notas, direcaoEfetivaDoc);
-        warnings.push(
-            `Receita de LOCAÇÃO da ficha (R$ ${receitaSemDocumento.toFixed(2)}) entrou no F550 — aluguel não `
-            + 'gera documento fiscal, e sem isto o M200/M600 sairia ZERADO. O 0110 acompanha: escrituração '
-            + 'CONSOLIDADA (IND_REG_CUM 2).',
-        );
+        warnings.push(escrituracaoConsolidada
+            ? `Receita de LOCAÇÃO da ficha (R$ ${receitaSemDocumento.toFixed(2)}) entrou no F550 — aluguel não `
+              + 'gera documento fiscal, e sem isto o M200/M600 sairia ZERADO. Não há documento de receita no '
+              + 'período, então o arquivo é CONSOLIDADO: o 0110 acompanha (IND_REG_CUM 2) e o registro 1900 '
+              + 'consolida a receita.'
+            : `Receita de LOCAÇÃO da ficha (R$ ${receitaSemDocumento.toFixed(2)}) entrou no **F100** — o período `
+              + `também tem ${doc.quantidade} documento(s) de receita, então o arquivo é DETALHADO `
+              + '(IND_REG_CUM 9) e os documentos ficam escriturados no bloco A/C. Arquivo consolidado não pode '
+              + 'declarar documento: o PVA recusa com "O registro não deve ser informado para esse perfil".');
         if (doc.quantidade > 0) {
             // ⚠️ DUPLA CONTAGEM É O RISCO DESTE CAMINHO, e o app não escolhe:
             // se a locação também virou documento de saída, a contribuição sai
@@ -300,6 +320,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         participantes,
         unidades,
         receitaSemDocumento,
+        escrituracaoConsolidada,
         // 🚨 Havendo F550, o 1900 é OBRIGATÓRIO (recusa do PVA na AFFITTARE
         // 07/2026). COD_MOD e COD_SIT são de TABELA OFICIAL e dependem de qual
         // documento a empresa emite pelo aluguel — vêm do cadastro, nunca de
