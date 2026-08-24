@@ -3822,9 +3822,17 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         allowed for SIP enabled numbers". Em modo SIP a saída NÃO
                                                         sai por API — quem disca é o tronco. Botão que a Meta
                                                         recusa por desenho é botão que não faz nada. */}
+                                                    {/* ⚠️ A frase diz o ESTADO, não a promessa: discar o 221 só
+                                                        vai completar quando o SBC souber o endereço SIP da Meta,
+                                                        e ele se lê no INVITE da primeira ligação RECEBIDA. Dizer
+                                                        "disque 221" antes disso é a promessa que a tela não
+                                                        cumpre — o defeito que este mesmo bloco acabou de ter. */}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                                                        📞 Para ligar, disque <strong>{sel.numero}</strong> no ramal 221 (HitPhone) —
-                                                        a saída vai pelo tronco SIP, não por aqui.
+                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone),
+                                                        não por aqui — a Meta recusa chamada por API em número SIP.
+                                                        <span className="block text-amber-600 dark:text-amber-400">
+                                                            Em validação: falta a primeira ligação RECEBIDA, que é o que ensina o endereço da Meta ao tronco.
+                                                        </span>
                                                     </p>
                                                 </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (
