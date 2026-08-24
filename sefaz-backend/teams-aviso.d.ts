@@ -4,13 +4,17 @@ export const ACTIVITY_TYPE_MENSAGEM: string;
 
 export function enviarAvisoTeams(
     p: { email: string; titulo?: string | null; corpo?: string | null },
-    deps?: { fetch?: typeof fetch; token?: string; configurado?: boolean },
+    deps?: {
+        fetch?: typeof fetch; token?: string; tokenNovo?: string;
+        configurado?: boolean; invalidarToken?: () => void;
+    },
 ): Promise<{ ok: true } | {
     ok: false;
     etapa: 'graph-nao-configurado' | 'token' | 'usuario-nao-encontrado' | 'consulta-usuario'
         | 'consulta-instalacao' | 'app-nao-instalado' | 'envio';
     erro: string;
     bruto?: unknown;
+    renovouToken?: boolean;
 }>;
 
 export function statusAvisoTeams(env?: Record<string, string | undefined>): {

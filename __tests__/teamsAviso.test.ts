@@ -133,6 +133,30 @@ describe('enviarAvisoTeams — a recusa volta NOMEADA', () => {
         }
     });
 
+    it('🔁 "insufficient privileges" com token cacheado RENOVA o token e tenta de novo (consent recém-dado no Azure)', async () => {
+        const invalidou = jest.fn();
+        const fetchPorToken = (async (url: string, opts: { headers: Record<string, string> }) => {
+            const token = String(opts?.headers?.Authorization || '');
+            if (String(url).includes('installedApps?')) return { status: 200, json: async () => ({ value: [{ id: 'inst-9' }] }) };
+            if (String(url).includes('/users/')) {
+                if (String(url).includes('sendActivityNotification')) {
+                    // token velho (do cache) leva a recusa de permissão; o novo passa
+                    return token.includes('t-velho')
+                        ? { status: 403, json: async () => ({ error: { message: 'Insufficient privileges to complete the operation.' } }) }
+                        : { status: 204, json: async () => ({}) };
+                }
+                return { status: 200, json: async () => ({ id: 'aad-1' }) };
+            }
+            throw new Error(`URL inesperada: ${url}`);
+        }) as never;
+        const r = await enviarAvisoTeams(
+            { email: 'ana@spassessoriacontabil.com.br' },
+            { configurado: true, token: 't-velho', tokenNovo: 't-novo', invalidarToken: invalidou, fetch: fetchPorToken },
+        );
+        expect(r).toEqual({ ok: true });
+        expect(invalidou).toHaveBeenCalled();
+    });
+
     it('Graph não configurado é dito, nunca tentado', async () => {
         const r = await enviarAvisoTeams({ email: 'x@y.br' }, { configurado: false });
         expect(r.ok).toBe(false);
