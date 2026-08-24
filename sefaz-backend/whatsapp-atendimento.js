@@ -12,7 +12,8 @@
 //   menos" de propósito — ele guarda gates de app). RH, Jurídico e Recepção
 //   são FILAS DE ATENDIMENTO, catálogo PRÓPRIO, aqui.
 // - Recepção atende TODOS (Paulo, 16/08): quem tem a fila 'recepcao' vê
-//   todas; os demais veem a(s) própria(s) + Recepção. Admin vê tudo.
+//   todas; os demais veem SÓ a(s) própria(s) (24/08). Quem vê tudo é GESTOR
+//   ou Recepção — administrar o CFI não é atender o inbox (24/08).
 // - O BOT NASCE DESLIGADO (`botAtivo: false`): com a plataforma atual ainda
 //   respondendo, dois bots no mesmo cliente = menu em dobro. Ligar é decisão
 //   na ⚙️ (mesma regra do alertasAtivos da Legalização).
@@ -42,7 +43,17 @@ export function filaValida(id) {
 }
 
 // ─── Papéis do ATENDIMENTO (Paulo, 16/08) — não são os roles do CFI ─────────
-// admin (role do CFI)  = tudo, inclusive ⚙️ (alteração sistêmica);
+// 🚨 ADMINISTRAR O APP ≠ ATENDER TODAS AS FILAS (Paulo, 24/08: "não podemos
+// confundir admin do CFI dos outros módulos"). O `role: admin` vem do CFI e
+// diz que a pessoa configura o sistema — não que ela atende o WhatsApp da
+// casa inteira. Ele passou a valer SÓ para o que é administração (⚙️,
+// cadastros, LGPD, encerrar qualquer atendimento); quem vê TODAS as filas é
+// o GESTOR ou quem atende a Recepção, que são papéis DO ATENDIMENTO.
+// ⚠️ Consequência que se diz na cara: admin sem fila marcada e sem ser gestor
+// passa a ver só o que conduz. Quem precisa da visão total do inbox marca
+// GESTOR (⭐) ou a fila Recepção — é um clique, e fica declarado.
+// admin (role do CFI)  = administra (⚙️ e cadastros) e encerra qualquer
+//                        atendimento; a VISÃO segue as filas dele;
 // gestor               = vê tudo, atende tudo, encerra qualquer atendimento,
 //                        SÓ NÃO altera configuração;
 // colaborador (padrão) = só as filas linkadas, transfere, encerra APENAS o
@@ -58,8 +69,9 @@ export function papelValido(p) {
  * (users.filasAtendimento); sem atribuição, os departamentos de MÓDULO valem
  * como fila (os 5 ids coincidem de propósito). Devolve null = TODAS.
  */
-export function filasVisiveis({ role, papelAtendimento, departamentos = [], filasAtendimento = [] }) {
-    if (role === 'admin') return null;
+export function filasVisiveis({ papelAtendimento, departamentos = [], filasAtendimento = [] }) {
+    // ⚠️ `role` NÃO entra aqui de propósito — ver o comentário dos papéis
+    // acima. Quem administra o CFI não herda o inbox do escritório inteiro.
     if (String(papelAtendimento || '').toLowerCase() === 'gestor') return null; // gestor vê tudo
     const minhas = (filasAtendimento.length ? filasAtendimento : departamentos)
         .map((d) => String(d || '').trim().toLowerCase())
@@ -99,7 +111,7 @@ export function conversaVisivel(filasDoUsuario, filaDaConversa) {
  * Pergunta que o dia do corte responde do jeito caro. O bot pergunta ao
  * cliente para qual departamento ele quer ir e MOVE a conversa para aquela
  * fila. A partir daí, quem enxerga a conversa é só quem atende aquela fila
- * (`filasVisiveis`) — mais quem vê tudo: Recepção, gestor e admin.
+ * (`filasVisiveis`) — mais quem vê tudo: Recepção e gestor.
  *
  * Enquanto os colaboradores não estiverem vinculados às filas na ⚙️ → 👥, o
  * efeito é este: o cliente escolhe "3 - Departamento Pessoal", a conversa sai
@@ -125,10 +137,11 @@ export function coberturaDasFilas({ menu = [], atendentes = null } = {}) {
         const brutas = (a?.filasAtendimento?.length ? a.filasAtendimento : (a?.departamentos || []));
         return brutas.map((f) => String(f || '').trim().toLowerCase()).filter((f) => IDS_FILAS.has(f));
     };
-    // Quem vê TUDO: admin, gestor e quem tem a fila 'recepcao' (decisão do
-    // Paulo, 16/08: a Recepção atende todos).
-    const veTudo = atendentes.filter((a) => a?.role === 'admin'
-        || String(a?.papelAtendimento || '').toLowerCase() === 'gestor'
+    // Quem vê TUDO: GESTOR e quem tem a fila 'recepcao' (decisão do Paulo,
+    // 16/08: a Recepção atende todos). ⚠️ Admin saiu daqui em 24/08 — se ele
+    // continuasse contando como cobertura, uma fila SEM NINGUÉM do
+    // departamento pareceria coberta por quem só administra o app.
+    const veTudo = atendentes.filter((a) => String(a?.papelAtendimento || '').toLowerCase() === 'gestor'
         || filasDe(a).includes('recepcao'));
 
     const filas = FILAS_ATENDIMENTO.map((f) => {

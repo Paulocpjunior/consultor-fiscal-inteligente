@@ -21,9 +21,14 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
         expect(filaValida('marketing')).toBe(false);
     });
 
-    it('Recepção atende TODOS; colaborador de fila vê SÓ as dele; admin vê tudo', () => {
-        expect(filasVisiveis({ role: 'admin' })).toBeNull();
-        expect(filasVisiveis({ role: 'colaborador', filasAtendimento: ['recepcao'] })).toBeNull();
+    it('Recepção atende TODOS; colaborador de fila vê SÓ as dele; ADMIN não herda o inbox', () => {
+        // ⚠️ Premissa TROCADA por decisão do Paulo (24/08): "não podemos
+        // confundir admin do CFI dos outros módulos". Administrar o app (⚙️,
+        // cadastros, encerrar qualquer atendimento) deixou de dar visão do
+        // inbox inteiro — quem vê tudo é GESTOR ou quem atende a Recepção.
+        expect(filasVisiveis({ role: 'admin', filasAtendimento: ['legalizacao'] } as any)).toEqual(['legalizacao']);
+        expect(filasVisiveis({ role: 'admin' } as any)).toEqual([]);
+        expect(filasVisiveis({ role: 'colaborador', filasAtendimento: ['recepcao'] } as any)).toBeNull();
         // ⚠️ Premissa TROCADA por decisão do Paulo (24/08): "usuários que
         // estão somente dentro de um grupo só têm acesso àquele grupo
         // específico… as notificações de acordo com a restrição de cada
@@ -31,9 +36,9 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
         // colaborador do Contábil carregar e ser avisado das ~1.8 mil
         // conversas da Recepção. Triagem é da Recepção/gestor/admin, e a
         // conversa chega à fila pela TRANSFERÊNCIA.
-        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'] })).toEqual(['fiscal']);
+        expect(filasVisiveis({ departamentos: ['fiscal'] })).toEqual(['fiscal']);
         // filasAtendimento explícita VENCE os departamentos de módulo
-        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh']);
+        expect(filasVisiveis({ departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh']);
     });
 
     it('conversa sem fila é da Recepção — só quem vê tudo (ou atende Recepção) a enxerga', () => {
@@ -46,7 +51,7 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
 
 describe('papéis do atendimento (Paulo, 16/08): admin tudo · gestor vê/atende/encerra tudo · colaborador só o seu', () => {
     it('gestor vê TODAS as filas; papel desconhecido é recusado', () => {
-        expect(filasVisiveis({ role: 'colaborador', papelAtendimento: 'gestor', departamentos: ['fiscal'] })).toBeNull();
+        expect(filasVisiveis({ papelAtendimento: 'gestor', departamentos: ['fiscal'] })).toBeNull();
         expect(papelValido('gestor')).toBe(true);
         expect(papelValido('colaborador')).toBe(true);
         expect(papelValido('supervisor')).toBe(false);
@@ -843,5 +848,28 @@ describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — n
         // O mutex de string único é exatamente o defeito que travaria o
         // carregamento automático de várias imagens ao mesmo tempo.
         expect(tela).not.toMatch(/const \[midiaCarregando, setMidiaCarregando\] = useState<string \| null>/);
+    });
+});
+
+// ═══ 24/08 — "não podemos confundir admin do CFI dos outros módulos" ═══════
+// O role `admin` vem do CFI e diz que a pessoa CONFIGURA o sistema. Ele
+// virou, sem ninguém decidir, "atende o WhatsApp da casa inteira": o
+// bruno.pellegrino tinha Legalização e Jurídico marcados e recebia de TODAS
+// as filas, porque o selo "admin · tudo" vencia os chips. Duas autoridades
+// diferentes com o mesmo nome.
+describe('administrar o app ≠ atender todas as filas', () => {
+    it('admin com filas marcadas vê SÓ elas (o caso bruno.pellegrino)', () => {
+        const bruno = { role: 'admin', papelAtendimento: 'colaborador', filasAtendimento: ['legalizacao', 'juridico'] } as any;
+        expect(filasVisiveis(bruno)).toEqual(['legalizacao', 'juridico']);
+        expect(conversaVisivel(filasVisiveis(bruno), 'fiscal')).toBe(false);
+        expect(conversaVisivel(filasVisiveis(bruno), 'legalizacao')).toBe(true);
+    });
+
+    it('mas o que é ADMINISTRAÇÃO continua dele: encerrar qualquer atendimento', () => {
+        expect(podeEncerrar({ role: 'admin', email: 'a@sp', atribuidoA: 'outro@sp' })).toBe(true);
+    });
+
+    it('quem precisa ver tudo marca GESTOR — e aí vê', () => {
+        expect(filasVisiveis({ role: 'admin', papelAtendimento: 'gestor', filasAtendimento: ['legalizacao'] } as any)).toBeNull();
     });
 });
