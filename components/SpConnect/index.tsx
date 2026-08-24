@@ -136,6 +136,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return; }
             setErro(null);
             setConversas(r.conversas || []);
+            // 🚨 A CONVERSA ABERTA TAMBÉM SE ATUALIZA (24/08). A lista se
+            // renovava a cada 30s e o painel da conversa aberta NÃO: ele vivia
+            // do patch local, então virava foto velha. Foi assim que o cliente
+            // AUTORIZOU a ligação (a linha apareceu na thread, o banco gravou
+            // 'aceita') e o painel continuou dizendo "aguardando" com o botão
+            // de pedir de pé — o segundo pedido bateu no limite da Meta
+            // (138009). Vale pro resto também: fila, dono, situação e janela
+            // mudam pelo webhook e por outro atendente. O SERVIDOR é quem diz.
+            const abertaAgora = (r.conversas || []).find((c) => c.numero === selRef.current?.numero);
+            if (abertaAgora) setSel(abertaAgora);
             setLimiteConversas(r.limiteLeitura ?? null);
             if (r.respostasRapidas) setRespostasRapidas(r.respostasRapidas);
             setFilas(r.filas || []);
