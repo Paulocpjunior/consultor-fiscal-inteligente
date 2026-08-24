@@ -413,7 +413,7 @@ async function perfilAtendimento(db, user) {
     } catch { /* sem doc = só Recepção */ }
     const papel = String(papelAtendimento || '').toLowerCase() === 'gestor' ? 'gestor' : 'colaborador';
     return {
-        filas: filasVisiveis({ role: user?.role, papelAtendimento, departamentos, filasAtendimento }),
+        filas: filasVisiveis({ papelAtendimento, departamentos, filasAtendimento }),
         papel,
         papelAtendimento,
     };

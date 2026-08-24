@@ -53,7 +53,11 @@ export function interpretarNota(texto: unknown, escala?: number): number | null;
 
 export const FILAS_ATENDIMENTO: FilaAtendimento[];
 export function filaValida(id: unknown): boolean;
-export function filasVisiveis(p: { role?: string; papelAtendimento?: string | null; departamentos?: string[]; filasAtendimento?: string[] }): string[] | null;
+/**
+ * ⚠️ SEM `role`: administrar o CFI não dá visão do inbox (24/08). Quem vê
+ * todas as filas é gestor ou quem atende a Recepção.
+ */
+export function filasVisiveis(p: { papelAtendimento?: string | null; departamentos?: string[]; filasAtendimento?: string[] }): string[] | null;
 export function conversaVisivel(filasDoUsuario: string[] | null, filaDaConversa: string | null | undefined): boolean;
 export function configPadraoAtendimento(): ConfigAtendimento;
 export function resolverConfig(gravada: unknown): ConfigAtendimento;
