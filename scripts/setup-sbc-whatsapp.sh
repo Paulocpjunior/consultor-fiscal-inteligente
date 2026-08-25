@@ -30,12 +30,14 @@ SBC_HOST="${SBC_HOST:?Defina SBC_HOST (ex.: SBC_HOST=sip.spassessoriacontabil.co
 # ✅ DESTINO DE HOJE: 211, a TELEFONISTA (Paulo, 25/08: "O ramal 211 é
 # telefonista ou seja 1 opção quando recebemos ligação"). O default deixou de
 # ser o 221, que era o alvo do PRIMEIRO TESTE — o ramal de uma pessoa.
-# ⚠️ O 211 NÃO é a URA: é uma opção DENTRO dela. E é justamente por isso que
-# ele serve: DTMF na chamada SIP da Meta NÃO está provado aqui, e URA de menu
-# numérico sem teclado é beco (o cliente ouve as opções e não escolhe). A
-# telefonista é a URA humana — pergunta com quem falar e transfere.
-# 📌 Isso se revisa quando a primeira chamada real chegar e o DTMF for medido.
-SBC_DESTINO="${SBC_DESTINO:-211}"                 # telefonista do HitPhone (URA humana)
+# ✅ E o motivo é o mais simples que existe: é assim que a casa atende por
+# QUALQUER meio. "Ambos a URA atende e o cliente NÃO TEM OPÇÃO DE DISCAGEM!
+# Isso nos ajuda, a telefonista ramal 211 atende. E pode transferir" — ou seja,
+# a URA daqui não é menu numérico, e DTMF não decide nada neste projeto.
+# ⚠️ NÃO rotear a chamada de WhatsApp por dono/fila: seria uma SEGUNDA regra
+# para o mesmo cliente (quem liga do celular cai na telefonista, quem liga pelo
+# WhatsApp cairia num ramal). "Mesma coisa, só muda o meio" (Paulo, 25/08).
+SBC_DESTINO="${SBC_DESTINO:-211}"                 # telefonista do HitPhone — a mesma porta do fixo
 HIT_HOST="${HIT_HOST:-177.107.205.201}"
 HIT_PORT="${HIT_PORT:-21694}"
 LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"

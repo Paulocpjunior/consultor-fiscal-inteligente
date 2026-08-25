@@ -126,23 +126,33 @@ describe('a ENTRADA cai na URA que o Paulo decidiu', () => {
         expect(doc).toMatch(/uma opção DENTRO/i);
     });
 
-    it('🚨 o DTMF é nomeado como NÃO MEDIDO — é ele que decide URA × telefonista', () => {
-        // URA de menu numérico sem teclado é beco: o cliente ouve as opções e
-        // não escolhe. Sem esta ressalva, alguém aponta o destino para o menu
-        // por parecer "mais completo" e a chamada morre no ar.
+    // ⚠️ TRAVA TROCADA PELA 3ª VEZ NA MESMA HORA — e as três porque eu estava
+    // travando DEDUÇÃO MINHA, não a operação. A anterior dizia que "o DTMF
+    // decide URA × telefonista"; o Paulo respondeu que a URA daqui **não tem
+    // opção de discagem** — ela atende e cai na telefonista, em qualquer meio.
+    // Não há menu para digitar, então teclado não decide nada.
+    it('🚨 a URA NÃO tem opção de discagem — e o documento diz isso', () => {
         const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
-        expect(doc).toMatch(/DTMF/);
-        expect(doc).toMatch(/não está provado/i);
-        expect(script).toMatch(/DTMF/);
+        expect(doc).toMatch(/não tem opção de\s*\n?\s*discagem/i);
+        expect(doc).toMatch(/DTMF não decide nada|teclado não decide nada/i);
     });
 
-    it('o funil da entrada começa pela IDENTIDADE, não pelo menu', () => {
+    it('🚨 o funil é UM SÓ — nada de rotear a chamada de WhatsApp por dono/fila', () => {
+        // Rotear por identidade criaria uma SEGUNDA regra para o mesmo cliente:
+        // quem liga do celular cai na telefonista, quem liga pelo WhatsApp
+        // cairia num ramal. "Mesma coisa, só muda o meio" (Paulo, 25/08).
         const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
-        expect(doc).toMatch(/conversa com DONO/);
-        expect(doc).toMatch(/conversa com FILA/);
-        // E os dois degraus que dependem do app aparecem como CONSTRUÇÃO, não
-        // como configuração — senão viram promessa de tela que não existe.
-        expect(doc).toMatch(/são construção, não configuração/);
+        expect(doc).toMatch(/O FUNIL É UM SÓ/);
+        expect(doc).toMatch(/SEGUNDA\s*\n?\s*regra/);
+        expect(script).toMatch(/NÃO rotear a chamada de WhatsApp por dono\/fila/);
+        // O dialplan tem que continuar simples: um destino, sem consulta ao app.
+        expect(script).toMatch(/Dial\(PJSIP\/\$\{SBC_DESTINO\}@hit,60\)/);
+    });
+
+    it('a identidade serve ao REGISTRO, e ele vem do CDR (não do webhook)', () => {
+        const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
+        expect(doc).toMatch(/CDR do SBC/);
+        expect(doc).toMatch(/não manda evento de\s*\n?\s*chamada no webhook/);
     });
 
     it('🚨 trocar o destino NÃO é dito como conserto do bloqueio da Meta', () => {
