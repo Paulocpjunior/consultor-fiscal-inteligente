@@ -602,9 +602,54 @@ export function conferirCadastrosOrfaosContrib(linhas) {
     return { erros };
 }
 
+// ── R: Σ VL_ITEM dos C170 = VL_MERC do C100 pai ────────────────────────────
+//
+// FONTE: Guia Prático, C170, campo 07 — *"a soma de valores dos registros C170
+// deve ser igual ao valor informado no campo VL_MERC do registro C100"*.
+//
+// 📌 ELA NASCE JUNTO DA CORREÇÃO DO DESCONTO (25/08, PWR). O `VL_MERC` e o
+// `VL_ITEM` passaram a sair LÍQUIDOS do desconto incondicional — e mexer nos
+// dois lados de uma igualdade é exatamente onde se deixa metade para trás.
+// Ela nasce VERDE e quebra no dia em que um dos dois mudar sozinho.
+/**
+ * C100 cujo VL_MERC não fecha com a soma dos VL_ITEM dos filhos.
+ */
+export function conferirSomaDosItensContrib(linhas) {
+    const erros = [];
+    const cent = (v) => Math.round((parseFloat(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0) * 100);
+    let pai = null;
+    const fechar = () => {
+        if (!pai || !pai.temFilho) return;
+        if (pai.merc === pai.soma) return;
+        erros.push({
+            registro: 'C100', linha: pai.linha,
+            fonte: 'Guia Prático, C170 campo 07: "a soma de valores dos registros C170 deve ser igual ao '
+                + 'valor informado no campo VL_MERC do registro C100".',
+            mensagem: `O documento nº ${pai.num || '?'} (linha ${pai.linha}) declara VL_MERC `
+                + `${(pai.merc / 100).toFixed(2)} e a soma dos VL_ITEM dos C170 dá `
+                + `${(pai.soma / 100).toFixed(2)}. O pai e os filhos têm de dizer o mesmo valor — se o `
+                + 'desconto incondicional saiu de um lado, tem de sair do outro.',
+        });
+    };
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        const reg = String(campos[0] || '').trim();
+        if (reg === 'C100') {
+            fechar();
+            pai = { linha: i + 1, num: String(campos[7] || '').trim(), merc: cent(campos[15]), soma: 0, temFilho: false };
+            return;
+        }
+        if (reg === 'C170' && pai) { pai.soma += cent(campos[6]); pai.temFilho = true; return; }
+        if (reg) { fechar(); pai = null; }
+    });
+    fechar();
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
+        ...conferirSomaDosItensContrib(linhas).erros,
         ...conferirCadastrosOrfaosContrib(linhas).erros,
         ...conferirCodItemDosItens(linhas).erros,
         ...conferirIndOrigCredDasEntradas(linhas).erros,

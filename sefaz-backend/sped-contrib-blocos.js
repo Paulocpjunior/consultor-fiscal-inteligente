@@ -39,6 +39,7 @@ import { convertCfopParaEntrada, serieDoC100 } from './sped-fiscal-blocoC.js';
 // C170 e o bloco M), e nos dois na direção mais cara.
 import {
     receitaDoItem, baseDoItem, receitaEBaseDoDocumento, codigosReceitaM205,
+    descontosDosItens, valoresLiquidosDosItens,
 } from './base-pis-cofins.js';
 // O valor total do documento (mercadorias + acessórias + ST + IPI − desconto) —
 // o mesmo que o VL_OPR do C190 usa no EFD ICMS/IPI.
@@ -166,8 +167,10 @@ function valorTotalDoDocumento(nota, totais) {
     return (nota.itens || []).reduce((s, i) => s + valorOperacaoDoItem(i), 0);
 }
 
-function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq) {
-    const vlItem = parseFloat(item.vProd || item.valor || 0) || 0;
+function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem) {
+    const vlItem = Number.isFinite(liquidoDoItem)
+        ? liquidoDoItem
+        : parseFloat(item.vProd || item.valor || 0) || 0;
     if (direcao === 'saida') {
         const cstPis = getCstPis(item, regimeApuracao, 'saida');
         const cstCofins = getCstCofins(item, regimeApuracao, 'saida');
@@ -179,7 +182,11 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq) {
         // mercadoria cheia; do lado de cá vale a receita líquida do desconto
         // MENOS o ICMS destacado (Tema 69). O arquivo ACEITO desta mesma
         // empresa prova: VL_BC_PIS 16.055,60 = VL_ITEM 19.580 − ICMS 3.524,40.
-        const base = baseDoItem(item);
+        // O líquido já vem do dono (desconto próprio + rateio do documento);
+        // sem ele, cai no `baseDoItem`, que só conhece o desconto do ITEM.
+        const base = Number.isFinite(liquidoDoItem)
+            ? Math.max(0, vlItem - (parseFloat(item.vICMS || 0) || 0))
+            : baseDoItem(item);
         // ⚠️ E O VALOR SEGUE A BASE, nunca o destacado no documento: no aceito,
         // o C170 traz 104,36 (0,65% da base reduzida) enquanto o C100 traz
         // 127,27 (o que o emitente destacou). Manter o destacado aqui faria o
@@ -535,13 +542,23 @@ export function buildBlocoC_Contrib(dados) {
             ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
             : '';
 
+        // 🚨 O VL_MERC SAI LÍQUIDO DO DESCONTO INCONDICIONAL (Paulo, 25/08,
+        // PWR: *"o valor da receita não pode ser esses 38.316,84 e sim
+        // 37.754,60 conforme a ficha financeira — tem que ajustar no C100"*).
+        // A receita que o PVA mostra no M210 vem dos DOCUMENTOS, então
+        // enquanto o C100 declarar a mercadoria CHEIA ela sai bruta por
+        // construção. O `VL_DESC` continua informado, dizendo quanto foi
+        // tirado — e o `VL_ITEM` do C170 usa a MESMA régua, senão a soma dos
+        // filhos deixaria de fechar com o pai.
+        const liquidosDosItens = valoresLiquidosDosItens(nota);
+        const descontosPorItem = descontosDosItens(nota);
         let vProd = 0, vDesc = 0, vPis = 0, vCofins = 0;
-        for (const item of (nota.itens || [])) {
-            vProd += parseFloat(item.vProd || item.valor || 0);
-            vDesc += parseFloat(item.vDesc || 0);
+        (nota.itens || []).forEach((item, k) => {
+            vProd += liquidosDosItens[k] || 0;
+            vDesc += descontosPorItem[k] || 0;
             vPis += parseFloat(item.vPIS || 0);
             vCofins += parseFloat(item.vCOFINS || 0);
-        }
+        });
         if (vPis === 0) vPis = vProd * aliq.pis;
         if (vCofins === 0) vCofins = vProd * aliq.cofins;
 
@@ -634,8 +651,11 @@ export function buildBlocoC_Contrib(dados) {
         // recusa seguinte (a PWR pagou essa em 19/08).
         // ═══════════════════════════════════════════════════════════════════
         if (!levaC170NoContribuicoes(nota)) continue;
-        for (const item of (nota.itens || [])) {
-            const vlItem = parseFloat(item.vProd || item.valor || 0);
+        (nota.itens || []).forEach((item, k) => {
+            // ⚠️ MESMA RÉGUA DO VL_MERC: o item entra líquido do desconto
+            // incondicional, e o desconto vai no campo próprio.
+            const descontoItem = descontosPorItem[k] || 0;
+            const vlItem = liquidosDosItens[k] || 0;
             const cfopLancado = convertCfopParaEntrada(
                 item.cfop || item.CFOP || '0000', direcao, dados, nota,
             );
@@ -643,7 +663,10 @@ export function buildBlocoC_Contrib(dados) {
             const aliqIcmsItem = parseFloat(item.aliqIcms || 0)
                 || (item.vICMS && item.vBC ? (item.vICMS / item.vBC) * 100 : 0);
 
-            const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq);
+            // ⚠️ A BASE lê o MESMO líquido: com o desconto lançado só no total
+            // do documento, `baseDoItem(item)` não o enxergaria e a base sairia
+            // cheia — o registro se desmentiria dentro da própria linha.
+            const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, vlItem);
 
             linhas.push(fmt.buildLine([
                 'C170',
@@ -653,7 +676,7 @@ export function buildBlocoC_Contrib(dados) {
                 fmt.formatValue(item.qCom || item.quantidade || 1, 5), //  5 QTD
                 unidadeDoItem(item),                                    //  6 UNID
                 fmt.formatValue(vlItem),                              //  7 VL_ITEM
-                fmt.formatValue(item.vDesc || 0),                     //  8 VL_DESC
+                fmt.formatValue(descontoItem),                        //  8 VL_DESC
                 IND_MOV_COM_MOVIMENTACAO,                             //  9 IND_MOV
                 cstIcms,                                              // 10 CST_ICMS
                 fmt.sanitizeString(cfopLancado, 4),                   // 11 CFOP
@@ -684,7 +707,7 @@ export function buildBlocoC_Contrib(dados) {
                 fmt.formatValue(p.vlCofins),                          // 36 VL_COFINS
                 '',                                                   // 37 COD_CTA
             ]));
-        }
+        });
     }
 
     const totalBloco = linhas.length + 1;
@@ -1120,29 +1143,20 @@ export function buildBlocoM(dados) {
         // declarava PIS/COFINS a pagar sobre uma COMPRA.
         if (direcaoEfetivaDoc(nota) === 'saida') {
             totalBcSaida += rb.base;
-            // 🚨 VL_REC_BRT É A RECEITA **BRUTA** — e quem provou isso foi o
-            // PRÓPRIO PVA (25/08, PWR 1364 · 07/2026, 5º dia no mesmo assunto).
+            // 🚨 A RECEITA DO M210 É A LÍQUIDA — a mesma da FICHA FINANCEIRA.
             //
-            // Sandra apagou TODA a base do PVA e reimportou o arquivo que
-            // declara `|M210|51|37754,60|30958,77|` — e a tela continuou
-            // mostrando **38.316,84 / 30.958,77**. Os dois números da tela são
-            // somas do NOSSO arquivo: 38.316,84 = Σ VL_ITEM dos C170 de saída
-            // (= Σ VL_MERC dos C100) e 30.958,77 = Σ VL_BC_PIS. Ou seja: **o
-            // PVA recalcula o M210 a partir dos documentos** e sobrescreve o
-            // campo 2 com a receita BRUTA.
+            // Paulo, 25/08 (PWR 1364 · 07/2026): *"o valor da receita não pode
+            // ser esses 38.316,84 e sim 37.754,60 conforme a ficha financeira.
+            // Tem que ajustar no C100."*
             //
-            // ⚠️ E NÃO HÁ COMO FAZER O BRUTO VIRAR LÍQUIDO NO DOCUMENTO: o Guia
-            // Prático é literal no C170, campo 07 — *"a soma de valores dos
-            // registros C170 deve ser igual ao valor informado no campo VL_MERC
-            // do registro C100"* —, e VL_MERC é o valor das mercadorias, com o
-            // desconto no campo PRÓPRIO (VL_DESC). Baixar o VL_ITEM para o
-            // líquido trocaria esta divergência por uma RECUSA de validação.
-            //
-            // ✅ E O IMPOSTO NÃO MUDA UM CENTAVO: o desconto continua fora da
-            // BASE, que é onde ele reduz tributo — 38.316,84 − 562,24 (desconto)
-            // − 6.795,83 (ICMS, Tema 69) = 30.958,77, exatamente a base que o
-            // PVA mostra e sobre a qual a guia é paga.
-            totalReceitaSaida += rb.receitaBruta;
+            // ⚠️ E ESCREVER AQUI NÃO BASTAVA — foi o que custou a semana. O PVA
+            // RECALCULA o M210 a partir dos documentos (medido: a tela dele
+            // trazia Σ VL_ITEM dos C170 e Σ VL_BC_PIS, não os campos que a
+            // gente escrevia). Por isso a correção mora no C100/C170: o
+            // `VL_MERC` e o `VL_ITEM` saem líquidos do desconto incondicional,
+            // com o `VL_DESC` informado ao lado. Aí os dois lados dizem
+            // 37.754,60 — o arquivo e a tela do PVA.
+            totalReceitaSaida += rb.receita;
             icmsExcluido += rb.icms;
             if (rb.desconto > 0) { descontoExcluido += rb.desconto; docsComDesconto += 1; }
             // ⚠️ O VALOR APURADO SEGUE A BASE, não o destacado no documento. O
@@ -1201,27 +1215,25 @@ export function buildBlocoM(dados) {
     // responde lendo o código — e há empresa com desconto em quase toda nota.
     if (descontoExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
-            `Desconto incondicional: ${docsComDesconto} documento(s), total `
-            + `${descontoExcluido.toFixed(2)}. O VL_REC_BRT do M210/M610 é a receita BRUTA `
-            + `(${totalReceitaSaida.toFixed(2)}) — é assim que o PVA recalcula o registro a partir dos `
-            + 'C100/C170, e o Guia não deixa o VL_ITEM sair líquido (a soma dos C170 tem que bater com o '
-            + `VL_MERC do C100). O desconto sai da BASE, que é onde ele reduz tributo: ${totalReceitaSaida.toFixed(2)} `
-            + `− ${descontoExcluido.toFixed(2)} de desconto − ${icmsExcluido.toFixed(2)} de ICMS = `
-            + `${totalBcSaida.toFixed(2)}. Se o PVA mostrar a receita bruta, é o esperado — confira a BASE.`,
+            `Receita do M210/M610: o DESCONTO incondicional está FORA — bruta `
+            + `${(totalReceitaSaida + descontoExcluido).toFixed(2)} − desconto ${descontoExcluido.toFixed(2)} `
+            + `= ${totalReceitaSaida.toFixed(2)} (${docsComDesconto} documento(s) com desconto). `
+            + 'Ele sai já no C100/C170 — VL_MERC e VL_ITEM líquidos, com o VL_DESC informado ao lado —, '
+            + 'porque o PVA recalcula o M210 a partir dos documentos: corrigir só o M210 não chegava na '
+            + 'tela dele. Confira o "Valor total das mercadorias e serviços" do C100 no PVA.',
         );
     }
 
     if (icmsExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
-            // ⚠️ A CONTA TEM DE FECHAR NA PRÓPRIA FRASE. Desde 25/08 o
-            // `totalReceitaSaida` é a receita BRUTA (é o que o PVA recalcula),
-            // então o desconto entra AQUI — sem ele a subtração não daria a
-            // base, e aviso que se desmente é pior que aviso nenhum.
+            // ⚠️ A CONTA TEM DE FECHAR NA PRÓPRIA FRASE: `totalReceitaSaida` já
+            // é a receita LÍQUIDA do desconto (o abatimento acontece lá no
+            // C100/C170), então aqui só o ICMS é subtraído. Somar o desconto de
+            // novo faria o aviso se desmentir — e aviso que não fecha é pior
+            // que aviso nenhum.
             `Base do PIS/COFINS (Tema 69 · RE 574.706): o ICMS destacado nas saídas foi EXCLUÍDO da base — `
-            + `receita bruta ${totalReceitaSaida.toFixed(2)}`
-            + (descontoExcluido > 0 ? ` − desconto ${descontoExcluido.toFixed(2)}` : '')
-            + ` − ICMS ${icmsExcluido.toFixed(2)} = base ${totalBcSaida.toFixed(2)}. `
-            + 'É a mesma exclusão que a ficha do Lucro já fazia; antes desta '
+            + `receita ${totalReceitaSaida.toFixed(2)} − ICMS ${icmsExcluido.toFixed(2)} = base `
+            + `${totalBcSaida.toFixed(2)}. É a mesma exclusão que a ficha do Lucro já fazia; antes desta `
             + 'competência o SPED declarava a base CHEIA, maior que a da guia.',
         );
     }

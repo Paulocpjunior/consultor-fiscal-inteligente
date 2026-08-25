@@ -208,3 +208,141 @@ describe('🚨 os dois leitores do dono', () => {
         expect(orq).toMatch(/nada deixa de ser apurado/);
     });
 });
+
+// ============================================================================
+// 🚨 O DESCONTO SAI NO C100/C170 — o M210 sozinho não chega na tela do PVA
+//
+// Paulo, 25/08 (PWR 1364 · 07/2026): *"O valor da receita não pode ser esses
+// 38.316,84 e sim 37.754,60 conforme a ficha financeira. Tem que ajustar no
+// C100."*
+//
+// Cinco dias corrigindo o M210 sem efeito, porque **o PVA recalcula o M210 a
+// partir dos documentos**: a tela dele trazia Σ VL_ITEM dos C170 e Σ VL_BC_PIS,
+// não os campos que a gente escrevia. A correção mora no documento.
+// ============================================================================
+import {
+    descontosDosItens, valoresLiquidosDosItens,
+// @ts-ignore — módulo JS do backend, sem tipos
+} from '../sefaz-backend/base-pis-cofins.js';
+import {
+    conferirSomaDosItensContrib,
+// @ts-ignore
+} from '../sefaz-backend/sped-contrib-campos.js';
+// @ts-ignore
+import { buildBlocoM } from '../sefaz-backend/sped-contrib-blocos.js';
+
+describe('🚨 o desconto incondicional sai do valor do item', () => {
+    const brlNum = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.'));
+    /** ⚠️ NÃO chamar de `it`: sombreia o `it` do jest e o erro sai em outro lugar. */
+    const umItem = (v: number, icms: number, d = 0) => ({
+        nItem: 1, cProd: '3', xProd: 'TELHA', qCom: 1, uCom: 'MT',
+        vProd: v, vICMS: icms, vDesc: d, vBC: v - d, cfop: '5101', cst: '00', NCM: '73089090',
+    });
+    const nota = (itens: any[], totais: any) => ({
+        chave: '35260731947349000169550010000000071369620739', numero: '7', serie: '1',
+        direcao: 'saida', status: 'autorizado', dhEmi: '2026-07-24T10:00:00-03:00',
+        cnpjEmit: '31947349000169', cnpjDest: '26767102000120', itens, totais,
+    });
+    const gerar = (n: any) => buildBlocoC_Contrib({
+        empresa: { cnpj: '31947349000169', nome: 'PWR', uf: 'SP' },
+        competencia: '2026-07', competenciaFim: '2026-07',
+        regimeApuracao: '2', notas: [n], warnings: [] as string[],
+    }).map(semQuebra);
+
+    // A NF 7 real: 18.741,24 de mercadoria − 562,24 de desconto = 18.179,00.
+    it('C100 e C170 saem LÍQUIDOS, com o VL_DESC informado ao lado', () => {
+        const l = gerar(nota([umItem(18741.24, 3272.22, 562.24)], { vNF: 18179.00, vDesc: 562.24 }));
+        const c100 = l.find((x: string) => x.startsWith('|C100|'))!.split('|');
+        const c170 = l.find((x: string) => x.startsWith('|C170|'))!.split('|');
+        expect(brlNum(c100[16])).toBeCloseTo(18179.00, 2);  // VL_MERC
+        expect(brlNum(c100[14])).toBeCloseTo(562.24, 2);    // VL_DESC — nada some
+        expect(brlNum(c170[7])).toBeCloseTo(18179.00, 2);   // VL_ITEM
+        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);
+        // A base não muda: ela já era líquida de desconto e de ICMS.
+        expect(brlNum(c170[26])).toBeCloseTo(14906.78, 2);
+    });
+
+    // 🚨 As DUAS formas do desconto dão o MESMO arquivo — a armadilha das duas
+    // formas, agora no campo que o PVA lê para montar a receita.
+    it('desconto só no TOTAL do documento chega ao item pelo rateio', () => {
+        const l = gerar(nota([umItem(18741.24, 3272.22)], { vNF: 18179.00, vDesc: 562.24 }));
+        const c170 = l.find((x: string) => x.startsWith('|C170|'))!.split('|');
+        expect(brlNum(c170[7])).toBeCloseTo(18179.00, 2);
+        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);
+        expect(brlNum(c170[26])).toBeCloseTo(14906.78, 2);
+    });
+
+    it('nas DUAS casas não desconta duas vezes', () => {
+        const l = gerar(nota([umItem(18741.24, 3272.22, 562.24)], { vNF: 18179.00, vDesc: 562.24 }));
+        expect(brlNum(l.find((x: string) => x.startsWith('|C170|'))!.split('|')[7])).toBeCloseTo(18179.00, 2);
+    });
+
+    // ⚠️ O rateio fecha na UNIDADE: Σ dos rateados = o desconto do documento.
+    // Sem isso trocaríamos a divergência por um erro de arredondamento.
+    it('o rateio entre itens fecha no centavo', () => {
+        const n = { itens: [{ vProd: 33.33 }, { vProd: 33.33 }, { vProd: 33.34 }], totais: { vDesc: 10 } };
+        const d = descontosDosItens(n);
+        expect(d.reduce((s: number, v: number) => s + v, 0)).toBeCloseTo(10, 2);
+        expect(valoresLiquidosDosItens(n).reduce((s: number, v: number) => s + v, 0)).toBeCloseTo(90, 2);
+    });
+
+    it('sem desconto nenhum o item continua com o valor cheio', () => {
+        const n = { itens: [{ vProd: 100 }], totais: {} };
+        expect(descontosDosItens(n)).toEqual([0]);
+        expect(valoresLiquidosDosItens(n)).toEqual([100]);
+    });
+
+    it('e o M210 declara a receita da ficha — 37.754,60 nas 5 saídas da PWR', () => {
+        const nf = (n: string, itens: any[], totais: any) => ({
+            chave: `3526073194734900016955001000000000${n}1369620739`, numero: n, serie: '1',
+            direcao: 'saida', status: 'autorizado', dhEmi: '2026-07-24T10:00:00-03:00',
+            cnpjEmit: '31947349000169', cnpjDest: '26767102000120', itens, totais,
+        });
+        const d = {
+            empresa: { cnpj: '31947349000169', nome: 'PWR', uf: 'SP' },
+            competencia: '2026-07', competenciaFim: '2026-07', regimeApuracao: '2',
+            notas: [
+                nf('3', [umItem(6743.10, 1213.76), { ...umItem(1819.44, 327.50), nItem: 2 }], { vNF: 8562.54 }),
+                nf('4', [umItem(2105.60, 379.01)], { vNF: 2105.60 }),
+                nf('5', [umItem(4485.51, 807.39)], { vNF: 4485.51 }),
+                nf('6', [umItem(4421.95, 795.95)], { vNF: 4421.95 }),
+                nf('7', [umItem(18741.24, 3272.22, 562.24)], { vNF: 18179.00, vDesc: 562.24 }),
+            ],
+            warnings: [] as string[],
+        };
+        const m210 = buildBlocoM(d).map(semQuebra).find((x: string) => x.startsWith('|M210|'))!;
+        expect(m210).toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+    });
+});
+
+// 🚨 A TRAVA DA MEIA CORREÇÃO: mexer no VL_MERC sem mexer no VL_ITEM (ou o
+// contrário) faz o pai e os filhos declararem valores diferentes. Ela nasce
+// VERDE e existe porque esta correção mexeu nos DOIS lados de uma igualdade.
+describe('🚨 Σ VL_ITEM tem de fechar com o VL_MERC do C100 pai', () => {
+    const C100 = (merc: string) => `|C100|1|0|26767102000120|55|00|001|7|3526|24072026|24072026`
+        + `|18179,00|0|562,24||${merc}|9|0,00|0,00|0,00|18179,00|3272,22|0,00|0,00|0,00|118,16|545,37|||`;
+    const C170 = (item: string) => `|C170|1|3|TELHA|187,60000|MT|${item}|562,24|0|000|5101|`
+        + `|18179,00|18,00|3272,22|0,00|0,00|0,00|0|||0,00|0,00|0,00|01|14906,78|0,6500|||96,89`
+        + `|01|14906,78|3,0000|||447,20||`;
+
+    it('nasce VERDE quando os dois lados dizem o mesmo', () => {
+        expect(conferirSomaDosItensContrib([C100('18179,00'), C170('18179,00')]).erros).toHaveLength(0);
+    });
+
+    it('acusa a meia correção, com os dois números e o número do documento', () => {
+        const r = conferirSomaDosItensContrib([C100('18179,00'), C170('18741,24')]).erros;
+        expect(r).toHaveLength(1);
+        expect(r[0].registro).toBe('C100');
+        expect(r[0].mensagem).toContain('18179.00');
+        expect(r[0].mensagem).toContain('18741.24');
+        expect(r[0].mensagem).toContain('nº 7');
+        expect(r[0].fonte).toContain('C170 campo 07');
+    });
+
+    // ⚠️ C100 sem filho não é acusado: a cancelada entra COM C100 e sem C170,
+    // e acusá-la seria alarme sobre escrituração correta.
+    it('C100 sem C170 (cancelada, NFC-e) não é acusado', () => {
+        expect(conferirSomaDosItensContrib([C100('18179,00')]).erros).toHaveLength(0);
+        expect(conferirSomaDosItensContrib([C100('0,00'), '|C990|3|']).erros).toHaveLength(0);
+    });
+});
