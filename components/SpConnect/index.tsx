@@ -11,9 +11,10 @@
 // coluna do cliente aparece só em telas largas (xl).
 // A lista se atualiza sozinha a cada 30s — atendimento não vive de F5.
 // ============================================================================
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
+    procurarConversas,
     importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
@@ -21,6 +22,7 @@ import {
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
+    sondarSbc, SondaSbc,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, excluirContato, salvarEtiqueta,
@@ -51,7 +53,7 @@ import {
 } from '../../services/spConnect';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
-import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
+import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
 import { interpretarConversaTxt } from '../../sefaz-backend/whatsapp-import-ultrafox.js';
@@ -76,6 +78,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
+    // 🔎 Resultado da busca NO BANCO — estado próprio, nunca misturado com
+    // `conversas`: a lista se renova a cada 30s e apagaria o que a pessoa
+    // acabou de achar. `null` = mostrando a lista normal.
+    const [achados, setAchados] = useState<{
+        termo: string; conversas: ConversaResumo[]; total: number; truncado: boolean;
+        contatosTruncados: boolean;
+    } | null>(null);
+    const [procurando, setProcurando] = useState(false);
+    const [erroBusca, setErroBusca] = useState<string | null>(null);
     // 🔍 Busca DENTRO da conversa aberta (pendência 🟡 do de-para — a busca
     // só alcançava a lista). Limpa ao trocar de conversa, senão a próxima
     // abriria filtrada por um termo de outra thread.
@@ -84,12 +95,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [sel, setSel] = useState<ConversaResumo | null>(null);
     const [mensagens, setMensagens] = useState<MensagemInbox[]>([]);
     const [carregandoMsgs, setCarregandoMsgs] = useState(false);
+    // ⬆️ HISTÓRICO puxado à mão fica em estado PRÓPRIO. Se ele entrasse em
+    // `mensagens`, a renovação de 30s (que traz só a fatia recente) apagaria o
+    // que a pessoa acabou de carregar — e ela clicaria de novo, e de novo.
+    const [antigas, setAntigas] = useState<MensagemInbox[]>([]);
+    const [temMaisAntigas, setTemMaisAntigas] = useState(false);
+    const [carregandoAntigas, setCarregandoAntigas] = useState(false);
+    const [threadSemOrdem, setThreadSemOrdem] = useState(false);
     const [texto, setTexto] = useState('');
     const [enviando, setEnviando] = useState(false);
     const [erroEnvio, setErroEnvio] = useState<string | null>(null);
     const fimDaThread = useRef<HTMLDivElement>(null);
     const selRef = useRef<ConversaResumo | null>(null);
     selRef.current = sel;
+    const antigasRef = useRef<MensagemInbox[]>([]);
+    antigasRef.current = antigas;
+    const mensagensRef = useRef<MensagemInbox[]>([]);
+    mensagensRef.current = mensagens;
+
+    // A thread que a tela mostra = histórico puxado + fatia recente, sem
+    // repetir id (as duas fatias podem se tocar numa borda).
+    const thread = useMemo(() => {
+        const vistos = new Set<string>();
+        return [...antigas, ...mensagens]
+            .filter((m) => (m.id && vistos.has(m.id) ? false : (m.id && vistos.add(m.id), true)))
+            .sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+    }, [antigas, mensagens]);
 
     // 📧 E-mail NÃO verificado (caso recepcao@, 24/08): o backend RECUSA o
     // token com "Email não verificado" — trava de segurança correta (sem ela,
@@ -160,11 +191,38 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!silencioso) setCarregandoMsgs(true);
         try {
             const r = await listarMensagens(numero);
-            if (r.ok && selRef.current?.numero === numero) setMensagens(r.mensagens || []);
+            if (r.ok && selRef.current?.numero === numero) {
+                setMensagens(r.mensagens || []);
+                setThreadSemOrdem(Boolean(r.semOrdem));
+                // ⚠️ A renovação de 30s NÃO pode apagar o "carregar mais" que a
+                // pessoa já usou: ela recarrega só a FATIA RECENTE, e a
+                // resposta dela fala sobre essa fatia. Quem já puxou histórico
+                // mantém o que tem — o `temMais` daquela página é que manda.
+                if (!antigasRef.current.length) setTemMaisAntigas(Boolean(r.temMais));
+            }
         } finally {
             if (!silencioso) setCarregandoMsgs(false);
         }
     }, []);
+
+    // ⬆️ As 500 ANTERIORES à mais antiga que já está na tela. Cursor por
+    // VALOR (timestamp), nunca por número de página: mensagem que chega no
+    // meio do caminho não desloca a janela nem faz linha repetir.
+    const carregarAntigas = useCallback(async () => {
+        const numero = selRef.current?.numero;
+        if (!numero || carregandoAntigas) return;
+        const primeira = antigasRef.current[0] || mensagensRef.current[0];
+        if (!primeira?.timestamp) return;
+        setCarregandoAntigas(true);
+        try {
+            const r = await listarMensagens(numero, primeira.timestamp);
+            if (!r.ok || selRef.current?.numero !== numero) return;
+            setAntigas((a) => [...(r.mensagens || []), ...a]);
+            setTemMaisAntigas(Boolean(r.temMais));
+        } finally {
+            setCarregandoAntigas(false);
+        }
+    }, [carregandoAntigas]);
 
     // Atendimento não vive de F5: lista e thread aberta se renovam a cada 30s.
     useEffect(() => {
@@ -176,6 +234,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         return () => clearInterval(timer);
     }, [recarregar, carregarThread]);
 
+    // ⚠️ A rolagem para o fim segue presa à FATIA RECENTE, de propósito:
+    // carregar histórico acrescenta linhas ACIMA e não pode jogar a pessoa
+    // de volta pro rodapé — ela acabou de pedir pra ver o começo.
     useEffect(() => {
         fimDaThread.current?.scrollIntoView({ block: 'end' });
     }, [mensagens.length]);
@@ -183,6 +244,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const abrir = async (c: ConversaResumo) => {
         setSel(c);
         setMensagens([]);
+        setAntigas([]);
+        setTemMaisAntigas(false);
+        setThreadSemOrdem(false);
         setBuscaThread('');
         setErroEnvio(null);
         setAcaoErro(null);
@@ -547,6 +611,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [chamadaResultado, setChamadaResultado] = useState<{ acao: string; calling: Record<string, unknown> | null } | null>(null);
     const [sipHost, setSipHost] = useState('');
     const [sipPorta, setSipPorta] = useState('5061');
+    // 🔌 Medição do caminho até o SBC — estado PRÓPRIO, nunca misturado com o
+    // da sonda de settings: as duas respondem perguntas diferentes e juntá-las
+    // faria "gravado na Meta" passar por "a Meta alcança".
+    const [sbc, setSbc] = useState<SondaSbc | null>(null);
+    const [sondandoSbc, setSondandoSbc] = useState(false);
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
         if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
         setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
@@ -660,11 +729,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // é só puxar do bucket. Documento/vídeo continuam por clique: são
     // maiores e o clique ali já é o comportamento esperado (baixar/abrir).
     useEffect(() => {
-        mensagens
+        // Lê a THREAD inteira: a foto do histórico puxado à mão tem que
+        // aparecer igual à da fatia recente — senão "carregar mais antigas"
+        // devolveria uma conversa de balões vazios.
+        thread
             .filter((m) => (m.tipo === 'image' || m.tipo === 'sticker') && m.midia?.baixada !== false)
             .forEach((m) => { verMidia(m); });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mensagens]);
+    }, [thread]);
 
     const [anexando, setAnexando] = useState(false);
     const inputAnexo = useRef<HTMLInputElement>(null);
@@ -879,6 +951,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [ctCarregando, setCtCarregando] = useState(false);
     const [ctErro, setCtErro] = useState<string | null>(null);
     const [ctSel, setCtSel] = useState<Contato | null>(null);
+    // ✏️ Rascunho da edição do cadastro — TEXTO no estado, gravado só no
+    // Salvar. Editar direto no objeto faria a lista mudar antes de o servidor
+    // ter aceitado, e um erro deixaria a tela mostrando o que não foi gravado.
+    const [ctEdit, setCtEdit] = useState<{ nome: string; observacao: string } | null>(null);
+    const [ctSalvando, setCtSalvando] = useState(false);
     const [ctNovo, setCtNovo] = useState<{ numero: string; nome: string; categoria: string } | null>(null);
     const [ctMsg, setCtMsg] = useState<string | null>(null);
 
@@ -908,6 +985,29 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setCtSel(atualizado);
         setContatos((l) => l.map((x) => (x.numero === c.numero ? atualizado : x)));
         setCtMsg(null);
+    };
+
+    // ✏️ EDITAR O CADASTRO (Paulo, 25/08: "não possuímos a opção de EDITAR
+    // contato, para que assim possamos usar os flags, se cliente, ou não
+    // salvar e completar o necessário").
+    // 🚨 O backend ACEITA `nome` e `observacao` no PATCH desde que os contatos
+    // nasceram — e nenhum botão os mandava. Campo que o servidor grava e
+    // ninguém pode preencher é a "rota sem botão" na versão CAMPO: parece
+    // entrega, e a pessoa que precisa dele conclui que o app não faz.
+    const salvarCadastroDoContato = async (c: Contato, nome: string, observacao: string) => {
+        setCtSalvando(true);
+        try {
+            const r = await atualizarContato(c.numero, { nome: nome.trim(), observacao: observacao.trim() });
+            if (!r.ok) { setCtMsg(r.error || 'Não deu para salvar o contato.'); return; }
+            // O nome do PERFIL é o que o WhatsApp manda; o que se digita aqui
+            // é o mesmo campo, e a lista tem que concordar na hora — senão a
+            // pessoa salva e vê o nome velho, e salva de novo.
+            const atualizado = { ...c, nomePerfil: nome.trim() || null, observacao: observacao.trim() || null };
+            setCtSel(atualizado);
+            setContatos((l) => l.map((x) => (x.numero === c.numero ? atualizado : x)));
+            setCtEdit(null);
+            setCtMsg('✓ Contato salvo.');
+        } finally { setCtSalvando(false); }
     };
 
     const registrarConsentimento = async (c: Contato, etiqueta: string) => {
@@ -1345,10 +1445,29 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         document.title = tituloComContador(naoLidasTotalAviso, 'SP Connect — Atendimento WhatsApp');
     }, [naoLidasTotalAviso]);
 
+    const procurarNoBanco = useCallback(async () => {
+        const termo = busca.trim();
+        if (termo.length < 2 || procurando) return;
+        setProcurando(true); setErroBusca(null);
+        try {
+            const r = await procurarConversas(termo);
+            if (!r.ok) { setErroBusca(r.error || 'Falha ao procurar.'); return; }
+            setAchados({
+                termo: r.termo, conversas: r.conversas || [], total: r.total || 0,
+                truncado: Boolean(r.truncado), contatosTruncados: Boolean(r.contatosTruncados),
+            });
+        } finally { setProcurando(false); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [busca, procurando]);
+
     const agora = new Date();
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
     const conduzidaPorOutro = Boolean(sel?.atribuidoA && sel.atribuidoA !== meuEmail);
-    const visiveis = filtrarConversas(conversas, { busca, aba });
+    // 🔎 Com resultado do banco na mão, a lista MOSTRA O RESULTADO — e o filtro
+    // de aba não se aplica: a pessoa pediu "procure no banco", não "procure no
+    // banco dentro da aba Fiscal". Filtrar de novo aqui faria a conversa
+    // achada SUMIR depois de encontrada, que é o pior desfecho de uma busca.
+    const visiveis = achados ? achados.conversas : filtrarConversas(conversas, { busca, aba });
     const naoLidasTotal = conversas.reduce((s, c) => s + (c.naoLidas || 0), 0);
     // O que falta nos avisos sai do NÚCLEO (três camadas numa pergunta só).
     const avisoDoTopo = faltaNosAvisos({
@@ -1816,7 +1935,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </p>
                                 )}
                                 {contatos.map((c) => (
-                                    <button key={c.numero} onClick={() => { setCtSel(ctSel?.numero === c.numero ? null : c); setCtMsg(null); }}
+                                    <button key={c.numero} onClick={() => { setCtSel(ctSel?.numero === c.numero ? null : c); setCtEdit(null); setCtMsg(null); }}
                                         className={`w-full text-left rounded-lg border px-2.5 py-1.5 ${ctSel?.numero === c.numero
                                             ? 'border-[#0e3bfa] bg-[#0e3bfa]/5'
                                             : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40'}`}>
@@ -1860,9 +1979,57 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {/* Painel do contato escolhido */}
                             {ctSel && (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
-                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
-                                        {ctSel.nomePerfil || formatarNumeroBr(ctSel.numero)}
-                                    </p>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100 truncate">
+                                            {ctSel.nomePerfil || formatarNumeroBr(ctSel.numero)}
+                                        </p>
+                                        {!ctEdit && (
+                                            <button
+                                                onClick={() => { setCtEdit({ nome: ctSel.nomePerfil || '', observacao: ctSel.observacao || '' }); setCtMsg(null); }}
+                                                className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 btn-press whitespace-nowrap">
+                                                ✏️ Editar
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* ✏️ O cadastro: nome e observação. O backend aceitava os dois
+                                        desde sempre e nenhum botão os mandava — campo que o servidor
+                                        grava e ninguém pode preencher parece entrega, e quem precisa
+                                        dele conclui que o app não faz. */}
+                                    {ctEdit && (
+                                        <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 space-y-1.5">
+                                            <label className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                                Nome
+                                                <input value={ctEdit.nome} onChange={(e) => setCtEdit({ ...ctEdit, nome: e.target.value })}
+                                                    placeholder="como esta pessoa aparece na lista" className={CAMPO} />
+                                            </label>
+                                            <label className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                                Observação
+                                                <input value={ctEdit.observacao} onChange={(e) => setCtEdit({ ...ctEdit, observacao: e.target.value })}
+                                                    placeholder="ex.: falar só à tarde · sócio da empresa X" className={CAMPO} />
+                                            </label>
+                                            <div className="flex gap-1.5">
+                                                <button onClick={() => salvarCadastroDoContato(ctSel, ctEdit.nome, ctEdit.observacao)}
+                                                    disabled={ctSalvando}
+                                                    className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40 btn-press">
+                                                    {ctSalvando ? 'Salvando…' : 'Salvar'}
+                                                </button>
+                                                <button onClick={() => setCtEdit(null)}
+                                                    className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 btn-press">
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                            {/* A categoria fica logo abaixo, nas etiquetas: dizer isso
+                                                aqui evita a pessoa procurar um campo "categoria" que
+                                                não existe neste bloco. */}
+                                            <p className="text-[10px] text-slate-400">
+                                                A <strong>categoria</strong> (Cliente, Lead…) se troca nas 🏷 etiquetas logo abaixo — ela é
+                                                obrigatória, então marque a nova antes de desmarcar a velha.
+                                            </p>
+                                        </div>
+                                    )}
+                                    {!ctEdit && ctSel.observacao && (
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300">📝 {ctSel.observacao}</p>
+                                    )}
                                     <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">🏷 Etiquetas</p>
                                     <div className="flex gap-1.5 flex-wrap">
                                         {etiquetas.map((e) => {
@@ -2142,9 +2309,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         {cfgAba === 'atendentes' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Clique nas filas de cada pessoa — salva na hora. Quem tem <strong>Recepção</strong> vê
-                                    TODAS as conversas; sem atribuição, valem os departamentos de módulo; os demais veem
-                                    a própria fila + Recepção.
+                                    Clique nas filas de cada pessoa — salva na hora. Cada um vê e é avisado <strong>só das
+                                    filas marcadas</strong>. Quem precisa ver TODAS: <strong>⭐ Gestor</strong> ou a fila
+                                    <strong>Recepção</strong>. Sem nenhuma fila marcada, a pessoa só vê o que ela mesma
+                                    conduz. <em>Ser admin do CFI configura o app, mas não dá visão do inbox inteiro.</em>
                                 </p>
                                 {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
                                     não deixa a página mostrar popup do sistema — quem avisa lá é
@@ -2221,9 +2389,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <div className="flex items-center justify-between gap-2">
                                                 <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
                                                     {a.nome || a.email || a.uid}
-                                                    {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600">admin · tudo</span>}
+                                                    {/* 🚨 O selo dizia "admin · tudo" e virou MENTIRA em 24/08: administrar
+                                                        o CFI deixou de dar visão do inbox inteiro. Ele agora diz o que o
+                                                        papel FAZ (configura, encerra qualquer atendimento) — a visão sai
+                                                        das filas ao lado, como em todo mundo. */}
+                                                    {a.role === 'admin' && <span className="ml-1.5 text-[9px] font-bold text-emerald-600" title="Administra o app (⚙️, cadastros) e pode encerrar qualquer atendimento. A VISÃO das conversas segue as filas marcadas — marque ⭐ Gestor ou a fila Recepção para ver todas.">admin do app</span>}
+                                                    {/* 👑 O dono vê tudo por CONSTRUÇÃO — o selo existe pra ninguém
+                                                        tentar "arrumar" o acesso dele mexendo em fila ou papel. */}
+                                                    {a.dono && <span className="ml-1.5 text-[9px] font-bold text-violet-600" title="Dono do escritório: vê e atende TODAS as filas sempre, sem depender de marcação. Não há o que configurar aqui.">👑 dono · tudo</span>}
                                                 </p>
-                                                {a.role !== 'admin' && (
+                                                {/* 🚨 O ⭐ era ESCONDIDO justo para o admin — herança de quando
+                                                    admin via tudo de graça. Com a separação de 24/08 isso virou
+                                                    beco: o admin que precisa do inbox inteiro não tinha o botão
+                                                    que resolve. Só o DONO fica sem ele, porque nele não muda nada. */}
+                                                {!a.dono && (
                                                     <button
                                                         onClick={async () => {
                                                             const novo = a.papelAtendimento === 'gestor' ? 'colaborador' : 'gestor';
@@ -2350,6 +2529,29 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {sonda.horarios.conferencia.motivo}
                                                 </p>
                                             )}
+                                            {/* 🚨 AGORA ESTAMOS DENTRO DA JANELA? (24/08)
+                                                Testamos a ligação às 19:51 — FORA de 08:00–12:00 e 13:00–17:30 —
+                                                e o painel não disse uma palavra. Fora da grade a Meta recusa a
+                                                chamada com a MESMA frase que se lê como defeito ("SP Assessoria
+                                                não pode receber ligações do WhatsApp"), então o teste fora da
+                                                hora responde sobre o HORÁRIO e parece resposta sobre o TRONCO.
+                                                O painel tem a grade e tem o relógio: calar aqui é deixar quem
+                                                testa concluir a causa errada. */}
+                                            {sonda.horarios?.mensagens && (() => {
+                                                const agora = new Date();
+                                                const dentro = dentroDoHorario(sonda.horarios.mensagens, agora);
+                                                const hora = agora.toLocaleTimeString('pt-BR',
+                                                    { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+                                                return (
+                                                    <p className={`text-[10.5px] font-semibold rounded px-2 py-1 ${dentro
+                                                        ? 'text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30'
+                                                        : 'text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30'}`}>
+                                                        {dentro
+                                                            ? `✅ Agora (${hora}) está DENTRO da janela — um teste de ligação vale como teste.`
+                                                            : `⛔ Agora (${hora}) está FORA da janela. Um teste de ligação AGORA é recusado pela Meta com "não pode receber ligações do WhatsApp" — e essa recusa é do HORÁRIO, não do tronco. Teste dentro da grade acima.`}
+                                                    </p>
+                                                );
+                                            })()}
                                             <button
                                                 onClick={() => aplicarChamada({ acao: 'horarios' },
                                                     'Aplicar à CHAMADA os mesmos horários das mensagens?\n\nFora desses horários o botão ☎️ do cliente fica indisponível. Se um dia o horário das mensagens mudar, é preciso voltar aqui e reaplicar — a Meta não acompanha sozinha.')}
@@ -2394,9 +2596,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">📞 Destino da chamada (tronco SIP → HitPhone)</p>
                                             {(() => {
                                                 const servidores = (sonda.horarios?.calling as { sip?: { servers?: { hostname?: string; port?: number }[] } } | null)?.sip?.servers;
+                                                const sipLigado = sonda.horarios?.interruptores?.estado.sip === 'ENABLED';
                                                 return Array.isArray(servidores) && servidores.length > 0 ? (
-                                                    <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
-                                                        ✅ Tronco gravado na Meta: {servidores.map((s) => `${s.hostname}:${s.port}`).join(' · ')}
+                                                    // 🚨 O verde AFIRMAVA "tronco gravado" só porque o
+                                                    // endereço existia — e endereço guardado NÃO é tronco
+                                                    // LIGADO. Foi essa frase que ficou verde enquanto o
+                                                    // cliente ouvia "não pode receber ligações".
+                                                    <p className={`text-[10.5px] ${sipLigado
+                                                        ? 'text-emerald-700 dark:text-emerald-300'
+                                                        : 'text-amber-700 dark:text-amber-300'}`}>
+                                                        {sipLigado ? '✅ Tronco LIGADO na Meta: ' : '⚠️ Servidor gravado, mas o SIP NÃO está ligado: '}
+                                                        {servidores.map((s) => `${s.hostname}:${s.port}`).join(' · ')}
+                                                        {!sipLigado && ` (sip.status = ${sonda.horarios?.interruptores?.estado.sip || 'não declarado'})`}
                                                     </p>
                                                 ) : (
                                                     <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
@@ -2421,6 +2632,114 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {aplicandoChamada === 'sip' ? 'Gravando…' : '📞 Cadastrar tronco SIP'}
                                                 </button>
                                             </div>
+                                        </div>
+
+                                        {/* 🚦 OS INTERRUPTORES (25/08) — o que a Meta tem LIGADO.
+                                            O painel mostrava ícone, horário e servidores, e nunca
+                                            leu `calling.status` nem `sip.status`. A escrita manda
+                                            `status: ENABLED` e ninguém RE-LIA se ela guardou ligado:
+                                            status passando por resultado dentro do nosso próprio
+                                            painel de diagnóstico. Foi por isso que tudo ficou verde
+                                            com a ligação recusada às 09:15, DENTRO da janela. */}
+                                        {sonda.horarios?.interruptores && (
+                                            <div className={`rounded-lg px-3 py-2 space-y-1 ${sonda.horarios.interruptores.ok
+                                                ? 'bg-emerald-50 dark:bg-emerald-900/30'
+                                                : 'bg-red-50 dark:bg-red-900/30'}`}>
+                                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                                    🚦 O que a Meta tem LIGADO
+                                                </p>
+                                                <ul className="text-[10.5px] text-slate-700 dark:text-slate-200 space-y-0.5">
+                                                    {([
+                                                        ['Chamada do número', sonda.horarios.interruptores.estado.chamada, 'calling.status'],
+                                                        ['SIP (o tronco)', sonda.horarios.interruptores.estado.sip, 'sip.status'],
+                                                        ['Botão ☎️ do cliente', sonda.horarios.interruptores.estado.icone, 'call_icon_visibility'],
+                                                        ['Horários da chamada', sonda.horarios.interruptores.estado.horarios, 'call_hours.status'],
+                                                    ] as const).map(([rot, valor, campo]) => (
+                                                        <li key={campo}>
+                                                            {valor === 'ENABLED' || valor === 'DEFAULT' ? '✓' : '⚠'} {rot}:{' '}
+                                                            <strong>{valor}</strong>{' '}
+                                                            <span className="text-slate-400">({campo})</span>
+                                                        </li>
+                                                    ))}
+                                                    <li>· servidores SIP gravados: <strong>{sonda.horarios.interruptores.estado.servidores}</strong></li>
+                                                </ul>
+                                                {/* ⚠️ "não-declarado" NUNCA é lido como ligado: assumir o
+                                                    que não foi medido é o que produziu o verde falso. */}
+                                                {sonda.horarios.interruptores.impedimentos.map((im) => (
+                                                    <div key={im.campo} className="text-[10.5px] text-red-800 dark:text-red-200">
+                                                        <p className="font-bold">⛔ {im.motivo}</p>
+                                                        <p>{im.acao}</p>
+                                                    </div>
+                                                ))}
+                                                {sonda.horarios.interruptores.ok && (
+                                                    <p className="text-[10.5px] text-emerald-800 dark:text-emerald-200">
+                                                        Os quatro estão como devem. Se a ligação ainda for recusada, a causa não
+                                                        está em nenhum interruptor daqui.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* 🔌 A META CONSEGUE FALAR COM O NOSSO SBC?
+                                            🚨 A sonda de cima é toda verde e a ligação é recusada na ORIGEM —
+                                            porque ela responde OUTRA pergunta: "o que a Meta tem GRAVADO?".
+                                            Ter gravado o hostname não é ela CONSEGUIR abrir TLS nele. Em modo
+                                            SIP quem liga para o nosso servidor é a Meta; se o aperto de mão não
+                                            fecha, se o certificado não é público ou se o nome não bate, ela
+                                            recusa antes de mandar INVITE nenhum — e por isso o log do Asterisk
+                                            fica mudo. Este botão faz o que ela faz: ABRE A CONEXÃO. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1.5">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔌 A Meta consegue falar com o nosso SBC?</p>
+                                            <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                A sonda acima diz o que a Meta tem <strong>gravado</strong>. Esta abre a conexão do
+                                                jeito que ela abre — DNS, TLS, certificado e um <em>SIP OPTIONS</em>. É o que separa
+                                                "tudo verde e a ligação recusada" de uma causa com nome.
+                                            </p>
+                                            <button
+                                                onClick={async () => {
+                                                    setSondandoSbc(true); setSbc(null);
+                                                    try {
+                                                        const r = await sondarSbc(sipHost.trim() ? { hostname: sipHost.trim(), porta: Number(sipPorta) || 5061 } : undefined);
+                                                        setSbc(r.ok ? r : ({ conclusao: { veredito: 'indeterminado', motivo: r.error || 'Falha ao sondar.', acao: 'Tente de novo; se persistir, é falha do próprio app.' } } as SondaSbc));
+                                                    } finally { setSondandoSbc(false); }
+                                                }}
+                                                disabled={sondandoSbc}
+                                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 dark:bg-slate-600 text-white disabled:opacity-40 btn-press whitespace-nowrap">
+                                                {sondandoSbc ? 'Medindo… (até 8s)' : '🔌 Testar o caminho até o SBC'}
+                                            </button>
+                                            {sbc && (
+                                                <div className={`rounded-lg px-2.5 py-2 text-[10.5px] ${sbc.conclusao.veredito === 'aprovado'
+                                                    ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200'
+                                                    : sbc.conclusao.veredito === 'reprovado'
+                                                        ? 'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                                                        : 'bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200'}`}>
+                                                    <p className="font-bold">
+                                                        {sbc.conclusao.veredito === 'aprovado' ? '✅' : sbc.conclusao.veredito === 'reprovado' ? '⛔' : '⚠️'}{' '}
+                                                        {sbc.conclusao.motivo}
+                                                    </p>
+                                                    <p className="mt-0.5">{sbc.conclusao.acao}</p>
+                                                    {sbc.conclusao.ressalvas?.map((r) => <p key={r} className="mt-0.5">• {r}</p>)}
+                                                    {/* As etapas ficam à vista: é a lista que diz ONDE parou, e é
+                                                        ela que vai junto no chamado do suporte da Meta. */}
+                                                    <ul className="mt-1.5 space-y-0.5 text-slate-600 dark:text-slate-300">
+                                                        <li>{sbc.dns?.ok ? '✓' : '✕'} DNS {sbc.hostname} {sbc.dns?.enderecos?.length ? `→ ${sbc.dns.enderecos.join(', ')}` : (sbc.dns?.erro || '')}</li>
+                                                        <li>{sbc.tcp?.ok ? '✓' : '✕'} porta {sbc.porta} {sbc.tcp?.erro || ''}</li>
+                                                        <li>{sbc.tls?.ok ? '✓' : '✕'} TLS {sbc.tls?.protocolo || sbc.tls?.erro || ''}</li>
+                                                        {sbc.certificado && (
+                                                            <li>{sbc.certificado.grave ? '✕' : '✓'} certificado — {sbc.certificado.motivo}
+                                                                {sbc.cert?.emissor ? ` (emissor: ${sbc.cert.emissor})` : ''}</li>
+                                                        )}
+                                                        <li>{sbc.sip?.respondeu ? '✓' : '✕'} SIP {sbc.sip?.respondeu
+                                                            ? `${sbc.sip.codigo}${sbc.sip.frase ? ` ${sbc.sip.frase}` : ''}${sbc.sip.servidor ? ` · ${sbc.sip.servidor}` : ''}`
+                                                            : (sbc.sip?.motivo || '')}</li>
+                                                    </ul>
+                                                    {sbc.origemDoAlvo && (
+                                                        <p className="mt-1 text-slate-500 dark:text-slate-400">
+                                                            Alvo veio de: {sbc.origemDoAlvo}.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
@@ -3391,10 +3710,49 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         </div>
                         <input
                             value={busca}
-                            onChange={(e) => setBusca(e.target.value)}
+                            onChange={(e) => { setBusca(e.target.value); if (achados) setAchados(null); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') procurarNoBanco(); }}
                             placeholder="🔎 Nome, número ou mensagem…"
                             className="w-full px-2.5 py-1.5 text-[12px] rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
                         />
+                        {/* 🔎 A OUTRA METADE DO TETO MENOR (Paulo, 25/08).
+                            A lista carrega 300 para a página abrir rápido; a busca
+                            do campo filtra só o que está carregado. Sem esta porta,
+                            procurar conversa de dois meses atrás não acharia nada —
+                            e "não achei" se lê como "não existe". */}
+                        {busca.trim().length >= 2 && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                    onClick={procurarNoBanco}
+                                    disabled={procurando}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-50 btn-press whitespace-nowrap">
+                                    {procurando ? 'Procurando…' : '🔎 Procurar no banco inteiro'}
+                                </button>
+                                {achados && (
+                                    <button onClick={() => setAchados(null)}
+                                        className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 whitespace-nowrap">
+                                        ✕ voltar à lista
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {achados && (
+                            <div className="rounded-lg bg-slate-100 dark:bg-slate-700/50 px-2.5 py-1.5 text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
+                                {/* Recorte DITO, sempre: "12 de 40" é resposta, "12" é armadilha. */}
+                                🔎 Busca no banco por <strong>"{achados.termo}"</strong>:{' '}
+                                {achados.total === 0 ? 'nenhuma conversa encontrada' : (
+                                    <>{achados.truncado ? `mostrando ${achados.conversas.length} de ${achados.total}` : `${achados.total} conversa(s)`}</>
+                                )}.
+                                {/* ⚠️ Dizer o que ela NÃO faz é parte da resposta: fingir
+                                    que procurou no texto faria concluir que a frase não
+                                    existe na carteira. */}
+                                <span className="block text-slate-500 dark:text-slate-400">
+                                    Procura por <strong>número</strong> e <strong>nome</strong> — não procura dentro do
+                                    texto das mensagens.
+                                    {achados.contatosTruncados && ' A carteira de contatos passou do teto da varredura: se o nome não apareceu, procure pelo número, que é completo.'}
+                                </span>
+                            </div>
+                        )}
                         {/* 🔔 Avisos: quem decide o que falta é o núcleo
                             `faltaNosAvisos` — as TRÊS camadas numa pergunta só.
                             🚨 Antes a barra olhava permissão e som; com os dois
@@ -3433,11 +3791,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         )}
                         {/* Lista cortada SEMPRE diz (farol honesto): sem isto, "Todas · 2000"
                             seria lido como a carteira inteira. */}
-                        {limiteConversas != null && (
+                        {/* ⚠️ A frase MUDOU com o teto (25/08): ela dizia "a busca acha só
+                            o que está na lista", e isso deixou de ser verdade — dizer que
+                            não dá, quando dá, faz a pessoa não procurar. Agora ela aponta
+                            a porta, que é o que o teto menor exige em troca. */}
+                        {limiteConversas != null && !achados && (
                             <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                                ⚠️ Mostrando as {limiteConversas} conversas mais recentes — há mais no banco.
-                                A busca acha só o que está na lista.
+                                ⚠️ Mostrando as {limiteConversas} conversas mais recentes — a página abre rápido assim.
+                                Para as outras, digite no campo acima e use <strong>🔎 Procurar no banco inteiro</strong>.
                             </p>
+                        )}
+                        {erroBusca && (
+                            <p className="text-[10px] text-red-700 dark:text-red-400">⛔ {erroBusca}</p>
                         )}
                         <div className="flex gap-1.5 flex-wrap">
                             {chip('todas', `Todas · ${conversas.length}`)}
@@ -3545,7 +3910,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 {buscaThread.trim() && (
                                     <>
                                         <span className="text-[10px] text-slate-400 whitespace-nowrap">
-                                            {filtrarMensagensDaThread(mensagens, buscaThread).length} de {mensagens.length}
+                                            {filtrarMensagensDaThread(thread, buscaThread).length} de {thread.length}
                                         </span>
                                         <button onClick={() => setBuscaThread('')} className="text-slate-400 hover:text-slate-600 px-1 text-[11px]">✕</button>
                                     </>
@@ -3553,16 +3918,41 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </div>
 
                             <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-1.5">
+                                {/* ⬆️ O teto de 500 cortava a conversa CALADO: a pessoa rolava
+                                    até o topo e concluía que o histórico não existia. Agora a
+                                    parede DIZ que é parede e tem porta. */}
+                                {!carregandoMsgs && temMaisAntigas && !buscaThread.trim() && (
+                                    <div className="text-center pb-1">
+                                        <button
+                                            onClick={carregarAntigas}
+                                            disabled={carregandoAntigas}
+                                            className="text-[11px] font-semibold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 btn-press whitespace-nowrap">
+                                            {carregandoAntigas ? 'Carregando…' : '⬆️ Carregar mais antigas'}
+                                        </button>
+                                        <p className="text-[9px] text-slate-400 mt-0.5">
+                                            Esta conversa tem mais histórico — a tela mostra {thread.length} mensagem(ns).
+                                        </p>
+                                    </div>
+                                )}
+                                {/* Índice construindo: a fatia veio SEM ORDEM, então paginar
+                                    devolveria as mesmas linhas. Dizer é melhor que esconder. */}
+                                {!carregandoMsgs && threadSemOrdem && (
+                                    <p className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded px-2 py-1 text-center">
+                                        ⚠️ O índice das mensagens ainda está sendo construído — esta conversa pode aparecer
+                                        fora de ordem e não dá para carregar o histórico agora. Costuma levar alguns minutos.
+                                    </p>
+                                )}
                                 {carregandoMsgs ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">Carregando…</p>
-                                ) : mensagens.length === 0 ? (
+                                ) : thread.length === 0 ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">Nenhuma mensagem gravada nesta conversa.</p>
-                                ) : filtrarMensagensDaThread(mensagens, buscaThread).length === 0 ? (
+                                ) : filtrarMensagensDaThread(thread, buscaThread).length === 0 ? (
                                     <p className="text-xs text-slate-400 text-center mt-4">
                                         Nada com "{buscaThread}" nas mensagens carregadas desta conversa.
+                                        {temMaisAntigas && ' Há histórico mais antigo ainda não carregado — limpe a busca e use ⬆️ Carregar mais antigas.'}
                                     </p>
                                 ) : (
-                                    filtrarMensagensDaThread(mensagens, buscaThread).map((m) => {
+                                    filtrarMensagensDaThread(thread, buscaThread).map((m) => {
                                         const tick = carimboStatus(m.statusEntrega);
                                         const midia = rotuloMidia(m.midia, m.tipo);
                                         const saida = m.direcao === 'saida';

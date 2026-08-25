@@ -36,7 +36,7 @@ import {
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
-    lerCallingDasSettings, conferirCallHours,
+    lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -56,6 +56,9 @@ import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
 } from './whatsapp-atendimento.js';
+import { ehDono } from './auditoria-dono.js';
+import { PORTA_SIP_TLS, interpretarCertificado, concluirSondaSbc } from './sbc-sonda.js';
+import { medirSbc } from './sbc-medicao.js';
 import {
     interpretarContatosCsv, interpretarConversaTxt, interpretarMensagensCsv,
     prepararMensagensDoTxt, idMensagemImportada,
@@ -402,18 +405,28 @@ router.post('/webhook-assinar-waba', requireAdmin, async (_req, res) => {
 // Perfil de atendimento do usuário logado: filas que enxerga (null = todas)
 // e o PAPEL (admin/gestor/colaborador). O escopo é do BACKEND — o front
 // nunca é o filtro de dados (regra da Carteira).
+// 🚨 O `if (role === 'admin') return { filas: null }` que morava AQUI era a
+// SEGUNDA CÓPIA da régua — e ela sobreviveu ao PR #995, que tirou o `role` de
+// dentro do `filasVisiveis`. Efeito: o admin parava de ser NOTIFICADO das
+// outras filas (o push já lia a régua nova) e continuava VENDO todas na
+// lista, porque nem chegava a chamar a régua. Meia correção não deixa o
+// defeito pela metade — ela troca um erro por uma CONTRADIÇÃO, e quem lê
+// escolhe a metade que preferir. Quem responde agora é a régua, e só ela.
 async function perfilAtendimento(db, user) {
-    if (user?.role === 'admin') return { filas: null, papel: 'admin', papelAtendimento: null };
     let departamentos = []; let filasAtendimento = []; let papelAtendimento = null;
     try {
         const u = await db.collection('users').doc(user.uid).get();
         departamentos = u.data()?.departamentos || [];
         filasAtendimento = u.data()?.filasAtendimento || [];
         papelAtendimento = u.data()?.papelAtendimento || null;
-    } catch { /* sem doc = só Recepção */ }
-    const papel = String(papelAtendimento || '').toLowerCase() === 'gestor' ? 'gestor' : 'colaborador';
+    } catch { /* sem doc = só as filas do cadastro central */ }
+    // `papel` é o de ADMINISTRAÇÃO (o que a tela usa pra liberar ⚙️ e
+    // encerramento) — ele continua vindo do role do CFI. O que ele NÃO decide
+    // mais é `filas`, que é visão de atendimento.
+    const papel = user?.role === 'admin' ? 'admin'
+        : (String(papelAtendimento || '').toLowerCase() === 'gestor' ? 'gestor' : 'colaborador');
     return {
-        filas: filasVisiveis({ role: user?.role, papelAtendimento, departamentos, filasAtendimento }),
+        filas: filasVisiveis({ email: user?.email, papelAtendimento, departamentos, filasAtendimento }),
         papel,
         papelAtendimento,
     };
@@ -428,7 +441,57 @@ async function perfilAtendimento(db, user) {
 // Virou leitura paginada com teto ALTO e NOMEADO: se um dia bater, a
 // resposta diz (`limiteLeitura`), nunca esconde.
 const PAGINA_CONVERSAS = 500;
-const TETO_LEITURA_CONVERSAS = 2000;
+// ⚡ TETO BAIXADO DE 2000 PARA 300 (Paulo, 25/08: "eu até diminuiria este teto,
+// para ganhar agilidade no carregamento da pág, ficando disponível no campo de
+// busca quando o colaborador preferir"). Carregar 2000 conversas + 2000
+// contatos a cada 30 SEGUNDOS é o que fazia a tela demorar — e ninguém rola
+// 2000 linhas: quem procura conversa antiga PROCURA.
+//
+// 🚨 A METADE QUE NÃO PODE FALTAR: baixar o teto sem a busca alcançar o banco
+// tornaria a conversa antiga MAIS invisível — o teto novo esconderia 1.700
+// conversas em vez de nenhuma, e a busca continuaria achando "só o que está na
+// lista". Por isso a rota `/conversas/procurar` entra no MESMO PR. Meia
+// correção não deixa o defeito pela metade: ela troca um por outro.
+const TETO_LEITURA_CONVERSAS = 300;
+
+/**
+ * Resumo de conversa para a lista — DONO ÚNICO da forma (a listagem e a busca
+ * no banco leem daqui). Duas cópias fariam a busca devolver linha com campo
+ * faltando, e a tela mostraria uma conversa "sem nome" que na lista tem nome.
+ */
+async function montarResumosDeConversas(db, docsConversas) {
+    const numeros = docsConversas.map((d) => d.id);
+    const contatos = new Map();
+    // getAll em fatias: uma chamada com centenas de refs é pedir recusa do RPC.
+    for (let i = 0; i < numeros.length; i += 300) {
+        const refs = numeros.slice(i, i + 300).map((n) => db.collection('whatsapp_contatos').doc(n));
+        // eslint-disable-next-line no-await-in-loop
+        (await db.getAll(...refs)).forEach((c) => { if (c.exists) contatos.set(c.id, c.data()); });
+    }
+    return docsConversas.map((d) => {
+        const x = d.data();
+        const c = contatos.get(d.id) || {};
+        return {
+            numero: d.id,
+            nome: c.nomeExibicao || c.nomePerfil || null,
+            empresaId: c.empresaId || null,   // null = pendência "vincular ao cliente"
+            empresaNome: c.empresaNome || null,
+            origemContato: c.origem || null,
+            fila: x.fila || null,             // null = Recepção
+            protocolo: x.protocolo || null,
+            atribuidoA: x.atribuidoA || null,
+            transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
+            canalId: x.canalId || null,               // por qual número do escritório entrou
+            canal: x.canal || 'whatsapp',             // 'instagram' = DM (selo 📷 na tela)
+            situacao: x.status || 'aberta',
+            janela24hAte: x.janela24hAte || null,
+            permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
+            ultimaMensagem: x.ultimaMensagem || null,
+            naoLidas: x.naoLidas || 0,
+            atualizadoEm: x.atualizadoEm || null,
+        };
+    });
+}
 
 router.get('/conversas', requireAuth, async (req, res) => {
     try {
@@ -493,37 +556,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 if (pagina.docs.length < PAGINA_CONVERSAS) break;
             }
         }
-        const numeros = docsConversas.map((d) => d.id);
-        const contatos = new Map();
-        // getAll em fatias: uma chamada com 2000 refs é pedir recusa do RPC.
-        for (let i = 0; i < numeros.length; i += 300) {
-            const refs = numeros.slice(i, i + 300).map((n) => db.collection('whatsapp_contatos').doc(n));
-            // eslint-disable-next-line no-await-in-loop
-            (await db.getAll(...refs)).forEach((c) => { if (c.exists) contatos.set(c.id, c.data()); });
-        }
-        const conversas = docsConversas.map((d) => {
-            const x = d.data();
-            const c = contatos.get(d.id) || {};
-            return {
-                numero: d.id,
-                nome: c.nomeExibicao || c.nomePerfil || null,
-                empresaId: c.empresaId || null,   // null = pendência "vincular ao cliente"
-                empresaNome: c.empresaNome || null,
-                origemContato: c.origem || null,
-                fila: x.fila || null,             // null = Recepção
-                protocolo: x.protocolo || null,
-                atribuidoA: x.atribuidoA || null,
-                transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
-                canalId: x.canalId || null,               // por qual número do escritório entrou
-                canal: x.canal || 'whatsapp',             // 'instagram' = DM (selo 📷 na tela)
-                situacao: x.status || 'aberta',
-                janela24hAte: x.janela24hAte || null,
-                permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
-                ultimaMensagem: x.ultimaMensagem || null,
-                naoLidas: x.naoLidas || 0,
-                atualizadoEm: x.atualizadoEm || null,
-            };
-        });
+        const conversas = await montarResumosDeConversas(db, docsConversas);
         // 🚨 ORDENA PELO QUE MOSTRA (24/08, Paulo: "as conversas estão fora de
         // ordem"). A leitura ordenava por `atualizadoEm` — qualquer atividade,
         // inclusive as que NÃO viram linha na conversa (assumir, vincular
@@ -554,6 +587,119 @@ router.get('/conversas', requireAuth, async (req, res) => {
     }
 });
 
+// ═══ 🔎 PROCURAR NO BANCO INTEIRO ═══════════════════════════════════════════
+// Paulo, 25/08: "diminuiria este teto para ganhar agilidade… ficando disponível
+// no campo de busca quando o colaborador preferir".
+//
+// 🚨 É A OUTRA METADE DO TETO MENOR. A busca da tela filtra o que está
+// CARREGADO; com 300 na lista, procurar conversa de dois meses atrás no campo
+// não acharia nada — e "não achei" se lê como "não existe". Esta rota vai ao
+// banco.
+//
+// O QUE ELA PROCURA, e a diferença importa:
+//  · NÚMERO — por PREFIXO do id do documento (o id da conversa É o número).
+//    Exato e completo: não depende de o contato estar cadastrado.
+//  · NOME — varredura PROJETADA de `whatsapp_contatos` (só os dois campos de
+//    nome), casando por PEDAÇO e sem acento/caixa. Prefixo do Firestore não
+//    serviria: ele é sensível à caixa, então "bru" nunca acharia "Brunna" —
+//    busca que falha em silêncio é pior que busca que não existe.
+//
+// ⚠️ O QUE ELA **NÃO** PROCURA, e a tela DIZ: o TEXTO das mensagens. Procurar
+// dentro de ~centenas de milhares de mensagens exige índice de busca que este
+// projeto não tem, e fingir que procurou faria alguém concluir que a frase não
+// existe na carteira. Isso continua valendo só para a conversa carregada.
+//
+// A visibilidade é a MESMA da listagem (filas + condução + Instagram por
+// usuário) — uma busca que devolve conversa de fila alheia seria a porta dos
+// fundos do escopo que subiu ontem.
+const TETO_BUSCA_CONTATOS = 4000;
+const TETO_RESULTADO_BUSCA = 120;
+
+/** Sem acento e em minúsculas — a comparação que uma pessoa espera. */
+function chaveDeBusca(t) {
+    return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+router.get('/conversas/procurar', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const termo = String(req.query.termo || '').trim();
+        if (termo.length < 2) {
+            return res.status(400).json({ ok: false, error: 'Digite ao menos 2 caracteres para procurar no banco.' });
+        }
+        const { filas: minhasFilas } = await perfilAtendimento(db, req.user);
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get()
+            .catch(() => ({ data: () => null }));
+        const cfgAtendimento = resolverConfig(cfgDoc.data());
+
+        const digitos = termo.replace(/\D/g, '');
+        const chave = chaveDeBusca(termo);
+        const ids = new Set();
+
+        // 1) NÚMERO — prefixo no id do documento. Vale a partir de 3 dígitos;
+        //    com menos, o prefixo devolveria meia carteira e não é busca.
+        if (digitos.length >= 3) {
+            const porNumero = await db.collection('whatsapp_conversas')
+                .orderBy(admin.firestore.FieldPath.documentId())
+                .startAt(digitos).endAt(`${digitos}\uf8ff`)
+                .limit(TETO_RESULTADO_BUSCA).get();
+            porNumero.docs.forEach((d) => ids.add(d.id));
+        }
+
+        // 2) NOME — varredura projetada dos contatos (dois campos), casando
+        //    por pedaço. `.select()` é o que a torna barata: sem ele viriam os
+        //    documentos inteiros de milhares de contatos.
+        let contatosVarridos = 0;
+        let contatosTruncados = false;
+        if (chave.length >= 2) {
+            const snap = await db.collection('whatsapp_contatos')
+                .select('nomePerfil', 'nomeExibicao').limit(TETO_BUSCA_CONTATOS).get();
+            contatosVarridos = snap.size;
+            contatosTruncados = snap.size >= TETO_BUSCA_CONTATOS;
+            snap.docs.forEach((d) => {
+                if (ids.size >= TETO_RESULTADO_BUSCA * 3) return;
+                const x = d.data();
+                const alvo = `${chaveDeBusca(x.nomeExibicao)} ${chaveDeBusca(x.nomePerfil)}`;
+                if (alvo.includes(chave)) ids.add(d.id);
+            });
+        }
+
+        // 3) As conversas desses números (contato SEM conversa não vira linha:
+        //    a lista é de CONVERSAS, e abrir uma que não existe é beco).
+        const alvos = [...ids].slice(0, TETO_RESULTADO_BUSCA * 3);
+        const docs = [];
+        for (let i = 0; i < alvos.length; i += 300) {
+            const refs = alvos.slice(i, i + 300).map((n) => db.collection('whatsapp_conversas').doc(n));
+            // eslint-disable-next-line no-await-in-loop
+            (await db.getAll(...refs)).forEach((d) => { if (d.exists) docs.push(d); });
+        }
+        const resumos = await montarResumosDeConversas(db, docs);
+        const quandoExibido = (cv) => Date.parse(cv.ultimaMensagem?.em || cv.atualizadoEm || '') || 0;
+        const visiveis = resumos
+            .filter((cv) => (conversaVisivel(minhasFilas, cv.fila)
+                || (req.user?.email && cv.atribuidoA === req.user.email))
+                && (cv.canal !== 'instagram' || podeAtenderInstagram(cfgAtendimento, req.user?.email)))
+            .sort((a, b) => quandoExibido(b) - quandoExibido(a));
+
+        return res.json({
+            ok: true,
+            termo,
+            conversas: visiveis.slice(0, TETO_RESULTADO_BUSCA),
+            // Recorte DITO, sempre: "12 de 40" é resposta; "12" é armadilha.
+            total: visiveis.length,
+            truncado: visiveis.length > TETO_RESULTADO_BUSCA,
+            // ⚠️ Nomeado, nunca escondido: com a carteira acima do teto, um
+            // nome pode ficar de fora e a pessoa precisa saber disso para
+            // procurar pelo número, que é completo.
+            contatosVarridos,
+            contatosTruncados,
+        });
+    } catch (e) {
+        console.error('[whatsapp/conversas/procurar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // Mensagens de UMA conversa.
 // 🚨 O `limit(500)` SEM ORDENAR ESCONDIA A MENSAGEM NOVA (Paulo, 24/08:
 // "Ivan mandou msg, o Matheus está com a conversa ABERTA e não aparece —
@@ -577,16 +723,32 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
             const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
             if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
         }
+        // ⬆️ PAGINAÇÃO — o teto de 500 cortava a conversa CALADO. Ordenar
+        // resolveu QUAIS 500 vêm (a mensagem nova sempre entra), mas a
+        // conversa antiga continuava terminando numa parede sem aviso: a
+        // pessoa rolava até o topo e concluía que o histórico não existia.
+        // `antesDe` é o timestamp da mensagem mais antiga que a tela já tem —
+        // cursor por VALOR, não por página, então mensagem que chegar no meio
+        // do caminho não desloca a janela nem duplica linha.
+        const antesDe = String(req.query.antesDe || '').trim();
         const colecao = getDb().collection('whatsapp_mensagens').where('conversaId', '==', numero);
+        const PAGINA = 500;
         let snap;
+        let ordenou = true;
         try {
             // As 500 MAIS RECENTES (a tela ordena de novo; aqui o que importa
-            // é QUAIS 500 vêm).
-            snap = await colecao.orderBy('timestamp', 'desc').limit(500).get();
+            // é QUAIS 500 vêm) — ou as 500 anteriores ao cursor.
+            const base = antesDe ? colecao.where('timestamp', '<', antesDe) : colecao;
+            snap = await base.orderBy('timestamp', 'desc').limit(PAGINA).get();
         } catch (e) {
             if (!/index/i.test(String(e?.message || ''))) throw e;
             console.warn('[whatsapp/mensagens] índice composto ainda construindo — fatia sem ordem:', e.message);
-            snap = await colecao.limit(500).get();
+            // ⚠️ Sem índice não há como paginar por valor: a fatia volta SEM
+            // ordem e um "carregar mais" aqui devolveria as MESMAS linhas.
+            // Então `temMais` sai FALSO e a tela não oferece o botão — botão
+            // que não anda é pior que botão nenhum.
+            ordenou = false;
+            snap = await colecao.limit(PAGINA).get();
         }
         const mensagens = snap.docs.map((d) => {
             const x = d.data();
@@ -613,7 +775,20 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
                 anexoNoBackup: x.anexoNoBackup || null,
             };
         }).sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
-        return res.json({ ok: true, mensagens });
+        // Página CHEIA = há chance de haver mais atrás. Meia página prova o
+        // fim. ⚠️ Isto NÃO é "tem mais N": afirmar quantidade exigiria contar
+        // a conversa inteira a cada abertura, e número que o app não mediu é
+        // justamente o que faz alguém confiar no que não foi conferido.
+        const maisAntiga = mensagens[0]?.timestamp || null;
+        return res.json({
+            ok: true,
+            mensagens,
+            temMais: ordenou && snap.size >= PAGINA && Boolean(maisAntiga),
+            maisAntiga,
+            // Dito na cara: sem índice a thread não pagina, e a tela precisa
+            // poder EXPLICAR isso em vez de só esconder o botão.
+            semOrdem: !ordenou,
+        });
     } catch (e) {
         console.error('[whatsapp/mensagens]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -2264,6 +2439,10 @@ router.get('/atendentes', requireAdmin, async (_req, res) => {
                 papelAtendimento: x.papelAtendimento || 'colaborador',
                 departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
                 filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
+                // 👑 Quem é DONO vem do SERVIDOR, que é quem tem a env — a tela
+                // não recalcula. Segunda leitura do mesmo fato daria selo
+                // divergente no dia em que a lista for restringida por env.
+                dono: ehDono(x.email),
             };
         }).sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
         return res.json({ ok: true, atendentes, filas: FILAS_ATENDIMENTO });
@@ -2694,15 +2873,91 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
                 mensagens: cfgAt.horario,
                 conferencia: conferirCallHours(calling, cfgAt.horario),
                 calling,
+                // 🚨 Os INTERRUPTORES, que o painel não lia (25/08):
+                // `calling.status` e `sip.status`. Servidor GRAVADO não é
+                // tronco LIGADO — e era isso que fazia a tela dizer
+                // "✅ tronco gravado" com a ligação sendo recusada.
+                interruptores: lerEstadoDaChamada(calling),
             };
         } catch (e) {
             // Falha na leitura NÃO derruba a sonda — mas é dita, nunca "igual".
-            horarios = { mensagens: null, conferencia: { situacao: 'horario-ilegivel', motivo: `Não consegui ler o horário das mensagens: ${e.message}` }, calling: null };
+            horarios = { mensagens: null, conferencia: { situacao: 'horario-ilegivel', motivo: `Não consegui ler o horário das mensagens: ${e.message}` }, calling: null, interruptores: null };
         }
 
         return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * ☎️ 🔌 SONDA DO SBC — "a Meta consegue falar com o nosso servidor?"
+ *
+ * 🚨 A sonda de settings é toda verde e a ligação é recusada na ORIGEM. Ela
+ * responde *"o que a Meta tem GRAVADO?"* — e ter gravado o hostname não é a
+ * Meta CONSEGUIR abrir TLS nele. Em modo SIP quem liga para o nosso servidor
+ * é ela; se o aperto de mão não fecha, se o certificado não é público ou se o
+ * nome não bate, ela não tem para onde mandar a chamada — e o log do Asterisk
+ * fica mudo porque nenhum INVITE chegou. Nada disso aparece em GET settings.
+ *
+ * Então esta rota FAZ O QUE A META FAZ: abre a conexão e mede. O alvo sai das
+ * settings da PRÓPRIA Meta (o hostname que ela usa), nunca de um campo
+ * digitado aqui — sondar um endereço diferente do que ela tem gravado
+ * responderia sobre outro servidor.
+ */
+router.post('/chamadas/sondar-sbc', requireAdmin, async (req, res) => {
+    const t0 = Date.now();
+    try {
+        const cfg = configWhatsapp();
+        if (!cfg.token || !cfg.phoneNumberId) {
+            return res.json({
+                ok: true,
+                conclusao: {
+                    veredito: 'indeterminado',
+                    motivo: 'O canal do WhatsApp não está configurado neste ambiente.',
+                    acao: 'Sem token/phone number id não dá pra saber qual servidor a Meta usa.',
+                },
+            });
+        }
+
+        // 1) De quem a Meta liga: o servidor que ELA tem gravado.
+        let hostname = null; let porta = PORTA_SIP_TLS; let sipDaMeta = null;
+        try {
+            const r = await fetch(`${GRAPH_BASE}/${cfg.phoneNumberId}/settings`, {
+                headers: { Authorization: `Bearer ${cfg.token}` },
+            });
+            const corpo = await r.json().catch(() => ({}));
+            sipDaMeta = lerCallingDasSettings(corpo)?.sip || null;
+            const servidor = sipDaMeta?.servers?.[0] || null;
+            hostname = servidor?.hostname || null;
+            if (servidor?.port) porta = Number(servidor.port) || PORTA_SIP_TLS;
+        } catch (e) {
+            console.warn('[whatsapp/sondar-sbc] não li as settings:', e.message);
+        }
+        // Permite sondar ANTES de cadastrar (o técnico quer saber se o servidor
+        // sobe antes de apontar a Meta pra ele). Fica DITO de onde veio o alvo.
+        const doPedido = String(req.body?.hostname || '').trim();
+        const origemDoAlvo = hostname ? 'settings da Meta' : (doPedido ? 'informado no pedido' : null);
+        if (!hostname && doPedido) {
+            hostname = doPedido;
+            porta = Number(req.body?.porta) || PORTA_SIP_TLS;
+        }
+        if (!hostname) {
+            return res.json({ ok: true, conclusao: concluirSondaSbc({}), sipDaMeta, origemDoAlvo });
+        }
+
+        const medida = await medirSbc({ hostname, porta });
+        const certificado = medida.tls.ok
+            ? interpretarCertificado({ ...medida.cert, hostname })
+            : null;
+        const conclusao = concluirSondaSbc({ hostname, porta, ...medida, certificado });
+        return res.json({
+            ok: true, hostname, porta, origemDoAlvo, sipDaMeta,
+            ...medida, certificado, conclusao, levouMs: Date.now() - t0,
+        });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/sondar-sbc]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

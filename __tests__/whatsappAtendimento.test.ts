@@ -21,9 +21,14 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
         expect(filaValida('marketing')).toBe(false);
     });
 
-    it('Recepção atende TODOS; colaborador de fila vê SÓ as dele; admin vê tudo', () => {
-        expect(filasVisiveis({ role: 'admin' })).toBeNull();
-        expect(filasVisiveis({ role: 'colaborador', filasAtendimento: ['recepcao'] })).toBeNull();
+    it('Recepção atende TODOS; colaborador de fila vê SÓ as dele; ADMIN não herda o inbox', () => {
+        // ⚠️ Premissa TROCADA por decisão do Paulo (24/08): "não podemos
+        // confundir admin do CFI dos outros módulos". Administrar o app (⚙️,
+        // cadastros, encerrar qualquer atendimento) deixou de dar visão do
+        // inbox inteiro — quem vê tudo é GESTOR ou quem atende a Recepção.
+        expect(filasVisiveis({ role: 'admin', filasAtendimento: ['legalizacao'] } as any)).toEqual(['legalizacao']);
+        expect(filasVisiveis({ role: 'admin' } as any)).toEqual([]);
+        expect(filasVisiveis({ role: 'colaborador', filasAtendimento: ['recepcao'] } as any)).toBeNull();
         // ⚠️ Premissa TROCADA por decisão do Paulo (24/08): "usuários que
         // estão somente dentro de um grupo só têm acesso àquele grupo
         // específico… as notificações de acordo com a restrição de cada
@@ -31,9 +36,9 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
         // colaborador do Contábil carregar e ser avisado das ~1.8 mil
         // conversas da Recepção. Triagem é da Recepção/gestor/admin, e a
         // conversa chega à fila pela TRANSFERÊNCIA.
-        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'] })).toEqual(['fiscal']);
+        expect(filasVisiveis({ departamentos: ['fiscal'] })).toEqual(['fiscal']);
         // filasAtendimento explícita VENCE os departamentos de módulo
-        expect(filasVisiveis({ role: 'colaborador', departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh']);
+        expect(filasVisiveis({ departamentos: ['fiscal'], filasAtendimento: ['rh'] })).toEqual(['rh']);
     });
 
     it('conversa sem fila é da Recepção — só quem vê tudo (ou atende Recepção) a enxerga', () => {
@@ -46,7 +51,7 @@ describe('filas de atendimento (≠ departamentos do SaaS)', () => {
 
 describe('papéis do atendimento (Paulo, 16/08): admin tudo · gestor vê/atende/encerra tudo · colaborador só o seu', () => {
     it('gestor vê TODAS as filas; papel desconhecido é recusado', () => {
-        expect(filasVisiveis({ role: 'colaborador', papelAtendimento: 'gestor', departamentos: ['fiscal'] })).toBeNull();
+        expect(filasVisiveis({ papelAtendimento: 'gestor', departamentos: ['fiscal'] })).toBeNull();
         expect(papelValido('gestor')).toBe(true);
         expect(papelValido('colaborador')).toBe(true);
         expect(papelValido('supervisor')).toBe(false);
@@ -720,9 +725,16 @@ describe('🚨 a lista de conversas não pode ter teto SECO — "Todas · 100" n
     const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
     const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
 
-    it('a leitura é paginada até um teto ALTO, e o teto sai NOMEADO na resposta', () => {
-        expect(rotas).toMatch(/TETO_LEITURA_CONVERSAS = 2000/);
+    // ⚠️ TRAVA TROCADA PELA INTENÇÃO (25/08): ela prendia o NÚMERO 2000, e o
+    // teto caiu para 300 a pedido do Paulo ("diminuiria este teto para ganhar
+    // agilidade… ficando disponível no campo de busca"). O que ela existe para
+    // garantir não é o número — é que o teto não seja SECO: ele tem que sair
+    // NOMEADO e tem que haver como alcançar o que ficou de fora. Com a busca
+    // no banco, essa exigência ficou MAIS forte, não menos.
+    it('o teto sai NOMEADO na resposta e existe caminho para além dele', () => {
         expect(rotas).toMatch(/limiteLeitura: docsConversas\.length >= TETO_LEITURA_CONVERSAS/);
+        // A porta: sem ela, teto menor é só esconder mais conversa em silêncio.
+        expect(rotas).toMatch(/router\.get\('\/conversas\/procurar', requireAuth/);
         // O limit(100) seco não pode voltar por merge desatento.
         expect(rotas).not.toMatch(/whatsapp_conversas'\)\s*\n?\s*\.orderBy\('atualizadoEm', 'desc'\)\.limit\(100\)/);
     });
@@ -833,9 +845,17 @@ describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — n
     // buscar de novo na Meta.
     const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
 
-    it('existe um efeito que chama verMidia sozinho pra imagem/figurinha', () => {
-        expect(tela).toMatch(/useEffect\(\(\) => \{\s*mensagens\s*\.filter\(\(m\) => \(m\.tipo === 'image' \|\| m\.tipo === 'sticker'\)/);
+    // ⚠️ TRAVA TROCADA PELA INTENÇÃO (24/08): ela prendia a lista pelo NOME
+    // (`mensagens`), e quando a thread ganhou paginação a leitura passou a ser
+    // `thread` (histórico puxado à mão + fatia recente). Prender o nome faria
+    // este teste reprovar a correção que a régua manda fazer — e, pior, deixaria
+    // passar o defeito real: ler SÓ a fatia recente devolveria uma conversa
+    // antiga de balões vazios. O que importa é que ele leia a lista EXIBIDA.
+    it('existe um efeito que chama verMidia sozinho pra imagem/figurinha da thread EXIBIDA', () => {
+        expect(tela).toMatch(/useEffect\(\(\) => \{[\s\S]{0,400}?thread\s*\n\s*\.filter\(\(m\) => \(m\.tipo === 'image' \|\| m\.tipo === 'sticker'\)/);
         expect(tela).toMatch(/\.forEach\(\(m\) => \{ verMidia\(m\); \}\);/);
+        // E a lista exibida inclui o histórico — senão a foto antiga some.
+        expect(tela).toMatch(/const thread = useMemo/);
     });
 
     it("midiaCarregando virou MAPA (era um id só) — senão a 2ª imagem trava esperando a 1ª", () => {
@@ -843,5 +863,107 @@ describe('🖼️ imagem/gif tinha que APARECER sozinha, como na Ultra Fox — n
         // O mutex de string único é exatamente o defeito que travaria o
         // carregamento automático de várias imagens ao mesmo tempo.
         expect(tela).not.toMatch(/const \[midiaCarregando, setMidiaCarregando\] = useState<string \| null>/);
+    });
+});
+
+// ═══ 24/08 — "não podemos confundir admin do CFI dos outros módulos" ═══════
+// O role `admin` vem do CFI e diz que a pessoa CONFIGURA o sistema. Ele
+// virou, sem ninguém decidir, "atende o WhatsApp da casa inteira": o
+// bruno.pellegrino tinha Legalização e Jurídico marcados e recebia de TODAS
+// as filas, porque o selo "admin · tudo" vencia os chips. Duas autoridades
+// diferentes com o mesmo nome.
+describe('administrar o app ≠ atender todas as filas', () => {
+    it('admin com filas marcadas vê SÓ elas (o caso bruno.pellegrino)', () => {
+        const bruno = { role: 'admin', papelAtendimento: 'colaborador', filasAtendimento: ['legalizacao', 'juridico'] } as any;
+        expect(filasVisiveis(bruno)).toEqual(['legalizacao', 'juridico']);
+        expect(conversaVisivel(filasVisiveis(bruno), 'fiscal')).toBe(false);
+        expect(conversaVisivel(filasVisiveis(bruno), 'legalizacao')).toBe(true);
+    });
+
+    it('mas o que é ADMINISTRAÇÃO continua dele: encerrar qualquer atendimento', () => {
+        expect(podeEncerrar({ role: 'admin', email: 'a@sp', atribuidoA: 'outro@sp' })).toBe(true);
+    });
+
+    it('quem precisa ver tudo marca GESTOR — e aí vê', () => {
+        expect(filasVisiveis({ role: 'admin', papelAtendimento: 'gestor', filasAtendimento: ['legalizacao'] } as any)).toBeNull();
+    });
+});
+
+// ═══ 24/08 — "Eu não! Meu acesso é full" ═══════════════════════════════════
+// A separação de admin × atendimento tirou a visão total de TODO admin, e o
+// dono do escritório caiu junto. O acesso dele volta — mas por CONSTRUÇÃO,
+// nunca por marcação na ⚙️: régua que mora em campo editável é régua que
+// alguém desmarca sem querer, e foi exatamente esse o defeito do dia.
+describe('👑 o dono vê tudo por construção', () => {
+    const DONO = 'junior@spassessoriacontabil.com.br';
+
+    it('sem fila nenhuma e sem ser gestor, o dono continua vendo TUDO', () => {
+        expect(filasVisiveis({ email: DONO } as any)).toBeNull();
+        expect(conversaVisivel(filasVisiveis({ email: DONO } as any), 'fiscal')).toBe(true);
+    });
+
+    it('e o caixa alto/baixo do e-mail não muda a resposta', () => {
+        expect(filasVisiveis({ email: 'JUNIOR@SPassessoriacontabil.com.BR' } as any)).toBeNull();
+    });
+
+    it('admin comum NÃO herda isso — a exceção é do dono, não do papel', () => {
+        expect(filasVisiveis({
+            email: 'bruno.pellegrino@spassessoriacontabil.com.br',
+            role: 'admin', filasAtendimento: ['legalizacao'],
+        } as any)).toEqual(['legalizacao']);
+    });
+
+    it('quem responde é o MESMO dono do relatório restrito (nunca 2ª lista)', () => {
+        const nucleo = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-atendimento.js'), 'utf8');
+        expect(nucleo).toMatch(/import \{ ehDono \} from '\.\/auditoria-dono\.js'/);
+        // Uma lista de e-mails privilegiados escrita AQUI seria o começo de
+        // duas respostas divergentes sobre quem manda na casa.
+        expect(nucleo).not.toMatch(/@spassessoriacontabil\.com\.br/);
+    });
+});
+
+// ═══ 24/08 — a SEGUNDA PORTA que o PR #995 deixou viva ═════════════════════
+// 🚨 Tirar o `role` de dentro do `filasVisiveis` NÃO fechou a classe: a rota
+// tinha um atalho PRÓPRIO (`if (role === 'admin') return { filas: null }`) que
+// nem chegava a chamar a régua. Resultado: o admin parou de ser NOTIFICADO
+// das outras filas (o push já lia a régua nova) e continuava VENDO todas na
+// lista. Meia correção não deixa o defeito pela metade — ela troca um erro
+// por uma CONTRADIÇÃO, e quem lê escolhe a metade que preferir.
+describe('a régua da visão tem UMA porta', () => {
+    const rotas = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const perfil = rotas.slice(
+        rotas.indexOf('async function perfilAtendimento'),
+        rotas.indexOf('async function perfilAtendimento') + 1400,
+    );
+
+    it('perfilAtendimento não decide `filas` por role — só pela régua', () => {
+        expect(perfil).toMatch(/filas: filasVisiveis\(\{ email: user\?\.email,/);
+        expect(perfil).not.toMatch(/role === 'admin'\) return \{ filas: null/);
+    });
+
+    it('o role continua decidindo o que é ADMINISTRAÇÃO (o `papel` da tela)', () => {
+        expect(perfil).toMatch(/user\?\.role === 'admin' \? 'admin'/);
+    });
+
+    it('e o push manda o mesmo e-mail para a mesma régua', () => {
+        const push = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-push.js'), 'utf8');
+        expect(push).toMatch(/filasVisiveis\(\{ email: u\.email,/);
+    });
+});
+
+// ⚙️ E o clique que resolve tem que EXISTIR: o ⭐ Gestor era escondido
+// justamente para quem tem role admin — herança de quando admin via tudo de
+// graça. Aviso que aponta um lugar tem de apontar um lugar que a pessoa ACHA.
+describe('o ⭐ Gestor existe para quem precisa dele', () => {
+    const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('o botão não é mais escondido por ser admin', () => {
+        expect(tela).not.toMatch(/\{a\.role !== 'admin' && \(/);
+        expect(tela).toMatch(/\{!a\.dono && \(/);
+    });
+
+    it('e o selo do dono sai do BACKEND, não de uma lista na tela', () => {
+        expect(tela).toMatch(/a\.dono && <span/);
+        expect(tela).not.toMatch(/junior@spassessoriacontabil/);
     });
 });

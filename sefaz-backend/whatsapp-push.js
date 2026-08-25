@@ -73,8 +73,7 @@ function vetoDoAviso(u, { conversa, autorDaMensagem, config, noExpediente }) {
     // A própria mensagem nunca volta como aviso.
     if (autorDaMensagem && u.email && u.email === autorDaMensagem) return 'é o autor da mensagem';
     // A MESMA régua do inbox — nunca uma segunda cópia.
-    const filas = filasVisiveis({
-        role: u.role, papelAtendimento: u.papelAtendimento,
+    const filas = filasVisiveis({ email: u.email, papelAtendimento: u.papelAtendimento,
         departamentos: u.departamentos || [], filasAtendimento: u.filasAtendimento || [],
     });
     if (!conversaVisivel(filas, conversa.fila || null)) return 'a conversa é de uma fila que ele não atende';

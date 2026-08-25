@@ -73,3 +73,15 @@ export function resumoDaPermissao(p: RespostaPermissaoLigacao | null): string | 
 export function montarChamadaParaCliente(numero: string): {
     messaging_product: string; to: string; action: string;
 };
+
+/**
+ * ⚠️ Os interruptores que o painel não lia (25/08). Ausente NUNCA vira
+ * ENABLED: campo não declarado sai como 'nao-declarado'.
+ */
+export function lerEstadoDaChamada(calling: unknown): {
+    estado: {
+        chamada: string; sip: string; icone: string; horarios: string; servidores: number;
+    };
+    impedimentos: { campo: string; motivo: string; acao: string }[];
+    ok: boolean;
+};

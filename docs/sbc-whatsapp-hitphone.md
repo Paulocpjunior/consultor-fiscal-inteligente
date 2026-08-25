@@ -135,3 +135,102 @@ log** e o endpoint nem é escrito — endpoint com contato vazio quebraria o
 mesmo dia: o cartão "Permitir" foi aceito às 14:34). Ela não é substituída
 pelo tronco — sem o aceite, a Meta recusa a chamada de saída seja qual for o
 caminho.
+
+## ☎️ AS DUAS DIREÇÕES SÃO PROBLEMAS DIFERENTES (Paulo, 25/08)
+
+> *"vamos separar bem as 2 vertentes de saída de ligação. A saída de ligação
+> via WhatsApp tem CLIENTE CERTO, colaborador já sabe com quem quer falar da
+> sua lista, e pronto! Agora a entrada de ligação via WhatsApp, aí sim deve
+> passar pela URA, uma vez que não tem como cair no atendente correto."*
+
+Ele está certo, e a diferença é **quem sabe com quem quer falar**:
+
+| | SAÍDA (nós → cliente) | ENTRADA (cliente → nós) |
+|---|---|---|
+| Quem é o outro lado? | **Sabido** — a conversa está aberta | **Desconhecido** |
+| Quem escolhe? | O colaborador, na lista dele | Ninguém escolheu nada |
+| Logo | **botão na conversa**, zero digitação | **URA**, para achar o departamento |
+
+🚨 **O erro de desenho que isto corrige era meu.** Eu tratei as duas como uma
+coisa só e propus prefixo discado para a saída. Paulo: *"não faz o menor
+sentido — uma vez que já mandamos uma aprovação p o cliente, e ele aceita
+receber uma ligação via WhatsApp e não ligamos por WhatsApp, causa mais
+transtorno do que solução"*.
+
+E ele aponta o custo real: a permissão de ligação é pedida **DENTRO da
+conversa**, o cliente autoriza **naquela conversa**, e o app já tem o número.
+Mandar a pessoa decorar um prefixo e **redigitar** o número num teclado
+reintroduz à mão um dado que o sistema já tem — e é exatamente aí que um
+dígito errado liga para um estranho com o WhatsApp do escritório.
+
+### SAÍDA — botão na conversa (click-to-call)
+
+O `131055` continua valendo: **quem disca é o SBC**, nunca a Graph API. Mas
+"quem disca" não é "quem escolhe o número". O desenho é:
+
+```
+[☎️ Ligar] na conversa → CFI manda o SBC originar →
+SBC chama o RAMAL do colaborador → ele atende →
+SBC liga a outra perna à Meta → toca no WhatsApp do cliente
+```
+
+Sem prefixo, sem teclado, sem redigitar. O colaborador atende o próprio
+telefone e a ligação já está a caminho.
+
+🚧 **Ainda não dá para construir a discagem:** ela precisa do
+`META_SIP_DESTINO`, que só se lê no INVITE da **primeira ligação recebida**.
+**A entrada destrava a saída** — não há como inverter.
+
+### ENTRADA — pela URA, não por um ramal
+
+Quem liga pelo ☎️ do WhatsApp **não escolheu departamento**. Cair direto num
+ramal é apostar que a dúvida é sempre daquela pessoa.
+
+Isso já é **um parâmetro**, não código: `SBC_DESTINO`. O `221` de hoje era o
+alvo do **primeiro teste** (um ramal que aceita INVITE e prova a perna).
+
+⚠️ **A URA deve ser a MESMA de quem liga no fixo.** Uma triagem só: duas
+divergem no primeiro dia em que alguém mudar uma e esquecer a outra — é a
+armadilha das duas formas com outra roupa. Decisão do Paulo: qual ramal/rota
+da HIT é a URA.
+
+### Caminho SECUNDÁRIO da saída: teclado com prefixo
+
+Para quem estiver só com o telefone na mão, **sem o app aberto**. Não é o
+caminho principal — ver acima.
+
+Pergunta do Paulo (25/08): *"se eu ligar p o cliente do ramal 221, como sair
+pelo SIP ou pela Meta?"*.
+
+**Quem decide não é este SBC — é o HitPhone.** Ligação normal do 221 nem passa
+por aqui: ela sai pela telefonia deles, como sempre saiu. Este SBC só vê o que
+a HIT **escolheu** mandar para o nosso tronco.
+
+```
+221 ──┬─ número normal ─────────────► telefonia HitPhone ──► PSTN
+      └─ PREFIXO + número ─────────► tronco SIP da SP ──► este SBC ──► Meta ──► WhatsApp do cliente
+```
+
+O jeito de a HIT escolher é uma **rota de prefixo**. Ex.: com prefixo `*55`,
+`*5511999998888` vai ao WhatsApp e `11999998888` sai como telefone comum —
+dois caminhos, um teclado.
+
+### O que pedir ao suporte do HitPhone
+
+> Criar uma **rota de saída por prefixo** (ex.: `*55`) apontando para o nosso
+> tronco SIP `sip.spassessoriacontabil.com.br:5061` (TLS), disponível para o
+> ramal 221. O prefixo pode vir no INVITE — nós o retiramos.
+
+### O que o SBC faz com isso
+
+`SBC_PREFIXO_WHATSAPP` (env do script). Definido, o dialplan **retira** o
+prefixo e disca só o número; **recusa com motivo no log** o que não casa e o
+que não parece número (E.164 sem o `+` tem 10 a 15 dígitos).
+
+⚠️ **Vazio, ele aceita o número como veio** — é o comportamento de hoje, e só é
+seguro porque a HIT ainda não roteia nada para cá. No dia em que rotear, uma
+chamada inesperada iria ao WhatsApp **em silêncio**.
+
+🚧 **E nada disso disca antes de `META_SIP_DESTINO`**, que se lê no INVITE da
+primeira ligação RECEBIDA. Ou seja: **a entrada destrava a saída** — não há
+como inverter a ordem.

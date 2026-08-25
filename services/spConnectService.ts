@@ -37,8 +37,36 @@ export const listarConversas = () =>
         respostasRapidas?: string[];
     }>('/api/admin/whatsapp/conversas');
 
-export const listarMensagens = (numero: string) =>
-    req<{ mensagens: MensagemInbox[] }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens`);
+/**
+ * Mensagens de uma conversa — as 500 mais recentes. `antesDe` (o timestamp da
+ * mais antiga que já está na tela) traz as 500 ANTERIORES: cursor por VALOR,
+ * então mensagem que chegar no meio do caminho não desloca a janela.
+ */
+export const listarMensagens = (numero: string, antesDe?: string | null) =>
+    req<{
+        mensagens: MensagemInbox[];
+        /** Há chance de existir conversa mais antiga (página veio cheia). */
+        temMais?: boolean;
+        /** Timestamp da mais antiga desta fatia — é o cursor da próxima. */
+        maisAntiga?: string | null;
+        /** Índice ainda construindo: a fatia veio sem ordem e NÃO pagina. */
+        semOrdem?: boolean;
+    }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens${antesDe ? `?antesDe=${encodeURIComponent(antesDe)}` : ''}`);
+
+/**
+ * 🔎 Procura no BANCO INTEIRO — a outra metade do teto menor da lista.
+ * Acha por NÚMERO (prefixo, completo) e por NOME (pedaço, sem acento/caixa).
+ * NÃO procura no texto das mensagens — isso segue sendo só na conversa aberta.
+ */
+export const procurarConversas = (termo: string) =>
+    req<{
+        termo: string;
+        conversas: ConversaResumo[];
+        total: number;
+        truncado: boolean;
+        contatosVarridos: number;
+        contatosTruncados: boolean;
+    }>(`/api/admin/whatsapp/conversas/procurar?termo=${encodeURIComponent(termo)}`);
 
 export const marcarLida = (numero: string) =>
     req<{}>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/lida`, { method: 'POST' });
@@ -337,6 +365,13 @@ export interface HorariosChamada {
     mensagens: { dias: number[]; turnos: { inicio: string; fim: string }[] } | null;
     conferencia: { situacao: 'igual' | 'diverge' | 'sem-call-hours' | 'horario-ilegivel'; motivo: string };
     calling: Record<string, unknown> | null;
+    /** 🚨 Os interruptores que o painel não lia: calling.status e sip.status.
+     *  Servidor GRAVADO não é tronco LIGADO. Ausente vira 'nao-declarado'. */
+    interruptores?: {
+        estado: { chamada: string; sip: string; icone: string; horarios: string; servidores: number };
+        impedimentos: { campo: string; motivo: string; acao: string }[];
+        ok: boolean;
+    } | null;
 }
 
 export const sondarChamadas = () =>
@@ -346,6 +381,34 @@ export const sondarChamadas = () =>
         antesDeLigar: { titulo: string; texto: string }[];
         horarios?: HorariosChamada | null;
     }>('/api/admin/whatsapp/chamadas/sondar');
+
+export interface SondaSbc {
+    hostname?: string | null;
+    porta?: number;
+    /** De onde saiu o alvo: as settings da Meta, ou informado no pedido. */
+    origemDoAlvo?: string | null;
+    sipDaMeta?: Record<string, unknown> | null;
+    dns?: { ok: boolean; erro?: string | null; enderecos?: string[] };
+    tcp?: { ok: boolean; erro?: string | null };
+    tls?: { ok: boolean; erro?: string | null; protocolo?: string | null };
+    cert?: {
+        autorizado?: boolean; erroAutorizacao?: string | null; sujeitoCN?: string | null;
+        emissor?: string | null; alternativos?: string[]; validoAte?: string | null;
+    };
+    sip?: { respondeu: boolean; motivo?: string; codigo?: number; frase?: string | null; servidor?: string | null } | null;
+    certificado?: { situacao: string; grave: boolean; motivo: string; acao: string | null } | null;
+    conclusao: { veredito: 'aprovado' | 'reprovado' | 'indeterminado'; motivo: string; acao: string; ressalvas?: string[] };
+    levouMs?: number;
+}
+
+/**
+ * 🔌 A Meta CONSEGUE falar com o nosso SBC? A sonda de settings responde "o
+ * que ela tem gravado"; esta abre a conexão do jeito que ela abre — DNS, TLS,
+ * certificado e um SIP OPTIONS. É o que separa "tudo verde e a ligação é
+ * recusada" de uma causa com nome.
+ */
+export const sondarSbc = (p?: { hostname?: string; porta?: number }) =>
+    post<SondaSbc>('/api/admin/whatsapp/chamadas/sondar-sbc', p || {});
 
 /** 🛠 Escrita EXPLÍCITA na Meta (Paulo, 23/08) — a rota re-lê e devolve o que
  *  ficou GRAVADO; recusa da Meta volta crua, nunca engolida. */
@@ -430,6 +493,9 @@ export interface Atendente {
     uid: string; email: string | null; nome: string | null; role: string;
     papelAtendimento: string;
     departamentos: string[]; filasAtendimento: string[];
+    /** 👑 Dono do escritório — vê tudo por construção. Quem responde é o
+     *  BACKEND (`ehDono`, que tem a env); a tela só imprime o selo. */
+    dono?: boolean;
 }
 
 export const listarAtendentes = () =>

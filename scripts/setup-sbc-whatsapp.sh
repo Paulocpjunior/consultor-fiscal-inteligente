@@ -22,7 +22,16 @@ REGION="${ZONE%-*}"
 VM="sbc-whatsapp"
 IP_NAME="sbc-whatsapp-ip"
 SBC_HOST="${SBC_HOST:?Defina SBC_HOST (ex.: SBC_HOST=sip.spassessoriacontabil.com.br $0)}"
-SBC_DESTINO="${SBC_DESTINO:-221}"                 # ramal/DID no HitPhone que recebe a chamada
+# 🎯 ENTRADA — onde a ligação do WhatsApp CAI no HitPhone (Paulo, 25/08: "a
+# entrada de ligação via WhatsApp aí sim deve passar pela URA, uma vez que não
+# tem como cair no atendente correto"). Ele está certo, e este parâmetro é o
+# ponto exato disso: quem liga pelo ☎️ do WhatsApp não escolheu departamento —
+# mandar direto para UM ramal é apostar que a dúvida é sempre daquela pessoa.
+# ⚠️ O default 221 era do PRIMEIRO TESTE (um ramal que aceita INVITE e prova
+# que a perna funciona). Para o dia a dia, aponte para a URA/rota de
+# atendimento da HIT — é a MESMA porta por onde entra quem liga no telefone
+# fixo, e a régua da casa é uma triagem só, não duas.
+SBC_DESTINO="${SBC_DESTINO:-221}"                 # ramal/DID/URA no HitPhone que recebe a chamada
 HIT_HOST="${HIT_HOST:-177.107.205.201}"
 HIT_PORT="${HIT_PORT:-21694}"
 LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
@@ -30,6 +39,38 @@ LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
 # propósito: o endereço se LÊ no INVITE que ela manda na primeira ligação
 # recebida (asterisk -rvvv). Chutá-lo faria o colaborador ouvir silêncio.
 META_SIP_DESTINO="${META_SIP_DESTINO:-}"
+# ☎️ SAÍDA PELO TECLADO — CAMINHO SECUNDÁRIO, e o motivo está registrado.
+#
+# 🚨 PAULO CORRIGIU O DESENHO (25/08): "não faz o menor sentido — uma vez que
+# já mandamos uma aprovação p o cliente, e ele aceita receber uma ligação via
+# WhatsApp e não ligamos por WhatsApp, causa mais transtorno do que solução.
+# A saída de ligação via WhatsApp tem CLIENTE CERTO, colaborador já sabe com
+# quem quer falar da sua lista, e pronto!".
+#
+# Ele está certo. Na saída, o app SABE o número (a conversa está aberta e a
+# permissão foi concedida NELA) — obrigar a pessoa a decorar prefixo e digitar
+# o número num teclado é reintroduzir à mão um dado que o sistema já tem, e é
+# justamente onde o erro de digitação manda a ligação para um estranho.
+# O caminho PRINCIPAL é o BOTÃO na conversa (click-to-call: o app manda o SBC
+# originar a chamada). O 131055 continua valendo — quem disca é o SBC —, mas
+# quem ESCOLHE o número é o app, não o dedo.
+#
+# O prefixo abaixo fica como caminho SECUNDÁRIO: quem estiver só com o
+# telefone na mão, sem o app aberto.
+#
+# 🚨 QUEM DECIDE NÃO É ESTE SBC — é o HITPHONE. Ligação normal do 221 nem passa
+# por aqui: ela sai pela telefonia da HIT direto. Este SBC só vê o que a HIT
+# ESCOLHEU mandar para o nosso tronco, e o jeito de ela escolher é um PREFIXO
+# discado. Ex.: com prefixo *55, `*5511999998888` vai ao WhatsApp e
+# `11999998888` sai como telefone comum — dois caminhos, um teclado.
+#
+# ⚠️ O PREFIXO É COMBINAÇÃO COM A HIT, não invenção nossa: eles criam a rota
+# "prefixo X ⇒ tronco SIP da SP". Enquanto ele estiver VAZIO, a saída aceita o
+# número como veio (é o comportamento de hoje) — e isso só é seguro porque a
+# HIT ainda não roteia nada para cá. No dia em que rotear, chamada inesperada
+# iria ao WhatsApp em SILÊNCIO; por isso, definido o prefixo, o que NÃO casa é
+# RECUSADO com o motivo no log, nunca discado por engano.
+SBC_PREFIXO_WHATSAPP="${SBC_PREFIXO_WHATSAPP:-}"
 
 echo "== SBC WhatsApp → HitPhone =="
 echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT"
@@ -201,9 +242,25 @@ exten => _.,1,NoOp(Chamada WhatsApp da Meta -> HIT ${SBC_DESTINO})
 ; (asterisk -rvvv). Enquanto META_SIP_DESTINO estiver vazio, a saída RECUSA
 ; com o motivo no log — melhor que discar para um endereço chutado e o
 ; colaborador ouvir silêncio sem saber por quê.
-exten => _.,1,NoOp(Saida 221 -> WhatsApp)
- same => n,GotoIf($["${META_SIP_DESTINO}" = ""]?semdestino)
- same => n,Dial(PJSIP/meta-saida,60)
+; 🚨 QUAL CHAMADA VEM PARAR AQUI: só o que o HITPHONE ESCOLHEU mandar para o
+; nosso tronco. Ligação normal do 221 sai pela telefonia da HIT e nem passa
+; por este SBC — a escolha é DELES, por uma rota de PREFIXO discado.
+; Com SBC_PREFIXO_WHATSAPP definido, o prefixo é RETIRADO aqui e o que sobra é
+; o número do cliente; sem ele, o número vai como veio.
+exten => _.,1,NoOp(Saida 221 -> WhatsApp | discado=\${EXTEN})
+ same => n,Set(ALVO=\${FILTER(0-9,\${EXTEN})})
+ same => n,GotoIf(\$["${SBC_PREFIXO_WHATSAPP}" = ""]?semprefixo)
+ same => n,GotoIf(\$["\${EXTEN:0:${#SBC_PREFIXO_WHATSAPP}}" != "${SBC_PREFIXO_WHATSAPP}"]?naoemeu)
+ same => n,Set(ALVO=\${FILTER(0-9,\${EXTEN:${#SBC_PREFIXO_WHATSAPP}})})
+ same => n(semprefixo),GotoIf(\$["${META_SIP_DESTINO}" = ""]?semdestino)
+ ; Número implausível não vira ligação: E.164 sem o + tem 10 a 15 dígitos.
+ ; Discar lixo faria o colaborador ouvir silêncio sem saber por quê.
+ same => n,GotoIf(\$[\${LEN(\${ALVO})} < 10 | \${LEN(\${ALVO})} > 15]?numeroruim)
+ same => n,Dial(PJSIP/\${ALVO}@meta-saida,60)
+ same => n,Hangup()
+ same => n(naoemeu),Verbose(1, RECUSADA: \${EXTEN} nao tem o prefixo ${SBC_PREFIXO_WHATSAPP} - esta chamada nao era para o WhatsApp e a rota do HitPhone mandou para ca)
+ same => n,Hangup()
+ same => n(numeroruim),Verbose(1, RECUSADA: \${ALVO} nao parece numero de telefone - confira a rota de prefixo no HitPhone)
  same => n,Hangup()
  same => n(semdestino),Verbose(1, SAIDA BLOQUEADA: META_SIP_DESTINO vazio - leia o INVITE da Meta numa ligacao recebida e rode o script com ele)
  same => n,Hangup()
