@@ -237,6 +237,25 @@ describe('🔌 fiação', () => {
     // aponta um lugar que a pessoa ACHA" (21/08): aqui ele aponta um pacote
     // que a pessoa NÃO acha. Quem tem a versão é o zip servido pela rota, e é
     // pra ele que a frase manda — assim ela nunca desatualiza.
+    // 🚨 25/08, com o 🧪 passando na tela do Paulo ("✅ O Graph aceitou") e ele
+    // dizendo "o sino não vejo": a frase mandava "pode ligar a chave" — e a
+    // chave NASCE ligada, então ela pedia um ato já feito — e dizia "confira o
+    // sino" sem dizer onde. Com o SP Connect aberto no NAVEGADOR, procurar
+    // sino ali é procurar o que não existe. Aviso que aponta um lugar tem de
+    // apontar um lugar que a pessoa ACHA (21/08).
+    it('🚨 o sucesso do 🧪 não manda ligar chave já ligada e diz ONDE o sino fica', () => {
+        const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+        const i = tela.indexOf('O Graph aceitou');
+        const bloco = tela.slice(i, i + 1200);
+        expect(bloco).not.toMatch(/[Pp]ode ligar a chave/);
+        expect(bloco).toContain('aplicativo do Teams');
+        expect(bloco).toContain('Atividade');
+        expect(bloco).toMatch(/não nesta aba do navegador/);
+        // E o "aceitou" diz o que já prova — senão ele continua parecendo um
+        // passo intermediário e a pessoa segue caçando consent e pacote.
+        expect(bloco).toContain('TeamsActivity.Send');
+    });
+
     it('🚨 o suspeito do pacote manda ao zip servido, nunca a um número de versão cravado', () => {
         const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
         const bloco = tela.slice(tela.indexOf('Suspeitos: 1) permissão'), tela.indexOf('Suspeitos: 1) permissão') + 700);
