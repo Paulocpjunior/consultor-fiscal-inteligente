@@ -5,6 +5,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 QUATRO DIAS NO MESMO ERRO PORQUE TODA GERAÇÃO TINHA O MESMO NOME DE
+  ARQUIVO** (25/08, PWR 1364 · 07/2026, Paulo: *"Este é o 4º dia, o mesmo erro
+  da mesma empresa sobre o mesmo assunto!!!!!! não dá mais pra postergar"*).
+  Ele mandou o print do M210 do PVA com `VL_REC_BRT` **38.316,84** e, ANEXO na
+  mesma mensagem, o arquivo gerado — que declara **37.754,60**.
+  ✅ **OS DOIS ESTAVAM CERTOS.** O par que o PVA mostrava — `38.316,84 /
+  30.958,77` — é **exatamente** o estado de 20/08, em que o desconto já saía da
+  BASE e ainda não saía da RECEITA (está escrito neste arquivo). Ou seja: a tela
+  do PVA estava com uma **importação ANTERIOR**, e o arquivo dele estava certo.
+  Conferido linha a linha antes de responder: 38.316,84 − 562,24 = 37.754,60 −
+  ICMS 6.795,83 = 30.958,77, e é isso que o `|M210|` do anexo traz.
+  🔴 **A CAUSA DE NINGUÉM CONSEGUIR PERCEBER ISSO ERA O NOME DO ARQUIVO**: toda
+  geração da mesma empresa/competência saía como
+  `SPED_CONTRIB_31947349000169_202607.txt`, byte a byte o mesmo nome. Quatro
+  dias de correção ⇒ quatro arquivos indistinguíveis na pasta de downloads (o
+  navegador só acrescenta "(1)", "(2)"…) — e **o PVA guarda a escrituração
+  IMPORTADA na base dele**, então enquanto ninguém apagar e reimportar a tela
+  continua mostrando a importação velha, com o número velho.
+  ✂️ O nome passou a carregar a HORA
+  (`SPED_CONTRIB_<cnpj>_<periodo>_<AAAAMMDD-HHMM>.txt`), nas **DUAS famílias**,
+  com dono único — meia correção deixaria o EFD ICMS/IPI com o defeito inteiro.
+  O prefixo e a ordem não mudam, então quem procura por empresa/competência
+  continua achando, e a ordem alfabética virou cronológica.
+  ⚠️ **E o carimbo é de BRASÍLIA, não do processo**: o Cloud Run é UTC, e
+  arquivo gerado às 21h sairia com a data do dia SEGUINTE — o nome existe para
+  ORDENAR as gerações, então errar o fuso o faria confundir. É a armadilha de
+  fuso de 22/08 na versão do rótulo.
+  📌 **E O NÚMERO NA TELA NÃO BASTAVA — a prova é este caso.** O aviso com
+  *"bruta 38.316,84 − desconto 562,24 = VL_REC_BRT 37.754,60"* existe desde
+  24/08, e o dia seguinte começou igual. Faltava a outra metade: **DIZER QUAL
+  ARQUIVO a tela está descrevendo** e o que fazer quando o PVA discorda. A
+  geração passa a ecoar o nome + a linha do `M210`/`M610` (`E110` no fiscal)
+  **copiada do arquivo que saiu**, com a ação: *apague a escrituração desta
+  competência no PVA e importe ESTE arquivo*.
+  📌 **REGRA QUE FICA: arquivo que a pessoa vai conferir em OUTRO sistema nasce
+  com a hora da geração no nome.** *"Print prova o ARQUIVO, não o código — e
+  arquivo tem data"* (24/08) só é acionável se o arquivo DISSER que data ele
+  tem; sem isso, "confira se é o arquivo novo" é um pedido que ninguém consegue
+  cumprir, e a conversa recomeça no dia seguinte.
+  ⚠️ **E A LIÇÃO DE POSTURA**: em 24/08 eu respondi *"o arquivo que você validou
+  é anterior à correção"* e parei ali — resposta CERTA que não resolveu nada,
+  porque devolvia ao dono um trabalho que só o app podia fazer. **Quando a
+  resposta é "você está olhando o arquivo errado", a entrega não é a frase: é
+  tornar impossível olhar o arquivo errado.**
+
 - **🚨 A NFC-e NÃO LEVA C170 NO EFD-CONTRIBUIÇÕES — 572 recusas num arquivo
   só** (24/08, HYPE CAFE 1385 · 07/2026, Paulo: *"deu esses erros de estrutura,
   são os NFC-E"* — e ele já tinha nomeado a causa). O Relatório de Erros de
