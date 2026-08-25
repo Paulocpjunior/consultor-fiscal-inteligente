@@ -108,16 +108,41 @@ describe('a ENTRADA cai na URA que o Paulo decidiu', () => {
     // Paulo respondeu: *"Ramal rota ramal 211, central URA"*. O que a trava
     // garante agora é a INTENÇÃO: o destino é parâmetro, o default é a URA (não
     // o ramal de uma pessoa) e a decisão está escrita com a fala que a gerou.
-    it('o destino é PARÂMETRO, com a URA decidida como default', () => {
+    it('o destino é PARÂMETRO, e o default é a telefonista (não o ramal do teste)', () => {
         expect(script).toMatch(/SBC_DESTINO="\$\{SBC_DESTINO:-211\}"/);
         expect(script).not.toMatch(/SBC_DESTINO:-221/);   // o ramal do teste não volta a ser default
-        expect(script).toMatch(/central URA/);            // a fala que decidiu, junto do valor
+        expect(script).toMatch(/telefonista/);            // o que o 211 É, com a fala que decidiu
     });
 
-    it('e a URA tem que ser a MESMA de quem liga no fixo (uma triagem só)', () => {
+    // 🐛 DEFEITO MEU, DE DEZ MINUTOS (25/08). Ao ler "Ramal rota ramal 211,
+    // central URA" eu registrei que o 211 ERA a URA — e escrevi isso no script,
+    // no documento e nesta trava. O Paulo corrigiu na mensagem seguinte: "O
+    // ramal 211 é telefonista ou seja 1 opção quando recebemos ligação". A
+    // trava velha prendia a afirmação FALSA, então ela tinha que cair junto.
+    it('🚨 o 211 NÃO é vendido como a URA — ele é UMA opção dentro dela', () => {
         const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
-        expect(doc).toMatch(/É a MESMA URA de quem liga no fixo/);
-        expect(doc).toMatch(/ramal `211`/);
+        expect(doc).not.toMatch(/É a MESMA URA de quem liga no fixo/);
+        expect(doc).toMatch(/telefonista/i);
+        expect(doc).toMatch(/uma opção DENTRO/i);
+    });
+
+    it('🚨 o DTMF é nomeado como NÃO MEDIDO — é ele que decide URA × telefonista', () => {
+        // URA de menu numérico sem teclado é beco: o cliente ouve as opções e
+        // não escolhe. Sem esta ressalva, alguém aponta o destino para o menu
+        // por parecer "mais completo" e a chamada morre no ar.
+        const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
+        expect(doc).toMatch(/DTMF/);
+        expect(doc).toMatch(/não está provado/i);
+        expect(script).toMatch(/DTMF/);
+    });
+
+    it('o funil da entrada começa pela IDENTIDADE, não pelo menu', () => {
+        const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
+        expect(doc).toMatch(/conversa com DONO/);
+        expect(doc).toMatch(/conversa com FILA/);
+        // E os dois degraus que dependem do app aparecem como CONSTRUÇÃO, não
+        // como configuração — senão viram promessa de tela que não existe.
+        expect(doc).toMatch(/são construção, não configuração/);
     });
 
     it('🚨 trocar o destino NÃO é dito como conserto do bloqueio da Meta', () => {
