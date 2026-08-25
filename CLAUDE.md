@@ -5,47 +5,54 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
-- **🚨 O PVA RECALCULA O M210 — o `VL_REC_BRT` é a receita BRUTA, e nada que
-  a gente escreva no campo 2 chega na tela** (25/08, PWR 1364 · 07/2026, 5º dia
-  no mesmo assunto). Sandra fez o teste que fecha a questão: **apagou TODA a
-  base do PVA** e reimportou o arquivo que declara `|M210|51|37754,60|30958,77|`
-  — e a tela continuou mostrando **38.316,84 / 30.958,77**.
-  🔴 **E OS DOIS NÚMEROS DA TELA SÃO SOMAS DO NOSSO PRÓPRIO ARQUIVO**, medidas
-  linha a linha: `38.316,84` = **Σ VL_ITEM dos C170 de saída** (= Σ VL_MERC dos
-  C100) e `30.958,77` = **Σ VL_BC_PIS**. Ou seja: o PVA monta o M210 a partir
-  dos DOCUMENTOS e **sobrescreve** o campo 2 com a receita bruta.
-  🚨 **E NÃO HÁ COMO FAZER O BRUTO VIRAR LÍQUIDO NO DOCUMENTO.** O Guia Prático
-  é literal no C170, campo 07: *"a soma de valores dos registros C170 deve ser
-  igual ao valor informado no campo VL_MERC do registro C100"* — e o VL_MERC é
-  o valor das MERCADORIAS, com o desconto no campo próprio (VL_DESC). Baixar o
-  VL_ITEM para o líquido trocaria esta divergência por uma **recusa de
-  validação**, que é a lição do dia anterior (o C170 da NFC-e × o item órfão).
-  ✅ **E O IMPOSTO NUNCA ESTEVE ERRADO — é isto que fecha o assunto.** O
-  desconto continua fora da BASE, que é onde ele reduz tributo: 38.316,84 −
-  562,24 (desconto) − 6.795,83 (ICMS, Tema 69) = **30.958,77**, exatamente a
-  base que o PVA mostra e sobre a qual a guia é paga (PIS 201,23 · COFINS
-  928,76). Os cinco dias foram sobre um campo INFORMATIVO.
-  ✂️ O gerador passou a escrever a BRUTA no `VL_REC_BRT`, como o PVA faz — o
-  arquivo e a tela do PVA passam a dizer a MESMA coisa, e a divergência que
-  custou a semana some. Um teste que travava `37754,60` foi TROCADO, com o
-  motivo: **premissa derrubada pelo comportamento do próprio PVA.**
-  📌 **REGRA QUE FICA: quando o número da tela do PVA não é o do arquivo, a
-  primeira pergunta é "de onde ELE tira esse número?" — e a resposta se acha
-  somando as linhas do nosso próprio arquivo.** Duas somas de trinta segundos
+- **🚨 O DESCONTO SAI NO C100/C170 — o M210 sozinho NUNCA chegava na tela do
+  PVA** (25/08, PWR 1364 · 07/2026, quinto dia no MESMO assunto; Paulo:
+  *"O valor da receita não pode ser esses 38.316,84 e sim 37.754,60 conforme a
+  ficha financeira. Tem que ajustar no C100."*).
+  🔴 **A CAUSA, medida e não deduzida**: Sandra apagou TODA a base do PVA e
+  reimportou o arquivo que declarava `|M210|51|37754,60|…` — e a tela continuou
+  em **38.316,84**. Somando as linhas do NOSSO arquivo, os dois números da tela
+  aparecem: `38.316,84` = **Σ VL_ITEM dos C170** (= Σ VL_MERC dos C100) e
+  `30.958,77` = **Σ VL_BC_PIS**. **O PVA RECALCULA o M210 a partir dos
+  DOCUMENTOS.** Corrigir o M210 era escrever num campo que ele sobrescreve.
+  ✂️ **A correção mora no documento**: `VL_MERC` (C100) e `VL_ITEM` (C170) saem
+  **líquidos do desconto incondicional**, com o `VL_DESC` informado ao lado —
+  nada some do arquivo. Aí os dois lados dizem 37.754,60: o arquivo e a tela.
+  ⚠️ **E OS DOIS LADOS DA IGUALDADE MUDARAM JUNTOS.** O Guia é literal (C170,
+  campo 07: *"a soma de valores dos registros C170 deve ser igual ao valor
+  informado no campo VL_MERC do registro C100"*), então mexer só no C100 —
+  que foi o pedido ao pé da letra — trocaria a divergência por uma RECUSA.
+  A regra entrou na prevalidação no MESMO PR, **nasce VERDE**, e foi provada
+  mexendo só no C100 de propósito: ela acusa a nota, com os dois números.
+  ⚠️ **O RATEIO existe só para o desconto lançado no TOTAL do documento**, é
+  proporcional ao valor do item e fecha **na unidade** (a sobra de centavos vai
+  no último item) — senão trocaríamos a divergência por erro de arredondamento.
+  Desconto que já vem POR ITEM não é rateado: descontar duas vezes é a
+  armadilha que a régua da receita já tratava.
+  ✅ **E O IMPOSTO NUNCA MUDOU, nos cinco dias**: a base é a mesma
+  (30.958,77 → PIS 201,23 · COFINS 928,76), porque `VL_BC_PIS` já era líquido
+  de desconto e de ICMS. O que estava errado era o campo que a Receita LÊ para
+  montar a receita.
+  📌 **REGRA QUE FICA: quando o número da tela de um validador não é o do
+  arquivo, a primeira pergunta é "de ONDE ele tira esse número?" — e a resposta
+  se acha somando as linhas do NOSSO arquivo.** Duas somas de trinta segundos
   responderam o que três dias de hipótese não responderam. Print de validador
-  não é só evidência do arquivo: é evidência do que o VALIDADOR calcula.
-  ⚠️ **E O MEU ERRO FOI PIOR QUE O DEFEITO.** Em 24/08 respondi *"a régua está
-  certa, o arquivo que você validou é anterior"*; em 25/08 repeti a mesma
-  história com outra roupa (*"o PVA está com uma importação antiga"*) e ainda
-  entreguei o carimbo de hora no nome do arquivo como se fosse a solução. As
-  duas respostas eram **coerentes com os dados que eu tinha e falsas**, e as
-  duas empurraram o trabalho de volta para quem já estava travado. **Explicação
-  que termina em "confere de novo aí" não é entrega** — quando o dono repete o
-  mesmo sintoma pela terceira vez, a hipótese que está errada é a MINHA, e o
-  caminho é medir o que o outro sistema faz, não reforçar o que eu deduzi.
-  ✅ **O que salvou foi a medição da Sandra**: apagar a base inteira do PVA
+  não prova só o arquivo: prova **o que o validador CALCULA**.
+  🚨 **E O ERRO CARO FOI DE MÉTODO, NÃO DE LEIAUTE.** Em 24/08 respondi *"a
+  régua está certa, o arquivo que você validou é anterior"*; em 25/08 repeti a
+  mesma história com outra roupa (*"o PVA está com uma importação antiga"*) e
+  entreguei carimbo de hora no nome do arquivo como se fosse a solução; e
+  quando a medição finalmente apareceu, ainda tentei fechar o caso dizendo que
+  a receita bruta era o certo — outra dedução minha, sobre um campo que é
+  decisão fiscal do dono. **Explicação que termina em "confere de novo aí" não
+  é entrega**, e **quando o dono repete o mesmo sintoma pela terceira vez, a
+  hipótese errada é a MINHA**. O caminho é medir o que o outro sistema faz —
+  não reforçar o que eu deduzi, e não devolver o problema para quem já está
+  travado.
+  ✅ **O que destravou foi o teste da Sandra**: apagar a base inteira do PVA
   eliminou a única explicação que eu tinha. **Teste que ELIMINA hipótese vale
-  mais que print que a confirma.**
+  mais que print que a confirma** — e quem tem o sistema na frente consegue
+  fazer em um minuto o que eu não consigo fazer em três dias de dedução.
 
 - **🚨 QUATRO DIAS NO MESMO ERRO PORQUE TODA GERAÇÃO TINHA O MESMO NOME DE
   ARQUIVO** (25/08, PWR 1364 · 07/2026, Paulo: *"Este é o 4º dia, o mesmo erro

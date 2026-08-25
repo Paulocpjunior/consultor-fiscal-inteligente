@@ -69,6 +69,67 @@ export function receitaDoItem(item) {
     return Math.max(0, n(item?.vProd ?? item?.valor) - n(item?.vDesc));
 }
 
+/**
+ * O DESCONTO INCONDICIONAL DE CADA ITEM — o próprio, mais a parte que cabe a
+ * ele do desconto lançado só no TOTAL do documento.
+ *
+ * ═══ POR QUE EXISTE (Paulo, 25/08, PWR 1364 · 07/2026) ══════════════════════
+ *
+ * *"O valor da receita não pode ser esses 38.316,84 e sim 37.754,60 conforme a
+ * ficha financeira. Tem que ajustar no C100."*
+ *
+ * A receita que o PVA mostra no M210 é derivada dos DOCUMENTOS — e enquanto o
+ * `VL_MERC` do C100 (e o `VL_ITEM` do C170) carregarem a mercadoria CHEIA, ela
+ * sai bruta por construção. O desconto incondicional nunca foi receita, então
+ * ele sai do valor do item, e o `VL_DESC` continua informado dizendo quanto
+ * foi tirado — nada some do arquivo.
+ *
+ * ⚠️ **O RATEIO SÓ EXISTE PARA O DESCONTO DE DOCUMENTO**, e é proporcional ao
+ * valor do item. Ele não muda nenhum total: a Σ dos descontos rateados é
+ * EXATAMENTE o desconto do documento (a sobra de centavos vai no último item),
+ * então `Σ VL_ITEM` continua fechando com o `VL_MERC`. Sem fechar na unidade,
+ * trocaríamos esta divergência por um erro de arredondamento — que é o mesmo
+ * defeito com outra roupa.
+ *
+ * ⚠️ E ele NÃO se aplica quando os itens já trazem o desconto: o total é a
+ * soma dos itens quando eles o declaram, e descontar duas vezes é a armadilha
+ * que a régua da receita já tratava.
+ *
+ * @returns {number[]} um desconto por item, na ordem de `nota.itens`.
+ */
+export function descontosDosItens(nota) {
+    const itens = Array.isArray(nota?.itens) ? nota.itens : [];
+    if (!itens.length) return [];
+
+    const proprios = itens.map(i => n(i?.vDesc));
+    const somaPropria = proprios.reduce((s, v) => s + v, 0);
+    const doTotal = n(nota?.totais?.vDesc);
+    if (somaPropria > 0 || !(doTotal > 0)) return proprios;
+
+    const valores = itens.map(i => Math.max(0, n(i?.vProd ?? i?.valor)));
+    const soma = valores.reduce((s, v) => s + v, 0);
+    if (!(soma > 0)) return proprios;
+
+    // Em CENTAVOS, para a Σ fechar na unidade — a sobra vai no último item.
+    const totalCent = Math.round(Math.min(doTotal, soma) * 100);
+    const rateio = valores.map(v => Math.floor((v / soma) * totalCent));
+    const sobra = totalCent - rateio.reduce((s, v) => s + v, 0);
+    rateio[rateio.length - 1] += sobra;
+    return rateio.map(c => c / 100);
+}
+
+/**
+ * O valor do item JÁ LÍQUIDO do desconto incondicional — o que vai ao
+ * `VL_ITEM` do C170 e, somado, ao `VL_MERC` do C100.
+ *
+ * @returns {number[]} um valor por item, na ordem de `nota.itens`.
+ */
+export function valoresLiquidosDosItens(nota) {
+    const itens = Array.isArray(nota?.itens) ? nota.itens : [];
+    const desc = descontosDosItens(nota);
+    return itens.map((i, k) => Math.max(0, n(i?.vProd ?? i?.valor) - (desc[k] || 0)));
+}
+
 /** ICMS destacado no item — o que sai da base pelo Tema 69. */
 export function icmsDestacadoDoItem(item) {
     return n(item?.vICMS);
