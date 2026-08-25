@@ -4716,8 +4716,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   MÊS** (Paulo, 30/07 — v1.0.19): a data do Jotform é a DATA-BASE (1ª
   parcela), não vencimento; `projetarProximaParcela` devolve a próxima
   parcela + o número dela (`Parcela 47/60`), acordo cumprido vira 🏁
-  concluído (não alerta, não é vencido) e a idempotência do alerta virou
-  `{item}_p{parcela}_{faixa}`. Fim de 144 "vencidos" falsos. **FAROL HONESTO
+  concluído (não alerta, não é vencido). Fim de 144 "vencidos" falsos.
+  🚨 **E A CONTAGEM SAÍA DA DATA ERRADA — o acordo de 5 anos aparecia como
+  "Parcela 1/120"** (24/08, prints do Jotform da SBE EDICOES). O formulário
+  tem DUAS datas com significados diferentes: **DATA INICIO PARCELAMENTO é a
+  CONCESSÃO**, e **DATA VENCIMENTO é o vencimento de UMA parcela** — a do
+  guia anexado naquele envio. Nos dois registros reais o MESMO campo aparece
+  com os dois sentidos (num deles é a 1ª parcela; no outro, a do mês
+  corrente, cinco anos depois da concessão).
+  ✂️ **A régua que resiste às duas formas: do campo de vencimento sai só o
+  DIA do mês** (é a única coisa que ele diz igual em todo registro), **a
+  CONTAGEM sai da concessão**, e a **data final é DERIVADA** (concessão + nº
+  de parcelas) — nunca lida de um campo que se contradiz entre registros.
+  Sem concessão gravada, cai no comportamento antigo e **DIZ isso**
+  (`origemContagem` + "⚠️ sem data de início" na linha).
+  📌 **REGRA QUE FICA: campo de formulário preenchido por pessoas pode ter
+  DOIS significados no mesmo cadastro — use dele só a parte que não varia.**
+  Escolher um dos sentidos acerta metade dos registros e erra a outra em
+  silêncio.
+  🚨 **E A RENUMERAÇÃO IA VIRAR SPAM NO CLIENTE**: a idempotência era
+  `{item}_p{parcela}_{faixa}`, então trocar o número da parcela criaria chave
+  NOVA e o cliente receberia de novo o aviso que já recebeu — correção
+  interna virando e-mail repetido. A chave passou a ser a **DATA** da parcela
+  (o fato, que não se renumera) e as chaves antigas continuam sendo
+  reconhecidas antes de enviar. **Renumerar entidade que tem chave de
+  idempotência é reenviar tudo: a chave se muda junto, no mesmo PR.**
+  ✂️ E a **segunda cópia da régua morreu**: `services/legalizacaoLogic.ts`
+  reimplementava a projeção como *"espelho do backend"*, com teste cruzado
+  segurando as duas iguais. **Cópia com teste continua sendo cópia** — esta
+  correção teria de ser escrita duas vezes, e é assim que a tela e o e-mail
+  passam a dizer parcelas diferentes do MESMO acordo. O front re-exporta o
+  backend e o teste prova que não há segunda implementação. **FAROL HONESTO
   VALE PRA CONTAGEM** (Paulo, 30/07 — v1.0.20): o painel mostrava 20 de ~150
   itens na janela -7/+30d por um `slice(0,20)` mudo e contradizia os próprios
   selos dos cards. Regra: lista cortada SEMPRE diz "mostrando X de N";
