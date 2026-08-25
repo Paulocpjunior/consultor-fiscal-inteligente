@@ -2327,10 +2327,30 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
                                         {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
                                     </button>
+                                    {/* ✅ 25/08: a frase de sucesso tinha DOIS defeitos, os dois do
+                                        tipo que faz a pessoa procurar problema onde não há.
+                                        (1) Mandava "pode ligar a chave" com a chave JÁ ligada (ela
+                                        nasce ligada) — duas leituras do mesmo fato na mesma tela.
+                                        (2) Dizia "confira o sino" sem dizer ONDE: quem está com o SP
+                                        Connect aberto no NAVEGADOR fica procurando ali, e o sino é
+                                        do aplicativo do Teams. Aviso que aponta um lugar tem de
+                                        apontar um lugar que a pessoa ACHA (regra de 21/08).
+                                        E ela DIZ o que o "aceitou" já prova, porque é isso que tira
+                                        os dois suspeitos da frente sem mais nenhum teste. */}
                                     {teamsTeste && (teamsTeste.resultado.ok ? (
-                                        <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
-                                            ✅ O Graph aceitou — confira o <strong>sino de Atividade</strong> do seu Teams. Chegou lá? Pode ligar a chave.
-                                        </p>
+                                        <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
+                                            <p>
+                                                ✅ <strong>O Graph aceitou.</strong> Isso já prova as duas metades: a permissão
+                                                <strong> TeamsActivity.Send</strong> tem consent e o pacote instalado no seu Teams é o que
+                                                declara <code>activities</code>. Nada mais falta configurar.
+                                            </p>
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                O aviso aparece no <strong>aplicativo do Teams</strong> → barra da esquerda →
+                                                <strong> Atividade</strong> (o sino), não nesta aba do navegador. Pode levar alguns segundos.
+                                                Não chegou em ~1 min? Teams → <strong>Configurações → Notificações e atividade</strong>, e veja se o
+                                                SP Connect está silenciado.
+                                            </p>
+                                        </div>
                                     ) : (
                                         <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
                                             <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
