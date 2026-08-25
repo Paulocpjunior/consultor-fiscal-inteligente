@@ -725,9 +725,16 @@ describe('🚨 a lista de conversas não pode ter teto SECO — "Todas · 100" n
     const rotas = readFileSync(join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
     const tela = readFileSync(join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
 
-    it('a leitura é paginada até um teto ALTO, e o teto sai NOMEADO na resposta', () => {
-        expect(rotas).toMatch(/TETO_LEITURA_CONVERSAS = 2000/);
+    // ⚠️ TRAVA TROCADA PELA INTENÇÃO (25/08): ela prendia o NÚMERO 2000, e o
+    // teto caiu para 300 a pedido do Paulo ("diminuiria este teto para ganhar
+    // agilidade… ficando disponível no campo de busca"). O que ela existe para
+    // garantir não é o número — é que o teto não seja SECO: ele tem que sair
+    // NOMEADO e tem que haver como alcançar o que ficou de fora. Com a busca
+    // no banco, essa exigência ficou MAIS forte, não menos.
+    it('o teto sai NOMEADO na resposta e existe caminho para além dele', () => {
         expect(rotas).toMatch(/limiteLeitura: docsConversas\.length >= TETO_LEITURA_CONVERSAS/);
+        // A porta: sem ela, teto menor é só esconder mais conversa em silêncio.
+        expect(rotas).toMatch(/router\.get\('\/conversas\/procurar', requireAuth/);
         // O limit(100) seco não pode voltar por merge desatento.
         expect(rotas).not.toMatch(/whatsapp_conversas'\)\s*\n?\s*\.orderBy\('atualizadoEm', 'desc'\)\.limit\(100\)/);
     });

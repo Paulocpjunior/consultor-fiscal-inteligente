@@ -441,7 +441,57 @@ async function perfilAtendimento(db, user) {
 // Virou leitura paginada com teto ALTO e NOMEADO: se um dia bater, a
 // resposta diz (`limiteLeitura`), nunca esconde.
 const PAGINA_CONVERSAS = 500;
-const TETO_LEITURA_CONVERSAS = 2000;
+// ⚡ TETO BAIXADO DE 2000 PARA 300 (Paulo, 25/08: "eu até diminuiria este teto,
+// para ganhar agilidade no carregamento da pág, ficando disponível no campo de
+// busca quando o colaborador preferir"). Carregar 2000 conversas + 2000
+// contatos a cada 30 SEGUNDOS é o que fazia a tela demorar — e ninguém rola
+// 2000 linhas: quem procura conversa antiga PROCURA.
+//
+// 🚨 A METADE QUE NÃO PODE FALTAR: baixar o teto sem a busca alcançar o banco
+// tornaria a conversa antiga MAIS invisível — o teto novo esconderia 1.700
+// conversas em vez de nenhuma, e a busca continuaria achando "só o que está na
+// lista". Por isso a rota `/conversas/procurar` entra no MESMO PR. Meia
+// correção não deixa o defeito pela metade: ela troca um por outro.
+const TETO_LEITURA_CONVERSAS = 300;
+
+/**
+ * Resumo de conversa para a lista — DONO ÚNICO da forma (a listagem e a busca
+ * no banco leem daqui). Duas cópias fariam a busca devolver linha com campo
+ * faltando, e a tela mostraria uma conversa "sem nome" que na lista tem nome.
+ */
+async function montarResumosDeConversas(db, docsConversas) {
+    const numeros = docsConversas.map((d) => d.id);
+    const contatos = new Map();
+    // getAll em fatias: uma chamada com centenas de refs é pedir recusa do RPC.
+    for (let i = 0; i < numeros.length; i += 300) {
+        const refs = numeros.slice(i, i + 300).map((n) => db.collection('whatsapp_contatos').doc(n));
+        // eslint-disable-next-line no-await-in-loop
+        (await db.getAll(...refs)).forEach((c) => { if (c.exists) contatos.set(c.id, c.data()); });
+    }
+    return docsConversas.map((d) => {
+        const x = d.data();
+        const c = contatos.get(d.id) || {};
+        return {
+            numero: d.id,
+            nome: c.nomeExibicao || c.nomePerfil || null,
+            empresaId: c.empresaId || null,   // null = pendência "vincular ao cliente"
+            empresaNome: c.empresaNome || null,
+            origemContato: c.origem || null,
+            fila: x.fila || null,             // null = Recepção
+            protocolo: x.protocolo || null,
+            atribuidoA: x.atribuidoA || null,
+            transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
+            canalId: x.canalId || null,               // por qual número do escritório entrou
+            canal: x.canal || 'whatsapp',             // 'instagram' = DM (selo 📷 na tela)
+            situacao: x.status || 'aberta',
+            janela24hAte: x.janela24hAte || null,
+            permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
+            ultimaMensagem: x.ultimaMensagem || null,
+            naoLidas: x.naoLidas || 0,
+            atualizadoEm: x.atualizadoEm || null,
+        };
+    });
+}
 
 router.get('/conversas', requireAuth, async (req, res) => {
     try {
@@ -506,37 +556,7 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 if (pagina.docs.length < PAGINA_CONVERSAS) break;
             }
         }
-        const numeros = docsConversas.map((d) => d.id);
-        const contatos = new Map();
-        // getAll em fatias: uma chamada com 2000 refs é pedir recusa do RPC.
-        for (let i = 0; i < numeros.length; i += 300) {
-            const refs = numeros.slice(i, i + 300).map((n) => db.collection('whatsapp_contatos').doc(n));
-            // eslint-disable-next-line no-await-in-loop
-            (await db.getAll(...refs)).forEach((c) => { if (c.exists) contatos.set(c.id, c.data()); });
-        }
-        const conversas = docsConversas.map((d) => {
-            const x = d.data();
-            const c = contatos.get(d.id) || {};
-            return {
-                numero: d.id,
-                nome: c.nomeExibicao || c.nomePerfil || null,
-                empresaId: c.empresaId || null,   // null = pendência "vincular ao cliente"
-                empresaNome: c.empresaNome || null,
-                origemContato: c.origem || null,
-                fila: x.fila || null,             // null = Recepção
-                protocolo: x.protocolo || null,
-                atribuidoA: x.atribuidoA || null,
-                transferidaDe: x.transferidaDe || null,   // selo "↪ veio de X" até alguém assumir
-                canalId: x.canalId || null,               // por qual número do escritório entrou
-                canal: x.canal || 'whatsapp',             // 'instagram' = DM (selo 📷 na tela)
-                situacao: x.status || 'aberta',
-                janela24hAte: x.janela24hAte || null,
-                permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
-                ultimaMensagem: x.ultimaMensagem || null,
-                naoLidas: x.naoLidas || 0,
-                atualizadoEm: x.atualizadoEm || null,
-            };
-        });
+        const conversas = await montarResumosDeConversas(db, docsConversas);
         // 🚨 ORDENA PELO QUE MOSTRA (24/08, Paulo: "as conversas estão fora de
         // ordem"). A leitura ordenava por `atualizadoEm` — qualquer atividade,
         // inclusive as que NÃO viram linha na conversa (assumir, vincular
@@ -563,6 +583,119 @@ router.get('/conversas', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[whatsapp/conversas]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══ 🔎 PROCURAR NO BANCO INTEIRO ═══════════════════════════════════════════
+// Paulo, 25/08: "diminuiria este teto para ganhar agilidade… ficando disponível
+// no campo de busca quando o colaborador preferir".
+//
+// 🚨 É A OUTRA METADE DO TETO MENOR. A busca da tela filtra o que está
+// CARREGADO; com 300 na lista, procurar conversa de dois meses atrás no campo
+// não acharia nada — e "não achei" se lê como "não existe". Esta rota vai ao
+// banco.
+//
+// O QUE ELA PROCURA, e a diferença importa:
+//  · NÚMERO — por PREFIXO do id do documento (o id da conversa É o número).
+//    Exato e completo: não depende de o contato estar cadastrado.
+//  · NOME — varredura PROJETADA de `whatsapp_contatos` (só os dois campos de
+//    nome), casando por PEDAÇO e sem acento/caixa. Prefixo do Firestore não
+//    serviria: ele é sensível à caixa, então "bru" nunca acharia "Brunna" —
+//    busca que falha em silêncio é pior que busca que não existe.
+//
+// ⚠️ O QUE ELA **NÃO** PROCURA, e a tela DIZ: o TEXTO das mensagens. Procurar
+// dentro de ~centenas de milhares de mensagens exige índice de busca que este
+// projeto não tem, e fingir que procurou faria alguém concluir que a frase não
+// existe na carteira. Isso continua valendo só para a conversa carregada.
+//
+// A visibilidade é a MESMA da listagem (filas + condução + Instagram por
+// usuário) — uma busca que devolve conversa de fila alheia seria a porta dos
+// fundos do escopo que subiu ontem.
+const TETO_BUSCA_CONTATOS = 4000;
+const TETO_RESULTADO_BUSCA = 120;
+
+/** Sem acento e em minúsculas — a comparação que uma pessoa espera. */
+function chaveDeBusca(t) {
+    return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+router.get('/conversas/procurar', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const termo = String(req.query.termo || '').trim();
+        if (termo.length < 2) {
+            return res.status(400).json({ ok: false, error: 'Digite ao menos 2 caracteres para procurar no banco.' });
+        }
+        const { filas: minhasFilas } = await perfilAtendimento(db, req.user);
+        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get()
+            .catch(() => ({ data: () => null }));
+        const cfgAtendimento = resolverConfig(cfgDoc.data());
+
+        const digitos = termo.replace(/\D/g, '');
+        const chave = chaveDeBusca(termo);
+        const ids = new Set();
+
+        // 1) NÚMERO — prefixo no id do documento. Vale a partir de 3 dígitos;
+        //    com menos, o prefixo devolveria meia carteira e não é busca.
+        if (digitos.length >= 3) {
+            const porNumero = await db.collection('whatsapp_conversas')
+                .orderBy(admin.firestore.FieldPath.documentId())
+                .startAt(digitos).endAt(`${digitos}\uf8ff`)
+                .limit(TETO_RESULTADO_BUSCA).get();
+            porNumero.docs.forEach((d) => ids.add(d.id));
+        }
+
+        // 2) NOME — varredura projetada dos contatos (dois campos), casando
+        //    por pedaço. `.select()` é o que a torna barata: sem ele viriam os
+        //    documentos inteiros de milhares de contatos.
+        let contatosVarridos = 0;
+        let contatosTruncados = false;
+        if (chave.length >= 2) {
+            const snap = await db.collection('whatsapp_contatos')
+                .select('nomePerfil', 'nomeExibicao').limit(TETO_BUSCA_CONTATOS).get();
+            contatosVarridos = snap.size;
+            contatosTruncados = snap.size >= TETO_BUSCA_CONTATOS;
+            snap.docs.forEach((d) => {
+                if (ids.size >= TETO_RESULTADO_BUSCA * 3) return;
+                const x = d.data();
+                const alvo = `${chaveDeBusca(x.nomeExibicao)} ${chaveDeBusca(x.nomePerfil)}`;
+                if (alvo.includes(chave)) ids.add(d.id);
+            });
+        }
+
+        // 3) As conversas desses números (contato SEM conversa não vira linha:
+        //    a lista é de CONVERSAS, e abrir uma que não existe é beco).
+        const alvos = [...ids].slice(0, TETO_RESULTADO_BUSCA * 3);
+        const docs = [];
+        for (let i = 0; i < alvos.length; i += 300) {
+            const refs = alvos.slice(i, i + 300).map((n) => db.collection('whatsapp_conversas').doc(n));
+            // eslint-disable-next-line no-await-in-loop
+            (await db.getAll(...refs)).forEach((d) => { if (d.exists) docs.push(d); });
+        }
+        const resumos = await montarResumosDeConversas(db, docs);
+        const quandoExibido = (cv) => Date.parse(cv.ultimaMensagem?.em || cv.atualizadoEm || '') || 0;
+        const visiveis = resumos
+            .filter((cv) => (conversaVisivel(minhasFilas, cv.fila)
+                || (req.user?.email && cv.atribuidoA === req.user.email))
+                && (cv.canal !== 'instagram' || podeAtenderInstagram(cfgAtendimento, req.user?.email)))
+            .sort((a, b) => quandoExibido(b) - quandoExibido(a));
+
+        return res.json({
+            ok: true,
+            termo,
+            conversas: visiveis.slice(0, TETO_RESULTADO_BUSCA),
+            // Recorte DITO, sempre: "12 de 40" é resposta; "12" é armadilha.
+            total: visiveis.length,
+            truncado: visiveis.length > TETO_RESULTADO_BUSCA,
+            // ⚠️ Nomeado, nunca escondido: com a carteira acima do teto, um
+            // nome pode ficar de fora e a pessoa precisa saber disso para
+            // procurar pelo número, que é completo.
+            contatosVarridos,
+            contatosTruncados,
+        });
+    } catch (e) {
+        console.error('[whatsapp/conversas/procurar]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
