@@ -13,6 +13,9 @@ import {
 import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 import { requireAdmin } from './require-admin.js';
 import { competenciaParaGerarArquivo } from './competencia.js';
+// O nome carrega a HORA da geração — sem ela, "confira se é o arquivo novo"
+// é um pedido que ninguém tem como cumprir (PWR, 25/08).
+import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
 
 const router = express.Router();
 
@@ -104,10 +107,20 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
 
-        // Nome do arquivo: SPED_CONTRIB_<cnpj>_<periodo>.txt
+        // 🚨 O NOME DIZ QUAL GERAÇÃO É (PWR, 25/08 — quatro dias conferindo o
+        // arquivo errado porque todas as gerações tinham o mesmo nome).
+        // SPED_CONTRIB_<cnpj>_<periodo>_<AAAAMMDD-HHMM>.txt
         const cnpj = (dados.empresa.cnpj || '').replace(/\D/g, '');
         const periodo = competencia.replace('-', '');
-        const filename = `SPED_CONTRIB_${cnpj}_${periodo}.txt`;
+        const filename = nomeDoArquivoSped({ familia: 'SPED_CONTRIB', cnpj, periodo });
+
+        // 🚨 E A TELA PASSA A DIZER QUAL ARQUIVO ELA ESTÁ DESCREVENDO. O número
+        // certo já saía no aviso desde 24/08 e o dia seguinte começou igual: o
+        // PVA guarda a escrituração IMPORTADA na base dele, então enquanto
+        // ninguém apagar e reimportar a tela mostra a importação anterior.
+        for (const a of avisoDeIdentidadeDoArquivo({
+            filename, linhas: linhasDoArquivo, registros: ['M210', 'M610'],
+        })) dados.warnings.push(a);
 
         res.setHeader('Content-Type', 'text/plain; charset=windows-1252');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
