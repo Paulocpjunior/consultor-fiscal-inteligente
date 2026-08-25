@@ -36,7 +36,7 @@ import {
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
-    lerCallingDasSettings, conferirCallHours,
+    lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -2873,10 +2873,15 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
                 mensagens: cfgAt.horario,
                 conferencia: conferirCallHours(calling, cfgAt.horario),
                 calling,
+                // 🚨 Os INTERRUPTORES, que o painel não lia (25/08):
+                // `calling.status` e `sip.status`. Servidor GRAVADO não é
+                // tronco LIGADO — e era isso que fazia a tela dizer
+                // "✅ tronco gravado" com a ligação sendo recusada.
+                interruptores: lerEstadoDaChamada(calling),
             };
         } catch (e) {
             // Falha na leitura NÃO derruba a sonda — mas é dita, nunca "igual".
-            horarios = { mensagens: null, conferencia: { situacao: 'horario-ilegivel', motivo: `Não consegui ler o horário das mensagens: ${e.message}` }, calling: null };
+            horarios = { mensagens: null, conferencia: { situacao: 'horario-ilegivel', motivo: `Não consegui ler o horário das mensagens: ${e.message}` }, calling: null, interruptores: null };
         }
 
         return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });

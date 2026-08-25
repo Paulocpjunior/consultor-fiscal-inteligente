@@ -293,6 +293,78 @@ export function conferirCallHours(callingGravado, horario) {
     };
 }
 
+/**
+ * 🚨 O QUE A META TEM LIGADO — os interruptores que o painel NÃO lia.
+ *
+ * Estado em 25/08: SBC provado de pé (TLS, certificado público, SIP 200 OK),
+ * ícone visível, horário conferido, tronco "gravado" — e a ligação recusada
+ * DENTRO da janela, às 09:15, com "SP Assessoria não pode receber ligações do
+ * WhatsApp".
+ *
+ * O painel afirmava "✅ Tronco gravado na Meta" olhando SÓ para
+ * `sip.servers[]` existir. Mas guardar o endereço do servidor NÃO é o SIP
+ * estar LIGADO: `calling.status` e `sip.status` são interruptores próprios, e
+ * nenhum dos dois aparecia na tela. A escrita manda `status: 'ENABLED'` e
+ * ninguém RE-LIA se a Meta guardou ligado — é status passando por resultado
+ * dentro do nosso próprio painel de diagnóstico, que é a primeira regra
+ * permanente deste projeto invertida mais uma vez.
+ *
+ * ⚠️ AUSENTE NÃO É LIGADO. Campo que a Meta não declara vira
+ * 'nao-declarado', nunca ENABLED por otimismo: foi assumir o que não foi
+ * medido que fez este painel ficar verde enquanto o cliente ouvia "não pode
+ * receber ligações".
+ */
+export function lerEstadoDaChamada(calling) {
+    const c = calling && typeof calling === 'object' ? calling : null;
+    const ler = (v) => (v === undefined || v === null || v === '' ? 'nao-declarado' : String(v).toUpperCase());
+    const estado = {
+        chamada: ler(c?.status),
+        sip: ler(c?.sip?.status),
+        icone: ler(c?.call_icon_visibility),
+        horarios: ler(c?.call_hours?.status),
+        servidores: Array.isArray(c?.sip?.servers) ? c.sip.servers.length : 0,
+    };
+    const impedimentos = [];
+    if (!c) {
+        impedimentos.push({
+            campo: 'calling', motivo: 'A Meta não devolveu bloco de chamada nenhum para este número.',
+            acao: 'Rode a sonda de novo; se persistir, o número pode não ter a chamada habilitada na conta.',
+        });
+    } else {
+        if (estado.chamada !== 'ENABLED') {
+            impedimentos.push({
+                campo: 'calling.status',
+                motivo: `A CHAMADA do número está "${estado.chamada}" na Meta — enquanto isso, toda ligação é recusada com "não pode receber ligações do WhatsApp".`,
+                acao: 'Habilite a chamada no WhatsApp Manager (Números → o número → Ligações).',
+            });
+        }
+        // Servidor gravado com o SIP desligado é exatamente o caso que faz o
+        // painel parecer pronto: o endereço está lá e ninguém atende por ele.
+        if (estado.servidores > 0 && estado.sip !== 'ENABLED') {
+            impedimentos.push({
+                campo: 'sip.status',
+                motivo: `O servidor SIP está gravado, mas o SIP está "${estado.sip}" — endereço guardado NÃO é tronco ligado.`,
+                acao: 'Clique em 📞 Cadastrar tronco SIP de novo: a escrita manda status ENABLED junto.',
+            });
+        }
+        if (estado.servidores === 0) {
+            impedimentos.push({
+                campo: 'sip.servers',
+                motivo: 'Nenhum servidor SIP gravado — a ligação não tem para onde ir.',
+                acao: 'Cadastre o tronco (hostname + porta) na aba ☎️.',
+            });
+        }
+        if (estado.icone === 'DISABLE_ALL') {
+            impedimentos.push({
+                campo: 'call_icon_visibility',
+                motivo: 'O botão ☎️ está OCULTO para os clientes.',
+                acao: 'Mostre o botão na aba ☎️ (mas só depois de haver quem atenda).',
+            });
+        }
+    }
+    return { estado, impedimentos, ok: impedimentos.length === 0 };
+}
+
 // ============================================================================
 // EVENTOS DE CHAMADA NO WEBHOOK (Paulo, 23/08 — "pode seguir"): a ligação
 // recebida/perdida vira LINHA NA CONVERSA do Connect, senão o cliente liga e

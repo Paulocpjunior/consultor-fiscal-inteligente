@@ -2596,9 +2596,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">📞 Destino da chamada (tronco SIP → HitPhone)</p>
                                             {(() => {
                                                 const servidores = (sonda.horarios?.calling as { sip?: { servers?: { hostname?: string; port?: number }[] } } | null)?.sip?.servers;
+                                                const sipLigado = sonda.horarios?.interruptores?.estado.sip === 'ENABLED';
                                                 return Array.isArray(servidores) && servidores.length > 0 ? (
-                                                    <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
-                                                        ✅ Tronco gravado na Meta: {servidores.map((s) => `${s.hostname}:${s.port}`).join(' · ')}
+                                                    // 🚨 O verde AFIRMAVA "tronco gravado" só porque o
+                                                    // endereço existia — e endereço guardado NÃO é tronco
+                                                    // LIGADO. Foi essa frase que ficou verde enquanto o
+                                                    // cliente ouvia "não pode receber ligações".
+                                                    <p className={`text-[10.5px] ${sipLigado
+                                                        ? 'text-emerald-700 dark:text-emerald-300'
+                                                        : 'text-amber-700 dark:text-amber-300'}`}>
+                                                        {sipLigado ? '✅ Tronco LIGADO na Meta: ' : '⚠️ Servidor gravado, mas o SIP NÃO está ligado: '}
+                                                        {servidores.map((s) => `${s.hostname}:${s.port}`).join(' · ')}
+                                                        {!sipLigado && ` (sip.status = ${sonda.horarios?.interruptores?.estado.sip || 'não declarado'})`}
                                                     </p>
                                                 ) : (
                                                     <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
@@ -2624,6 +2633,52 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {/* 🚦 OS INTERRUPTORES (25/08) — o que a Meta tem LIGADO.
+                                            O painel mostrava ícone, horário e servidores, e nunca
+                                            leu `calling.status` nem `sip.status`. A escrita manda
+                                            `status: ENABLED` e ninguém RE-LIA se ela guardou ligado:
+                                            status passando por resultado dentro do nosso próprio
+                                            painel de diagnóstico. Foi por isso que tudo ficou verde
+                                            com a ligação recusada às 09:15, DENTRO da janela. */}
+                                        {sonda.horarios?.interruptores && (
+                                            <div className={`rounded-lg px-3 py-2 space-y-1 ${sonda.horarios.interruptores.ok
+                                                ? 'bg-emerald-50 dark:bg-emerald-900/30'
+                                                : 'bg-red-50 dark:bg-red-900/30'}`}>
+                                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                                    🚦 O que a Meta tem LIGADO
+                                                </p>
+                                                <ul className="text-[10.5px] text-slate-700 dark:text-slate-200 space-y-0.5">
+                                                    {([
+                                                        ['Chamada do número', sonda.horarios.interruptores.estado.chamada, 'calling.status'],
+                                                        ['SIP (o tronco)', sonda.horarios.interruptores.estado.sip, 'sip.status'],
+                                                        ['Botão ☎️ do cliente', sonda.horarios.interruptores.estado.icone, 'call_icon_visibility'],
+                                                        ['Horários da chamada', sonda.horarios.interruptores.estado.horarios, 'call_hours.status'],
+                                                    ] as const).map(([rot, valor, campo]) => (
+                                                        <li key={campo}>
+                                                            {valor === 'ENABLED' || valor === 'DEFAULT' ? '✓' : '⚠'} {rot}:{' '}
+                                                            <strong>{valor}</strong>{' '}
+                                                            <span className="text-slate-400">({campo})</span>
+                                                        </li>
+                                                    ))}
+                                                    <li>· servidores SIP gravados: <strong>{sonda.horarios.interruptores.estado.servidores}</strong></li>
+                                                </ul>
+                                                {/* ⚠️ "não-declarado" NUNCA é lido como ligado: assumir o
+                                                    que não foi medido é o que produziu o verde falso. */}
+                                                {sonda.horarios.interruptores.impedimentos.map((im) => (
+                                                    <div key={im.campo} className="text-[10.5px] text-red-800 dark:text-red-200">
+                                                        <p className="font-bold">⛔ {im.motivo}</p>
+                                                        <p>{im.acao}</p>
+                                                    </div>
+                                                ))}
+                                                {sonda.horarios.interruptores.ok && (
+                                                    <p className="text-[10.5px] text-emerald-800 dark:text-emerald-200">
+                                                        Os quatro estão como devem. Se a ligação ainda for recusada, a causa não
+                                                        está em nenhum interruptor daqui.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* 🔌 A META CONSEGUE FALAR COM O NOSSO SBC?
                                             🚨 A sonda de cima é toda verde e a ligação é recusada na ORIGEM —
