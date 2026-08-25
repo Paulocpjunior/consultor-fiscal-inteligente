@@ -52,7 +52,7 @@ import {
 } from '../../services/spConnect';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
-import { conferirEscalaNaMensagem, coberturaDasFilas } from '../../sefaz-backend/whatsapp-atendimento.js';
+import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
 import { interpretarConversaTxt } from '../../sefaz-backend/whatsapp-import-ultrafox.js';
@@ -2424,6 +2424,29 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {sonda.horarios.conferencia.motivo}
                                                 </p>
                                             )}
+                                            {/* 🚨 AGORA ESTAMOS DENTRO DA JANELA? (24/08)
+                                                Testamos a ligação às 19:51 — FORA de 08:00–12:00 e 13:00–17:30 —
+                                                e o painel não disse uma palavra. Fora da grade a Meta recusa a
+                                                chamada com a MESMA frase que se lê como defeito ("SP Assessoria
+                                                não pode receber ligações do WhatsApp"), então o teste fora da
+                                                hora responde sobre o HORÁRIO e parece resposta sobre o TRONCO.
+                                                O painel tem a grade e tem o relógio: calar aqui é deixar quem
+                                                testa concluir a causa errada. */}
+                                            {sonda.horarios?.mensagens && (() => {
+                                                const agora = new Date();
+                                                const dentro = dentroDoHorario(sonda.horarios.mensagens, agora);
+                                                const hora = agora.toLocaleTimeString('pt-BR',
+                                                    { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+                                                return (
+                                                    <p className={`text-[10.5px] font-semibold rounded px-2 py-1 ${dentro
+                                                        ? 'text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30'
+                                                        : 'text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30'}`}>
+                                                        {dentro
+                                                            ? `✅ Agora (${hora}) está DENTRO da janela — um teste de ligação vale como teste.`
+                                                            : `⛔ Agora (${hora}) está FORA da janela. Um teste de ligação AGORA é recusado pela Meta com "não pode receber ligações do WhatsApp" — e essa recusa é do HORÁRIO, não do tronco. Teste dentro da grade acima.`}
+                                                    </p>
+                                                );
+                                            })()}
                                             <button
                                                 onClick={() => aplicarChamada({ acao: 'horarios' },
                                                     'Aplicar à CHAMADA os mesmos horários das mensagens?\n\nFora desses horários o botão ☎️ do cliente fica indisponível. Se um dia o horário das mensagens mudar, é preciso voltar aqui e reaplicar — a Meta não acompanha sozinha.')}
