@@ -3745,7 +3745,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden md:grid md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px]" style={{ height: 'calc(100vh - 140px)', minHeight: '480px' }}>
 
                 {/* ═══ COLUNA 1 — CONVERSAS ═══════════════════════════════════ */}
-                <div className={`${sel ? 'hidden md:flex' : 'flex'} flex-col md:border-r border-slate-200 dark:border-slate-700 min-h-0`}>
+                {/* 🐛 NO CELULAR A LISTA MOSTRAVA 4 CONVERSAS (25/08, print do
+                    Paulo: "no app no celular... não carrega"). E ela carregava:
+                    o defeito é de ESPAÇO. A coluna tem altura fixa
+                    (`100vh - 140px`) e a rolagem era só da lista, DENTRO dela —
+                    enquanto o cabeçalho (busca + barra de avisos + o aviso do
+                    teto + 9 chips de fila) ocupava quase metade da caixa numa
+                    tela de celular. Sobravam ~260px para as linhas, ou seja
+                    quatro. Quem rolava a PÁGINA batia no rodapé e concluía,
+                    com toda a razão, que a lista tinha acabado.
+                    ✂️ No celular quem rola é a COLUNA INTEIRA: o cabeçalho sai
+                    de cena junto e a tela vira lista, como em qualquer app de
+                    mensagem. No md+ nada muda — lá o cabeçalho fica fixo e a
+                    lista rola por dentro, que é o certo com espaço sobrando. */}
+                <div className={`${sel ? 'hidden md:flex' : 'flex'} flex-col md:border-r border-slate-200 dark:border-slate-700 min-h-0 overflow-y-auto md:overflow-hidden`}>
                     <div className="p-2.5 space-y-2 border-b border-slate-200 dark:border-slate-700">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide shrink-0">Conversas</p>
@@ -3896,7 +3909,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto min-h-0">
+                    {/* Sem `flex-1` no celular: aqui a lista tem a altura do
+                        conteúdo e quem rola é a coluna. Com ele, o flex
+                        comprimiria a lista de volta ao tamanho da caixa e o
+                        defeito voltaria inteiro. */}
+                    <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
                         {visiveis.length === 0 && !carregando ? (
                             <div className="p-4 text-[11px] text-slate-500 dark:text-slate-400 space-y-1.5">
                                 {conversas.length === 0 ? (

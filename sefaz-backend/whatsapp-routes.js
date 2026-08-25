@@ -542,7 +542,10 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 const v = d.data().atualizadoEm;
                 return v?.toMillis ? v.toMillis() : (Date.parse(v) || 0);
             };
-            docsConversas = snap.docs.sort((a, b) => quando(b) - quando(a));
+            // Mesmo corte do outro galho, e pela mesma razão: as DUAS consultas
+            // são limitadas ao teto CADA UMA, então a união pode chegar ao
+            // dobro — e o aviso da tela continuaria anunciando o teto.
+            docsConversas = snap.docs.sort((a, b) => quando(b) - quando(a)).slice(0, TETO_LEITURA_CONVERSAS);
         } else {
             let cursorConv = null;
             while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
@@ -552,7 +555,15 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 // eslint-disable-next-line no-await-in-loop
                 const pagina = await q.get();
                 if (pagina.empty) break;
-                docsConversas = docsConversas.concat(pagina.docs);
+                // 🐛 O TETO NÃO CORTAVA NADA (25/08, print do Paulo: chip
+                // "Todas · 500" com o aviso dizendo "mostrando as 300 mais
+                // recentes"). A página do banco é 500 e o teto é 300: a
+                // primeira leitura já trazia 500, o laço saía satisfeito e a
+                // rota devolvia as 500 — anunciando 300. Duas leituras do
+                // mesmo fato na mesma tela, e o defeito é MEU, de quando
+                // baixei o teto sem olhar o tamanho da página.
+                // ✂️ O corte é aqui: o que sai é o que o aviso promete.
+                docsConversas = docsConversas.concat(pagina.docs).slice(0, TETO_LEITURA_CONVERSAS);
                 cursorConv = pagina.docs[pagina.docs.length - 1];
                 if (pagina.docs.length < PAGINA_CONVERSAS) break;
             }
