@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
+    procurarConversas,
     importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
@@ -77,6 +78,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
+    // 🔎 Resultado da busca NO BANCO — estado próprio, nunca misturado com
+    // `conversas`: a lista se renova a cada 30s e apagaria o que a pessoa
+    // acabou de achar. `null` = mostrando a lista normal.
+    const [achados, setAchados] = useState<{
+        termo: string; conversas: ConversaResumo[]; total: number; truncado: boolean;
+        contatosTruncados: boolean;
+    } | null>(null);
+    const [procurando, setProcurando] = useState(false);
+    const [erroBusca, setErroBusca] = useState<string | null>(null);
     // 🔍 Busca DENTRO da conversa aberta (pendência 🟡 do de-para — a busca
     // só alcançava a lista). Limpa ao trocar de conversa, senão a próxima
     // abriria filtrada por um termo de outra thread.
@@ -1407,10 +1417,29 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         document.title = tituloComContador(naoLidasTotalAviso, 'SP Connect — Atendimento WhatsApp');
     }, [naoLidasTotalAviso]);
 
+    const procurarNoBanco = useCallback(async () => {
+        const termo = busca.trim();
+        if (termo.length < 2 || procurando) return;
+        setProcurando(true); setErroBusca(null);
+        try {
+            const r = await procurarConversas(termo);
+            if (!r.ok) { setErroBusca(r.error || 'Falha ao procurar.'); return; }
+            setAchados({
+                termo: r.termo, conversas: r.conversas || [], total: r.total || 0,
+                truncado: Boolean(r.truncado), contatosTruncados: Boolean(r.contatosTruncados),
+            });
+        } finally { setProcurando(false); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [busca, procurando]);
+
     const agora = new Date();
     const janela = sel ? estadoJanela(sel.janela24hAte, agora) : null;
     const conduzidaPorOutro = Boolean(sel?.atribuidoA && sel.atribuidoA !== meuEmail);
-    const visiveis = filtrarConversas(conversas, { busca, aba });
+    // 🔎 Com resultado do banco na mão, a lista MOSTRA O RESULTADO — e o filtro
+    // de aba não se aplica: a pessoa pediu "procure no banco", não "procure no
+    // banco dentro da aba Fiscal". Filtrar de novo aqui faria a conversa
+    // achada SUMIR depois de encontrada, que é o pior desfecho de uma busca.
+    const visiveis = achados ? achados.conversas : filtrarConversas(conversas, { busca, aba });
     const naoLidasTotal = conversas.reduce((s, c) => s + (c.naoLidas || 0), 0);
     // O que falta nos avisos sai do NÚCLEO (três camadas numa pergunta só).
     const avisoDoTopo = faltaNosAvisos({
@@ -3550,10 +3579,49 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         </div>
                         <input
                             value={busca}
-                            onChange={(e) => setBusca(e.target.value)}
+                            onChange={(e) => { setBusca(e.target.value); if (achados) setAchados(null); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') procurarNoBanco(); }}
                             placeholder="🔎 Nome, número ou mensagem…"
                             className="w-full px-2.5 py-1.5 text-[12px] rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
                         />
+                        {/* 🔎 A OUTRA METADE DO TETO MENOR (Paulo, 25/08).
+                            A lista carrega 300 para a página abrir rápido; a busca
+                            do campo filtra só o que está carregado. Sem esta porta,
+                            procurar conversa de dois meses atrás não acharia nada —
+                            e "não achei" se lê como "não existe". */}
+                        {busca.trim().length >= 2 && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                    onClick={procurarNoBanco}
+                                    disabled={procurando}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-50 btn-press whitespace-nowrap">
+                                    {procurando ? 'Procurando…' : '🔎 Procurar no banco inteiro'}
+                                </button>
+                                {achados && (
+                                    <button onClick={() => setAchados(null)}
+                                        className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 whitespace-nowrap">
+                                        ✕ voltar à lista
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {achados && (
+                            <div className="rounded-lg bg-slate-100 dark:bg-slate-700/50 px-2.5 py-1.5 text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
+                                {/* Recorte DITO, sempre: "12 de 40" é resposta, "12" é armadilha. */}
+                                🔎 Busca no banco por <strong>"{achados.termo}"</strong>:{' '}
+                                {achados.total === 0 ? 'nenhuma conversa encontrada' : (
+                                    <>{achados.truncado ? `mostrando ${achados.conversas.length} de ${achados.total}` : `${achados.total} conversa(s)`}</>
+                                )}.
+                                {/* ⚠️ Dizer o que ela NÃO faz é parte da resposta: fingir
+                                    que procurou no texto faria concluir que a frase não
+                                    existe na carteira. */}
+                                <span className="block text-slate-500 dark:text-slate-400">
+                                    Procura por <strong>número</strong> e <strong>nome</strong> — não procura dentro do
+                                    texto das mensagens.
+                                    {achados.contatosTruncados && ' A carteira de contatos passou do teto da varredura: se o nome não apareceu, procure pelo número, que é completo.'}
+                                </span>
+                            </div>
+                        )}
                         {/* 🔔 Avisos: quem decide o que falta é o núcleo
                             `faltaNosAvisos` — as TRÊS camadas numa pergunta só.
                             🚨 Antes a barra olhava permissão e som; com os dois
@@ -3592,11 +3660,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         )}
                         {/* Lista cortada SEMPRE diz (farol honesto): sem isto, "Todas · 2000"
                             seria lido como a carteira inteira. */}
-                        {limiteConversas != null && (
+                        {/* ⚠️ A frase MUDOU com o teto (25/08): ela dizia "a busca acha só
+                            o que está na lista", e isso deixou de ser verdade — dizer que
+                            não dá, quando dá, faz a pessoa não procurar. Agora ela aponta
+                            a porta, que é o que o teto menor exige em troca. */}
+                        {limiteConversas != null && !achados && (
                             <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                                ⚠️ Mostrando as {limiteConversas} conversas mais recentes — há mais no banco.
-                                A busca acha só o que está na lista.
+                                ⚠️ Mostrando as {limiteConversas} conversas mais recentes — a página abre rápido assim.
+                                Para as outras, digite no campo acima e use <strong>🔎 Procurar no banco inteiro</strong>.
                             </p>
+                        )}
+                        {erroBusca && (
+                            <p className="text-[10px] text-red-700 dark:text-red-400">⛔ {erroBusca}</p>
                         )}
                         <div className="flex gap-1.5 flex-wrap">
                             {chip('todas', `Todas · ${conversas.length}`)}

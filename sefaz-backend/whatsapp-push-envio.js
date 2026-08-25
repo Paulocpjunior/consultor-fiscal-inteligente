@@ -81,7 +81,9 @@ export async function notificarMensagem({ msg, conversa = {}, config = null, can
         // 🔔 Aviso NATIVO do Teams (Paulo, 23/08) — MESMA audiência do push
         // (destinatariosDoAvisoTeams reusa a régua), outra porta. Best-effort
         // e ANTES do early-return do FCM: quem não registrou celular ainda
-        // pode ter o Teams aberto. Nasce desligado (avisoTeamsAtivo).
+        // pode ter o Teams aberto. Nasce LIGADO (avisoTeamsAtivo: true) —
+        // regra do Paulo (23/08): "OS ALERTAS NASCEM LIGADOS SEMPRE". O
+        // "nasce desligado" vale só pro que fala com o CLIENTE.
         if (config?.avisoTeamsAtivo) {
             const teams = destinatariosDoAvisoTeams({ usuarios, conversa, config, agora: new Date(), autorDaMensagem: null });
             for (const alvo of teams.alvos) {
