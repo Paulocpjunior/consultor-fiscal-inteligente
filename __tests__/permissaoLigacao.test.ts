@@ -226,10 +226,35 @@ describe('📞 ligar para o cliente', () => {
     it('a tela NÃO oferece ligar por API — ela diz que a saída é pelo ramal', () => {
         expect(tela).not.toMatch(/📞 Ligar para o cliente \(atende no ramal 221\)/);
         expect(tela).toMatch(/A ligação de saída sai pelo <strong>tronco SIP<\/strong>/);
-        // E não promete o que ainda não anda: a saída depende do endereço da
-        // Meta, que só a primeira ligação RECEBIDA ensina.
-        expect(tela).toMatch(/Em validação: falta a primeira ligação RECEBIDA/);
         expect(tela).toMatch(/permissaoLigacao\?\.status === 'aceita' \?/);
+    });
+
+    // 🚨 TRAVA LITERAL TROCADA PELA INTENÇÃO (25/08, 2ª vez neste mesmo bloco).
+    // Ela prendia a frase "Em validação: falta a primeira ligação RECEBIDA" —
+    // e essa frase virou o defeito: com o gravador do SBC provado ligado, a
+    // chamada das 14h52 (dentro da janela) não produziu CDR nem INVITE em três
+    // conferências seguidas, ou seja a Meta ACEITA e NÃO ENTREGA no tronco.
+    // Mandar esperar a primeira ligação era mandar esperar o que não acontece
+    // sozinho. O que a trava garante agora é o COMPORTAMENTO: a linha diz o
+    // estado MEDIDO e não devolve espera ao colaborador.
+    it('o estado da ligação é o MEDIDO, e não manda esperar ligação que não chega', () => {
+        expect(tela).not.toMatch(/Em validação: falta a primeira ligação RECEBIDA/);
+        expect(tela).toMatch(/Ligação ainda NÃO funciona nos dois sentidos/);
+        expect(tela).toMatch(/não entrega no nosso tronco/);
+        // Estado sem saída é beco: a linha diz o que dá pra fazer HOJE.
+        expect(tela).toMatch(/Fale por mensagem enquanto isso/);
+    });
+
+    // 🚨 CÓDIGO MORTO COM CARA DE ENTREGA: a ação de ligar e a porta de fetch
+    // ficaram órfãs quando o botão saiu (24/08). Órfã é a isca para alguém
+    // religar um caminho que a Meta recusa POR DESENHO — as duas foram
+    // deletadas em 25/08. Se voltarem, é junto do botão, e o botão só existe
+    // quando o número sair do modo SIP.
+    it('não sobra ação nem porta de fetch órfã de ligar por API', () => {
+        expect(tela).not.toMatch(/const acaoLigar/);
+        expect(tela).not.toMatch(/ligarParaCliente/);
+        const servico = fs.readFileSync(path.join(process.cwd(), 'services/spConnectService.ts'), 'utf8');
+        expect(servico).not.toMatch(/export const ligarParaCliente/);
     });
 
     it('131055 é traduzido com a arquitetura, não com "tente de novo"', () => {
