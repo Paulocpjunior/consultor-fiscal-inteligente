@@ -76,8 +76,12 @@ TLS/SRTP ⇄ UDP/RTP apontada para `177.107.205.201:21694`.
    mensagens) e **👁 mostrar o botão** ☎️ — só nesta ordem: destino primeiro,
    botão depois (chamada sem quem atende é pior que chamada nenhuma).
 3. **Chamada de teste**: um celular liga pelo ☎️ do WhatsApp → deve tocar no
-   HitPhone (ramal/rota do destino). A linha "☎️ Ligação de WhatsApp…" aparece
-   na conversa do Connect (webhook `calls`, no ar desde o deploy 736).
+   HitPhone (ramal/rota do destino).
+   🐛 **Este passo prometia demais até 25/08**: dizia que *"a linha ☎️ Ligação
+   de WhatsApp aparece na conversa (webhook `calls`)"*. **Em modo SIP a Meta
+   NÃO manda evento de chamada no webhook** — só o `call_permission_reply`.
+   A prova do teste é o telefone TOCAR e o `Master.csv` do SBC ganhar a linha;
+   o registro na conversa virá do CDR, e ainda é construção.
 4. Se não tocar: `gcloud compute ssh sbc-whatsapp --zone=us-west1-a` →
    `sudo asterisk -rvvv` e ligar de novo — o log diz em qual perna parou
    (TLS da Meta, SRTP, ou o UDP da HIT). O erro real é a régua.
@@ -197,16 +201,13 @@ documento que ele era *"a MESMA URA de quem liga no fixo"*. **É falso**, e o
 Paulo corrigiu em seguida: *"O ramal 211 é telefonista ou seja 1 opção quando
 recebemos ligação"*. O 211 é **uma opção DENTRO** da URA, não a URA.
 
-✅ **E mesmo assim o 211 continua sendo o destino certo — por OUTRA razão**, que
-é o achado deste desenho: **a chamada de WhatsApp pode não carregar teclado.**
-DTMF (RFC 2833) no modo SIP da Meta **não está provado neste projeto**, e uma
-URA de menu numérico sem teclado é um beco: o cliente ouve as opções e não
-consegue escolher. A telefonista é a **URA humana** — ela pergunta com quem
-falar e transfere, que é exatamente o que o menu faria.
+✅ **E o 211 é o destino certo pelo motivo mais simples que existe: é assim que
+a casa atende, por qualquer meio.** A URA daqui **não tem opção de discagem** —
+ela atende e cai na telefonista, que transfere. Vale para quem liga do fixo, do
+celular e do WhatsApp; o cliente escolhe o MEIO, não o caminho interno.
 
-⚠️ Enquanto o DTMF não for medido, mandar a chamada de WhatsApp para o menu da
-URA é apostar num teclado que talvez não exista. Isso se mede na PRIMEIRA
-chamada que chegar (ver a seção do funil).
+📌 **Isso mata a questão do DTMF antes de ela existir**: não há menu para
+digitar em lugar nenhum, então teclado não decide nada aqui (ver o funil).
 
 ⚠️ **E isso NÃO destrava a ligação**: o INVITE da Meta não chega ao tronco
 (medido em 25/08, ver o topo deste documento). O 211 é para onde a chamada vai
@@ -272,53 +273,65 @@ Então o funil da ligação de WhatsApp não pode inventar uma triagem paralela 
 quem liga no fixo e quem liga pelo WhatsApp tem que chegar ao mesmo lugar, ou a
 casa passa a ter duas portas com regras diferentes para o mesmo cliente.
 
-### 🚨 O que decide o funil, e ainda NÃO foi medido: o TECLADO
+### ✅ O FUNIL É UM SÓ, e é o que a casa JÁ FAZ (Paulo, 25/08)
 
-Uma URA de menu numérico só funciona se a chamada carregar **DTMF**. No modo
-SIP da Meta isso **não está provado neste projeto** — e a diferença é a que
-separa um funil que funciona de um beco:
+*"Mesma coisa, só muda o meio que o cliente faz a ligação. Se liga de telefone
+fixo, celular ou WhatsApp é o cliente que escolhe. Quem atender 3337-1554 hoje
+e depois também 3155-1554, ambos a URA atende e o cliente **não tem opção de
+discagem**! Isso nos ajuda, a telefonista ramal 211 atende. E pode transferir
+(encaminhar a msg)."*
 
-- **se houver DTMF** → a chamada de WhatsApp pode cair na URA igual ao fixo, e
-  o cliente escolhe o departamento como sempre;
-- **se não houver** → o cliente ouve o menu e **não consegue escolher**. Aí a
-  telefonista (211) é a **URA humana**: ela pergunta com quem falar e transfere.
+📌 **A URA daqui NÃO é menu numérico** — ela atende e cai na **telefonista**.
+Isso responde a pergunta do teclado antes de ela existir: **não há o que
+digitar em meio nenhum**, então **DTMF não decide nada** neste projeto.
 
-**Por isso o destino de hoje é o 211.** Não é preferência: é o caminho que
-funciona nos DOIS casos. Quando a primeira chamada real chegar, mede-se o DTMF
-(`asterisk -rvvv` mostra os eventos) e, se houver, é uma env para mudar.
-
-### O funil, do mais informado ao menos
-
-A ligação de WhatsApp chega com algo que a ligação de telefone **não tem**: a
-**identidade** do cliente. O SP Connect já sabe, daquele número, se há conversa
-aberta, em qual **fila** ela está e **quem conduz**. Jogar isso fora e mandar
-todo mundo para o mesmo menu é desperdiçar a única vantagem do canal.
+🐛 **E aqui eu tinha errado pela terceira vez na mesma hora.** Escrevi que o
+DTMF era *"o que decide o funil"* e desenhei uma árvore de quatro degraus
+roteando por dono e por fila. Nada disso era da operação: era **dedução minha**
+sobre uma URA de menu que não existe. **Quando o dono descreve como a casa
+atende, a régua vem dele — não da minha dedução.** O desenho certo é o mais
+curto:
 
 ```
-Chamada de WhatsApp chega no SBC
+Cliente liga  ──  fixo · celular · WhatsApp  (quem escolhe o meio é ELE)
         │
-        ├─ 1. Tem conversa com DONO, e ele está no horário?
-        │      → toca no ramal DELE. O cliente não repete o assunto.
-        │
-        ├─ 2. Tem conversa com FILA (sem dono)?
-        │      → toca nos ramais daquela fila (Fiscal, DP, Contábil…)
-        │
-        ├─ 3. Não tem conversa, ou ninguém disponível?
-        │      → 211, a telefonista (a mesma porta de quem liga no fixo)
-        │
-        └─ 4. Fora do horário de atendimento?
-               → recado dizendo o horário, e o cliente volta pela MENSAGEM,
-                 que é onde a casa responde melhor — em vez de tocar no vazio
+        └──────────────►  URA atende  ──►  telefonista (ramal 211)
+                                              │
+                                              └─► transfere para quem resolve
 ```
 
-⚠️ **Os degraus 1 e 2 são construção, não configuração**: o Asterisk precisa
-perguntar ao SP Connect *"de quem é este número?"* antes de discar. É rota nova
-no CFI + um AGI/CURL no dialplan — barato de fazer, e **impossível de provar**
-enquanto a Meta não entregar a primeira chamada.
+⚠️ **E rotear a chamada de WhatsApp por dono/fila seria criar uma SEGUNDA
+regra** para o mesmo cliente — quem liga do celular cairia na telefonista e
+quem liga pelo WhatsApp cairia direto num ramal. Duas portas com regras
+diferentes para a mesma pessoa é a armadilha das duas formas com outra roupa, e
+foi o Paulo que cortou isso: *mesma coisa, só muda o meio*.
 
-⚠️ **E o degrau 1 depende do INVITE trazer o número do cliente** (`From`).
-Provável, não medido. Se não vier, o funil começa no degrau 3 e o resto morre —
-por isso a primeira chamada real vale mais que qualquer plano.
+### 🔁 A telefonista é a Recepção, no outro meio
+
+O paralelo é do próprio Paulo — *"pode transferir (encaminhar a msg)"*. É a
+MESMA operação nos dois canais, e vale ler assim quando alguém for mexer num
+dos lados:
+
+| | Mensagem | Ligação |
+|---|---|---|
+| quem recebe primeiro | fila **Recepção** (vê tudo) | **telefonista**, ramal 211 |
+| o que faz | encaminha para a fila | transfere para o ramal |
+| quem decide | pessoa | pessoa |
+
+### Então para que serve a identidade do WhatsApp?
+
+Não para **rotear** — isso ficou decidido acima. Serve para o **registro e o
+contexto**, que é onde ela não tem substituto:
+
+- a ligação vira **linha na conversa** (de quem, quando, quanto durou, quem
+  atendeu), saindo do **CDR do SBC** — em modo SIP a Meta não manda evento de
+  chamada no webhook, então esse é o único lugar de onde o registro pode vir;
+- e quem atende consegue **abrir a conversa daquele número** enquanto fala, em
+  vez de perguntar de novo o que já está escrito.
+
+⚠️ Isso é **construção**, e nada disso se prova enquanto a Meta não entregar a
+primeira chamada — inclusive porque depende de o INVITE trazer o número do
+cliente (`From`), que é provável e **não medido**.
 
 ### As duas WABAs no mesmo inbox
 
