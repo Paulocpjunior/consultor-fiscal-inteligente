@@ -27,14 +27,15 @@ SBC_HOST="${SBC_HOST:?Defina SBC_HOST (ex.: SBC_HOST=sip.spassessoriacontabil.co
 # tem como cair no atendente correto"). Ele está certo, e este parâmetro é o
 # ponto exato disso: quem liga pelo ☎️ do WhatsApp não escolheu departamento —
 # mandar direto para UM ramal é apostar que a dúvida é sempre daquela pessoa.
-# ✅ DECIDIDO PELO PAULO (25/08): *"Ramal rota ramal 211, central URA"*. O
-# default deixou de ser o 221 — aquele era o alvo do PRIMEIRO TESTE (um ramal
-# que aceita INVITE e prova que a perna funciona), e mandar a ligação de um
-# cliente para o ramal de UMA pessoa é apostar que a dúvida é sempre dela.
-# ⚠️ O 211 é a MESMA URA de quem liga no telefone fixo — uma triagem só. Duas
-# divergem no primeiro dia em que alguém mudar uma e esquecer a outra, que é a
-# armadilha das duas formas com outra roupa.
-SBC_DESTINO="${SBC_DESTINO:-211}"                 # URA do HitPhone (a mesma do telefone fixo)
+# ✅ DESTINO DE HOJE: 211, a TELEFONISTA (Paulo, 25/08: "O ramal 211 é
+# telefonista ou seja 1 opção quando recebemos ligação"). O default deixou de
+# ser o 221, que era o alvo do PRIMEIRO TESTE — o ramal de uma pessoa.
+# ⚠️ O 211 NÃO é a URA: é uma opção DENTRO dela. E é justamente por isso que
+# ele serve: DTMF na chamada SIP da Meta NÃO está provado aqui, e URA de menu
+# numérico sem teclado é beco (o cliente ouve as opções e não escolhe). A
+# telefonista é a URA humana — pergunta com quem falar e transfere.
+# 📌 Isso se revisa quando a primeira chamada real chegar e o DTMF for medido.
+SBC_DESTINO="${SBC_DESTINO:-211}"                 # telefonista do HitPhone (URA humana)
 HIT_HOST="${HIT_HOST:-177.107.205.201}"
 HIT_PORT="${HIT_PORT:-21694}"
 LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"

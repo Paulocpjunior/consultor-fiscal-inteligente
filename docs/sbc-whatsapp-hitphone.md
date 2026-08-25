@@ -189,14 +189,24 @@ ramal é apostar que a dúvida é sempre daquela pessoa.
 Isso já é **um parâmetro**, não código: `SBC_DESTINO`. O `221` era o alvo do
 **primeiro teste** (um ramal que aceita INVITE e prova a perna).
 
-✅ **DECIDIDO EM 25/08 — a URA é o ramal `211`** (Paulo: *"Ramal rota ramal 211,
-central URA"*). É o default do script desde então; quem já instalou com o 221
-roda o script de novo (a reinstalação da config é idempotente) e a chamada
-passa a cair na URA.
+✅ **DESTINO DE HOJE: ramal `211` — a TELEFONISTA.**
 
-⚠️ **É a MESMA URA de quem liga no fixo**, e isso é regra, não coincidência:
-uma triagem só. Duas divergem no primeiro dia em que alguém mudar uma e
-esquecer a outra — a armadilha das duas formas com outra roupa.
+🐛 **E aqui eu escrevi errado por dez minutos**: ao ler *"Ramal rota ramal 211,
+central URA"* eu registrei que **o 211 era a URA**, e escrevi no script e neste
+documento que ele era *"a MESMA URA de quem liga no fixo"*. **É falso**, e o
+Paulo corrigiu em seguida: *"O ramal 211 é telefonista ou seja 1 opção quando
+recebemos ligação"*. O 211 é **uma opção DENTRO** da URA, não a URA.
+
+✅ **E mesmo assim o 211 continua sendo o destino certo — por OUTRA razão**, que
+é o achado deste desenho: **a chamada de WhatsApp pode não carregar teclado.**
+DTMF (RFC 2833) no modo SIP da Meta **não está provado neste projeto**, e uma
+URA de menu numérico sem teclado é um beco: o cliente ouve as opções e não
+consegue escolher. A telefonista é a **URA humana** — ela pergunta com quem
+falar e transfere, que é exatamente o que o menu faria.
+
+⚠️ Enquanto o DTMF não for medido, mandar a chamada de WhatsApp para o menu da
+URA é apostar num teclado que talvez não exista. Isso se mede na PRIMEIRA
+chamada que chegar (ver a seção do funil).
 
 ⚠️ **E isso NÃO destrava a ligação**: o INVITE da Meta não chega ao tronco
 (medido em 25/08, ver o topo deste documento). O 211 é para onde a chamada vai
@@ -243,6 +253,80 @@ chamada inesperada iria ao WhatsApp **em silêncio**.
 🚧 **E nada disso disca antes de `META_SIP_DESTINO`**, que se lê no INVITE da
 primeira ligação RECEBIDA. Ou seja: **a entrada destrava a saída** — não há
 como inverter a ordem.
+
+## 🗺️ A TOPOLOGIA REAL (Paulo, 25/08) — e o funil da ENTRADA
+
+Até aqui eu desenhava com um número e uma URA imaginária. O Paulo descreveu o
+que existe de verdade, e isso muda o desenho:
+
+| O que | Número / ramal | O que faz hoje |
+|---|---|---|
+| **Tronco chave da URA** | **11 3155-1554** | quem liga, **a URA atende** |
+| Segundo número, mesma URA | **11 3337-1554** | também cai na URA (ambos HitPhone) |
+| **Telefonista** | ramal **211** | **UMA opção** dentro da URA |
+| WhatsApp principal (hoje) | **11 3337-1554** | é a WABA do SP Connect |
+| WhatsApp novo | **11 3155-1554** | *"agora só precisamos finalizar as configurações"* |
+
+📌 **O fato que manda**: os **dois** números caem na **mesma URA** por telefone.
+Então o funil da ligação de WhatsApp não pode inventar uma triagem paralela —
+quem liga no fixo e quem liga pelo WhatsApp tem que chegar ao mesmo lugar, ou a
+casa passa a ter duas portas com regras diferentes para o mesmo cliente.
+
+### 🚨 O que decide o funil, e ainda NÃO foi medido: o TECLADO
+
+Uma URA de menu numérico só funciona se a chamada carregar **DTMF**. No modo
+SIP da Meta isso **não está provado neste projeto** — e a diferença é a que
+separa um funil que funciona de um beco:
+
+- **se houver DTMF** → a chamada de WhatsApp pode cair na URA igual ao fixo, e
+  o cliente escolhe o departamento como sempre;
+- **se não houver** → o cliente ouve o menu e **não consegue escolher**. Aí a
+  telefonista (211) é a **URA humana**: ela pergunta com quem falar e transfere.
+
+**Por isso o destino de hoje é o 211.** Não é preferência: é o caminho que
+funciona nos DOIS casos. Quando a primeira chamada real chegar, mede-se o DTMF
+(`asterisk -rvvv` mostra os eventos) e, se houver, é uma env para mudar.
+
+### O funil, do mais informado ao menos
+
+A ligação de WhatsApp chega com algo que a ligação de telefone **não tem**: a
+**identidade** do cliente. O SP Connect já sabe, daquele número, se há conversa
+aberta, em qual **fila** ela está e **quem conduz**. Jogar isso fora e mandar
+todo mundo para o mesmo menu é desperdiçar a única vantagem do canal.
+
+```
+Chamada de WhatsApp chega no SBC
+        │
+        ├─ 1. Tem conversa com DONO, e ele está no horário?
+        │      → toca no ramal DELE. O cliente não repete o assunto.
+        │
+        ├─ 2. Tem conversa com FILA (sem dono)?
+        │      → toca nos ramais daquela fila (Fiscal, DP, Contábil…)
+        │
+        ├─ 3. Não tem conversa, ou ninguém disponível?
+        │      → 211, a telefonista (a mesma porta de quem liga no fixo)
+        │
+        └─ 4. Fora do horário de atendimento?
+               → recado dizendo o horário, e o cliente volta pela MENSAGEM,
+                 que é onde a casa responde melhor — em vez de tocar no vazio
+```
+
+⚠️ **Os degraus 1 e 2 são construção, não configuração**: o Asterisk precisa
+perguntar ao SP Connect *"de quem é este número?"* antes de discar. É rota nova
+no CFI + um AGI/CURL no dialplan — barato de fazer, e **impossível de provar**
+enquanto a Meta não entregar a primeira chamada.
+
+⚠️ **E o degrau 1 depende do INVITE trazer o número do cliente** (`From`).
+Provável, não medido. Se não vier, o funil começa no degrau 3 e o resto morre —
+por isso a primeira chamada real vale mais que qualquer plano.
+
+### As duas WABAs no mesmo inbox
+
+O SP Connect é **apto a dois números desde 16/08** (catálogo de canais, entrada
+roteada pelo `phone_number_id` da Meta). O que falta decidir é de operação, não
+de código: **caixa única com selo do canal** × **caixas separadas**. A régua da
+casa empurra para a caixa única — o cliente é o mesmo, e duas listas fazem a
+mesma pessoa aparecer em dois lugares com estados diferentes.
 
 ## 🛑 PROVADO EM 25/08: a Meta NÃO ENTREGA a chamada no tronco
 
