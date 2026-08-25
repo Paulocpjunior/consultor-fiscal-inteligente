@@ -233,10 +233,22 @@ export function configPadraoAtendimento() {
         avaliacaoEscala: 10,
         // 🤖 IA DE TRIAGEM (25/08) — lê o texto livre do cliente e escolhe uma
         // fila DO MENU quando tem certeza; sem certeza, o menu de sempre.
-        // NASCE DESLIGADA, como tudo que fala com o CLIENTE (a régua é a mesma
-        // do bot, do aviso de transferência e da avaliação; o que nasce ligado
-        // é alerta INTERNO). Ligar é decisão do dono, com o corte assentado.
-        triagemIaAtiva: false,
+        //
+        // ✅ NASCE LIGADA POR DECISÃO DO DONO (Paulo, 25/08: *"vamos ligar por
+        // padrão e ver como o pessoal se sai! Se der merda aperto o botão do
+        // off"*). Eu tinha escrito `false` pela régua da casa — o que fala com
+        // o CLIENTE nasce desligado —, e ele decidiu o contrário sabendo do
+        // alcance: o bot já está em 🌐 todos, então isto vale para a carteira
+        // inteira na próxima mensagem.
+        //
+        // ⚠️ O QUE SUSTENTA A DECISÃO, e por isso ela não é temerária: o pior
+        // caso desta IA é o comportamento de ONTEM. Sem certeza, ilegível, fora
+        // do ar ou lenta ⇒ o menu de sempre. Ela nunca responde ao cliente,
+        // nunca inventa fila fora do menu, e o `#menu` desfaz qualquer
+        // encaminhamento errado — pelo próprio cliente, sem depender de nós.
+        // 🔌 E o "botão do off" é real: `rodarBot` relê esta config a CADA
+        // mensagem, então desligar vale na mensagem seguinte, sem deploy.
+        triagemIaAtiva: true,
         horario: {
             dias: [1, 2, 3, 4, 5],
             turnos: [{ inicio: '08:00', fim: '12:00' }, { inicio: '13:00', fim: '17:30' }],
@@ -372,9 +384,12 @@ export function resolverConfig(gravada) {
         avaliacaoEscala: ESCALAS_AVALIACAO.includes(Number(gravada.avaliacaoEscala))
             ? Number(gravada.avaliacaoEscala) : p.avaliacaoEscala,
         avisoTeamsAtivo: typeof gravada.avisoTeamsAtivo === 'boolean' ? gravada.avisoTeamsAtivo : p.avisoTeamsAtivo,
-        // ⚠️ Config gravada ANTES deste campo existir fica DESLIGADA (o padrão
-        // manda), e isso é o lado certo: ligar sozinho a IA numa carteira
-        // inteira por causa de um deploy seria decidir no lugar do dono.
+        // ⚠️ Config gravada ANTES deste campo existir herda o PADRÃO — e como
+        // o dono mandou ligar por padrão (25/08), ela nasce LIGADA no primeiro
+        // deploy. Isso é a decisão dele, tomada com o alcance na mesa, não um
+        // efeito colateral: está dito no `configPadraoAtendimento`.
+        // ✅ E quem DESLIGAR fica desligado: a partir daí o campo existe gravado
+        // como `false`, e o padrão não o reacende num deploy seguinte.
         triagemIaAtiva: typeof gravada.triagemIaAtiva === 'boolean' ? gravada.triagemIaAtiva : p.triagemIaAtiva,
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },

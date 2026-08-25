@@ -3511,10 +3511,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         <span className="text-[11px] text-slate-700 dark:text-slate-200">
                                             🤖 IA lê o texto livre e encaminha para a fila certa
                                             <span className="block text-[9px] text-slate-400">
-                                                hoje, quem escreve em vez de digitar o número recebe o menu de novo.
+                                                sem ela, quem escreve em vez de digitar o número recebe o menu de novo.
                                                 A IA <strong>só classifica</strong> — nunca responde ao cliente, nunca fala de
                                                 imposto, prazo ou valor. Sem certeza, mostra o menu como sempre.
                                                 O atendente vê na conversa que o encaminhamento foi automático.
+                                            </span>
+                                            {/* 🔌 O caminho de VOLTA, dito junto da chave. Sem esta
+                                                linha, "desligo se der problema" é uma aposta: ninguém
+                                                sabe se precisa de deploy nem quando passa a valer.
+                                                O bot relê a config a cada mensagem — por isso vale já. */}
+                                            <span className="block text-[9px] text-emerald-600 dark:text-emerald-400">
+                                                Desmarcar aqui e salvar já vale na <strong>próxima mensagem</strong>, sem deploy —
+                                                e o cliente pode desfazer um encaminhamento errado digitando <strong>#menu</strong>.
                                             </span>
                                         </span>
                                     </label>
