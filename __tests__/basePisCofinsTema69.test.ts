@@ -121,9 +121,11 @@ describe('🚨 C170 — a base do PIS/COFINS exclui o ICMS', () => {
 describe('🚨 M210/M610 — receita bruta e base são campos DIFERENTES', () => {
     const linhas = () => buildBlocoM(dados([NF7]));
 
+    // ⚠️ 25/08: o VL_REC_BRT passou a ser a BRUTA (18.741,24), que é o que o
+    // PVA recalcula. A BASE não mudou — e é ela que paga.
     it('VL_REC_BRT traz a receita e VL_BC_CONT traz a base — não o mesmo número', () => {
         const f = campos(acha(linhas(), 'M210')[0]);
-        expect(brl(f[3])).toBeCloseTo(18179.00, 2);   // VL_REC_BRT
+        expect(brl(f[3])).toBeCloseTo(18741.24, 2);   // VL_REC_BRT — bruta
         expect(brl(f[4])).toBeCloseTo(14906.78, 2);   // VL_BC_CONT
         expect(brl(f[7])).toBeCloseTo(14906.78, 2);   // VL_BC_CONT_AJUS
         expect(brl(f[3])).not.toBeCloseTo(brl(f[4]), 2);
@@ -136,7 +138,7 @@ describe('🚨 M210/M610 — receita bruta e base são campos DIFERENTES', () =>
 
     it('e o M610 idem, com 3%', () => {
         const f = campos(acha(linhas(), 'M610')[0]);
-        expect(brl(f[3])).toBeCloseTo(18179.00, 2);
+        expect(brl(f[3])).toBeCloseTo(18741.24, 2);
         expect(brl(f[4])).toBeCloseTo(14906.78, 2);
         expect(brl(f[11])).toBeCloseTo(brl(f[7]) * brl(f[8]) / 100, 2);
     });
@@ -261,11 +263,19 @@ describe('🚨 desconto no ITEM × só no TOTAL — as duas formas dão o mesmo 
         expect(r.base).toBe(0);
     });
 
-    it('e o M210 sai com a receita LÍQUIDA — 37.754,60, não 38.316,84', () => {
+    // 🚨 PREMISSA TROCADA EM 25/08 PELO PRÓPRIO PVA. Este teste exigia
+    // `VL_REC_BRT 37.754,60` (o líquido). Sandra apagou TODA a base do PVA,
+    // reimportou o arquivo com 37.754,60 e a tela continuou mostrando
+    // **38.316,84 / 30.958,77** — que são Σ VL_ITEM dos C170 e Σ VL_BC_PIS do
+    // NOSSO arquivo. O PVA RECALCULA o M210 e o campo 2 é a receita BRUTA.
+    // A BASE — que é onde o desconto reduz tributo — continua líquida.
+    it('o M210 traz a receita BRUTA e a base LÍQUIDA — como o PVA recalcula', () => {
         const linhas = buildBlocoM(dados([...OUTRAS, SO_NO_TOTAL] as any[]));
         const m210 = campos(acha(linhas, 'M210')[0]);
-        expect(brl(m210[3])).toBeCloseTo(37754.60, 2);   // VL_REC_BRT
-        expect(brl(m210[4])).toBeCloseTo(30958.77, 2);   // VL_BC_CONT
+        expect(brl(m210[3])).toBeCloseTo(38316.84, 2);   // VL_REC_BRT — bruta
+        expect(brl(m210[4])).toBeCloseTo(30958.77, 2);   // VL_BC_CONT — líquida
+        // ⚠️ E a diferença entre as duas é exatamente desconto + ICMS.
+        expect(brl(m210[3]) - brl(m210[4])).toBeCloseTo(562.24 + 6795.83, 2);
     });
 });
 
@@ -296,25 +306,36 @@ describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o ap
         warnings: [] as string[],
     });
 
-    it('reproduz a linha PROVADA em 20/08 — receita 37.754,60 × base 30.958,77', () => {
+    // 🚨 A LINHA QUE O PVA MOSTRA — provada contra a tela dele (25/08).
+    // Antes este teste travava `37754,60`; a base e o imposto NÃO mudaram.
+    it('reproduz a linha que o PVA recalcula — bruta 38.316,84 × base 30.958,77', () => {
         const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
         expect(l.find((x: string) => x.startsWith('|M210|')))
-            .toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+            .toBe('|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
     });
 
-    // 🚨 O aviso é a metade que faltava: ele torna o número CONFERÍVEL contra o
-    // C100 do PVA sem ninguém precisar ler código.
-    it('a geração DIZ a receita bruta, o desconto e quantos documentos tinham', () => {
+    // 🚨 O IMPOSTO É O MESMO — é isto que fecha o assunto. O desconto sai da
+    // BASE, não da receita bruta, e é a base que paga.
+    it('o desconto continua fora da BASE — o valor a recolher não muda', () => {
+        const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
+        const m210 = l.find((x: string) => x.startsWith('|M210|'))!.split('|');
+        expect(brl(m210[4])).toBeCloseTo(38316.84 - 562.24 - 6795.83, 2);
+        expect(brl(m210[11])).toBeCloseTo(201.23, 2);
+    });
+
+    // 🚨 O aviso deixou de repetir "tirei o desconto da receita" e passou a
+    // DIZER o que a pessoa vai ver no PVA — foi a promessa de um número que a
+    // tela do PVA nunca mostraria que custou cinco dias.
+    it('a geração AVISA que o PVA mostra a bruta, e manda conferir a BASE', () => {
         const d = dados();
         buildBlocoM(d);
-        const aviso = d.warnings.find(w => /DESCONTO incondicional/.test(w))!;
+        const aviso = d.warnings.find(w => /[Dd]esconto incondicional/.test(w))!;
         expect(aviso).toBeTruthy();
-        expect(aviso).toMatch(/bruta 38316\.84/);
-        expect(aviso).toMatch(/desconto 562\.24/);
-        expect(aviso).toMatch(/VL_REC_BRT 37754\.60/);
-        expect(aviso).toMatch(/1 documento\(s\) com desconto/);
-        // Aponta ONDE conferir — aviso que não diz o lugar vira ruído.
-        expect(aviso).toMatch(/C100/);
+        expect(aviso).toMatch(/38316\.84/);        // a bruta, que é o que aparece
+        expect(aviso).toMatch(/562\.24/);          // o desconto
+        expect(aviso).toMatch(/30958\.77/);        // a base, que é o que paga
+        expect(aviso).toMatch(/1 documento\(s\)/);
+        expect(aviso).toMatch(/confira a BASE/i);
     });
 
     // ⚠️ Sem desconto nenhum o aviso NÃO aparece: alarme sobre arquivo correto
@@ -336,6 +357,6 @@ describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o ap
             warnings: [] as string[],
         };
         buildBlocoM(porItem);
-        expect(porItem.warnings.find(w => /DESCONTO incondicional/.test(w))).toMatch(/desconto 562\.24/);
+        expect(porItem.warnings.find(w => /[Dd]esconto incondicional/.test(w))).toMatch(/562\.24/);
     });
 });
