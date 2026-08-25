@@ -103,10 +103,11 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | API oficial da Meta | ✔ **[Paulo]** | ✔ (WABA própria, cartão do Paulo na Meta) | ✅ |
 | App de celular / tablet | ✔ app próprio **[Paulo]** | **PWA** — instala na tela inicial pelo navegador, e com a chave VAPID publicada avisa com o app fechado (ver §3) | 🟡 **cobre o uso, não é loja** |
 | Rodar dentro do Teams | ✕ | app do tenant pronto (`teams-app/`, zip em `/sp-connect-teams.zip`) | 🆕 |
+| **Aviso NATIVO do Teams** (sino de Atividade) | ✕ | `sendActivityNotification` do Graph, com a MESMA audiência do push (fila, autor, 📷, horário); chave nasce ligada; 🧪 na ⚙️ → 👥 prova no próprio Teams de quem clica | ✅ **25/08 — o Graph ACEITOU** [Paulo]. O 204 só sai depois de três portas: usuário no tenant, **SP Connect instalado** no Teams dele e `activityType` **declarado no manifest instalado** — ou seja, prova de uma vez o consent da `TeamsActivity.Send` e o pacote com `activities`, que eram os dois atos que faltavam. ⚠️ O aviso aparece no **aplicativo** do Teams (barra da esquerda → Atividade), nunca na aba do navegador: foi essa a confusão do dia, e a frase de sucesso passou a dizer o lugar |
 | Vários NÚMEROS de WhatsApp | **[?]** | **apto desde 16/08**: catálogo de canais (o de hoje segue vindo do env e é o padrão), entrada roteada pelo `phone_number_id` da Meta e cadastro na ⚙️ — o token do 2º número vive no Cloud Run, nunca no banco. Falta só o número existir | ✅ apto |
 | Outros canais — Instagram | **[?]** | **DMs no MESMO inbox — ✅ PROVADO EM PRODUÇÃO 22/08** (Paulo: *"perfeito, perfeito, entrou e saiu"*): DM de teste chegou com o selo 📷 na Recepção e a resposta por texto voltou entregue (✓). Arquitetura: caso de uso "API do Instagram com login do Instagram" — webhook na tela do caso de uso (seção 3), assinatura pela chave do app do Instagram (env `INSTAGRAM_APP_SECRET`), resposta pelo `graph.instagram.com` com o token da conta (env `INSTAGRAM_ACCESS_TOKEN`); os dois via Secret Manager, ativados por deploy da esteira. O bot NÃO roda nas DMs (triagem humana na Recepção, decisão de projeto) e fora da janela da Meta não há template — espera-se o cliente escrever | ✅ **22/08** — acesso POR USUÁRIO (lista "Quem atende as DMs" na ⚙️ → 📷; decisão do Paulo: juliana.gomes@, rhsp@ e o admin master); anexo/áudio de SAÍDA no IG é fase futura (recusa nomeada na tela) |
 | Outros canais — Wix (site) | **[?]** | nenhum | 🔴 depende de saber qual recurso do Wix ele quer dizer (chat widget é API própria, sem nada em comum com a Meta) |
-| **Chamada de voz/vídeo** (liberada pela Meta Brasil) | **[?]** | ⚙️ → ☎️ **SONDA** o estado real na Meta e relata, com o cru da resposta. **Não liga nada de propósito** | 🟡 **decisão do Paulo, não construção**: ligar abre o botão de ligar no WhatsApp de TODOS os clientes, e sem destino que atenda (HitPhone/ramal) é telefone tocando no vazio — o cliente lê como "a SP não me atende", não como recurso desligado |
+| **Chamada de voz/vídeo** (liberada pela Meta Brasil) | **[?]** | ⚙️ → ☎️ SONDA o estado real na Meta e relata com o cru da resposta; ☎️ pedido de permissão na conversa; SBC próprio (Asterisk, TLS 5061) apontado no tronco da HitPhone | 🔴 **BLOQUEADO NA META, medido em 25/08** — e o bloqueio é dos DOIS lados. **Saída**: código **131055**, *"Graph API calls are not allowed for SIP enabled numbers"* — em modo SIP quem disca é o tronco, então não existe (nem pode existir) botão de ligar no app. **Entrada**: com todos os interruptores da Meta LIGADOS, o 🔌 verde até o SBC e o gravador do Asterisk **provado ligado**, a chamada das 14h52 — dentro da janela — saiu *"Não atendida"* no celular e o tronco **não registrou CDR nem INVITE** em três conferências. A Meta aceita a chamada e **não entrega**. Chamado aberto (texto pronto em `docs/sbc-whatsapp-hitphone.md`). ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sairá do **CDR do SBC**, nunca da Meta |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
 
 ## 6. Operação e administração
@@ -177,6 +178,14 @@ neste documento (e, quando faltar, vira fila de construção):
 **Não bloqueia** (pode entrar depois do corte, sem prejuízo): etiquetas,
 relatórios de volume/tempo, presença, respostas rápidas configuráveis,
 busca dentro da thread, CRM/Jotform.
+
+🔴 **E a CHAMADA DE VOZ não é bloqueante, apesar do vermelho** — a distinção
+importa porque a régua deste documento é *"enquanto houver 🔴 em linha
+bloqueante, a resposta é NÃO"*. Ela não bloqueia por dois motivos: **a Ultra
+Fox também não faz** (a linha dela é **[?]**, e ninguém do escritório atende
+ligação de WhatsApp hoje), e o bloqueio **não é nosso** — é da Meta não
+entregar o INVITE no tronco. Esperar por isso seria manter a mensalidade de
+uma plataforma por um recurso que ela também não tem.
 
 **Sequência recomendada**: ~~fechar os 3 bloqueantes~~ ✅ 16/08 →
 ~~ligar o bot no PILOTO, com a Ultra Fox de pé~~ ✅ 17/08 → ~~**ensaio com
