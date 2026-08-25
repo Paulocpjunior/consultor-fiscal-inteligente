@@ -145,3 +145,87 @@ describe('toda chamada deixa marca — senão o silêncio mente', () => {
         expect(script).toMatch(/unanswered = yes/);
     });
 });
+
+// ═══ 25/08 — HEREDOC DE DOIS NÍVEIS: o script morreu NA VM ═════════════════
+// `EXTEN: unbound variable` — o provisionamento abortou e NADA foi aplicado
+// (nem o logger, nem o CDR que este mesmo PR tinha acabado de acrescentar).
+//
+// 🚨 A CAUSA É DE ESTRUTURA, e mordeu DUAS vezes no mesmo dia:
+//  · o script LOCAL monta o script da VM dentro de `cat > "$STARTUP" <<EOF`
+//    (não citado) — ali o shell LOCAL expande `$var` e executa CRASE;
+//  · o script da VM escreve o extensions.conf dentro de outro heredoc — e
+//    esse estava NÃO CITADO também, então o shell da VM tentava expandir
+//    `${EXTEN}` (que é variável do ASTERISK, não do shell) e, com
+//    `set -u`, matava tudo.
+//
+// ✂️ A correção é de UMA letra e resolve a classe: os heredocs do lado da VM
+// passam a ser CITADOS (`<<'CONF'`). As variáveis de SHELL já foram expandidas
+// no nível local — quando o arquivo chega na VM não há mais nada a expandir —,
+// então tudo que é do Asterisk atravessa intacto.
+//
+// ⚠️ E as CRASES dos meus comentários viravam substituição de comando no nível
+// local: foi de lá que saíram os "messages: command not found" e o
+// "/var/log/asterisk/full: No such file or directory" NO MAC.
+//
+// 📌 `bash -n` não pega nenhum dos dois: ele não avalia heredoc. Só GERAR o
+// arquivo e conferir pega — e é o que este teste faz.
+describe('o script da VM é GERADO e conferido, não suposto', () => {
+    const execSync = require('child_process').execSync as typeof import('child_process').execSync;
+    const os = require('os') as typeof import('os');
+    const fs = require('fs') as typeof import('fs');
+
+    // Recorta a montagem do STARTUP e a executa com valores de exemplo — o
+    // mesmo caminho que roda na máquina do Paulo, sem tocar em gcloud.
+    const gerado = (() => {
+        const i = script.indexOf('STARTUP=$(mktemp)');
+        const j = script.indexOf('\nEOF\n', i) + '\nEOF\n'.length;
+        const dir = fs.mkdtempSync(join(os.tmpdir(), 'sbc-'));
+        const monta = join(dir, 'monta.sh');
+        fs.writeFileSync(monta, [
+            '#!/usr/bin/env bash', 'set -euo pipefail',
+            'SBC_HOST=sip.exemplo.com.br', 'LE_EMAIL=a@b.c', 'IP=1.2.3.4',
+            'HIT_HOST=9.9.9.9', 'HIT_PORT=21694', 'SBC_DESTINO=221',
+            "META_SIP_DESTINO=''", "SBC_PREFIXO_WHATSAPP='*55'",
+            "BLOCO_META_SAIDA='; saida desligada'",
+            `export TMPDIR=${dir}`,
+            script.slice(i, j),
+        ].join('\n'));
+        execSync(`bash ${monta}`, { stdio: 'pipe' });
+        const arquivos = fs.readdirSync(dir).filter((f) => f.startsWith('tmp.'));
+        return fs.readFileSync(join(dir, arquivos[0]), 'utf8');
+    })();
+
+    it('o arquivo que vai para a VM tem sintaxe válida', () => {
+        const os2 = require('os') as typeof import('os');
+        const alvo = join(fs.mkdtempSync(join(os2.tmpdir(), 'sbcchk-')), 'vm.sh');
+        fs.writeFileSync(alvo, gerado);
+        // Se isto falhar, o provisionamento morre NA VM — e o sintoma chega
+        // como "nada foi aplicado", não como erro de script.
+        expect(() => execSync(`bash -n ${alvo}`, { stdio: 'pipe' })).not.toThrow();
+    });
+
+    it('as variáveis do ASTERISK chegam INTACTAS (não expandidas pelo shell)', () => {
+        expect(gerado).toContain('${EXTEN}');
+        expect(gerado).toContain('${ALVO}');
+        expect(gerado).toContain('${FILTER(0-9,${EXTEN})}');
+    });
+
+    it('os heredocs do lado da VM são CITADOS — é o que as protege', () => {
+        expect(gerado).toContain("cat > /etc/asterisk/extensions.conf <<'CONF'");
+        expect(gerado).toContain("cat > /etc/asterisk/pjsip.conf <<'CONF'");
+    });
+
+    it('e as variáveis de SHELL já vieram resolvidas (nada sobra para a VM)', () => {
+        expect(gerado).toContain('Dial(PJSIP/221@hit,60)');
+        expect(gerado).not.toContain('${SBC_DESTINO}');
+        expect(gerado).not.toContain('${IP}');
+    });
+
+    it('nenhuma CRASE no heredoc externo (ela vira comando no shell LOCAL)', () => {
+        const i = script.indexOf('STARTUP=$(mktemp)');
+        const j = script.indexOf('\nEOF\n', i);
+        const comCrase = script.slice(i, j).split('\n')
+            .map((l, n) => ({ n, l })).filter(({ l }) => l.includes('`'));
+        expect(comCrase.map((x) => x.l.trim())).toEqual([]);
+    });
+});
