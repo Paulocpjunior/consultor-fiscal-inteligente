@@ -135,3 +135,41 @@ log** e o endpoint nem é escrito — endpoint com contato vazio quebraria o
 mesmo dia: o cartão "Permitir" foi aceito às 14:34). Ela não é substituída
 pelo tronco — sem o aceite, a Meta recusa a chamada de saída seja qual for o
 caminho.
+
+## ☎️ Saída do ramal 221: telefone normal × WhatsApp
+
+Pergunta do Paulo (25/08): *"se eu ligar p o cliente do ramal 221, como sair
+pelo SIP ou pela Meta?"*.
+
+**Quem decide não é este SBC — é o HitPhone.** Ligação normal do 221 nem passa
+por aqui: ela sai pela telefonia deles, como sempre saiu. Este SBC só vê o que
+a HIT **escolheu** mandar para o nosso tronco.
+
+```
+221 ──┬─ número normal ─────────────► telefonia HitPhone ──► PSTN
+      └─ PREFIXO + número ─────────► tronco SIP da SP ──► este SBC ──► Meta ──► WhatsApp do cliente
+```
+
+O jeito de a HIT escolher é uma **rota de prefixo**. Ex.: com prefixo `*55`,
+`*5511999998888` vai ao WhatsApp e `11999998888` sai como telefone comum —
+dois caminhos, um teclado.
+
+### O que pedir ao suporte do HitPhone
+
+> Criar uma **rota de saída por prefixo** (ex.: `*55`) apontando para o nosso
+> tronco SIP `sip.spassessoriacontabil.com.br:5061` (TLS), disponível para o
+> ramal 221. O prefixo pode vir no INVITE — nós o retiramos.
+
+### O que o SBC faz com isso
+
+`SBC_PREFIXO_WHATSAPP` (env do script). Definido, o dialplan **retira** o
+prefixo e disca só o número; **recusa com motivo no log** o que não casa e o
+que não parece número (E.164 sem o `+` tem 10 a 15 dígitos).
+
+⚠️ **Vazio, ele aceita o número como veio** — é o comportamento de hoje, e só é
+seguro porque a HIT ainda não roteia nada para cá. No dia em que rotear, uma
+chamada inesperada iria ao WhatsApp **em silêncio**.
+
+🚧 **E nada disso disca antes de `META_SIP_DESTINO`**, que se lê no INVITE da
+primeira ligação RECEBIDA. Ou seja: **a entrada destrava a saída** — não há
+como inverter a ordem.
