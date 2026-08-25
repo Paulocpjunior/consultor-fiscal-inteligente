@@ -2,8 +2,12 @@ import { User, UserRole, AccessLog } from '../types';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import {
+    validarEmailParaRedefinicao, mensagemDaRedefinicao, type ResultadoRedefinicao,
+} from './redefinirSenha';
+import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    sendPasswordResetEmail,
     signOut,
     updateProfile,
     onAuthStateChanged,
@@ -458,17 +462,57 @@ export const deleteUser = async (userId: string): Promise<boolean> => {
     return true;
 };
 
-export const resetUserPassword = async (userId: string): Promise<boolean> => {
-    if (isFirebaseConfigured) return true; // requer backend/email p/ outro usuário
-    if (!LOCAL_MODE_HABILITADO || !LOCAL_MASTER_PASSWORD) return false;
-    const users = getLocalUsers();
-    const idx = users.findIndex(u => u.id === userId);
-    if (idx !== -1) {
-        users[idx].passwordHash = encodePasswordForLocalStorage(LOCAL_MASTER_PASSWORD);
-        saveLocalUsers(users);
+// ─── REDEFINIR SENHA ──────────────────────────────────────────────────────────
+/**
+ * 📧 Manda o link de redefinição para a caixa do próprio dono da conta.
+ *
+ * 🚨 É este o caminho que NÃO EXISTIA (25/08). A identidade é do Firebase
+ * Auth, então quem troca a senha é quem tem acesso ao e-mail — nem o app nem
+ * o admin escolhem senha de ninguém. Serve tanto ao colaborador que esqueceu
+ * (botão na tela de login) quanto ao admin pedindo pelo colaborador (Gerenciar
+ * Usuários): o MESMO caminho, porque dois caminhos divergiriam.
+ *
+ * A régua (domínio, formato e a tradução da resposta) mora em
+ * `redefinirSenha.ts`, que é puro e testado sem rede.
+ */
+export const enviarLinkDeRedefinicao = async (email: string): Promise<ResultadoRedefinicao> => {
+    const invalido = validarEmailParaRedefinicao(email);
+    if (invalido) return invalido;
+
+    const cleanEmail = normalizeEmail(email);
+
+    if (!isFirebaseConfigured || !auth) {
+        // Modo local (dev): não há e-mail para mandar. RECUSA dizendo isso —
+        // devolver sucesso aqui seria repetir o defeito que este PR conserta.
+        return {
+            ok: false, situacao: 'falha',
+            texto: 'O app está em modo local (sem nuvem) — não há como enviar e-mail.',
+            acao: 'Isto só acontece em desenvolvimento; em produção o link é enviado normalmente.',
+        };
     }
-    return idx !== -1;
+
+    try {
+        await sendPasswordResetEmail(auth, cleanEmail);
+        return mensagemDaRedefinicao('ok', cleanEmail);
+    } catch (error: any) {
+        // O código do Firebase é o que não muda (a mensagem dele muda e vem
+        // em inglês) — é por ele que a frase certa é escolhida.
+        return mensagemDaRedefinicao(error?.code || 'desconhecido', cleanEmail);
+    }
 };
+
+/**
+ * 🚨 ESTA FUNÇÃO MENTIA — e foi por ela que o Paulo chegou (25/08).
+ * Ela fazia `if (isFirebaseConfigured) return true;`, ou seja **em produção
+ * não fazia nada e devolvia sucesso**; a tela dizia "Senha de X resetada." e o
+ * colaborador continuava sem entrar. Mantida como nome, apontando para o
+ * caminho que FUNCIONA: o admin dispara o link para a caixa da pessoa.
+ *
+ * ⚠️ E ela não escolhe mais senha nenhuma: a antiga gravava a senha padrão do
+ * env no modo local, e "senha padrão" é porta aberta enquanto ninguém troca.
+ */
+export const resetUserPassword = async (email: string): Promise<ResultadoRedefinicao> =>
+    enviarLinkDeRedefinicao(email);
 
 // ─── ACCESS LOGS ──────────────────────────────────────────────────────────────
 /**

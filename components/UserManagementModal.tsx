@@ -245,21 +245,34 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, tab]);
 
-    const handleResetPassword = async (userId: string, userName: string) => {
+    // 🚨 ESTE BOTÃO MENTIA (corrigido 25/08, Paulo: "colaborador não consegue
+    // resetar a SENHA"). Ele chamava `resetUserPassword(userId)`, que em
+    // produção fazia `if (isFirebaseConfigured) return true;` — NADA — e a tela
+    // dizia "Senha de X resetada.". O admin avisava a pessoa, ela não entrava, e
+    // os dois procuravam o problema no lugar errado. O tooltip ainda prometia a
+    // senha "123456", que é senha padrão conhecida — a classe que este projeto
+    // já tinha removido do authService.
+    // ✂️ O que ele faz agora é o que a identidade do app permite: dispara o LINK
+    // de redefinição para a caixa da própria pessoa (Firebase Auth). Ninguém
+    // escolhe senha de terceiro — nem o admin.
+    const handleResetPassword = async (userEmail: string, userName: string) => {
         const ok = await confirm({
-            title: 'Resetar senha',
-            message: `Resetar senha de "${userName}" para a senha padrão?`,
+            title: 'Enviar link de redefinição',
+            message: `Mandar para ${userEmail} o link para ${userName} criar uma senha nova?\n\nA senha é escolhida por quem recebe o e-mail — nem você nem o sistema definem a senha dela.`,
             variant: 'warning',
-            confirmLabel: 'Resetar',
+            confirmLabel: 'Enviar link',
         });
         if (!ok) return;
         try {
-            const success = await authService.resetUserPassword(userId);
-            setMsg(success
-                ? { text: `Senha de ${userName} resetada.`, type: 'success' }
-                : { text: 'Erro ao resetar senha.', type: 'error' });
+            const r = await authService.resetUserPassword(userEmail);
+            // A frase vem da régua (situação a situação, com a ação junto) —
+            // repetir texto aqui faria a tela do admin e a do login divergirem.
+            setMsg({
+                text: r.acao ? `${r.texto} ${r.acao}` : r.texto,
+                type: r.ok ? 'success' : 'error',
+            });
         } catch (e: any) {
-            setMsg({ text: e?.message || 'Erro ao resetar senha.', type: 'error' });
+            setMsg({ text: e?.message || 'Erro ao enviar o link.', type: 'error' });
         }
     };
 
@@ -648,11 +661,11 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                                                 </button>
                                                             )}
                                                             <button
-                                                                onClick={() => handleResetPassword(user.id, user.name)}
-                                                                className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-xs font-semibold"
-                                                                title="Resetar senha para 123456"
+                                                                onClick={() => handleResetPassword(user.email, user.name)}
+                                                                className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-xs font-semibold whitespace-nowrap"
+                                                                title="Envia para o e-mail da pessoa o link de criar senha nova (quem escolhe a senha é ela)"
                                                             >
-                                                                Resetar Senha
+                                                                📧 Enviar link de senha
                                                             </button>
                                                             {isAdmin && (
                                                                 <button
