@@ -19,6 +19,12 @@ export interface ConfigAtendimento {
     /** 📷 e-mails que atendem as DMs do Instagram; vazia = sem restrição. */
     instagramAtendentes: string[];
     avisoTeamsAtivo: boolean;
+    /**
+     * 🤖 IA de triagem: lê o texto livre e escolhe uma fila DO MENU quando tem
+     * certeza; sem certeza, o menu de sempre. Ela só CLASSIFICA — nunca
+     * responde ao cliente. Nasce desligada.
+     */
+    triagemIaAtiva: boolean;
     /** ⚡ Frases do composer (editáveis na ⚙️). Vazia = sem chips, escolha legítima. */
     respostasRapidas: string[];
 }
@@ -110,4 +116,10 @@ export function decidirAutomacao(p: {
     config: ConfigAtendimento;
     agora?: Date;
     protocoloNovo?: string;
+    /**
+     * 🤖 Leitura da IA de triagem, JÁ DECIDIDA fora (o cérebro é puro: rede
+     * dentro dele obrigaria todo teste do bot a simular o Gemini). Só é usada
+     * no galho da triagem, e fila fora do catálogo é barrada mesmo assim.
+     */
+    filaSugerida?: { fila: string; rotulo?: string; confianca?: number | null; motivo?: string | null } | null;
 }): AcaoBot[];

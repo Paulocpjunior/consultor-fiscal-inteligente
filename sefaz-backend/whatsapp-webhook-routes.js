@@ -40,6 +40,10 @@ import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEn
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
 import { extrairEventosChamada, resumoDaChamada, resumoDaPermissao } from './whatsapp-chamadas.js';
+import {
+    filasParaTriagem, valeClassificar, montarPromptTriagem,
+    interpretarRespostaTriagem, decidirDestinoDaTriagem,
+} from './whatsapp-triagem-ia.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -498,7 +502,66 @@ async function capturarAvaliacao(db, msg) {
  * com enviadoPor 'bot', senão o atendente não vê o que o cliente recebeu).
  * Best-effort: falha aqui NUNCA derruba o webhook.
  */
-async function rodarBot(db, msg) {
+/**
+ * 🤖 A IA de triagem — o I/O que o cérebro puro não pode ter.
+ *
+ * Devolve `{ fila, rotulo, confianca, motivo }` SÓ quando tem certeza; em
+ * qualquer outro caso devolve `null` e o bot segue como sempre (menu). Nunca
+ * lança: falha de IA não pode calar o bot, que é o que responde ao cliente.
+ *
+ * ⏱️ TEM PRAZO. O cliente está esperando do outro lado, e um modelo lento
+ * transformaria "a IA melhorou a triagem" em "o bot demora a responder". Passou
+ * do tempo, cai no menu — o pior caso da IA é o comportamento de hoje.
+ */
+async function triarComIa({ app, config, texto }) {
+    try {
+        if (!config?.triagemIaAtiva) return null;
+        if (!valeClassificar(texto)) return null;         // dígito, "oi", "ok"
+        const ai = app?.get?.('ai');
+        if (!ai) return null;                             // sem GEMINI_API_KEY
+
+        const filas = filasParaTriagem(config);
+        if (!filas.length) return null;
+
+        // O modelo sai do MESMO resolvedor do resto do app (já pina no mais
+        // novo da família alvo na conta do Paulo). Cravar um id aqui seria a
+        // segunda régua do modelo, que já custou caro em 15/08.
+        const modelos = app.get('geminiModelos');
+        const modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
+
+        const corrida = ai.models.generateContent({
+            model: modelo,
+            contents: montarPromptTriagem({ texto, filas }),
+            // temperatura 0: classificação não é criatividade. E SEM grounding
+            // de propósito — a IA aqui não busca nada, ela lê a frase e escolhe
+            // da lista. Busca abriria a porta para ela "saber" matéria fiscal.
+            config: { temperature: 0 },
+        });
+        const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), TEMPO_MAX_TRIAGEM_MS));
+        const r = await Promise.race([corrida, prazo]);
+
+        const destino = decidirDestinoDaTriagem({
+            resultado: interpretarRespostaTriagem(r?.text ?? '', filas),
+            filas,
+        });
+        if (destino.situacao !== 'classificada') {
+            // Não é erro — é a IA sendo honesta. Fica no log porque é assim
+            // que se descobre que a triagem parou de pegar (silêncio aqui
+            // faria "a IA não está funcionando" virar palpite).
+            console.log('[whatsapp/triagem-ia]', destino.situacao, JSON.stringify(destino));
+            return null;
+        }
+        return destino;
+    } catch (e) {
+        console.warn('[whatsapp/triagem-ia] falhou (bot segue no menu):', e.message);
+        return null;
+    }
+}
+
+/** Teto de espera da IA — passou disso, o cliente recebe o menu. */
+const TEMPO_MAX_TRIAGEM_MS = 6000;
+
+async function rodarBot(db, msg, deps = {}) {
     try {
         const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
         const config = resolverConfig(cfgDoc.data());
@@ -512,12 +575,22 @@ async function rodarBot(db, msg) {
         const canalEnv = await cfgDeEnvioDaConversa(db, conversa);
         if (canalEnv.erro) { console.warn('[whatsapp/bot] bot calado nesta conversa:', canalEnv.erro); return; }
         const depsEnvio = canalEnv.cfg ? { cfg: canalEnv.cfg } : {};
+        // 🤖 A IA só é consultada no MESMO estado em que o bot mostraria o
+        // menu: conversa sem fila, sem dono e sem sub-menu aberto. Fora disso
+        // a mensagem tem outro significado (resposta ao atendente, escolha de
+        // sub-menu) e perguntar seria gastar chamada para atrapalhar.
+        const emTriagem = !conversa.fila && !conversa.atribuidoA && !conversa.submenuAberto;
+        const filaSugerida = emTriagem
+            ? await triarComIa({ app: deps.app, config, texto: msg.texto })
+            : null;
+
         const acoes = decidirAutomacao({
             // `numero` decide o ALCANCE: no modo piloto o bot só responde aos
             // números cadastrados — é o que deixa a Ultra Fox de pé sem o
             // cliente receber menu em dobro.
             conversa, numero: msg.de, textoMensagem: msg.texto, nomeContato: msg.nomePerfil,
             config, agora: new Date(), protocoloNovo: gerarProtocolo(),
+            filaSugerida,
         });
 
         for (const acao of acoes) {
@@ -580,6 +653,29 @@ async function rodarBot(db, msg) {
                 } else {
                     console.warn('[whatsapp/bot] resposta não saiu:', envio.erro);
                 }
+            } else if (acao.tipo === 'registrarTriagemIa') {
+                // 🤖 CARIMBO DA ORIGEM — a mesma régua do resto da casa: valor
+                // que o app DEDUZIU nunca se confunde com valor que a pessoa
+                // informou. Aqui a diferença é operacional: quem assume a
+                // conversa precisa saber que o encaminhamento foi automático,
+                // porque automático pode estar errado e o cliente não escolheu.
+                await convRef.set({
+                    triagemIa: {
+                        fila: acao.fila, confianca: acao.confianca ?? null,
+                        motivo: acao.motivo || null, em: agora,
+                    },
+                }, { merge: true });
+                // Nota INTERNA (o cliente não vê) na própria thread: é onde o
+                // atendente olha, e sem ela o carimbo ficaria num campo que
+                // nenhuma tela lê — a "flag que ninguém lê" de 22/08.
+                await db.collection('whatsapp_mensagens').add({
+                    conversaId: msg.de, direcao: 'interna', tipo: 'nota',
+                    texto: `🤖 Encaminhado pela IA para ${acao.fila}`
+                        + (acao.confianca != null ? ` (confiança ${Math.round(acao.confianca * 100)}%)` : '')
+                        + (acao.motivo ? ` — ${acao.motivo}` : '')
+                        + '. O cliente não escolheu no menu: confira se é a fila certa.',
+                    midia: null, timestamp: agora, statusEntrega: null, enviadoPor: 'bot',
+                });
             }
         }
     } catch (e) {
@@ -726,7 +822,9 @@ router.post('/webhook', async (req, res) => {
                     // A avaliação vem ANTES do bot: se a mensagem for a nota
                     // da pesquisa, ela não pode virar gatilho de triagem.
                     const foiNota = await capturarAvaliacao(db, msg);
-                    if (!foiNota) await rodarBot(db, msg);
+                    // `req.app` viaja porque é dele que sai o cliente do
+                    // Gemini e o resolvedor de modelo (a IA de triagem).
+                    if (!foiNota) await rodarBot(db, msg, { app: req.app });
                     // 🔔 Push no celular (a régua de QUEM recebe é a mesma
                     // fila do inbox). Best-effort: a mensagem já está salva.
                     try {

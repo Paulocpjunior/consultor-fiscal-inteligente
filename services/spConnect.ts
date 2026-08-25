@@ -30,6 +30,13 @@ export interface ConfigAtendimento {
     instagramAtendentes: string[];
     /** 🔔 Aviso NATIVO do Teams (sino de Atividade via Graph) — nasce desligado. */
     avisoTeamsAtivo: boolean;
+    /**
+     * 🤖 IA de triagem: lê o texto livre do cliente e escolhe uma fila DO MENU
+     * quando tem certeza; sem certeza, o menu de sempre. **Ela só classifica —
+     * nunca responde ao cliente.** Nasce desligada (regra da casa: o que fala
+     * com o CLIENTE nasce desligado).
+     */
+    triagemIaAtiva: boolean;
 }
 
 /**
