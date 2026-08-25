@@ -4993,7 +4993,47 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   depender de clique pós-deploy). (4) UpdateBanner obrigatório desde o
   1º deploy — Safari segura HTML antigo mesmo com no-store. O card
   Legalização foi REMOVIDO do CFI; deep-link `services/moduloDeepLink.ts`
-  ficou (padrão de URL fixa pros hubs internos). **PARCELAMENTO vence MÊS A
+  ficou (padrão de URL fixa pros hubs internos).
+  🚨 **A DATA DO JOTFORM É MM/DD — E O APP INVERTIA DIA E MÊS EM SILÊNCIO**
+  (25/08, CASA DA CRIANCA BETINHO, Paulo: *"a única coisa que está diferente é
+  que no sistema a data está alterada… está invertendo a data do dia e do
+  mês"*). A prova é o WIDGET do próprio formulário: colunas rotuladas
+  **Month | Day | Year** com `04 | 09 | 26` e cabeçalho `04/09/2026` — 9 de
+  ABRIL; o app gravou 4 de setembro.
+  🔴 **O parser assumia dia-primeiro "porque o formulário é BR"** e só acertava
+  por ACIDENTE: quando um dos números passa de 12 (`11/22/2022`) a ambiguidade
+  se resolve sozinha. Nos dias **1 a 12** ele errava CALADO — data plausível e
+  errada, que é o pior desfecho porque ninguém confere data a olho. Alcance:
+  TODO campo de data das duas planilhas (vencimento, emissão, concessão do
+  parcelamento) — ~4 em cada 10 datas, deslocadas em até 11 meses, movendo o
+  farol para os dois lados. **Inclusive a contagem de parcelas de 24/08: a
+  régua estava certa e a DATA que a alimentava estava torta.**
+  ✂️ A ordem virou **PARÂMETRO** com o padrão do formulário, e **quando um dos
+  números passa de 12 é ELE que decide**, nunca o padrão. O objeto
+  `{day,month,year}` segue preferido: nele não há o que adivinhar.
+  📌 **REGRA QUE FICA: data ambígua `a/b/AAAA` não se resolve por suposição de
+  país — resolve-se pela ORDEM DECLARADA DA FONTE.** E a correção só vale com
+  **`PARSER_VERSAO` +1**, que re-sincroniza e reescreve o que está gravado:
+  corrigir o parser sem reprocessar deixa a base inteira com o erro antigo.
+  ⚠️ Um teste que afirmava *"05/08/2026 = 5 de agosto"* foi **TROCADO** — ele
+  travava a premissa que o print derrubou.
+  📌 **E O QUE FEZ ESTE CASO SER ACHADO FOI O PRINT DO FORMULÁRIO, não o
+  código.** Duas vezes no mesmo dia eu disse "está corrigido" sobre coisa que a
+  tela dele não mostrava (*"é a 2ª hoje que vc fala que fez e não fez"*), e nas
+  duas o defeito era **entrega invisível**: a reconciliação de saídas gravava a
+  lápide só DURANTE o sync e o `/cron-now` não devolvia `removidos` nem os
+  avisos da trava — a rodada podia ter marcado 40 saídas ou ter sido barrada, e
+  a tela dizia a mesma coisa. **Entrega que não aparece é indistinguível de
+  entrega que não aconteceu** — é "rota sem botão" com outra roupa.
+  ✂️ Daí nasceu o **🔎 Por que este item aparece?** (aba Vencimentos, admin):
+  consulta o Jotform AO VIVO e responde item a item, mostrando **o valor cru
+  das datas ao lado do que o app gravou**. Ele separa três causas com ações
+  OPOSTAS — sumiu e o app não marcou (rode o sync) · sumiu e já está marcado
+  (não é pendência) · **continua na planilha e o prazo é real** (a pendência é
+  verdadeira; se o cliente saiu, a linha se apaga no Jotform — o app não apaga
+  cadastro por conta própria). Leitura falha vira `nao-conferido`, **nunca um
+  veredito**: afirmar no escuro foi o que gerou a conversa.
+  **PARCELAMENTO vence MÊS A
   MÊS** (Paulo, 30/07 — v1.0.19): a data do Jotform é a DATA-BASE (1ª
   parcela), não vencimento; `projetarProximaParcela` devolve a próxima
   parcela + o número dela (`Parcela 47/60`), acordo cumprido vira 🏁
