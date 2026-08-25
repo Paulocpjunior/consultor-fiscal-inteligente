@@ -223,12 +223,31 @@ describe('🚨 a chave e a fiação', () => {
     const rota = fs.readFileSync(raiz('sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
     const tela = fs.readFileSync(raiz('components/SpConnect/index.tsx'), 'utf8');
 
-    it('NASCE DESLIGADA — a régua da casa para tudo que fala com o CLIENTE', () => {
-        expect(configPadraoAtendimento().triagemIaAtiva).toBe(false);
-        expect(resolverConfig({}).triagemIaAtiva).toBe(false);
-        // Config gravada antes do campo existir também fica desligada.
-        expect(resolverConfig({ botAtivo: true }).triagemIaAtiva).toBe(false);
-        expect(resolverConfig({ triagemIaAtiva: true }).triagemIaAtiva).toBe(true);
+    // ⚠️ PREMISSA FECHADA POR DECISÃO DO DONO (25/08). Este teste dizia "nasce
+    // DESLIGADA", pela régua da casa (o que fala com o CLIENTE nasce off). O
+    // Paulo decidiu o contrário, sabendo do alcance: *"vamos ligar por padrão e
+    // ver como o pessoal se sai! Se der merda aperto o botão do off"*. Premissa
+    // em aberto se fecha por decisão dele, nunca por dedução minha — então o
+    // teste foi TROCADO, não afrouxado: o que ele garante agora é que ligada
+    // por padrão vem COM o caminho de volta funcionando.
+    it('nasce LIGADA — decisão do dono, com o desligar valendo na hora', () => {
+        expect(configPadraoAtendimento().triagemIaAtiva).toBe(true);
+        expect(resolverConfig({}).triagemIaAtiva).toBe(true);
+        // Config gravada antes do campo existir herda o padrão: liga.
+        expect(resolverConfig({ botAtivo: true }).triagemIaAtiva).toBe(true);
+        // 🚨 E o DESLIGADO gravado PERMANECE — o padrão não pode reacender no
+        // deploy seguinte, senão o "botão do off" dura até o próximo push.
+        expect(resolverConfig({ triagemIaAtiva: false }).triagemIaAtiva).toBe(false);
+    });
+
+    it('🔌 o "botão do off" vale na PRÓXIMA MENSAGEM — o bot relê a config sempre', () => {
+        // É isto que torna a decisão do dono segura: desligar não espera deploy.
+        const rota = fs.readFileSync(raiz('sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        const corpo = rota.slice(rota.indexOf('async function rodarBot'));
+        expect(corpo.slice(0, 400)).toMatch(/whatsapp_config'\)\.doc\('atendimento'\)\.get\(\)/);
+        // E a tela DIZ isso, senão "desligo se der problema" é aposta.
+        const tela = fs.readFileSync(raiz('components/SpConnect/index.tsx'), 'utf8');
+        expect(tela).toMatch(/já vale na <strong>próxima mensagem<\/strong>, sem deploy/);
     });
 
     it('🚨 a chave tem BOTÃO — régua sem tela é código morto com cara de entrega', () => {
