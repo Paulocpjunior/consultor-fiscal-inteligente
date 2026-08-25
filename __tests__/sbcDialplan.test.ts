@@ -113,3 +113,35 @@ describe('a ENTRADA cai onde o Paulo mandar — e o 221 era do TESTE', () => {
         expect(doc).toMatch(/A URA deve ser a MESMA de quem liga no fixo/);
     });
 });
+
+// ═══ 25/08 — O SBC NASCEU SEM DEIXAR RASTRO ════════════════════════════════
+// A primeira ligação REAL entrou ("Não atendida" no celular do cliente, 14:17)
+// e NÃO HAVIA COMO PROVAR se ela chegou aqui:
+//  · `/var/log/asterisk/full` não existia — o pacote do Ubuntu só escreve
+//    `messages`, sem verbose, então a linha do dialplan (NoOp) não é escrita
+//    em lugar nenhum;
+//  · `cdr-csv/Master.csv` também não existia.
+//
+// 🚨 O silêncio não distinguia "não chegou" de "chegou e ninguém anotou" — a
+// pior forma de silêncio, e a MESMA classe que este projeto persegue em toda
+// tela. Infraestrutura de diagnóstico que não registra é farol apagado.
+describe('toda chamada deixa marca — senão o silêncio mente', () => {
+    it('o logger grava VERBOSE em `full` (é dele que sai o INVITE da Meta)', () => {
+        expect(script).toMatch(/full => notice,warning,error,verbose/);
+    });
+
+    it('e o verbose PERSISTE no asterisk.conf, não em comando de sessão', () => {
+        // `core set verbose` some no primeiro restart — foi assim que a
+        // ligação de hoje passou sem registro.
+        expect(script).toMatch(/verbose = 3/);
+        expect(script).toMatch(/grep -q '\^verbose' \/etc\/asterisk\/asterisk\.conf/);
+    });
+
+    it('o CDR grava UMA LINHA POR CHAMADA, inclusive as NÃO ATENDIDAS', () => {
+        // É a prova barata de "chegou ou não chegou": não depende de logger,
+        // de verbose nem de alguém com o console aberto na hora. E `unanswered`
+        // é o que importa aqui — a ligação de hoje não foi atendida.
+        expect(script).toMatch(/enable = yes/);
+        expect(script).toMatch(/unanswered = yes/);
+    });
+});
