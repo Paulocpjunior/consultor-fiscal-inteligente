@@ -53,6 +53,21 @@ export const listarMensagens = (numero: string, antesDe?: string | null) =>
         semOrdem?: boolean;
     }>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/mensagens${antesDe ? `?antesDe=${encodeURIComponent(antesDe)}` : ''}`);
 
+/**
+ * 🔎 Procura no BANCO INTEIRO — a outra metade do teto menor da lista.
+ * Acha por NÚMERO (prefixo, completo) e por NOME (pedaço, sem acento/caixa).
+ * NÃO procura no texto das mensagens — isso segue sendo só na conversa aberta.
+ */
+export const procurarConversas = (termo: string) =>
+    req<{
+        termo: string;
+        conversas: ConversaResumo[];
+        total: number;
+        truncado: boolean;
+        contatosVarridos: number;
+        contatosTruncados: boolean;
+    }>(`/api/admin/whatsapp/conversas/procurar?termo=${encodeURIComponent(termo)}`);
+
 export const marcarLida = (numero: string) =>
     req<{}>(`/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/lida`, { method: 'POST' });
 
