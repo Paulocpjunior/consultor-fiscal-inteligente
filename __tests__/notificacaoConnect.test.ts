@@ -99,9 +99,19 @@ describe('permissão do navegador — recusa com CAMINHO', () => {
         expect(negada.texto).toContain('Teams');
         expect(negada.acao).not.toContain('cadeado');
         expect(negada.acao).toMatch(/som/i);        // o que FUNCIONA lá fica dito
-        expect(negada.acao).toMatch(/navegador/i);  // e o caminho do pop-up também
+        // ⚠️ TRAVA LITERAL TROCADA (25/08): aqui estava
+        // `expect(negada.acao).toMatch(/navegador/i)` — ela prendia justamente
+        // o conselho que virou defeito ("abra no navegador"), de quando o
+        // navegador era o único caminho de pop-up dentro do Teams. Com o aviso
+        // NATIVO no ar, o canal de lá é o sino, e mandar sair do Teams passou a
+        // ser a primeira parada errada. O que a trava garante agora é a
+        // INTENÇÃO: o conselho aponta um canal que funciona ALI.
+        expect(negada.acao).toMatch(/sino|Atividade|Teams/i);
         const pendente = textoDaPermissao('nao-pedida', true);
         expect(pendente.acao).not.toContain('o navegador vai perguntar');
+        // E as duas permissões respondem IGUAL dentro do Teams: nenhuma delas
+        // decide nada lá, e duas frases diferentes divergiriam no 1º ajuste.
+        expect(pendente).toEqual(negada);
     });
 });
 
@@ -179,6 +189,28 @@ describe('🚨 faltaNosAvisos — as TRÊS camadas numa pergunta só', () => {
         expect(r.acao).not.toMatch(/cadeado/i);
         expect(r.texto).toContain('Teams');
     });
+
+    // 🚨 CONSELHO INVERTIDO (25/08, print do Paulo com o SP Connect ABERTO
+    // DENTRO do Teams). A barra mandava "para pop-up e push, abra o SP Connect
+    // direto no navegador" — ou seja, mandava SAIR do Teams para ser avisado.
+    // Era verdade até 24/08 e deixou de ser no dia em que o aviso NATIVO passou
+    // a funcionar (o Graph aceitou o sendActivityNotification): ali quem avisa é
+    // o próprio Teams, com banner, som, aba fechada e celular — mais do que o
+    // pop-up do navegador entrega. Alarme certo com a primeira parada errada
+    // custa o dia do colaborador, e este mandava desmontar o uso que a casa
+    // escolheu. As DUAS permissões (negada e não pedida) dizem o mesmo, porque
+    // dentro do Teams nenhuma delas decide nada.
+    it.each(['negada', 'nao-pedida'] as const)(
+        '🚨 dentro do Teams (%s) o conselho aponta o SINO, e não manda sair do Teams',
+        (permissao) => {
+            const r = faltaNosAvisos({ ...base, permissao, emIframe: true });
+            expect(r.texto).toMatch(/sino de Atividade/);
+            expect(`${r.texto} ${r.acao}`).not.toMatch(/fora do Teams|direto no navegador|no navegador\b/i);
+            // Não AFIRMA que chegou — aponta o lugar que MEDE (o app não vê
+            // daqui nem a instalação no Teams da pessoa nem o silenciamento).
+            expect(r.acao).toMatch(/Testar no meu Teams/);
+        },
+    );
 
     it('som pendente aparece — e o botão do push CONTINUA sendo oferecido', () => {
         // Camadas independentes: esconder uma atrás da outra foi o defeito.

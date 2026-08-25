@@ -85,6 +85,21 @@ export function tituloComContador(naoLidas: number, base = 'SP Connect'): string
 
 export type EstadoPermissao = 'concedida' | 'negada' | 'nao-pedida' | 'sem-suporte';
 
+/**
+ * Dentro do Teams a resposta é a MESMA nos dois estados de permissão do
+ * navegador (negada e não pedida), porque nenhum deles decide nada ali: quem
+ * avisa é o Teams. Uma constante só, senão as duas frases divergem no primeiro
+ * ajuste — e a diferença apareceria justo pra quem já estava confuso.
+ *
+ * ⚠️ Ela não AFIRMA que o aviso chegou: o app não mede isso daqui (a instalação
+ * do SP Connect no Teams de cada pessoa e o silenciamento por app são de lá).
+ * Por isso ela aponta o lugar que MEDE — o 🧪 da ⚙️ — em vez de dar por certo.
+ */
+const AVISO_DENTRO_DO_TEAMS = {
+    texto: '🔔 Aqui quem avisa é o próprio Teams — pelo sino de Atividade.',
+    acao: 'Ele toca e mostra banner mesmo com esta aba fechada, e chega no celular. O som de mensagem nova também continua tocando aqui. Não está chegando? ⚙️ → 👥 Atendentes e filas → 🧪 Testar no meu Teams.',
+} as const;
+
 /** Estado da permissão de notificação do navegador (sem pedir nada). */
 export function estadoDaPermissao(deps?: { permission?: string; temApi?: boolean }): EstadoPermissao {
     const temApi = deps?.temApi ?? (typeof window !== 'undefined' && 'Notification' in window);
@@ -98,20 +113,24 @@ export function estadoDaPermissao(deps?: { permission?: string; temApi?: boolean
 /**
  * O que a tela diz em cada estado — recusa sempre com CAMINHO.
  * `emIframe` muda o conselho: dentro do Teams não há cadeado nem barra de
- * endereço (Paulo, 21/08), e o pop-up do navegador não é do nosso controle
- * lá — o caminho honesto é o som (que funciona) e o app fora do Teams.
+ * endereço (Paulo, 21/08), e o pop-up do navegador não é do nosso controle lá.
+ *
+ * 🚨 O CONSELHO DE DENTRO DO TEAMS ESTAVA INVERTIDO (25/08). Ele mandava
+ * *"para pop-up e push, abra o SP Connect direto no navegador"* — ou seja,
+ * mandava SAIR do Teams para ser avisado. Isso era verdade até 24/08 e deixou
+ * de ser no dia em que o aviso NATIVO passou a funcionar: o Graph aceitou o
+ * `sendActivityNotification`, e dentro do Teams quem avisa é o PRÓPRIO Teams
+ * (sino de Atividade), com banner e som, com esta aba fechada e no celular —
+ * que é MAIS do que o pop-up do navegador entrega. Alarme certo com a primeira
+ * parada errada custa o dia do colaborador (a lição de 23/08), e aqui ele
+ * mandava desmontar justamente o uso que a casa escolheu.
  */
 export function textoDaPermissao(estado: EstadoPermissao, emIframe = false): { texto: string; acao: string | null } {
     switch (estado) {
         case 'concedida':
             return { texto: '🔔 Avisos ligados neste navegador.', acao: null };
         case 'negada':
-            if (emIframe) {
-                return {
-                    texto: '🔕 Dentro do Teams o pop-up de mensagem nova não aparece.',
-                    acao: 'O som de mensagem nova continua tocando aqui. Para pop-up e push, abra o SP Connect direto no navegador (mesmo endereço, fora do Teams).',
-                };
-            }
+            if (emIframe) return AVISO_DENTRO_DO_TEAMS;
             return {
                 texto: '🔕 Este navegador BLOQUEOU os avisos — mensagem nova não vai aparecer na tela.',
                 // O "não" fica guardado: sem dizer onde reverter, a pessoa
@@ -121,12 +140,7 @@ export function textoDaPermissao(estado: EstadoPermissao, emIframe = false): { t
         case 'sem-suporte':
             return { texto: '🔕 Este navegador não mostra avisos.', acao: 'O som continua funcionando; para o pop-up, use um navegador atualizado.' };
         default:
-            if (emIframe) {
-                return {
-                    texto: '🔔 Avisos no Teams dependem da permissão do Teams.',
-                    acao: 'Clique em "Ligar avisos" — se o Teams não perguntar, o som continua avisando; para pop-up e push, use o SP Connect no navegador.',
-                };
-            }
+            if (emIframe) return AVISO_DENTRO_DO_TEAMS;
             return { texto: '🔔 Ligue os avisos para não depender de olhar a tela.', acao: 'Clique em "Ligar avisos" (o navegador vai perguntar).' };
     }
 }
