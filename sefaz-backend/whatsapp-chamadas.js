@@ -294,6 +294,44 @@ export function conferirCallHours(callingGravado, horario) {
 }
 
 /**
+ * 🚨 "PEÇA UM RETORNO DE LIGAÇÃO E ENTRAREMOS EM CONTATO" — quem recebe isso?
+ *
+ * 25/08: a ligação do CELULAR mostrou a tela real da Meta — fora do horário,
+ * o cliente recebe **"Pedir retorno de ligação"** e a frase *"entraremos em
+ * contato assim que possível"*. É uma promessa feita EM NOSSO NOME por uma
+ * tela que não é nossa.
+ *
+ * O app trata `call_permission_request` (que NÓS mandamos) e
+ * `call_permission_reply` (o "Permitir" do cliente). O PEDIDO DE RETORNO é
+ * outra coisa, e o leiaute dele NÃO ESTÁ PROVADO aqui.
+ *
+ * ⚠️ POR ISSO ISTO NÃO É UM HANDLER — é um LOCALIZADOR. Escrever o
+ * processamento de um payload que ninguém viu seria inventar leiaute, que é o
+ * que esta casa não faz (a lição do 1010, do 0500 e do D100). O que ele faz é
+ * ACHAR o evento cru quando ele chegar, para a régua nascer do EVENTO REAL.
+ *
+ * A busca é pelo TEXTO do payload de propósito: não sei em qual campo a Meta
+ * põe isso, e um filtro por caminho conhecido erraria justamente no que eu não
+ * conheço — que é o motivo desta função existir.
+ */
+export function ehEventoDeChamada(payload) {
+    let texto;
+    try { texto = JSON.stringify(payload || {}); } catch { return false; }
+    return /"(calls|call_permission_[a-z]+|call_status|callback[_a-z]*)"/i.test(texto);
+}
+
+/** Rótulo humano do que aquele evento cru PARECE ser — com a ressalva. */
+export function rotularEventoCru(payload) {
+    let texto;
+    try { texto = JSON.stringify(payload || {}); } catch { return 'ilegível'; }
+    if (/"call_permission_reply"/i.test(texto)) return 'resposta do cliente ao pedido de permissão';
+    if (/"call_permission_request"/i.test(texto)) return 'pedido de permissão de ligação';
+    if (/callback/i.test(texto)) return 'PEDIDO DE RETORNO (leiaute não provado — é este que se procura)';
+    if (/"calls"/i.test(texto)) return 'evento de chamada (campo calls)';
+    return 'menciona chamada, forma desconhecida';
+}
+
+/**
  * 🚨 O QUE A META TEM LIGADO — os interruptores que o painel NÃO lia.
  *
  * Estado em 25/08: SBC provado de pé (TLS, certificado público, SIP 200 OK),

@@ -407,6 +407,19 @@ export interface SondaSbc {
  * certificado e um SIP OPTIONS. É o que separa "tudo verde e a ligação é
  * recusada" de uma causa com nome.
  */
+/**
+ * 🔎 Os eventos de CHAMADA que a Meta mandou, CRUS. Existe porque a tela dela
+ * promete "peça um retorno de ligação e entraremos em contato" — e o leiaute
+ * desse pedido não está provado aqui. Não processa nada: entrega o evento real
+ * para a régua nascer DELE.
+ */
+export const eventosCrusDeChamada = () =>
+    req<{
+        achados: { em: string | null; rotulo: string; payload: unknown }[];
+        amostra: number;
+        ultimoEventoEm: string | null;
+    }>('/api/admin/whatsapp/chamadas/eventos-crus');
+
 export const sondarSbc = (p?: { hostname?: string; porta?: number }) =>
     post<SondaSbc>('/api/admin/whatsapp/chamadas/sondar-sbc', p || {});
 

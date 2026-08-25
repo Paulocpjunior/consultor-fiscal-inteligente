@@ -85,3 +85,8 @@ export function lerEstadoDaChamada(calling: unknown): {
     impedimentos: { campo: string; motivo: string; acao: string }[];
     ok: boolean;
 };
+
+/** ⚠️ LOCALIZADOR, não handler: o leiaute do pedido de retorno não está
+ *  provado, então ele só ACHA o evento cru — a régua nasce do evento real. */
+export function ehEventoDeChamada(payload: unknown): boolean;
+export function rotularEventoCru(payload: unknown): string;

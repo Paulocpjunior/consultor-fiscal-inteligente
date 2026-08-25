@@ -23,6 +23,7 @@ import {
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
+    eventosCrusDeChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, excluirContato, salvarEtiqueta,
@@ -615,6 +616,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // da sonda de settings: as duas respondem perguntas diferentes e juntá-las
     // faria "gravado na Meta" passar por "a Meta alcança".
     const [sbc, setSbc] = useState<SondaSbc | null>(null);
+    // 🔎 Eventos de chamada CRUS — a tela da Meta promete "peça um retorno de
+    // ligação e entraremos em contato", e o leiaute desse pedido não está
+    // provado. Isto ACHA o evento real; a régua nasce dele, nunca de dedução.
+    const [crus, setCrus] = useState<{ achados: { em: string | null; rotulo: string; payload: unknown }[]; amostra: number } | null>(null);
+    const [lendoCrus, setLendoCrus] = useState(false);
     const [sondandoSbc, setSondandoSbc] = useState(false);
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
         if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
@@ -2738,6 +2744,54 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                             Alvo veio de: {sbc.origemDoAlvo}.
                                                         </p>
                                                     )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* 🔎 O PEDIDO DE RETORNO — promessa feita EM NOSSO NOME.
+                                            Fora do horário, a tela da Meta oferece ao cliente "Pedir
+                                            retorno de ligação" e diz "entraremos em contato assim que
+                                            possível". Se esse pedido chega ao webhook e ninguém lê, o
+                                            cliente espera um retorno que não vem.
+                                            ⚠️ Isto NÃO processa nada: o leiaute não está provado, e
+                                            escrever handler de payload que ninguém viu é inventar
+                                            leiaute. Ele ACHA o evento real. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1.5">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔎 O que a Meta já mandou sobre chamada</p>
+                                            <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                Fora do horário o cliente vê <strong>"Pedir retorno de ligação"</strong> e a promessa
+                                                de que entraremos em contato. Peça um retorno pelo celular e clique aqui: é deste
+                                                evento que sai a régua para o pedido virar tarefa de alguém.
+                                            </p>
+                                            <button
+                                                onClick={async () => {
+                                                    setLendoCrus(true);
+                                                    try {
+                                                        const r = await eventosCrusDeChamada();
+                                                        setCrus(r.ok ? { achados: r.achados || [], amostra: r.amostra || 0 } : null);
+                                                    } finally { setLendoCrus(false); }
+                                                }}
+                                                disabled={lendoCrus}
+                                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 btn-press whitespace-nowrap">
+                                                {lendoCrus ? 'Lendo…' : '🔎 Ver eventos de chamada (crus)'}
+                                            </button>
+                                            {crus && (
+                                                <div className="text-[10.5px] text-slate-600 dark:text-slate-300 space-y-1">
+                                                    <p>
+                                                        {crus.achados.length === 0
+                                                            ? `Nenhum evento de chamada entre os ${crus.amostra} eventos mais recentes do webhook.`
+                                                            : `${crus.achados.length} evento(s) de chamada entre os ${crus.amostra} mais recentes:`}
+                                                    </p>
+                                                    {crus.achados.map((a, i) => (
+                                                        <details key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1">
+                                                            <summary className="cursor-pointer font-semibold">
+                                                                {a.em ? new Date(a.em).toLocaleString('pt-BR') : 'sem data'} — {a.rotulo}
+                                                            </summary>
+                                                            <pre className="mt-1 text-[9px] bg-slate-900 text-slate-200 rounded p-2 overflow-x-auto max-h-48">
+                                                                {JSON.stringify(a.payload, null, 2)}
+                                                            </pre>
+                                                        </details>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
