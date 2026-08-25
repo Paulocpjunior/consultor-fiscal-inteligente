@@ -3499,6 +3499,25 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             })()}
                                         </div>
                                     )}
+                                    {/* 🤖 IA DE TRIAGEM (25/08). Ela NASCE DESLIGADA como
+                                        tudo que fala com o CLIENTE, e o texto diz o limite
+                                        dela em vez de vender inteligência: ela CLASSIFICA,
+                                        não responde. Sem essa frase, "IA no bot" se lê como
+                                        "o bot agora tira dúvidas", que é exatamente o que
+                                        ele não pode fazer num escritório contábil. */}
+                                    <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                        <input type="checkbox" checked={cfg.triagemIaAtiva}
+                                            onChange={(e) => setCfg((c) => (c ? { ...c, triagemIaAtiva: e.target.checked } : c))} />
+                                        <span className="text-[11px] text-slate-700 dark:text-slate-200">
+                                            🤖 IA lê o texto livre e encaminha para a fila certa
+                                            <span className="block text-[9px] text-slate-400">
+                                                hoje, quem escreve em vez de digitar o número recebe o menu de novo.
+                                                A IA <strong>só classifica</strong> — nunca responde ao cliente, nunca fala de
+                                                imposto, prazo ou valor. Sem certeza, mostra o menu como sempre.
+                                                O atendente vê na conversa que o encaminhamento foi automático.
+                                            </span>
+                                        </span>
+                                    </label>
                                     <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                                         <input type="checkbox" checked={cfg.avisarClienteTransferencia}
                                             onChange={(e) => setCfg((c) => (c ? { ...c, avisarClienteTransferencia: e.target.checked } : c))} />
