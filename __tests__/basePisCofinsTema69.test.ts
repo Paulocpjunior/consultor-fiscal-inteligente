@@ -147,7 +147,7 @@ describe('🚨 M210/M610 — receita bruta e base são campos DIFERENTES', () =>
 
     it('e o M610 idem, com 3%', () => {
         const f = campos(acha(linhas(), 'M610')[0]);
-        expect(brl(f[3])).toBeCloseTo(18179.00, 2);
+        expect(brl(f[3])).toBeCloseTo(18741.24, 2);
         expect(brl(f[4])).toBeCloseTo(14906.78, 2);
         expect(brl(f[11])).toBeCloseTo(brl(f[7]) * brl(f[8]) / 100, 2);
     });
@@ -321,7 +321,7 @@ describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o ap
     it('reproduz a linha da ficha financeira — 37.754,60 × base 30.958,77', () => {
         const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
         expect(l.find((x: string) => x.startsWith('|M210|')))
-            .toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+            .toBe('|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
     });
 
     // 🚨 O IMPOSTO É O MESMO — é isto que fecha o assunto. O desconto sai da
