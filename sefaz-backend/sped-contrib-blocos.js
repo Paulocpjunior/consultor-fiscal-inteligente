@@ -1120,7 +1120,29 @@ export function buildBlocoM(dados) {
         // declarava PIS/COFINS a pagar sobre uma COMPRA.
         if (direcaoEfetivaDoc(nota) === 'saida') {
             totalBcSaida += rb.base;
-            totalReceitaSaida += rb.receita;
+            // 🚨 VL_REC_BRT É A RECEITA **BRUTA** — e quem provou isso foi o
+            // PRÓPRIO PVA (25/08, PWR 1364 · 07/2026, 5º dia no mesmo assunto).
+            //
+            // Sandra apagou TODA a base do PVA e reimportou o arquivo que
+            // declara `|M210|51|37754,60|30958,77|` — e a tela continuou
+            // mostrando **38.316,84 / 30.958,77**. Os dois números da tela são
+            // somas do NOSSO arquivo: 38.316,84 = Σ VL_ITEM dos C170 de saída
+            // (= Σ VL_MERC dos C100) e 30.958,77 = Σ VL_BC_PIS. Ou seja: **o
+            // PVA recalcula o M210 a partir dos documentos** e sobrescreve o
+            // campo 2 com a receita BRUTA.
+            //
+            // ⚠️ E NÃO HÁ COMO FAZER O BRUTO VIRAR LÍQUIDO NO DOCUMENTO: o Guia
+            // Prático é literal no C170, campo 07 — *"a soma de valores dos
+            // registros C170 deve ser igual ao valor informado no campo VL_MERC
+            // do registro C100"* —, e VL_MERC é o valor das mercadorias, com o
+            // desconto no campo PRÓPRIO (VL_DESC). Baixar o VL_ITEM para o
+            // líquido trocaria esta divergência por uma RECUSA de validação.
+            //
+            // ✅ E O IMPOSTO NÃO MUDA UM CENTAVO: o desconto continua fora da
+            // BASE, que é onde ele reduz tributo — 38.316,84 − 562,24 (desconto)
+            // − 6.795,83 (ICMS, Tema 69) = 30.958,77, exatamente a base que o
+            // PVA mostra e sobre a qual a guia é paga.
+            totalReceitaSaida += rb.receitaBruta;
             icmsExcluido += rb.icms;
             if (rb.desconto > 0) { descontoExcluido += rb.desconto; docsComDesconto += 1; }
             // ⚠️ O VALOR APURADO SEGUE A BASE, não o destacado no documento. O
@@ -1179,18 +1201,27 @@ export function buildBlocoM(dados) {
     // responde lendo o código — e há empresa com desconto em quase toda nota.
     if (descontoExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
-            `Receita do M210/M610: o DESCONTO incondicional foi tirado da receita — bruta `
-            + `${(totalReceitaSaida + descontoExcluido).toFixed(2)} − desconto ${descontoExcluido.toFixed(2)} `
-            + `= VL_REC_BRT ${totalReceitaSaida.toFixed(2)} (${docsComDesconto} documento(s) com desconto). `
-            + 'Confira contra o C100 do PVA: o "Valor do desconto" de cada nota tem que estar nesta soma.',
+            `Desconto incondicional: ${docsComDesconto} documento(s), total `
+            + `${descontoExcluido.toFixed(2)}. O VL_REC_BRT do M210/M610 é a receita BRUTA `
+            + `(${totalReceitaSaida.toFixed(2)}) — é assim que o PVA recalcula o registro a partir dos `
+            + 'C100/C170, e o Guia não deixa o VL_ITEM sair líquido (a soma dos C170 tem que bater com o '
+            + `VL_MERC do C100). O desconto sai da BASE, que é onde ele reduz tributo: ${totalReceitaSaida.toFixed(2)} `
+            + `− ${descontoExcluido.toFixed(2)} de desconto − ${icmsExcluido.toFixed(2)} de ICMS = `
+            + `${totalBcSaida.toFixed(2)}. Se o PVA mostrar a receita bruta, é o esperado — confira a BASE.`,
         );
     }
 
     if (icmsExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
+            // ⚠️ A CONTA TEM DE FECHAR NA PRÓPRIA FRASE. Desde 25/08 o
+            // `totalReceitaSaida` é a receita BRUTA (é o que o PVA recalcula),
+            // então o desconto entra AQUI — sem ele a subtração não daria a
+            // base, e aviso que se desmente é pior que aviso nenhum.
             `Base do PIS/COFINS (Tema 69 · RE 574.706): o ICMS destacado nas saídas foi EXCLUÍDO da base — `
-            + `receita ${totalReceitaSaida.toFixed(2)} − ICMS ${icmsExcluido.toFixed(2)} = base `
-            + `${totalBcSaida.toFixed(2)}. É a mesma exclusão que a ficha do Lucro já fazia; antes desta `
+            + `receita bruta ${totalReceitaSaida.toFixed(2)}`
+            + (descontoExcluido > 0 ? ` − desconto ${descontoExcluido.toFixed(2)}` : '')
+            + ` − ICMS ${icmsExcluido.toFixed(2)} = base ${totalBcSaida.toFixed(2)}. `
+            + 'É a mesma exclusão que a ficha do Lucro já fazia; antes desta '
             + 'competência o SPED declarava a base CHEIA, maior que a da guia.',
         );
     }
