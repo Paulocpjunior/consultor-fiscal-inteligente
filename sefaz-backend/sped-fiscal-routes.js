@@ -25,6 +25,9 @@ import { fetchAllDocs } from './firestore-paginate.js';
 // Valor do documento em TODAS as formas (o import pelo navegador grava só
 // `totais.vNF`) — régua única.
 import { valorDoDocumento } from './xml-metadata-helper.js';
+// O nome carrega a HORA da geração — dono ÚNICO nas duas famílias, senão o
+// EFD ICMS/IPI continuaria produzindo arquivos indistinguíveis (PWR, 25/08).
+import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -277,7 +280,15 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         const sufixo = periodo.competencia
             ? periodo.competencia.replace('-', '')
             : `${periodo.competenciaInicio.replace('-', '')}_${periodo.competenciaFim.replace('-', '')}`;
-        const filename = `SPED_${cnpj}_${sufixo}.txt`;
+        // 🚨 O NOME DIZ QUAL GERAÇÃO É — SPED_<cnpj>_<periodo>_<AAAAMMDD-HHMM>.txt
+        const filename = nomeDoArquivoSped({ familia: 'SPED', cnpj, periodo: sufixo });
+
+        // 🚨 E A TELA DIZ QUAL ARQUIVO ELA DESCREVE — o PVA guarda a
+        // escrituração IMPORTADA na base dele, então número na tela sem o nome
+        // do arquivo do lado não fecha a conferência (PWR, 25/08).
+        for (const a of avisoDeIdentidadeDoArquivo({
+            filename, linhas: linhasDoArquivo, registros: ['E110'],
+        })) dados.warnings.push(a);
 
         res.setHeader('Content-Type', 'text/plain; charset=windows-1252');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
