@@ -37,6 +37,7 @@ import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
     lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
+    ehEventoDeChamada, rotularEventoCru,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -2887,6 +2888,43 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
         return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══ 🔎 EVENTOS DE CHAMADA, CRUS ═══════════════════════════════════════════
+// 25/08, a ligação do CELULAR mostrou a tela real: fora do horário o cliente
+// recebe **"Pedir retorno de ligação"** e a frase "entraremos em contato assim
+// que possível" — uma promessa feita EM NOSSO NOME por uma tela que não é
+// nossa. Se esse pedido chega ao webhook e ninguém o lê, o cliente espera um
+// retorno que não vem.
+//
+// ⚠️ Esta rota NÃO processa nada: ela ACHA o evento cru. O leiaute do pedido
+// de retorno não está provado, e escrever o handler de um payload que ninguém
+// viu seria inventar leiaute — a lição do 1010, do 0500 e do D100. A régua
+// nasce do EVENTO REAL, e é ele que esta rota entrega.
+router.get('/chamadas/eventos-crus', requireAdmin, async (_req, res) => {
+    try {
+        const snap = await getDb().collection('whatsapp_webhook_eventos')
+            .orderBy('recebidoEm', 'desc').limit(200).get();
+        const achados = snap.docs
+            .filter((d) => ehEventoDeChamada(d.data()?.payload))
+            .slice(0, 10)
+            .map((d) => ({
+                em: d.data()?.recebidoEm || null,
+                rotulo: rotularEventoCru(d.data()?.payload),
+                payload: d.data()?.payload || null,
+            }));
+        return res.json({
+            ok: true,
+            achados,
+            // Recorte DITO: "0 de 200 conferidos" é resposta; "0" sozinho
+            // passaria por "a Meta não manda nada", que é outra afirmação.
+            amostra: snap.size,
+            ultimoEventoEm: snap.docs[0]?.data()?.recebidoEm || null,
+        });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/eventos-crus]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
