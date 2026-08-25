@@ -142,14 +142,13 @@ const post = <T>(url: string, body?: unknown, metodo: 'POST' | 'PATCH' | 'DELETE
 const urlConversa = (numero: string, acao: string) =>
     `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/${acao}`;
 
-/** ☎️ Pede ao cliente a permissão de ligação (cartão "Permitir" no WhatsApp). */
-/** ☎️ Liga para o cliente (só depois do "Permitir" dele — a trava é do backend). */
-export const ligarParaCliente = (numero: string) =>
-    post<{
-        mensagem: MensagemInbox; acao?: string; emConducaoPor?: string;
-        code?: number | null; permissao?: string; indeterminado?: boolean;
-    }>(urlConversa(numero, 'ligar'));
+// ☎️ `ligarParaCliente` FOI DELETADA em 25/08. A Meta recusa chamada por API em
+// número no modo SIP (código 131055, provado em 24/08), então a porta só servia
+// a uma ação de tela que já não existia — porta de fetch órfã é o convite para
+// religar um botão que não disca. A rota do backend continua de pé com as
+// travas dela; quando este número sair do modo SIP, a porta volta COM o botão.
 
+/** ☎️ Pede ao cliente a permissão de ligação (cartão "Permitir" no WhatsApp). */
 export const pedirPermissaoLigacao = (numero: string) =>
     post<{
         mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean; emConducaoPor?: string;

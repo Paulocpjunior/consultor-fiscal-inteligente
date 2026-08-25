@@ -20,7 +20,7 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
     eventosCrusDeChamada,
@@ -401,32 +401,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
     };
 
-    // ☎️ LIGAR para o cliente. O telefone dele TOCA — por isso confirma antes,
-    // como no pedido de permissão (e diferente de tudo que é ajuste interno).
-    const [ligando, setLigando] = useState(false);
-    const acaoLigar = async () => {
-        if (!sel || ligando) return;
-        setPermLigErro(null); setPermLigAviso(null); setPermLigConducao(false);
-        const ok = await pedirConfirmacao(
-            'O telefone do cliente vai TOCAR agora, e a ligação atende no ramal 221 (HitPhone). Ligar?',
-            'Ligar agora',
-        );
-        if (!ok) return;
-        setLigando(true);
-        setPermLigAviso('⏳ Pedindo a ligação à Meta…');
-        try {
-            const r = await ligarParaCliente(sel.numero);
-            if (!r.ok) {
-                const cod = (r as any).code != null ? ` (código ${(r as any).code})` : '';
-                setPermLigErro(`${r.error}${cod}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
-                setPermLigConducao(Boolean((r as any).emConducaoPor));
-                setPermLigAviso(null);
-                return;
-            }
-            setMensagens((m) => [...m, r.mensagem]);
-            setPermLigAviso('☎️ Ligação pedida — atenda no ramal 221 quando tocar.');
-        } finally { setLigando(false); }
-    };
+    // ☎️ NÃO EXISTE AÇÃO DE LIGAR AQUI, e o motivo é a resposta da própria Meta
+    // (24/08, código 131055): "Graph API calls are not allowed for SIP enabled
+    // numbers". Em modo SIP a saída não sai por API — quem disca é o tronco.
+    // A ação existia e ficou ÓRFÃ quando o botão saiu: código morto com cara de
+    // entrega é a isca para alguém religar um caminho que a Meta recusa por
+    // desenho, então ela foi DELETADA em 25/08 junto com a porta de fetch.
+    // A rota do backend (`/conversas/:numero/ligar`) fica de pé com as travas
+    // dela (permissão do cliente, validade, condução) — ela é a régua do dia em
+    // que este número sair do modo SIP, e não é ela que promete botão.
 
     const acaoSituacao = async () => {
         if (!sel) return;
@@ -2355,7 +2338,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <p className="text-slate-500 dark:text-slate-400">
                                                 Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
                                                 app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
-                                                2) o pacote do Teams ainda na versão sem <code>activities</code> — reenviar o zip 1.1.0;
+                                                2) o pacote do Teams instalado é anterior ao <code>activities</code> —
+                                                baixe o atual em <a href="/sp-connect-teams.zip" className="underline">/sp-connect-teams.zip</a> e reenvie;
                                                 3) o SP Connect não instalado no seu Teams.
                                             </p>
                                         </div>
@@ -4339,16 +4323,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         allowed for SIP enabled numbers". Em modo SIP a saída NÃO
                                                         sai por API — quem disca é o tronco. Botão que a Meta
                                                         recusa por desenho é botão que não faz nada. */}
-                                                    {/* ⚠️ A frase diz o ESTADO, não a promessa: discar o 221 só
-                                                        vai completar quando o SBC souber o endereço SIP da Meta,
-                                                        e ele se lê no INVITE da primeira ligação RECEBIDA. Dizer
-                                                        "disque 221" antes disso é a promessa que a tela não
-                                                        cumpre — o defeito que este mesmo bloco acabou de ter. */}
+                                                    {/* ⚠️ A frase diz o ESTADO MEDIDO, não a promessa. Até 25/08
+                                                        ela dizia "falta a primeira ligação RECEBIDA" — o que fazia
+                                                        parecer que bastava alguém ligar. A medição desmentiu: com o
+                                                        gravador do SBC PROVADO ligado, a chamada das 14h52 (dentro
+                                                        da janela) saiu "Não atendida" no celular e o tronco não
+                                                        registrou CDR nem INVITE em três conferências seguidas. Ou
+                                                        seja: a Meta ACEITA a chamada e NÃO a entrega no tronco.
+                                                        Mandar esperar a primeira ligação seria mandar esperar o que
+                                                        não vai acontecer sozinho — quem destrava é o chamado. */}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
                                                         📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone),
                                                         não por aqui — a Meta recusa chamada por API em número SIP.
-                                                        <span className="block text-amber-600 dark:text-amber-400">
-                                                            Em validação: falta a primeira ligação RECEBIDA, que é o que ensina o endereço da Meta ao tronco.
+                                                        <span className="block text-red-600 dark:text-red-400">
+                                                            🛑 Ligação ainda NÃO funciona nos dois sentidos: medido em 25/08, a Meta aceita
+                                                            a chamada e não entrega no nosso tronco (sem INVITE, sem CDR) — chamado aberto com ela.
+                                                            Fale por mensagem enquanto isso.
                                                         </span>
                                                     </p>
                                                 </>

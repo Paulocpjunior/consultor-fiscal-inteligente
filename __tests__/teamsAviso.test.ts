@@ -229,4 +229,19 @@ describe('🔌 fiação', () => {
         expect(tela).toContain('Testar no meu Teams');
         expect(tela).toContain('alternarAvisoTeams');
     });
+
+    // 🚨 SUSPEITO QUE APONTA VERSÃO CRAVADA ENVELHECE EM SILÊNCIO (25/08). O
+    // texto mandava "reenviar o zip 1.1.0" e o manifest já estava em 1.1.1 —
+    // quem seguisse a instrução procuraria um pacote que não é o atual, e
+    // concluiria que reenviou quando não reenviou. É a irmã do "aviso que
+    // aponta um lugar que a pessoa ACHA" (21/08): aqui ele aponta um pacote
+    // que a pessoa NÃO acha. Quem tem a versão é o zip servido pela rota, e é
+    // pra ele que a frase manda — assim ela nunca desatualiza.
+    it('🚨 o suspeito do pacote manda ao zip servido, nunca a um número de versão cravado', () => {
+        const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+        const bloco = tela.slice(tela.indexOf('Suspeitos: 1) permissão'), tela.indexOf('Suspeitos: 1) permissão') + 700);
+        expect(bloco).toContain('/sp-connect-teams.zip');
+        expect(bloco).not.toMatch(/zip\s+\d+\.\d+\.\d+/);
+        expect(bloco).toContain('TeamsActivity.Send');
+    });
 });
