@@ -186,13 +186,22 @@ telefone e a ligação já está a caminho.
 Quem liga pelo ☎️ do WhatsApp **não escolheu departamento**. Cair direto num
 ramal é apostar que a dúvida é sempre daquela pessoa.
 
-Isso já é **um parâmetro**, não código: `SBC_DESTINO`. O `221` de hoje era o
-alvo do **primeiro teste** (um ramal que aceita INVITE e prova a perna).
+Isso já é **um parâmetro**, não código: `SBC_DESTINO`. O `221` era o alvo do
+**primeiro teste** (um ramal que aceita INVITE e prova a perna).
 
-⚠️ **A URA deve ser a MESMA de quem liga no fixo.** Uma triagem só: duas
-divergem no primeiro dia em que alguém mudar uma e esquecer a outra — é a
-armadilha das duas formas com outra roupa. Decisão do Paulo: qual ramal/rota
-da HIT é a URA.
+✅ **DECIDIDO EM 25/08 — a URA é o ramal `211`** (Paulo: *"Ramal rota ramal 211,
+central URA"*). É o default do script desde então; quem já instalou com o 221
+roda o script de novo (a reinstalação da config é idempotente) e a chamada
+passa a cair na URA.
+
+⚠️ **É a MESMA URA de quem liga no fixo**, e isso é regra, não coincidência:
+uma triagem só. Duas divergem no primeiro dia em que alguém mudar uma e
+esquecer a outra — a armadilha das duas formas com outra roupa.
+
+⚠️ **E isso NÃO destrava a ligação**: o INVITE da Meta não chega ao tronco
+(medido em 25/08, ver o topo deste documento). O 211 é para onde a chamada vai
+cair **quando** a Meta passar a entregar — trocar o destino agora é preparar o
+terreno, não corrigir o bloqueio.
 
 ### Caminho SECUNDÁRIO da saída: teclado com prefixo
 

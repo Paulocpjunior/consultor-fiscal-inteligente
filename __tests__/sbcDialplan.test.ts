@@ -101,16 +101,30 @@ describe('a saída pelo teclado é caminho SECUNDÁRIO, com o motivo registrado'
     });
 });
 
-describe('a ENTRADA cai onde o Paulo mandar — e o 221 era do TESTE', () => {
-    it('SBC_DESTINO é parâmetro e o comentário diz que o default era de teste', () => {
-        expect(script).toMatch(/SBC_DESTINO="\$\{SBC_DESTINO:-221\}"/);
-        expect(script).toMatch(/O default 221 era do PRIMEIRO TESTE/);
-        expect(script).toMatch(/aponte para a URA/);
+describe('a ENTRADA cai na URA que o Paulo decidiu', () => {
+    // ⚠️ TRAVA LITERAL TROCADA (25/08). Ela prendia `SBC_DESTINO:-221` e a frase
+    // "O default 221 era do PRIMEIRO TESTE" — ou seja, prendia o estado
+    // PROVISÓRIO e reprovaria justamente a decisão que ela estava esperando.
+    // Paulo respondeu: *"Ramal rota ramal 211, central URA"*. O que a trava
+    // garante agora é a INTENÇÃO: o destino é parâmetro, o default é a URA (não
+    // o ramal de uma pessoa) e a decisão está escrita com a fala que a gerou.
+    it('o destino é PARÂMETRO, com a URA decidida como default', () => {
+        expect(script).toMatch(/SBC_DESTINO="\$\{SBC_DESTINO:-211\}"/);
+        expect(script).not.toMatch(/SBC_DESTINO:-221/);   // o ramal do teste não volta a ser default
+        expect(script).toMatch(/central URA/);            // a fala que decidiu, junto do valor
     });
 
     it('e a URA tem que ser a MESMA de quem liga no fixo (uma triagem só)', () => {
         const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
-        expect(doc).toMatch(/A URA deve ser a MESMA de quem liga no fixo/);
+        expect(doc).toMatch(/É a MESMA URA de quem liga no fixo/);
+        expect(doc).toMatch(/ramal `211`/);
+    });
+
+    it('🚨 trocar o destino NÃO é dito como conserto do bloqueio da Meta', () => {
+        // Sem isto, quem ler "URA decidida" conclui que a ligação passou a
+        // funcionar — e ela não passou: o INVITE não chega ao tronco.
+        const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
+        expect(doc).toMatch(/NÃO destrava a ligação/);
     });
 });
 
