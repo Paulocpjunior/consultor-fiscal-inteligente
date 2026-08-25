@@ -210,3 +210,35 @@ describe('a rota existe e tem BOTÃO (rota sem botão é código morto)', () => 
         expect(tela).toMatch(/sbc\.sip\?\.respondeu/);
     });
 });
+
+// ═══ 24/08 — "TUDO DE PÉ E A LIGAÇÃO RECUSADA": a janela ═══════════════════
+// O 🔌 aprovou o caminho — TLS 1.2, certificado público até 2026-11-22,
+// Asterisk respondendo SIP 200 OK. Ou seja: a hipótese do certificado, que era
+// a minha nº 1, estava ERRADA e o SBC está inteiro.
+//
+// 🚨 E o print que trouxe essa prova trouxe outra coisa: ele é das 19:51, e a
+// grade da chamada (a MESMA das mensagens) é seg–sex 08:00–12:00 e
+// 13:00–17:30. Fora dela a Meta recusa a ligação com a frase que se lê como
+// defeito — "SP Assessoria não pode receber ligações do WhatsApp". Então o
+// teste feito fora da hora responde sobre o HORÁRIO e PARECE resposta sobre o
+// tronco: nós dois testamos fora da janela e fomos procurar defeito de
+// infraestrutura.
+//
+// O painel tem a grade e tem o relógio. Calar aqui é deixar quem testa
+// concluir a causa errada — é a régua de "causa junto do número".
+describe('o painel diz se AGORA vale testar a ligação', () => {
+    const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('usa a MESMA régua de horário do atendimento, nunca uma segunda cópia', () => {
+        expect(tela).toMatch(/dentroDoHorario \} from '\.\.\/\.\.\/sefaz-backend\/whatsapp-atendimento\.js'/);
+        expect(tela).toMatch(/dentroDoHorario\(sonda\.horarios\.mensagens, agora\)/);
+    });
+
+    it('fora da janela ele DIZ que a recusa é do horário, não do tronco', () => {
+        expect(tela).toMatch(/essa recusa é do HORÁRIO, não do tronco/);
+    });
+
+    it('e mostra a hora de SP — número que não dá pra conferir não convence', () => {
+        expect(tela).toMatch(/timeZone: 'America\/Sao_Paulo', hour: '2-digit', minute: '2-digit'/);
+    });
+});
