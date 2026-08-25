@@ -234,3 +234,77 @@ chamada inesperada iria ao WhatsApp **em silêncio**.
 🚧 **E nada disso disca antes de `META_SIP_DESTINO`**, que se lê no INVITE da
 primeira ligação RECEBIDA. Ou seja: **a entrada destrava a saída** — não há
 como inverter a ordem.
+
+## 🛑 PROVADO EM 25/08: a Meta NÃO ENTREGA a chamada no tronco
+
+Depois de um dia inteiro de rodadas, o caso fechou — e fechou com MEDIÇÃO, não
+com dedução. Três hipóteses minhas caíram no caminho (certificado, horário,
+interruptores da Meta); a única que sobreviveu veio de olhar a tela real.
+
+### O que está provado do NOSSO lado
+
+| | |
+|---|---|
+| DNS | `sip.spassessoriacontabil.com.br` → 35.185.197.118 |
+| Porta 5061 | aberta |
+| TLS | 1.2, certificado **público** (Let's Encrypt), válido até 22/11/2026 |
+| SIP | **OPTIONS → 200 OK**, Asterisk 20.6.0 |
+| Registro | `full` com VERBOSE + CDR ligados e CONFERIDOS antes do teste |
+
+### O que está provado do lado da META
+
+`GET /settings` devolve, todos ENABLED: `calling.status`, `sip.status`,
+`call_hours.status`; `call_icon_visibility = DEFAULT`; um servidor SIP gravado
+(`sip.spassessoriacontabil.com.br:5061`); grade em America/Sao_Paulo,
+seg–sex 08:00–12:00 e 13:00–17:30.
+
+### O que acontece
+
+A chamada do cliente (do CELULAR — o WhatsApp **Desktop** não liga para número
+da Business API, e era isso que produzia *"não pode receber ligações"*) é
+ACEITA pela Meta: o cliente vê a tela de chamada, o horário é respeitado, e o
+resultado é **"Não atendida"**.
+
+E **nenhum INVITE chega ao SBC**: nem CDR, nem log, com o gravador ligado e
+conferido. Teste das 14:52 de 25/08, dentro da janela.
+
+⚠️ Também não chega evento de chamada no WEBHOOK — só o
+`call_permission_reply`. Em modo SIP a sinalização É o INVITE, então a ligação
+NUNCA vai virar linha na conversa vindo do webhook: quando ela passar a chegar,
+o registro tem de sair do CDR do SBC.
+
+### Conclusão
+
+O que falta não está no SBC nem na configuração que o app escreve. **Não há o
+que consertar deste lado** — o próximo passo é o suporte da Meta, e o texto do
+chamado está abaixo.
+
+📌 **REGRA QUE FICA: infraestrutura de diagnóstico se CONFERE antes do teste.**
+As três primeiras rodadas não valeram nada porque o SBC nasceu sem gravar —
+o silêncio não distinguia "não chegou" de "chegou e ninguém anotou". Só depois
+de provar que o gravador estava ligado é que o vazio virou prova.
+
+### Texto do chamado (Meta / suporte da WABA)
+
+> Número: +55 11 3337-1554 · WABA 1289687319936644 · phone_number_id
+> 1167203286473367.
+>
+> Chamadas de usuário para a empresa (Business Calling API em modo SIP) são
+> aceitas e terminam como "Não atendida" — nenhum INVITE chega ao nosso SBC.
+>
+> Configuração (GET /settings): calling.status=ENABLED, sip.status=ENABLED,
+> sip.servers=[sip.spassessoriacontabil.com.br:5061],
+> call_icon_visibility=DEFAULT, call_hours.status=ENABLED
+> (America/Sao_Paulo, seg–sex 08:00–12:00 e 13:00–17:30).
+>
+> Nosso SBC: TLS 1.2 na 5061, certificado público válido até 22/11/2026,
+> responde SIP OPTIONS com 200 OK (Asterisk 20.6.0). Teste feito de fora da
+> rede confirma DNS, porta, handshake TLS e resposta SIP.
+>
+> Com logging verbose e CDR habilitados e verificados ANTES do teste, uma
+> chamada às 14:52 (dentro da janela) não gerou nenhum registro: nenhum
+> INVITE, nenhuma entrada de CDR.
+>
+> Pergunta: o que impede o roteamento das chamadas para o tronco SIP
+> configurado? Há alguma etapa de validação/aprovação do servidor SIP, ou
+> allowlist de IP, pendente do lado de vocês?
