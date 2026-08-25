@@ -365,6 +365,13 @@ export interface HorariosChamada {
     mensagens: { dias: number[]; turnos: { inicio: string; fim: string }[] } | null;
     conferencia: { situacao: 'igual' | 'diverge' | 'sem-call-hours' | 'horario-ilegivel'; motivo: string };
     calling: Record<string, unknown> | null;
+    /** 🚨 Os interruptores que o painel não lia: calling.status e sip.status.
+     *  Servidor GRAVADO não é tronco LIGADO. Ausente vira 'nao-declarado'. */
+    interruptores?: {
+        estado: { chamada: string; sip: string; icone: string; horarios: string; servidores: number };
+        impedimentos: { campo: string; motivo: string; acao: string }[];
+        ok: boolean;
+    } | null;
 }
 
 export const sondarChamadas = () =>
