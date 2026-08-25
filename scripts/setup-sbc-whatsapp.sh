@@ -164,8 +164,8 @@ CONF
 
 # ── 🚨 O SBC NASCEU SEM DEIXAR RASTRO (25/08). A primeira ligação REAL entrou
 #    ("Não atendida" no celular do cliente, 14:17) e não havia como provar se
-#    ela chegou aqui: `/var/log/asterisk/full` não existia (o pacote do Ubuntu
-#    só escreve `messages`, sem verbose) e o `Master.csv` do CDR também não.
+#    ela chegou aqui: /var/log/asterisk/full não existia (o pacote do Ubuntu
+#    só escreve messages, sem verbose) e o Master.csv do CDR também não.
 #    Ou seja: o log ficou mudo e o silêncio não distinguia "não chegou" de
 #    "chegou e ninguém anotou" — que é a pior forma de silêncio, e a mesma
 #    classe que este projeto persegue em toda tela. Infraestrutura de
@@ -176,13 +176,13 @@ dateformat = %F %T
 [logfiles]
 console => notice,warning,error
 messages => notice,warning,error
-; `full` é o que guarda o VERBOSE — é dele que sai o INVITE da Meta, e é ele
+; O 'full' é o que guarda o VERBOSE — é dele que sai o INVITE da Meta, e é ele
 ; que faltava. Sem verbose, a linha do dialplan (NoOp) não é escrita em lugar
 ; nenhum e a chamada não deixa marca.
 full => notice,warning,error,verbose
 CONF
 
-# Verbose PERSISTE no arquivo: `core set verbose` some no primeiro restart, e
+# Verbose PERSISTE no arquivo: 'core set verbose' some no primeiro restart, e
 # foi exatamente assim que a ligação de hoje passou sem registro.
 if ! grep -q '^verbose' /etc/asterisk/asterisk.conf; then
     sed -i 's/^\[options\]/[options]\nverbose = 3/' /etc/asterisk/asterisk.conf
@@ -206,7 +206,7 @@ CONF
 # ── A ponte: Meta entra por TLS/SRTP; a HIT recebe INVITE direto em UDP/RTP.
 #    ⚠️ Leiaute da perna Meta NÃO provado contra chamada real — o ajuste fino
 #    sai do log (asterisk -rvvv), nunca de dedução (docs/sbc-whatsapp-hitphone.md).
-cat > /etc/asterisk/pjsip.conf <<CONF
+cat > /etc/asterisk/pjsip.conf <<'CONF'
 [transport-tls]
 type=transport
 protocol=tls
@@ -264,7 +264,7 @@ contact=sip:${HIT_HOST}:${HIT_PORT}
 ${BLOCO_META_SAIDA}
 CONF
 
-cat > /etc/asterisk/extensions.conf <<CONF
+cat > /etc/asterisk/extensions.conf <<'CONF'
 [de-meta]
 ; Toda chamada da Meta cai no destino do HitPhone (ramal/DID ${SBC_DESTINO}).
 exten => _.,1,NoOp(Chamada WhatsApp da Meta -> HIT ${SBC_DESTINO})
