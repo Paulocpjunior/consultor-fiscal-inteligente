@@ -951,6 +951,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [ctCarregando, setCtCarregando] = useState(false);
     const [ctErro, setCtErro] = useState<string | null>(null);
     const [ctSel, setCtSel] = useState<Contato | null>(null);
+    // ✏️ Rascunho da edição do cadastro — TEXTO no estado, gravado só no
+    // Salvar. Editar direto no objeto faria a lista mudar antes de o servidor
+    // ter aceitado, e um erro deixaria a tela mostrando o que não foi gravado.
+    const [ctEdit, setCtEdit] = useState<{ nome: string; observacao: string } | null>(null);
+    const [ctSalvando, setCtSalvando] = useState(false);
     const [ctNovo, setCtNovo] = useState<{ numero: string; nome: string; categoria: string } | null>(null);
     const [ctMsg, setCtMsg] = useState<string | null>(null);
 
@@ -980,6 +985,29 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setCtSel(atualizado);
         setContatos((l) => l.map((x) => (x.numero === c.numero ? atualizado : x)));
         setCtMsg(null);
+    };
+
+    // ✏️ EDITAR O CADASTRO (Paulo, 25/08: "não possuímos a opção de EDITAR
+    // contato, para que assim possamos usar os flags, se cliente, ou não
+    // salvar e completar o necessário").
+    // 🚨 O backend ACEITA `nome` e `observacao` no PATCH desde que os contatos
+    // nasceram — e nenhum botão os mandava. Campo que o servidor grava e
+    // ninguém pode preencher é a "rota sem botão" na versão CAMPO: parece
+    // entrega, e a pessoa que precisa dele conclui que o app não faz.
+    const salvarCadastroDoContato = async (c: Contato, nome: string, observacao: string) => {
+        setCtSalvando(true);
+        try {
+            const r = await atualizarContato(c.numero, { nome: nome.trim(), observacao: observacao.trim() });
+            if (!r.ok) { setCtMsg(r.error || 'Não deu para salvar o contato.'); return; }
+            // O nome do PERFIL é o que o WhatsApp manda; o que se digita aqui
+            // é o mesmo campo, e a lista tem que concordar na hora — senão a
+            // pessoa salva e vê o nome velho, e salva de novo.
+            const atualizado = { ...c, nomePerfil: nome.trim() || null, observacao: observacao.trim() || null };
+            setCtSel(atualizado);
+            setContatos((l) => l.map((x) => (x.numero === c.numero ? atualizado : x)));
+            setCtEdit(null);
+            setCtMsg('✓ Contato salvo.');
+        } finally { setCtSalvando(false); }
     };
 
     const registrarConsentimento = async (c: Contato, etiqueta: string) => {
@@ -1907,7 +1935,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </p>
                                 )}
                                 {contatos.map((c) => (
-                                    <button key={c.numero} onClick={() => { setCtSel(ctSel?.numero === c.numero ? null : c); setCtMsg(null); }}
+                                    <button key={c.numero} onClick={() => { setCtSel(ctSel?.numero === c.numero ? null : c); setCtEdit(null); setCtMsg(null); }}
                                         className={`w-full text-left rounded-lg border px-2.5 py-1.5 ${ctSel?.numero === c.numero
                                             ? 'border-[#0e3bfa] bg-[#0e3bfa]/5'
                                             : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40'}`}>
@@ -1951,9 +1979,57 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {/* Painel do contato escolhido */}
                             {ctSel && (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
-                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
-                                        {ctSel.nomePerfil || formatarNumeroBr(ctSel.numero)}
-                                    </p>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100 truncate">
+                                            {ctSel.nomePerfil || formatarNumeroBr(ctSel.numero)}
+                                        </p>
+                                        {!ctEdit && (
+                                            <button
+                                                onClick={() => { setCtEdit({ nome: ctSel.nomePerfil || '', observacao: ctSel.observacao || '' }); setCtMsg(null); }}
+                                                className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 btn-press whitespace-nowrap">
+                                                ✏️ Editar
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* ✏️ O cadastro: nome e observação. O backend aceitava os dois
+                                        desde sempre e nenhum botão os mandava — campo que o servidor
+                                        grava e ninguém pode preencher parece entrega, e quem precisa
+                                        dele conclui que o app não faz. */}
+                                    {ctEdit && (
+                                        <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 space-y-1.5">
+                                            <label className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                                Nome
+                                                <input value={ctEdit.nome} onChange={(e) => setCtEdit({ ...ctEdit, nome: e.target.value })}
+                                                    placeholder="como esta pessoa aparece na lista" className={CAMPO} />
+                                            </label>
+                                            <label className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                                Observação
+                                                <input value={ctEdit.observacao} onChange={(e) => setCtEdit({ ...ctEdit, observacao: e.target.value })}
+                                                    placeholder="ex.: falar só à tarde · sócio da empresa X" className={CAMPO} />
+                                            </label>
+                                            <div className="flex gap-1.5">
+                                                <button onClick={() => salvarCadastroDoContato(ctSel, ctEdit.nome, ctEdit.observacao)}
+                                                    disabled={ctSalvando}
+                                                    className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40 btn-press">
+                                                    {ctSalvando ? 'Salvando…' : 'Salvar'}
+                                                </button>
+                                                <button onClick={() => setCtEdit(null)}
+                                                    className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 btn-press">
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                            {/* A categoria fica logo abaixo, nas etiquetas: dizer isso
+                                                aqui evita a pessoa procurar um campo "categoria" que
+                                                não existe neste bloco. */}
+                                            <p className="text-[10px] text-slate-400">
+                                                A <strong>categoria</strong> (Cliente, Lead…) se troca nas 🏷 etiquetas logo abaixo — ela é
+                                                obrigatória, então marque a nova antes de desmarcar a velha.
+                                            </p>
+                                        </div>
+                                    )}
+                                    {!ctEdit && ctSel.observacao && (
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300">📝 {ctSel.observacao}</p>
+                                    )}
                                     <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">🏷 Etiquetas</p>
                                     <div className="flex gap-1.5 flex-wrap">
                                         {etiquetas.map((e) => {
