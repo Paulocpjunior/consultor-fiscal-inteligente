@@ -138,6 +138,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'whatsapp_config', grupo: 'Comunicação', funcionalidade: 'Config do atendimento (doc "atendimento"): bot de triagem (nasce DESLIGADO), horário de funcionamento, mensagens automáticas e menu → fila (⚙️ do SP Connect, só admin grava)' },
     { colecao: 'whatsapp_push_tokens', grupo: 'Comunicação', funcionalidade: 'Token do celular de cada atendente (push de mensagem nova) + preferências de aviso — 1 doc por uid; quem recebe o quê é decidido pela fila, não pelo token' },
     { colecao: 'whatsapp_canais', grupo: 'Comunicação', funcionalidade: 'Canais do WhatsApp (2º número / 2ª WABA): rótulo, phoneNumberId e o NOME da variável do Cloud Run que guarda o token — o VALOR do token nunca entra no banco' },
+    { colecao: 'whatsapp_presenca', grupo: 'Comunicação', funcionalidade: 'Último sinal do inbox aberto, 1 doc por e-mail — responde "quem da fila está no ar AGORA?" na hora de transferir. Guarda só o carimbo de tempo; ausência de sinal NUNCA é lida como "offline"' },
     { colecao: 'whatsapp_avaliacoes', grupo: 'Comunicação', funcionalidade: 'Notas 1-5 da pesquisa de satisfação pós-encerramento (número, nota, atendente, fila, protocolo) — admin/gestor veem todas, colaborador as próprias' },
     { colecao: 'whatsapp_sp_arquivo_state', grupo: 'Comunicação', funcionalidade: 'Cursor do arquivador de mídia do SP Connect no SharePoint (doc "estado") — backfill progressivo retomável, mesmo desenho do sefaz_sp_arquivo_state do fiscal' },
 

@@ -58,6 +58,7 @@ import {
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
+import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
 import { PORTA_SIP_TLS, interpretarCertificado, concluirSondaSbc } from './sbc-sonda.js';
 import { medirSbc } from './sbc-medicao.js';
 import {
@@ -2437,6 +2438,72 @@ router.post('/canais', requireAdmin, async (req, res) => {
 // `users.filasAtendimento` decide quem VÊ o quê no inbox (filasVisiveis).
 // Gravação SÓ admin — mesma regra dos departamentos do SaaS (auto-conceder
 // 'recepcao' abriria todas as conversas), e as rules têm a anti-autoconcessão.
+
+/**
+ * 🟢 SINAL DE PRESENÇA — o inbox aberto bate aqui de tempos em tempos.
+ *
+ * `requireAuth` e SEM destinatário no corpo: cada um marca a PRÓPRIA presença.
+ * Aceitar um e-mail no body deixaria alguém marcar presença por outro, e o
+ * único uso disso seria mentir sobre quem está no ar.
+ *
+ * Best-effort de propósito: falhar aqui não pode atrapalhar quem está
+ * atendendo — presença é conforto, mensagem é o trabalho.
+ */
+router.post('/presenca', requireAuth, async (req, res) => {
+    try {
+        const email = String(req.user?.email || '').trim().toLowerCase();
+        if (!email) return res.status(400).json({ ok: false, error: 'Sessão sem e-mail.' });
+        await getDb().collection('whatsapp_presenca').doc(email).set({
+            email, em: new Date().toISOString(), nome: req.user?.name || null,
+        }, { merge: true });
+        return res.json({ ok: true, intervaloMs: INTERVALO_SINAL_MS });
+    } catch (e) {
+        console.warn('[whatsapp/presenca]', e.message);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🟢 QUEM DA FILA ESTÁ NO AR — a pergunta da hora de TRANSFERIR.
+ *
+ * `requireAuth` (não admin): quem transfere é atendente, e é ele que precisa
+ * saber se há alguém do outro lado. Devolve NOME e situação, nunca "offline".
+ */
+router.get('/presenca/fila/:fila', requireAuth, async (req, res) => {
+    try {
+        const fila = String(req.params.fila || '').trim().toLowerCase();
+        if (!filaValida(fila)) return res.status(400).json({ ok: false, error: 'Fila inválida.' });
+        const db = getDb();
+        const [usuarios, presencas] = await Promise.all([
+            db.collection('users').limit(500).get(),
+            db.collection('whatsapp_presenca').limit(500).get(),
+        ]);
+        // A régua de "quem é da fila" é a MESMA do inbox — `filasVisiveis`.
+        // Uma segunda aqui divergiria no primeiro gestor cadastrado.
+        const atendentes = usuarios.docs.map((d) => {
+            const x = d.data() || {};
+            return {
+                email: x.email || null,
+                nome: x.displayName || x.nome || null,
+                filas: filasVisiveis({
+                    email: x.email,
+                    papelAtendimento: x.papelAtendimento,
+                    departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
+                    filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
+                }),
+            };
+        }).filter((a) => a.email);
+        const mapa = {};
+        for (const d of presencas.docs) {
+            const x = d.data() || {};
+            mapa[String(x.email || d.id).toLowerCase()] = x.em || null;
+        }
+        return res.json({ ok: true, ...quemDaFilaEstaNoAr({ fila, atendentes, presencas: mapa }) });
+    } catch (e) {
+        console.error('[whatsapp/presenca/fila]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
 
 router.get('/atendentes', requireAdmin, async (_req, res) => {
     try {
