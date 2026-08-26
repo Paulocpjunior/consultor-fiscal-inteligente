@@ -1161,6 +1161,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [multiCanal, setMultiCanal] = useState(false);
     const [canalErro, setCanalErro] = useState<string | null>(null);
     const [canalForm, setCanalForm] = useState({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+    // Guarda QUAL canal está em edição — só para a tela dizer que vai
+    // sobrescrever. A gravação já sobrescreve por `id`; sem este aviso, o
+    // botão "Cadastrar número" faria parecer que cria um segundo.
+    const [canalEditando, setCanalEditando] = useState<string | null>(null);
     // 📱 Ativar na Cloud API: PIN de 6 dígitos, por canal. Ele NÃO é guardado —
     // some do estado assim que a Meta responde.
     const [pinCanal, setPinCanal] = useState<Record<string, string>>({});
@@ -1216,6 +1220,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     useEffect(() => { carregarCanais(); }, [carregarCanais]);
     const rotuloCanal = (id: string | null | undefined) =>
         canais.find((c) => c.id === (id || 'principal'))?.rotulo || 'Número principal';
+    // ✏️ Carrega o canal no formulário. O `id` vai junto e é ele que faz a
+    // gravação SOBRESCREVER em vez de criar outro — o backend grava por
+    // `doc(id).set()`.
+    // 🚨 E carrega TODOS os campos, não só o que se quer mudar: o `.set()` é
+    // sem merge, então salvar com o formulário pela metade APAGARIA o
+    // `envToken` e o número pararia de funcionar, calado. É a armadilha do
+    // `setDoc` sem merge de 21/08, do lado da tela.
+    const editarCanal = (c: CanalWhatsapp) => {
+        setCanalEditando(c.id);
+        setCanalErro(null);
+        setCanalForm({
+            id: c.id,
+            rotulo: c.rotulo || '',
+            phoneNumberId: c.phoneNumberId || '',
+            envToken: c.envToken || '',
+            numeroExibicao: c.numeroExibicao || '',
+            wabaId: c.wabaId || '',
+        });
+    };
+
+    const cancelarEdicaoCanal = () => {
+        setCanalEditando(null);
+        setCanalErro(null);
+        setCanalForm({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+    };
+
     const cadastrarCanal = async () => {
         setSalvandoCanal(true);
         setCanalErro(null);
@@ -1223,6 +1253,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             const r = await salvarCanal(canalForm);
             if (!r.ok) { setCanalErro(r.error || 'Falha ao salvar o canal.'); return; }
             setCanalForm({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+            setCanalEditando(null);
             await carregarCanais();
         } finally { setSalvandoCanal(false); }
     };
@@ -3165,15 +3196,30 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {c.rotulo}
                                                     {c.origem === 'env' && <span className="ml-1.5 text-[9px] font-bold text-slate-400">padrão · Cloud Run</span>}
                                                 </p>
-                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${c.pronto
-                                                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                                                    : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
-                                                    {c.pronto ? 'pronto' : 'incompleto'}
-                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                    {/* ✏️ CADASTRO SEM COMO CORRIGIR É BECO (26/08): o painel
+                                                        nascera só com "➕ Novo número", e o 1º cadastro real saiu
+                                                        com um dígito a mais no número de exibição. Sem editar, a
+                                                        saída era redigitar tudo com o MESMO `id` — que o painel
+                                                        nem mostrava. É a família do ✕ do FUNRURAL (14/08): botão
+                                                        que grava nasce com o caminho de volta. */}
+                                                    {c.origem !== 'env' && (
+                                                        <button onClick={() => editarCanal(c)}
+                                                            className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 btn-press">
+                                                            ✏️ editar
+                                                        </button>
+                                                    )}
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${c.pronto
+                                                        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                                        : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
+                                                        {c.pronto ? 'pronto' : 'incompleto'}
+                                                    </span>
+                                                </div>
                                             </div>
                                             <p className="text-[10px] text-slate-400">
                                                 {c.numeroExibicao || 'número não informado'} · id {c.phoneNumberId || '—'}
                                                 {c.envToken ? ` · token em ${c.envToken}` : ''}
+                                                {c.origem !== 'env' && <span className="ml-1 text-slate-500">· canal <code>{c.id}</code></span>}
                                             </p>
                                             {!c.pronto && (c.faltas || []).length > 0 && (
                                                 <p className="text-[10px] text-red-600 dark:text-red-400">falta: {(c.faltas || []).join(' · ')}</p>
@@ -3208,7 +3254,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     ))}
                                 </div>
                                 <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 space-y-1.5">
-                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">➕ Novo número</p>
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                        {canalEditando ? `✏️ Editando o canal "${canalEditando}"` : '➕ Novo número'}
+                                    </p>
+                                    {canalEditando && (
+                                        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                            Salvar SOBRESCREVE este canal. Os campos vieram preenchidos de propósito —
+                                            apagar um deles apaga o cadastro dele, não o deixa como estava.
+                                        </p>
+                                    )}
                                     <div className="grid grid-cols-2 gap-1.5">
                                         <input value={canalForm.id} onChange={(e) => setCanalForm((f) => ({ ...f, id: e.target.value }))} placeholder="id (ex.: rh)" className={CAMPO} />
                                         <input value={canalForm.rotulo} onChange={(e) => setCanalForm((f) => ({ ...f, rotulo: e.target.value }))} placeholder="Rótulo (ex.: RH)" className={CAMPO} />
@@ -3218,10 +3272,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         <input value={canalForm.wabaId} onChange={(e) => setCanalForm((f) => ({ ...f, wabaId: e.target.value }))} placeholder="WABA id (opcional)" className={`${CAMPO} col-span-2`} />
                                     </div>
                                     {canalErro && <p className="text-[11px] text-red-600 dark:text-red-400">{canalErro}</p>}
-                                    <button onClick={cadastrarCanal} disabled={salvandoCanal}
-                                        className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                        {salvandoCanal ? 'Salvando…' : 'Cadastrar número'}
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                        <button onClick={cadastrarCanal} disabled={salvandoCanal}
+                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                            {salvandoCanal ? 'Salvando…' : canalEditando ? 'Salvar alterações' : 'Cadastrar número'}
+                                        </button>
+                                        {canalEditando && (
+                                            <button onClick={cancelarEdicaoCanal}
+                                                className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 btn-press">
+                                                Cancelar
+                                            </button>
+                                        )}
+                                    </div>
                                     <p className="text-[10px] text-slate-400">
                                         Depois de cadastrar: no Cloud Run, crie a variável com esse NOME e o token do número.
                                         A entrada é roteada pelo próprio aviso da Meta — nada de adivinhar de quem é a mensagem.
