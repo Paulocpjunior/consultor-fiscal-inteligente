@@ -486,8 +486,22 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 
 ### Texto do chamado (Meta / suporte da WABA)
 
+🐛 **O `phone_number_id` daqui estava com UM dígito errado até 26/08** —
+`1167203`**`28`**`6473367` onde a tela da Meta mostra `1167203`**`20`**`6473367`.
+Corrigido lendo o **Gerenciador do WhatsApp → Números de telefone → (o número)
+→ "Identificação do número de telefone"**, que é a fonte. Um dígito trocado num
+chamado manda o suporte olhar outro número (ou nenhum), e a resposta volta
+dizendo que está tudo certo — a volta mais cara que existe, porque parece
+resposta. **Identificador de conta se COPIA da tela do órgão, nunca se digita.**
+
+⚠️ **E a WABA tem DOIS números**, os dois `Conectado`: `+55 11 3337-1554`
+(`1167203206473367`, o do atendimento e o desta ocorrência) e
+`+55 11 3155-1554` (`1163613100164959`, o BM). O chamado é sobre o **3337**;
+dizer só "nosso número" numa conta com dois é convite para o suporte olhar o
+errado.
+
 > Número: +55 11 3337-1554 · WABA 1289687319936644 · phone_number_id
-> 1167203286473367.
+> 1167203206473367.
 >
 > Chamadas de usuário para a empresa (Business Calling API em modo SIP) são
 > aceitas e terminam como "Não atendida" — nenhum INVITE chega ao nosso SBC.
