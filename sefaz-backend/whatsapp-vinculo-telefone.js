@@ -125,7 +125,15 @@ export function cruzarNumerosComCadastro({ conversas = [], empresas = [] } = {})
                 if (!achados.some((a) => a.empresaId === x.empresaId)) achados.push(x);
             }
         }
-        const linha = { numero: c.numero, nome: c.nome || null, fila: c.fila || null };
+        const linha = {
+            numero: c.numero, nome: c.nome || null, fila: c.fila || null,
+            // 🚨 CONTATO ≠ CONVERSA, e misturar os dois faz o buraco parecer
+            // sete vezes maior do que é (26/08, primeira medição real: 2.216
+            // "sem vínculo" onde a maioria é o CATÁLOGO importado da Ultra
+            // Fox, gente que nunca trocou uma mensagem aqui). Quem já
+            // escreveu é lacuna de verdade; quem só está na agenda não é.
+            temConversa: Boolean(c.temConversa),
+        };
         if (achados.length === 1) sugestoes.push({ ...linha, ...achados[0] });
         else if (achados.length > 1) ambiguos.push({ ...linha, candidatos: achados });
         else semCadastro.push(linha);
@@ -136,6 +144,9 @@ export function cruzarNumerosComCadastro({ conversas = [], empresas = [] } = {})
     // mais que contato parado.
     sugestoes.sort((a, b) => (a.campo === b.campo ? 0 : a.campo === 'whatsappCliente' ? -1 : 1));
 
+    // O recorte que importa: quem JÁ TROCOU MENSAGEM aqui. O resto é agenda.
+    const comConversa = (lista) => lista.filter((x) => x.temConversa).length;
+
     return {
         total: conversas.length,
         empresasComNumero,
@@ -143,6 +154,17 @@ export function cruzarNumerosComCadastro({ conversas = [], empresas = [] } = {})
         ambiguos,
         semCadastro,
         semNumeroLegivel,
+        // 🚨 A MESMA CONTA NO RECORTE DE QUEM ESCREVEU. Sem ela, "2.159 sem
+        // cadastro" lê-se como 2.159 clientes perdidos — e a ação (preencher
+        // cadastro) seria cobrada sobre uma agenda que em boa parte nem é de
+        // cliente. Alarme com número inflado é o que faz a equipe parar de
+        // olhar o painel.
+        ativos: {
+            total: conversas.filter((c) => c.temConversa).length,
+            sugestoes: comConversa(sugestoes),
+            ambiguos: comConversa(ambiguos),
+            semCadastro: comConversa(semCadastro),
+        },
     };
 }
 

@@ -15,6 +15,8 @@ export interface ConversaParaCruzar {
     nome?: string | null;
     fila?: string | null;
     canal?: string | null;
+    /** Já trocou mensagem no Connect? Contato só de agenda não é lacuna. */
+    temConversa?: boolean;
 }
 export interface EmpresaParaCruzar {
     id: string;
@@ -28,6 +30,7 @@ export interface Sugestao {
     /** Nome do CONTATO (quem escreveu) — nunca o do cliente. */
     nome: string | null;
     fila: string | null;
+    temConversa: boolean;
     empresaId: string;
     /** Nome do cliente no cadastro. */
     nomeEmpresa: string;
@@ -41,6 +44,8 @@ export interface CruzamentoVinculo {
     semCadastro: { numero: string; nome: string | null; fila: string | null }[];
     /** Sem telefone legível — DM do Instagram, por exemplo. Não é lacuna de vínculo. */
     semNumeroLegivel: { numero: string; nome: string | null; canal: string | null }[];
+    /** A MESMA conta, só entre quem já trocou mensagem — o recorte acionável. */
+    ativos: { total: number; sugestoes: number; ambiguos: number; semCadastro: number };
 }
 
 export function cruzarNumerosComCadastro(p?: {

@@ -251,10 +251,12 @@ export interface SugestoesDeVinculo {
     total: number;
     empresasNoCadastro: number;
     empresasComNumero: number;
-    sugestoes: { numero: string; nome: string | null; empresaId: string; nomeEmpresa: string; campo: string }[];
-    ambiguos: { numero: string; nome: string | null; candidatos: { empresaId: string; nomeEmpresa: string; campo: string }[] }[];
-    semCadastro: { numero: string; nome: string | null }[];
+    sugestoes: { numero: string; nome: string | null; temConversa: boolean; empresaId: string; nomeEmpresa: string; campo: string }[];
+    ambiguos: { numero: string; nome: string | null; temConversa: boolean; candidatos: { empresaId: string; nomeEmpresa: string; campo: string }[] }[];
+    semCadastro: { numero: string; nome: string | null; temConversa: boolean }[];
     semNumeroLegivel: { numero: string; nome: string | null; canal: string | null }[];
+    /** A MESMA conta, só entre quem já trocou mensagem — o recorte acionável. */
+    ativos: { total: number; sugestoes: number; ambiguos: number; semCadastro: number };
 }
 
 export const sugestoesDeVinculo = () =>
