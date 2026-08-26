@@ -394,6 +394,27 @@ não é endereço errado — o alvo testado é o MESMO que a Meta tem gravado.
 NUNCA vai virar linha na conversa vindo do webhook: quando ela passar a chegar,
 o registro tem de sair do CDR do SBC.
 
+### 🔎 Como medir isso em UM comando (dentro do SBC)
+
+Responder *"chegou INVITE?"* dependia de saber Asterisk — caminho do log, nome
+do CSV do CDR, comandos do pjsip. **Medição que depende de conhecimento
+especializado é medição que não acontece**, e foi por isso que a conversa com a
+Meta ficou parada esperando um dado que ninguém coletava.
+
+```bash
+# no SBC (sip.spassessoriacontabil.com.br / 35.185.197.118)
+sudo bash scripts/sbc-diagnostico.sh 09:3     # a janela da tentativa
+sudo bash scripts/sbc-diagnostico.sh --ao-vivo # arma a captura da PRÓXIMA
+```
+
+Ele confere o **gravador primeiro** (silêncio só vale se ele estava ligado —
+lição de 25/08), diz **até onde o log alcança** (rotação invalida o zero),
+procura o INVITE, o CDR e — o que faltava — as **recusas nossas** (401/403/488).
+*"Tocou uma vez e caiu"* é o sintoma clássico de INVITE que CHEGA e é recusado:
+se aparecer recusa ali, a causa deixou de ser da Meta e passou a ser nossa.
+
+A saída já vem com as três conclusões possíveis e a ação de cada uma.
+
 ### Conclusão
 
 O que falta não está no SBC nem na configuração que o app escreve. **Não há o
