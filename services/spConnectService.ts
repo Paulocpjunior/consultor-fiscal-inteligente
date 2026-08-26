@@ -419,13 +419,15 @@ export interface HorariosChamada {
     } | null;
 }
 
-export const sondarChamadas = () =>
+/** ☎️ A chamada é POR NÚMERO: `canal` diz de qual. Omitido = o principal. */
+export const sondarChamadas = (canal?: string) =>
     req<{
+        canal?: { id: string; rotulo: string | null };
         conclusao: { veredito: SondaChamada['situacao']; motivo: string; acao?: string; respondeuPor?: string | null };
         sondas: SondaChamada[];
         antesDeLigar: { titulo: string; texto: string }[];
         horarios?: HorariosChamada | null;
-    }>('/api/admin/whatsapp/chamadas/sondar');
+    }>(`/api/admin/whatsapp/chamadas/sondar${canal ? `?canal=${encodeURIComponent(canal)}` : ''}`);
 
 export interface SondaSbc {
     hostname?: string | null;
@@ -470,13 +472,14 @@ export const eventosCrusDeChamada = () =>
         janela: { de: string | null; ate: string | null };
     }>('/api/admin/whatsapp/chamadas/eventos-crus');
 
-export const sondarSbc = (p?: { hostname?: string; porta?: number }) =>
+export const sondarSbc = (p?: { hostname?: string; porta?: number; canal?: string }) =>
     post<SondaSbc>('/api/admin/whatsapp/chamadas/sondar-sbc', p || {});
 
 /** 🛠 Escrita EXPLÍCITA na Meta (Paulo, 23/08) — a rota re-lê e devolve o que
  *  ficou GRAVADO; recusa da Meta volta crua, nunca engolida. */
-export const configurarChamadas = (p:
-    { acao: 'horarios' } | { acao: 'icone'; iconeVisivel: boolean } | { acao: 'sip'; hostname: string; porta: number }) =>
+export const configurarChamadas = (p: ({ acao: 'horarios' }
+    | { acao: 'icone'; iconeVisivel: boolean }
+    | { acao: 'sip'; hostname: string; porta: number }) & { canal?: string }) =>
     post<{
         acao: string;
         aplicado: Record<string, unknown>;

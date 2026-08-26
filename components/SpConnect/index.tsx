@@ -633,12 +633,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     } | null>(null);
     const [sondando, setSondando] = useState(false);
     const [sondaErro, setSondaErro] = useState<string | null>(null);
-    const rodarSonda = async () => {
+    // ☎️ DE QUAL NÚMERO ESTAMOS FALANDO (Paulo, 26/08): *"já que nosso tronco
+    // chave na URA é o 3155-1554, as ligações por WhatsApp saem por ele; o
+    // 3337 continua sendo o WhatsApp principal"*. A chamada é POR NÚMERO —
+    // sonda, horários, ícone e destino SIP são settings do phone_number_id.
+    // 🚨 Sem este seletor a aba mentia por construção: com dois números
+    // cadastrados, ela lia e ESCREVIA sempre no principal, e o resultado
+    // aparecia no painel da Meta do número errado.
+    const [canalChamada, setCanalChamada] = useState<string>('principal');
+    const rodarSonda = async (canal?: string) => {
         setSondando(true); setSondaErro(null);
-        const r = await sondarChamadas();
+        const r = await sondarChamadas(canal ?? canalChamada);
         setSondando(false);
         if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar, horarios: r.horarios ?? null });
         else setSondaErro(r.error || 'A sonda não respondeu.');
+    };
+    // Trocar de número LIMPA o que estava na tela antes de medir o novo:
+    // resultado do número anterior ao lado do seletor já trocado é a leitura
+    // dupla de sempre — a pessoa lê o estado de um como se fosse do outro.
+    const trocarCanalChamada = (id: string) => {
+        setCanalChamada(id);
+        setSonda(null); setSbc(null); setChamadaResultado(null);
+        setChamadaErro(null); setSondaErro(null);
     };
 
     // 🛠 Escrita explícita na Meta (Paulo, 23/08): horários = os das mensagens;
@@ -664,7 +680,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
         setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
         try {
-            const r = await configurarChamadas(p);
+            const r = await configurarChamadas({ ...p, canal: canalChamada });
             if (!r.ok) { setChamadaErro(r.error || 'A Meta recusou a gravação.'); return; }
             setChamadaResultado({ acao: r.acao, calling: r.calling });
             await rodarSonda(); // a tela volta a dizer o estado REAL, relido da Meta
@@ -2551,7 +2567,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     não efeito de um clique de diagnóstico.
                                 </p>
 
-                                <button onClick={rodarSonda} disabled={sondando}
+                                {/* ☎️ DE QUAL NÚMERO — Paulo, 26/08: o tronco da URA é o 3155-1554,
+                                    então é NELE que a ligação de WhatsApp deve entrar; o 3337 segue
+                                    como o WhatsApp de mensagem. Chamada é setting do phone_number_id:
+                                    sem escolher, esta aba lia e ESCREVIA sempre no principal. */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">☎️ Número desta configuração</p>
+                                    <select value={canalChamada} onChange={(e) => trocarCanalChamada(e.target.value)} className={CAMPO}>
+                                        {canais.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.rotulo}{c.numeroExibicao ? ` · ${c.numeroExibicao}` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                        ⚠️ A ligação segue o número da CONVERSA: quem fala com um número vê o ☎️
+                                        <strong> daquele</strong> número. Configurar aqui não move a ligação dos outros.
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                        Sonda, horários, ícone e destino SIP abaixo valem para o número escolhido acima.
+                                    </p>
+                                </div>
+
+                                {/* ⚠️ `onClick={rodarSonda}` passaria o EVENTO do clique como se fosse
+                                    o canal — pego pelo tsc, não por mim. Argumento posicional
+                                    novo em função usada como handler é essa armadilha. */}
+                                <button onClick={() => rodarSonda()} disabled={sondando}
                                     className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
                                     {sondando ? 'Perguntando à Meta…' : '🔎 Sondar o estado na Meta'}
                                 </button>
@@ -2799,7 +2840,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 onClick={async () => {
                                                     setSondandoSbc(true); setSbc(null);
                                                     try {
-                                                        const r = await sondarSbc(sipHost.trim() ? { hostname: sipHost.trim(), porta: Number(sipPorta) || 5061 } : undefined);
+                                                        const r = await sondarSbc(sipHost.trim() ? { hostname: sipHost.trim(), porta: Number(sipPorta) || 5061, canal: canalChamada } : { canal: canalChamada });
                                                         setSbc(r.ok ? r : ({ conclusao: { veredito: 'indeterminado', motivo: r.error || 'Falha ao sondar.', acao: 'Tente de novo; se persistir, é falha do próprio app.' } } as SondaSbc));
                                                     } finally { setSondandoSbc(false); }
                                                 }}

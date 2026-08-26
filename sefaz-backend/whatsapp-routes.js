@@ -48,7 +48,7 @@ import {
 } from './lgpd-titular.js';
 import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-midia.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
-import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
+import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaConversa, CANAL_PADRAO_ID } from './whatsapp-canais.js';
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
 import { cruzarNumerosComCadastro, sugestaoParaNumero } from './whatsapp-vinculo-telefone.js';
 import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
@@ -2448,6 +2448,34 @@ async function lerCanais(db) {
     return montarCatalogoCanais({ cadastrados });
 }
 
+// ☎️ DE QUAL NÚMERO ESTAMOS FALANDO? — a chamada é POR NÚMERO, não por conta.
+//
+// 26/08 (Paulo): *"já que nosso tronco chave na URA é o 11 3155-1554, as
+// ligações por WhatsApp saem por ele; o 3337-1554 continua sendo o WhatsApp
+// principal"*. As rotas de chamada nasceram presas ao número do ENV, de quando
+// só existia um — e configurar chamada é o caso em que isso mais engana: a
+// pessoa escolhe o número na tela, a rota grava no OUTRO, e o painel da Meta
+// mostra o resultado no lugar errado.
+//
+// 🚨 CANAL DESCONHECIDO É RECUSA, NUNCA "cai no padrão": silenciosamente
+// configurar o número principal quando alguém pediu o segundo é escrever
+// destino SIP no número errado — e destino SIP errado derruba a chamada de
+// quem hoje funciona.
+async function cfgDaChamada(req) {
+    const pedido = String(req.query?.canal || req.body?.canal || '').trim().toLowerCase();
+    if (!pedido || pedido === CANAL_PADRAO_ID) {
+        const cfg = configWhatsapp();
+        return { ok: Boolean(cfg.token && cfg.phoneNumberId), cfg, canalId: CANAL_PADRAO_ID, rotulo: 'Número principal',
+            erro: 'O canal do WhatsApp não está configurado neste ambiente.' };
+    }
+    const catalogo = await lerCanais(getDb());
+    const canal = catalogo.canais.find((c) => c.id === pedido);
+    if (!canal) return { ok: false, canalId: pedido, erro: `Canal "${pedido}" não está cadastrado (⚙️ → 📞 Números).` };
+    const cred = credenciaisDoCanal(canal, process.env);
+    return { ok: cred.pronto, cfg: cred.cfg, canalId: canal.id, rotulo: canal.rotulo,
+        erro: cred.pronto ? null : `Falta para usar o "${canal.rotulo}": ${cred.faltas.join(' · ')}` };
+}
+
 router.get('/canais', requireAuth, async (_req, res) => {
     try {
         const catalogo = await lerCanais(getDb());
@@ -3024,15 +3052,20 @@ router.post('/importar-ultrafox/lote', requireAdmin, async (req, res) => {
  * clique de diagnóstico. `whatsappChamadas.test.ts` prova que o núcleo não
  * escreve (nem na Meta, nem no banco).
  */
-router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
+router.get('/chamadas/sondar', requireAdmin, async (req, res) => {
     try {
-        const cfg = configWhatsapp();
-        if (!cfg.token || !cfg.phoneNumberId) {
+        const alvo = await cfgDaChamada(req);
+        const cfg = alvo.cfg || {};
+        // ⚠️ Aqui a falta NÃO vira erro HTTP, de propósito: esta rota é a SONDA,
+        // e o desenho dela é responder `indeterminado` COM o motivo. "Não
+        // consegui perguntar" é resposta diferente de "a Meta disse que não".
+        if (!alvo.ok) {
             return res.json({
                 ok: true,
+                canal: { id: alvo.canalId, rotulo: alvo.rotulo || null },
                 conclusao: {
                     veredito: 'indeterminado',
-                    motivo: 'O canal do WhatsApp não está configurado neste ambiente.',
+                    motivo: alvo.erro || 'O canal do WhatsApp não está configurado neste ambiente.',
                     acao: 'Sem token/phone number id não dá pra perguntar à Meta — e não perguntar não é resposta.',
                 },
                 sondas: [], antesDeLigar: ANTES_DE_LIGAR,
@@ -3167,13 +3200,17 @@ router.get('/chamadas/eventos-crus', requireAdmin, async (_req, res) => {
 router.post('/chamadas/sondar-sbc', requireAdmin, async (req, res) => {
     const t0 = Date.now();
     try {
-        const cfg = configWhatsapp();
-        if (!cfg.token || !cfg.phoneNumberId) {
+        const alvo = await cfgDaChamada(req);
+        const cfg = alvo.cfg || {};
+        // ⚠️ Sonda também aqui: falta de credencial é `indeterminado` COM o
+        // motivo, nunca erro seco — o 🔌 existe para dizer o que ele mediu.
+        if (!alvo.ok) {
             return res.json({
                 ok: true,
+                canal: { id: alvo.canalId, rotulo: alvo.rotulo || null },
                 conclusao: {
                     veredito: 'indeterminado',
-                    motivo: 'O canal do WhatsApp não está configurado neste ambiente.',
+                    motivo: alvo.erro || 'O canal do WhatsApp não está configurado neste ambiente.',
                     acao: 'Sem token/phone number id não dá pra saber qual servidor a Meta usa.',
                 },
             });
@@ -3235,10 +3272,12 @@ router.post('/chamadas/sondar-sbc', requireAdmin, async (req, res) => {
  */
 router.post('/chamadas/configurar', requireAdmin, async (req, res) => {
     try {
-        const cfg = configWhatsapp();
-        if (!cfg.token || !cfg.phoneNumberId) {
-            return res.status(400).json({ ok: false, error: 'O canal do WhatsApp não está configurado neste ambiente.' });
-        }
+        // 🚨 Aqui o canal errado não devolve resposta errada: ele ESCREVE no
+        // número errado, e destino SIP no número errado derruba a chamada de
+        // quem hoje funciona. Por isso a recusa vem ANTES de montar payload.
+        const alvo = await cfgDaChamada(req);
+        if (!alvo.ok) return res.status(alvo.cfg ? 400 : 404).json({ ok: false, error: alvo.erro });
+        const cfg = alvo.cfg;
         const acao = String(req.body?.acao || '');
         let mudanca = null;
         if (acao === 'horarios') {
