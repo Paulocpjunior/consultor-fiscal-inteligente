@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✅ A PWR FECHOU O EFD-CONTRIBUIÇÕES — e com ela o BLOCO C tem recibo pela
+  primeira vez** (26/08, Paulo: *"PWR · MANTOAN · AFFITTARE · PEC · CF BANK —
+  todas essas foram ref. à obrigação EFD CONTRIBUIÇÕES"*). É a **PRIMEIRA
+  INDÚSTRIA** a fechar esta obrigação, e é o que faltava: MANTOAN, HS,
+  AFFITTARE, PEC e CF BANK são todas de SERVIÇO ou de receita sem documento —
+  nenhuma passava pelo bloco C.
+  📌 **O QUE ISSO ENCERRA**: em 20/08 o bloco C do EFD-Contribuições levou
+  **157 recusas de importação** de uma vez (C100 saindo com 24 campos onde o
+  leiaute tem 29, C170 com 23 onde tem 37, a seção de ICMS/IPI inteira PULADA,
+  e os outros 125 erros todos consequência do mesmo defeito de FORMA). Agora
+  o recibo prova: `C100` **29**, `C170` **37**, `M210`/`M610` com **COD_CONT
+  51**, e `M205`/`M605` preenchidos.
+  📌 **E ENCERRA O CASO DOS CINCO DIAS** (25/08, `VL_REC_BRT` 38.316,84 ×
+  37.754,60). A resposta estava na *Validação* do M210 campo 03 do Guia 1.35 —
+  `VL_REC_BRT` é a Σ dos `VL_ITEM` dos C170, que são BRUTOS, e o desconto e o
+  ICMS têm campos PRÓPRIOS. O imposto nunca esteve errado; o recibo confirma
+  que a base reduzida (Tema 69) e o rateio do desconto saem certos no arquivo.
+  🏁 **O PLACAR DO EFD-CONTRIBUIÇÕES: SEIS empresas e CINCO formas de arquivo
+  provadas por recibo** — detalhado só com documento de SERVIÇO (MANTOAN),
+  detalhado com documento + F600 de retenção (HS PROJETOS), consolidado só com
+  F550 (AFFITTARE), detalhado com documento + F100 (PEC), sem documento nenhum
+  com F100 de aplicação financeira (CF BANK) e agora **detalhado de INDÚSTRIA,
+  pelo bloco C** (PWR). **As seis saem do MESMO gerador** — o que muda é a
+  régua que decide o perfil, nunca um caminho paralelo por cliente.
+  ✅ **E A PWR PASSA A SER A ÚNICA EMPRESA COM AS DUAS OBRIGAÇÕES FECHADAS**:
+  o EFD ICMS/IPI dela fechou em 20/08 e o EFD-Contribuições agora. Ou seja, o
+  mesmo cliente tem os dois arquivos aceitos saindo do mesmo app — que é a
+  prova ponta a ponta que faltava para a família do Lucro.
+  ⚠️ **O QUE ISSO NÃO PROVA, e não pode virar leitura larga**: (1) **seis
+  clientes fechados não são a carteira fechada** — quem diz quem pode migrar
+  continua sendo a 🏁 Fila de migração, cliente a cliente, e o gargalo hoje é
+  CAPTURA (202 empresas com A3, 42 sem A1 válido), não leiaute; (2) o **bloco
+  D** continua sem recibo — nenhuma das seis tem CT-e no EFD-Contribuições, e
+  ele só fecha com empresa do NÃO-cumulativo que tenha frete contratado;
+  (3) o **E510 (IPI)** e o **E200/E210 (ST)** seguem sem passar pelo PVA.
+  🚩 **E FICA UMA PERGUNTA NOMEADA, não uma suposição**: não sei se estes
+  arquivos foram regerados ANTES ou DEPOIS do deploy 815. Se foi depois, eles
+  são também a prova em PRODUÇÃO de que as travas de 26/08 nasceram MUDAS no
+  arquivo correto — que é justamente o que o teste de controle existia para
+  medir. Carimbar isso sem saber seria o "print prova o ARQUIVO, não o código"
+  ao contrário.
+
 - **🚨 O LADO DA CONTRAPARTE TINHA CINCO CÓPIAS — e o próprio dono já carregava
   o aviso do defeito que elas têm** (26/08, fechando a pendência nomeada em
   22/08: *"restam ~60 leituras cruas de `direcao` e elas NÃO foram triadas uma
