@@ -450,9 +450,28 @@ e é distinto de zero medido (`grep -c` sai com 1 quando conta zero e com ≥2
 quando erra — é o código de saída que separa os dois), e as travas rodam o
 script de verdade em vez de varrer a fonte.
 
-📌 **Ou seja: a janela de 09:30 de 26/08 continua SEM medição.** Rodar de novo
-(o `git pull` traz a versão corrigida) é o que fecha o dado que falta no
-chamado.
+✅ **E COM A VERSÃO CORRIGIDA A MEDIÇÃO SAIU — 26/08, 15:53.** O veredito voltou
+🟡 **NENHUM INVITE na janela, com o gravador LIGADO** — e não ⚪ "não consegui
+contar", ou seja **a busca de fato rodou**. Como a rodada foi com `--ao-vivo`
+sem janela, o filtro virou **o dia inteiro de 26/08**, e o log cobre de
+**25/08 17:48:18 a 26/08 15:53:18**: a tentativa das 09:30 está dentro. A
+seção 6 fecha a outra ponta — **nenhuma recusa nossa** (401/403/404/407/488/603).
+
+📌 **É este o fato que faltava no chamado, e ele é mais forte que o esperado**:
+não é "não achamos no minuto X", é **nenhum INVITE no dia inteiro**, com o
+gravador provado ligado e sem recusa nossa. Já está no texto do chamado abaixo.
+
+⚠️ **O que este dado NÃO separa**: o log mostra o que o **Asterisk** vê. Se o
+INVITE fosse barrado antes dele (firewall/rede), o log estaria igualmente
+vazio. É por isso que a pergunta sobre os **IPs de origem** continua no
+chamado — e por isso a captura `pjsip set logger on`, armada na mesma rodada,
+vale a próxima ligação: ela grava o **pacote SIP CRU recebido**, inclusive o
+que o Asterisk recusaria antes do dialplan. Uma ligação + uma rodada com o
+minuto fecham isso em definitivo.
+
+⚠️ **E o CDR NÃO existe nesta VM**, então o log é testemunha única. Conferir
+`sudo asterisk -rx 'cdr show status'` antes de tratar a ausência de CDR como
+corroboração: hoje ela não é nem prova nem contraprova.
 
 ### Conclusão
 
@@ -489,6 +508,13 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 > Em 26/08, às 09:30 (dentro da janela), a chamada passou a TOCAR uma vez no
 > aparelho do chamador antes de terminar como "Não atendida" — comportamento
 > diferente do dia anterior.
+>
+> Varredura do log do Asterisk feita em 26/08 às 15:53, cobrindo o período
+> contínuo de 25/08 17:48 a 26/08 15:53 (portanto incluindo a tentativa das
+> 09:30): ZERO linhas com INVITE em todo o dia 26/08, com o logging verbose
+> comprovadamente ativo no momento da varredura. E nenhuma resposta de recusa
+> nossa (401/403/404/407/488/603) no mesmo período — ou seja, não é o caso de
+> a chamada chegar e ser rejeitada pelo nosso lado: ela não chega.
 >
 > Verificação do caminho feita em 26/08 às 11:24, a partir do endereço que
 > consta em sip.servers[]: DNS sip.spassessoriacontabil.com.br →
