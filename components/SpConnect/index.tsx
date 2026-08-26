@@ -3226,7 +3226,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 {vincSug && (
                                     <div className="space-y-2">
                                         <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
-                                            <p><strong>{vincSug.total}</strong> contato(s) sem vínculo · <strong>{vincSug.empresasComNumero}</strong> de {vincSug.empresasNoCadastro} cliente(s) têm telefone no cadastro.</p>
+                                            {/* 🚨 CONTATO ≠ CONVERSA. `whatsapp_contatos` guarda também o
+                                                catálogo importado da Ultra Fox — gente que nunca trocou
+                                                mensagem aqui. Sem separar, "2.159 sem cadastro" lê-se como
+                                                2.159 clientes perdidos, e a ação seria cobrada sobre uma
+                                                agenda que em boa parte nem é de cliente. */}
+                                            <p>
+                                                <strong>{vincSug.ativos?.total ?? 0}</strong> conversa(s) sem cliente vinculado
+                                                <span className="text-slate-400"> · de {vincSug.total} contato(s) na agenda (o resto veio da importação e nunca escreveu aqui)</span>
+                                            </p>
+                                            <p><strong>{vincSug.empresasComNumero}</strong> de {vincSug.empresasNoCadastro} cliente(s) têm telefone no cadastro — é o teto do que este cruzamento consegue achar.</p>
                                             {/* 🚨 "0 sugestões" com 0 cliente cadastrado é falta de CADASTRO;
                                                 com 400 cadastrados é outra história. Sem este número, o zero
                                                 mandaria procurar defeito no lugar errado. */}
@@ -3241,6 +3250,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 ⚪ {vincSug.semCadastro.length} sem cadastro
                                                 {vincSug.semNumeroLegivel.length > 0 && <> · 📷 {vincSug.semNumeroLegivel.length} sem telefone (DM)</>}
                                             </p>
+                                            {vincSug.ativos && (
+                                                <p className="text-slate-400">
+                                                    Entre quem JÁ ESCREVEU aqui: 🟢 {vincSug.ativos.sugestoes} · 🟡 {vincSug.ativos.ambiguos} ·
+                                                    ⚪ {vincSug.ativos.semCadastro}. É este o recorte que muda a tela do atendente.
+                                                </p>
+                                            )}
                                         </div>
 
                                         {vincSug.sugestoes.length > 0 && (
