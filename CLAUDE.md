@@ -5,6 +5,54 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O PAINEL COBRAVA UM CAMPO QUE NÃO EXISTE — 236 empresas em ALTO por uma
+  pendência IMPOSSÍVEL DE RESOLVER** (26/08, Paulo com dois prints lado a lado:
+  o cadastro da **A CASTELLANO** mostrando *"Regime Tributário: Lucro
+  Presumido"* e o painel de Cadastros incompletos dizendo *"`tipoTributacao` —
+  Tipo (Presumido/Real) não definido"*).
+  🔴 **A varredura fechou a questão em um grep**: `tipoTributacao` aparecia em
+  **DOIS lugares no repo inteiro** — no `diagnostico-cadastros-helper.js`, que
+  o EXIGIA, e no teste dele, que descrevia a exigência. **Nenhuma tela grava,
+  nenhum gerador lê, nenhum importador preenche.** Como ninguém o preenche, a
+  pendência nascia em **100% das empresas do Lucro** — é isso que explica o
+  **236 em ALTO**, e o número não é a carteira torta: é o painel medindo um
+  campo que não existe.
+  🔴 **E É A ARMADILHA DAS DUAS FORMAS NO CADASTRO**: o modal grava
+  `dadosFiscais.regimeTributario` — o campo que nasceu em **18/08** com dono,
+  vocabulário (SIMPLES · LUCRO_PRESUMIDO · LUCRO_REAL · IMUNE · ISENTA) e
+  precedência própria —, e o painel perguntava por outro nome. Quem preenchia
+  no modal **nunca** conseguia apagar a pendência.
+  ✂️ Quem responde agora é o **DONO** (`regimeDaEmpresa`), com a precedência da
+  casa: cadastro explícito > `regimePadrao` > coleção. A pendência só nasce
+  quando `apuracaoDefinida` é **false** — ou seja, quando o regime está mesmo
+  indefinido — e a frase passou a **APONTAR O LUGAR** (*"escolha Lucro
+  Presumido ou Lucro Real em Empresas → Dados Fiscais → Regime Tributário"*),
+  que é a régua do achado 18 de 21/08.
+  ✅ **E IMUNE/ISENTA deixam de virar pendência**: são regimes PRÓPRIOS, não
+  "regime indefinido". Cobrá-los de um templo seria o caso da igreja de 18/08
+  ao contrário.
+  📌 **O CUSTO NÃO É A LINHA ERRADA — É O PAINEL INTEIRO PERDENDO CRÉDITO.**
+  Alarme que a carteira toda recebe e ninguém consegue apagar ensina a equipe a
+  ignorar a lista, **inclusive as 3 pendências CRÍTICAS que estavam certas**.
+  É a família da "rota sem botão" (13/08) e do aviso que aponta lugar
+  inexistente (21/08): quem procura, não acha, e conclui que o app está
+  quebrado.
+  ✂️ **A CLASSE VIROU TRAVA POR VARREDURA** (`pendenciaTemCampoGravavel.test.ts`):
+  todo campo que o diagnóstico exige tem de aparecer em código de produção FORA
+  do próprio helper — campo que só existe no lugar que o cobra é fantasma por
+  definição. A lista de campos é **lida da FONTE** (`add('<campo>'`), nunca
+  copiada, senão ela envelhece no primeiro campo novo. Provada revertendo o
+  `tipoTributacao` de propósito.
+  📌 **REGRA QUE FICA: pendência nasce apontando o campo que a TELA grava, e o
+  teste de gravidade não pode ser a única prova de que ela existe.** O teste
+  antigo passava verde descrevendo a exigência do campo fantasma — ele
+  documentava o defeito em vez de pegá-lo. **Trocar a fixture foi o certo; ela
+  descrevia um mundo que a produção não vive.**
+  ⚠️ **E O NÚMERO NÃO ESTÁ CONFERIDO EM PRODUÇÃO**: o 236 sai do print, e
+  quantas empresas realmente saem do ALTO depois disto só o painel dirá — parte
+  delas pode ter outra pendência junto. Carimbar "236 resolvidas" aqui seria o
+  "0/388" com outra roupa.
+
 - **✅ A PWR FECHOU O EFD-CONTRIBUIÇÕES — e com ela o BLOCO C tem recibo pela
   primeira vez** (26/08, Paulo: *"PWR · MANTOAN · AFFITTARE · PEC · CF BANK —
   todas essas foram ref. à obrigação EFD CONTRIBUIÇÕES"*). É a **PRIMEIRA

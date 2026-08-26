@@ -16,14 +16,53 @@ describe('pendenciasCadastro — campos críticos', () => {
         expect(r).toHaveLength(0);
     });
 
+    // 🚨 A FIXTURE MUDOU EM 26/08 e a TROCA É O CERTO: ela usava
+    // `tipoTributacao`, um campo que **não existe em lugar nenhum do app** —
+    // nenhuma tela grava, nenhum gerador lê, nenhum importador preenche. Ele
+    // aparecia em DOIS lugares no repo inteiro: no helper, que o exigia, e
+    // aqui, descrevendo a exigência. O teste descrevia um mundo que a produção
+    // não vive, e como ninguém o preenche a pendência nascia em 100% das
+    // empresas do Lucro (236 em ALTO no painel do Paulo).
+    // O que a tela DE FATO grava é `dadosFiscais.regimeTributario` (18/08).
     it('empresa LUCRO completa → zero pendências', () => {
         const r = pendenciasCadastro({
             cnpj: '12345678000190',
             nome: 'Acme',
-            tipoTributacao: 'presumido',
+            dadosFiscais: { uf: 'SP', codMunIBGE: '3550308', regimeTributario: 'LUCRO_PRESUMIDO' },
+        }, 'lucro');
+        expect(r).toHaveLength(0);
+    });
+
+    // 🚨 O CASO DO PRINT: A CASTELLANO, com "Lucro Presumido" escolhido no
+    // modal, aparecia em ALTO dizendo "Tipo (Presumido/Real) não definido".
+    it('regime escolhido no modal APAGA a pendência — o caso A CASTELLANO', () => {
+        const r = pendenciasCadastro({
+            cnpj: '51227692000146', nome: 'A CASTELLANO INDUSTRIA METALURGICA LTDA',
+            dadosFiscais: { uf: 'SP', codMunIBGE: '3509502', regimeTributario: 'LUCRO_PRESUMIDO' },
+        }, 'lucro');
+        expect(r).toHaveLength(0);
+        expect(gravidadeCadastro(r)).toBe('ok');
+    });
+
+    // ⚠️ A precedência é a do DONO: `regimePadrao` também define a apuração, e
+    // exigir o campo novo de quem já tem o antigo seria pedir trabalho por um
+    // dado que o app já tem.
+    it('`regimePadrao` na ficha também resolve', () => {
+        const r = pendenciasCadastro({
+            cnpj: '12345678000190', nome: 'X', regimePadrao: 'lucro_real',
             dadosFiscais: { uf: 'SP', codMunIBGE: '3550308' },
         }, 'lucro');
         expect(r).toHaveLength(0);
+    });
+
+    // ⚠️ E IMUNE/ISENTA não são "regime indefinido": são regimes próprios
+    // (18/08, o caso da igreja que aparecia como Lucro Presumido).
+    it('entidade IMUNE não vira pendência de regime', () => {
+        const r = pendenciasCadastro({
+            cnpj: '12345678000190', nome: 'IGREJA',
+            dadosFiscais: { uf: 'SP', codMunIBGE: '3550308', regimeTributario: 'IMUNE' },
+        }, 'lucro');
+        expect(r.find((p: any) => p.campo.endsWith('regimeTributario'))).toBeFalsy();
     });
 
     it('CNPJ inválido → pendência com impacto "TUDO"', () => {
@@ -58,13 +97,17 @@ describe('pendenciasCadastro — campos críticos', () => {
         expect(r.find((p: any) => p.campo === 'anexo')).toBeTruthy();
     });
 
-    it('Lucro NÃO exige anexo (mas exige tipoTributacao)', () => {
+    it('Lucro NÃO exige anexo (mas exige o regime, quando ele falta de verdade)', () => {
         const r = pendenciasCadastro({
             cnpj: '12345678000190', nome: 'X',
             dadosFiscais: { uf: 'SP', codMunIBGE: '1' },
         }, 'lucro');
         expect(r.find((p: any) => p.campo === 'anexo')).toBeFalsy();
-        expect(r.find((p: any) => p.campo === 'tipoTributacao')).toBeTruthy();
+        const reg = r.find((p: any) => p.campo === 'dadosFiscais.regimeTributario');
+        expect(reg).toBeTruthy();
+        // 📌 E ela APONTA O LUGAR — pendência sem caminho de resolução foi
+        // exatamente o defeito que este PR fecha.
+        expect(reg.descricao).toMatch(/Dados Fiscais/);
     });
 
     it('empresa null/undefined → array vazio (defensivo)', () => {
@@ -96,8 +139,9 @@ describe('gravidadeCadastro — classificação', () => {
         expect(gravidadeCadastro([{ campo: 'anexo', descricao: 'x', impacto: 'y' }])).toBe('alto');
     });
 
-    it('faltando tipoTributacao (Lucro) → alto', () => {
-        expect(gravidadeCadastro([{ campo: 'tipoTributacao', descricao: 'x', impacto: 'y' }])).toBe('alto');
+    it('faltando o regime (Lucro) → alto', () => {
+        expect(gravidadeCadastro([{ campo: 'dadosFiscais.regimeTributario', descricao: 'x', impacto: 'y' }]))
+            .toBe('alto');
     });
 
     it('só faltando CNAE → médio', () => {
