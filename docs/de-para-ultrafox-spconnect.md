@@ -116,8 +116,17 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 a chamada passou a TOCAR uma vez** (antes era recusada de saída) e o caminho
 até o SBC foi provado **a partir do endereço que a própria Meta guarda** —
 DNS → 35.185.197.118, TLSv1.2, certificado público válido e **SIP OPTIONS 200
-OK** do Asterisk. Ou seja: não sobrou nada para conferir deste lado; falta só o
-INVITE/CDR do tronco no minuto da tentativa, que é medição do HitPhone. ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sairá do **CDR do SBC**, nunca da Meta |
+OK** do Asterisk. ✅ **E A MEDIÇÃO DO TRONCO SAIU no mesmo dia, 15:53**: o log
+do Asterisk cobre de **25/08 17:48 a 26/08 15:53** e traz **ZERO INVITE no dia
+inteiro de 26/08** — período que inclui as **DUAS** tentativas do chamador
+(09:30 e 14:06, as duas tocando uma vez e terminando "Não atendida", com a
+permissão vigente até 02/09). E **nenhuma recusa nossa** (401/403/404/407/488/
+603) no mesmo período: não é "chega e o Asterisk derruba", é **não chega**.
+⚠️ O que o dado NÃO separa: o log mostra o que o Asterisk VÊ — INVITE barrado
+antes dele (firewall/rede) deixaria o log igualmente vazio, e é por isso que a
+pergunta dos IPs de origem está no chamado e a captura de pacote SIP cru
+(`pjsip set logger on`) ficou armada para a próxima ligação. ⚠️ E o CDR **não
+existe nesta VM**, então hoje o log é testemunha única. ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sairá do **CDR do SBC**, nunca da Meta |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
 
 ## 6. Operação e administração
