@@ -5,6 +5,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TRAVA DE CONTAGEM COBRIA 11 REGISTROS DE 34 — e o Guia fechou o resto
+  no mesmo dia** (25/08, logo depois de os dois manuais entrarem no repo).
+  `conferirContagemDeCampos` roda em todo arquivo gerado desde 18/08, mas **só
+  acusa o registro que está NELA** — e ela tinha onze, todos de recibo do PVA ou
+  arquivo assinado. Os outros 23 que o gerador emite passavam **sem conferência
+  nenhuma**: foi por isso que o 0500 saiu com o leiaute do arquivo VIZINHO e só
+  o olho do Paulo pegou.
+  ✂️ A contagem dos **200 registros** virou dado, EXTRAÍDA do Guia 1.35 por
+  script (`scripts/extrair-leiaute-contrib.mjs`), nunca digitada — tabela
+  oficial copiada à mão é a segunda cópia que esta casa mais paga. Cobertura:
+  **de 11 para 33** dos 34 registros emitidos.
+  🚨 **A PRECEDÊNCIA É O CORAÇÃO: recibo/assinado VENCE o Guia.** A extração de
+  `.docx` erra — no 0500 o número do campo 09 se perdeu na conversão e a
+  contagem sai **8** onde o assinado do CF BANK mostra **9**. Recibo é a régua
+  FALANDO; extração é leitura de documento. Se o Guia vencesse, a trava
+  acusaria justamente a linha CORRETA.
+  ⚠️ **E REGISTRO COM NÚMERO PERDIDO NÃO ENTRA** (16 deles): a contagem estaria
+  subestimada e acusaria registro certo — o jeito conhecido de a equipe desligar
+  a trava. Eles saem NOMEADOS em `naoConferidos`; hoje sobra **só o 0100**.
+  📌 **E A DIVERGÊNCIA GUIA × RECIBO É ACHADO, não detalhe a escolher em
+  silêncio**: `divergenciasGuiaXRecibo()` nasce VAZIA e, se um dia encher, ou a
+  extração falhou ou o Guia e o PVA discordam — as duas pedem olho humano.
+  ⚠️ **A régua saiu do script e foi para o backend** (`leiaute-guia-extrator.js`):
+  `.mjs` não carrega no jest, e **régua dentro de script é régua sem prova** —
+  é a lição do E116, do E250 e da varredura de campo órfão que virou script e
+  sumiu do repo. O teste regera do Guia e exige o mesmo módulo que está no repo,
+  senão alguém "conserta" uma contagem à mão e ela some na próxima geração.
+  🐛 **E DUAS FIXTURES FORAM TROCADAS, pelo motivo certo**: o teste da FONTE
+  aceitava só `PVA|ACEITO` (o Guia é a terceira fonte legítima agora) e o
+  exemplo de "registro não conferido" era o **0150**, que passou a ser coberto —
+  a mesma troca que o C100 sofreu em 20/08. **Trocar a fixture é o certo;
+  trocar a régua para o teste passar seria desligar a trava.**
+
 - **🚨 CINCO DIAS NA PWR PORQUE EU NÃO TINHA O GUIA DESTA FAMÍLIA — e o campo
   estava definido por VALIDAÇÃO OFICIAL** (25/08, PWR 1364 · 07/2026). A
   pergunta era *"por que o PVA mostra 38.316,84 se o arquivo diz 37.754,60?"*.
