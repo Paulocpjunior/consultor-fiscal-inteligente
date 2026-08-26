@@ -431,7 +431,28 @@ procura o INVITE, o CDR e — o que faltava — as **recusas nossas** (401/403/4
 *"Tocou uma vez e caiu"* é o sintoma clássico de INVITE que CHEGA e é recusado:
 se aparecer recusa ali, a causa deixou de ser da Meta e passou a ser nossa.
 
-A saída já vem com as três conclusões possíveis e a ação de cada uma.
+A saída já vem com as conclusões possíveis e a ação de cada uma.
+
+🚨 **E A PRIMEIRA RODADA DE VERDADE NÃO VALEU — a ferramenta caiu na armadilha
+que ela existe para impedir** (26/08, `--ao-vivo` pela VM). Dois defeitos:
+a flag `--ao-vivo` era lida como se fosse a JANELA e descia até o `grep`
+(`grep: unrecognized option`, três vezes), e a dica de rodar de novo saía
+`sudo bash bash $(date …)` — sob `bash -s`, que é o caminho que funciona, `$0`
+é literalmente "bash".
+
+⚠️ **O caro não foi o erro de argumento: foi o veredito ter concluído mesmo
+assim.** Ele lia `${ACHADOS:-0}`, então "não consegui contar" virou "contei e
+deu zero", e a saída afirmou 🟡 *"NENHUM INVITE na janela"* sobre três buscas
+que **nunca rodaram**. É a régua de 06/08 — campo de valor não recebe default —
+dentro do diagnóstico que nasceu justamente para ninguém concluir no escuro.
+Corrigido: contagem começa VAZIA, o desfecho ⚪ **NÃO CONSEGUI CONTAR** existe
+e é distinto de zero medido (`grep -c` sai com 1 quando conta zero e com ≥2
+quando erra — é o código de saída que separa os dois), e as travas rodam o
+script de verdade em vez de varrer a fonte.
+
+📌 **Ou seja: a janela de 09:30 de 26/08 continua SEM medição.** Rodar de novo
+(o `git pull` traz a versão corrigida) é o que fecha o dado que falta no
+chamado.
 
 ### Conclusão
 

@@ -17,8 +17,10 @@
 // anotou". Um script que responde "0" sem conferir o gravador não é
 // diagnóstico: é a mesma armadilha com carinha de ferramenta.
 // ============================================================================
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
+import { execFileSync } from 'child_process';
 
 const raiz = process.cwd();
 const script = readFileSync(join(raiz, 'scripts/sbc-diagnostico.sh'), 'utf8');
@@ -180,5 +182,130 @@ describe('🚨 o veredito conclui sozinho, e no fim', () => {
     it('os caminhos são sobrescrevíveis — é o que permite PROVAR os quatro', () => {
         expect(script).toMatch(/LOG_FULL="\$\{LOG_FULL:-/);
         expect(script).toMatch(/LOGGER_CONF="\$\{LOGGER_CONF:-/);
+    });
+});
+
+// ============================================================================
+// 🚨 VARREDURA DE FONTE PROVA O CÓDIGO, NÃO A SAÍDA — então aqui ele RODA
+//
+// 26/08, a primeira rodada de verdade (Paulo, pela VM, com `--ao-vivo`). O
+// script tinha DOIS defeitos que nenhum teste de fonte pegaria, e os dois só
+// aparecem quando alguém executa:
+//
+// 🔴 (1) `JANELA="${1:-}"` engolia a FLAG: `--ao-vivo` descia até o `grep` e a
+//    saída trouxe TRÊS `grep: unrecognized option '--ao-vivo'`. As buscas NÃO
+//    RODARAM — e mesmo assim o veredito concluiu, sobre `ACHADOS` vazio. É o
+//    pior desfecho possível para um diagnóstico: **erro de argumento virando
+//    zero plausível**, indistinguível de "procurei e não achei". A mesma
+//    família do campo de valor que recebe default (06/08).
+// 🔴 (2) a dica de rodar de novo saía `sudo bash bash $(date ...)` — sob
+//    `bash -s`, que é o caminho que FUNCIONA, `$0` é literalmente "bash".
+//    Comando que não roda é o aviso que aponta lugar inexistente (21/08),
+//    e foi ele que a pessoa ia copiar em seguida.
+//
+// É a lição de 20/08 no campo do cérebro do CFOP: a varredura dizia que o
+// código estava certo e o dedo do Paulo não achava o campo. Aqui a régua é a
+// mesma — **prova por EXECUÇÃO**, que é exatamente o que os caminhos
+// sobrescrevíveis por env existem para permitir.
+// ============================================================================
+describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sbc-'));
+    const log = join(dir, 'full');
+    const env = {
+        ...process.env,
+        LOG_FULL: log,
+        LOGGER_CONF: join(dir, 'logger.conf'),
+        ASTERISK_CONF: join(dir, 'asterisk.conf'),
+        CDR_CSV: join(dir, 'nao-existe.csv'),
+    };
+    const hoje = new Date().toISOString().slice(0, 10);
+    writeFileSync(log, `[${hoje} 09:31:02] VERBOSE[1] Received SIP request INVITE\n`);
+    writeFileSync(join(dir, 'logger.conf'), 'full => notice,warning,error,verbose\n');
+    writeFileSync(join(dir, 'asterisk.conf'), 'verbose = 3\n');
+
+    // Como o Paulo roda de verdade: o script vai pela CONEXÃO, não pelo disco.
+    const porBashS = (...args: string[]) =>
+        execFileSync('bash', ['-s', '--', ...args], {
+            input: script, env, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+    it('🔴 a FLAG não vira filtro de busca — as buscas rodam', () => {
+        const saida = porBashS('--ao-vivo');
+        expect(saida).not.toMatch(/unrecognized option/);
+        // E provou que buscou de verdade: achou o INVITE que está no log.
+        expect(saida).toMatch(/1 linha\(s\) com INVITE/);
+    });
+
+    it('🔴 opção desconhecida é DITA e descartada, nunca vira janela', () => {
+        const saida = execFileSync('bash', ['-s', '--', '09:3', '--ao-vivo', '--xpto'], {
+            input: script, env, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        expect(saida).toMatch(/na janela "09:3"/);
+        expect(saida).not.toMatch(/unrecognized option/);
+    });
+
+    it('🔴 a dica de rodar de novo NUNCA sai "bash bash"', () => {
+        const saida = porBashS('--ao-vivo');
+        expect(saida).not.toMatch(/bash bash/);
+        // Vindo pela conexão não há arquivo no disco da VM: o caminho de volta
+        // é o comando que de fato funciona, não um `$0` que não existe.
+        expect(saida).toMatch(/gcloud compute ssh sbc-whatsapp/);
+    });
+
+    it('e DENTRO da VM, com o arquivo no disco, ela cita o ARQUIVO', () => {
+        const copia = join(dir, 'sbc-diagnostico.sh');
+        copyFileSync(join(raiz, 'scripts/sbc-diagnostico.sh'), copia);
+        const saida = execFileSync('bash', [copia, '--ao-vivo'], {
+            env, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        expect(saida).toMatch(new RegExp(`sudo bash ${copia.replace(/[.]/g, '\\.')} `));
+    });
+
+    // ── A CLASSE, não a instância ───────────────────────────────────────────
+    // O `--ao-vivo` virando filtro foi o ERRO; o que fez ele CONCLUIR mesmo
+    // assim foi `${ACHADOS:-0}` — "não consegui contar" lido como "contei e
+    // deu zero". As duas leituras mandam fazer coisas opostas: uma abre
+    // chamado na Meta, a outra manda rodar de novo. É a régua de 06/08
+    // (campo de valor não recebe default) dentro da ferramenta que existe
+    // justamente para não deixar ninguém concluir sobre o que não foi medido.
+    it('🚨 busca que FALHA não vira zero — nem no texto, nem no veredito', () => {
+        // `[` é regex inválida: o grep sai com código 2 (erro), não 1 (zero).
+        const saida = porBashS('[');
+        expect(saida).toMatch(/NÃO CONSEGUI CONTAR/);
+        expect(saida).not.toMatch(/NENHUM INVITE na janela/);
+    });
+
+    it('✅ mas o zero LEGÍTIMO continua podendo ser afirmado', () => {
+        // `grep -c` sai com 1 quando conta zero. Tratar todo não-zero como
+        // falha apagaria justamente o zero que o chamado da Meta precisa.
+        const saida = porBashS('03:1');
+        expect(saida).toMatch(/0 linha\(s\) com INVITE/);
+        expect(saida).toMatch(/NENHUM INVITE na janela/);
+        expect(saida).not.toMatch(/NÃO CONSEGUI CONTAR/);
+    });
+
+    it('e o INVITE achado conclui que o problema é NOSSO', () => {
+        expect(porBashS('09:3')).toMatch(/A META ENTREGA/);
+    });
+
+    it('⚠️ e a janela sugerida é do relógio DA VM, não do Mac', () => {
+        // Os dois fusos podem diferir; o log é escrito com a hora da VM, então
+        // uma janela vinda do Mac procuraria no minuto errado — e devolveria
+        // "nenhum INVITE" com toda a confiança.
+        expect(porBashS('--ao-vivo')).toMatch(/relógio DESTA VM/);
+    });
+
+    it('🚨 o desfecho "rodou no lugar errado" NÃO usa o helper — de propósito', () => {
+        // Ali `$0` É um `.sh` que existe (é o Mac), e o helper devolveria o
+        // MESMO comando que acabou de falhar. Unificar por elegância criaria
+        // um beco: a pessoa repetiria o clique que não funciona.
+        const veredito = script.slice(script.indexOf('# ── VEREDITO'));
+        expect(veredito).toMatch(/Não unificar/);
+        // ⚠️ E a proibição é da CHAMADA, não da palavra: a 1ª versão deste
+        // teste barrava o próprio comentário que EXPLICA a decisão, ou seja
+        // mandava apagar a explicação para o teste passar. É o vício da trava
+        // literal (22/08) dentro da trava que eu estava escrevendo.
+        const chama = veredito.split('\n').some((l) => l.trim().startsWith('comando_de_rodar'));
+        expect(chama).toBe(false);
     });
 });
