@@ -646,9 +646,80 @@ export function conferirSomaDosItensContrib(linhas) {
     return { erros };
 }
 
+// ── R: VL_REC_BRT do M210/M610 = Σ VL_ITEM dos C170 de saída ───────────────
+//
+// FONTE: Guia Prático da EFD-Contribuições 1.35, M210 campo 03 —
+//   "Validação: Quando o valor do campo 02 (COD_CONT) for igual a 01, 51, 02,
+//    52, 31 ou 32, o valor do campo será igual à soma dos seguintes campos …
+//    VL_ITEM dos registros C170 … Em ambos os casos o valor do campo IND_OPER
+//    do registro C100 deve ser igual a '1'".
+//
+// 📌 É A REGRA QUE CUSTOU CINCO DIAS NA PWR (07/2026). O arquivo declarava
+// 37.754,60 (a receita da ficha, líquida do desconto) e o PVA insistia em
+// 38.316,84 — que é a Σ VL_ITEM. Não era importação antiga nem defeito de
+// leitura: era esta validação. O desconto sai no campo 08 do C170 e reduz a
+// BASE (campo 04), não a receita bruta.
+/**
+ * VL_REC_BRT declarado × a soma que a Receita valida.
+ *
+ * ⚠️ Só julga quando dá para julgar: bloco A, F ou registros consolidados no
+ * arquivo tornam a soma incompleta (a validação lista A170, F100, F550, D300…),
+ * e acusar ali seria alarme sobre arquivo correto. Sem C170 de saída, cala.
+ */
+export function conferirReceitaBrutaDoM210(linhas) {
+    const erros = [];
+    const lista = Array.isArray(linhas) ? linhas : [];
+    const cent = (v) => Math.round((parseFloat(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0) * 100);
+    const COD_CONT_COM_VALIDACAO = ['01', '51', '02', '52', '31', '32'];
+
+    // Outras fontes de receita bruta na MESMA soma — havendo qualquer uma,
+    // a Σ dos C170 é um PISO, não o total, e a regra fica muda.
+    const OUTRAS_FONTES = ['A170', 'C181', 'C481', 'C491', 'C381', 'C601', 'C870',
+        'C880', 'D201', 'D601', 'D300', 'D350', 'C175', 'F100', 'F200', 'F500',
+        'F510', 'F550', 'F560', 'I100'];
+    let temOutraFonte = false;
+    let saida = false;
+    let somaItens = 0;
+    let temC170DeSaida = false;
+    const declarados = [];
+    for (let i = 0; i < lista.length; i += 1) {
+        const c = camposDaLinha(lista[i]);
+        const reg = String(c[0] || '').trim();
+        if (!reg) continue;
+        if (OUTRAS_FONTES.includes(reg)) { temOutraFonte = true; continue; }
+        if (reg === 'C100') { saida = String(c[1] || '').trim() === '1'; continue; }
+        if (reg === 'C170') {
+            if (saida) { somaItens += cent(c[6]); temC170DeSaida = true; }
+            continue;
+        }
+        if (reg === 'M210' || reg === 'M610') {
+            declarados.push({ reg, linha: i + 1, cod: String(c[1] || '').trim(), valor: cent(c[2]) });
+        }
+    }
+    if (temOutraFonte || !temC170DeSaida) return { erros };
+
+    for (const d of declarados) {
+        if (!COD_CONT_COM_VALIDACAO.includes(d.cod)) continue;
+        if (d.valor === somaItens) continue;
+        erros.push({
+            registro: d.reg, linha: d.linha,
+            fonte: 'Guia Prático da EFD-Contribuições 1.35, M210 campo 03: "o valor do campo será igual à '
+                + 'soma dos seguintes campos … VL_ITEM dos registros C170 … [IND_OPER = 1]" (PWR 1364, '
+                + '07/2026 — cinco dias porque o PVA regera o registro por esta regra).',
+            mensagem: `O ${d.reg} (linha ${d.linha}) declara VL_REC_BRT ${(d.valor / 100).toFixed(2)} e a `
+                + `soma dos VL_ITEM dos C170 de saída dá ${(somaItens / 100).toFixed(2)}. É esta soma que a `
+                + 'Receita valida no campo — o PVA regera o registro e sobrescreve o que estiver aqui. '
+                + 'O desconto incondicional não entra nesta conta: ele sai no campo 08 (VL_DESC) do C170 e '
+                + 'reduz a BASE (campo 04), que é onde ele reduz tributo.',
+        });
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
+        ...conferirReceitaBrutaDoM210(linhas).erros,
         ...conferirSomaDosItensContrib(linhas).erros,
         ...conferirCadastrosOrfaosContrib(linhas).erros,
         ...conferirCodItemDosItens(linhas).erros,

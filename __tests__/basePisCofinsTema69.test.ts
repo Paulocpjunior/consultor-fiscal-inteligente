@@ -86,16 +86,16 @@ describe('🚨 C100 — o VL_DOC desconta (a DANFE diz 18.179,00)', () => {
         const c100 = acha(buildBlocoC(dados([NF7])), 'C100')[0];
         expect(brl(campos(c100)[12])).toBeCloseTo(18179.00, 2);
         expect(brl(campos(c100)[14])).toBeCloseTo(562.24, 2);   // VL_DESC
-        // 🚨 25/08 (PWR): o VL_MERC passou a sair LÍQUIDO do desconto
-        // incondicional — *"tem que ajustar no C100"*. É de onde o PVA deriva a
-        // receita do M210, e enquanto ele carregasse a mercadoria cheia a
-        // receita saía bruta por construção, por mais que o M210 dissesse outra
-        // coisa. O desconto continua declarado no campo próprio (VL_DESC).
-        expect(brl(campos(c100)[16])).toBeCloseTo(18179.00, 2); // VL_MERC — líquido
-        // ⚠️ E o filho tem de dizer o mesmo: Σ VL_ITEM = VL_MERC (Guia, C170 c.07).
+        // 🚨 O VL_MERC É BRUTO — Guia Prático da EFD-Contribuições 1.35, C170
+        // campo 07: *"somente o valor das mercadorias (equivalente à quantidade
+        // vezes preço unitário)"*, com a validação *"a soma de valores dos
+        // registros C170 deve ser igual ao valor informado no campo VL_MERC"*.
+        // ⚠️ Em 25/08 este teste chegou a exigir o LÍQUIDO, por dedução minha;
+        // o Guia desta família, que chegou no mesmo dia, desmentiu.
+        expect(brl(campos(c100)[16])).toBeCloseTo(18741.24, 2); // VL_MERC — bruto
         const itens = acha(buildBlocoC(dados([NF7])), 'C170')
             .reduce((soma, l) => soma + brl(campos(l)[7]), 0);
-        expect(itens).toBeCloseTo(18179.00, 2);
+        expect(itens).toBeCloseTo(18741.24, 2);
     });
 
     it('e o VL_PIS do C100 continua sendo o DESTACADO no documento', () => {
@@ -130,11 +130,11 @@ describe('🚨 C170 — a base do PIS/COFINS exclui o ICMS', () => {
 describe('🚨 M210/M610 — receita bruta e base são campos DIFERENTES', () => {
     const linhas = () => buildBlocoM(dados([NF7]));
 
-    // ⚠️ 25/08: o desconto passou a sair já no C100/C170 (o PVA recalcula o
-    // M210 a partir dos documentos), então a receita chega aqui LÍQUIDA.
+    // ⚠️ VL_REC_BRT = Σ VL_ITEM dos C170 (Guia 1.35, M210 campo 03,
+    // "Validação"). O desconto reduz a BASE, não a receita bruta.
     it('VL_REC_BRT traz a receita e VL_BC_CONT traz a base — não o mesmo número', () => {
         const f = campos(acha(linhas(), 'M210')[0]);
-        expect(brl(f[3])).toBeCloseTo(18179.00, 2);   // VL_REC_BRT — líquida
+        expect(brl(f[3])).toBeCloseTo(18741.24, 2);   // VL_REC_BRT — Σ VL_ITEM
         expect(brl(f[4])).toBeCloseTo(14906.78, 2);   // VL_BC_CONT
         expect(brl(f[7])).toBeCloseTo(14906.78, 2);   // VL_BC_CONT_AJUS
         expect(brl(f[3])).not.toBeCloseTo(brl(f[4]), 2);
@@ -147,7 +147,7 @@ describe('🚨 M210/M610 — receita bruta e base são campos DIFERENTES', () =>
 
     it('e o M610 idem, com 3%', () => {
         const f = campos(acha(linhas(), 'M610')[0]);
-        expect(brl(f[3])).toBeCloseTo(18179.00, 2);
+        expect(brl(f[3])).toBeCloseTo(18741.24, 2);
         expect(brl(f[4])).toBeCloseTo(14906.78, 2);
         expect(brl(f[11])).toBeCloseTo(brl(f[7]) * brl(f[8]) / 100, 2);
     });
@@ -278,14 +278,14 @@ describe('🚨 desconto no ITEM × só no TOTAL — as duas formas dão o mesmo 
     // **38.316,84 / 30.958,77** — que são Σ VL_ITEM dos C170 e Σ VL_BC_PIS do
     // NOSSO arquivo. O PVA RECALCULA o M210 e o campo 2 é a receita BRUTA.
     // A BASE — que é onde o desconto reduz tributo — continua líquida.
-    it('o M210 traz a receita LÍQUIDA e a base sem o ICMS', () => {
+    it('o M210 traz a receita BRUTA e a base com desconto e ICMS fora', () => {
         const linhas = buildBlocoM(dados([...OUTRAS, SO_NO_TOTAL] as any[]));
         const m210 = campos(acha(linhas, 'M210')[0]);
-        expect(brl(m210[3])).toBeCloseTo(37754.60, 2);   // VL_REC_BRT
+        expect(brl(m210[3])).toBeCloseTo(38316.84, 2);   // VL_REC_BRT = Σ VL_ITEM
         expect(brl(m210[4])).toBeCloseTo(30958.77, 2);   // VL_BC_CONT
-        // ⚠️ A diferença entre as duas é SÓ o ICMS: o desconto já saiu antes,
-        // no C100/C170, que é de onde o PVA deriva a receita.
-        expect(brl(m210[3]) - brl(m210[4])).toBeCloseTo(6795.83, 2);
+        // ⚠️ A diferença entre as duas é desconto + ICMS — os dois saem por
+        // campo PRÓPRIO do C170 (08 e 15), como manda a Seção 12 do Guia.
+        expect(brl(m210[3]) - brl(m210[4])).toBeCloseTo(562.24 + 6795.83, 2);
     });
 });
 
@@ -304,7 +304,7 @@ describe('🚨 desconto no ITEM × só no TOTAL — as duas formas dão o mesmo 
 // Números reais da PWR 07/2026: Σ vProd 38.316,84 · Σ desconto 562,24
 // (a NF 7, do print do C100: 18.741,24 − 562,24 = 18.179,00) · Σ ICMS 6.795,83.
 // ============================================================================
-describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o app diz quanto', () => {
+describe('🚨 PWR 07/2026 — a receita do M210 é a Σ VL_ITEM, e o desconto reduz a BASE', () => {
     const nf = (numero: number, vProd: number, vICMS: number, vDesc = 0) => ({
         numero: String(numero), direcao: 'saida', status: 'autorizado', competencia: '2026-07',
         itens: [{ vProd, vICMS }],
@@ -318,10 +318,12 @@ describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o ap
 
     // 🚨 A LINHA QUE O PVA MOSTRA — provada contra a tela dele (25/08).
     // Antes este teste travava `37754,60`; a base e o imposto NÃO mudaram.
-    it('reproduz a linha da ficha financeira — 37.754,60 × base 30.958,77', () => {
+    // 🚨 A LINHA QUE O PVA VALIDA — provada contra a tela dele em 25/08, e
+    // agora contra o Guia 1.35 (M210 campo 03, "Validação").
+    it('reproduz a linha que o PVA valida — 38.316,84 × base 30.958,77', () => {
         const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
         expect(l.find((x: string) => x.startsWith('|M210|')))
-            .toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+            .toBe('|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
     });
 
     // 🚨 O IMPOSTO É O MESMO — é isto que fecha o assunto. O desconto sai da
@@ -336,17 +338,19 @@ describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o ap
     // 🚨 O aviso deixou de repetir "tirei o desconto da receita" e passou a
     // DIZER o que a pessoa vai ver no PVA — foi a promessa de um número que a
     // tela do PVA nunca mostraria que custou cinco dias.
-    it('a geração DIZ quanto tirou e ONDE o desconto foi aplicado', () => {
+    it('a geração DIZ quanto tirou e ONDE o desconto reduz — a BASE', () => {
         const d = dados();
         buildBlocoM(d);
         const aviso = d.warnings.find(w => /desconto incondicional/i.test(w))!;
         expect(aviso).toBeTruthy();
         expect(aviso).toMatch(/38316\.84/);        // a bruta, de onde partiu
         expect(aviso).toMatch(/562\.24/);          // o desconto
-        expect(aviso).toMatch(/37754\.60/);        // a receita que fica
+        expect(aviso).toMatch(/30958\.77/);        // a base, que é o que paga
         expect(aviso).toMatch(/1 documento\(s\)/);
-        // Aponta o campo do PVA onde conferir — aviso sem lugar vira ruído.
-        expect(aviso).toMatch(/C100/);
+        // Aponta ONDE conferir — e o lugar é a BASE, não a receita: foi
+        // procurar o número na linha errada que custou cinco dias.
+        expect(aviso).toMatch(/BASE/);
+        expect(aviso).toMatch(/C170/);
     });
 
     // ⚠️ Sem desconto nenhum o aviso NÃO aparece: alarme sobre arquivo correto
@@ -369,5 +373,74 @@ describe('🚨 PWR 07/2026 — a receita do M210 é LÍQUIDA do desconto, e o ap
         };
         buildBlocoM(porItem);
         expect(porItem.warnings.find(w => /desconto incondicional/i.test(w))).toMatch(/562\.24/);
+    });
+});
+
+// ============================================================================
+// 🚨 A VALIDAÇÃO OFICIAL DO VL_REC_BRT — a regra que custou cinco dias
+//
+// Guia Prático da EFD-Contribuições 1.35, M210 campo 03:
+//
+//   "Campo 03 - Preenchimento: informar o valor da receita bruta auferida no
+//    período, vinculada ao respectivo COD_CONT.
+//    Validação: Quando o valor do campo 02 (COD_CONT) for igual a 01, 51, 02,
+//    52, 31 ou 32, o valor do campo será igual à soma dos seguintes campos …
+//    VL_ITEM dos registros C170 … Em ambos os casos o valor do campo IND_OPER
+//    do registro C100 deve ser igual a '1' …"
+//
+// Era isto o tempo todo. O arquivo da PWR declarava 37.754,60 (a receita da
+// ficha, líquida do desconto) e o PVA insistia em 38.316,84 — a Σ VL_ITEM.
+// Sandra apagou a base inteira do PVA e reimportou: não mudou.
+// ============================================================================
+// @ts-ignore — módulo JS do backend, sem tipos
+import { conferirReceitaBrutaDoM210 } from '../sefaz-backend/sped-contrib-campos.js';
+
+describe('🚨 VL_REC_BRT = Σ VL_ITEM dos C170 de saída', () => {
+    const c100 = (indOper: string) => `|C100|${indOper}|0|26767102000120|55|00|001|7|3526`
+        + '|24072026|24072026|18179,00|0|562,24||18741,24|9|0,00|0,00|0,00|18179,00|3272,22'
+        + '|0,00|0,00|0,00|121,82|562,24|||';
+    const c170 = (item: string) => `|C170|1|3|TELHA|187,60000|MT|${item}|562,24|0|000|5101|`
+        + '|18179,00|18,00|3272,22|0,00|0,00|0,00|0|||0,00|0,00|0,00|01|14906,78|0,6500|||96,89'
+        + '|01|14906,78|3,0000|||447,20||';
+    const m210 = (rec: string) => `|M210|51|${rec}|14906,78|||14906,78|0,6500|||96,89|||||96,89|`;
+
+    it('nasce VERDE quando o M210 traz a soma', () => {
+        expect(conferirReceitaBrutaDoM210([c100('1'), c170('18741,24'), m210('18741,24')]).erros)
+            .toHaveLength(0);
+    });
+
+    it('acusa o arquivo que a PWR gerou por cinco dias, com a citação do Guia', () => {
+        const r = conferirReceitaBrutaDoM210([c100('1'), c170('18741,24'), m210('18179,00')]).erros;
+        expect(r).toHaveLength(1);
+        expect(r[0].registro).toBe('M210');
+        expect(r[0].mensagem).toContain('18179.00');
+        expect(r[0].mensagem).toContain('18741.24');
+        expect(r[0].fonte).toContain('M210 campo 03');
+        // Diz onde o desconto REALMENTE entra — senão o aviso vira o mesmo
+        // vai-e-vem: a pessoa procura o desconto na linha errada.
+        expect(r[0].mensagem).toMatch(/VL_DESC/);
+        expect(r[0].mensagem).toMatch(/BASE/);
+    });
+
+    // ⚠️ ENTRADA NÃO ENTRA NA SOMA: a validação diz "IND_OPER do C100 igual a 1".
+    it('C170 de ENTRADA fica fora da conta', () => {
+        expect(conferirReceitaBrutaDoM210([
+            c100('0'), c170('99999,99'), c100('1'), c170('18741,24'), m210('18741,24'),
+        ]).erros).toHaveLength(0);
+    });
+
+    // ⚠️ A validação lista OUTRAS fontes na mesma soma (A170, F100, F550,
+    // D300…). Havendo qualquer uma, a Σ dos C170 é um PISO — acusar ali seria
+    // alarme sobre arquivo correto, que é o que faz a equipe desligar a trava.
+    it('fica MUDA quando há outra fonte de receita no arquivo', () => {
+        const f550 = '|F550|21811,34|01|0|21811,34|0,65|141,76|01|0|21811,34|3|654,33|||||';
+        expect(conferirReceitaBrutaDoM210([c100('1'), c170('18741,24'), f550, m210('40552,58')]).erros)
+            .toHaveLength(0);
+    });
+
+    // ⚠️ E só julga os COD_CONT que a validação nomeia.
+    it('COD_CONT fora da lista não é julgado', () => {
+        const m = '|M210|99|1,00|14906,78|||14906,78|0,6500|||96,89|||||96,89|';
+        expect(conferirReceitaBrutaDoM210([c100('1'), c170('18741,24'), m]).erros).toHaveLength(0);
     });
 });

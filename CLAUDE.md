@@ -5,54 +5,50 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
-- **🚨 O DESCONTO SAI NO C100/C170 — o M210 sozinho NUNCA chegava na tela do
-  PVA** (25/08, PWR 1364 · 07/2026, quinto dia no MESMO assunto; Paulo:
-  *"O valor da receita não pode ser esses 38.316,84 e sim 37.754,60 conforme a
-  ficha financeira. Tem que ajustar no C100."*).
-  🔴 **A CAUSA, medida e não deduzida**: Sandra apagou TODA a base do PVA e
-  reimportou o arquivo que declarava `|M210|51|37754,60|…` — e a tela continuou
-  em **38.316,84**. Somando as linhas do NOSSO arquivo, os dois números da tela
-  aparecem: `38.316,84` = **Σ VL_ITEM dos C170** (= Σ VL_MERC dos C100) e
-  `30.958,77` = **Σ VL_BC_PIS**. **O PVA RECALCULA o M210 a partir dos
-  DOCUMENTOS.** Corrigir o M210 era escrever num campo que ele sobrescreve.
-  ✂️ **A correção mora no documento**: `VL_MERC` (C100) e `VL_ITEM` (C170) saem
-  **líquidos do desconto incondicional**, com o `VL_DESC` informado ao lado —
-  nada some do arquivo. Aí os dois lados dizem 37.754,60: o arquivo e a tela.
-  ⚠️ **E OS DOIS LADOS DA IGUALDADE MUDARAM JUNTOS.** O Guia é literal (C170,
-  campo 07: *"a soma de valores dos registros C170 deve ser igual ao valor
-  informado no campo VL_MERC do registro C100"*), então mexer só no C100 —
-  que foi o pedido ao pé da letra — trocaria a divergência por uma RECUSA.
-  A regra entrou na prevalidação no MESMO PR, **nasce VERDE**, e foi provada
-  mexendo só no C100 de propósito: ela acusa a nota, com os dois números.
-  ⚠️ **O RATEIO existe só para o desconto lançado no TOTAL do documento**, é
-  proporcional ao valor do item e fecha **na unidade** (a sobra de centavos vai
-  no último item) — senão trocaríamos a divergência por erro de arredondamento.
-  Desconto que já vem POR ITEM não é rateado: descontar duas vezes é a
-  armadilha que a régua da receita já tratava.
-  ✅ **E O IMPOSTO NUNCA MUDOU, nos cinco dias**: a base é a mesma
-  (30.958,77 → PIS 201,23 · COFINS 928,76), porque `VL_BC_PIS` já era líquido
-  de desconto e de ICMS. O que estava errado era o campo que a Receita LÊ para
-  montar a receita.
-  📌 **REGRA QUE FICA: quando o número da tela de um validador não é o do
-  arquivo, a primeira pergunta é "de ONDE ele tira esse número?" — e a resposta
-  se acha somando as linhas do NOSSO arquivo.** Duas somas de trinta segundos
-  responderam o que três dias de hipótese não responderam. Print de validador
-  não prova só o arquivo: prova **o que o validador CALCULA**.
-  🚨 **E O ERRO CARO FOI DE MÉTODO, NÃO DE LEIAUTE.** Em 24/08 respondi *"a
-  régua está certa, o arquivo que você validou é anterior"*; em 25/08 repeti a
-  mesma história com outra roupa (*"o PVA está com uma importação antiga"*) e
-  entreguei carimbo de hora no nome do arquivo como se fosse a solução; e
-  quando a medição finalmente apareceu, ainda tentei fechar o caso dizendo que
-  a receita bruta era o certo — outra dedução minha, sobre um campo que é
-  decisão fiscal do dono. **Explicação que termina em "confere de novo aí" não
-  é entrega**, e **quando o dono repete o mesmo sintoma pela terceira vez, a
-  hipótese errada é a MINHA**. O caminho é medir o que o outro sistema faz —
-  não reforçar o que eu deduzi, e não devolver o problema para quem já está
-  travado.
-  ✅ **O que destravou foi o teste da Sandra**: apagar a base inteira do PVA
-  eliminou a única explicação que eu tinha. **Teste que ELIMINA hipótese vale
-  mais que print que a confirma** — e quem tem o sistema na frente consegue
-  fazer em um minuto o que eu não consigo fazer em três dias de dedução.
+- **🚨 CINCO DIAS NA PWR PORQUE EU NÃO TINHA O GUIA DESTA FAMÍLIA — e o campo
+  estava definido por VALIDAÇÃO OFICIAL** (25/08, PWR 1364 · 07/2026). A
+  pergunta era *"por que o PVA mostra 38.316,84 se o arquivo diz 37.754,60?"*.
+  A resposta está escrita no **Guia Prático da EFD-Contribuições 1.35, M210
+  campo 03**: *"Validação: quando o COD_CONT for igual a 01, 51, 02, 52, 31 ou
+  32, o valor do campo será igual à soma dos seguintes campos … **VL_ITEM dos
+  registros C170** … [IND_OPER do C100 = 1]"*.
+  ✅ **`VL_REC_BRT` é a Σ VL_ITEM, e o `VL_ITEM` é BRUTO** — campo 07: *"somente
+  o valor das mercadorias (equivalente à quantidade vezes preço unitário)"*,
+  com a validação *"a soma dos registros C170 deve ser igual ao VL_MERC do
+  C100"*. O desconto **tem campo próprio**: a **Seção 12** traz a tabela —
+  no C170, *descontos incondicionais* → **campo 08 (VL_DESC)** e *exclusão do
+  ICMS* → **campo 15 (VL_ICMS)**. É de lá que o PVA monta a BASE, e a base é o
+  que paga: 38.316,84 − 562,24 − 6.795,83 = **30.958,77** → PIS 201,23 ·
+  COFINS 928,76. **O imposto nunca esteve errado, nos cinco dias.**
+  ✅ E o Manual do Lucro Presumido (PVA 2.04) fecha: *"o PVA gera automaticamente
+  os registros consolidadores do Bloco M"*. Escrever outro número ali é escrever
+  num campo que ele sobrescreve — foi o que a Sandra provou apagando a base
+  inteira do PVA e reimportando.
+  🚨 **E EU ERREI TRÊS VEZES NO MESMO DIA, sempre pelo mesmo motivo: deduzir em
+  vez de ler a fonte.** (1) *"o arquivo que você validou é anterior"*; (2) *"o
+  PVA está com uma importação antiga"* — e entreguei carimbo de hora no nome do
+  arquivo como se fosse a solução; (3) quando ele mandou *"tem que ajustar no
+  C100"*, baixei o `VL_ITEM` para o líquido **citando o Guia do EFD ICMS/IPI** —
+  o arquivo VIZINHO. É o erro do 1010 (17/08) e do 0500 (24/08), agora cometido
+  por mim, no argumento.
+  📌 **REGRA QUE FICA: antes de citar uma validação, conferir de QUAL família é
+  o Guia.** As duas famílias têm registros com o mesmo número e regras
+  diferentes. Os dois manuais agora estão em `docs/sped/` (Guia 1.35 + Manual do
+  Lucro Presumido PVA 2.04), então **deduzir leiaute de EFD-Contribuições passou
+  a ser escolha, não falta de fonte**.
+  📌 **E A SEGUNDA REGRA: quando o número da tela de um validador não é o do
+  arquivo, a pergunta é "de ONDE ele tira esse número?"** — some as linhas do
+  NOSSO arquivo e leia a *Validação* do campo no Guia. Duas somas e um `grep`
+  responderam o que quatro dias de hipótese não responderam.
+  ✂️ **A validação virou regra da prevalidação**, com a citação: `VL_REC_BRT` ×
+  Σ VL_ITEM dos C170 de saída. Ela **nasce VERDE** no arquivo correto e acusa
+  exatamente o que a PWR gerou por cinco dias. ⚠️ Fica **MUDA** quando há A170,
+  F100, F550, D300… no arquivo — a validação lista outras fontes na mesma soma,
+  e ali a Σ dos C170 é um PISO, não o total.
+  ⚠️ **O RATEIO DO DESCONTO FICOU**, e é ele que faz a base sair certa: quando o
+  desconto vem só no **total do documento**, cada item precisa levar a parte
+  dele no campo 08, senão o PVA não tem de onde reduzir a base daquele item. É
+  proporcional ao valor e fecha **na unidade** (a sobra vai no último item).
 
 - **🚨 QUATRO DIAS NO MESMO ERRO PORQUE TODA GERAÇÃO TINHA O MESMO NOME DE
   ARQUIVO** (25/08, PWR 1364 · 07/2026, Paulo: *"Este é o 4º dia, o mesmo erro

@@ -1,0 +1,608 @@
+Escrituração Fiscal Digital da Contribuição para o PIS/Pasep, da Cofins e da Contribuição Previdenciária sobre a Receita - EFD Contribuições
+
+Roteiro de Escrituração das Contribuições Sociais
+(Pessoa Jurídica Tributada pelo Lucro Presumido)
+
+Edição dos Dados Pelo Programa Validador e Assinador da Escrituração
+- PVA Versão 2.04 -
+
+Edição dos Dados Pelo Programa Validador e Assinador da Escrituração
+- PVA Versão 2.04 -
+
+08 de março de 2013
+
+1
+
+Sumário
+
+	Introdução	3
+		Conteúdo da Escrituração	4
+		PJ-Lucro Presumido – Registros de Escrituração Obrigatória	5
+		PJ-Lucro Presumido – Registros Complementares da Escrituração	7
+		Geração de Dados na Escrituração	8
+		Bloco F: Escrituração das Receitas (PIS/Cofins)	10
+		– Receita Tributada a Alíquota Básica – CST 01	15
+		– Receita Tributada a Alíquota Zero – CST 06	17
+		– Receita da Revenda de Produtos Monofásicos – CST 04	18
+		– Receita da Revenda de Produtos - Substituição Tributária – CST 05	19
+		– Receita sem Incidência das Contribuições – CST 08	20
+		Bloco M: Apuração das Contribuições (PIS/Cofins)	23
+		– Registros M200/M600: Apuração do PIS e da Cofins	24
+		– Registros M400/M800: Consolidação das Receitas Não Tributadas	25
+		Bloco P: Apuração da Contribuições Previdenciária sobre a Receita Bruta	27
+		– Registro P100: Contribuição Previdenciária s/Receita (Código Tabela 5.1.1)	29
+		– Registro P200: Consolidação da Cont. Previdenciária S/Receita Bruta	31
+		Assinatura Digital da Escrituração	32
+
+Introdução
+
+Este manual tem por objetivo orientar a escrituração fiscal digital, pelas pessoas jurídicas tributadas pelo lucro presumido, da contribuição para o PIS/Pasep e da Cofins, no regime cumulativo, bem como da Contribuição Previdenciária sobre a Receita Bruta (Lei nº 12.546, de 2012), utilizando o próprio Programa Validador e Assinador (PVA) da EFD-Contribuições, na versão 2.04.
+
+Nota: A versão 2.04 do PVA contempla as seguintes atualizações, em relação à versão 2.03:
+	Nova interface nas telas de edição dos registros da escrituração;
+	Cálculo automático da consolidação da Contribuição Previdenciária sobre a Receita, no registro P200, a partir das receitas e contribuições informadas de forma segregada, por serviço/produto (NCM), nos diversos registros P100;
+	Cálculo automático da demonstração da composição das receitas não tributadas de Cofins (receitas isentas, com suspensão, alíquota zero ou não incidência), nos registros M810, a partir dos correspondentes valores informados para o PIS/Pasep, nos registros M410;
+	Instalação e execução do PVA, com a Maquina Virtual Java 1.7.
+Atenção:
+	Para a instalação do PVA da EFD-Contribuições, é necessário que seja instalado previamente a Maquina Virtual Java (JVM).
+	Os programas do Sped são desenvolvidos em Java, não sendo assim executados sem a Maquina Virtual Java, que poderá ser baixada acessando o site http://www.java.com/pt_BR/download/manual.jsp .
+	A versão 2.03 do PVA da EFD-Contribuições não é compatível com a versão 1.7 (Java 7) da Maquina Virtual Java. Neste caso, deve ser instalada a versão anterior 1.6 (Java 6), para que a versão 2.03 do PVA da EFD-Contribuições possa ser executada.
+	A versão 2.04 do PVA da EFD-Contribuições já está compatível com a versão 1.7 (Java 7) da Maquina Virtual Java.
+Atenção:
+	Para a instalação do PVA da EFD-Contribuições, é necessário que seja instalado previamente a Maquina Virtual Java (JVM).
+	Os programas do Sped são desenvolvidos em Java, não sendo assim executados sem a Maquina Virtual Java, que poderá ser baixada acessando o site http://www.java.com/pt_BR/download/manual.jsp .
+	A versão 2.03 do PVA da EFD-Contribuições não é compatível com a versão 1.7 (Java 7) da Maquina Virtual Java. Neste caso, deve ser instalada a versão anterior 1.6 (Java 6), para que a versão 2.03 do PVA da EFD-Contribuições possa ser executada.
+	A versão 2.04 do PVA da EFD-Contribuições já está compatível com a versão 1.7 (Java 7) da Maquina Virtual Java.
+
+A EFD-Contribuições (Escrituração Fiscal Digital da Contribuição para o PIS/Pasep, da Cofins e da Contribuição Previdenciária sobre a Receita), está regulada pela Instrução Normativa RFB nº 1.252, de 2012, a qual dispõe sobre as situações de obrigatoriedade e dispensa da escrituração, da forma e prazos de apresentação, entre outras disposições.
+
+	Conteúdo da Escrituração
+
+As informações que devem ser prestadas na escrituração digital estão dispostas em blocos de registros, conforme quadro abaixo.
+Os registros são compostos de campos que devem ser apresentados de forma sequencial, conforme o leiaute estabelecido no Guia Prático da Escrituração, disponibilizado para download na página da EFD-Contribuições, no Portal do Sped.
+
+Tabela de Blocos da EFD - Contribuições:
+
+Bloco
+ | Descrição
+ | 0
+ | Abertura, Identificação e Referências (Dados de cadastro)
+ | A
+ | Documentos Fiscais - Serviços (ISS)
+ | C
+ | Documentos Fiscais I – Mercadorias (ICMS/IPI)
+ | D
+ | Documentos Fiscais II – Serviços (ICMS)
+ | F
+ | Demais Documentos e Operações
+ |
+I
+ | Operações das Instituições Financeiras e Assemelhadas, Seguradoras, Entidades de Previdência Privada e Operadoras de Planos de Assistência à Saúde
+ | M
+ | Apuração da Contribuição e Crédito de PIS/PASEP e da COFINS
+ | P
+ | Apuração da Contribuição Previdenciária sobre a Receita Bruta
+ | 1
+ | Complemento da Escrituração – Controle de Saldos de Créditos e de Retenções, Operações Extemporâneas e Outras Informações
+ | 9
+ | Controle e Encerramento do Arquivo Digital
+ |
+
+										A	obrigatoriedade	ou	não	de	escrituração	de	cada	bloco	da	EFD-Contribuições é determinada de acordo com:
+	a qualificação da pessoa jurídica (PJ em geral, PJ do sistema financeiro, etc);
+o regime de tributação do IR (Lucro real, Lucro presumido/Arbitrado);
+
+o conteúdo da escrituração (escrituração consolidada (Bloco F) ou detalhada por documento fiscal (Blocos A, C, D e F));
+	a contribuição a que se sujeita a pessoa jurídica (Apuração do PIS/Cofins, no Bloco M e apuração da Contribuição Previdenciária sobre a Receita Bruta, no Bloco P).
+A obrigatoriedade ou não de preenchimento de cada campo dos registros da escrituração, está identificada tanto nas telas de edição da escrituração do próprio PVA como na estrutura de cada registro, conforme demonstrado no Guia Prático da Escrituração.
+A estrutura e conteúdos completos dos registros da escrituração digital estão dispostos no Anexo ao Ato Declaratório Executivo Cofis nº 20, de 14 de março de 2012 (D.O.U. de 16.03.2012).
+No caso da pessoa jurídica tributada com base no lucro presumido, sujeita ao regime cumulativo do PIS/Pasep e da Cofins, a escrituração das operações (receitas) do período poderá ser efetuada de forma consolidada, pelo regime de caixa (Registro F500) ou de competência (Registro F550), conforme a opção da pessoa jurídica.
+
+	– Pessoa Jurídica tributada pelo Lucro Presumido – Registros de Escrituração Obrigatória:
+A pessoa jurídica tributada pelo lucro presumido, sujeita ao regime cumulativo do PIS/Pasep e da Cofins, procederá à escrituração das suas receitas, tributadas ou não, de forma consolidada por totais mensais, nos registros F500 ou F550, assim como já era demonstrado de forma consolidada, no Dacon.
+No caso da pessoa jurídica ser também contribuinte da Contribuição Previdenciária sobre a Receita Bruta, nos termos da Lei nº 12.546/2011, a escrituração também será efetuada com base nas receitas totais auferidas no período, no registro P100.
+
+Nota: A relação completa das incidências da Contribuição Previdenciária sobre a Receita Bruta encontra disponibilizada na Tabela 5.1.1 da EFD-Contribuições, no link “Tabelas de Códigos” disposto na página da EFD - Contribuições, no Portal do Sped.
+Nota: A relação completa das incidências da Contribuição Previdenciária sobre a Receita Bruta encontra disponibilizada na Tabela 5.1.1 da EFD-Contribuições, no link “Tabelas de Códigos” disposto na página da EFD - Contribuições, no Portal do Sped.
+
+Segue abaixo os registros de escrituração obrigatória, referentes às três contribuições:
+Bloco 0 (Dados Cadastrais)
+Registro da Escrituração
+ | Tela de Digitação do PVA
+ | Ficha no Dacon
+ | 0000 - Abertura do Arquivo e Identificação da PJ
+ |
+Criar Nova Escrituração
+ |
+Novo Demonstrativo
+ | 0110 - Regime de Apuração do PIS e da Cofins
+ |
+ |
+ | 0140 - Cadastro de Estabelecimento
+ |
+ |
+ | 0145 - Regime de Apuração da Cont. Previdenciária s/ Receita (1)
+ | 0145 - Regime de Apuração da CP s/ Receita
+ |
+ | (1). Registro obrigatório para as empresas sujeitas à contribuição Previdenciária s/ a Receita Bruta
+
+Bloco F (Escrituração das Receitas - PIS/Cofins)
+Registro da Escrituração
+ | Tela de Digitação do PVA
+ | Ficha no Dacon
+ | F500 - Consolidação das Operações da Pessoa Jurídica - Regime de
+Caixa
+ | F500 - Operações com Incidência do PIS/Pasep e da
+Cofins Pelo Regime de Caixa
+ | Fichas 08A / 18A
+ | F550 - Consolidação das Operações da Pessoa Jurídica - Regime de
+Competência
+ | F550 - Operações com Incidência do PIS/Pasep e da
+Cofins Pelo Regime de Competência
+ | Fichas 08A / 18A
+ | F200 - Operações da Atividade Imobiliária – Unidade Imobiliária
+Vendida
+ | F200 - Operações da Atividade Imobiliária – Unidade
+Imobiliária Vendida
+ | Fichas 08A / 18A
+ | OBS: No caso de pessoa jurídica fabricante de produtos monofásicos, CST 03 (combustíveis, bebidas frias e embalagens para bebidas), deve as receitas serem informadas nos registros F510 (Caixa) ou F560 (Competência), conforme o caso.
+Bloco M (Apuração do PIS/Pasep e da Cofins)
+Registro da Escrituração
+ | Tela de Digitação do PVA
+ | Ficha no Dacon
+ | M200 - Consolidação da Contribuição para o PIS/PASEP do Período
+ | M200 - Contribuição para o PIS/Pasep do Período
+ | Ficha 15A
+ | M600 - Consolidação da Cofins do Período
+ | M600 - Contribuição para a Cofins do Período
+ | Ficha 25A
+ |
+ |
+ |
+ | M400 - Receitas Isentas, sem incidência, alíquota zero ou suspensão -
+PIS/Pasep (*)
+ | M400 - Receitas Isentas, sem incidência, alíquota zero
+ou suspensão - PIS/Pasep
+ |
+ | M800 - Receitas Isentas, sem incidência, alíquota zero ou suspensão -
+Cofins (*)
+ | M800 - Receitas Isentas, sem incidência, alíquota zero
+ou suspensão - Cofins
+ |
+ |
+Bloco P (Apuração da Contribuição Previdenciária s/Receita Bruta)
+Registro da Escrituração
+ | Tela de Digitação do PVA
+ | Ficha no Dacon
+ | P100 - Contribuição Previdenciária sobre a Receita Bruta (por serviço/produto fabricado - Tabela 5.1.1)
+ | P100 - Contribuição Previdenciária sobre a Receita Bruta (por serviço/produto fabricado - Tabela 5.1.1)
+ |
+ | P200 - Consolidação da Contribuição Previdenciária sobre a Receita
+Bruta
+ | P200 - Consolidação da Contribuição Previdenciária
+sobre a Receita Bruta
+ |
+ |
+	– Pessoa Jurídica tributada pelo Lucro Presumido – Registros complementares da Escrituração:
+
+Os seguintes registros são de escrituração complementar, conforme a ocorrência das correspondentes operações, entre outros:
+Registro 0200: Registro de cadastramento de item (produtos/serviços vendidos), na caso da pessoa jurídica optar em detalhar as receitas, em F500 ou em F550, de forma consolidada por item.
+Registro 0500: Registro de cadastramento do plano de contas contábeis, no caso da pessoa jurídica optar em segregar as receitas, em F500 ou em F550, de acordo com as contas contábeis representativas de receitas.
+Registro F525: Registro de informação da memória de cálculo dos recebimentos no mês, no caso de pessoa jurídica apurar a contribuição para o PIS/Pasep e a Cofins pelo regime de caixa.
+Registro F600: registro para escriturar as retenções sofridas na fonte, quando do recebimento das fontes pagadoras. Os valores informados nos registros F600, a deduzir da contribuição no período de PIS e de Cofins, devem ser transferidos para os registro M200 e M600, respectivamente.
+Registros 1010 e 1020: Registros para informar os processos judiciais ou administrativos, conforme o caso, que venha a conferir à pessoa jurídica o direito de adotar tratamento tributário diferente ao estabelecido na legislação correspondente.
+Registro 1800: registro para escriturar as receitas da atividade imobiliária, submetidas ao Regime Especial de Tributação (RET) e ao programa Minha Casa Minha Vida.
+Registro 1900: registro para escriturar as receitas do período de apuração, consolidadas por cada tipo de documento fiscal.
+
+	Geração de Dados na Escrituração
+O PVA da EFD - Contribuições, disponibilizado no portal de serviços do Sped, no endereço eletrônico da Secretaria da Receita Federal do Brasil (http://www.receita.fazenda.gov.br), possibilita o preenchimento da base de dados da escrituração das contribuições por dois meios específicos, a saber:
+		Edição da escrituração diretamente no próprio PVA: mediante a digitação da base de dados do período (dados cadastrais, receitas e contribuições apuradas no período); ou
+
+	Importação de arquivo no formato “txt” pelo PVA: utilizando os sistemas internos da pessoa jurídica, será gerado arquivo digital no formato “txt”, no qual os dados do período (dados cadastrais, receitas e contribuições apuradas) estão dispostos de acordo com o leiaute da EFD-Contribuições.
+
+Para tanto, deve a pessoa jurídica na opção “Nova”, clicar a funcionalidade “Criar” ou “Importar” (Escrituração), conforme figura abaixo, ou então, clicar nos ícones correspondentes, no alto da tela.
+
+Para se criar uma nova escrituração, mediante a edição de dados (digitação) no próprio PVA da EFD-Contribuições, deve a pessoa jurídica tributada pelo lucro presumido, submetida ao regime cumulativo do PIS/Pasep e da Cofins e, conforme o caso, também submetida à Contribuição previdenciária sobre a Receita Bruta, proceder à digitação dos campos da tela “Criar Nova Escrituração”, conforme abaixo:
+
+Atenção: Para o correto cadastramento da escrituração, bem como o preenchimento dos registros referentes às operações que irão compor o seu conteúdo (receitas e contribuições apuradas no período), deve a pessoa jurídica observar às orientações contidas no Guia Prático da escrituração, bem como as respostas e esclarecimentos constantes no “Perguntas Freqüentes”, ambos disponibilizados na página da EFD-Contribuições, no portal do Sped.
+
+2.1 – Bloco F : Escrituração das Receitas (PIS/Cofins):
+Uma vez cadastrada a escrituração, conforme anteriormente demonstrado, a mesma poderá ser totalmente elaborada mediante a digitação de dados no próprio programa (PVA). Para tanto, deve a pessoa jurídica tributada pelo lucro presumido, ao apurar as contribuições, com base nas informações de receitas auferidas (regime de competência) ou recebidas (regime de caixa) no mês, observar os procedimentos a seguir:
+
+Passo 1: Selecionar e abrir a escrituração a ser editada.
+Para a edição de uma escrituração já cadastrada, o usuário deve selecionar e abrir a mesma, conforme figura abaixo:
+
+Após selecionar a escrituração a ser editada, o Programa validador (PVA) relaciona a estrutura de registros da escrituração (árvore da escrituração), cujo conteúdo é definido de acordo com as informações prestadas no cadastramento da escrituração.
+Desta forma, caso no cadastramento da Ficha “Criar Nova Escrituração”
+seja indicado no campo “Critério de Escrituração e Apuração” a opção “2 –
+
+Regime de Competência – Escrituração consolidada”, por exemplo, será relacionado e disponibilizado para edição, na árvore da escrituração, o registro “F550 – Operações com Incidência do PIS/Pasep e da Cofins Pelo Regime de Competência”.
+De igual forma, caso seja indicado no referido campo de cadastramento da escrituração a opção “1 – Regime de Caixa – Escrituração consolidada”, por exemplo, será relacionado e disponibilizado para edição, na árvore da escrituração, o registro “F500 – Operações com Incidência do PIS/Pasep e da Cofins Pelo Regime de Caixa”.
+A referida árvore da escrituração (conjunto de registros passíveis de escrituração) encontra-se disposta à esquerda da tela de edição de dados. Conforme figura abaixo.
+
+Na área à direita da tela de edição, é relacionado o registro correspondente à linha da árvore selecionada. Uma vez clicando na linha da árvore correspondente ao registro, o mesmo é visualizado para edição, na área à direita.
+Deve ser observado que o fato do registro constar na árvore não quer dizer que necessariamente o mesmo seja de escrituração obrigatória. A árvore relaciona tanto os registros de escrituração obrigatória, em função das informações prestadas no cadastramento da escrituração, como também os registros relacionados ou complementares.
+
+A título exemplificativo, independente do escopo da escrituração, do seu conteúdo (regime de incidência cumulativo (PJ lucro presumido) ou não
+
+cumulativo (PJ lucro real), ou do regime de escrituração (caixa ou competência)), a árvore da escrituração sempre relaciona o registro F600, próprio e específico para as pessoas jurídicas informarem os valores retidos na fonte (pelos órgãos públicos ou empresas, conforme o caso) , passíveis de dedução da contribuição apurada no período.
+
+Passo 2: Proceder à geração dos dados da escrituração.
+Conforme já comentado, a geração dos dados da escrituração pode ser efetuada mediante a importação de arquivo elaborado no formato txt (em sistemas internos da empresa) com os dados correspondentes ao período, como também, possibilita a edição completa dos dados, mediante digitação nas fichas do próprio PVA.
+De acordo com o cadastramento da escrituração, o PVA irá disponibilizar a árvore para edição dos registros, obrigatórios ou complementares.
+Atenção: Assim como a apuração e pagamento das contribuições são efetuados de forma centralizada pela pessoa jurídica (pelo estabelecimento sede), escrituração das contribuições sociais (PIS/Pasep, Cofins e Contribuição Previdenciária sobre a Receita Bruta) também é gerada de forma centralizada, numa única escrituração.
+Todavia, a escrituração das receitas, nos registros F500 (regime de caixa) e F550 (regime de competência), no caso do PIS/Pasep e da Cofins, bem como nos registros P100, no caso da CP s/ a Receita Bruta, deve ser efetuada de forma segregada, por cada estabelecimento da pessoa jurídica.
+Assim, a empresa que tenha auferido receitas em 3 estabelecimentos diversos (estabelecimento sede mais dois estabelecimentos filias) deverá escriturar cada estabelecimento em questão, no registro 0140, demonstrando na escrituração dos registros em F500, F550 e P100, conforme o caso, as receitas próprias de cada estabelecimento.
+Atenção: Assim como a apuração e pagamento das contribuições são efetuados de forma centralizada pela pessoa jurídica (pelo estabelecimento sede), escrituração das contribuições sociais (PIS/Pasep, Cofins e Contribuição Previdenciária sobre a Receita Bruta) também é gerada de forma centralizada, numa única escrituração.
+Todavia, a escrituração das receitas, nos registros F500 (regime de caixa) e F550 (regime de competência), no caso do PIS/Pasep e da Cofins, bem como nos registros P100, no caso da CP s/ a Receita Bruta, deve ser efetuada de forma segregada, por cada estabelecimento da pessoa jurídica.
+Assim, a empresa que tenha auferido receitas em 3 estabelecimentos diversos (estabelecimento sede mais dois estabelecimentos filias) deverá escriturar cada estabelecimento em questão, no registro 0140, demonstrando na escrituração dos registros em F500, F550 e P100, conforme o caso, as receitas próprias de cada estabelecimento.
+
+Exemplo da Escrituração das receitas (PIS/Cofins):
+Demonstramos a seguir o exemplo da escrituração dos registros obrigatórios, referentes ao PIS/Pasep e a Cofins, considerando as receitas auferidas por uma pessoa jurídica comercial, do ramo de supermercado, cuja apuração das contribuições no regime cumulativo seja pelo regime de competência, conforme indicado no cadastramento da escrituração – Registro “0000”.
+
+SUPERMERCADO XYZ – RECEITAS REFERENTES A JANEIRO/2013:
+RECEITA
+ | ESPECIFICAÇÃO
+ | CST
+ | 1.000.000,00
+ | Revenda Produtos Tributados à Alíquota Basica
+ | 01
+ |
+ | 500.000,00
+ | Alimentos e bebidas diversas (exceto bebidas monofásicas)
+ |
+ |
+ | 350.000,00
+ | Produtos de higiene e limpeza
+ |
+ |
+ | 150.000,00
+ | Outros produtos
+ |
+ | 700.000,00
+ | Revenda Produtos Tributados à Alíquota Zero
+ | 06
+ |
+ | 400.000,00
+ | Frutas e verduras
+ |
+ |
+ | 200.000,00
+ | leite, iogurte e queijos
+ |
+ |
+ | 100.000,00
+ | Massas alimentícias e farinha de trigo
+ |
+ | 600.000,00
+ | Revenda Produtos de Tributação Monofásica
+ | 04
+ |
+ | 380.000,00
+ | Cervejas, refrigerantes e agua
+ |
+ |
+ | 220.000,00
+ | Artigos de perfumaria
+ |
+ | 80.000,00
+ | Revenda Produtos Sujeitos à Substituição Tributária: Cigarros
+ | 05
+ | 210.000.00
+ | Receitas e Rendimentos Sem Incidência:
+ | 08
+ |
+ | 180.000,00
+ | Rendimentos de aplicação financeira
+ |
+ |
+ | 30.000,00
+ | Rendimentos de aluguéis
+ |
+ |
+ | 2.590.000,00
+ | Total das Receitas no Período
+ |
+A partir da memória de cálculo elaborada pela empresa, para a consolidação de suas receitas do período, caso a pessoa jurídica fosse preencher a ficha correspondente no Dacon, os dados acima seriam assim informados:
+
+Na EFD - Contribuições, os valores das receitas auferidas no período (regime de competência) são informados no registro F550, de forma segregada por cada Código de Situação Tributária (CST), das Tabelas 4.3.3 (PIS) e 4.3.4 (Cofins), relacionadas no Guia Prático da Escrituração (disponível no Portal do Sped).
+Na tabela abaixo está demonstrada a correlação entre as linhas da Ficha 08A do Dacon e os correspondentes CST a serem informados no Registro F550:
+
+DACON
+ | EFD-CONTRIBUIÇÕES
+ | Ficha 08A – Cálculo da Contribuição para o PIS/Pasep - Regime Cumulativo
+ | Registro F500
+(Caixa)
+ | Registro F550
+(Competência)
+ | APURAÇÃO DA CONTRIBUIÇÃO
+ | CST
+ | 01.Receita de Vendas de Bens e Serviços – Alíquota de 0,65%
+ | 01
+ | 02.Demais Receitas - Alíquota de 0,65%
+ | 01
+ | 03.Receita Tributada no Regime de Substituição Tributária – Alíquota de 0,65%
+ | 05
+ | 04. Valor da Contribuição Apurada
+ | -
+ | OUTRAS RECEITAS AUFERIDAS
+ |
+ | 05.Receita Tributada à Alíquota Zero
+ | 06
+ | 06.Receita Tributada à Alíquota Zero – Revenda de Produtos Tributação Monofásica
+ | 04
+ | 07.Receita de Vendas de Bens do Ativo Permanente
+ | 49
+ | 08.Receita Sem Incidência da Contribuição – Exportação
+ | 08
+ | 09.Receita Isenta e Demais Receitas Sem Incidência da Contribuição
+ | 07
+ | 10.Receita com Suspensão da Contribuição
+ | 09
+ | 11.Receita de Revenda Decorrente de Operações Sujeitas a Substituição Tributária
+ | 05
+ | 12.Receita Tributada pelo RET – Patrimônio de Afetação
+ | Registro 1800 (RET)
+ |
+Orientações preliminares quanto à edição (inclusão/exclusão) de registros na escrituração:
+Uma vez selecionada a escrituração para a edição de dados, utilizando o próprio PVA, para a geração dos registros representativos de receitas deve o usuário clicar no ícone correspondente ao registro F550, na árvore da escrituração, conforme figura abaixo:
+
+Para a abertura e edição de dados em um registro da escrituração, deve o usuário clicar na caixa com o símbolo +, conforme figura a seguir. Por sua vez, caso o usuário queira excluir um registro deve, uma vez selecionado o mesmo, clicar na caixa com o símbolo -.
+
+No caso do usuário querer editar um registro já informado, para complementar dados ou corrigir alguma informação, basta selecionar a linha correspondente ao registro em questão, clique sobre o mesmo, e a tela com os dados do registro será aberta, para edição.
+No exemplo dado, deve ser gerado um registro F550 para cada CST representativo de receita auferida, conforme demonstrado a seguir:
+
+	– Receita Tributada a Alíquota Básica – CST 01:
+
+RECEITA
+ | ESPECIFICAÇÃO
+ | CST
+ | 1.000.000,00
+ | Revenda Produtos Tributados à Alíquota Basica
+ | 01
+ |
+ | 500.000,00
+ | Alimentos e bebidas diversas (exceto bebidas monofásicas)
+ |
+ |
+ | 350.000,00
+ | Produtos de higiene e limpeza
+ |
+ |
+ | 150.000,00
+ | Outros produtos
+ |
+ | Na escrituração do registro F550 da EFD - Contribuições é disponibilizada a mesma funcionalidade existente no Dacon, de uma vez informado no referido registro a receita (Campo “Valor total da receita auferida”) e a sua forma de tributação, CST = 01 (operação tributável a alíquota básica) os campos de alíquota e de valor do PIS/Pasep são automaticamente preenchidos pelo PVA.
+De igual forma, uma vez preenchidos os campos do PIS/Pasep (Receita e CST) os campos correspondentes da Cofins são também preenchidos automaticamente (Receitas + CST Cofins + Base de cálculo + Alíquota + Valor da Cofins).
+
+Atenção: Os campos informados na parte inferior do Registro F550 (Complemento das informações constantes no registro) são de preenchimento opcional e apenas nos casos em que a pessoa jurídica queira segregar as informações de receitas auferidas no período, por modelo de documento fiscal, por CFOP ou por conta contábil, conforme o caso. Registre-se que o não preenchimento destes campos não acarreta nenhum tipo de inconsistência quanto ao conteúdo da escrituração.
+Esclarecimentos Importantes – CST 01:
+	Os valores da Contribuição para o PIS/Pasep e da Cofins apurados nos registros F550 (regime de competência) ou F500 (regime de caixa), com o CST “01 – Operação Tributável com Alíquota Básica”, irão compor o valor total da contribuição apurada no período, nos Registros “M200 – Consolidação do PIS/Pasep do Período” e “M600 – Consolidação da Cofins do Período”, campo “Valor Total da Contribuição Cumulativa no Período”.
+	Assim, o valor a ser gerado/informado no campo “Valor Total da Contribuição Cumulativa no Período” acima referido, em M200 e M600, compreende a consolidação (soma) das contribuições apuradas nos registros do Bloco F (F200, F500, F510, F550 e/ou F560, conforme a natureza da receita tributável), cujos CST informados sejam iguais a “01”, “02”, “03” e “05”.
+	Uma vez gerado/informado os registros correspondentes às receitas,
+Esclarecimentos Importantes – CST 01:
+	Os valores da Contribuição para o PIS/Pasep e da Cofins apurados nos registros F550 (regime de competência) ou F500 (regime de caixa), com o CST “01 – Operação Tributável com Alíquota Básica”, irão compor o valor total da contribuição apurada no período, nos Registros “M200 – Consolidação do PIS/Pasep do Período” e “M600 – Consolidação da Cofins do Período”, campo “Valor Total da Contribuição Cumulativa no Período”.
+	Assim, o valor a ser gerado/informado no campo “Valor Total da Contribuição Cumulativa no Período” acima referido, em M200 e M600, compreende a consolidação (soma) das contribuições apuradas nos registros do Bloco F (F200, F500, F510, F550 e/ou F560, conforme a natureza da receita tributável), cujos CST informados sejam iguais a “01”, “02”, “03” e “05”.
+	Uma vez gerado/informado os registros correspondentes às receitas,
+
+tributadas (CST 01, 02, 03 e 05), o usuário poderá definir que o PVA gere automaticamente os registros M200 e M600. Para tanto, deve clicar na função “Gerar Apuração PIS e Cofins”, disponível no menu “EFD Contribuições”.
+tributadas (CST 01, 02, 03 e 05), o usuário poderá definir que o PVA gere automaticamente os registros M200 e M600. Para tanto, deve clicar na função “Gerar Apuração PIS e Cofins”, disponível no menu “EFD Contribuições”.
+
+	– Receita Tributada a Alíquota Zero – CST 06:
+
+RECEITA
+ | ESPECIFICAÇÃO
+ | CST
+ | 700.000,00
+ | Revenda Produtos Tributados à Alíquota Zero
+ | 06
+ |
+ | 400.000,00
+ | Frutas e verduras
+ |
+ |
+ | 200.000,00
+ | leite, iogurte e queijos
+ |
+ |
+ | 100.000,00
+ | Massas alimentícias e farinha de trigo
+ |
+ | Assim como no exemplo da escrituração da receita tributada com alíquota básica (CST 01), na escrituração das receitas tributadas á alíquota zero (CST 06), não é obrigatório ou necessário detalhar cada item de produtos que compõem a receita, sendo escriturado o correspondente registro F550 pelo valor total, conforme abaixo:
+
+Regras de consolidação das receitas não tributadas: CST 04, 06, 07, 08 e 09.
+Esclarecimentos Importantes – CST 06:
+1. Os valores das receitas informadas nos registros F550 (regime de competência) ou F500 (regime de caixa), com o CST “06 – Operação Tributável a Alíquota Zero” (Ver relação e códigos na Tabela 4.3.13 da EFD-Contribuições), irão compor os Registros:
+- M400: Consolidação das receitas isentas, sem incidência, sujeitas a alíquota zero ou com suspensão - PIS/Pasep;
+Esclarecimentos Importantes – CST 06:
+1. Os valores das receitas informadas nos registros F550 (regime de competência) ou F500 (regime de caixa), com o CST “06 – Operação Tributável a Alíquota Zero” (Ver relação e códigos na Tabela 4.3.13 da EFD-Contribuições), irão compor os Registros:
+- M400: Consolidação das receitas isentas, sem incidência, sujeitas a alíquota zero ou com suspensão - PIS/Pasep;
+
+- M800: Consolidação das receitas isentas, sem incidência, sujeitas a alíquota zero ou com suspensão – Cofins.
+	Assim, o valor a ser gerado/informado no campo “Valor Total da Receita Bruta no Período”, em M400 e M800, compreende a consolidação (soma) das receitas informadas nos registros do Bloco F, cujos CST informados sejam iguais a “04”, “06”, “07”. “08” e “09”.
+	Uma vez gerado/informado os registros correspondentes às receitas, não tributadas (CST 04, 06, 07, 08 e 09), o usuário poderá definir que o PVA gere automaticamente os registros M400 e M800. Para tanto, deve clicar na função “Gerar Apuração PIS e Cofins”, disponível no menu “EFD Contribuições”.
+	Na EFD-Contribuições deve a pessoa jurídica detalhar nos registros filhos M410 (PIS) e M810 (Cofins), as receitas não tributadas, consolidadas nos registros M400 (PIS) e M800 (Cofins), respectivamente.
+Este detalhamento das receitas não tributadas, em M410 e M810, é efetuado de acordo com a natureza da receita correspondente, conforme os códigos listados no combo box do campo “Natureza da Receita” de M410 e M810.
+Na impossibilidade de individualização das receitas tributadas a alíquota zero (CST 06), conforme os diversos códigos listados, pode ser utilizado o código genérico “999”.
+
+	– Receita da Revenda de Produtos Monofásicos – CST 04:
+
+RECEITA
+ | ESPECIFICAÇÃO
+ | CST
+ | 600.000,00
+ | Revenda Produtos de Tributação Monofásica
+ | 04
+ |
+ | 380.000,00
+ | Cervejas, refrigerantes e agua
+ |
+ |
+ | 220.000,00
+ | Artigos de perfumaria
+ |
+ |
+Os procedimentos para a escrituração das receitas da revenda de produtos monofásicos – CST 04 (Ver relação e códigos na Tabela 4.3.10 ou 4.3.11 da EFD-Contribuições), são os mesmos adotados na escrituração das receitas tributadas a alíquota zero – CST 06.
+Na geração do registro F550, o usuário precisa digitar apenas o valor total da receita auferida no mês, correspondente à revenda de produto sujeito à tributação monofásica das contribuições, e indicar o CST correspondente (CST 04), não precisando preencher os demais campos, conforme demonstrado na figura a seguir.
+Deve também o usuário além de gerar os registros totalizadores das receitas com CST 04, gerar os correspondentes registros M400 (PIS) e M800 (Cofins),
+
+bem como os registros filhos de detalhamento, M410 (PIS) e M810 (Cofins), conforme esclarecimentos do Item II.
+
+	– Receita da Revenda de Produtos Tributados por Substituição Tributária – CST 05:
+
+RECEITA
+ | ESPECIFICAÇÃO
+ | CST
+ | 80.000,00
+ | Revenda Produtos Sujeitos à Substituição Tributária: Cigarros
+ | 05
+ |
+Na escrituração do registro F550 da receita da revenda de produto tributado por substituição tributária, como no caso de cigarros, deve a pessoa jurídica preencher além do campo totalizador da receita mensal e do campo de CST correspondente (CST 05), preencher o valor zero (R$ 0,00) no campo de base de cálculo, conforme figura abaixo:
+
+A necessidade de digitar o valor zero no campo de base de cálculo é decorrente de que a pessoa jurídica revendedora de produto sujeito ao regime de substituição tributária (CST 05) é contribuinte ao auferir receita da venda de produtos nesse regime, só que está sendo substituído pelo fabricante.
+Desta forma, ao informar o valor zero na revenda desses produtos, o PVA trata a referida receita como não mais sujeita ao pagamento das contribuições.
+Nota: Por ter natureza de receita tributável, porém com a tributação substituída pelo fabricante (assumindo a pessoa jurídica fabricante o ônus de apurar e pagar a contribuição devida, como contribuinte e como substituto tributário do revendedor) a receita da revenda de uma operação tributável não é considerada na consolidação das receitas não tributadas em M400 (PIS) e M800 (Cofins).
+
+	– Receita sem Incidência das Contribuições – CST 08:
+
+RECEITA
+ | ESPECIFICAÇÃO
+ | CST
+ | 210.000.00
+ | Receitas e Rendimentos Sem Incidência:
+ | 08
+ |
+ | 180.000,00
+ | Rendimentos de aplicação financeira
+ |
+ |
+ | 30.000,00
+ | Rendimentos de aluguéis
+ |
+ | Os procedimentos para a escrituração das receitas sem incidência das contribuições – CST 08 (Ver relação e códigos na Tabela 4.3.15 da EFD-Contribuições), são os mesmos adotados na escrituração das receitas tributadas a alíquota zero – CST 06 (Item II).
+Na geração do registro F550, o usuário precisa digitar apenas o valor total da receita auferida no mês, correspondente às receitas sem incidência das contribuições, e indicar o CST correspondente (CST 08), não precisando preencher os demais campos, conforme demonstrado na figura a seguir.
+
+Procedimentos após a escrituração das Receitas (Registro F550):
+Após a escrituração das receitas do período, nos registros F550, deve o usuário gerar os correspondentes registros de consolidação, no Bloco M, abaixo especificados:
+	Registros M200 (Apuração do PIS) e M600 (Apuração da Cofins);
+		Registros M400 (Receitas não tributadas do PIS) e M800 (Receitas não tributadas da Cofins), bem como os registros filhos de detalhamento M410 (PIS) e M810 (Cofins).
+A não escrituração dos registros de apuração das contribuições (M200/M600) e dos registros de consolidação das receitas não tributadas (M400/M800) geram pendências de erros da escrituração, que impedem a sua validação e transmissão.
+Para a verificação da existência ou não de erros na escrituração, que impedem a sua validação, o usuário deve clicar no ícone “Verificar Pendências de Escrituração”, conforme indicado na figura abaixo.
+
+Na verificação de pendências da escrituração, constatando a inexistência dos registros do Bloco M (M200 e M400 para o PIS e M600 e M800 para a Cofins, e registros filhos), o PVA gerará relatório das pendências existentes (erros e avisos), conforme abaixo demonstrado:
+
+Para a eliminação da pendência de erro, conforme exemplo acima, deve o usuário proceder à sua escrituração, mediante um dos procedimentos abaixo, a seu critério:
+		Editar os registros correspondentes aos erros apontados no relatório, criando os registros ausentes ou preenchendo os campos exigidos, mediante digitação no próprio PVA. Para tanto, basta clicar na expressão “Registro/Campo não informado”, destacada em azul, em cada linha de erro;
+		Determinar que o próprio PVA proceda ao cálculo automático e geração dos registros M200 e M400 (PIS) e M600 e M800 (Cofins). Para tanto, basta usar a função “Gerar Apuração PIS e Cofins”, disponível no menu “EFD Contribuições”, no alto da tela do programa, conforme item 2.1 a seguir.
+
+2.1 – Bloco M: Apuração das Contribuições (PIS/Cofins):
+
+Na escrituração das pessoas jurídicas tributadas pelo lucro presumido, após a geração dos registros representativos das receitas do período, nos registros do bloco F (F200, F500, F510, F550, F560) e das retenções na fonte (F600), deve o usuário proceder à escrituração do Bloco M, dos registros correspondentes à apuração do valor da contribuição devida/a pagar no período, em M200 (PIS) e M600 (Cofins) e dos registros de consolidação das receitas não tributadas, em M400 (PIS) e M800 (Cofins).
+A partir das receitas informadas nos registros do bloco F (registros F200, F500, F510, F550 e F560), o programa validador (PVA) disponibiliza a função de cálculo automático do PIS/Pasep (registro M200) e da Cofins (registro M600), bem como dos registros de consolidação das receitas não tributadas (registro M400 (PIS) e M800 (Cofins)).
+Para tanto, após a edição dos registros geradores de receitas, no Bloco F (Receitas de PIS e Cofins), deve o usuário clicar na função “Gerar Apuração das Contribuições” conforme tela abaixo:
+
+Importante: A cada edição inclusão ou exclusão de valores, deve a empresa gerar nova apuração, conforme acima, para que ocorra a devida atualização.
+
+Considerações sobre a função “Gerar Apuração das Contribuições”:
+		O PVA, versão 2.04, gera automaticamente os registros consolidadores do Bloco M: M200 (Apuração do PIS), M600 (Apuração da Cofins), M400 (Consolidação das Receitas Não Tributadas – PIS) e M800 (Consolidação das Receitas Não Tributadas – Cofins), bem como o registro consolidador P200, da Cont. Previdenciária s/ a Receita Bruta.
+		Em relação aos registros de detalhamento das receitas não tributadas M410 (PIS) e M810 (Cofins), filhos dos registros M400 e M800, os mesmos não são gerados automaticamente pelo PVA, devendo ser editados pelo usuário, conforme a natureza das receitas correspondestes, informadas nos registros F550 com os CST 04, 06, 07, 08 e 09. Uma vez informado os registros M410, a funcionalidade “Gerar Apuração” gera os registros correspondentes de Cofins, M810.
+		A função de geração automática dos registros de apuração desconsidera os dados anteriormente informados/existentes no PVA, nos registros M200, M400, M600, M800 e P200. Desta forma, cada vez que for utilizada esta função, o PVA desconsidera o conteúdo anteriormente existente nestes registros e procede a um novo cálculo dos mesmos.
+Considerações sobre a função “Gerar Apuração das Contribuições”:
+		O PVA, versão 2.04, gera automaticamente os registros consolidadores do Bloco M: M200 (Apuração do PIS), M600 (Apuração da Cofins), M400 (Consolidação das Receitas Não Tributadas – PIS) e M800 (Consolidação das Receitas Não Tributadas – Cofins), bem como o registro consolidador P200, da Cont. Previdenciária s/ a Receita Bruta.
+		Em relação aos registros de detalhamento das receitas não tributadas M410 (PIS) e M810 (Cofins), filhos dos registros M400 e M800, os mesmos não são gerados automaticamente pelo PVA, devendo ser editados pelo usuário, conforme a natureza das receitas correspondestes, informadas nos registros F550 com os CST 04, 06, 07, 08 e 09. Uma vez informado os registros M410, a funcionalidade “Gerar Apuração” gera os registros correspondentes de Cofins, M810.
+		A função de geração automática dos registros de apuração desconsidera os dados anteriormente informados/existentes no PVA, nos registros M200, M400, M600, M800 e P200. Desta forma, cada vez que for utilizada esta função, o PVA desconsidera o conteúdo anteriormente existente nestes registros e procede a um novo cálculo dos mesmos.
+
+	– Registros M200/M600: Apuração do PIS e da Cofins.
+Uma vez utilizada a função “Gerar Apuração das Contribuições”, o PVA gera os correspondentes registros de apuração M200 e M600, conforme figura abaixo:
+
+Observações Importantes:
+		No caso da pessoa jurídica ter sofrido retenções na fonte das contribuições, decorrentes de pagamentos efetuados por fontes pagadoras diversas (órgãos públicos ou por empresas), devem ser escriturados os valores retidos no registro “F600 – Contribuição Retida na Fonte”, sendo gerado um registro F600 para cada fonte pagadora, identificada esta pelo CNPJ.
+		O valor das retenções sofridas no período (registro F600), a descontar da contribuição cumulativa, não são recuperados nos correspondentes campos dos registros M200 (PIS) e M600 (Cofins). Desta forma, precisa o usuário complementar os valores retidos nos registros M200 e M600, no campo “Valor Retido na Fonte Deduzido no Período (Cumulativo)”.
+Importante: Eventuais valores destacados nos documentos fiscais de vendas, quando da venda de bens e serviços, não devem ser informados no registro F600. Os valores que são informados em F600 são os que foram retidos pelas fontes pagadoras diversas, no período da escrituração, quando do pagamento pelos bens e serviços adquiridos do contribuinte.
+
+	– Registros M400/M800: Consolidação das Receitas Não Tributadas.
+Caso a pessoa jurídica tenha informado receitas não tributadas (receitas isentas, com alíquota zero, com suspensão ou não incidência) nos registros do Bloco F, a funcionalidade “Gerar Apuração das Contribuições”, gera também os correspondentes registros consolidação dessas receitas, em M400 (Receitas não tributadas de PIS) e M800 (Receitas não tributadas de Cofins), conforme figura abaixo:
+
+Como se verifica da figura acima, o programa consolidada cada tipo de receita não tributada, em um registro M400/M800 para cada CST correspondente.
+Tendo em vista a necessidade de um maior controle e conhecimento da composição das receitas escrituradas, o PVA requer que seja detalhada a natureza das receitas totais informadas por CST, nos registros de detalhamento M410 (PIS) e M810, em função dos códigos de receitas constantes nas tabelas da escrituração, conforme quadro a seguir:
+
+CST
+ | Tabela de Códigos - EFD Contribuições
+ | 04
+ | 4.3.10 - Produtos Sujeitos à Incidência Monofásica (Revenda)
+ | 06
+ | 4.3.13 - Produtos Sujeitos à Aliquota Zero das Contribuições
+ | 07
+ | 4.3.14 - Operações com Isenção das Contribuições
+ | 08
+ | 4.3.15 - Operações sem Incidência das Contribuições
+ | 09
+ | 4.3.16 - Operações com Suspensão das Contribuições
+ | Desta forma, uma vez gerada na escrituração os registros M400 (PIS) e M800 (Cofins), deve a pessoa jurídica informar o necessário detalhamento das receitas não tributadas, por código de receitas, nos registros filho M410 e M810. Estes registros não são gerados automaticamente pelo PVA.
+Na área de edição dos registros M410 e M810, para a identificação do código de receita correspondente, basta selecionar no combo box disponibilizado no campo “Natureza da Receita”, a opção correspondente.
+Observação: Na impossibilidade de identificar a receita correspondente a cada código constante nas tabelas citadas, pode a pessoa jurídica informar o código genérico relacionado nas mesmas.
+Por exemplo, na revenda de combustíveis por um posto de gasolina, informando o código genérico “001 – Revenda de Combustíveis – Alíquota Zero (Monofásicos)”, o qual equivale ao somatório da receita da revenda de gasolina (código 101), óleo diesel (código 102) e álcool para fins carburantes (códigos 112/113).
+Atenção: Na versão 2.03 do PVA, a pessoa jurídica tem de editar (digitar) tanto os registros M410 de detalhamento das receitas não tributadas pelo PIS, como os registros M810 de detalhamento das receitas não tributadas pela Cofins.
+Na versão 2.04 do PVA, uma vez editados os registros M410 (Detalhamento das receitas não tributadas – PIS), a função “Gerar Apuração das Contribuições” (função “Gerar Apuração PIS e Cofins” da versão 2.03) gera automaticamente os correspondentes registros M810 (Detalhamento das receitas não tributadas – Cofins).
+Atenção: Na versão 2.03 do PVA, a pessoa jurídica tem de editar (digitar) tanto os registros M410 de detalhamento das receitas não tributadas pelo PIS, como os registros M810 de detalhamento das receitas não tributadas pela Cofins.
+Na versão 2.04 do PVA, uma vez editados os registros M410 (Detalhamento das receitas não tributadas – PIS), a função “Gerar Apuração das Contribuições” (função “Gerar Apuração PIS e Cofins” da versão 2.03) gera automaticamente os correspondentes registros M810 (Detalhamento das receitas não tributadas – Cofins).
+
+2.3 – Bloco P: Apuração da Contribuição Previdenciária sobre a Receita Bruta:
+
+Considerações Iniciais:
+A apuração e escrituração da contribuição incidente sobre o valor da receita bruta é obrigatória pela pessoa jurídica, tributada pelo lucro real ou presumido, que desenvolva atividades, produtos ou serviços relacionados na Tabela 5.1.1 de Códigos de Incidência, disponibilizada na página da EFD-Contribuições, no portal do Sped.
+As incidências da Contribuição Previdenciária sobre a Receita Bruta estão previstas nos arts. 7º a 10 da Lei nº 12.546, de 2011 e atualizações posteriores, sendo regulamentadas pelo Decreto nº 7.828, de 2012.
+A escrituração do Bloco P será específica para a apuração da Contribuição Previdenciária sobre Receita, efetuada pela pessoa jurídica de forma autônoma e independente da escrituração de apuração do PIS/Pasep e da Cofins, constante nos Blocos “A”, “C”, “D”, “F” e “M”.
+O Bloco “P” só precisa ser escriturado se a PJ auferiu alguma receita sujeita à Contribuição Previdenciária sobre Receita, no mês da escrituração. A ação caracterizadora da efetividade ou não de sua escrituração, é materializada com a geração do registro "0145".
+Sem a escrituração do registro 0145, o PVA não disponibiliza para edição os registros do Bloco P. Uma vez escriturado o referido registro 0145, o PVA exige a apuração da contribuição, no Bloco P.
+
+Observações Importantes:
+		A identificação na EFD-Contribuições de que a pessoa jurídica se sujeita à Contribuição Previdenciária sobre a Receita bruta é determinada com a escrituração do registro de cadastro “0145 – Regime de Apuração da Contribuição Previdenciária sobre a Receita bruta” no Bloco “0”.
+		O registro 0145 é habilitado para edição no PVA, ao selecionar na tela o registro Pai “0140 – Cadastro de Estabelecimento”, conforme figura abaixo. Uma vez gerado o registro 0145, é disponibilizado para edição os registros do Bloco P, para a escrituração das receitas por códigos de incidência (conforme códigos da Tabela 5.1.1) no registro P100 e para a consolidação das contribuições informadas em P100, no registro P200.
+		A escrituração do registro P100, no qual se informam as receitas mensais e contribuição apurada, por cada código de incidência da Tabela 5.1.1, é demonstrada na visão de cada estabelecimento que auferiu as receitas. Desta forma, caso a empresa possua 10 estabelecimentos e destes, apenas 3 prestaram
+Observações Importantes:
+		A identificação na EFD-Contribuições de que a pessoa jurídica se sujeita à Contribuição Previdenciária sobre a Receita bruta é determinada com a escrituração do registro de cadastro “0145 – Regime de Apuração da Contribuição Previdenciária sobre a Receita bruta” no Bloco “0”.
+		O registro 0145 é habilitado para edição no PVA, ao selecionar na tela o registro Pai “0140 – Cadastro de Estabelecimento”, conforme figura abaixo. Uma vez gerado o registro 0145, é disponibilizado para edição os registros do Bloco P, para a escrituração das receitas por códigos de incidência (conforme códigos da Tabela 5.1.1) no registro P100 e para a consolidação das contribuições informadas em P100, no registro P200.
+		A escrituração do registro P100, no qual se informam as receitas mensais e contribuição apurada, por cada código de incidência da Tabela 5.1.1, é demonstrada na visão de cada estabelecimento que auferiu as receitas. Desta forma, caso a empresa possua 10 estabelecimentos e destes, apenas 3 prestaram
+
+serviços ou produziram bens sujeitos a esta contribuição previdenciária, então deve ser escriturado um registro 0145 para cadastrar estes 3 estabelecimentos.
+		Apesar da escrituração do registro P100 dever ser efetuado em relação a cada estabelecimento gerador de receitas com incidência desta contribuição previdenciária, o PVA valida a escrituração das receitas, em P100, de forma centralizada no estabelecimento sede. Neste caso, basta cadastrar o registro 0145 no estabelecimento sede (no registro 0140 – Cadastro de Estabelecimento).
+		Maiores informações desta contribuição previdenciária e instruções para a escrituração de cada campo dos registros 0145, P100 e P200 encontram-se dispostas no Guia Prático da EFD-Contribuições, disponibilizada no portal do Sped.
+serviços ou produziram bens sujeitos a esta contribuição previdenciária, então deve ser escriturado um registro 0145 para cadastrar estes 3 estabelecimentos.
+		Apesar da escrituração do registro P100 dever ser efetuado em relação a cada estabelecimento gerador de receitas com incidência desta contribuição previdenciária, o PVA valida a escrituração das receitas, em P100, de forma centralizada no estabelecimento sede. Neste caso, basta cadastrar o registro 0145 no estabelecimento sede (no registro 0140 – Cadastro de Estabelecimento).
+		Maiores informações desta contribuição previdenciária e instruções para a escrituração de cada campo dos registros 0145, P100 e P200 encontram-se dispostas no Guia Prático da EFD-Contribuições, disponibilizada no portal do Sped.
+
+	– Registro P100: Apuração da Contribuição Previdenciária s/Receita Bruta (por código de incidência).
+Para a edição do Registro P100, precisa ser selecionado e aberto na arvore da escrituração o link “P010 – Identificação do Estabelecimento”. Uma vez selecionado o estabelecimento, em P010, o PVA disponibiliza na tela, na área abaixo da relação dos estabelecimentos, o registro P100, para edição, conforme figura abaixo.
+Para editar o registro, basta clicar no botão + .
+
+Atenção: Para o adequado preenchimento dos campos dos registros P100 e P200 (consolidação da Contribuição Previdenciária informada em P100), deve a pessoa jurídica observar as instruções de preenchimento contidas no Guia Prático da EFD-Contribuições.
+
+Exemplo de Escrituração:
+Considerando uma pessoa jurídica fabricante de vestuário e seus acessórios, tenha auferido uma receita bruta mensal de R$ 2.000.000,00, no mês de janeiro de 2013, decorrente da venda de produtos por ela industrializados, conforme abaixo, teríamos os seguintes procedimentos:
+R$ 1.200.000,00: Blusas de malha (Capítulo 61 da TIPI);
+R$ 800.000,00: Blusas de outros tecidos, exceto de malha (Capítulo 62 da TIPI).
+
+	Na escrituração do registro P100 relativo à receita bruta da venda de roupas de malha:
+
+	Na escrituração do registro P100 relativo à receita bruta da venda de outras roupas, exceto de malha:
+
+	– Registro P200: Consolidação da Contribuição Previdenciária s/Receita Bruta.
+
+Uma vez gerado na escrituração os registros P100, um para cada código de incidência da Contribuição Previdenciária, deve a pessoa jurídica informar a consolidação do valor da contribuição, tendo em vista que a mesma é declarada e recolhida de forma centralizada, pelo estabelecimento sede da pessoa jurídica.
+Atenção:
+Na versão 2.03 do PVA, a pessoa jurídica precisa editar (digitar) tanto os registros P100 como o registro P200, de consolidação da contribuição previdenciária.
+Na versão 2.04 do PVA, uma vez editados os diversos registros P100, conforme os códigos de incidência, a função “Gerar Apuração das Contribuições” (função “Gerar Apuração PIS e Cofins” da versão 2.03) gera automaticamente o correspondente registro P200, de consolidação, bastando ao usuário tão somente complementar no registro P200 o campo indicador do código de receita, conforme informado na DCTF.
+Atenção:
+Na versão 2.03 do PVA, a pessoa jurídica precisa editar (digitar) tanto os registros P100 como o registro P200, de consolidação da contribuição previdenciária.
+Na versão 2.04 do PVA, uma vez editados os diversos registros P100, conforme os códigos de incidência, a função “Gerar Apuração das Contribuições” (função “Gerar Apuração PIS e Cofins” da versão 2.03) gera automaticamente o correspondente registro P200, de consolidação, bastando ao usuário tão somente complementar no registro P200 o campo indicador do código de receita, conforme informado na DCTF.
+
+No caso do exemplo de escrituração, o preenchimento do registro P200 deve ser efetuado conforme figura abaixo:
+
+	Assinatura Digital da Escrituração:
+
+De acordo com a Instrução Normativa RFB nº 1.252, de 2012, a EFD-Contribuições emitida de forma eletrônica deverá ser assinada digitalmente pelo representante legal da empresa ou procurador constituído nos termos da Instrução Normativa RFB nº 944, de 2009 , utilizando-se de certificado digital válido (e-PJ ou e-CNPJ que contenha o mesmo numero base do CNPJ (8 primeiros caracteres) da pessoa jurídica identificada no registro “0000”), emitido por entidade credenciada pela Infra-estrutura de Chaves Públicas Brasileira (ICP-Brasil), que não tenha sido revogado e que ainda esteja dentro de seu prazo de validade, a fim de garantir a autoria do documento digital.
+Para a certificação digital da escrituração, deve ser selecionado no menu “EFD Contribuições” a opção “Assinatura”. Uma vez selecionada a opção “Assinar”, o programa disponibilizará tela com a relação de escriturações já validadas e prontas para serem assinadas digitalmente.
+Selecionada a escrituração a assinar, o programa então disponibiliza a ficha “Lista de Certificados”, para o usuário selecionar o certificado digital válido da empresa e proceder à devida assinatura digital da escrituração.
+
+Assinada a escrituração, a mesma deverá ser transmitida, devendo a pessoa jurídica observar os prazos para transmissão definidos no art. 7º da IN RFB nº 1.252/2012, que estabelece que a EFD-Contribuições será transmitida mensalmente ao Sped até o 10º (décimo) dia útil do 2º (segundo) mês subsequente ao que se refira a escrituração, inclusive nos casos de extinção, incorporação, fusão e cisão total ou parcial.

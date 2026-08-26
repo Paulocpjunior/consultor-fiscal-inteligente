@@ -231,7 +231,7 @@ import {
 // @ts-ignore
 import { buildBlocoM } from '../sefaz-backend/sped-contrib-blocos.js';
 
-describe('🚨 o desconto incondicional sai do valor do item', () => {
+describe('🚨 o desconto incondicional sai da BASE, por campo próprio', () => {
     const brlNum = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.'));
     /** ⚠️ NÃO chamar de `it`: sombreia o `it` do jest e o erro sai em outro lugar. */
     const umItem = (v: number, icms: number, d = 0) => ({
@@ -249,32 +249,38 @@ describe('🚨 o desconto incondicional sai do valor do item', () => {
         regimeApuracao: '2', notas: [n], warnings: [] as string[],
     }).map(semQuebra);
 
-    // A NF 7 real: 18.741,24 de mercadoria − 562,24 de desconto = 18.179,00.
-    it('C100 e C170 saem LÍQUIDOS, com o VL_DESC informado ao lado', () => {
+    // A NF 7 real: 18.741,24 de mercadoria, 562,24 de desconto, ICMS 3.272,22.
+    // 🚨 O VL_ITEM é BRUTO e o desconto tem CAMPO PRÓPRIO — Guia 1.35, C170
+    // campo 07 ("quantidade × preço unitário") e Seção 12 (descontos
+    // incondicionais → campo 08; exclusão do ICMS → campo 15).
+    it('C100/C170 saem BRUTOS, com o desconto no campo 08 e a base já líquida', () => {
         const l = gerar(nota([umItem(18741.24, 3272.22, 562.24)], { vNF: 18179.00, vDesc: 562.24 }));
         const c100 = l.find((x: string) => x.startsWith('|C100|'))!.split('|');
         const c170 = l.find((x: string) => x.startsWith('|C170|'))!.split('|');
-        expect(brlNum(c100[16])).toBeCloseTo(18179.00, 2);  // VL_MERC
-        expect(brlNum(c100[14])).toBeCloseTo(562.24, 2);    // VL_DESC — nada some
-        expect(brlNum(c170[7])).toBeCloseTo(18179.00, 2);   // VL_ITEM
-        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);
-        // A base não muda: ela já era líquida de desconto e de ICMS.
+        expect(brlNum(c100[16])).toBeCloseTo(18741.24, 2);  // VL_MERC — bruto
+        expect(brlNum(c100[14])).toBeCloseTo(562.24, 2);    // VL_DESC
+        expect(brlNum(c170[7])).toBeCloseTo(18741.24, 2);   // VL_ITEM — bruto
+        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);     // VL_DESC — campo 08
+        expect(brlNum(c170[15])).toBeCloseTo(3272.22, 2);   // VL_ICMS — campo 15
+        // E a BASE já sai líquida das duas exclusões: 18.741,24 − 562,24 − ICMS.
         expect(brlNum(c170[26])).toBeCloseTo(14906.78, 2);
     });
 
     // 🚨 As DUAS formas do desconto dão o MESMO arquivo — a armadilha das duas
     // formas, agora no campo que o PVA lê para montar a receita.
-    it('desconto só no TOTAL do documento chega ao item pelo rateio', () => {
+    it('desconto só no TOTAL do documento chega ao campo 08 pelo rateio', () => {
         const l = gerar(nota([umItem(18741.24, 3272.22)], { vNF: 18179.00, vDesc: 562.24 }));
         const c170 = l.find((x: string) => x.startsWith('|C170|'))!.split('|');
-        expect(brlNum(c170[7])).toBeCloseTo(18179.00, 2);
-        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);
-        expect(brlNum(c170[26])).toBeCloseTo(14906.78, 2);
+        expect(brlNum(c170[7])).toBeCloseTo(18741.24, 2);   // item continua bruto
+        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);     // e o desconto aparece
+        expect(brlNum(c170[26])).toBeCloseTo(14906.78, 2);  // a base desconta
     });
 
     it('nas DUAS casas não desconta duas vezes', () => {
         const l = gerar(nota([umItem(18741.24, 3272.22, 562.24)], { vNF: 18179.00, vDesc: 562.24 }));
-        expect(brlNum(l.find((x: string) => x.startsWith('|C170|'))!.split('|')[7])).toBeCloseTo(18179.00, 2);
+        const c170 = l.find((x: string) => x.startsWith('|C170|'))!.split('|');
+        expect(brlNum(c170[8])).toBeCloseTo(562.24, 2);
+        expect(brlNum(c170[26])).toBeCloseTo(14906.78, 2);
     });
 
     // ⚠️ O rateio fecha na UNIDADE: Σ dos rateados = o desconto do documento.
@@ -292,7 +298,7 @@ describe('🚨 o desconto incondicional sai do valor do item', () => {
         expect(valoresLiquidosDosItens(n)).toEqual([100]);
     });
 
-    it('e o M210 declara a receita da ficha — 37.754,60 nas 5 saídas da PWR', () => {
+    it('e o M210 declara a Σ VL_ITEM — 38.316,84 nas 5 saídas da PWR', () => {
         const nf = (n: string, itens: any[], totais: any) => ({
             chave: `3526073194734900016955001000000000${n}1369620739`, numero: n, serie: '1',
             direcao: 'saida', status: 'autorizado', dhEmi: '2026-07-24T10:00:00-03:00',
@@ -311,7 +317,7 @@ describe('🚨 o desconto incondicional sai do valor do item', () => {
             warnings: [] as string[],
         };
         const m210 = buildBlocoM(d).map(semQuebra).find((x: string) => x.startsWith('|M210|'))!;
-        expect(m210).toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+        expect(m210).toBe('|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
     });
 });
 
