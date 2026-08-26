@@ -42,7 +42,7 @@ import { cfopExiste } from './cfop-catalogo.js';
 import { linhasMalformadas } from './sped-auditoria-saida.js';
 
 import {
-    conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_ICMS_IPI,
+    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, POS_DT_FIN_ICMS_IPI,
 } from './sped-c100-regras-comuns.js';
 
 const campos = (linha) => String(linha || '').split('|');
@@ -314,6 +314,127 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+    // ── R17. A APURAÇÃO DO E110 TEM DE FECHAR CONSIGO MESMA ─────────────────
+    //
+    // FONTE — Guia Prático 3.2.3, E110, campo 11 (VL_SLD_APURADO), literal:
+    //   *"o valor informado deve ser preenchido com base na expressão: soma do
+    //   total de débitos (VL_TOT_DEBITOS) com total de ajustes (VL_AJ_DEBITOS +
+    //   VL_TOT_AJ_DEBITOS) com total de estorno de crédito (VL_ESTORNOS_CRED)
+    //   menos a soma do total de créditos (VL_TOT_CREDITOS) com total de ajuste
+    //   de créditos (VL_AJ_CREDITOS + VL_TOT_AJ_CREDITOS) com total de estorno
+    //   de débito (VL_ESTORNOS_DEB) com saldo credor do período anterior
+    //   (VL_SLD_CREDOR_ANT). Se o valor da expressão for maior ou igual a '0',
+    //   então este valor deve ser informado neste campo e o campo 14
+    //   (VL_SLD_CREDOR_TRANSPORTAR) deve ser igual a '0'."*
+    // E o campo 13: *"deve corresponder à diferença entre o campo
+    // VL_SLD_APURADO e o campo VL_TOT_DED"*.
+    //
+    // 🚨 É AQUI QUE MORA O NÚMERO QUE VIRA GUIA — e este registro já mordeu:
+    // em 02/08 o campo 11 (saldo DEVEDOR) recebia o saldo CREDOR em valor
+    // absoluto, ou seja o arquivo declarava imposto a pagar num mês em que a
+    // empresa era credora. Os totais ali estavam certos um a um; o que não
+    // fechava era a EXPRESSÃO, e nada perguntava por ela.
+    //
+    // ⚠️ Um centavo de tolerância: os campos saem de `aplicarAjustesApuracao`,
+    // que arredonda a cada passo. Alarme sobre arredondamento é o que ensina a
+    // equipe a ignorar a prevalidação; erro de sinal ou campo trocado de casa
+    // erra por ORDEM DE GRANDEZA.
+    for (const l of doReg('E110')) {
+        const c = campos(l);
+        const v = (i) => num(c[i]);
+        const expressao = (v(2) + v(3) + v(4) + v(5)) - (v(6) + v(7) + v(8) + v(9) + v(10));
+        const devedor = expressao >= 0;
+        const perto = (a, b) => Math.abs(centavos(a) - centavos(b)) <= 1;
+        const conta = (campo, esperado, recebido, porque) => {
+            if (perto(esperado, recebido)) return;
+            add(erros, {
+                regra: 'e110-apuracao-nao-fecha', registro: 'E110', campo, linha: l,
+                valor: recebido.toFixed(2), esperado: esperado.toFixed(2),
+                mensagem: `A apuração do E110 não fecha consigo mesma: ${porque} dá `
+                    + `${esperado.toFixed(2)} e o campo declara ${recebido.toFixed(2)}.`,
+                acao: 'Isto é defeito de GERAÇÃO (a expressão da apuração), não de lançamento — reporte com '
+                    + 'o print em vez de editar o arquivo. Um campo fora do lugar aqui vira guia de ICMS '
+                    + 'com o valor errado.',
+                fonte: 'Guia Prático 3.2.3, E110, campos 11 e 13 — a expressão da apuração, escrita por '
+                    + 'extenso no próprio Guia. Este registro já saiu com o saldo CREDOR no campo do saldo '
+                    + 'DEVEDOR (02/08).',
+            });
+        };
+        conta('11 - VL_SLD_APURADO', devedor ? expressao : 0, v(11),
+            'débitos + ajustes + estornos de crédito − créditos − ajustes − estornos de débito − saldo credor anterior');
+        conta('13 - VL_ICMS_RECOLHER', Math.max(0, v(11) - v(12)), v(13),
+            'VL_SLD_APURADO − VL_TOT_DED');
+        conta('14 - VL_SLD_CREDOR_TRANSPORTAR', Math.max(0, -(expressao - v(12))), v(14),
+            'o valor ABSOLUTO da expressão quando ela é negativa (com as deduções)');
+    }
+
+    // ── R18. O que o E110 manda recolher tem de ser o que o E116 cobra ──────
+    //
+    // FONTE — Guia Prático 3.2.3, E110 campo 13, na mesma Validação:
+    //   *"O valor da soma deste campo com o campo DEB_ESP deve ser igual à soma
+    //   dos valores do campo VL_OR do registro E116."*
+    //
+    // 🚨 O E116 é a OBRIGAÇÃO A RECOLHER — é dele que sai a guia. Os dois lados
+    // são montados pelo gerador em passos diferentes, então divergirem é
+    // exatamente o defeito que ninguém confere a olho: o livro apura um valor e
+    // a obrigação cobra outro.
+    const e116s = doReg('E116');
+    const e110s = doReg('E110');
+    if (e116s.length && e110s.length) {
+        const somaOr = e116s.reduce((s, l) => s + num(campos(l)[3]), 0);
+        const devidoNoE110 = e110s.reduce((s, l) => s + num(campos(l)[13]) + num(campos(l)[15]), 0);
+        if (Math.abs(centavos(somaOr) - centavos(devidoNoE110)) > 1) {
+            add(erros, {
+                regra: 'e110-x-e116', registro: 'E116', campo: '3 - VL_OR', linha: e116s[0],
+                valor: somaOr.toFixed(2), esperado: devidoNoE110.toFixed(2),
+                mensagem: `O E110 apura ${devidoNoE110.toFixed(2)} a recolher (VL_ICMS_RECOLHER + DEB_ESP) e `
+                    + `os E116 somam ${somaOr.toFixed(2)}. O livro e a obrigação declaram valores diferentes `
+                    + 'para o MESMO imposto.',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É deste número que sai a guia do ICMS.',
+                fonte: 'Guia Prático 3.2.3, E110 campo 13: "O valor da soma deste campo com o campo DEB_ESP '
+                    + 'deve ser igual à soma dos valores do campo VL_OR do registro E116".',
+            });
+        }
+    }
+
+    // ── R19. O saldo do IPI no E520 tem de seguir a própria conta ───────────
+    //
+    // FONTE — Guia Prático 3.2.3, E520, campos 07 e 08:
+    //   *"se a soma dos campos VL_DEB_IPI e VL_OD_IPI menos a soma dos campos
+    //   VL_SD_ANT_IPI, VL_CRED_IPI e VL_OC_IPI for menor que '0' (zero), então
+    //   o campo VL_SC_IPI [deve receber o valor absoluto]"* — e o contrário
+    //   para o VL_SD_IPI.
+    //
+    // 🚨 ESTE REGISTRO JÁ FOI LIDO NA POSIÇÃO ERRADA (19/08): o parser do
+    // espelho mapeava o VL_OD_IPI como se fosse o saldo credor, e a tela
+    // mostrava "IPI a Recolher" onde estava o crédito. Passou despercebido por
+    // meses porque pouquíssimos clientes têm IPI e o número plausível era zero.
+    // A linha REAL da PWR fecha: 2.547,39 + 2.200,45 = 4.747,84 no campo 7.
+    for (const l of doReg('E520')) {
+        const c = campos(l);
+        const v = (i) => num(c[i]);
+        const saldo = (v(3) + v(5)) - (v(2) + v(4) + v(6));
+        const esperadoSc = saldo < 0 ? -saldo : 0;
+        const esperadoSd = saldo >= 0 ? saldo : 0;
+        for (const [campo, esperado, recebido] of [
+            ['7 - VL_SC_IPI', esperadoSc, v(7)],
+            ['8 - VL_SD_IPI', esperadoSd, v(8)],
+        ]) {
+            if (Math.abs(centavos(esperado) - centavos(recebido)) <= 1) continue;
+            add(erros, {
+                regra: 'e520-saldo-ipi', registro: 'E520', campo, linha: l,
+                valor: recebido.toFixed(2), esperado: esperado.toFixed(2),
+                mensagem: `O saldo de IPI do E520 não fecha: débitos + outros débitos − saldo anterior − `
+                    + `créditos − outros créditos dá ${saldo.toFixed(2)}, então o campo deveria ser `
+                    + `${esperado.toFixed(2)} e ele declara ${recebido.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. Saldo de IPI no campo errado transporta o '
+                    + 'crédito para o lado errado e o erro só reaparece na competência seguinte.',
+                fonte: 'Guia Prático 3.2.3, E520, campos 07 e 08. A linha real da PWR 07/2026 fecha: '
+                    + '|E520|2547,39|0,00|2200,45|0,00|0,00|4747,84|0,00|.',
+            });
+        }
+    }
+
     // ── R9. Contribuinte de IPI: E500 exige o 0002 ──────────────────────────
     if (e520s.length && doReg('0002').length === 0) {
         add(erros, {
@@ -422,6 +543,12 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // Mesma casa da R1 — e a posição do DT_FIN é PARÂMETRO porque o 0000 tem
     // leiaute diferente nos dois arquivos (campo 5 aqui, 6 no Contribuições).
     for (const e of conferirDtDocNoPeriodo(lista, POS_DT_FIN_ICMS_IPI)) add(erros, e);
+
+    // ── R20. O período do 0000 tem de ser um MÊS INTEIRO ────────────────────
+    // Mesma casa das R1/R16, e pelo MESMO motivo: a validação está nos dois
+    // Guias e a regra nasceu hoje no EFD-Contribuições. Deixá-la numa família
+    // só é a "meia trava" do COD_MUN do 0150 — aqui os campos são o 04 e o 05.
+    for (const e of conferirPeriodoDoArquivo(lista, POS_DT_FIN_ICMS_IPI)) add(erros, e);
 
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`

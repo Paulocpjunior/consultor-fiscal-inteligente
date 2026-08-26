@@ -40,6 +40,7 @@
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_CONTRIBUICOES,
+    conferirPeriodoDoArquivo as periodoDoArquivoComum,
 } from './sped-c100-regras-comuns.js';
 // A contagem oficial dos 184 registros lidos por inteiro no Guia 1.35 — gerada
 // por `scripts/extrair-leiaute-contrib.mjs`, não escrita à mão.
@@ -973,66 +974,19 @@ export function conferirAritmeticaPisCofins(linhas) {
 
 // ── R: o período do 0000 tem de ser um MÊS INTEIRO ─────────────────────────
 //
-// FONTE (Guia Prático 1.35, registro 0000):
-//   · campo 06 (DT_INI): *"Verificar se a data informada neste campo pertence
-//     ao mesmo mês/ano da data informada no campo DT_FIN. O valor informado
-//     deve ser o primeiro dia do mesmo mês de referência da escrituração"*;
-//   · campo 07 (DT_FIN): *"… deve ser o último dia do mês a que se refere a
-//     escrituração"*.
+// ⚠️ A RÉGUA MUDOU DE CASA no mesmo dia em que nasceu (26/08), e o motivo é a
+// lição de 21/08: **trava nasce onde roda para as DUAS famílias**. A mesma
+// validação está nos dois Guias — no EFD-Contribuições nos campos 06/07 do
+// 0000, no EFD ICMS/IPI nos campos 04/05 —, e escrevê-la só aqui seria a
+// "meia trava" do COD_MUN do 0150: protege o cliente que já quebrou e deixa o
+// próximo descoberto.
 //
-// 🚨 É O CAMPO MAIS CARO DO ARQUIVO INTEIRO: ele diz A QUE MÊS tudo isto se
-// refere. A varredura de competência de 22/08 achou que a competência circula
-// em QUATRO formas legítimas e que cada porta conhecia um subconjunto
-// diferente — o efeito ali foi arquivo VAZIO; aqui seria arquivo CHEIO
-// entregue no mês errado, que é pior, porque ninguém confere data a olho.
+// A posição é PARÂMETRO, nunca dedução do vizinho: o 0000 do EFD-Contribuições
+// traz IND_SIT_ESP e NUM_REC_ANTERIOR antes das datas. Carimbar a posição do
+// outro arquivo faria a regra ler o nome da empresa como se fosse data — foi
+// exatamente o erro que o teste do DT_FIN pegou em 22/08.
 export function conferirPeriodoDoArquivo(linhas) {
-    const erros = [];
-    const l0000 = (Array.isArray(linhas) ? linhas : [])
-        .map((l, i) => ({ campos: camposDaLinha(l), linha: i + 1 }))
-        .find(x => String(x.campos[0] || '').trim() === '0000');
-    if (!l0000) return { erros };
-
-    const dia = (txt) => {
-        const s = String(txt ?? '').trim();
-        return /^\d{8}$/.test(s)
-            ? { d: Number(s.slice(0, 2)), m: Number(s.slice(2, 4)), a: Number(s.slice(4)), txt: s }
-            : null;
-    };
-    const ini = dia(l0000.campos[5]);   // campo 06
-    const fim = dia(l0000.campos[6]);   // campo 07
-    const acusar = (mensagem) => erros.push({
-        registro: '0000', linha: l0000.linha,
-        fonte: 'Guia Prático da EFD-Contribuições 1.35, registro 0000, campos 06 e 07: o DT_INI "deve ser o '
-            + 'primeiro dia do mesmo mês de referência da escrituração" e o DT_FIN "o último dia do mês a '
-            + 'que se refere a escrituração".',
-        mensagem,
-    });
-    // Data ilegível NÃO vira "mês errado": é outra falha, e dizer a errada
-    // manda procurar problema no lugar errado.
-    if (!ini || !fim) {
-        acusar('O período do arquivo (0000, campos 06 e 07) não está no formato DDMMAAAA: '
-            + `DT_INI "${String(l0000.campos[5] ?? '')}" · DT_FIN "${String(l0000.campos[6] ?? '')}". `
-            + 'Sem período legível o PVA não importa, e não dá para saber a que mês o arquivo se refere.');
-        return { erros };
-    }
-    if (ini.m !== fim.m || ini.a !== fim.a) {
-        acusar(`O arquivo declara DT_INI ${ini.txt} e DT_FIN ${fim.txt} — meses diferentes. A escrituração `
-            + 'é de UM mês, e o período atravessando a virada significa competência errada: o movimento '
-            + 'sairia declarado no mês que não é o dele.');
-        return { erros };
-    }
-    const ultimo = new Date(Date.UTC(ini.a, ini.m, 0)).getUTCDate();
-    if (ini.d !== 1) {
-        acusar(`O DT_INI é ${ini.txt} e o Guia exige o PRIMEIRO dia do mês (01${String(ini.m).padStart(2, '0')}`
-            + `${ini.a}). Começar no meio do mês declara à Receita um período que não é o da escrituração.`);
-    }
-    if (fim.d !== ultimo) {
-        acusar(`O DT_FIN é ${fim.txt} e o último dia deste mês é ${String(ultimo).padStart(2, '0')}`
-            + `${String(fim.m).padStart(2, '0')}${fim.a}. Fechando ANTES, o movimento dos dias que sobram `
-            + 'fica fora da escrituração; DEPOIS, o arquivo declara um dia que o mês não tem. Nos dois casos '
-            + 'o PVA recusa — é contra este campo que ele confere o DT_DOC de cada documento.');
-    }
-    return { erros };
+    return { erros: periodoDoArquivoComum(linhas, POS_DT_FIN_CONTRIBUICOES) };
 }
 
 export function avisosDaPrevalidacaoContrib(linhas) {

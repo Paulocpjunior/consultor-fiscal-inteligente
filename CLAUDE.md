@@ -5,6 +5,54 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A APURAÇÃO NUNCA TINHA SIDO PERGUNTADA SE FECHA CONSIGO MESMA — e é
+  dela que sai a GUIA** (26/08, a mesma varredura, agora no Guia do EFD
+  ICMS/IPI). O Guia 3.2.3 está no repo desde 20/08 e tem **885** linhas de
+  *"Validação:"*; **147** são de registros que o gerador emite. As mais caras
+  estavam descobertas — e este registro **já mordeu duas vezes, as duas com
+  teste verde**:
+  · **02/08** — o **E110 campo 11** (saldo DEVEDOR) recebia o saldo CREDOR em
+  valor absoluto: o arquivo declarava imposto a pagar num mês em que a empresa
+  era CREDORA. Cada total, isolado, estava certo; o que não fechava era a
+  **EXPRESSÃO**, e nada perguntava por ela.
+  · **19/08** — o **E520** foi lido na posição errada pelo parser do espelho,
+  com o `VL_OD_IPI` ocupando a casa do saldo credor. Passou meses despercebido
+  porque pouquíssimos clientes têm IPI e o número plausível era **zero**.
+  ✂️ **TRÊS REGRAS NOVAS, todas com a expressão LITERAL do Guia**: **R17** — o
+  E110 fecha consigo mesmo (campos 11, 13 e 14, com a conta escrita por extenso
+  no próprio Guia); **R18** — `VL_ICMS_RECOLHER + DEB_ESP` = Σ `VL_OR` dos
+  E116, ou seja *o que o livro apura é o que a obrigação cobra* (os dois lados
+  são montados em passos diferentes do gerador, e divergirem é o defeito que
+  ninguém confere a olho); **R19** — o saldo do IPI no E520 segue a própria
+  conta, travada contra a linha REAL da PWR (2.547,39 + 2.200,45 = 4.747,84).
+  ⚠️ **UM CENTAVO DE TOLERÂNCIA nas três**: os campos saem de
+  `aplicarAjustesApuracao`, que arredonda a cada passo. Alarme sobre
+  arredondamento é o que ensina a equipe a ignorar a prevalidação — e erro de
+  SINAL ou campo trocado de casa erra por ORDEM DE GRANDEZA.
+  ✅ **NASCEM VERDES nos CINCO caminhos que a régua de apuração produz hoje** —
+  devedor simples, devedor com dedução, credor no período, com saldo credor
+  anterior, e dedução MAIOR que o saldo devedor (que não vira crédito). O teste
+  monta o E110 **chamando a própria `aplicarAjustesApuracao`**, nunca uma linha
+  escrita à mão: fixture que não é o que o gerador produz é teste verde sobre
+  defeito vivo.
+  ✂️ **E A RÉGUA DO PERÍODO MUDOU DE CASA NO MESMO DIA EM QUE NASCEU.** De
+  manhã ela entrou só no EFD-Contribuições; a varredura mostrou a MESMA
+  validação no Guia do ICMS/IPI, e deixá-la numa família só é a "meia trava" do
+  COD_MUN do 0150 — protege o cliente que já quebrou e deixa o próximo
+  descoberto. `conferirPeriodoDoArquivo` foi para `sped-c100-regras-comuns.js`
+  (o dono declarado das regras que valem nas duas famílias) e o Contribuições
+  passou a DELEGAR.
+  ⚠️ **A POSIÇÃO É PARÂMETRO, nunca dedução do vizinho**: campos **04/05** no
+  EFD ICMS/IPI e **06/07** no EFD-Contribuições, cujo 0000 traz `IND_SIT_ESP` e
+  `NUM_REC_ANTERIOR` antes das datas. Carimbar a posição do outro arquivo faria
+  a regra ler a **razão social** como se fosse data — é literalmente o erro que
+  o teste do DT_FIN pegou em 22/08, e há um caso no teste provando isso.
+  📌 **REGRA QUE FICA: quando a fonte oficial repete a mesma validação nos dois
+  Guias, a régua nasce no módulo COMUM — não se escreve nela duas vezes nem se
+  escreve numa só.** É a terceira vez que esta mudança de casa acontece
+  (`linhasMalformadas` em 21/08, o C100 e o COD_MUN do 0150 em 22/08), e as
+  três foram descobertas DEPOIS de a trava já estar rodando pela metade.
+
 - **🚨 O GUIA TEM 343 LINHAS DE "Validação:" E NINGUÉM AS TINHA LIDO** (26/08,
   logo depois de o bloco D fechar). O Guia entrou no repo em 25/08 e serviu
   para responder DUAS perguntas pontuais; a varredura mostrou que ele carrega
