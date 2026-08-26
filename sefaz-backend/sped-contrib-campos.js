@@ -41,12 +41,15 @@
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_CONTRIBUICOES,
 } from './sped-c100-regras-comuns.js';
+// A contagem oficial dos 184 registros lidos por inteiro no Guia 1.35 — gerada
+// por `scripts/extrair-leiaute-contrib.mjs`, não escrita à mão.
+import { CAMPOS_DO_GUIA, REGISTROS_INCERTOS_NO_GUIA } from './leiaute-contrib-guia.js';
 
 /**
  * Contagem de campos INCLUINDO o REG, que é como o PVA conta ("Valor Esperado
  * 16" para uma linha que começa em M210).
  */
-export const CAMPOS_POR_REGISTRO = {
+export const CAMPOS_PROVADOS_POR_RECIBO = {
     // 🚨 O 0500 do EFD-Contribuições NÃO é o do EFD ICMS/IPI — este termina no
     // NOME_CTA_REF; o do outro arquivo tem um COD_CCUS a mais. O gerador saiu
     // com 9 e Paulo pegou a olho (24/08: *"uma está com 4 barrinhas e a outra
@@ -117,6 +120,59 @@ export const CAMPOS_POR_REGISTRO = {
             + 'É o 1010 de Processo Referenciado (ação judicial), NÃO o do EFD ICMS/IPI.',
     },
 };
+
+/**
+ * A tabela que a trava usa: **recibo/assinado VENCE, e o Guia cobre o resto**.
+ *
+ * ═══ POR QUE A MESCLA, e nesta ordem ════════════════════════════════════════
+ *
+ * Até 25/08 só existiam as onze contagens provadas por recibo — e a trava é
+ * MUDA para o registro que não está nela. Foi assim que o 0500 saiu com o
+ * leiaute do arquivo vizinho e ninguém percebeu até o Paulo contar as barras.
+ * Com o Guia 1.35 no repo, os 184 registros lidos por inteiro entram como
+ * fonte, e o arquivo passa de 11 para 33 registros conferidos.
+ *
+ * ⚠️ **O RECIBO VENCE O GUIA, sempre.** O `CAMPOS_DO_GUIA` é derivado de uma
+ * extração mecânica de .docx, e ela erra: no 0500 o número do campo 09 se
+ * perdeu na conversão e a contagem sai 8 onde o assinado do CF BANK mostra 9.
+ * Recibo do PVA é a régua FALANDO; extração é leitura de documento.
+ *
+ * 🚨 **E QUANDO OS DOIS DISCORDAM, ISSO É ACHADO** — não é detalhe a escolher
+ * em silêncio: ou a extração falhou, ou o Guia e o PVA divergem, e as duas
+ * coisas precisam de olho humano. `divergenciasGuiaXRecibo()` devolve a lista.
+ */
+export const CAMPOS_POR_REGISTRO = (() => {
+    const tabela = {};
+    for (const [reg, campos] of Object.entries(CAMPOS_DO_GUIA)) {
+        tabela[reg] = {
+            campos,
+            fonte: 'Guia Prático da EFD-Contribuições 1.35 — tabela de leiaute do registro '
+                + `${reg} (extraída por scripts/extrair-leiaute-contrib.mjs).`,
+        };
+    }
+    // O provado por recibo/arquivo aceito entra POR CIMA.
+    for (const [reg, d] of Object.entries(CAMPOS_PROVADOS_POR_RECIBO)) tabela[reg] = d;
+    return tabela;
+})();
+
+/**
+ * Onde o Guia extraído e o recibo do PVA discordam.
+ *
+ * Nasce com UMA entrada conhecida (o 0500, buraco na conversão). Entrada nova
+ * aqui é para OLHAR, não para ignorar.
+ */
+export function divergenciasGuiaXRecibo() {
+    const fora = [];
+    for (const [reg, d] of Object.entries(CAMPOS_PROVADOS_POR_RECIBO)) {
+        const guia = CAMPOS_DO_GUIA[reg];
+        if (guia == null || guia === d.campos) continue;
+        fora.push({ registro: reg, guia, recibo: d.campos, fonte: d.fonte });
+    }
+    return fora;
+}
+
+/** Registros que o Guia extraído não cobre — a trava continua muda neles. */
+export const REGISTROS_SEM_CONTAGEM = REGISTROS_INCERTOS_NO_GUIA;
 
 /**
  * Posições nomeadas pelo PVA. Servem para a mensagem DIZER o que foi parar no

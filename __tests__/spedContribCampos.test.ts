@@ -59,12 +59,13 @@ describe('a trava pega o arquivo real que o PVA recusou', () => {
         expect(m610.mensagem).toContain('3,0000');
     });
 
-    // As DUAS fontes legítimas desta tabela são a recusa do PVA e o arquivo
-    // ACEITO — "arquivo aceito > leiaute deduzido" é a régua da casa, e foi um
-    // aceito que fixou o M205/M605. O que nunca vale é memória.
+    // As fontes legítimas desta tabela são TRÊS: a recusa do PVA, o arquivo
+    // ACEITO e — desde 25/08 — o próprio **Guia Prático 1.35**, que o Paulo
+    // mandou em Word e que passou a cobrir os registros que recibo nenhum
+    // tinha alcançado. O que nunca vale é memória.
     it('cada contagem carrega a FONTE — nenhuma foi escrita de memória', () => {
         for (const reg of Object.keys(CAMPOS_POR_REGISTRO)) {
-            expect(String((CAMPOS_POR_REGISTRO as any)[reg].fonte)).toMatch(/PVA|ACEITO/);
+            expect(String((CAMPOS_POR_REGISTRO as any)[reg].fonte)).toMatch(/PVA|ACEITO|Guia Prático/);
         }
     });
 
@@ -73,9 +74,13 @@ describe('a trava pega o arquivo real que o PVA recusou', () => {
         // PVA da PWR deu a contagem dele (29), então ele saiu da lista dos não
         // provados. Trocar a FIXTURE é o certo — trocar a régua para manter o
         // teste verde seria desligar a trava que acabou de pegar um defeito.
-        const s = conferirContagemDeCampos(['|0150|X|Y|', '|M210|01|1|2|3|4|5|6|7|8|9|10|11|12|13|14|']);
+        // ⚠️ E a fixture MUDOU DE NOVO em 25/08, pela mesma razão: com o Guia
+        // no repo o 0150 passou a ser conferido (13 campos). Quem continua
+        // descoberto é o 0100 — o número de um campo dele se perdeu na
+        // conversão do .docx, então a contagem seria um chute.
+        const s = conferirContagemDeCampos(['|0100|X|Y|', '|M210|01|1|2|3|4|5|6|7|8|9|10|11|12|13|14|']);
         expect(s.erros).toHaveLength(0);      // o M210 acima tem os 16
-        expect(s.naoConferidos).toContain('0150');
+        expect(s.naoConferidos).toContain('0100');
         // Silêncio não é aprovação: quem lê precisa saber o que ficou de fora.
         expect(s.naoConferidos).not.toContain('M210');
     });
