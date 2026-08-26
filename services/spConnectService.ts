@@ -182,6 +182,26 @@ export const transferirFila = (numero: string, fila: string, recado?: string) =>
     post<{ numero: string; fila: string; transferidaDe: string; avisoCliente: string; nota: MensagemInbox }>(
         urlConversa(numero, 'fila'), { fila, recado });
 
+/** 🟢 Presença: o inbox aberto bate aqui. Marca a PRÓPRIA — sem destinatário. */
+export const baterPresenca = () =>
+    post<{ intervaloMs: number }>('/api/admin/whatsapp/presenca', {});
+
+export interface PessoaNaFila {
+    email: string; nome: string;
+    situacao: 'no-ar' | 'sem-sinal' | 'sem-registro';
+    texto: string; minutos: number | null;
+}
+export interface PresencaDaFila {
+    fila: string; total: number; noAr: number;
+    pessoas: PessoaNaFila[];
+    /** Só existe quando há o que avisar — fila coberta não ganha alarme. */
+    aviso: string | null;
+}
+
+/** 🟢 Quem da fila está no ar AGORA — a pergunta da hora de transferir. */
+export const presencaDaFila = (fila: string) =>
+    req<PresencaDaFila>(`/api/admin/whatsapp/presenca/fila/${encodeURIComponent(fila)}`);
+
 /** Assumir a conversa (liberar=true devolve pra fila). */
 export const assumirConversa = (numero: string, liberar = false) =>
     post<{ numero: string }>(urlConversa(numero, 'assumir'), { liberar });

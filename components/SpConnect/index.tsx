@@ -23,6 +23,7 @@ import {
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
+    baterPresenca, presencaDaFila, PresencaDaFila,
     eventosCrusDeChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
@@ -235,6 +236,24 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         return () => clearInterval(timer);
     }, [recarregar, carregarThread]);
 
+    // 🟢 BATIMENTO DE PRESENÇA — é o que responde "quem está no ar?" na hora
+    // de transferir. Bate a cada minuto, e SÓ com a aba visível: aba
+    // esquecida atrás de outra por três horas continuaria dizendo "no ar", e
+    // aí quem transfere confia num sinal que não é presença de ninguém.
+    // Best-effort: falhar aqui não pode atrapalhar quem está atendendo.
+    useEffect(() => {
+        const bater = () => {
+            if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            baterPresenca().catch(() => { /* presença é conforto, mensagem é o trabalho */ });
+        };
+        bater();
+        const t = setInterval(bater, 60_000);
+        // Voltar para a aba bate na hora: esperar o próximo minuto deixaria a
+        // pessoa "sem sinal" logo depois de sentar na mesa.
+        document.addEventListener('visibilitychange', bater);
+        return () => { clearInterval(t); document.removeEventListener('visibilitychange', bater); };
+    }, []);
+
     // ⚠️ A rolagem para o fim segue presa à FATIA RECENTE, de propósito:
     // carregar histórico acrescenta linhas ACIMA e não pode jogar a pessoa
     // de volta pro rodapé — ela acabou de pedir pra ver o começo.
@@ -307,6 +326,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [transFila, setTransFila] = useState('');
     const [transRecado, setTransRecado] = useState('');
     const [transAviso, setTransAviso] = useState<string | null>(null);
+    // 🟢 Quem está no ar na fila DESTINO — buscado ao escolher a fila, não no
+    // carregamento da tela: é uma pergunta de UM momento, e consultá-la a cada
+    // conversa aberta seria pagar leitura por uma resposta que ninguém pediu.
+    const [presFila, setPresFila] = useState<PresencaDaFila | null>(null);
+    useEffect(() => {
+        if (!transFila) { setPresFila(null); return; }
+        let vivo = true;
+        presencaDaFila(transFila).then((r) => {
+            // Falha vira SILÊNCIO, não alarme: não saber quem está no ar não
+            // pode virar um aviso que parece problema na transferência.
+            if (vivo) setPresFila(r.ok ? r : null);
+        });
+        return () => { vivo = false; };
+    }, [transFila]);
     const acaoTransferir = async () => {
         if (!sel || !transFila || transFila === (sel.fila || 'recepcao')) return;
         setAcaoErro(null);
@@ -4348,6 +4381,24 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </label>
                                     {transFila && (
                                         <div className="space-y-1">
+                                            {/* 🟢 QUEM ESTÁ NO AR NA FILA DESTINO — é aqui que a
+                                                presença vale. Sem isto, transferir para uma fila
+                                                sem ninguém é indistinguível de transferir para uma
+                                                fila cheia: a conversa some da mesa de quem mandou e
+                                                ninguém do outro lado vê.
+                                                ⚠️ Ela INFORMA, não impede: o app mediu o SINAL do
+                                                inbox, não a pessoa. Bloquear por falta de sinal
+                                                barraria transferência legítima para quem está com
+                                                a aba fechada e vai abrir daqui a dez minutos. */}
+                                            {presFila && (
+                                                <div className={`rounded px-2 py-1 text-[10px] leading-snug ${presFila.noAr > 0
+                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                                                    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'}`}>
+                                                    {presFila.noAr > 0
+                                                        ? <>🟢 <strong>{presFila.noAr} de {presFila.total}</strong> no ar em {rotuloCurtoFila(transFila)}: {presFila.pessoas.filter((p) => p.situacao === 'no-ar').map((p) => p.nome).join(', ')}</>
+                                                        : <>⚠️ {presFila.aviso}</>}
+                                                </div>
+                                            )}
                                             <input value={transRecado} onChange={(e) => setTransRecado(e.target.value)}
                                                 placeholder="Recado pra fila destino (opcional — vira nota interna)" className={CAMPO} />
                                             <button onClick={acaoTransferir}
