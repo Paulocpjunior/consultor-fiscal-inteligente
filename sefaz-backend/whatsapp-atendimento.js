@@ -257,6 +257,22 @@ export function configPadraoAtendimento() {
             saudacao: '{nome}, aguarde um momento, logo te atenderemos!\n\nEm qualquer momento, digite #sair para sair do atendimento.\nProtocolo: {protocolo}',
             menuCabecalho: 'Digite uma das seguintes opções:',
             confirmacaoFila: 'Perfeito! Você foi direcionado para {fila}. Aguarde que logo um atendente responderá.',
+            // 🚨 FORA DO HORÁRIO O APP NÃO PODE PROMETER "LOGO" (Paulo, 26/08:
+            // *"não deveria travar pelo fator horário?"*). No teste dele o
+            // encaminhamento saiu às 07:37 dizendo *"aguarde que logo um
+            // atendente responderá"* — com o escritório abrindo às 8:00 e o
+            // aviso de fora de horário já gasto naquele dia (ele sai UMA vez
+            // por dia, de propósito, pra não metralhar). Ou seja: a única
+            // frase que o cliente recebeu prometia uma coisa que a casa não ia
+            // cumprir.
+            // ⚠️ Não é a MESMA frase em outra roupa — são fatos DIFERENTES:
+            // uma diz "logo", a outra diz "quando abrirmos". Por isso são duas
+            // chaves, e não um texto só com remendo.
+            confirmacaoFilaForaDeHorario: 'Perfeito! Você foi direcionado para {fila}. Estamos fora do horário de atendimento agora — assim que abrirmos, um atendente responde por aqui.',
+            // 🤖 O caminho de volta quando quem escolheu foi a IA. Só aparece
+            // NESSE caso: quem digitou "3" acabou de escolher, e oferecer o
+            // menu a ele seria ruído.
+            desfazerTriagemIa: 'Se não for isso, digite #menu para escolher o departamento.',
             foraDeHorario: 'Obrigado por entrar em contato! Nosso horário de atendimento é de Seg. a Sex das 8:00h às 12:00h e 13:00 às 17:30h.\nVisite nosso site: www.spassessoriacontabil.com.br\n\nPode deixar sua mensagem que retornaremos o mais breve possível!',
             sair: 'Atendimento encerrado. Quando precisar, é só chamar!',
             transferencia: 'Você foi direcionado para {fila}. Um atendente do time já vai continuar seu atendimento.',
@@ -647,14 +663,29 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
     if (!conversa.fila && !emConducaoHumana(conversa)) {
         // A confirmação de fila é UMA só, escolhida no menu OU no sub-menu —
         // função local pra não nascer a segunda cópia da ordem imagem→texto.
-        const confirmarFila = (fila, rotulo) => {
+        const confirmarFila = (fila, rotulo, porIa = false) => {
             acoes.push({ tipo: 'definirFila', fila });
             // Imagem ANTES do texto — é a ordem que a Ultra Fox usa (a arte
             // do departamento, depois o "aguarde"). Fila sem imagem
             // cadastrada pula esta ação, sem falha nem substituto genérico.
             const imagem = config.imagensPorFila?.[fila];
             if (imagem) acoes.push({ tipo: 'enviarImagem', url: imagem, fila });
-            acoes.push({ tipo: 'responder', texto: renderMensagem(config.mensagens.confirmacaoFila, { fila: rotulo }) });
+            // 🚨 A PROMESSA MUDA COM O RELÓGIO: "logo um atendente responderá"
+            // às 07:37 é promessa que a casa não cumpre. O encaminhamento em
+            // si CONTINUA acontecendo fora do horário, de propósito — travar
+            // aqui deixaria a mensagem sem destino nenhum, e de manhã a
+            // equipe não teria a conversa na fila. O que muda é o que o app
+            // AFIRMA.
+            const base = dentro
+                ? config.mensagens.confirmacaoFila
+                : (config.mensagens.confirmacaoFilaForaDeHorario || config.mensagens.confirmacaoFila);
+            // 🤖 Quem foi encaminhado pela IA nunca viu o menu — então é a ele
+            // que o caminho de volta interessa. Quem digitou o número acabou
+            // de escolher: repetir "digite #menu" ali seria ruído.
+            const desfazer = porIa && config.mensagens.desfazerTriagemIa
+                ? `\n\n${config.mensagens.desfazerTriagemIa}`
+                : '';
+            acoes.push({ tipo: 'responder', texto: `${renderMensagem(base, { fila: rotulo })}${desfazer}` });
         };
 
         // ↳ DENTRO de um sub-menu aberto (item 5 de 21/08): o dígito se lê
@@ -708,7 +739,7 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
                     confianca: filaSugerida.confianca ?? null,
                     motivo: filaSugerida.motivo || null,
                 });
-                confirmarFila(filaSugerida.fila, filaSugerida.rotulo || filaSugerida.fila);
+                confirmarFila(filaSugerida.fila, filaSugerida.rotulo || filaSugerida.fila, true);
             } else {
                 // Sem IA, sem certeza ou IA fora do ar: o menu de sempre. É de
                 // propósito que o pior caso da IA seja o comportamento de hoje.
