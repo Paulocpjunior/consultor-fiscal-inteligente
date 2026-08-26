@@ -22,7 +22,16 @@
 # "chegou e ninguém anotou". Por isso este script CONFERE o gravador ANTES, e
 # se recusa a concluir "não chegou" quando não pode.
 #
-# USO (dentro do SBC):
+# 🚨 SÃO DUAS MÁQUINAS: este script mora no REPO (no Mac) e roda DENTRO da VM
+# do SBC. Rodá-lo no Mac devolve "No such file or directory" — aconteceu em
+# 26/08, e a culpa foi da instrução que dizia só "dentro do SBC".
+#
+# USO — do clone do repo, no Mac (manda o script pela conexão, sem copiar nada):
+#   cd ~/consultor-fiscal-inteligente && git pull
+#   gcloud compute ssh sbc-whatsapp --project=consultorfiscalapp \
+#     --zone=us-west1-a --command='sudo bash -s -- 09:3' < scripts/sbc-diagnostico.sh
+#
+# Já DENTRO da VM (se você já entrou por ssh):
 #   sudo bash sbc-diagnostico.sh              # olha o dia de hoje
 #   sudo bash sbc-diagnostico.sh 09:3         # a janela da tentativa
 #   sudo bash sbc-diagnostico.sh --ao-vivo    # arma a captura da PRÓXIMA

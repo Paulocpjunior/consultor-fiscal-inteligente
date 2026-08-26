@@ -401,11 +401,29 @@ do CSV do CDR, comandos do pjsip. **Medição que depende de conhecimento
 especializado é medição que não acontece**, e foi por isso que a conversa com a
 Meta ficou parada esperando um dado que ninguém coletava.
 
+🚨 **São DUAS máquinas, e confundir isso custou uma rodada** (26/08): o script
+mora no REPO (no Mac) e precisa rodar DENTRO da VM do SBC. Rodar `sudo bash
+scripts/sbc-diagnostico.sh` no Mac devolve *"No such file or directory"* —
+foi o que aconteceu, e a culpa é da instrução que dizia só "dentro do SBC".
+
+O comando abaixo resolve os dois de uma vez: manda o script pela conexão e
+executa lá, **sem copiar arquivo nenhum**.
+
 ```bash
-# no SBC (sip.spassessoriacontabil.com.br / 35.185.197.118)
-sudo bash scripts/sbc-diagnostico.sh 09:3     # a janela da tentativa
-sudo bash scripts/sbc-diagnostico.sh --ao-vivo # arma a captura da PRÓXIMA
+cd ~/consultor-fiscal-inteligente && git pull       # traz o script
+
+gcloud compute ssh sbc-whatsapp \
+  --project=consultorfiscalapp --zone=us-west1-a \
+  --command='sudo bash -s -- 09:3' < scripts/sbc-diagnostico.sh
 ```
+
+Para armar a captura da PRÓXIMA ligação, troque `09:3` por `--ao-vivo`.
+
+⚠️ **Se o `gcloud` não existir no Mac** (o `.zprofile` do Paulo aponta para um
+SDK que foi movido — a linha de erro aparece a cada terminal novo): confira com
+`gcloud version`. Sem ele, o caminho é o **Cloud Shell** do console do Google
+(`console.cloud.google.com`, ícone `>_`), que já vem autenticado — ali o mesmo
+`gcloud compute ssh` funciona, bastando trazer o script por `git clone`.
 
 Ele confere o **gravador primeiro** (silêncio só vale se ele estava ligado —
 lição de 25/08), diz **até onde o log alcança** (rotação invalida o zero),
