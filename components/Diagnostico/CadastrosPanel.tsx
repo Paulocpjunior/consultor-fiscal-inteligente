@@ -60,7 +60,10 @@ const CadastrosPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                 <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
                     Empresas Simples/Lucro com campos obrigatórios faltando.
                     <b> Crítico</b> = SPED Fiscal não gera (sem UF / IBGE / CNPJ).
-                    <b> Alto</b> = DAS/DARF não calcula (sem anexo / tipo tributação).
+                    {/* ⚠️ Dizia "tipo tributação" — o nome do campo FANTASMA que o painel
+                        cobrava e que ninguém gravava (26/08). A tela tem de descrever o
+                        campo que a pessoa preenche, senão ela procura o que não existe. */}
+                    <b> Alto</b> = DAS/DARF não calcula (sem anexo / sem regime tributário).
                     <b> Médio</b> = identificação ou CNAE faltando.
                 </p>
 

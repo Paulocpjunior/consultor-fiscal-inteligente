@@ -48,10 +48,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   antigo passava verde descrevendo a exigência do campo fantasma — ele
   documentava o defeito em vez de pegá-lo. **Trocar a fixture foi o certo; ela
   descrevia um mundo que a produção não vive.**
-  ⚠️ **E O NÚMERO NÃO ESTÁ CONFERIDO EM PRODUÇÃO**: o 236 sai do print, e
-  quantas empresas realmente saem do ALTO depois disto só o painel dirá — parte
-  delas pode ter outra pendência junto. Carimbar "236 resolvidas" aqui seria o
-  "0/388" com outra roupa.
+  ✅ **MEDIDO EM PRODUÇÃO NO MESMO DIA (deploy 820): 236 → 2, e o OK saltou de
+  186 para 420.** Ou seja, **234 das 236 eram alarme falso** — o painel media
+  um campo que não existe. Os **2 que sobraram são reais** (empresa do Lucro
+  com o regime de fato em branco) e os **3 CRÍTICOS continuam**, corretos.
+  📌 **E ISSO FECHA A RÉGUA DE 22/08 pela via certa: impacto se MEDE no painel,
+  não se deduz do código.** Eu tinha escrito aqui *"o número não está conferido
+  em produção"* justamente para não carimbar "236 resolvidas" antes da prova —
+  e a prova veio do print dele, não da minha leitura do diff. **Quando eu deduzi
+  impacto** (o ADN, 22/08) **eu errei; quando esperei o painel, o número veio
+  maior do que eu teria estimado.**
+  ✂️ **E O SUBTÍTULO DA TELA AINDA DESCREVIA O FANTASMA** — *"Alto = DAS/DARF
+  não calcula (sem anexo / **tipo tributação**)"*. A tela tem de nomear o campo
+  que a pessoa PREENCHE, senão ela procura o que não existe; passou a dizer
+  *"sem regime tributário"*, que é o nome do campo no modal.
 
 - **✅ A PWR FECHOU O EFD-CONTRIBUIÇÕES — e com ela o BLOCO C tem recibo pela
   primeira vez** (26/08, Paulo: *"PWR · MANTOAN · AFFITTARE · PEC · CF BANK —
