@@ -234,3 +234,55 @@ describe('🔗 a conversa sem vínculo DIZ de quem o cadastro acha que é', () =
         expect(rota).toMatch(/JANELA_INDICE_VINCULO_MS/);
     });
 });
+
+// ============================================================================
+// 🚨 CONTATO ≠ CONVERSA — a primeira medição real inflou o buraco 7×
+//
+// 26/08, print do Paulo: **2.216 contatos sem vínculo · 2.159 sem cadastro**.
+// Lido assim, parece 2.159 clientes perdidos. Mas `whatsapp_contatos` guarda
+// também o CATÁLOGO importado da Ultra Fox — gente que nunca trocou uma
+// mensagem no Connect. Cobrar "preencha o cadastro" sobre uma agenda que em
+// boa parte nem é de cliente é alarme com número inflado, e alarme inflado é o
+// que faz a equipe parar de olhar o painel.
+// ============================================================================
+describe('🚨 o recorte de quem JÁ ESCREVEU', () => {
+    const empresas = [{ id: 'e1', nome: 'PADARIA', dadosFiscais: { whatsappCliente: '11997377599' } }];
+
+    it('conta à parte quem tem conversa de quem é só agenda', () => {
+        const r = cruzarNumerosComCadastro({
+            conversas: [
+                { numero: '5511997377599', temConversa: true },    // cliente que escreveu
+                { numero: '5511911112222', temConversa: true },    // escreveu, sem cadastro
+                { numero: '5511933334444', temConversa: false },   // só agenda importada
+                { numero: '5511944445555', temConversa: false },
+            ],
+            empresas,
+        });
+        expect(r.total).toBe(4);              // a agenda inteira
+        expect(r.ativos.total).toBe(2);       // o que muda a tela do atendente
+        expect(r.ativos.sugestoes).toBe(1);
+        expect(r.ativos.semCadastro).toBe(1);
+        expect(r.semCadastro).toHaveLength(3);   // 3 na agenda, mas só 1 escreveu
+    });
+
+    it('e a linha carrega o fato — a tela precisa saber qual é qual', () => {
+        const r = cruzarNumerosComCadastro({
+            conversas: [{ numero: '5511997377599', temConversa: true }], empresas,
+        });
+        expect(r.sugestoes[0].temConversa).toBe(true);
+    });
+
+    it('🚨 a tela DIZ os dois números — o da agenda e o de quem escreveu', () => {
+        const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+        expect(tela).toMatch(/vincSug\.ativos\?\.total/);
+        expect(tela).toMatch(/nunca escreveu aqui/);
+        // E o TETO do método, senão "25 de 2.216" parece fracasso quando na
+        // verdade só 244 clientes têm telefone cadastrado.
+        expect(tela).toMatch(/teto do que este cruzamento consegue achar/);
+    });
+
+    it('a leitura das conversas é só de IDS — booleano não paga documento', () => {
+        const rota = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rota).toMatch(/collection\('whatsapp_conversas'\)\.select\(\)\.get\(\)/);
+    });
+});

@@ -2346,11 +2346,16 @@ router.get('/clientes-busca', requireAuth, async (req, res) => {
 router.get('/vinculo-sugestoes', requireAdmin, async (req, res) => {
     try {
         const db = getDb();
-        const [contatos, simples, lucro] = await Promise.all([
+        const [contatos, conversasSnap, simples, lucro] = await Promise.all([
             db.collection('whatsapp_contatos').get(),
+            // 🚨 SÓ OS IDS: `.select()` sem campo devolve a referência, e é o
+            // suficiente pra responder "este contato já escreveu aqui?".
+            // Trazer o documento inteiro custaria caro pra usar um booleano.
+            db.collection('whatsapp_conversas').select().get(),
             db.collection('simples_empresas').get(),
             db.collection('lucro_empresas').get(),
         ]);
+        const comConversa = new Set(conversasSnap.docs.map((d) => d.id));
         const empresas = [];
         for (const snap of [simples, lucro]) {
             for (const d of snap.docs) {
@@ -2365,7 +2370,12 @@ router.get('/vinculo-sugestoes', requireAdmin, async (req, res) => {
         const conversas = contatos.docs
             .map((d) => ({ id: d.id, ...d.data() }))
             .filter((c) => !c.empresaId)     // já vinculado não é pendência
-            .map((c) => ({ numero: c.numero || c.id, nome: c.nomePerfil || c.nome || null, canal: c.canal || null }));
+            .map((c) => ({
+                numero: c.numero || c.id,
+                nome: c.nomePerfil || c.nome || null,
+                canal: c.canal || null,
+                temConversa: comConversa.has(c.numero || c.id),
+            }));
 
         const r = cruzarNumerosComCadastro({ conversas, empresas });
         return res.json({ ok: true, ...r, empresasNoCadastro: empresas.length });
