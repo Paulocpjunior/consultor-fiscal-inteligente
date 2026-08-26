@@ -943,7 +943,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     useEffect(() => {
         setCliente360(null);
         const numero = sel?.numero;
-        if (!numero || !sel?.empresaId) return;
+        // 🚨 A conversa SEM vínculo também consulta — é justamente nela que
+        // mora a sugestão ("pelo cadastro, este número é da X"). O `return`
+        // antigo exigia `empresaId`, ou seja: só perguntava a quem já tinha
+        // resposta, e a sugestão nunca apareceria em tela nenhuma.
+        if (!numero) return;
         let vivo = true;
         clienteDaConversa(numero).then((r) => { if (vivo && r.ok) setCliente360(r); });
         return () => { vivo = false; };
@@ -4458,9 +4462,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 ) : (
                                     <>
                                         <p className="text-[11px] text-amber-700 dark:text-amber-400 mb-1">Sem vínculo com o cadastro.</p>
+                                        {/* 🔗 O cadastro tem o telefone deste número? Então o app DIZ de
+                                            quem ele acha que é — e para aí. Vincular sozinho mostraria a
+                                            guia de um cliente na conversa de outro no dia em que o número
+                                            trocar de dono. */}
+                                        {cliente360?.sugestao?.situacao === 'sugerida' && (
+                                            <div className="mb-1.5 rounded border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-1.5">
+                                                <p className="text-[10px] text-emerald-800 dark:text-emerald-300">
+                                                    Pelo cadastro, este número é da <strong>{cliente360.sugestao.nomeEmpresa}</strong>
+                                                    <span className="text-emerald-700/70 dark:text-emerald-400/70"> ({cliente360.sugestao.campo === 'whatsappCliente' ? 'WhatsApp do cliente' : 'telefone'})</span>.
+                                                </p>
+                                                <button onClick={() => acaoVincular(cliente360.sugestao!.empresaId!, cliente360.sugestao!.nomeEmpresa!)}
+                                                    className="mt-1 w-full text-[10px] font-bold px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white">
+                                                    ✓ Confirmar este cliente
+                                                </button>
+                                            </div>
+                                        )}
+                                        {cliente360?.sugestao?.situacao === 'ambigua' && (
+                                            // O app não escolhe: mostrar um dos dois seria apontar o
+                                            // cliente errado com toda a confiança.
+                                            <p className="text-[10px] text-amber-700 dark:text-amber-400 mb-1.5">
+                                                ⚠️ Este número está em mais de um cadastro ({(cliente360.sugestao.candidatos || []).map((c) => c.nomeEmpresa).join(' · ')}) — escolha abaixo qual é.
+                                            </p>
+                                        )}
                                         <button onClick={() => setVincAberto(true)}
                                             className="w-full text-[11px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
-                                            🔗 Vincular ao cliente
+                                            🔗 {cliente360?.sugestao?.situacao === 'sugerida' ? 'Vincular a outro cliente' : 'Vincular ao cliente'}
                                         </button>
                                     </>
                                 )}
