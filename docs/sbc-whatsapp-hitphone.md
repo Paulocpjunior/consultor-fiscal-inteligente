@@ -374,6 +374,21 @@ resultado é **"Não atendida"**.
 E **nenhum INVITE chega ao SBC**: nem CDR, nem log, com o gravador ligado e
 conferido. Teste das 14:52 de 25/08, dentro da janela.
 
+🆕 **26/08, 09:30 — A CHAMADA PASSOU A TOCAR.** Antes ela era recusada de
+saída; nesta tentativa o celular tocou **uma vez** e terminou como *"Não
+atendida"*. É um fato NOVO e não é pouco: alguma coisa mudou do lado da Meta
+entre 25 e 26/08. ⚠️ Mas ele **não prova entrega no tronco** — quem responde
+isso é o INVITE/CDR do Asterisk naquele minuto, e o webhook não serve para
+isso (ver a ressalva logo abaixo).
+
+🆕 **E O CAMINHO ATÉ O SBC FOI PROVADO A PARTIR DO ALVO QUE A META GUARDA**
+(26/08, 11:24 — botão 🔌 do painel, que lê o `sip.servers[]` do `GET /settings`
+e abre a conexão de verdade): DNS `sip.spassessoriacontabil.com.br` →
+**35.185.197.118**, porta **5061**, **TLSv1.2**, certificado público válido até
+**22/11/2026** (emissor YE1), e **SIP OPTIONS respondido com 200 OK** pelo
+Asterisk PBX 20.6.0. Ou seja: não é DNS, não é firewall, não é certificado, e
+não é endereço errado — o alvo testado é o MESMO que a Meta tem gravado.
+
 ⚠️ Também não chega evento de chamada no WEBHOOK — só o
 `call_permission_reply`. Em modo SIP a sinalização É o INVITE, então a ligação
 NUNCA vai virar linha na conversa vindo do webhook: quando ela passar a chegar,
@@ -408,9 +423,21 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 > rede confirma DNS, porta, handshake TLS e resposta SIP.
 >
 > Com logging verbose e CDR habilitados e verificados ANTES do teste, uma
-> chamada às 14:52 (dentro da janela) não gerou nenhum registro: nenhum
-> INVITE, nenhuma entrada de CDR.
+> chamada às 14:52 de 25/08 (dentro da janela) não gerou nenhum registro:
+> nenhum INVITE, nenhuma entrada de CDR.
 >
-> Pergunta: o que impede o roteamento das chamadas para o tronco SIP
-> configurado? Há alguma etapa de validação/aprovação do servidor SIP, ou
-> allowlist de IP, pendente do lado de vocês?
+> Em 26/08, às 09:30 (dentro da janela), a chamada passou a TOCAR uma vez no
+> aparelho do chamador antes de terminar como "Não atendida" — comportamento
+> diferente do dia anterior.
+>
+> Verificação do caminho feita em 26/08 às 11:24, a partir do endereço que
+> consta em sip.servers[]: DNS sip.spassessoriacontabil.com.br →
+> 35.185.197.118, porta 5061 aberta, TLSv1.2, certificado público válido até
+> 22/11/2026, e SIP OPTIONS respondido com 200 OK (Asterisk PBX 20.6.0). O
+> destino está acessível a partir da internet pública.
+>
+> Perguntas: (1) o que impede o roteamento das chamadas para o tronco SIP
+> configurado? (2) há etapa de validação/aprovação do servidor SIP, ou
+> allowlist de IP de origem, pendente do lado de vocês? (3) de quais IPs de
+> origem partem os INVITEs, para que possamos confirmar que não há bloqueio no
+> nosso lado?
