@@ -122,6 +122,28 @@ export const CAMPOS_PROVADOS_POR_RECIBO = {
 };
 
 /**
+ * Registros cuja tabela do Guia foi lida **CAMPO A CAMPO por uma pessoa**,
+ * porque a extração mecânica do .docx perdeu um número neles.
+ *
+ * ⚠️ Entram ACIMA da extração e ABAIXO do recibo: é leitura da mesma fonte
+ * oficial, feita à mão porque a máquina falhou — não é prova de arquivo aceito.
+ * Cada entrada nomeia os campos lidos, para a conferência ser refazível.
+ */
+export const CAMPOS_LIDOS_A_MAO_NO_GUIA = {
+    // 🚨 O gerador montava **20** campos aqui, e o deslocamento começava no 13:
+    // o VL_DOC caía na casa do TP_CT-e (um dígito) e PIS/COFINS iam parar em
+    // IND_FRT/VL_SERV/VL_BC_ICMS/VL_ICMS. A extração automática marcou o D100
+    // como INCERTO, então a trava ficaria muda justamente aqui.
+    D100: {
+        campos: 23,
+        fonte: 'Guia Prático da EFD-Contribuições 1.35, tabela do registro D100, lida campo a campo: '
+            + 'REG · IND_OPER · IND_EMIT · COD_PART · COD_MOD · COD_SIT · SER · SUB · NUM_DOC · CHV_CTE · '
+            + 'DT_DOC · DT_A_P · TP_CT-e · CHV_CTE_REF · VL_DOC · VL_DESC · IND_FRT · VL_SERV · '
+            + 'VL_BC_ICMS · VL_ICMS · VL_NT · COD_INF · COD_CTA.',
+    },
+};
+
+/**
  * A tabela que a trava usa: **recibo/assinado VENCE, e o Guia cobre o resto**.
  *
  * ═══ POR QUE A MESCLA, e nesta ordem ════════════════════════════════════════
@@ -150,7 +172,9 @@ export const CAMPOS_POR_REGISTRO = (() => {
                 + `${reg} (extraída por scripts/extrair-leiaute-contrib.mjs).`,
         };
     }
-    // O provado por recibo/arquivo aceito entra POR CIMA.
+    // A leitura humana do MESMO Guia entra por cima da extração que falhou…
+    for (const [reg, d] of Object.entries(CAMPOS_LIDOS_A_MAO_NO_GUIA)) tabela[reg] = d;
+    // …e o provado por recibo/arquivo aceito entra POR CIMA de tudo.
     for (const [reg, d] of Object.entries(CAMPOS_PROVADOS_POR_RECIBO)) tabela[reg] = d;
     return tabela;
 })();
@@ -772,9 +796,78 @@ export function conferirReceitaBrutaDoM210(linhas) {
     return { erros };
 }
 
+// ── R: D100 sem os filhos D101/D105, e D100 que não é aquisição ────────────
+//
+// FONTE (as duas literais, Guia Prático 1.35):
+//   · D101: *"Para cada documento informado e relacionado em cada registro
+//     D100, obrigatoriamente deve ser apresentado o detalhamento das
+//     informações, por item do documento, referentes ao PIS/Pasep (D101) e à
+//     Cofins (D105)."*
+//   · D100, campo 02 (IND_OPER): **valor válido [0]**. Prestação de serviço de
+//     transporte se escritura no D200 — não existe D100 de saída.
+//
+// 📌 ELA NASCE JUNTO DA CORREÇÃO DO GERADOR, que é a régua da casa: até 26/08
+// o bloco D emitia D100 sozinho, com IND_OPER 1 na prestação e PIS/COFINS
+// empurrados para dentro de campos de ICMS. Nenhuma das cinco empresas
+// fechadas por recibo tinha CT-e no período — foi só por isso que a recusa
+// não chegou.
+/**
+ * D100 sem D101/D105, e D100 com IND_OPER diferente de 0.
+ */
+export function conferirBlocoDContrib(linhas) {
+    const erros = [];
+    const lista = Array.isArray(linhas) ? linhas : [];
+    let pai = null;
+    const fechar = () => {
+        if (!pai) return;
+        const faltam = ['D101', 'D105'].filter(r => !pai.filhos.has(r));
+        if (faltam.length) {
+            erros.push({
+                registro: 'D100', linha: pai.linha,
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, D101: "Para cada documento informado e '
+                    + 'relacionado em cada registro D100, obrigatoriamente deve ser apresentado o '
+                    + 'detalhamento das informações, por item do documento, referentes ao PIS/Pasep (D101) '
+                    + 'e à Cofins (D105)".',
+                mensagem: `O D100 nº ${pai.num || '?'} (linha ${pai.linha}) saiu sem ${faltam.join(' e ')}. `
+                    + 'O detalhamento por item é obrigatório, e sem ele a base do crédito de PIS/COFINS do '
+                    + 'frete não é recuperada no bloco M (M105/M505) — o crédito some da apuração.',
+            });
+        }
+        pai = null;
+    };
+    lista.forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        const reg = String(campos[0] || '').trim();
+        if (reg === 'D100') {
+            fechar();
+            const indOper = String(campos[1] || '').trim();
+            if (indOper !== '0') {
+                erros.push({
+                    registro: 'D100', linha: i + 1,
+                    fonte: 'Guia Prático da EFD-Contribuições 1.35, D100 campo 02 (IND_OPER) — '
+                        + 'Valores válidos: [0]. E as Observações do registro: "só devem ser relacionados '
+                        + 'neste registro as aquisições de serviços de transportes que … confiram direito '
+                        + 'ao crédito do PIS/Pasep e da Cofins".',
+                    mensagem: `O D100 da linha ${i + 1} saiu com IND_OPER "${indOper || '(vazio)'}", e o `
+                        + 'campo só aceita "0 — Aquisição". Conhecimento de transporte de PRESTAÇÃO (a '
+                        + 'empresa emitiu o CT-e) se escritura no registro D200, não aqui.',
+                });
+            }
+            pai = { linha: i + 1, num: String(campos[8] || '').trim(), filhos: new Set() };
+            return;
+        }
+        if (reg === 'D101' || reg === 'D105') { if (pai) pai.filhos.add(reg); return; }
+        // Qualquer outro registro fecha o pai — D101/D105 só existem sob D100.
+        if (reg) fechar();
+    });
+    fechar();
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
+        ...conferirBlocoDContrib(linhas).erros,
         ...conferirReceitaBrutaDoM210(linhas).erros,
         ...conferirSomaDosItensContrib(linhas).erros,
         ...conferirCadastrosOrfaosContrib(linhas).erros,

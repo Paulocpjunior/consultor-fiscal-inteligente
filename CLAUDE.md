@@ -5,6 +5,72 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O BLOCO D NÃO É "O CT-e DO MÊS" — É A AQUISIÇÃO DE FRETE COM DIREITO A
+  CRÉDITO, e o gerador tratava como se fosse o primeiro** (26/08, pendência
+  nomeada desde 21/08 e cobrada pela trava de contagem que subiu no dia
+  anterior). As duas fontes oficiais respondem, literais:
+  📖 **Guia Prático 1.35, D100, Observações**: *"Só devem ser relacionados
+  neste registro as aquisições de serviços de transportes que … confiram
+  direito ao crédito do PIS/Pasep e da Cofins."* E o campo 02 (IND_OPER) tem
+  **UM único valor válido: [0]**.
+  📖 **Manual do Lucro Presumido (PVA 2.04)**, ao listar os registros do regime
+  CUMULATIVO — Blocos 0, F, M e P mais 0200, 0500, F525, F600, 1010/1020, 1800
+  e 1900 —: **o bloco D não está lá.** Não podia estar: crédito só existe no
+  NÃO-cumulativo.
+  🔴 **O que o gerador fazia, e as CINCO empresas fechadas por recibo são todas
+  CUMULATIVAS**: ele emitia D100 em qualquer regime e em qualquer direção. Foi
+  só por nenhuma delas ter CT-e no período que a recusa não chegou — e ela é a
+  MESMA da PEC/AFFITTARE, *"O registro não deve ser informado para esse perfil
+  e/ou tipo de operação"*, esperando o primeiro conhecimento de transporte.
+  🔴 **E o leiaute estava deslocado a partir do campo 13**: 20 campos onde o
+  Guia lista **23**, com o `VL_DOC` caindo na casa do **TP_CT-e** — um campo de
+  UM dígito — e o valor do documento saindo **VAZIO**. PIS e COFINS iam parar
+  em `IND_FRT`, `VL_SERV`, `VL_BC_ICMS` e `VL_ICMS`, que são campos de ICMS.
+  🔴 **E o D101/D105 NUNCA foi emitido**, embora o Guia seja literal: *"Para
+  cada documento informado e relacionado em cada registro D100,
+  obrigatoriamente deve ser apresentado o detalhamento … referentes ao
+  PIS/Pasep (D101) e à Cofins (D105)"*. Sem eles a base do crédito do frete
+  **não é recuperada no M105/M505** — o crédito some da apuração, calado.
+  ✂️ `frete-contratado-bloco-d.js` é o dono da pergunta *"este CT-e entra no
+  bloco D, e com qual tratamento?"*, lido pelo gerador **e** pela prevalidação.
+  Prestação aponta o **D200** (que o app ainda não gera) em vez de virar um
+  D100 inválido; regime cumulativo não produz o bloco; e cada motivo de
+  exclusão sai num aviso PRÓPRIO, porque as ações são diferentes.
+  🚨 **TRÊS CÓDIGOS DE TABELA OFICIAL, E NENHUM ESTÁ NO XML DO CT-e**:
+  `IND_NAT_FRT` (D101/D105 campo 02) descreve o que a EMPRESA fez com aquele
+  frete — venda, compra, transferência —, não o que o transportador fez;
+  `IND_FRT` (D100 campo 17) diz por conta de quem ele corre; e `NAT_BC_CRED`
+  vem da **Tabela 4.3.7**, que o Guia só REFERENCIA e não está neste repo. Os
+  três viraram cadastro (whitelist + modal no MESMO PR, regra do #382) e sem
+  eles o CT-e **não entra**, com a falta nomeada e o lugar de preencher — é o
+  desenho que fechou o 1900 da AFFITTARE na PRIMEIRA rodada do PVA.
+  ⚠️ **E O INDICADOR `9` (Outras) É RECUSADO DE PROPÓSITO**: o Guia o amarra à
+  **SUBCONTRATAÇÃO** de transporte, que tem crédito PRESUMIDO, CST 60-66 e
+  alíquotas próprias (1,2375% e 5,7%, Tabela 4.3.17). Tratá-lo como os outros
+  declararia crédito na alíquota errada — num arquivo que o PVA aceita.
+  ✅ **O QUE A RÉGUA DERIVA, com a citação**: o CST sai do indicador — 3, 4 e 5
+  vão com **70** (*"as operações que não tem previsão de apuração de crédito
+  devem ser informadas com o CST 70"*), e o **1** também, porque nele o ônus é
+  do ADQUIRENTE, ou seja quem escritura não pagou o frete. Sem crédito, base,
+  alíquota e valor saem **ZERADOS** — e aí o zero É a resposta ("não há
+  crédito"), não o default de quem não achou o dado.
+  📌 **AS DUAS RECUSAS VIRARAM REGRA DA PREVALIDAÇÃO NO MESMO PR**
+  (`conferirBlocoDContrib`): D100 sem D101/D105 e D100 com IND_OPER ≠ 0. Ela
+  lê as LINHAS do arquivo gerado e **nasce VERDE** sobre o que o gerador
+  produz hoje.
+  📌 **E O D100 ENTROU NA CONTAGEM POR LEITURA HUMANA DO GUIA**
+  (`CAMPOS_LIDOS_A_MAO_NO_GUIA`): a extração automática do .docx perdeu um
+  número nele e o marcou como INCERTO, então a trava que subiu em 25/08 ficaria
+  MUDA justamente aqui. A precedência é **recibo > leitura à mão do Guia >
+  extração** — e cada entrada nomeia os campos lidos, para a conferência ser
+  refazível.
+  📌 **REGRA QUE FICA: antes de corrigir a CONTAGEM de um registro, perguntar
+  se ele deveria estar no arquivo.** Eu vim consertar "20 campos onde o Guia
+  lista 23" e o defeito de verdade era outro — o registro saía em empresa que
+  não tem esse bloco, na direção que o campo não admite, e sem os dois filhos
+  obrigatórios. Contar campo de um registro que não devia existir é acertar a
+  forma do erro.
+
 - **🚨 A TRAVA DE CONTAGEM COBRIA 11 REGISTROS DE 34 — e o Guia fechou o resto
   no mesmo dia** (25/08, logo depois de os dois manuais entrarem no repo).
   `conferirContagemDeCampos` roda em todo arquivo gerado desde 18/08, mas **só

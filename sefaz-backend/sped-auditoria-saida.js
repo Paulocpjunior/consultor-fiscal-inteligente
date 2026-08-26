@@ -53,7 +53,13 @@ export const DETALHES_VIGIADOS = {
     // `nota.valor || nota.totalNota` e o importer grava **valorTotal** (o CT-e
     // traz <vTPrest>) — todo CT-e capturado saía com VL_DOC 0,00 e o crédito
     // de PIS/COFINS do frete ia a zero. Só o D190 estava vigiado.
-    D100: { rotulo: 'conhecimentos de transporte (Contribuições)', campos: { 12: 'VL_DOC' } },
+    // 🐛 E ELA NASCEU MUDA — corrigido em 26/08. A posição estava em **12**, que
+    // no leiaute do D100 é o `DT_A_P`: uma DATA, que nunca sai zerada, então a
+    // vigilância nunca teve o que acusar. O `VL_DOC` é o campo **15** nas DUAS
+    // famílias (Guia da EFD-Contribuições 1.35 e Guia 3.2.3 do EFD ICMS/IPI —
+    // os 23 primeiros campos são idênticos). É a MESMA classe do 0500: trava
+    // que existe, roda e olha o lugar errado dá sensação de cobertura.
+    D100: { rotulo: 'conhecimentos de transporte (Contribuições)', campos: { 15: 'VL_DOC' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
     // F600 — retenção na fonte (Contribuições, 19/08 · caso HS PROJETOS).
     // Posições provadas contra arquivo aceito do E-Fiscal:

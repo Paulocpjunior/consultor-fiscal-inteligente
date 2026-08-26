@@ -598,6 +598,12 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // E no modal no MESMO PR (regra do #382): fora daqui ele é descartado em
     // silêncio e a tela diria "salvo" sem gravar nada.
     'contrib1900CodMod', 'contrib1900CodSit',
+    // Frete contratado (bloco D do EFD-Contribuições). Os três são de TABELA
+    // OFICIAL e nenhum está no XML do CT-e: a natureza do frete descreve o que
+    // a EMPRESA fez com ele (venda, compra, transferência), o tipo diz por
+    // conta de quem ele corre, e a base do crédito vem da Tabela 4.3.7, que
+    // não está neste repo. Sem eles o CT-e não entra e a falta é DITA.
+    'contribIndNatFrete', 'contribIndFrtCte', 'contribNatBcCredFrete',
     // IND_APRO_CRED do 0110 (não-cumulativo) e a conta contábil da receita
     // financeira do F100 — os dois eram cravados/ausentes e o EFD assinado do
     // CF BANK (24/08) mostrou que são fato DA EMPRESA.

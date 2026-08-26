@@ -1520,6 +1520,25 @@ export interface EmpresaDadosFiscais {
     contrib1900CodMod?: string;
     contrib1900CodSit?: string;
     /**
+     * 🚨 **FRETE CONTRATADO — bloco D do EFD-Contribuições.**
+     *
+     * O D100 existe SÓ para a aquisição de frete que dá direito a crédito
+     * (Guia Prático 1.35, D100: *"só devem ser relacionados neste registro as
+     * aquisições de serviços de transportes que … confiram direito ao crédito
+     * do PIS/Pasep e da Cofins"*), ou seja só no regime NÃO-CUMULATIVO.
+     *
+     * ⚠️ Os três são de TABELA OFICIAL e nenhum está no XML do CT-e:
+     * `contribIndNatFrete` (D101/D105 campo 02) diz o que a EMPRESA fez com
+     * aquele frete — venda, compra, transferência —, `contribIndFrtCte`
+     * (D100 campo 17) diz por conta de quem ele corre, e
+     * `contribNatBcCredFrete` é a Tabela 4.3.7, que não está neste repo.
+     * Sem cadastro o CT-e NÃO entra e a falta vira aviso com o lugar de
+     * preencher — o desenho do 1900, que fechou na primeira rodada do PVA.
+     */
+    contribIndNatFrete?: string;
+    contribIndFrtCte?: string;
+    contribNatBcCredFrete?: string;
+    /**
      * 🚨 **IND_APRO_CRED do 0110** — como a empresa apropria o crédito no
      * regime NÃO-cumulativo: `1` = apropriação DIRETA · `2` = rateio
      * proporcional. O gerador cravava `2` para todo mundo; o EFD assinado do

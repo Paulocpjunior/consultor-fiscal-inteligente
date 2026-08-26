@@ -586,6 +586,22 @@ const REGUAS_VIGIADAS: Regua[] = [
             'components/LucroPresumidoReal/DareSpModal.tsx',
         ],
     },
+    {
+        nome: 'Natureza e tipo do FRETE CONTRATADO (bloco D do EFD-Contribuições)',
+        dono: 'sefaz-backend/frete-contratado-bloco-d.js',
+        comoUsar: "import { INDICADORES_NATUREZA_FRETE, INDICADORES_TIPO_FRETE, decidirFreteNoBlocoD } "
+            + "from 'sefaz-backend/frete-contratado-bloco-d.js'",
+        porque: '26/08: são tabelas OFICIAIS do Guia Prático 1.35 (D101/D105 campo 02 e D100 campo 17) e '
+            + 'decidem, de uma vez, se o CT-e entra no arquivo e com qual CST — indicador 3, 4 ou 5 vai com '
+            + 'CST 70, sem crédito. Uma segunda cópia da lista faria a TELA oferecer um indicador que o '
+            + 'GERADOR não conhece (ou o contrário), e o resultado seria crédito de PIS/COFINS declarado a '
+            + 'maior num arquivo que o PVA aceita — o erro que só aparece na fiscalização. É a família do '
+            + 'IVA-ST e do catálogo de CFOP, que já custaram a réplica divergente.',
+        assinaturas: [
+            /(?:export\s+)?const\s+INDICADORES_NATUREZA_FRETE\s*=/,
+            /(?:export\s+)?const\s+INDICADORES_TIPO_FRETE\s*=/,
+        ],
+    },
 ];
 
 // ─── Varredura ──────────────────────────────────────────────────────────────
