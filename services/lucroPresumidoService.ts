@@ -5,6 +5,9 @@ import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, limit as fbLimit } from 'firebase/firestore';
+// 🔒 O dono da pergunta "qual é a competência?" — a ficha grava `mesReferencia`
+// em quatro formas, e `===` perderia a competência fechada em silêncio.
+import { normalizarCompetencia } from '../sefaz-backend/competencia.js';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
 const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
@@ -341,6 +344,44 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
             // certo — o gêmeo mantido — nunca no zumbi).
             if ((empresaData as any)._deleted) {
                 throw new Error('Esta empresa foi excluída por um administrador — a ficha não pode ser salva nela. Atualize a página (F5) e lance no cadastro correto.');
+            }
+
+            // ═══════════════════════════════════════════════════════════════
+            // 🔒 COMPETÊNCIA COM FIM DE MÊS DADO NÃO MUDA DE VALOR (26/08)
+            //
+            // Paulo: *"deve se expandir às fichas financeiras, com os devidos
+            // valores apurados e fechados, para que não haja divergência em
+            // valores apurados"*.
+            //
+            // Sem isto, a ficha de uma competência já entregue pode ser editada
+            // e o número muda **em silêncio** — e o Contábil, no CCI, fica com
+            // o valor que importou sem saber que ele mudou. É essa divergência
+            // que o ato existe para matar.
+            //
+            // ⚠️ ESTA NÃO É A PROTEÇÃO PRINCIPAL, e dizer isso importa: o que
+            // de fato garante o número é o CARIMBO, que guarda uma CÓPIA dos
+            // apurados — editar a ficha não o altera. Esta trava é o aviso na
+            // porta, para a pessoa não perder o trabalho digitando algo que
+            // não vai valer.
+            //
+            // ⚠️ E a competência casa NORMALIZADA: `mesReferencia` aparece como
+            // 'YYYY-MM', 'YYYY-MM-DD' e 'MM/YYYY' conforme a época do
+            // lançamento, e `===` perderia a competência fechada em silêncio —
+            // exatamente o descasamento que mordeu três vezes em 15/08.
+            const comp = normalizarCompetencia(registro.mesReferencia);
+            if (comp) {
+                const fechSnap = await getDoc(doc(db, 'fechamentos_competencia', `${empresaId}_${comp}`));
+                const fech = fechSnap.exists() ? (fechSnap.data() as any) : null;
+                // 'reaberta' é competência ABERTA de novo — travá-la impediria
+                // justamente a correção que a reabertura veio permitir.
+                if (fech?.estado === 'fechada') {
+                    throw new Error(
+                        `O fim de mês de ${comp} já foi dado`
+                        + `${fech.fechadoPor?.email ? ` por ${fech.fechadoPor.email}` : ''}`
+                        + ` e esses valores são a base que a contabilidade importa. `
+                        + 'Para alterar, peça a um administrador que reabra a competência na Rotina do mês.',
+                    );
+                }
             }
             const currentFicha = empresaData.fichaFinanceira || [];
 

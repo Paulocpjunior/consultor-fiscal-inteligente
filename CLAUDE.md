@@ -5,6 +5,104 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 "DAR FIM DE MÊS" — o ato que vira a RÉGUA de impostos, livros, ficha e
+  do CCI** (26/08, Paulo: *"o fechamento do fim do mês no CFI exige (DAR FIM DE
+  MÊS), essa função é que deve ser usada como régua para nos nortear, usar como
+  base p impostos, livros, ficha financeira, exatamente o que o CCI deve usar
+  como base para importação do contábil"*).
+  🔴 **A CAUSA: o app DEDUZIA que o mês fechou.** A Rotina olhava documentos,
+  ficha, tarefas e envios e concluía — o cabeçalho dela diz, literal: *"Nada
+  aqui 'marca como feito' na mão"*. Isso é honesto para GUIAR e não serve para
+  NORTEAR, porque dedução muda quando a fonte muda: o livro de agosto
+  reimpresso em dezembro sai DIFERENTE se uma nota de agosto chegou em
+  novembro; a ficha de competência entregue podia ser editada e o número mudava
+  **em silêncio** (não havia `fechadoEm`, `fechadoPor` nem versão em
+  `FichaFinanceiraRegistro`); e o Contábil importava valor que podia mudar
+  depois dele ter importado.
+  ✂️ **A COMPOSIÇÃO É O CORAÇÃO**: as 5 etapas da Rotina viram a
+  **PRÉ-CONDIÇÃO** (*"você PODE dar fim de mês?"*) e o ato responde *"o mês FOI
+  fechado — quando, por quem, com qual acervo, com quais valores"*.
+  ⚠️ **E ISSO MUDOU O SIGNIFICADO DO FAROL `ok`**: ele deixou de querer dizer
+  "mês fechado" e passou a dizer "pronto para fechar". Pela régua de 23/08 (o
+  `capturaNfeOk`), o leitor entrou no MESMO PR — o `✓ Mês fechado` da Rotina
+  virou `✓ Pronto para dar fim de mês` + o botão. Meia correção aqui trocaria
+  um erro por uma CONTRADIÇÃO, com uma tela dizendo fechado e a outra aberto.
+  ✅ **O CARIMBO CONGELA TRÊS COISAS, e elas têm de concordar por CONSTRUÇÃO**:
+  o **ACERVO** (instante do corte + `ultNSU`/`maxNSU` — a prova de QUAIS
+  documentos viraram aquele número), os **VALORES APURADOS** e o **LASTRO**
+  (quantos documentos existiam por trás; sem ele o CCI recebe número fechado
+  com ZERO documento atrás, que é o caso EXPERTE de 15/08).
+  🚨 **O CARIMBO LEVA RESULTADO, NUNCA INSUMO** — faturamento, despesa, folha e
+  CMV ficam de fora de propósito: levá-los convidaria o outro lado a
+  RECALCULAR, e dois números para o mesmo fato é o pior defeito de um arquivo
+  fiscal. É a régua já provada no R-2055 (*"a ressalva PROÍBE recalcular do
+  outro lado"*). ⚠️ E apurado ausente vira **null, nunca zero** — zero num
+  campo de saldo é uma AFIRMAÇÃO, e esta atravessa para a contabilidade.
+  ⚠️ **A ÂNCORA É O INSTANTE, e o NSU é a PROVA — não trocar um pelo outro**: o
+  NSU só existe no trilho DistDFe, e cofre de e-mail, portal de SP, ADN e
+  importação manual não têm NSU nenhum, então corte ancorado nele deixaria
+  metade da captura fora da trava.
+  📌 **AS TRÊS DECISÕES DO PAULO, travadas por teste**: (1) fecha o
+  **COLABORADOR**, reabre **SÓ ADMIN** — o número já pode ter sido importado
+  pela contabilidade; (2) **BLOQUEIA** — etapa em âmbar não passa, e não há
+  justificativa que fure (eu recomendei justificativa escrita, ele manteve o
+  bloqueio; ⚠️ consequência dita e aceita: cliente com captura em âmbar por
+  infraestrutura — as 202 do A3, a EXPERTE — **não fecha, e não chega ao CCI**);
+  (3) **uma empresa por vez**, a família do *"ninguém emite em série"*.
+  ⚠️ **E O BLOQUEIO NOMEIA A ETAPA E DIZ ONDE SE RESOLVE** — com a decisão de
+  bloquear, essa lista é a ÚNICA saída que a pessoa tem, e trava sem caminho é
+  trava que a equipe contorna (13/08).
+  ⚠️ **`reaberta` NÃO conta como fechada**, de propósito: tratá-la assim
+  travaria justamente a edição que a reabertura veio permitir. E reabrir não é
+  "desfazer" — é **RETIFICAÇÃO**: motivo escrito (≥15 caracteres, o piso da T3
+  da DCTFWeb), **versão nova** e o valor da versão anterior guardado, que é a
+  única forma de responder depois *"o Contábil importou QUAL número?"*.
+  📌 **A ESCRITA É SÓ DA ROTA, e aqui isso É a trava**: a pré-condição é
+  conferida no backend, então `allow write: if false` nas rules — escrita pelo
+  navegador tornaria o bloqueio inteiro contornável com um `setDoc`.
+  📌 **A ROTINA DE UMA EMPRESA SAI DO MESMO DONO DO PAINEL**
+  (`montarRotinasDaCompetencia`, extraída neste PR): uma segunda montagem
+  divergiria no pior lugar — o painel diria "pronto" e o botão recusaria.
+  🚩 **O QUE ESTE PR NÃO FAZ, e é a próxima leva**: os LEITORES fiscais ainda
+  não perguntam ao carimbo (livro, os dois SPED, guias e DIPAM continuam
+  gerando ao vivo), e o **túnel do CCI ainda não entrega o fechamento**. O que
+  já protege o número hoje é o carimbo guardar uma **CÓPIA** dos apurados —
+  editar a ficha não o altera — mais a trava que recusa a edição da ficha de
+  competência fechada, com a frase mandando pedir a reabertura ao admin.
+
+- **🚨 O CATÁLOGO DE COLEÇÕES TINHA UM FANTASMA — e a varredura só fechava UMA
+  direção** (26/08, achado no caminho do fim de mês). `catalogoBanco.test.ts`
+  barrava `.collection('x')` sem linha no catálogo; a volta — **coleção
+  catalogada que ninguém escreve** — estava aberta, e `lucro_fichas` estava lá.
+  🔴 Ela **NUNCA EXISTIU**: a ficha do Lucro é EMBUTIDA no documento da empresa
+  (`fichaFinanceira[]`). Foi ela que deixou o saldo de IPI em **0,00** até
+  19/08 — a leitura consultava `db.collection('lucro_fichas')` e a query voltava
+  vazia SEMPRE, indistinguível de *"não tem saldo"*. Corrigido o leitor, a linha
+  do catálogo ficou descrevendo o fantasma. É a MESMA família do
+  `tipoTributacao`: **campo/coleção que só existe no lugar que o declara**.
+  📌 E o painel Sistema→Banco já sabia dizer *"catalogada sem uso"* — só que em
+  tempo de EXECUÇÃO e só para quem o abre, que é dev-only. **Trava escrita não
+  é trava ligada.**
+  🐛 **E A VARREDURA NASCEU ERRADA DE DUAS FORMAS, as duas MEDIDAS antes de
+  subir**: (1) ela lia **PROSA** — os dois orquestradores do SPED têm um
+  comentário citando `db.collection('lucro_fichas')` justamente para DIZER que
+  ela não existe, e isso contava como prova de que existe (a IDA tinha o mesmo
+  vício, e as duas brigavam sobre o mesmo fato); (2) o stripper de comentário
+  `/\*[\s\S]*?\*\//` **engoliu 105 KB dos 157 KB do `server.js`** — um `/*`
+  dentro de string faz o casamento atravessar o arquivo — e levou junto
+  `das_envios_cliente`, que está lá em `.collection(...)`, acusando-a de
+  fantasma. **Alarme falso que aparece justamente quando está tudo certo é o
+  jeito conhecido de a equipe desligar a trava.**
+  ✂️ Saem só comentário de LINHA e linhas de bloco que começam com `*`. E a
+  VOLTA **não usa a extração de padrão da IDA**: ali eu já TENHO o nome, então
+  basta procurá-lo — usar a extração acusou SEIS coleções que existem, porque
+  metade do backend nomeia a coleção por CONSTANTE (`const COL_MSGS =
+  'cofre_email_mensagens'`). **Provada criando um fantasma de propósito.**
+  📌 **REGRA QUE FICA: varredura de fonte lê CÓDIGO, nunca prosa — e comer
+  comentário de bloco com regex é perigoso.** É a terceira vez que a leitura de
+  comentário engana uma trava desta casa (o `.select(` da projeção em 22/08, a
+  régua única do ISS no mesmo dia, agora o catálogo).
+
 - **🚨 O PAINEL COBRAVA UM CAMPO QUE NÃO EXISTE — 236 empresas em ALTO por uma
   pendência IMPOSSÍVEL DE RESOLVER** (26/08, Paulo com dois prints lado a lado:
   o cadastro da **A CASTELLANO** mostrando *"Regime Tributário: Lucro

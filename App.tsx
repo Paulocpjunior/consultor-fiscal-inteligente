@@ -1299,7 +1299,7 @@ const App: React.FC = () => {
                         {searchType === SearchType.ROTINA_FISCAL && (
                             <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
-                                <RotinaFiscalPainel onIrPara={irParaEtapaDaRotina} />
+                                <RotinaFiscalPainel onIrPara={irParaEtapaDaRotina} ehAdmin={currentUser.role === 'admin'} />
                             </Suspense>
                             </ErrorBoundary>
                         )}

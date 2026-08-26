@@ -1,0 +1,233 @@
+// ============================================================================
+// sefaz-backend/fim-de-mes-routes.js  (ESM)
+// ----------------------------------------------------------------------------
+//   GET  /api/admin/fim-de-mes/situacao?empresaId=&competencia=AAAA-MM
+//   POST /api/admin/fim-de-mes/fechar     { empresaId, competencia }
+//   POST /api/admin/fim-de-mes/reabrir    { empresaId, competencia, motivo }
+//
+// 🔒 O ATO que vira a régua de impostos, livros, ficha financeira e da
+// importação do Contábil (CCI). A régua está em `fim-de-mes.js` (puro,
+// testado); aqui é só I/O e as duas guardas de acesso.
+//
+// ═══ POR QUE A ESCRITA É SÓ AQUI ════════════════════════════════════════════
+//
+// A decisão do Paulo (26/08) é que **etapa aberta BLOQUEIA** — e essa
+// pré-condição é conferida NESTA rota. Se o navegador pudesse gravar em
+// `fechamentos_competencia`, o bloqueio inteiro seria contornável com um
+// `setDoc`. Por isso as rules fecham a escrita (`allow write: if false`).
+//
+// ═══ UMA EMPRESA POR VEZ ════════════════════════════════════════════════════
+//
+// Decisão do Paulo, e é a família do *"ninguém emite em série"* (28/07): fim
+// de mês em lote multiplicaria o erro por 200 antes de alguém ver. A rota
+// aceita UM `empresaId` — não há caminho de lote, e isso é de propósito.
+// ============================================================================
+
+import { Router } from 'express';
+import admin from 'firebase-admin';
+import { requireAuth } from './require-admin.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
+import { montarRotinasDaCompetencia } from './rotina-fiscal-routes.js';
+import { acharFichaCompetencia } from './ipi-varredura.js';
+import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
+import { normalizarCompetencia } from './competencia.js';
+import {
+    montarFimDeMes, montarCorte, podeDarFimDeMes,
+    conferirReabertura, aplicarReabertura, descreverFechamento,
+} from './fim-de-mes.js';
+
+const router = Router();
+const COLECAO = 'fechamentos_competencia';
+
+function getDb() {
+    if (!admin.apps.length) admin.initializeApp();
+    return admin.firestore();
+}
+
+/** Id estável: fechar de novo sobrescreve a MESMA linha, nunca cria a segunda. */
+const idDoFechamento = (empresaId, competencia) => `${empresaId}_${competencia}`;
+
+/** As duas coleções de empresa — a ficha do Lucro é EMBUTIDA no documento. */
+async function carregarEmpresa(db, empresaId) {
+    for (const col of ['lucro_empresas', 'simples_empresas']) {
+        const snap = await db.collection(col).doc(empresaId).get();
+        if (snap.exists) return { id: snap.id, colecao: col, ...(snap.data() || {}) };
+    }
+    return null;
+}
+
+/**
+ * O acervo, para o carimbo do corte.
+ *
+ * O NSU é a PROVA (o que se mostra numa fiscalização), nunca o filtro — ele só
+ * existe no trilho DistDFe, e cofre de e-mail, portal de SP, ADN e importação
+ * manual não têm NSU nenhum.
+ *
+ * ⚠️ Falha na leitura do cursor NÃO derruba o fechamento e NÃO vira zero: o
+ * carimbo sai com `ultNSU: null`, que é "não consegui provar", e é diferente
+ * de "o cursor estava no começo".
+ */
+async function lerCursor(db, cnpj) {
+    const digitos = String(cnpj || '').replace(/\D/g, '');
+    if (!digitos) return null;
+    try {
+        const snap = await db.collection('sefaz_state').doc(digitos).get();
+        return snap.exists ? (snap.data() || null) : null;
+    } catch (e) {
+        console.warn('[fim-de-mes] cursor indisponível:', e.message);
+        return null;
+    }
+}
+
+/** Monta o estado completo da competência — usado pelo GET e pelo POST. */
+async function situacaoDaCompetencia(db, user, empresaId, competencia) {
+    const comp = normalizarCompetencia(competencia);
+    if (!comp) return { erro: 'Competência ilegível.' };
+    if (!empresaId) return { erro: 'Informe a empresa.' };
+    if (!(await podeAcessarEmpresaId(user, empresaId))) {
+        return { erro: 'Esta empresa não está na sua carteira.', status: 403 };
+    }
+
+    const empresa = await carregarEmpresa(db, empresaId);
+    if (!empresa) return { erro: 'Empresa não encontrada.', status: 404 };
+
+    const fechSnap = await db.collection(COLECAO).doc(idDoFechamento(empresaId, comp)).get();
+    const fechamento = fechSnap.exists ? (fechSnap.data() || null) : null;
+
+    // A rotina sai do MESMO dono do painel — segunda montagem divergiria, e a
+    // divergência apareceria como "a tela diz pronto e o botão recusa".
+    const { rotinas } = await montarRotinasDaCompetencia(db, [{
+        id: empresa.id, nome: empresa.nome || empresa.razaoSocial || null,
+        cnpj: String(empresa.cnpj || '').replace(/\D/g, ''),
+        colecao: empresa.colecao, regimePadrao: empresa.regimePadrao,
+        regime: empresa.regime, uf: empresa.dadosFiscais?.uf || empresa.uf,
+        codMunIBGE: empresa.dadosFiscais?.codMunIBGE || empresa.codMunIBGE,
+        capturaAtiva: empresa.capturarSefaz !== false,
+    }], comp);
+    const rotina = rotinas[0] || null;
+
+    return {
+        empresa, competencia: comp, rotina, fechamento,
+        precondicao: podeDarFimDeMes(rotina),
+        descricao: descreverFechamento(fechamento),
+    };
+}
+
+router.get('/situacao', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const r = await situacaoDaCompetencia(db, req.user,
+            String(req.query.empresaId || ''), String(req.query.competencia || ''));
+        if (r.erro) return res.status(r.status || 400).json({ ok: false, erro: r.erro });
+        return res.json({
+            ok: true,
+            competencia: r.competencia,
+            empresa: { id: r.empresa.id, nome: r.empresa.nome || null },
+            etapas: r.rotina?.etapas || [],
+            precondicao: r.precondicao,
+            fechamento: r.fechamento,
+            descricao: r.descricao,
+        });
+    } catch (e) {
+        console.error('[fim-de-mes] situacao:', e);
+        return res.status(500).json({ ok: false, erro: e.message });
+    }
+});
+
+router.post('/fechar', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const { empresaId, competencia } = req.body || {};
+        const r = await situacaoDaCompetencia(db, req.user, String(empresaId || ''), String(competencia || ''));
+        if (r.erro) return res.status(r.status || 400).json({ ok: false, erro: r.erro });
+
+        const ficha = acharFichaCompetencia(r.empresa.fichaFinanceira, r.competencia);
+        const cursor = await lerCursor(db, r.empresa.cnpj);
+
+        // A contagem sai da PRÓPRIA etapa de captura da Rotina — recontar aqui
+        // seria a segunda leitura do mesmo fato, e ela divergiria no dia em que
+        // a etapa mudasse o que conta.
+        const eCaptura = (r.rotina?.etapas || []).find((e) => e.id === 'captura') || null;
+        const contagem = {
+            entradas: Number(eCaptura?.entradas ?? 0),
+            saidas: Number(eCaptura?.saidas ?? 0),
+            total: Number(eCaptura?.total ?? 0),
+        };
+
+        // O LASTRO viaja no carimbo: sem ele o CCI recebe número fechado com
+        // zero documento por trás (o caso EXPERTE, 15/08). Falha aqui NÃO
+        // derruba o fechamento — ela só deixa o carimbo sem a ressalva, e o
+        // núcleo grava `null`, que é "não conferi", nunca "está tudo certo".
+        let lastro = null;
+        try {
+            lastro = conferirFichaContraDocumentos({
+                valorApurado: Number(ficha?.totalImpostos ?? 0),
+                documentos: eCaptura ? contagem.total : null,
+                rotulo: 'A apuração',
+            });
+        } catch (e) {
+            console.warn('[fim-de-mes] lastro indisponível:', e.message);
+        }
+
+        const agoraIso = new Date().toISOString();
+        const montado = montarFimDeMes({
+            empresaId: r.empresa.id,
+            competencia: r.competencia,
+            regime: r.empresa.colecao === 'simples_empresas' ? 'SIMPLES' : (r.empresa.regimePadrao || null),
+            rotina: r.rotina,
+            ficha,
+            corte: montarCorte({ agoraIso, state: cursor, documentos: contagem }),
+            lastro,
+            quem: { uid: req.user?.uid || null, email: req.user?.email || null, nome: req.user?.name || null },
+            agoraIso,
+            anterior: r.fechamento,
+        });
+
+        // A recusa chega à tela com os BLOQUEIOS nomeados — 400, nunca 500:
+        // "não pode fechar" é resposta, não falha do servidor.
+        if (!montado.ok) {
+            return res.status(400).json({ ok: false, erro: montado.motivo, bloqueios: montado.bloqueios });
+        }
+
+        await db.collection(COLECAO).doc(idDoFechamento(r.empresa.id, r.competencia))
+            .set(montado.fechamento, { merge: false });
+
+        return res.json({ ok: true, fechamento: montado.fechamento, descricao: descreverFechamento(montado.fechamento) });
+    } catch (e) {
+        console.error('[fim-de-mes] fechar:', e);
+        return res.status(500).json({ ok: false, erro: e.message });
+    }
+});
+
+// 🚨 REABRIR É SÓ ADMIN (decisão do Paulo, 26/08) — o número já pode ter sido
+// importado pela contabilidade, e reabrir não é "desfazer": é RETIFICAÇÃO.
+// A guarda é dupla de propósito: o `req.user.admin` aqui e a régua pura
+// `conferirReabertura`, que também exige o motivo escrito.
+router.post('/reabrir', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const { empresaId, competencia, motivo } = req.body || {};
+        const r = await situacaoDaCompetencia(db, req.user, String(empresaId || ''), String(competencia || ''));
+        if (r.erro) return res.status(r.status || 400).json({ ok: false, erro: r.erro });
+
+        const conferido = conferirReabertura({
+            fechamento: r.fechamento, motivo: String(motivo || ''), ehAdmin: req.user?.admin === true,
+        });
+        if (!conferido.pode) return res.status(403).json({ ok: false, erro: conferido.erro });
+
+        const reaberto = aplicarReabertura({
+            fechamento: r.fechamento, motivo: String(motivo),
+            quem: { uid: req.user?.uid || null, email: req.user?.email || null, nome: req.user?.name || null },
+            agoraIso: new Date().toISOString(),
+        });
+        await db.collection(COLECAO).doc(idDoFechamento(r.empresa.id, r.competencia))
+            .set(reaberto, { merge: false });
+
+        return res.json({ ok: true, fechamento: reaberto, descricao: descreverFechamento(reaberto) });
+    } catch (e) {
+        console.error('[fim-de-mes] reabrir:', e);
+        return res.status(500).json({ ok: false, erro: e.message });
+    }
+});
+
+export default router;

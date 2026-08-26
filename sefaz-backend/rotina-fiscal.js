@@ -42,6 +42,19 @@ export const ETAPAS_ROTINA = [
  */
 const FECHADAS = new Set(['concluida', 'na']);
 
+/**
+ * ESTA etapa está fechada?
+ *
+ * Exportada porque o **fim de mês** (26/08) usa exatamente esta pergunta como
+ * PRÉ-CONDIÇÃO — e a régua da casa é dura: quem precisa da mesma resposta
+ * chama o dono, nunca reescreve o `Set`. Uma segunda cópia divergiria no dia
+ * em que nascer um status novo, e divergiria em SILÊNCIO: o mês fecharia com
+ * etapa aberta, ou pararia de fechar com etapa que já fechou.
+ */
+export function etapaFechada(e) {
+    return FECHADAS.has(String(e?.status || ''));
+}
+
 const etapa = (id, status, resumo, acao = null, extra = {}) => {
     const base = ETAPAS_ROTINA.find((e) => e.id === id);
     return { ...base, status, resumo, acao, ...extra };
@@ -427,8 +440,8 @@ export function montarRotinaFiscal({
 
     // PRÓXIMO PASSO = a primeira etapa não fechada, na ordem. É a "linha" que
     // faltava: o colaborador não precisa decidir por onde começar.
-    const proxima = etapas.find((e) => !FECHADAS.has(e.status)) || null;
-    const fechadas = etapas.filter((e) => FECHADAS.has(e.status)).length;
+    const proxima = etapas.find((e) => !etapaFechada(e)) || null;
+    const fechadas = etapas.filter(etapaFechada).length;
 
     return {
         empresa: empresa || null,
