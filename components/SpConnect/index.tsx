@@ -3651,6 +3651,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         ['saudacao', 'Saudação (1º contato) — aceita {nome} e {protocolo}'],
                                         ['menuCabecalho', 'Cabeçalho do menu'],
                                         ['confirmacaoFila', 'Confirmação de fila — aceita {fila}'],
+                                        ['confirmacaoFilaForaDeHorario', 'Confirmação de fila FORA do horário — aceita {fila}'],
+                                        ['desfazerTriagemIa', 'Caminho de volta quando quem encaminhou foi a 🤖 IA'],
                                         ['foraDeHorario', 'Fora do horário'],
                                         ['sair', 'Resposta ao #sair'],
                                         ['transferencia', 'Aviso de transferência — aceita {fila}'],

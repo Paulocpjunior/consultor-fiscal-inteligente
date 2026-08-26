@@ -161,7 +161,6 @@ describe('a régua do R-4020 vale no F600 — tributo da operação NÃO é rete
 // como "sem retenção gravada": F001|1, e o M200/M600 declarava a recolher SEM
 // o abatimento. As duas formas se leem pelo DONO (lerRetencoesFederaisDoDoc).
 // ═══════════════════════════════════════════════════════════════════════════
-// @ts-ignore — módulo JS do backend
 import { buildBlocoA } from '../sefaz-backend/sped-contrib-blocos.js';
 
 /** NFS-e prestada como o TRILHO DO PORTAL grava: tudo achatado na raiz. */

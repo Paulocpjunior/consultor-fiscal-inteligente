@@ -174,7 +174,29 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
         atualizadoEm: agora,
     }, { merge: true });
 
-    await db.collection('whatsapp_conversas').doc(msg.de).set({
+    // 🚨 CONVERSA JÁ ENCERRADA QUE RECEBE MENSAGEM É ATENDIMENTO NOVO — e é
+    // AQUI que ela se solta (26/08, print do Paulo: encerrou, deu a nota,
+    // mandou "bom dia, preciso da minha guia de DAS" e o app ficou mudo).
+    //
+    // O ✅ Encerrar passou a limpar fila/dono no mesmo dia, mas isso só vale
+    // para quem encerrar DAQUI PRA FRENTE: toda conversa fechada ANTES ficou
+    // com a fila e o dono do atendimento anterior grudados, e o galho da
+    // triagem só roda com a conversa SEM fila e SEM dono. Ou seja: metade da
+    // correção deixava a carteira inteira muda para sempre — o defeito que ela
+    // existe para fechar, vivo em todo mundo que já foi atendido uma vez.
+    //
+    // ⚠️ E a leitura é ANTES da escrita de propósito: a linha `status:'aberta'`
+    // logo abaixo apaga a prova. Ler depois devolveria 'aberta' sempre e a
+    // regra nunca dispararia — foi exatamente o que aconteceu na conversa do
+    // print, que chegou aqui já reaberta e continuou presa.
+    //
+    // ⚠️ E só quando estava RESOLVIDA: conversa aberta é atendimento em
+    // andamento, e limpar o dono ali tiraria da mesa de quem está atendendo a
+    // conversa que ele está atendendo, a cada mensagem do cliente.
+    const convRef = db.collection('whatsapp_conversas').doc(msg.de);
+    const eraResolvida = ((await convRef.get()).data() || {}).status === 'resolvida';
+
+    await convRef.set({
         numero: msg.de,
         // O canal da conversa é o do PRIMEIRO contato e não muda sozinho: se
         // o cliente escrever pro outro número, a linha do canal desta
@@ -190,6 +212,7 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
         // ⚠️ `resolvidaPor` fica: quem encerrou o atendimento ANTERIOR é fato
         // histórico, e apagá-lo perderia a auditoria de quem fechou o quê.
         status: 'aberta',
+        ...(eraResolvida ? { fila: null, atribuidoA: null, submenuAberto: null } : {}),
         // Mensagem do cliente ABRE/renova a janela de 24h — é ela que a F2 mostra.
         janela24hAte: janela24hAte(msg.timestamp || agora),
         naoLidas: admin.firestore.FieldValue.increment(1),

@@ -33,7 +33,6 @@
  */
 
 // O DONO da pergunta — a mesma régua que o SPED, o `.FML` e a DIPAM usam.
-// @ts-ignore — módulo backend com .d.ts próprio
 import { ehNotaPropriaDeEntrada as ehNotaPropriaDeEntradaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
