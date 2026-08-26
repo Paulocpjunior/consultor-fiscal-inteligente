@@ -17,13 +17,13 @@ import {
     procurarConversas,
     importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
-    mudarSituacao, criarNota, vincularCliente, buscarClientes,
+    mudarSituacao, criarNota, vincularCliente, buscarClientes, sugestoesDeVinculo,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
-    baterPresenca, presencaDaFila, PresencaDaFila,
+    baterPresenca, presencaDaFila, PresencaDaFila, SugestoesDeVinculo,
     eventosCrusDeChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
@@ -588,7 +588,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo'>('bot');
+    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
 
     // ── 🗄 Arquivo de mídia no SharePoint (o cron roda sozinho; o botão antecipa)
     const [arqRodando, setArqRodando] = useState(false);
@@ -601,6 +601,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             if (!r.ok) { setArqErro(r.error || 'O arquivamento falhou.'); return; }
             setArqResultado(r);
         } finally { setArqRodando(false); }
+    };
+
+    // ── 🔗 De quem são os números sem vínculo? MEDE primeiro; a ação é por
+    // linha, com confirmação. Sugestão nunca vira vínculo sozinha: número de
+    // WhatsApp muda de dono, e vincular errado mostra a guia de um cliente
+    // dentro da conversa de outro.
+    const [vincSug, setVincSug] = useState<SugestoesDeVinculo | null>(null);
+    const [vincSugCarregando, setVincSugCarregando] = useState(false);
+    const [vincSugErro, setVincSugErro] = useState<string | null>(null);
+    const [vincSugFeitos, setVincSugFeitos] = useState<Record<string, string>>({});
+    const medirVinculos = async () => {
+        setVincSugCarregando(true); setVincSugErro(null);
+        try {
+            const r = await sugestoesDeVinculo();
+            if (!r.ok) { setVincSugErro(r.error || 'Não deu para medir agora.'); return; }
+            setVincSug(r);
+        } finally { setVincSugCarregando(false); }
+    };
+    const confirmarSugestao = async (numero: string, empresaId: string, nomeEmpresa: string) => {
+        const r = await vincularCliente(numero, empresaId, nomeEmpresa);
+        if (r.ok) setVincSugFeitos((s) => ({ ...s, [numero]: nomeEmpresa }));
+        else setVincSugErro(r.error || 'Não deu para vincular.');
     };
 
     // ── ☎️ Sonda de voz/vídeo: PERGUNTA à Meta, não liga nada.
@@ -2317,7 +2339,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -3182,6 +3204,92 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         )}
 
                         {/* ── aba 🗄 SharePoint (arquivo de mídia) ──────────── */}
+                        {/* ── aba 🔗 Vínculos: de quem são os números sem cliente ── */}
+                        {cfgAba === 'vinculos' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Conversa sem cliente vinculado deixa a coluna do cliente vazia (responsável da
+                                    carteira e guias enviadas) e some do relatório por cliente. Aqui o app cruza o
+                                    número da conversa com o <strong>WhatsApp do cliente</strong> e o <strong>telefone</strong>
+                                    {' '}do cadastro e <strong>sugere</strong> — quem confirma é você.
+                                </p>
+                                <button onClick={medirVinculos} disabled={vincSugCarregando}
+                                    className="text-[11px] font-bold px-3 py-1.5 rounded bg-[#0e3bfa] text-white disabled:opacity-60">
+                                    {vincSugCarregando ? '⏳ medindo…' : '🔎 Medir agora'}
+                                </button>
+                                {vincSugErro && <p className="text-[11px] text-red-600 dark:text-red-400">{vincSugErro}</p>}
+
+                                {vincSug && (
+                                    <div className="space-y-2">
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                                            <p><strong>{vincSug.total}</strong> contato(s) sem vínculo · <strong>{vincSug.empresasComNumero}</strong> de {vincSug.empresasNoCadastro} cliente(s) têm telefone no cadastro.</p>
+                                            {/* 🚨 "0 sugestões" com 0 cliente cadastrado é falta de CADASTRO;
+                                                com 400 cadastrados é outra história. Sem este número, o zero
+                                                mandaria procurar defeito no lugar errado. */}
+                                            {vincSug.empresasComNumero === 0 && (
+                                                <p className="text-amber-700 dark:text-amber-400">
+                                                    ⚠️ Nenhum cliente tem telefone preenchido — não há o que cruzar. O campo
+                                                    fica em <strong>Empresas → Dados Fiscais → WhatsApp do cliente</strong>.
+                                                </p>
+                                            )}
+                                            <p>
+                                                🟢 {vincSug.sugestoes.length} com sugestão · 🟡 {vincSug.ambiguos.length} ambíguo(s) ·
+                                                ⚪ {vincSug.semCadastro.length} sem cadastro
+                                                {vincSug.semNumeroLegivel.length > 0 && <> · 📷 {vincSug.semNumeroLegivel.length} sem telefone (DM)</>}
+                                            </p>
+                                        </div>
+
+                                        {vincSug.sugestoes.length > 0 && (
+                                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1">
+                                                <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">🟢 Sugestões — confira e confirme</p>
+                                                {vincSug.sugestoes.slice(0, 50).map((s) => (
+                                                    <div key={s.numero} className="flex items-center justify-between gap-2 text-[11px] border-b border-slate-100 dark:border-slate-700/50 py-1 last:border-0">
+                                                        <span className="text-slate-600 dark:text-slate-300 min-w-0">
+                                                            <strong>{s.nome || formatarNumeroBr(s.numero)}</strong>
+                                                            <span className="text-slate-400"> → {s.nomeEmpresa}</span>
+                                                            <span className="text-[9px] text-slate-400"> (pelo {s.campo === 'whatsappCliente' ? 'WhatsApp do cliente' : 'telefone'})</span>
+                                                        </span>
+                                                        {vincSugFeitos[s.numero]
+                                                            ? <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">✓ vinculado</span>
+                                                            : <button onClick={() => confirmarSugestao(s.numero, s.empresaId, s.nomeEmpresa)}
+                                                                className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#0e3bfa] text-white whitespace-nowrap">Vincular</button>}
+                                                    </div>
+                                                ))}
+                                                {vincSug.sugestoes.length > 50 && (
+                                                    <p className="text-[10px] text-slate-400">Mostrando 50 de {vincSug.sugestoes.length} — meça de novo depois de confirmar estas.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {vincSug.ambiguos.length > 0 && (
+                                            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2.5 space-y-1">
+                                                {/* Escolher aqui apontaria o cliente errado com toda a confiança. */}
+                                                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">🟡 O mesmo número em mais de um cliente — o app não escolhe</p>
+                                                {vincSug.ambiguos.slice(0, 20).map((a) => (
+                                                    <p key={a.numero} className="text-[11px] text-amber-800 dark:text-amber-300">
+                                                        {a.nome || formatarNumeroBr(a.numero)}: {a.candidatos.map((c) => c.nomeEmpresa).join(' · ')}
+                                                    </p>
+                                                ))}
+                                                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                                    Ou o cadastro está duplicado, ou o número é compartilhado. Vincule pela conversa,
+                                                    caso a caso.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {vincSug.semCadastro.length > 0 && (
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                ⚪ <strong>{vincSug.semCadastro.length}</strong> número(s) não estão em cadastro nenhum. Boa
+                                                parte não é cliente (currículo, fornecedor, lead) — o resto é cliente sem o WhatsApp
+                                                preenchido em Dados Fiscais. <strong>Isso não é defeito do app</strong>: é cadastro
+                                                faltando, e o app não inventa de quem é o número.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {cfgAba === 'arquivo' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">

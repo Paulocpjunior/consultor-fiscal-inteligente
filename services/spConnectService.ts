@@ -236,6 +236,21 @@ export const buscarClientes = (q: string) =>
     req<{ clientes: { id: string; nome: string; cnpj: string; origem: string }[] }>(
         `/api/admin/whatsapp/clientes-busca?q=${encodeURIComponent(q)}`);
 
+/** 🔗 Quem é o cliente dos números sem vínculo — MEDIÇÃO, não decisão.
+ *  Os quatro desfechos vêm separados porque as ações são diferentes. */
+export interface SugestoesDeVinculo {
+    total: number;
+    empresasNoCadastro: number;
+    empresasComNumero: number;
+    sugestoes: { numero: string; nome: string | null; empresaId: string; nomeEmpresa: string; campo: string }[];
+    ambiguos: { numero: string; nome: string | null; candidatos: { empresaId: string; nomeEmpresa: string; campo: string }[] }[];
+    semCadastro: { numero: string; nome: string | null }[];
+    semNumeroLegivel: { numero: string; nome: string | null; canal: string | null }[];
+}
+
+export const sugestoesDeVinculo = () =>
+    req<SugestoesDeVinculo>('/api/admin/whatsapp/vinculo-sugestoes');
+
 // ─── 📞 Canais (2º número / 2ª WABA) ────────────────────────────────────────
 
 export interface CanalWhatsapp {
