@@ -5,6 +5,41 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 SÓ UMA DAS SEIS SOMAS C100 × C190 ESTAVA CONFERIDA — e o par é o que já
+  custou um dia inteiro da PWR** (26/08, fechando a varredura do Guia do EFD
+  ICMS/IPI). O Guia 3.2.3 repete a MESMA validação em seis campos do C100 —
+  *"a soma dos valores do campo <X> dos registros analíticos (C190) deve ser
+  igual ao valor informado neste campo"* — e a prevalidação só perguntava pelo
+  **VL_DOC × VL_OPR** (a R14, que nasceu do caso PWR de 20/08). Faltavam
+  `VL_BC_ICMS`, `VL_ICMS`, `VL_BC_ICMS_ST`, `VL_ICMS_ST` e `VL_IPI`.
+  🚨 **E A CONDIÇÃO QUE PRODUZ O DEFEITO CONTINUA NO GERADOR**: o **C100 lê os
+  TOTAIS DO DOCUMENTO** (`totais.vBC`, `totais.vICMS`…) e o **C190 agrega os
+  ITENS** — duas fontes diferentes, montadas em passos diferentes. É a MESMA
+  dupla que produziu o `VL_OPR` sem o IPI, e ali o PVA nem recusa: ele só
+  imprime um total menor.
+  🐛 **E O COMENTÁRIO DO PRÓPRIO GERADOR JÁ AFIRMAVA O QUE NINGUÉM CONFERIA**:
+  `// VL_BC_ICMS — bate com ΣC190`, escrito ao lado do campo. É o vício de
+  13/08 na forma mais barata de todas — **regra escrita não é regra travada**,
+  e comentário que afirma um invariante sem teste é a pior das duas, porque a
+  próxima pessoa lê e acredita.
+  ⚠️ **O CAMPO 22 É O QUE ALIMENTA A APURAÇÃO**: é a soma dos `VL_ICMS` dos
+  C190 que vira débito e crédito no E110 (a R7 confere exatamente isso). Um
+  C100 que discorda dos próprios filhos põe o LIVRO e a APURAÇÃO em números
+  diferentes para a MESMA nota — e o colaborador compara o livro, não o C190.
+  ✅ **NASCE VERDE sobre o gerador REAL em quatro cenários** — a NF 7 da PWR,
+  nota com dois grupos de CST/CFOP com ST e IPI, cancelada e NFC-e. O teste
+  **chama o `buildBlocoC`**, nunca uma linha escrita à mão.
+  ⚠️ **As duas exceções ficam declaradas**: a **cancelada** sai com os campos
+  VAZIOS (Exceção 1) e sem filhos; na **NFC-e** os campos de ST, IPI, PIS e
+  COFINS são PROIBIDOS no C100. Comparar nos dois casos acusaria nota correta.
+  E nota **sem nenhum C190** continua sendo a R6, que já diz a causa certa —
+  dois alarmes para UM defeito é o caminho para a equipe ignorar os dois.
+  📌 **A CONTA DO DIA**: o Guia do EFD-Contribuições tem **343** validações
+  oficiais (92 em registros que o gerador emite) e o do ICMS/IPI tem **885**
+  (147). Elas são a lista de recusas do PVA escrita ANTES de elas acontecerem —
+  e ler essa lista custa uma tarde, enquanto descobri-la uma volta de PVA por
+  vez é o gargalo que o Paulo nomeou em 20/08.
+
 - **🚨 A APURAÇÃO NUNCA TINHA SIDO PERGUNTADA SE FECHA CONSIGO MESMA — e é
   dela que sai a GUIA** (26/08, a mesma varredura, agora no Guia do EFD
   ICMS/IPI). O Guia 3.2.3 está no repo desde 20/08 e tem **885** linhas de
