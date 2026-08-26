@@ -223,6 +223,15 @@ export const vincularCliente = (numero: string, empresaId: string, empresaNome?:
  *  e últimas guias do rito #293 — nenhuma conta nova, só leitura. */
 export interface ClienteDaConversa {
     vinculado: boolean;
+    /** 🔗 Só quando NÃO vinculado: de quem o cadastro diz que é este número.
+     *  Sugestão, nunca vínculo — quem confirma é quem está atendendo. */
+    sugestao?: {
+        situacao: 'sugerida' | 'ambigua';
+        empresaId?: string;
+        nomeEmpresa?: string;
+        campo?: string;
+        candidatos?: { empresaId: string; nomeEmpresa: string; campo: string }[];
+    } | null;
     empresa?: { id: string; nome: string; cnpj: string | null; regime: string | null; excluida?: boolean; naoEncontrada?: boolean };
     responsaveis?: { nome: string; papel: string }[];
     guias?: { tipo: string | null; competencia: string | null; valor: number | null; canal: string | null; enviadoPor: string | null; enviadoEm: string | null }[];
