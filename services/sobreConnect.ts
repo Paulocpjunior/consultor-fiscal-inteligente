@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-22';
+export const SOBRE_VERSAO = '2026-08-26';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -63,7 +63,7 @@ export const O_QUE_FAZ: Bloco[] = [
     },
     {
         titulo: '🤖 Triar sozinho quem chega',
-        texto: 'O bot recebe, saúda, mostra o menu de departamentos e encaminha para a fila certa antes de qualquer pessoa gastar tempo com isso. Fora do horário, avisa que estamos fechados em vez de deixar a mensagem sem resposta.',
+        texto: 'O bot recebe, saúda e encaminha para a fila certa antes de qualquer pessoa gastar tempo com isso. Quem escreve uma frase de verdade ("preciso da guia do DAS") é encaminhado direto pela leitura do pedido; quem manda "bom dia", ou quando não há certeza, recebe o menu de departamentos. Fora do horário, avisa que estamos fechados em vez de deixar a mensagem sem resposta.',
     },
     {
         titulo: '🗂 Separar por fila de departamento',
@@ -176,6 +176,15 @@ export const MANUAL: PassoManual[] = [
         atencao: 'Áudio não aceita legenda — se você escrever e gravar um áudio, o texto não vai junto; mande em duas mensagens. O app avisa antes.',
     },
     {
+        titulo: '5b. Quando quem encaminhou foi a 🤖 IA',
+        passos: [
+            'A conversa chega na sua fila SEM o cliente ter digitado número nenhum — ele escreveu o que precisa e o app leu.',
+            'Na thread fica uma NOTA INTERNA dizendo para qual fila foi e com quanta confiança. O cliente não vê essa linha.',
+            'Confira se é a fila certa antes de responder. Se não for, ↪️ Transferir resolve — o cliente não precisa fazer nada.',
+        ],
+        atencao: 'A IA NUNCA responde ao cliente e nunca dá informação fiscal: ela só escolhe o departamento. Na dúvida ela não escolhe — manda o menu. E o cliente pode digitar #menu a qualquer momento para trocar de departamento sozinho.',
+    },
+    {
         titulo: '6. Transferir para outro departamento',
         passos: [
             'Escolha o destino em ↪️ Transferir de fila e confirme.',
@@ -195,7 +204,7 @@ export const MANUAL: PassoManual[] = [
     {
         titulo: '8. Encerrar e pedir a avaliação',
         passos: [
-            '✅ Encerrar atendimento marca a conversa como resolvida.',
+            '✅ Encerrar atendimento marca a conversa como resolvida E solta a conversa: ela sai da sua mesa e perde a fila do atendimento que acabou.',
             'Com a pesquisa ligada na ⚙️, o cliente recebe na hora o pedido de nota. A escala é a que estiver configurada na ⚙️ — a mensagem e a leitura da resposta saem de lá, juntas.',
             'As notas aparecem no 📊 (média, distribuição e as últimas).',
         ],
@@ -259,6 +268,27 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-08-26',
+        itens: [
+            '🤖 O bot passou a LER o pedido do cliente: quem escreve uma frase de verdade ("preciso da guia do DAS") é encaminhado direto ao departamento, sem passar pelo menu. Ele só faz isso com CERTEZA — na dúvida, o menu de 1 a 8 de sempre. E "bom dia", "oi" e "ok" nunca vão pra IA: esses recebem o menu.',
+            '🔁 Quem foi encaminhado pela IA recebe junto o caminho de volta: "se não for isso, digite #menu". Quem escolheu no menu não recebe — acabou de escolher.',
+            '📝 Toda vez que a IA encaminha, entra uma NOTA INTERNA na conversa dizendo para qual fila foi e com quanta confiança. O cliente não vê. Se ela errar, é essa a linha que mostra.',
+            '✅ Encerrar o atendimento agora SOLTA a conversa (tira a fila e o dono). Antes ela ficava presa na mesa de quem já tinha terminado, e o cliente que voltasse não recebia resposta nenhuma do bot.',
+            '🕗 Fora do horário, o encaminhamento continua acontecendo — mas o app deixou de prometer "logo um atendente responderá" e passou a dizer que responde quando abrirmos.',
+            '🟢 Presença: na hora de transferir, a tela diz quantas pessoas daquela fila estão no ar agora. Sem sinal recente NÃO quer dizer "offline" (pode ser aba fechada ou telefone na mão), e a transferência funciona de qualquer jeito.',
+            '🔗 Conversa sem cliente vinculado passa a mostrar de quem o cadastro diz que é o número, com um botão de confirmar. É sugestão: quem vincula é você.',
+            '🔑 "Esqueci minha senha" na tela de login — o link chega no e-mail da casa, sem depender de admin.',
+            '📱 No celular, a lista de conversas voltou a rolar: ela mostrava só as primeiras e travava.',
+        ],
+    },
+    {
+        data: '2026-08-25',
+        itens: [
+            '🔔 Aviso NATIVO do Teams: mensagem nova acende o sino de Atividade do próprio Teams (barra da ESQUERDA do aplicativo, não a aba do navegador). Vale a mesma regra de fila e horário do push.',
+            '☎️ Ligação de WhatsApp: medido em 25/08, a Meta aceita a chamada e NÃO entrega no nosso tronco. Não é configuração daqui — há chamado aberto com ela. Enquanto isso, atenda por mensagem.',
+        ],
+    },
     {
         data: '2026-08-22',
         itens: [

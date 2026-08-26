@@ -87,3 +87,49 @@ describe('o que JÁ está coberto não pode aparecer como falta', () => {
         expect(doc).toContain('plataforma cancelada não devolve export');
     });
 });
+
+// ============================================================================
+// 🚨 O QUE O SP CONNECT PASSOU A FAZER TAMBÉM ENVELHECE O DOCUMENTO
+//
+// A trava original vigiava as LACUNAS (o app ganhou a capacidade → o de-para
+// não pode mais dizer 🔴). Faltava a direção contrária, e ela mordeu: a IA de
+// triagem subiu em 25/08, virou a primeira coisa que o cliente encontra, e o
+// de-para não tinha uma linha sobre ela — nem o manual da equipe. Quem lesse
+// os dois para decidir o corte não saberia que o bot mudou de comportamento.
+//
+// A régua é a mesma: pergunta ao CÓDIGO, exige que o documento concorde.
+// ============================================================================
+describe('🚨 capacidade NOVA do bot obriga linha no de-para', () => {
+    const atendimento = readFileSync(join(raiz, 'sefaz-backend/whatsapp-atendimento.js'), 'utf8');
+    const sobre = readFileSync(join(raiz, 'services/sobreConnect.ts'), 'utf8');
+
+    it('a IA de triagem existe no código — então ela está no de-para', () => {
+        expect(atendimento).toMatch(/triagemIaAtiva/);
+        expect(doc).toMatch(/texto livre/i);
+        // E o que ela NÃO faz vale tanto quanto: é isso que sustenta a decisão
+        // de deixá-la ligada por padrão.
+        expect(doc).toMatch(/não responde ao cliente/);
+    });
+
+    it('🚨 e ela está no MANUAL DA EQUIPE — manual errado é pior que manual nenhum', () => {
+        // Quem não sabe segue o que está escrito: um manual que só descreve o
+        // menu numérico deixa o colaborador sem entender por que a conversa
+        // chegou na fila dele sem o cliente ter digitado nada.
+        expect(sobre).toMatch(/#menu/);
+        expect(sobre).toMatch(/IA/);
+        expect(sobre).toMatch(/nota interna|NOTA INTERNA/i);
+    });
+
+    it('o encerrar que SOLTA a conversa está declarado', () => {
+        expect(atendimento).toMatch(/liberarConducao/);
+        expect(doc).toMatch(/Encerrar SOLTA a conversa/);
+    });
+
+    it('a presença saiu do 🟡 — ela está no ar desde 26/08', () => {
+        const linha = linhaDoDePara('Presença (online/ausente)');
+        expect(linha).not.toMatch(/🟡/);
+        // E o documento repete a ressalva que a tela faz: o app mede o SINAL,
+        // não a pessoa. Sem isso alguém leria "presença" como ponto eletrônico.
+        expect(linha).toMatch(/nunca "offline"/);
+    });
+});
