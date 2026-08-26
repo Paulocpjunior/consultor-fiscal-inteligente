@@ -70,6 +70,34 @@ interface Regua {
 }
 
 const REGUAS_VIGIADAS: Regua[] = [
+    {
+        nome: 'A COMPETÊNCIA ESTÁ FECHADA? — o fim de mês (DAR FIM DE MÊS)',
+        dono: 'sefaz-backend/fim-de-mes.js',
+        comoUsar: "import { competenciaFechada, podeDarFimDeMes } from 'sefaz-backend/fim-de-mes.js'",
+        porque: '26/08, Paulo: *"o fechamento do fim do mês no CFI exige (DAR FIM DE MÊS); essa função é que '
+            + 'deve ser usada como régua para nos nortear, usar como base p impostos, livros, ficha financeira, '
+            + 'exatamente o que o CCI deve usar como base para importação do contábil"*. É uma pergunta que vai '
+            + 'ter MUITOS leitores — livro, os dois SPED, a ficha, as guias e o túnel do Contábil —, e é '
+            + 'justamente aí que a segunda cópia nasce. Duas respostas para "esta competência está fechada?" '
+            + 'seriam o livro dizendo uma coisa e o arquivo outra, que é o defeito que esta casa mais paga. '
+            + 'E `reaberta` é ABERTA: a cópia que esquecer disso travaria a correção que a reabertura veio '
+            + 'permitir.',
+        assinaturas: [
+            // A reimplementação do estado, em vez de perguntar ao dono.
+            /estado\s*===\s*'fechada'/,
+            // A reimplementação da pré-condição (as 5 etapas da Rotina).
+            /export function podeDarFimDeMes/,
+        ],
+        permitido: [
+            // A porta do frontend EXIBE o estado que o backend respondeu — ela
+            // não decide nada, e ler o campo para escolher qual bloco renderizar
+            // é outra coisa que reimplementar a régua.
+            'components/FimDeMesBloco.tsx',
+            // A trava da ficha pergunta ao documento que o backend gravou; a
+            // régua de QUEM pode fechar continua sendo do backend.
+            'services/lucroPresumidoService.ts',
+        ],
+    },
     // ⚠️ `services/valorDigitado.ts` (o valor que a PESSOA digitou) NÃO entra
     // aqui, e o motivo é a régua desta casa: régua única é o dono da MESMA
     // pergunta, não o dono mais próximo. A assinatura da conversão pt-BR

@@ -232,6 +232,137 @@ async function montarIssDaCarteira(db, empresas, documentos, porCnpjToId, compet
     };
 }
 
+/**
+ * MONTA A ROTINA de um conjunto de empresas numa competência.
+ *
+ * 🚨 EXTRAÍDA EM 26/08, quando o **DAR FIM DE MÊS** passou a precisar da MESMA
+ * resposta: as 5 etapas da Rotina são a PRÉ-CONDIÇÃO do ato (etapa aberta
+ * BLOQUEIA o fechamento, decisão do Paulo). Uma segunda montagem no outro
+ * arquivo divergiria — e divergiria no pior lugar possível, porque o painel
+ * diria "pronto para fechar" e o botão recusaria, ou pior, o contrário.
+ *
+ * O handler do painel e o do fim de mês passam a chamar esta função; o que
+ * muda entre eles é só QUANTAS empresas entram.
+ */
+export async function montarRotinasDaCompetencia(db, empresas, competencia) {
+    const porCnpjToId = new Map(empresas.map((e) => [e.cnpj, e.id]));
+
+    // ── documentos da competência (uma leitura, campos mínimos) ──────────
+    const docsSnaps = await fetchAllDocs(
+        db.collection('documentos_fiscais')
+            .where('competencia', '==', competencia)
+            // 🚨 `cStat`/`eventos`: a etapa de VALIDAÇÃO conta as canceladas
+            // por `docCancelado`, e o cancelamento chega por EVENTO com o
+            // `status` ainda 'autorizado'. Sem eles a Rotina dizia
+            // "0 cancelada(s)" e a etapa fechava VERDE — o farol honesto
+            // mentindo justamente no guia do mês do colaborador.
+            .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos',
+                // `emitente`/`destinatario`/`tpNF` entram pra detectar compra
+                // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
+                // detalhe fica na aba própria, aqui só sinaliza a obrigação.
+                // tpNF=0 = nota própria de entrada (produtor no destinatário).
+                'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF',
+                // ISS de SP capital — MESMA leitura, sem consulta extra. As
+                // duas formas são obrigatórias: a NFS-e do portal vem
+                // ACHATADA (valorIss/issDevido) e a do XML vem em OBJETO
+                // (valores.iss). Ler só uma zera metade da base.
+                'tipo', 'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
+                'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
+                // `totais.vISSRetido` é a forma do ABRASF — faltava, e sem
+                // ela o ISS RETIDO daquele trilho some (a régua responde
+                // "não achei" e o painel soma zero). CAMPOS_PARA_ISS_DO_DOCUMENTO.
+                'totais.vISS', 'totais.vISSRetido',
+                // POR QUE o ISS está zerado (iss-zerado-causa.js). Tudo já
+                // é gravado pelo importer — nenhuma captura nova.
+                'aliquotaServicos', 'valorServicos', 'valorDeducoes', 'valorTotal',
+                'municipioPrestacaoIbge', 'prestadorOptanteSimples', 'codigoServico',
+                // CARTA DE CORREÇÃO: ela pode ter mudado o CFOP/natureza, e
+                // o livro sai do XML ORIGINAL. Era capturada e nenhum ponto
+                // da escrituração olhava — a validação passou a olhar.
+                'eventos', 'numero'),
+        { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
+    );
+    const documentos = docsSnaps.map((s) => s.data() || {});
+
+    // ── tarefas da competência (formato MM/AAAA) ────────────────────────
+    const compTarefa = competenciaTarefa(competencia);
+    const tarefasSnaps = await fetchAllDocs(
+        db.collection('tarefas').where('competencia', '==', compTarefa),
+        { label: `rotina-tarefas ${compTarefa}`, maxDocs: 20000 },
+    );
+    const tarefas = tarefasSnaps.map((s) => s.data() || {});
+
+    // ── envios do rito (#293) — sem índice por competência, filtra aqui ──
+    const enviosSnap = await db.collection('impostos_enviados').limit(3000).get();
+    const envios = enviosSnap.docs
+        .map((d) => d.data() || {})
+        .filter((e) => e.competencia === competencia);
+
+    const docsPorEmpresa = agrupar(documentos, porCnpjToId);
+    const tarefasPorEmpresa = agrupar(tarefas, porCnpjToId);
+    const enviosPorEmpresa = agrupar(envios, porCnpjToId);
+
+    // ── ISS de SP capital, pelo MESMO núcleo do painel 🏛️ ISS SP ─────────
+    // A rotina nascera cega pro ISS e a onda 1 são 157 empresas de serviço
+    // puro — as que NÃO fecham o mês no DAS. Reimplementar a conta aqui
+    // faria os dois painéis divergirem, então os dois leem o mesmo núcleo.
+    const issCarteira = await montarIssDaCarteira(db, empresas, documentos, porCnpjToId, competencia);
+    // Calendários municipais (coleção pequena: 1 doc por cidade × vigência).
+    // Falha aqui NÃO derruba o painel — sem eles o ISS volta a ser
+    // pendência nomeada, que é o estado de antes.
+    let prazosMunicipais = [];
+    try { prazosMunicipais = await carregarPrazosMunicipais(db); }
+    catch (e) { console.warn('[rotina] calendários municipais indisponíveis:', e.message); }
+
+    // 🚨 QUEM CAPTURA POR A3 (agente local `cfi-a3`) — 202 das 404 da
+    // carteira. UMA leitura da coleção (1 doc por empresa), a mesma que o
+    // 📊 Status já faz. Sem isso a Rotina manda metade da carteira
+    // "destravar a captura" quando o trilho está certo e o que falta é o
+    // agente ter rodado.
+    //
+    // ⚠️ Falha aqui NÃO derruba o painel e NÃO apaga o alarme: sem a
+    // leitura, a etapa volta a acender com a frase genérica — que é o
+    // estado de antes, e é o lado seguro do erro.
+    const empresasA3 = new Set();
+    try {
+        const certSnap = await db.collection('empresas_certificados').select('tipoCert').get();
+        certSnap.forEach((d) => { if (d.data()?.tipoCert === 'A3') empresasA3.add(d.id); });
+    } catch (e) {
+        console.warn('[rotina] tipo de certificado indisponível:', e.message);
+    }
+
+    const rotinas = empresas.map((e) => montarRotinaFiscal({
+        // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
+        // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
+        // tarefa não aparecia em lugar nenhum, e o mês fechava assim mesmo.
+        cobertura: coberturaDoCliente(e, competencia, prazosMunicipais),
+        iss: issCarteira.mapa.get(e.id) || null,
+        dipam: contarProdutoresRurais(docsPorEmpresa.get(e.id) || []),
+        empresa: { id: e.id, nome: e.nome, cnpj: e.cnpj, regime: e.regime },
+        competencia,
+        documentos: docsPorEmpresa.get(e.id) || [],
+        apuracao: acharApuracaoDaCompetencia(e, competencia),
+        tarefas: tarefasPorEmpresa.get(e.id) || [],
+        envios: enviosPorEmpresa.get(e.id) || [],
+        capturaAtiva: e.capturaAtiva,
+        capturaPorAgenteLocal: empresasA3.has(e.id),
+    }));
+
+    // O ISS e as CONTAGENS voltam juntos: os três são montados AQUI, numa
+    // leitura só, e o painel os publica. Recalculá-los fora faria os dois
+    // divergirem — que é justamente o motivo desta função existir.
+    //
+    // 🐛 E `lidos` esteve prestes a virar "Falha interna": ao extrair esta
+    // função eu deixei `documentos`/`tarefas`/`envios` aqui dentro e o handler
+    // continuou lendo os nomes. Quem pegou foi a trava de nomes do backend
+    // (20/08) — a MESMA classe que derrubou a geração do SPED naquele dia.
+    return {
+        rotinas,
+        issCarteira,
+        lidos: { documentos: documentos.length, tarefas: tarefas.length, envios: envios.length },
+    };
+}
+
 router.get('/painel', requireAuth, async (req, res) => {
     try {
         const competencia = /^\d{4}-\d{2}$/.test(String(req.query.competencia || ''))
@@ -252,108 +383,7 @@ router.get('/painel', requireAuth, async (req, res) => {
             empresas = empresas.filter((e) => alvo.has(e.id));
         }
 
-        const porCnpjToId = new Map(empresas.map((e) => [e.cnpj, e.id]));
-
-        // ── documentos da competência (uma leitura, campos mínimos) ──────────
-        const docsSnaps = await fetchAllDocs(
-            db.collection('documentos_fiscais')
-                .where('competencia', '==', competencia)
-                // 🚨 `cStat`/`eventos`: a etapa de VALIDAÇÃO conta as canceladas
-                // por `docCancelado`, e o cancelamento chega por EVENTO com o
-                // `status` ainda 'autorizado'. Sem eles a Rotina dizia
-                // "0 cancelada(s)" e a etapa fechava VERDE — o farol honesto
-                // mentindo justamente no guia do mês do colaborador.
-                .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos',
-                    // `emitente`/`destinatario`/`tpNF` entram pra detectar compra
-                    // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
-                    // detalhe fica na aba própria, aqui só sinaliza a obrigação.
-                    // tpNF=0 = nota própria de entrada (produtor no destinatário).
-                    'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF',
-                    // ISS de SP capital — MESMA leitura, sem consulta extra. As
-                    // duas formas são obrigatórias: a NFS-e do portal vem
-                    // ACHATADA (valorIss/issDevido) e a do XML vem em OBJETO
-                    // (valores.iss). Ler só uma zera metade da base.
-                    'tipo', 'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
-                    'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
-                    // `totais.vISSRetido` é a forma do ABRASF — faltava, e sem
-                    // ela o ISS RETIDO daquele trilho some (a régua responde
-                    // "não achei" e o painel soma zero). CAMPOS_PARA_ISS_DO_DOCUMENTO.
-                    'totais.vISS', 'totais.vISSRetido',
-                    // POR QUE o ISS está zerado (iss-zerado-causa.js). Tudo já
-                    // é gravado pelo importer — nenhuma captura nova.
-                    'aliquotaServicos', 'valorServicos', 'valorDeducoes', 'valorTotal',
-                    'municipioPrestacaoIbge', 'prestadorOptanteSimples', 'codigoServico',
-                    // CARTA DE CORREÇÃO: ela pode ter mudado o CFOP/natureza, e
-                    // o livro sai do XML ORIGINAL. Era capturada e nenhum ponto
-                    // da escrituração olhava — a validação passou a olhar.
-                    'eventos', 'numero'),
-            { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
-        );
-        const documentos = docsSnaps.map((s) => s.data() || {});
-
-        // ── tarefas da competência (formato MM/AAAA) ────────────────────────
-        const compTarefa = competenciaTarefa(competencia);
-        const tarefasSnaps = await fetchAllDocs(
-            db.collection('tarefas').where('competencia', '==', compTarefa),
-            { label: `rotina-tarefas ${compTarefa}`, maxDocs: 20000 },
-        );
-        const tarefas = tarefasSnaps.map((s) => s.data() || {});
-
-        // ── envios do rito (#293) — sem índice por competência, filtra aqui ──
-        const enviosSnap = await db.collection('impostos_enviados').limit(3000).get();
-        const envios = enviosSnap.docs
-            .map((d) => d.data() || {})
-            .filter((e) => e.competencia === competencia);
-
-        const docsPorEmpresa = agrupar(documentos, porCnpjToId);
-        const tarefasPorEmpresa = agrupar(tarefas, porCnpjToId);
-        const enviosPorEmpresa = agrupar(envios, porCnpjToId);
-
-        // ── ISS de SP capital, pelo MESMO núcleo do painel 🏛️ ISS SP ─────────
-        // A rotina nascera cega pro ISS e a onda 1 são 157 empresas de serviço
-        // puro — as que NÃO fecham o mês no DAS. Reimplementar a conta aqui
-        // faria os dois painéis divergirem, então os dois leem o mesmo núcleo.
-        const issCarteira = await montarIssDaCarteira(db, empresas, documentos, porCnpjToId, competencia);
-        // Calendários municipais (coleção pequena: 1 doc por cidade × vigência).
-        // Falha aqui NÃO derruba o painel — sem eles o ISS volta a ser
-        // pendência nomeada, que é o estado de antes.
-        let prazosMunicipais = [];
-        try { prazosMunicipais = await carregarPrazosMunicipais(db); }
-        catch (e) { console.warn('[rotina] calendários municipais indisponíveis:', e.message); }
-
-        // 🚨 QUEM CAPTURA POR A3 (agente local `cfi-a3`) — 202 das 404 da
-        // carteira. UMA leitura da coleção (1 doc por empresa), a mesma que o
-        // 📊 Status já faz. Sem isso a Rotina manda metade da carteira
-        // "destravar a captura" quando o trilho está certo e o que falta é o
-        // agente ter rodado.
-        //
-        // ⚠️ Falha aqui NÃO derruba o painel e NÃO apaga o alarme: sem a
-        // leitura, a etapa volta a acender com a frase genérica — que é o
-        // estado de antes, e é o lado seguro do erro.
-        const empresasA3 = new Set();
-        try {
-            const certSnap = await db.collection('empresas_certificados').select('tipoCert').get();
-            certSnap.forEach((d) => { if (d.data()?.tipoCert === 'A3') empresasA3.add(d.id); });
-        } catch (e) {
-            console.warn('[rotina] tipo de certificado indisponível:', e.message);
-        }
-
-        const rotinas = empresas.map((e) => montarRotinaFiscal({
-            // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
-            // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
-            // tarefa não aparecia em lugar nenhum, e o mês fechava assim mesmo.
-            cobertura: coberturaDoCliente(e, competencia, prazosMunicipais),
-            iss: issCarteira.mapa.get(e.id) || null,
-            dipam: contarProdutoresRurais(docsPorEmpresa.get(e.id) || []),
-            empresa: { id: e.id, nome: e.nome, cnpj: e.cnpj, regime: e.regime },
-            competencia,
-            documentos: docsPorEmpresa.get(e.id) || [],
-            apuracao: acharApuracaoDaCompetencia(e, competencia),
-            tarefas: tarefasPorEmpresa.get(e.id) || [],
-            envios: enviosPorEmpresa.get(e.id) || [],
-            capturaAtiva: e.capturaAtiva,
-            capturaPorAgenteLocal: empresasA3.has(e.id),
-        }));
+        const { rotinas, issCarteira, lidos } = await montarRotinasDaCompetencia(db, empresas, competencia);
 
         // Ordem de trabalho: quem está mais atrás aparece primeiro — é a fila
         // do dia, não uma lista alfabética.
@@ -381,7 +411,7 @@ router.get('/painel', requireAuth, async (req, res) => {
             // diz "N obrigações" sem dizer que M ficaram FORA da conta.
             catalogoPendencias: pendenciasDeConfirmacao(),
             rotinas,
-            lidos: { documentos: documentos.length, tarefas: tarefas.length, envios: envios.length },
+            lidos,
             geradoEm: new Date().toISOString(),
         });
     } catch (e) {

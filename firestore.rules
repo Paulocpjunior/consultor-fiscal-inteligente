@@ -454,6 +454,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // fechamentos_competencia: o "DAR FIM DE MÊS" (26/08). Leitura pra tela,
+    // escrita SÓ pelo backend — e aqui isso É a trava, não higiene: a decisão
+    // do Paulo é que etapa aberta BLOQUEIA, e essa pré-condição é conferida na
+    // rota. Escrita pelo navegador seria o bloqueio inteiro contornável com um
+    // setDoc. Reabrir também é da rota, porque é ato de admin com motivo
+    // escrito — e o número já pode ter sido importado pela contabilidade.
+    match /fechamentos_competencia/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow write: if false;
+    }
+
     // pgdas_atividades_codigos: codigo oficial de atividade do PGDAS-D
     // (ISS fixo/SUP). Vai NA DECLARACAO ao SERPRO — leitura e escrita passam
     // SO pelo backend, que valida o numero contra a declaracao lida.

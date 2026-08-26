@@ -15,9 +15,9 @@
 // ============================================================================
 import { readFileSync } from 'fs';
 import { join } from 'path';
+// O módulo ganhou `.d.ts` em 26/08 (o fim de mês precisou dele no FRONTEND).
 import {
     normalizarCompetencia, competenciaTarefa, formasDaCompetencia,
-// @ts-expect-error — módulo backend .js sem .d.ts
 } from '../sefaz-backend/competencia.js';
 
 const RAIZ = join(__dirname, '..');
