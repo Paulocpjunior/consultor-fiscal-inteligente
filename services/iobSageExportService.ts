@@ -11,6 +11,8 @@ import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
 import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+// O LADO da contraparte tem dono — ver o comentário em `participanteDoDoc`.
+import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -382,9 +384,13 @@ export function participanteDoDoc(d: DocumentoFiscal): ParticipanteNF | null {
     // NOTA PRÓPRIA DE ENTRADA (tpNF=0): o cliente emite a nota da compra
     // (produtor rural PF não emite NF-e) e o fornecedor está no bloco
     // DESTINATÁRIO. Sem isso, o participante seria a própria empresa.
-    const propriaEntrada = String(x.tpNF ?? '') === '0'
-        && onlyDigits(x.cnpjEmit || d.emitente?.cnpjCpf) === onlyDigits(x.empresaCnpj || '');
-    const usaDestinatario = d.direcao === 'saida' || propriaEntrada;
+    // 🚨 O LADO da contraparte tem DONO (26/08, triagem das leituras cruas de
+    // `direcao`). O dono faz o laço que esta cópia já fazia certo: a nota própria de
+    // entrada é emitida PELA EMPRESA, e sem conferir isso o `tpNF=0` de um
+    // TERCEIRO viraria "nossa" nota própria — a contraparte sairia do lado
+    // errado, mostrando o PRÓPRIO cliente como fornecedor.
+    // Ela estava correta — o que muda é deixar de ser a terceira cópia.
+    const usaDestinatario = ladoDaContraparte(d, x.empresaCnpj) === 'destinatario';
     const obj: any = usaDestinatario ? d.destinatario : d.emitente;
 
     const cnpjCpf = onlyDigits(obj?.cnpjCpf || (usaDestinatario ? x.cnpjDest : x.cnpjEmit));

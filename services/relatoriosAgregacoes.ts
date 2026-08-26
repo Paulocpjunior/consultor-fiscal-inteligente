@@ -13,7 +13,7 @@ import { alocarTributacaoIcms } from './iobSageExportService';
 // Ler só o objeto zerava TUDO que depende de "a empresa é a emitente" — foi
 // o que fez "emissão própria 0" em 198 clientes (05/08) e o que fazia este
 // relatório dizer "nenhuma nota emitida" com 436 documentos no recorte.
-import { cnpjEmitente, modeloDoDoc } from '../sefaz-backend/participante-doc-helper.js';
+import { cnpjEmitente, modeloDoDoc, ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // Régua ÚNICA de correlação de CFOP — a mesma do Exportar SAGE e do modal.
 import { correlacionarCfop, cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 // Cancelamento EFETIVO — o status gravado pode mentir (evento 155 não virava o
@@ -65,7 +65,6 @@ const contabilDoc = (d: DocumentoFiscal) => d.totais?.vNF || d.valorTotal || 0;
 
 /** Contraparte (quem não é a empresa): destinatário na saída e na nota própria de entrada. */
 export function contraparteDoc(d: DocumentoFiscal): any {
-    const propriaEntrada = String((d as any).tpNF ?? '') === '0';
     const x = d as any;
     const temLado = (p: any) => !!(p && (p.cnpjCpf || p.cnpj || p.cpf || p.nome || p.razaoSocial));
     // O importer PRINCIPAL grava os participantes em campos CHATOS; sync-routes
@@ -82,7 +81,15 @@ export function contraparteDoc(d: DocumentoFiscal): any {
         nome: x.xNomeDest || x.nomeDest || '',
         ie: x.ieDest || '', uf: x.ufDest || '', codMunIBGE: x.codMunDest || '',
     });
-    return (d.direcao === 'saida' || propriaEntrada) ? destinatario : emitente;
+    // 🚨 QUEM DECIDE O LADO É O DONO, não uma cópia (26/08). A cópia daqui
+    // reconhecia a nota própria de entrada só por `tpNF === '0'`, SEM o laço
+    // que o dono tem — e o comentário do próprio dono já diz por que ele
+    // existe: *"a nota própria de entrada é emitida PELA EMPRESA. Sem esse
+    // laço, o tpNF=0 de um TERCEIRO viraria 'nossa' nota própria — e a
+    // contraparte sairia do lado errado"*. Com dois clientes negociando entre
+    // si (o caso KROYA × GOLDLOG, 17/08), a nota própria de entrada de UM
+    // aparece na base e a coluna mostraria o PRÓPRIO cliente como fornecedor.
+    return ladoDaContraparte(d, (d as any).empresaCnpj) === 'destinatario' ? destinatario : emitente;
 }
 
 // ─── Resumo por CFOP ────────────────────────────────────────────────────────

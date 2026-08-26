@@ -34,6 +34,8 @@
 
 // O DONO da pergunta — a mesma régua que o SPED, o `.FML` e a DIPAM usam.
 import { ehNotaPropriaDeEntrada as ehNotaPropriaDeEntradaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+// O LADO da contraparte tem dono — ver o comentário na função abaixo.
+import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -58,10 +60,13 @@ export function contraparteNormalizada(d: any): { nome: string; doc: string; uf:
         nome: d?.xNomeDest || d?.nomeDest || '',
         uf: d?.ufDest || '',
     });
-    // Na nota PRÓPRIA de entrada (tpNF=0) o cliente é o emitente e a contraparte
-    // está no bloco destinatário — mesma régua da DIPAM.
-    const propriaEntrada = String(d?.tpNF ?? '') === '0';
-    const p = (d?.direcao === 'saida' || propriaEntrada) ? destinatario : emitente;
+    // 🚨 QUEM DECIDE O LADO É O DONO, não uma cópia (26/08). A cópia daqui
+    // reconhecia a nota própria de entrada só por `tpNF === '0'`, SEM o laço
+    // que o dono tem — e o comentário do próprio dono já diz por que ele
+    // existe: *"a nota própria de entrada é emitida PELA EMPRESA. Sem esse
+    // laço, o tpNF=0 de um TERCEIRO viraria 'nossa' nota própria — e a
+    // contraparte sairia do lado errado"*.
+    const p = ladoDaContraparte(d, d?.empresaCnpj) === 'destinatario' ? destinatario : emitente;
     return {
         nome: p?.nome || p?.razaoSocial || '',
         doc: soDigitos(p?.cnpjCpf || p?.cnpj || p?.cpf),
