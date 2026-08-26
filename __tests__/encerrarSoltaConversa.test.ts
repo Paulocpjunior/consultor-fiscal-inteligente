@@ -69,10 +69,37 @@ describe('🚨 e o cliente que VOLTA é atendimento novo', () => {
     });
 });
 
+describe('🚨 a conversa JÁ ENCERRADA se solta ao receber mensagem', () => {
+    // O ✅ Encerrar limpar fila/dono só vale para quem encerrar DAQUI PRA
+    // FRENTE. Toda conversa fechada ANTES da correção ficou com a fila e o
+    // dono grudados — e o galho da triagem só roda sem fila e sem dono. Sem
+    // esta metade, a carteira inteira ficaria muda para sempre: o defeito que
+    // a correção existe para fechar, vivo em todo mundo já atendido uma vez.
+    const trecho = webhook.slice(webhook.indexOf('async function gravarMensagemRecebida')).slice(0, 5000);
+
+    it('resolvida + mensagem nova = fila, dono e sub-menu limpos', () => {
+        expect(trecho).toMatch(/eraResolvida \? \{ fila: null, atribuidoA: null, submenuAberto: null \}/);
+    });
+
+    it('🚨 e a leitura vem ANTES da escrita — senão a prova já foi apagada', () => {
+        // `status: 'aberta'` é escrito nesta mesma chamada. Ler depois
+        // devolveria 'aberta' sempre e a regra nunca dispararia.
+        expect(trecho.indexOf('const eraResolvida')).toBeLessThan(trecho.indexOf("status: 'aberta'"));
+        expect(trecho).toMatch(/eraResolvida = \(\(await convRef\.get\(\)\)\.data\(\) \|\| \{\}\)\.status === 'resolvida'/);
+    });
+
+    it('⚠️ conversa ABERTA não perde o dono — atendimento em andamento continua na mesa', () => {
+        // Limpar aqui tiraria de quem está atendendo a conversa que ele está
+        // atendendo, a cada mensagem que o cliente mandasse.
+        expect(trecho).not.toMatch(/atribuidoA: null,?\s*\n?\s*submenuAberto: null \}\)?\s*,?\s*\n\s*\.\.\./);
+        expect(trecho.match(/atribuidoA: null/g) || []).toHaveLength(1);
+    });
+});
+
 describe('🚨 o selo não pode contradizer o contador', () => {
     it('mensagem do cliente REABRE a conversa', () => {
         const trecho = webhook.slice(webhook.indexOf('async function gravarMensagemRecebida'));
-        expect(trecho.slice(0, 3500)).toMatch(/status: 'aberta'/);
+        expect(trecho.slice(0, 5000)).toMatch(/status: 'aberta'/);
     });
 
     it('⚠️ MENOS a resposta da PESQUISA — ela é a última linha do que fechou', () => {
@@ -84,6 +111,6 @@ describe('🚨 o selo não pode contradizer o contador', () => {
 
     it('e `resolvidaPor` NÃO é apagado — quem fechou o anterior é histórico', () => {
         const trecho = webhook.slice(webhook.indexOf('async function gravarMensagemRecebida'));
-        expect(trecho.slice(0, 3500)).not.toMatch(/resolvidaPor: null/);
+        expect(trecho.slice(0, 5000)).not.toMatch(/resolvidaPor: null/);
     });
 });
