@@ -91,10 +91,14 @@ describe('🚨 script sem caminho é script que não existe', () => {
         expect(doc).toMatch(/sbc-diagnostico\.sh/);
     });
 
-    it('a saída ENSINA a ler — as três conclusões possíveis, com a ação', () => {
-        expect(script).toMatch(/INVITE presente/);
-        expect(script).toMatch(/INVITE ausente E gravador ligado/);
-        expect(script).toMatch(/INVITE ausente E gravador desligado/);
+    it('a saída CONCLUI — e a conclusão vem com a ação', () => {
+        // ⚠️ ESTE TESTE PRENDIA AS FRASES DO "COMO LER" e reprovou a própria
+        // correção que a régua mandava fazer: aquele rodapé ENSINAVA a
+        // concluir, e os fatos para concluir ficavam fora do print. Trocado
+        // pela INTENÇÃO — existe uma conclusão, e ela diz o que fazer.
+        expect(script).toMatch(/VEREDITO/);
+        expect(script).toMatch(/A META ENTREGA/);
+        expect(script).toMatch(/NÃO DÁ PARA CONCLUIR/);
     });
 });
 
@@ -127,5 +131,54 @@ describe('🚨 a instrução leva a pessoa até a máquina certa', () => {
     it('o próprio script avisa que são duas máquinas', () => {
         expect(script).toMatch(/SÃO DUAS MÁQUINAS/);
         expect(script).toMatch(/gcloud compute ssh sbc-whatsapp/);
+    });
+});
+
+// ============================================================================
+// 🚨 O VEREDITO FICA NO FIM — é o fim que sobrevive ao print
+//
+// 26/08, 2ª rodada: o Paulo rodou certo, pela VM, e mandou o print — com as
+// seções 1, 2 e 3 FORA DA TELA. Só sobrou o "0 linhas com INVITE". E esse zero
+// sozinho é exatamente a armadilha de 25/08: sem saber se o gravador estava
+// ligado e se o log alcança a hora da tentativa, ele não significa nada.
+//
+// O "COMO LER" no rodapé não bastava: ele ENSINAVA a concluir, e os fatos para
+// concluir tinham rolado para cima. Ferramenta de diagnóstico que depende de
+// rolagem não responde — ela CONCLUI, no lugar onde a pessoa olha, e diz junto
+// o que a conclusão ASSUME.
+// ============================================================================
+describe('🚨 o veredito conclui sozinho, e no fim', () => {
+    const veredito = script.slice(script.indexOf('VEREDITO'));
+
+    it('está DEPOIS de todas as seções — é o que sobra num print', () => {
+        expect(script.indexOf('VEREDITO')).toBeGreaterThan(script.indexOf('Alguma recusa nossa'));
+    });
+
+    it('os QUATRO desfechos são decididos por ele, não pelo leitor', () => {
+        expect(veredito).toMatch(/NÃO CONSEGUI OLHAR/);      // rodou no Mac
+        expect(veredito).toMatch(/NÃO DÁ PARA CONCLUIR/);    // gravador off
+        expect(veredito).toMatch(/A META ENTREGA/);          // achou INVITE
+        expect(veredito).toMatch(/NENHUM INVITE na janela/); // zero, gravador on
+    });
+
+    it('🚨 e o desfecho "a Meta não entrega" DIZ o que ele assume', () => {
+        // Sem a janela do log ao lado, seria carimbar prova não medida.
+        expect(veredito).toMatch(/só vale se a hora da/);
+        expect(veredito).toMatch(/\$\{LOG_DE:-\?\}/);
+    });
+
+    it('rodou no lugar errado? o veredito devolve o COMANDO certo', () => {
+        // Em vez de repetir "rode dentro do SBC", que foi o que já falhou.
+        expect(veredito).toMatch(/gcloud compute ssh sbc-whatsapp/);
+    });
+
+    it('⚠️ e sem CDR ele SEGURA a conclusão — o log vira testemunha única', () => {
+        expect(veredito).toMatch(/CDR NÃO existe nesta VM/);
+        expect(veredito).toMatch(/cdr show status/);
+    });
+
+    it('os caminhos são sobrescrevíveis — é o que permite PROVAR os quatro', () => {
+        expect(script).toMatch(/LOG_FULL="\$\{LOG_FULL:-/);
+        expect(script).toMatch(/LOGGER_CONF="\$\{LOGGER_CONF:-/);
     });
 });

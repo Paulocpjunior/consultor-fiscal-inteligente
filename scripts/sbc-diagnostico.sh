@@ -38,8 +38,13 @@
 # ============================================================================
 set -uo pipefail
 
-LOG_FULL="/var/log/asterisk/full"
-CDR_CSV="/var/log/asterisk/cdr-csv/Master.csv"
+# Caminhos sobrescrevíveis por env — é o que permite PROVAR os quatro
+# desfechos do veredito sem um Asterisk na mão. Em produção ninguém passa nada
+# e valem os padrões.
+LOG_FULL="${LOG_FULL:-/var/log/asterisk/full}"
+CDR_CSV="${CDR_CSV:-/var/log/asterisk/cdr-csv/Master.csv}"
+LOGGER_CONF="${LOGGER_CONF:-/etc/asterisk/logger.conf}"
+ASTERISK_CONF="${ASTERISK_CONF:-/etc/asterisk/asterisk.conf}"
 JANELA="${1:-}"
 HOJE="$(date +%Y-%m-%d)"
 
@@ -59,13 +64,13 @@ else
     echo "   ✗ NÃO existe $LOG_FULL — o Asterisk não está escrevendo log completo."
     GRAVANDO="nao"
 fi
-if grep -qs '^full =>.*verbose' /etc/asterisk/logger.conf; then
+if grep -qs '^full =>.*verbose' "$LOGGER_CONF"; then
     echo "   ✓ logger.conf manda verbose para o 'full'"
 else
     echo "   ✗ logger.conf SEM verbose no 'full' — a linha do dialplan não é escrita."
     GRAVANDO="nao"
 fi
-if grep -qs '^verbose' /etc/asterisk/asterisk.conf; then
+if grep -qs '^verbose' "$ASTERISK_CONF"; then
     echo "   ✓ verbose persistido no asterisk.conf (sobrevive a restart)"
 else
     echo "   ⚠ verbose NÃO está no asterisk.conf — 'core set verbose' some no restart."
@@ -82,9 +87,12 @@ fi
 # tentativa, "0 INVITEs" responde outra pergunta.
 echo
 echo "── 2. Até onde este log alcança"
+LOG_DE=""; LOG_ATE=""
 if [ -f "$LOG_FULL" ]; then
-    echo "   de : $(head -n 1 "$LOG_FULL" 2>/dev/null | cut -c1-30)"
-    echo "   até: $(tail -n 1 "$LOG_FULL" 2>/dev/null | cut -c1-30)"
+    LOG_DE="$(head -n 1 "$LOG_FULL" 2>/dev/null | cut -c1-30)"
+    LOG_ATE="$(tail -n 1 "$LOG_FULL" 2>/dev/null | cut -c1-30)"
+    echo "   de : $LOG_DE"
+    echo "   até: $LOG_ATE"
     echo "   ⚠️  Se a hora da ligação estiver FORA desta janela, o resultado"
     echo "      abaixo não responde nada — houve rotação de log."
 fi
@@ -108,6 +116,7 @@ echo "── 4. Chegou INVITE${JANELA:+ na janela \"$JANELA\"}?"
 FILTRO="${JANELA:-$HOJE}"
 if [ -f "$LOG_FULL" ]; then
     ACHADOS=$(grep -i "INVITE" "$LOG_FULL" 2>/dev/null | grep -c "$FILTRO" || true)
+    TEM_LOG="sim"
     echo "   $ACHADOS linha(s) com INVITE casando \"$FILTRO\""
     grep -i "INVITE" "$LOG_FULL" 2>/dev/null | grep "$FILTRO" | tail -20 | sed 's/^/   /'
     if [ "$ACHADOS" = "0" ] && [ "$GRAVANDO" = "nao" ]; then
@@ -159,12 +168,41 @@ if [ "${1:-}" = "--ao-vivo" ]; then
     echo "   Para desarmar:  sudo asterisk -rx 'pjsip set logger off'"
 fi
 
+# ── VEREDITO ────────────────────────────────────────────────────────────────
+# 🚨 ELE FICA NO FIM, E CONCLUI SOZINHO — não ensina a concluir. Em 26/08 a
+# saída chegou por print com as seções 1-3 fora da tela, e sem elas o "0
+# INVITEs" é exatamente a armadilha de 25/08. O fim é o que sobrevive ao
+# print e à rolagem, então é lá que a resposta tem de estar — junto do que
+# ela ASSUME, para ninguém carimbar prova que não foi medida.
 echo
 echo "════════════════════════════════════════════════════════════════"
-echo "COMO LER:"
-echo "  · INVITE presente  → a Meta ENTREGA. O problema é nosso (roteamento"
-echo "                       para o ramal), e a seção 6 costuma dizer qual."
-echo "  · INVITE ausente E gravador ligado → a Meta NÃO entrega. Este é o"
-echo "                       fato que falta no chamado (docs/sbc-whatsapp-hitphone.md)."
-echo "  · INVITE ausente E gravador desligado → não conclua nada. Ligue e refaça."
+echo "VEREDITO"
+if [ "${TEM_LOG:-nao}" != "sim" ]; then
+    echo "  ⚪ NÃO CONSEGUI OLHAR — não há log do Asterisk nesta máquina."
+    echo "     Você rodou no lugar errado: isto tem de rodar DENTRO da VM."
+    echo "     cd ~/consultor-fiscal-inteligente && gcloud compute ssh sbc-whatsapp \\"
+    echo "       --project=consultorfiscalapp --zone=us-west1-a \\"
+    echo "       --command='sudo bash -s -- ${JANELA:-09:3}' < scripts/sbc-diagnostico.sh"
+elif [ "$GRAVANDO" = "nao" ]; then
+    echo "  ⚪ NÃO DÁ PARA CONCLUIR — o gravador estava DESLIGADO."
+    echo "     Zero INVITE aqui não é 'não chegou', é 'não foi anotado' (lição"
+    echo "     de 25/08). Ligue o gravador, refaça a ligação e rode de novo."
+elif [ "${ACHADOS:-0}" != "0" ]; then
+    echo "  🔴 A META ENTREGA — chegou INVITE ($ACHADOS linha(s) na janela)."
+    echo "     Então o problema é NOSSO: roteamento até o ramal. Olhe a seção 6"
+    echo "     (recusas) e a seção 3 (o endpoint casou?). NÃO é caso de Meta."
+else
+    echo "  🟡 NENHUM INVITE na janela, com o gravador LIGADO."
+    echo "     Isso aponta para a Meta não entregar — MAS só vale se a hora da"
+    echo "     tentativa estiver dentro do log, que vai de:"
+    echo "       ${LOG_DE:-?}"
+    echo "       ${LOG_ATE:-?}"
+    echo "     Estando dentro, é ESTE o fato que falta no chamado da Meta"
+    echo "     (texto pronto em docs/sbc-whatsapp-hitphone.md)."
+    if [ ! -f "$CDR_CSV" ]; then
+        echo "  ⚠️  E o CDR NÃO existe nesta VM — ele é a prova que não depende de"
+        echo "     verbose, e sem ele o log é a única testemunha. Vale conferir"
+        echo "     'cdr show status' no Asterisk antes de fechar a conclusão."
+    fi
+fi
 echo "════════════════════════════════════════════════════════════════"
