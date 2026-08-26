@@ -1,4 +1,4 @@
-# Fontes oficiais do EFD ICMS/IPI — texto extraído
+# Fontes oficiais do SPED — texto extraído
 
 Paulo mandou os dois documentos em WORD em **20/08/2026**, depois de os links
 não abrirem: a rede deste ambiente recusa qualquer domínio externo (gov.br,
@@ -51,3 +51,45 @@ ou procure por `REGISTRO C100:` / `Campo 04 (COD_PART)`.
 tabela virou ` | ` entre células, então a leitura é boa para as regras em prosa
 (que é o que interessa) e imprecisa para contagem de campos. Onde a contagem
 importar, o gabarito continua sendo **arquivo aceito pelo PVA**.
+
+---
+
+# EFD-Contribuições — as fontes chegaram em 25/08/2026
+
+Paulo mandou os dois em WORD, depois de um dia inteiro no qual **eu citei o Guia
+do EFD ICMS/IPI para argumentar sobre o EFD-Contribuições** — o erro do 1010 e
+do 0500 (mesmo registro, arquivo diferente, leiaute diferente), desta vez meu.
+
+| Arquivo | O que é |
+|---|---|
+| `guia-pratico-efd-contribuicoes-1.35.txt` | **Guia Prático da EFD-Contribuições, versão 1.35 (18/06/2021)** — PIS/Pasep, Cofins e CPRB. Por registro: descrição dos campos, obrigatoriedade e as **Validações**. |
+| `manual-efd-contribuicoes-lucro-presumido-pva-2.04.txt` | **Manual de Escrituração para PJ do Lucro Presumido, PVA 2.04** — descreve como o PVA se comporta, que é a régua prática (Paulo: *"assim temos um parâmetro de como eles analisam, e usamos a mesma base do PVA dele"*). |
+
+## O que estes documentos responderam no MESMO dia
+
+- 🚨 **`VL_REC_BRT` do M210 é a Σ VL_ITEM dos C170.** Campo 03, *Validação*:
+  *"o valor do campo será igual à soma dos seguintes campos … VL_ITEM dos
+  registros C170 … [IND_OPER do C100 = 1]"*. Era a resposta dos **cinco dias**
+  da PWR: o arquivo dizia 37.754,60 e o PVA insistia em 38.316,84 porque é esta
+  a soma que ele valida.
+- 🚨 **`VL_ITEM` (C170 campo 07) é BRUTO** — *"somente o valor das mercadorias
+  (equivalente à quantidade vezes preço unitário)"* —, com a validação *"a soma
+  de valores dos registros C170 deve ser igual ao valor informado no campo
+  VL_MERC do registro C100"*. Isso **desmentiu** a correção que eu tinha
+  acabado de subir (VL_ITEM líquido), e ela foi revertida.
+- 🚨 **Seção 12 — onde entra cada exclusão**, em tabela: no **C170**, *exclusão
+  do ICMS* → **campo 15 (VL_ICMS)** e *descontos incondicionais* → **campo 08
+  (VL_DESC)**. É de lá que o PVA monta a base.
+- ✅ **O `VL_BC_CONT` do M210 é RECUPERADO do `VL_BC_PIS`** dos blocos A/C/D/F
+  com o mesmo CST — o que explica a base 30.958,77 na tela da Sandra.
+- ✅ **O PVA gera o bloco M sozinho**: *"O PVA, versão 2.04, gera automaticamente
+  os registros consolidadores do Bloco M: M200, M600, M400 e M800, bem como o
+  P200"* (Manual do Lucro Presumido). Escrever outro valor no campo é escrever
+  onde ele sobrescreve.
+- ✅ **A contribuição sai da base × alíquota, nunca do destacado no documento**:
+  *"O cálculo do valor da contribuição … é efetuado mediante a multiplicação dos
+  campos de base de cálculo totalizados no bloco M e as respectivas alíquotas"*.
+
+📌 **REGRA QUE FICA: antes de citar uma validação, conferir de QUAL família é o
+Guia.** As duas famílias têm registros com o mesmo número e regras diferentes, e
+agora as duas fontes estão aqui — não há mais desculpa para deduzir.

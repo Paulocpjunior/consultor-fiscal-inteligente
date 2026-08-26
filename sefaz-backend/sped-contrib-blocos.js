@@ -542,19 +542,28 @@ export function buildBlocoC_Contrib(dados) {
             ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
             : '';
 
-        // 🚨 O VL_MERC SAI LÍQUIDO DO DESCONTO INCONDICIONAL (Paulo, 25/08,
-        // PWR: *"o valor da receita não pode ser esses 38.316,84 e sim
-        // 37.754,60 conforme a ficha financeira — tem que ajustar no C100"*).
-        // A receita que o PVA mostra no M210 vem dos DOCUMENTOS, então
-        // enquanto o C100 declarar a mercadoria CHEIA ela sai bruta por
-        // construção. O `VL_DESC` continua informado, dizendo quanto foi
-        // tirado — e o `VL_ITEM` do C170 usa a MESMA régua, senão a soma dos
-        // filhos deixaria de fechar com o pai.
+        // 🚨 O VL_MERC É O VALOR DAS MERCADORIAS — BRUTO. Guia Prático da
+        // EFD-Contribuições 1.35, C170 campo 07: *"informar o valor total do
+        // item/produto, somente o valor das mercadorias (equivalente à
+        // quantidade vezes preço unitário) ou do serviço"*, com a validação
+        // *"a soma de valores dos registros C170 deve ser igual ao valor
+        // informado no campo VL_MERC do registro C100"*.
+        //
+        // ⚠️ O DESCONTO TEM CAMPO PRÓPRIO, e é a Seção 12 do Guia que diz qual:
+        // no C170, *descontos incondicionais* → campo 08 (VL_DESC) e *exclusão
+        // do ICMS* → campo 15 (VL_ICMS). É de lá que o PVA tira a BASE. Baixar
+        // o VL_ITEM para o líquido (o que este arquivo chegou a fazer em 25/08)
+        // contraria o campo 07 E quebra a validação do campo 03 do M210 — duas
+        // recusas no lugar de uma divergência de tela.
+        //
+        // 📌 O rateio continua servindo ao VL_DESC: quando o desconto vem só no
+        // TOTAL do documento, cada item precisa levar a parte dele, senão o PVA
+        // não tem de onde reduzir a base daquele item.
         const liquidosDosItens = valoresLiquidosDosItens(nota);
         const descontosPorItem = descontosDosItens(nota);
         let vProd = 0, vDesc = 0, vPis = 0, vCofins = 0;
         (nota.itens || []).forEach((item, k) => {
-            vProd += liquidosDosItens[k] || 0;
+            vProd += parseFloat(item.vProd || item.valor || 0) || 0;
             vDesc += descontosPorItem[k] || 0;
             vPis += parseFloat(item.vPIS || 0);
             vCofins += parseFloat(item.vCOFINS || 0);
@@ -652,10 +661,11 @@ export function buildBlocoC_Contrib(dados) {
         // ═══════════════════════════════════════════════════════════════════
         if (!levaC170NoContribuicoes(nota)) continue;
         (nota.itens || []).forEach((item, k) => {
-            // ⚠️ MESMA RÉGUA DO VL_MERC: o item entra líquido do desconto
-            // incondicional, e o desconto vai no campo próprio.
+            // ⚠️ VL_ITEM é BRUTO (Guia, campo 07: quantidade × preço unitário)
+            // e o desconto vai no campo 08 — é dali que o PVA reduz a base.
             const descontoItem = descontosPorItem[k] || 0;
-            const vlItem = liquidosDosItens[k] || 0;
+            const vlItem = parseFloat(item.vProd || item.valor || 0) || 0;
+            const liquidoDoItem = liquidosDosItens[k] || 0;
             const cfopLancado = convertCfopParaEntrada(
                 item.cfop || item.CFOP || '0000', direcao, dados, nota,
             );
@@ -666,7 +676,7 @@ export function buildBlocoC_Contrib(dados) {
             // ⚠️ A BASE lê o MESMO líquido: com o desconto lançado só no total
             // do documento, `baseDoItem(item)` não o enxergaria e a base sairia
             // cheia — o registro se desmentiria dentro da própria linha.
-            const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, vlItem);
+            const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem);
 
             linhas.push(fmt.buildLine([
                 'C170',
@@ -1143,20 +1153,28 @@ export function buildBlocoM(dados) {
         // declarava PIS/COFINS a pagar sobre uma COMPRA.
         if (direcaoEfetivaDoc(nota) === 'saida') {
             totalBcSaida += rb.base;
-            // 🚨 A RECEITA DO M210 É A LÍQUIDA — a mesma da FICHA FINANCEIRA.
+            // 🚨 VL_REC_BRT = Σ VL_ITEM DOS C170 — e não é dedução: é a
+            // VALIDAÇÃO oficial do campo, no Guia Prático 1.35, M210 campo 03.
             //
-            // Paulo, 25/08 (PWR 1364 · 07/2026): *"o valor da receita não pode
-            // ser esses 38.316,84 e sim 37.754,60 conforme a ficha financeira.
-            // Tem que ajustar no C100."*
+            // *"Campo 03 - Preenchimento: informar o valor da receita bruta
+            // auferida no período… Validação: quando o COD_CONT for igual a 01,
+            // 51, 02, 52, 31 ou 32, o valor do campo será igual à soma dos
+            // seguintes campos: … VL_ITEM dos registros C170 … [IND_OPER = 1]"*
             //
-            // ⚠️ E ESCREVER AQUI NÃO BASTAVA — foi o que custou a semana. O PVA
-            // RECALCULA o M210 a partir dos documentos (medido: a tela dele
-            // trazia Σ VL_ITEM dos C170 e Σ VL_BC_PIS, não os campos que a
-            // gente escrevia). Por isso a correção mora no C100/C170: o
-            // `VL_MERC` e o `VL_ITEM` saem líquidos do desconto incondicional,
-            // com o `VL_DESC` informado ao lado. Aí os dois lados dizem
-            // 37.754,60 — o arquivo e a tela do PVA.
-            totalReceitaSaida += rb.receita;
+            // Foi isto que custou cinco dias na PWR (07/2026). O arquivo dizia
+            // 37.754,60 e a tela do PVA insistia em 38.316,84 — porque 38.316,84
+            // é a soma dos VL_ITEM, que é o que a Receita valida neste campo.
+            // Sandra apagou a base inteira do PVA e reimportou: o número não
+            // mudou. O PVA regera o bloco M (Manual do Lucro Presumido, PVA
+            // 2.04: *"o PVA gera automaticamente os registros consolidadores do
+            // Bloco M"*), então escrever outro valor aqui é escrever num campo
+            // que ele sobrescreve — e sobrescreve com o valor CERTO.
+            //
+            // ✅ E O DESCONTO NÃO SE PERDE: ele sai no campo 08 (VL_DESC) de
+            // cada C170, como manda a Seção 12, e reduz a BASE — que é onde ele
+            // reduz tributo. Na PWR: 38.316,84 − 562,24 − 6.795,83 (ICMS) =
+            // 30.958,77, e é sobre esses 30.958,77 que a guia é paga.
+            totalReceitaSaida += rb.receitaBruta;
             icmsExcluido += rb.icms;
             if (rb.desconto > 0) { descontoExcluido += rb.desconto; docsComDesconto += 1; }
             // ⚠️ O VALOR APURADO SEGUE A BASE, não o destacado no documento. O
@@ -1215,12 +1233,13 @@ export function buildBlocoM(dados) {
     // responde lendo o código — e há empresa com desconto em quase toda nota.
     if (descontoExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
-            `Receita do M210/M610: o DESCONTO incondicional está FORA — bruta `
-            + `${(totalReceitaSaida + descontoExcluido).toFixed(2)} − desconto ${descontoExcluido.toFixed(2)} `
-            + `= ${totalReceitaSaida.toFixed(2)} (${docsComDesconto} documento(s) com desconto). `
-            + 'Ele sai já no C100/C170 — VL_MERC e VL_ITEM líquidos, com o VL_DESC informado ao lado —, '
-            + 'porque o PVA recalcula o M210 a partir dos documentos: corrigir só o M210 não chegava na '
-            + 'tela dele. Confira o "Valor total das mercadorias e serviços" do C100 no PVA.',
+            `Desconto incondicional: ${docsComDesconto} documento(s), total `
+            + `${descontoExcluido.toFixed(2)}. Ele NÃO sai do VL_REC_BRT do M210/M610 — o Guia 1.35 valida `
+            + `esse campo como a soma dos VL_ITEM dos C170, e é por isso que o PVA mostra `
+            + `${totalReceitaSaida.toFixed(2)}. O desconto sai no campo 08 (VL_DESC) de cada C170, como manda `
+            + `a Seção 12, e reduz a BASE: ${totalReceitaSaida.toFixed(2)} − ${descontoExcluido.toFixed(2)} `
+            + `− ${icmsExcluido.toFixed(2)} de ICMS = ${totalBcSaida.toFixed(2)}, que é sobre o que a guia é `
+            + 'paga. Confira a BASE do M210 no PVA, não a receita.',
         );
     }
 
