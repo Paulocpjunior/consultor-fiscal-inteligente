@@ -25,7 +25,10 @@ import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
     serieDoDocumento, codItemDoItem, unidadeDoItem, levaC170NoContribuicoes,
+    codSitDoDocumento,
 } from './sped-selecao-documentos.js';
+// 🚨 Quem decide o que entra no bloco D — e o que fica de fora, com a CAUSA.
+import { cadastroDoFreteContratado, decidirFreteNoBlocoD, avisosDoBlocoD } from './frete-contratado-bloco-d.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import {
     modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc,
@@ -726,28 +729,46 @@ export function buildBlocoC_Contrib(dados) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// BLOCO D — Transporte (CTe modelo 57)
+// BLOCO D — Aquisição de serviço de TRANSPORTE (CT-e modelo 57)
 // ═══════════════════════════════════════════════════════════════════════
+//
+// 🚨 O BLOCO D NÃO É "O CT-e DO MÊS" — é a aquisição de frete COM DIREITO A
+// CRÉDITO, e o gerador tratava como se fosse o primeiro. Quem decide o que
+// entra é `decidirFreteNoBlocoD` (o dono, com as duas fontes citadas lá):
+// prestação vai ao D200, regime cumulativo não tem bloco D, e os três códigos
+// de tabela oficial vêm do CADASTRO.
+//
+// 🚨 E O LEIAUTE ESTAVA DESLOCADO A PARTIR DO CAMPO 13. O gerador montava 20
+// campos onde o Guia 1.35 lista **23**, e o `VL_DOC` caía na casa do
+// **TP_CT-e**: o arquivo declarava o valor do frete num campo de UM dígito e
+// deixava o valor do documento VAZIO. PIS e COFINS iam para IND_FRT, VL_SERV,
+// VL_BC_ICMS e VL_ICMS — registros de ICMS, que não os carregam.
+//
+// 📖 Guia Prático 1.35, D101: *"Para cada documento informado e relacionado em
+// cada registro D100, obrigatoriamente deve ser apresentado o detalhamento
+// das informações, por item do documento, referentes ao PIS/Pasep (D101) e à
+// Cofins (D105)"* — e nenhum dos dois era emitido.
 
+/**
+ * Bloco D — aquisições de serviço de transporte que dão direito a crédito.
+ *
+ * Cada D100 sai com os **23 campos** do leiaute e com os filhos D101 (PIS) e
+ * D105 (Cofins), de 9 campos cada.
+ */
 export function buildBlocoD_Contrib(dados) {
     const linhas = [];
     // Modelo pela RÉGUA (o campo cru não existe em documento capturado).
     const notasD = selecionarCtesBlocoD(dados.notas);
-
-    if (notasD.length === 0) {
-        linhas.push(fmt.buildLine(['D001', '1']));
-        linhas.push(fmt.buildLine(['D990', '2']));
-        return linhas;
-    }
-
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
+    const cadastro = cadastroDoFreteContratado(dados.empresa?.dadosFiscais);
 
-    linhas.push(fmt.buildLine(['D001', '0']));
-    linhas.push(fmt.buildLine(['D010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
-
+    /** CT-e que ficou de fora, agrupado pela CAUSA — cada uma pede outra ação. */
+    const foraPorMotivo = {};
     /** CT-e sem valor legível: sai NOMEADO, como no bloco A. */
     const valorZeroD = [];
+    const escriturados = [];
+
     for (const notaCrua of notasD) {
         if (docCancelado(notaCrua)) continue;
         // As MESMAS três réguas do bloco A — este bloco tinha as três leituras
@@ -760,46 +781,114 @@ export function buildBlocoD_Contrib(dados) {
         //   · participante só na forma ANINHADA — a captura grava achatado.
         const nota = normalizarParticipantesDoc(notaCrua);
         const direcao = direcaoEfetivaDoc(nota);
-        const indOper = direcao === 'saida' ? '1' : '0';
-        const indEmit = direcao === 'saida' ? '0' : '1';
+        const rotulo = String(nota.numero || nota.chaveAcesso || nota.chave || '(sem número)');
 
+        const decisao = decidirFreteNoBlocoD({ direcao, regimeApuracao, cadastro });
+        if (!decisao.entra) {
+            (foraPorMotivo[decisao.motivo] ||= []).push(rotulo);
+            continue;
+        }
+
+        const vlDoc = valorDoDocumentoServico(nota);
+        // Zero num campo de valor é AFIRMAÇÃO, e o PVA recusa D100 zerado.
+        // Documento sem valor em forma nenhuma sai da base, nomeado.
+        if (!Number.isFinite(vlDoc) || vlDoc <= 0) { valorZeroD.push(rotulo); continue; }
+
+        escriturados.push({ nota, direcao, vlDoc, decisao });
+    }
+
+    if (escriturados.length === 0) {
+        linhas.push(fmt.buildLine(['D001', '1']));
+        empilharAvisosDoBlocoD(dados, foraPorMotivo, valorZeroD);
+        linhas.push(fmt.buildLine(['D990', '2']));
+        return linhas;
+    }
+
+    linhas.push(fmt.buildLine(['D001', '0']));
+    linhas.push(fmt.buildLine(['D010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
+
+    for (const { nota, direcao, vlDoc, decisao } of escriturados) {
         const participanteRaw = direcao === 'saida'
             ? (nota.destinatario || nota.tomador)
             : (nota.emitente || nota.prestador);
         const codPart = participanteRaw
             ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || '').replace(/\D/g, '')
             : '';
+        // A MESMA leitura do C100 vizinho — `formatDate` lê o dia do TEXTO do
+        // documento, nunca de conversão de fuso (22/08).
+        const dataDoc = fmt.formatDate(nota.dataEmissao || nota.dhEmi);
 
-        const vlDoc = valorDoDocumentoServico(nota);
-        // Zero num campo de valor é AFIRMAÇÃO, e o PVA recusa D100 zerado.
-        // Documento sem valor em forma nenhuma sai da base, nomeado.
-        if (!Number.isFinite(vlDoc) || vlDoc <= 0) {
-            valorZeroD.push(String(nota.numero || nota.chave || '(sem número)'));
-            continue;
-        }
-        const vlPis = vlDoc * aliq.pis;
-        const vlCofins = vlDoc * aliq.cofins;
-
+        // 📖 Guia 1.35, D100 — os 23 campos, na ordem. O campo 14 (CHV_CTE_REF)
+        // sai VAZIO por determinação do próprio Guia: *"Não preencher, informar
+        // campo 'vazio'"*.
         linhas.push(fmt.buildLine([
-            'D100',
-            indOper, indEmit, codPart,
-            '57', '00',
+            'D100',                                              // 01 REG
+            // 📖 Campo 02 — valor válido: [0]. Aquisição, e só.
+            '0',                                                 // 02 IND_OPER
+            // Emissão do transportador (terceiros). O CT-e de emissão PRÓPRIA
+            // é prestação, e prestação nem chega aqui.
+            '1',                                                 // 03 IND_EMIT
+            codPart,                                             // 04 COD_PART
+            '57',                                                // 05 COD_MOD
+            codSitDoDocumento(nota),                             // 06 COD_SIT
             // SER pela régua — o '1' cravado inventava a série de todo CT-e
             // que chegasse sem o campo; a chave carrega a série (23-25).
-            serieDoDocumento(nota),
-            '',
-            fmt.sanitizeString(nota.numero || '', 9),
-            fmt.sanitizeString(nota.chaveAcesso || nota.chave || '', 44),
-            fmt.formatDate(nota.dataEmissao || nota.dhEmi),
-            fmt.formatDate(nota.dataEmissao || nota.dhEmi),
-            fmt.formatValue(vlDoc),
-            '', '', '',
-            fmt.formatValue(vlDoc), fmt.formatValue(vlPis),
-            fmt.formatValue(vlDoc), fmt.formatValue(vlCofins),
+            serieDoDocumento(nota),                              // 07 SER
+            '',                                                  // 08 SUB
+            fmt.sanitizeString(nota.numero || '', 9),            // 09 NUM_DOC
+            fmt.sanitizeString(nota.chaveAcesso || nota.chave || '', 44), // 10 CHV_CTE
+            dataDoc,                                             // 11 DT_DOC
+            dataDoc,                                             // 12 DT_A_P
+            '',                                                  // 13 TP_CT-e
+            '',                                                  // 14 CHV_CTE_REF
+            fmt.formatValue(vlDoc),                              // 15 VL_DOC
+            '',                                                  // 16 VL_DESC
+            decisao.indFrt,                                      // 17 IND_FRT
+            // O CT-e É o serviço: o valor do documento é o da prestação.
+            fmt.formatValue(vlDoc),                              // 18 VL_SERV
+            valorOuVazio(nota.vBC ?? nota.vBcIcms ?? nota.valorBaseIcms),  // 19 VL_BC_ICMS
+            valorOuVazio(nota.vICMS ?? nota.valorIcms),          // 20 VL_ICMS
+            '',                                                  // 21 VL_NT
+            '',                                                  // 22 COD_INF
+            '',                                                  // 23 COD_CTA
         ]));
+
+        // 📖 D101/D105 — 9 campos cada. A base do crédito é o valor do frete;
+        // sem crédito (CST 70) base, alíquota e valor saem ZERADOS, e aí o zero
+        // É a resposta ("não há crédito"), não um default de quem não achou.
+        const comCredito = decisao.comCredito;
+        const filho = (reg, aliquota) => linhas.push(fmt.buildLine([
+            reg,                                                 // 01 REG
+            decisao.indNatFrete,                                 // 02 IND_NAT_FRT
+            fmt.formatValue(vlDoc),                              // 03 VL_ITEM
+            decisao.cst,                                         // 04 CST_*
+            decisao.natBcCred,                                   // 05 NAT_BC_CRED
+            fmt.formatValue(comCredito ? vlDoc : 0),             // 06 VL_BC_*
+            fmt.formatValue(comCredito ? aliquota * 100 : 0, 4), // 07 ALIQ_*
+            fmt.formatValue(comCredito ? vlDoc * aliquota : 0),  // 08 VL_*
+            '',                                                  // 09 COD_CTA
+        ]));
+        filho('D101', aliq.pis);
+        filho('D105', aliq.cofins);
     }
 
-    if (valorZeroD.length && Array.isArray(dados.warnings)) {
+    empilharAvisosDoBlocoD(dados, foraPorMotivo, valorZeroD);
+
+    const totalBloco = linhas.length + 1;
+    linhas.push(fmt.buildLine(['D990', totalBloco]));
+    return linhas;
+}
+
+/** Campo de valor OPCIONAL: ausência sai VAZIA, nunca como 0,00 afirmado. */
+function valorOuVazio(v) {
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n > 0 ? fmt.formatValue(n) : '';
+}
+
+function empilharAvisosDoBlocoD(dados, foraPorMotivo, valorZeroD) {
+    if (!Array.isArray(dados.warnings)) return;
+    for (const aviso of avisosDoBlocoD(foraPorMotivo)) dados.warnings.push(aviso);
+    if (valorZeroD.length) {
         dados.warnings.push(
             `Bloco D: ${valorZeroD.length} CT-e ficaram FORA porque o valor não foi encontrado em forma `
             + `nenhuma — nº ${valorZeroD.slice(0, 10).join(', ')}`
@@ -808,10 +897,6 @@ export function buildBlocoD_Contrib(dados) {
             + 'Reimporte o XML do CT-e (o valor mora em <vTPrest>) ou rode o ♻️ antes de transmitir.',
         );
     }
-
-    const totalBloco = linhas.length + 1;
-    linhas.push(fmt.buildLine(['D990', totalBloco]));
-    return linhas;
 }
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -11,6 +11,12 @@ import { CloseIcon, BuildingIcon } from './Icons';
 import { sanitizarDadosFiscais } from '../services/empresaDadosFiscaisSanitize';
 import { buscarCep } from '../services/cepService';
 import { listarContadores, salvarContador, type Contador } from '../services/contadoresService';
+// As tabelas do frete contratado vêm do DONO no backend — reescrevê-las aqui
+// seria a segunda cópia de uma tabela oficial, que é o defeito que esta casa
+// mais paga (lição do IVA-ST e do catálogo de CFOP).
+import {
+    INDICADORES_NATUREZA_FRETE, INDICADORES_TIPO_FRETE,
+} from '../sefaz-backend/frete-contratado-bloco-d';
 
 interface Props {
     isOpen: boolean;
@@ -381,6 +387,56 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 value={dados.contrib1900CodSit || ''}
                                 onChange={v => handleField('contrib1900CodSit', v)}
                                 placeholder="Tabela 4.1.2 — só p/ quem tem receita no F550"
+                            />
+                            {/* 🚨 BLOCO D — frete contratado. O D100 existe SÓ
+                                para a aquisição de frete com direito a crédito
+                                (Guia 1.35: "só devem ser relacionados neste
+                                registro as aquisições … que confiram direito ao
+                                crédito"), ou seja só no regime NÃO-CUMULATIVO.
+                                Os três campos são de tabela oficial e nenhum
+                                está no XML do CT-e — sem eles o conhecimento
+                                não entra, e a falta sai DITA na geração.
+                                As listas vêm do DONO, nunca copiadas aqui:
+                                segunda cópia de tabela oficial é o que esta
+                                casa mais paga. */}
+                            <div className="md:col-span-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 pt-2">
+                                EFD-Contribuições: frete contratado (bloco D)
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                    Natureza do frete (D101/D105 · IND_NAT_FRT)
+                                </label>
+                                <select
+                                    className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-sm"
+                                    value={dados.contribIndNatFrete || ''}
+                                    onChange={e => handleField('contribIndNatFrete', e.target.value)}
+                                >
+                                    <option value="">— (sem cadastro: o CT-e não entra no bloco D)</option>
+                                    {Object.entries(INDICADORES_NATUREZA_FRETE).map(([cod, desc]) => (
+                                        <option key={cod} value={cod}>{`${cod} — ${desc}`}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                    Tipo do frete (D100 · IND_FRT)
+                                </label>
+                                <select
+                                    className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-sm"
+                                    value={dados.contribIndFrtCte || ''}
+                                    onChange={e => handleField('contribIndFrtCte', e.target.value)}
+                                >
+                                    <option value="">— (sem cadastro: o CT-e não entra no bloco D)</option>
+                                    {Object.entries(INDICADORES_TIPO_FRETE).map(([cod, desc]) => (
+                                        <option key={cod} value={cod}>{`${cod} — ${desc}`}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <Field
+                                label="Base do crédito do frete (D101/D105 · NAT_BC_CRED)"
+                                value={dados.contribNatBcCredFrete || ''}
+                                onChange={v => handleField('contribNatBcCredFrete', v)}
+                                placeholder="Tabela 4.3.7 — só quando a natureza gera crédito"
                             />
                             {/* 🚨 O 0110 declarava rateio proporcional para TODA
                                 empresa do não-cumulativo, e o EFD assinado do CF

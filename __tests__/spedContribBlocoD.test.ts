@@ -17,6 +17,13 @@
 //
 // Nada disso aparecia como erro: aparecia como ZERO, que é indistinguível de
 // "o frete não teve valor".
+//
+// ⚠️ **A FIXTURE MUDOU EM 26/08, e o motivo é o certo**: descobriu-se que o
+// bloco D só existe para a AQUISIÇÃO de frete com direito a crédito (Guia 1.35,
+// D100) — ou seja, no regime NÃO-cumulativo e com os códigos de tabela oficial
+// cadastrados. A fixture passou a trazer esse cadastro. **Trocar a fixture é o
+// certo; afrouxar a régua para o teste passar seria desligar a trava** — a
+// mesma decisão do C100 (20/08) e do 0150 (25/08).
 // ============================================================================
 import { buildBlocoD_Contrib } from '../sefaz-backend/sped-contrib-blocos.js';
 import { auditarSaidaSped } from '../sefaz-backend/sped-auditoria-saida.js';
@@ -24,8 +31,15 @@ import { auditarSaidaSped } from '../sefaz-backend/sped-auditoria-saida.js';
 /** Chave real de CT-e (modelo 57 nas posições 21-22). */
 const CHAVE_CTE = '35260731947349000169570010000000031705547508';
 
+/** Cadastro do frete contratado — sem ele o CT-e não entra (e é assim mesmo). */
+const FRETE_CADASTRADO = {
+    contribIndNatFrete: '2',      // compras geradoras de crédito
+    contribIndFrtCte: '0',        // por conta do emitente
+    contribNatBcCredFrete: '09',  // Tabela 4.3.7
+};
+
 const dados = (notas: any[]) => ({
-    empresa: { cnpj: '31947349000169', nome: 'PWR' },
+    empresa: { cnpj: '31947349000169', nome: 'PWR', dadosFiscais: { ...FRETE_CADASTRADO } },
     competencia: '2026-07', regimeApuracao: '1', notas, warnings: [] as string[],
 });
 
@@ -44,24 +58,24 @@ describe('🚨 bloco D — o CT-e como ele chega da captura', () => {
     it('o valor REAL (valorTotal) chega ao registro — antes era 0,00 em toda linha', () => {
         const linha = buildBlocoD_Contrib(dados([cteCapturado()])).find((l: string) => l.startsWith('|D100|'));
         expect(linha).toBeDefined();
-        // ⚠️ O TESTE PERGUNTA PELO VALOR, NÃO PELA POSIÇÃO — de propósito. O
-        // leiaute do D100 do EFD-Contribuições NÃO está provado contra arquivo
-        // aceito (ele volta em `naoConferidos` na contagem de campos), e o
-        // gerador monta 20 campos onde o Guia Prático lista 23. Travar aqui a
-        // posição que o gerador usa hoje seria carimbar de PROVADO um leiaute
-        // deduzido — o oposto da régua da casa. O que ESTE PR conserta é a
-        // LEITURA (o valor existe e não era lido); a posição fica NOMEADA como
-        // pendência, para ser fechada com um EFD-Contribuições aceito que
-        // tenha bloco D.
-        expect(linha).toContain('1500,00');
-        // E o crédito do frete deixa de ser zero: 1,65% e 7,6% do não-cumulativo.
-        expect(linha).toContain('24,75');
-        expect(linha).toContain('114,00');
+        // ✅ 26/08 — A POSIÇÃO AGORA PODE SER TRAVADA. Este comentário dizia que
+        // o leiaute do D100 "não está provado" e que o gerador montava 20 campos
+        // onde o Guia lista 23; com o Guia Prático 1.35 no repo, a tabela do
+        // registro foi lida campo a campo e o `VL_DOC` é o **15**. Antes desta
+        // correção o valor caía na casa do `TP_CT-e`, que tem UM dígito.
+        expect(linha!.split('|')[15]).toBe('1500,00');
+        // E o crédito do frete deixa de ser zero — mas ele mora no D101/D105,
+        // não no D100: PIS/COFINS dentro do D100 iam parar em campos de ICMS.
+        const pis = buildBlocoD_Contrib(dados([cteCapturado()])).find((l: string) => l.startsWith('|D101|'));
+        const cofins = buildBlocoD_Contrib(dados([cteCapturado()])).find((l: string) => l.startsWith('|D105|'));
+        expect(pis).toContain('24,75');
+        expect(cofins).toContain('114,00');
     });
 
     it('PIS/COFINS do frete deixam de sair zerados', () => {
-        const linha = buildBlocoD_Contrib(dados([cteCapturado()])).find((l: string) => l.startsWith('|D100|'));
-        expect(linha).not.toMatch(/\|0,00\|0,00\|/);
+        const linhas = buildBlocoD_Contrib(dados([cteCapturado()]));
+        expect(linhas.find((l: string) => l.startsWith('|D101|'))).not.toMatch(/\|0,00\|/);
+        expect(linhas.find((l: string) => l.startsWith('|D105|'))).not.toMatch(/\|0,00\|/);
     });
 
     it('o participante vem dos campos ACHATADOS da captura', () => {
@@ -89,11 +103,15 @@ describe('🚨 bloco D — o CT-e como ele chega da captura', () => {
 });
 
 describe('🚨 e a auditoria passa a VIGIAR o D100 (regra de 06/08)', () => {
+    // 🐛 ESTA VIGILÂNCIA NASCEU MUDA (corrigido 26/08): a posição do VL_DOC
+    // estava em 12, que é o `DT_A_P` — uma DATA, que nunca sai zerada. O campo
+    // é o **15**, e a fixture antiga tinha 12 campos justamente porque foi
+    // escrita para casar com a posição errada. Trava que olha o lugar errado
+    // dá sensação de cobertura, que é pior que trava nenhuma.
     it('D100 com VL_DOC zerado em 100% das linhas é acusado', () => {
-        const arquivo = [
-            '|D100|0|1|47252373000113|57|00|1|4321|' + CHAVE_CTE + '|10072026|10072026|0,00|',
-            '|D100|0|1|47252373000113|57|00|1|4322|' + CHAVE_CTE + '|11072026|11072026|0,00|',
-        ];
+        const d100 = (num: string, dt: string) => '|D100|0|1|47252373000113|57|00|000||'
+            + `${num}|${CHAVE_CTE}|${dt}|${dt}|||0,00||0|0,00||||||`;
+        const arquivo = [d100('4321', '10072026'), d100('4322', '11072026')];
         const s = auditarSaidaSped(arquivo).suspeitas.filter((x: any) => x.registro === 'D100');
         expect(s.length).toBeGreaterThan(0);
         expect(s[0].detalhe).toMatch(/VL_DOC/);
