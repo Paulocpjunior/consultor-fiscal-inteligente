@@ -126,7 +126,14 @@ permissão vigente até 02/09). E **nenhuma recusa nossa** (401/403/404/407/488/
 antes dele (firewall/rede) deixaria o log igualmente vazio, e é por isso que a
 pergunta dos IPs de origem está no chamado e a captura de pacote SIP cru
 (`pjsip set logger on`) ficou armada para a próxima ligação. ⚠️ E o CDR **não
-existe nesta VM**, então hoje o log é testemunha única. ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sairá do **CDR do SBC**, nunca da Meta |
+existe nesta VM**, então hoje o log é testemunha única. 🚨 **E O NÚMERO IRMÃO
+ISOLOU A VARIÁVEL (26/08, 18:29)**: chamada para o **3155-1554** (2º canal, MESMA
+WABA, mesma permissão, mesmo chamador, mesmo dia) **tocou NORMALMENTE** até "Não
+atendida" — não caiu no primeiro toque. Conta, permissão, janela e aparelho saem
+da lista de causas; o que quebra é específico da entrega **SIP**. ⚠️ Falta
+confirmar na aba "Configurações de ligação" de cada número que o 3155 realmente
+não está em modo SIP — o app só escreveu `sip.servers[]` para o 3337, mas quem
+responde é a Meta. ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sairá do **CDR do SBC**, nunca da Meta |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
 
 ## 6. Operação e administração
