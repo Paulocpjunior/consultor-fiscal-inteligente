@@ -50,7 +50,7 @@ import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-mid
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
-import { cruzarNumerosComCadastro } from './whatsapp-vinculo-telefone.js';
+import { cruzarNumerosComCadastro, sugestaoParaNumero } from './whatsapp-vinculo-telefone.js';
 import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
 import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
@@ -2182,6 +2182,54 @@ router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
     }
 });
 
+// ─── 🔗 Índice telefone → cliente, lido UMA vez por janela ──────────────────
+//
+// A sugestão da conversa não pode custar uma varredura das ~400 empresas a
+// cada conversa aberta. Mesmo desenho do `empresa-cadastro-lookup.js` (22/08):
+// varre uma vez, cacheia por uma janela curta, e falha em silêncio devolvendo
+// "sem sugestão" — sugestão é conforto, e derrubar a coluna do cliente por um
+// cadastro torto seria trocar um conforto por um defeito.
+//
+// 🚨 A PROJEÇÃO CARREGA A LÁPIDE (regra de 21/08 — campo fora do `.select()`
+// some da leitura): sem `_deleted`/`_merged_into` aqui, o filtro passaria TODO
+// mundo e o app sugeriria cadastro que a casa já apagou.
+const CAMPOS_PARA_SUGESTAO_VINCULO = ['nome', 'razaoSocial', 'dadosFiscais', '_deleted', '_merged_into'];
+const JANELA_INDICE_VINCULO_MS = 5 * 60 * 1000;
+let _indiceVinculo = { em: 0, empresas: null };
+
+async function empresasParaSugestao() {
+    const agora = Date.now();
+    if (_indiceVinculo.empresas && agora - _indiceVinculo.em < JANELA_INDICE_VINCULO_MS) {
+        return _indiceVinculo.empresas;
+    }
+    const db = getDb();
+    const [simples, lucro] = await Promise.all([
+        db.collection('simples_empresas').select(...CAMPOS_PARA_SUGESTAO_VINCULO).get(),
+        db.collection('lucro_empresas').select(...CAMPOS_PARA_SUGESTAO_VINCULO).get(),
+    ]);
+    const empresas = [];
+    for (const snap of [simples, lucro]) {
+        for (const d of snap.docs) {
+            const x = d.data();
+            if (x._deleted || x._merged_into) continue;
+            empresas.push({ id: d.id, nome: x.nome || x.razaoSocial || d.id, dadosFiscais: x.dadosFiscais || {} });
+        }
+    }
+    _indiceVinculo = { em: agora, empresas };
+    return empresas;
+}
+
+/** A sugestão de UMA conversa. Erro de leitura devolve null — nunca palpite. */
+async function sugestaoDeClientePeloNumero(numero) {
+    try {
+        const r = sugestaoParaNumero(numero, await empresasParaSugestao());
+        return r.situacao === 'sem-cadastro' ? null : r;
+    } catch (e) {
+        console.warn('[whatsapp/vinculo] sugestão indisponível:', e.message);
+        return null;
+    }
+}
+
 // ─── CLIENTE 360 da conversa (pós-vínculo) ──────────────────────────────────
 // A vantagem do SP Connect sobre a plataforma antiga: o atendente vê QUEM é
 // o cliente sem trocar de tela. NENHUMA conta nova — responsável vem da
@@ -2194,7 +2242,14 @@ router.get('/conversas/:numero/cliente', requireAuth, async (req, res) => {
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         const db = getDb();
         const contato = (await db.collection('whatsapp_contatos').doc(numero).get()).data() || {};
-        if (!contato.empresaId) return res.json({ ok: true, vinculado: false });
+        // 🔗 SEM VÍNCULO, O APP AO MENOS DIZ DE QUEM ELE ACHA QUE É. A aba
+        // 🔗 Vínculos resolve a limpeza em massa UMA vez; esta linha resolve o
+        // dia a dia — é aqui que a dúvida nasce (18/08: o botão nasce onde a
+        // pessoa vai procurar). Continua SUGESTÃO: o vínculo é o clique.
+        if (!contato.empresaId) {
+            const sugestao = await sugestaoDeClientePeloNumero(numero);
+            return res.json({ ok: true, vinculado: false, sugestao });
+        }
 
         const empresaId = contato.empresaId;
         const [simples, lucro, cartSnap, enviosSnap] = await Promise.all([

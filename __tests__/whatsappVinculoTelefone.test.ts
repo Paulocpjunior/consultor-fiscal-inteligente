@@ -190,3 +190,47 @@ describe('🚨 a medição tem porta, botão e guarda', () => {
         expect(tela).toMatch(/Mostrando 50 de \{vincSug\.sugestoes\.length\}/);
     });
 });
+
+// ============================================================================
+// 🔗 A SUGESTÃO NA CONVERSA — a aba 🔗 Vínculos limpa em massa UMA vez; esta
+// linha resolve o dia a dia, no lugar onde a dúvida nasce (18/08).
+// ============================================================================
+describe('🔗 a conversa sem vínculo DIZ de quem o cadastro acha que é', () => {
+    const raiz2 = (...p: string[]) => path.join(process.cwd(), ...p);
+    const rota = fs.readFileSync(raiz2('sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = fs.readFileSync(raiz2('components/SpConnect/index.tsx'), 'utf8');
+
+    it('a rota do cliente devolve a sugestão quando NÃO há vínculo', () => {
+        const bloco = rota.slice(rota.indexOf("router.get('/conversas/:numero/cliente'"));
+        expect(bloco.slice(0, 1200)).toMatch(/vinculado: false, sugestao/);
+    });
+
+    it('🚨 e a tela CONSULTA a conversa sem vínculo — senão a sugestão nunca aparece', () => {
+        // O `return` antigo exigia `empresaId`: só perguntava a quem já tinha
+        // resposta. A sugestão existiria no backend e em tela nenhuma.
+        const bloco = tela.slice(tela.indexOf('const [cliente360, setCliente360]'));
+        expect(bloco.slice(0, 900)).not.toMatch(/if \(!numero \|\| !sel\?\.empresaId\) return;/);
+        expect(bloco.slice(0, 900)).toMatch(/if \(!numero\) return;/);
+    });
+
+    it('a sugestão vira BOTÃO de confirmar, com o campo que casou na frase', () => {
+        expect(tela).toMatch(/Confirmar este cliente/);
+        expect(tela).toMatch(/WhatsApp do cliente/);
+    });
+
+    it('🚨 ambígua NÃO ganha botão — o app não escolhe entre dois cadastros', () => {
+        const bloco = tela.slice(tela.indexOf("cliente360?.sugestao?.situacao === 'ambigua'"));
+        expect(bloco.slice(0, 600)).toMatch(/está em mais de um cadastro/);
+        expect(bloco.slice(0, 600)).not.toMatch(/acaoVincular\(/);
+    });
+
+    it('🚨 a projeção do índice carrega a LÁPIDE — campo fora do select some da leitura', () => {
+        // Sem `_deleted`/`_merged_into` no `.select()`, o filtro passaria todo
+        // mundo e o app sugeriria cadastro que a casa já apagou (21/08).
+        expect(rota).toMatch(/CAMPOS_PARA_SUGESTAO_VINCULO = \[[^\]]*'_deleted'[^\]]*'_merged_into'/);
+    });
+
+    it('índice cacheado por janela — sugestão não custa uma varredura por conversa', () => {
+        expect(rota).toMatch(/JANELA_INDICE_VINCULO_MS/);
+    });
+});
