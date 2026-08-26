@@ -341,3 +341,42 @@ describe('🔌 fiação — a escrita mora na rota, com releitura e sem grade pr
         expect(corpo).toContain('jaExiste');
     });
 });
+
+// ============================================================================
+// 🚨 "0 EVENTOS" SÓ VALE SE A AMOSTRA ALCANÇOU A HORA DA LIGAÇÃO
+//
+// 26/08, Paulo: *"acabei de tentar a ligação, chegou a tocar 1x"* — às 09:30,
+// e ela aparece como "Não atendida" no celular dele. A pergunta que decide se
+// isso é avanço (a Meta passou a entregar) ou o mesmo bloqueio de 25/08 é uma
+// só: **chegou evento no nosso webhook naquele minuto?**
+//
+// O painel lia os 200 eventos mais recentes. Numa caixa de 300 conversas isso
+// pode ser uma janela de MINUTOS — e aí "nenhum evento de chamada" se lê como
+// *"a Meta não mandou nada"* quando o certo seria *"não olhei até lá"*. Duas
+// conclusões opostas a partir do mesmo zero: uma fecha o chamado com a Meta,
+// a outra abre.
+// ============================================================================
+describe('🚨 o painel de eventos crus diz ATÉ ONDE olhou', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require('path') as typeof import('path');
+    const rota = fs.readFileSync(path.join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+    const bloco = rota.slice(rota.indexOf("router.get('/chamadas/eventos-crus'"));
+
+    it('a resposta carrega a JANELA de tempo da amostra', () => {
+        expect(bloco.slice(0, 2200)).toMatch(/janela: \{/);
+        expect(bloco.slice(0, 2200)).toMatch(/de: snap\.docs\[snap\.size - 1\]/);
+    });
+
+    it('e a tela MOSTRA a janela, com a ressalva quando não achou nada', () => {
+        expect(tela).toMatch(/crus\.janela\?\.de/);
+        expect(tela).toMatch(/este zero não responde nada/);
+    });
+
+    it('a amostra alcança mais que uma manhã movimentada', () => {
+        // 200 numa caixa de 300 conversas não chega em 09:30 depois do almoço.
+        expect(bloco.slice(0, 2200)).toMatch(/\.limit\(1000\)/);
+    });
+});
