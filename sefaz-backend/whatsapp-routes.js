@@ -50,6 +50,7 @@ import { validarAnexo, legendaSeraIgnorada, resumoDoAnexo } from './whatsapp-mid
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
+import { cruzarNumerosComCadastro } from './whatsapp-vinculo-telefone.js';
 import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
 import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
@@ -2273,6 +2274,46 @@ router.get('/clientes-busca', requireAuth, async (req, res) => {
             if (clientes.length >= 10) break;
         }
         return res.json({ ok: true, clientes });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ═══ 🔗 DE QUEM SÃO OS NÚMEROS SEM VÍNCULO? ════════════════════════════════
+//
+// Paulo, 26/08, olhando os prints: quase toda conversa com o selo âmbar
+// "vincular". Antes de construir tela de vínculo em massa, MEDIR — a régua da
+// casa é medir no painel, nunca deduzir do código.
+//
+// 🚨 A resposta separa quatro desfechos porque as AÇÕES são diferentes:
+// sugestão (um clique), ambíguo (alguém escolhe, ou o cadastro está
+// duplicado), sem cadastro (é terceiro, ou o cliente nunca teve o WhatsApp
+// preenchido) e sem número legível (DM do Instagram — nem é lacuna de
+// vínculo). Um número só faria os quatro parecerem o mesmo problema.
+router.get('/vinculo-sugestoes', requireAdmin, async (req, res) => {
+    try {
+        const db = getDb();
+        const [contatos, simples, lucro] = await Promise.all([
+            db.collection('whatsapp_contatos').get(),
+            db.collection('simples_empresas').get(),
+            db.collection('lucro_empresas').get(),
+        ]);
+        const empresas = [];
+        for (const snap of [simples, lucro]) {
+            for (const d of snap.docs) {
+                const x = d.data();
+                // Lápide fica de fora nos dois caminhos (#290): sugerir
+                // cadastro excluído devolveria à tela um cliente que a casa
+                // decidiu apagar.
+                if (x._deleted || x._merged_into) continue;
+                empresas.push({ id: d.id, nome: x.nome || x.razaoSocial || d.id, dadosFiscais: x.dadosFiscais || {}, telefone: x.telefone, whatsappCliente: x.whatsappCliente });
+            }
+        }
+        const conversas = contatos.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((c) => !c.empresaId)     // já vinculado não é pendência
+            .map((c) => ({ numero: c.numero || c.id, nome: c.nomePerfil || c.nome || null, canal: c.canal || null }));
+
+        const r = cruzarNumerosComCadastro({ conversas, empresas });
+        return res.json({ ok: true, ...r, empresasNoCadastro: empresas.length });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 
