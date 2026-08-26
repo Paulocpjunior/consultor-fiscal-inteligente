@@ -587,6 +587,32 @@ const REGUAS_VIGIADAS: Regua[] = [
         ],
     },
     {
+        nome: 'O LADO em que está a contraparte do documento',
+        dono: 'sefaz-backend/participante-doc-helper.js',
+        comoUsar: "import { ladoDaContraparte } from 'sefaz-backend/participante-doc-helper.js'",
+        porque: '26/08, triagem das 82 leituras cruas de `direcao`: duas cópias (`relatoriosAgregacoes` e '
+            + '`livroNotaProdutor`) reconheciam a nota própria de entrada só por `tpNF === "0"`, SEM o laço '
+            + 'que o dono tem — e o comentário do PRÓPRIO dono já diz por que ele existe: "a nota própria de '
+            + 'entrada é emitida PELA EMPRESA. Sem esse laço, o tpNF=0 de um TERCEIRO viraria \'nossa\' nota '
+            + 'própria — e a contraparte sairia do lado errado". Com dois clientes negociando entre si (KROYA '
+            + '× GOLDLOG, 17/08), a nota própria de entrada de UM aparece na base e a coluna mostraria o '
+            + 'PRÓPRIO cliente como fornecedor — em TODOS os relatórios e no Livro do produtor rural.',
+        // ⚠️ AS ASSINATURAS CASAM A ESCOLHA DO LADO, não a derivação de "é nota
+        // própria de entrada?" — essa é OUTRA pergunta e tem dono próprio
+        // (`ehNotaPropriaDeEntrada`). A 1ª versão desta trava usava
+        // `const propriaEntrada = String(` e acusou `migracao-prontidao.js`,
+        // que pergunta "é saída própria?" e faz o laço na linha de cima:
+        // alarme sobre código certo é o que faz a equipe desligar a trava.
+        assinaturas: [
+            /direcao === 'saida' \|\| propriaEntrada/,
+            /propriaEntrada \? [\w.()|| ]*destinatario/,
+        ],
+        permitido: [
+            // O dono do `tpNF` — é ele que define o que é nota própria de entrada.
+            'sefaz-backend/xml-metadata-helper.js',
+        ],
+    },
+    {
         nome: 'Natureza e tipo do FRETE CONTRATADO (bloco D do EFD-Contribuições)',
         dono: 'sefaz-backend/frete-contratado-bloco-d.js',
         comoUsar: "import { INDICADORES_NATUREZA_FRETE, INDICADORES_TIPO_FRETE, decidirFreteNoBlocoD } "

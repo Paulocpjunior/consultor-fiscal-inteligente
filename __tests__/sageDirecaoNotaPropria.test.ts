@@ -107,18 +107,31 @@ describe('🚨 o gerador do .FML lê a direção pelo DONO', () => {
         expect(src).not.toMatch(/cfopParaEscriturar\(it\.cfop, d\.direcao/);
     });
 
+    // ✂️ **O `usaDestinatario` SAIU DAQUI EM 26/08 — e a decisão anterior estava
+    // incompleta.** Esta lista dizia que ele "pergunta em QUAL BLOCO está a
+    // contraparte, não qual é o lado do livro", e por isso podia ficar cru. Mas
+    // *"em qual bloco está a contraparte"* é EXATAMENTE a pergunta do dono
+    // (`ladoDaContraparte`, que nasceu em 22/08, depois desta decisão). A cópia
+    // daqui estava CORRETA — ela até tinha o laço do CNPJ —, e mesmo assim era
+    // a quinta cópia da mesma pergunta. Régua certa copiada continua sendo
+    // cópia: ela só diverge no dia em que alguém corrige um lado.
+    //
     // ⚠️ O QUE FICOU DE PROPÓSITO, com o motivo — para não virar correção cega
     // numa próxima varredura:
     //
-    //  · `usaDestinatario` (participanteDoDoc) pergunta em QUAL BLOCO está a
-    //    contraparte, não qual é o lado do livro — e a exceção da nota própria
-    //    já está escrita ali ao lado, explícita;
     //  · a derivação da UF da empresa procura uma nota com chave cujo `direcao`
     //    gravado seja 'saida'. A nota própria de entrada também foi EMITIDA
     //    pela empresa, então a chave dela carrega a MESMA UF — usar a régua ali
     //    só reduziria os candidatos, sem mudar a resposta.
-    it('as duas leituras cruas que sobraram são as declaradas acima', () => {
+    it('a única leitura crua que sobrou é a declarada acima', () => {
         const cruas = (src.match(/d\.direcao/g) || []).length;
-        expect(cruas).toBe(3); // usaDestinatario + os dois `find` da UF
+        expect(cruas).toBe(2); // os dois `find` da derivação da UF
+    });
+
+    // 🚨 E O LADO DA CONTRAPARTE PASSOU A VIR DO DONO — travado para não
+    // renascer como sexta cópia.
+    it('o participante do .FML pergunta ao dono de que lado está a contraparte', () => {
+        expect(src).toMatch(/ladoDaContraparte\(d, x\.empresaCnpj\) === 'destinatario'/);
+        expect(src).not.toMatch(/direcao === 'saida' \|\| propriaEntrada/);
     });
 });

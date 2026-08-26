@@ -5,6 +5,56 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O LADO DA CONTRAPARTE TINHA CINCO CÓPIAS — e o próprio dono já carregava
+  o aviso do defeito que elas têm** (26/08, fechando a pendência nomeada em
+  22/08: *"restam ~60 leituras cruas de `direcao` e elas NÃO foram triadas uma
+  a uma"*). São **82**, e a triagem por RISCO mostrou que a maioria é legítima
+  — filtro que a PESSOA escolhe, linha já AGREGADA (a direção foi resolvida a
+  montante), o próprio dono, e direção de MENSAGEM, que é outro domínio.
+  🔴 **Mas CINCO lugares reimplementavam a MESMA pergunta** — *de que lado está
+  a contraparte?* —, que tem dono desde 22/08 (`ladoDaContraparte`). E o
+  comentário do dono já diz, palavra por palavra, por que ele existe: *"a nota
+  própria de entrada é emitida PELA EMPRESA. Sem esse laço, o `tpNF=0` de um
+  TERCEIRO viraria 'nossa' nota própria — e a contraparte sairia do lado
+  errado"*.
+  🔴 **TRÊS das cinco faziam exatamente isso: `tpNF === '0'` e mais nada** — a
+  contraparte de **TODOS os relatórios** (`relatoriosAgregacoes`), o **Livro do
+  produtor rural** (`livroNotaProdutor`) e a contagem da **Rotina do Mês**
+  (`rotina-fiscal-routes`). É o cenário KROYA × GOLDLOG (17/08): dois clientes
+  negociando entre si, a nota própria de entrada de UM aparece na base, e a
+  coluna mostraria o **PRÓPRIO cliente como fornecedor**.
+  🐛 **E UMA TINHA O LAÇO MAS LIA A FORMA ERRADA**: o `dipam-routes` conferia
+  `d.emitente.cnpjCpf` — só o ANINHADO — enquanto a captura principal grava
+  `cnpjEmit` **ACHATADO**. Ali ela respondia *"não é própria"* na maioria das
+  notas. É a armadilha das duas formas escondida DENTRO de uma cópia que
+  parecia correta; delegar ao dono corrigiu isso de brinde.
+  ⚠️ **E A CORREÇÃO SÓ FOI SEGURA PORQUE FOI MEDIDA ANTES.** A troca "óbvia"
+  tinha um risco real: o dono exige o CNPJ da empresa, e documento sem
+  `empresaCnpj` responderia *"não é própria"* para uma nota LEGÍTIMA — a
+  contraparte sairia errada na direção contrária. Fui ler o backfill: ele **só
+  vira a nota para 'entrada' quando `cnpjEmit === empresaCnpj`**, e ANTES dele
+  ela fica gravada como `'saida'`, que o dono reconhece sem precisar do CNPJ.
+  **Nos dois estados ele responde certo** — e é isso, não a intuição, que
+  autorizou a troca. É a lição de 22/08 (*"a correção óbvia produz o defeito na
+  hora"*) aplicada ANTES de custar.
+  🐛 **E A TRAVA NASCEU LARGA DEMAIS, pega na primeira execução**: a assinatura
+  `const propriaEntrada = String(` acusou `migracao-prontidao.js`, que pergunta
+  *"é saída própria?"* e **faz o laço na linha de cima** — código certo.
+  Estreitada para casar só a ESCOLHA DO LADO (`propriaEntrada ? …destinatario`
+  e `direcao === 'saida' || propriaEntrada`), porque *"é nota própria de
+  entrada?"* é OUTRA pergunta e tem dono próprio (`ehNotaPropriaDeEntrada`).
+  **Alarme sobre código certo é o que faz a equipe desligar a trava.**
+  📌 **REGRA QUE FICA: duas perguntas, dois donos.** Onde a cópia juntava as
+  duas numa expressão só (`propriaEntrada ? destinatario : emitente`), a
+  delegação chama as DUAS funções — e foi justamente a junção que produziu a
+  cópia. Quando uma condição responde duas coisas ao mesmo tempo, ela vira a
+  próxima segunda cópia.
+  ⚠️ **O que NÃO foi mexido, e por quê**: as leituras de WhatsApp/Connect
+  (direção de MENSAGEM, outro domínio), os `filters.direcao` (a escolha da
+  PESSOA, que é a fonte), as linhas já agregadas dos relatórios (`l.direcao`,
+  exibição 'E'/'S') e o `notaDigitada.ts` (lançamento manual — ali a direção é
+  o que a pessoa DIGITOU, não um campo capturado que possa mentir).
+
 - **🚨 SÓ UMA DAS SEIS SOMAS C100 × C190 ESTAVA CONFERIDA — e o par é o que já
   custou um dia inteiro da PWR** (26/08, fechando a varredura do Guia do EFD
   ICMS/IPI). O Guia 3.2.3 repete a MESMA validação em seis campos do C100 —

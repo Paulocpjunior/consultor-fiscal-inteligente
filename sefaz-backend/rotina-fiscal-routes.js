@@ -52,6 +52,10 @@ function coberturaDoCliente(e, competencia, prazosMunicipais = []) {
     }
 }
 import { identificarNaturezaFornecedor } from './dipam-produtor-rural.js';
+// Duas perguntas, dois donos: "é nota própria de entrada?" e "de que LADO está
+// a contraparte?". Juntá-las numa expressão só foi o que produziu a cópia.
+import { ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
+import { ladoDaContraparte } from './participante-doc-helper.js';
 import { montarPainelIssCarteira, acumularIssPorEmpresa } from './iss-carteira.js';
 import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
 
@@ -149,12 +153,17 @@ function agrupar(itens, porCnpjToId) {
 function contarProdutoresRurais(documentos) {
     let produtores = 0;
     for (const d of documentos) {
-        // Nota própria de entrada (tpNF=0): o cliente emite e o produtor está
-        // no bloco destinatário — o importer antigo gravava como 'saida'.
-        const propriaEntrada = String(d.tpNF ?? '') === '0';
+        // 🚨 ESTA CÓPIA NÃO TINHA O LAÇO (26/08, triagem das leituras cruas de
+        // `direcao`): ela reconhecia a nota própria de entrada só por
+        // `tpNF === '0'`, e o dono existe justamente por causa disso — a nota
+        // própria de entrada é emitida PELA EMPRESA, e sem conferir isso o
+        // `tpNF=0` de um TERCEIRO viraria "nossa" nota própria, com o produtor
+        // procurado no bloco errado. Duas perguntas, dois donos.
+        const propriaEntrada = ehNotaPropriaDeEntrada(d, d.empresaCnpj).sim;
         if (d.direcao !== 'entrada' && !propriaEntrada) continue;
         if (['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d.status)) continue;
-        const contraparte = propriaEntrada ? d.destinatario : d.emitente;
+        const contraparte = ladoDaContraparte(d, d.empresaCnpj) === 'destinatario'
+            ? d.destinatario : d.emitente;
         if (identificarNaturezaFornecedor(contraparte || {}).ehProdutorRuralPF) produtores += 1;
     }
     return { produtores, indefinidos: 0 };

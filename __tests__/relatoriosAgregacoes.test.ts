@@ -384,13 +384,33 @@ describe('resumoPorParticipante', () => {
         expect(r[1]).toMatchObject({ doc: '11111111000111', notas: 2, valor: 1400 });
     });
 
+    // ⚠️ A FIXTURE GANHOU O `empresaCnpj` EM 26/08, e trocá-la é o CERTO: ela
+    // era internamente inconsistente — usava a forma PÓS-backfill
+    // (`direcao: 'entrada'`) sem o campo que o backfill EXIGE para virar a
+    // direção. `corrigirDirecaoEntradaPropria` só vira a nota quando
+    // `cnpjEmit === empresaCnpj`, então documento real nesse estado sempre o
+    // tem. Sem ele, a fixture descrevia um mundo que a produção não vive — a
+    // mesma correção que o `livroNotaProdutor` sofreu em 22/08.
     it('nota própria de entrada aponta o DESTINATÁRIO (produtor) como contraparte', () => {
         const r = resumoPorParticipante([nfe({
-            tpNF: '0',
+            tpNF: '0', empresaCnpj: '22222222000122',
             emitente: { cnpjCpf: '22222222000122', nome: 'NOS', uf: 'SP' },
             destinatario: { cnpjCpf: '52998224725', nome: 'PRODUTOR PF', uf: 'MG' },
         })] as any, 'entrada');
         expect(r[0]).toMatchObject({ nome: 'PRODUTOR PF', uf: 'MG' });
+    });
+
+    // 🚨 E O CASO QUE A CÓPIA ERRAVA passa a ser exigido aqui: `tpNF=0` de um
+    // TERCEIRO não é "nossa" nota própria, e a contraparte é o EMITENTE. Sem
+    // isso a coluna mostraria o próprio cliente como fornecedor (KROYA ×
+    // GOLDLOG, 17/08).
+    it('tpNF=0 de TERCEIRO mantém a contraparte no emitente', () => {
+        const r = resumoPorParticipante([nfe({
+            tpNF: '0', empresaCnpj: '22222222000122',
+            emitente: { cnpjCpf: '99999999000199', nome: 'OUTRA EMPRESA', uf: 'PR' },
+            destinatario: { cnpjCpf: '52998224725', nome: 'CLIENTE DELE', uf: 'MG' },
+        })] as any, 'entrada');
+        expect(r[0]).toMatchObject({ nome: 'OUTRA EMPRESA', uf: 'PR' });
     });
 });
 
@@ -436,7 +456,9 @@ describe('resumoPorUf', () => {
             nfe({ emitente: { cnpjCpf: '1', nome: 'A', uf: 'MG' } }),
             nfe({ id: 'b', direcao: 'saida', destinatario: { cnpjCpf: '2', nome: 'B', uf: 'PR' }, valorTotal: 300, totais: { vNF: 300 } }),
             // nota própria de entrada: emitente = empresa; produtor (MG) no destinatário
-            nfe({ id: 'c', tpNF: '0', emitente: { cnpjCpf: '22222222000122', nome: 'NOS', uf: 'SP' }, destinatario: { cnpjCpf: '3', nome: 'PRODUTOR', uf: 'MG' }, valorTotal: 500, totais: { vNF: 500 } }),
+            // ⚠️ `empresaCnpj` acrescentado em 26/08 pelo mesmo motivo do teste
+            // acima: o backfill só vira a direção quando ele bate com o emitente.
+            nfe({ id: 'c', tpNF: '0', empresaCnpj: '22222222000122', emitente: { cnpjCpf: '22222222000122', nome: 'NOS', uf: 'SP' }, destinatario: { cnpjCpf: '3', nome: 'PRODUTOR', uf: 'MG' }, valorTotal: 500, totais: { vNF: 500 } }),
         ] as any);
         const mg = r.find(l => l.uf === 'MG')!;
         expect(mg.entradasQtd).toBe(2);

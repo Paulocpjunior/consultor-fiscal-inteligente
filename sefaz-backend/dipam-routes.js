@@ -31,6 +31,10 @@ import {
     carregarProdutoresRurais, salvarProdutorRural, lerCondicaoRural,
     documentosDaContraparte, COLECAO_PRODUTORES, NATUREZAS, REGIMES_FUNRURAL,
 } from './dipam-store.js';
+// Duas perguntas, dois donos: "é nota própria de entrada?" e "de que LADO está
+// a contraparte?". Juntá-las numa expressão só foi o que produziu a cópia.
+import { ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
+import { ladoDaContraparte } from './participante-doc-helper.js';
 
 const router = Router();
 
@@ -195,12 +199,18 @@ router.get('/varredura', requireAuth, async (req, res) => {
             const d = normalizarParticipantesDoc(s.data() || {});
             const emp = empresas.get(d.empresaId);
             if (!emp) continue;
-            // Nota própria de entrada = tpNF 0 com o CLIENTE de emitente
-            // (vale antes E depois do backfill de direção do sync-cron).
-            const propriaEntrada = String(d.tpNF ?? '') === '0'
-                && soDigitos((d.emitente || {}).cnpjCpf || (d.emitente || {}).cnpj) === emp.cnpj;
+            // 🚨 O LADO da contraparte tem DONO (26/08, triagem das leituras
+            // cruas de `direcao`). Esta cópia fazia o laço, mas
+            // lia o emitente só na forma ANINHADA — a captura principal grava
+            // `cnpjEmit` ACHATADO, e ali ela devolveria "não é própria".
+            // ⚠️ São DUAS perguntas e cada uma tem o SEU dono — juntá-las numa
+            // expressão só foi o que produziu esta cópia.
+            const propriaEntrada = ehNotaPropriaDeEntrada(d, emp.cnpj).sim;
             if (d.direcao !== 'entrada' && !propriaEntrada) continue;
-            const nat = identificarNaturezaFornecedor((propriaEntrada ? d.destinatario : d.emitente) || {});
+            const lado = ladoDaContraparte(d, emp.cnpj);
+            const nat = identificarNaturezaFornecedor(
+                (lado === 'destinatario' ? d.destinatario : d.emitente) || {},
+            );
             const conta = nat.ehProdutorRuralPF || nat.confianca === 'indefinida';
             if (!conta) continue;
             const at = candidatos.get(d.empresaId) || { provaveis: 0, indefinidos: 0 };
