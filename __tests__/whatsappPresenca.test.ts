@@ -17,7 +17,8 @@ import * as path from 'path';
 import {
     JANELA_NO_AR_MS, INTERVALO_SINAL_MS,
     situacaoDaPresenca, quemDaFilaEstaNoAr,
-} from '../sefaz-backend/whatsapp-presenca';
+// @ts-ignore — módulo JS do backend, sem tipos
+} from '../sefaz-backend/whatsapp-presenca.js';
 
 const raiz = (...p: string[]) => path.join(process.cwd(), ...p);
 const AGORA = Date.parse('2026-08-25T14:00:00-03:00');
