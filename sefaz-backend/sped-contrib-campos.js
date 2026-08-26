@@ -864,10 +864,183 @@ export function conferirBlocoDContrib(linhas) {
     return { erros };
 }
 
+// ── R: VL = BASE × ALÍQUOTA ÷ 100, em SEIS registros ───────────────────────
+//
+// FONTE: a MESMA validação, repetida pelo Guia Prático 1.35 em cada um deles.
+// Em C170 campo 30 (VL_PIS): *"o valor do campo 'VL_PIS' deve corresponder ao
+// valor da base de cálculo (campo 26 ou campo 28) multiplicado pela alíquota
+// aplicável ao item (campo 27 ou campo 29)"*; em D101 campo 08 vem com a conta
+// escrita por extenso: *"Sendo o Campo 'VL_BC_PIS' = 1.000.000,00 e o Campo
+// 'ALIQ_PIS' = 1,6500, então o Campo 'VL_PIS' será igual a: 1.000.000,00 x
+// 1,65 / 100 = 16.500,00"*. Idem A170 (12/16), F100 (10/14), F550 (07/12),
+// D105 (08) e C170 (36).
+//
+// 🚨 POR QUE ESTA É A DE MAIOR ALCANCE: é a assinatura do CAMPO DESLOCADO. O
+// M210 da MANTOAN (18/08) declarava base R$ 0,65 e contribuição R$ 285,28 —
+// os VALORES estavam certos, a FORMA é que estava errada, e o registro se
+// desmentia dentro de si mesmo. Nenhuma trava desta casa perguntava se a linha
+// FECHA. A contagem de campos pega o registro que perdeu campos; esta pega o
+// que manteve a contagem e trocou as casas.
+//
+// ⚠️ TOLERÂNCIA DE DOIS CENTAVOS, e ela é o que faz a trava servir: o arquivo
+// ACEITO da AFFITTARE traz 21.811,34 × 0,65% = 141,7737 declarado como
+// **141,76**, ou seja o próprio e-Fiscal arredonda para baixo. Alarme sobre
+// arredondamento legítimo é o jeito conhecido de a equipe desligar a trava —
+// e campo deslocado erra por ORDEM DE GRANDEZA, nunca por um centavo.
+//
+// ⚠️ E A LINHA COM ALÍQUOTA POR QUANTIDADE FICA DE FORA, NOMEADA NO CÓDIGO:
+// ali a conta é `QUANT_BC × ALIQ_QUANT` em REAIS por unidade, sem dividir por
+// 100 — a própria validação diz "campo 26 **ou** campo 28". O gerador nunca
+// preenche esses campos, então a regra nasce cobrindo tudo o que sai hoje.
+const ARITMETICA_PIS_COFINS = {
+    //            [base, alíquota, valor, (base_quant, aliq_quant)]  — 1-based
+    A170: [[10, 11, 12], [14, 15, 16]],
+    C170: [[26, 27, 30, 28, 29], [32, 33, 36, 34, 35]],
+    D101: [[6, 7, 8]],
+    D105: [[6, 7, 8]],
+    F100: [[8, 9, 10], [12, 13, 14]],
+    F550: [[5, 6, 7], [10, 11, 12]],
+};
+
+/** '1.234,56' → centavos; vazio/ilegível → null (ausência não é zero). */
+function centavosOuNulo(txt) {
+    const s = String(txt ?? '').trim();
+    if (s === '') return null;
+    const n = Number(s.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+/**
+ * VL_PIS/VL_COFINS que não fecham com a própria base e alíquota da linha.
+ */
+export function conferirAritmeticaPisCofins(linhas) {
+    const erros = [];
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        const reg = String(campos[0] || '').trim();
+        const conferencias = ARITMETICA_PIS_COFINS[reg];
+        if (!conferencias) return;
+        const em = (pos) => campos[pos - 1];
+        for (const [posBase, posAliq, posValor, posQuant, posAliqQuant] of conferencias) {
+            // Alíquota por QUANTIDADE: outra conta, e o gerador não a produz.
+            if (posQuant && (String(em(posQuant) ?? '').trim() || String(em(posAliqQuant) ?? '').trim())) continue;
+            const base = centavosOuNulo(em(posBase));
+            const valor = centavosOuNulo(em(posValor));
+            const aliqTxt = String(em(posAliq) ?? '').trim();
+            const aliq = aliqTxt === '' ? null : Number(aliqTxt.replace(/\./g, '').replace(',', '.'));
+            // Campo ausente é OUTRA pergunta (e o app já se recusa a preencher
+            // valor com default). Aqui só se confere o que está escrito.
+            if (base == null || valor == null || aliq == null || !Number.isFinite(aliq)) continue;
+            const r$ = (c) => (c / 100).toFixed(2).replace('.', ',');
+            // 🐛 A CONTA SOZINHA NÃO PEGA A PERMUTA — pego ao medir a própria
+            // régua: multiplicação é COMUTATIVA, então base e alíquota trocadas
+            // de casa dão exatamente o mesmo produto e a trava fica MUDA no
+            // deslocamento de UM campo, que é o caso mais provável. Quem
+            // desempata é o que a alíquota É: um PERCENTUAL. Nenhuma alíquota
+            // ad valorem de PIS/COFINS passa de 100%, então valor ali é o campo
+            // do vizinho ocupando a casa.
+            if (aliq > 100) {
+                erros.push({
+                    registro: reg, linha: i + 1,
+                    fonte: 'Guia Prático da EFD-Contribuições 1.35 — o campo é a "alíquota (em percentual)" '
+                        + 'aplicável ao item, e o valor sai da base multiplicada por ela dividida por 100.',
+                    mensagem: `O ${reg} da linha ${i + 1} declara alíquota de ${aliqTxt}% no campo ${posAliq}. `
+                        + 'Alíquota ad valorem de PIS/COFINS não passa de 100% — um número desse tamanho ali '
+                        + 'é o campo do vizinho ocupando a casa (base e alíquota trocadas, por exemplo). '
+                        + 'A conta não denuncia sozinha porque multiplicação é comutativa: trocadas de lugar, '
+                        + 'as duas dão o mesmo produto.',
+                });
+                continue;
+            }
+            const esperado = Math.round((base * aliq) / 100);
+            if (Math.abs(esperado - valor) <= 2) continue;
+            erros.push({
+                registro: reg, linha: i + 1,
+                fonte: 'Guia Prático da EFD-Contribuições 1.35 — a mesma validação em A170 (campos 12 e 16), '
+                    + 'C170 (30 e 36), D101/D105 (08), F100 (10 e 14) e F550 (07 e 12): "o valor do campo '
+                    + 'deve corresponder ao valor da base de cálculo multiplicado pela alíquota aplicável ao '
+                    + 'item … O resultado deverá ser dividido pelo valor 100".',
+                mensagem: `O ${reg} da linha ${i + 1} não fecha consigo mesmo: base ${r$(base)} × `
+                    + `${aliqTxt}% dá ${r$(esperado)}, e o campo ${posValor} declara ${r$(valor)}. `
+                    + 'Diferença dessa ordem não é arredondamento — é campo em casa errada ou base e valor '
+                    + 'vindos de contas diferentes. Foi assim que o M210 da MANTOAN declarou base de R$ 0,65 '
+                    + 'com contribuição de R$ 285,28: os valores certos, a FORMA errada.',
+            });
+        }
+    });
+    return { erros };
+}
+
+// ── R: o período do 0000 tem de ser um MÊS INTEIRO ─────────────────────────
+//
+// FONTE (Guia Prático 1.35, registro 0000):
+//   · campo 06 (DT_INI): *"Verificar se a data informada neste campo pertence
+//     ao mesmo mês/ano da data informada no campo DT_FIN. O valor informado
+//     deve ser o primeiro dia do mesmo mês de referência da escrituração"*;
+//   · campo 07 (DT_FIN): *"… deve ser o último dia do mês a que se refere a
+//     escrituração"*.
+//
+// 🚨 É O CAMPO MAIS CARO DO ARQUIVO INTEIRO: ele diz A QUE MÊS tudo isto se
+// refere. A varredura de competência de 22/08 achou que a competência circula
+// em QUATRO formas legítimas e que cada porta conhecia um subconjunto
+// diferente — o efeito ali foi arquivo VAZIO; aqui seria arquivo CHEIO
+// entregue no mês errado, que é pior, porque ninguém confere data a olho.
+export function conferirPeriodoDoArquivo(linhas) {
+    const erros = [];
+    const l0000 = (Array.isArray(linhas) ? linhas : [])
+        .map((l, i) => ({ campos: camposDaLinha(l), linha: i + 1 }))
+        .find(x => String(x.campos[0] || '').trim() === '0000');
+    if (!l0000) return { erros };
+
+    const dia = (txt) => {
+        const s = String(txt ?? '').trim();
+        return /^\d{8}$/.test(s)
+            ? { d: Number(s.slice(0, 2)), m: Number(s.slice(2, 4)), a: Number(s.slice(4)), txt: s }
+            : null;
+    };
+    const ini = dia(l0000.campos[5]);   // campo 06
+    const fim = dia(l0000.campos[6]);   // campo 07
+    const acusar = (mensagem) => erros.push({
+        registro: '0000', linha: l0000.linha,
+        fonte: 'Guia Prático da EFD-Contribuições 1.35, registro 0000, campos 06 e 07: o DT_INI "deve ser o '
+            + 'primeiro dia do mesmo mês de referência da escrituração" e o DT_FIN "o último dia do mês a '
+            + 'que se refere a escrituração".',
+        mensagem,
+    });
+    // Data ilegível NÃO vira "mês errado": é outra falha, e dizer a errada
+    // manda procurar problema no lugar errado.
+    if (!ini || !fim) {
+        acusar('O período do arquivo (0000, campos 06 e 07) não está no formato DDMMAAAA: '
+            + `DT_INI "${String(l0000.campos[5] ?? '')}" · DT_FIN "${String(l0000.campos[6] ?? '')}". `
+            + 'Sem período legível o PVA não importa, e não dá para saber a que mês o arquivo se refere.');
+        return { erros };
+    }
+    if (ini.m !== fim.m || ini.a !== fim.a) {
+        acusar(`O arquivo declara DT_INI ${ini.txt} e DT_FIN ${fim.txt} — meses diferentes. A escrituração `
+            + 'é de UM mês, e o período atravessando a virada significa competência errada: o movimento '
+            + 'sairia declarado no mês que não é o dele.');
+        return { erros };
+    }
+    const ultimo = new Date(Date.UTC(ini.a, ini.m, 0)).getUTCDate();
+    if (ini.d !== 1) {
+        acusar(`O DT_INI é ${ini.txt} e o Guia exige o PRIMEIRO dia do mês (01${String(ini.m).padStart(2, '0')}`
+            + `${ini.a}). Começar no meio do mês declara à Receita um período que não é o da escrituração.`);
+    }
+    if (fim.d !== ultimo) {
+        acusar(`O DT_FIN é ${fim.txt} e o último dia deste mês é ${String(ultimo).padStart(2, '0')}`
+            + `${String(fim.m).padStart(2, '0')}${fim.a}. Fechando ANTES, o movimento dos dias que sobram `
+            + 'fica fora da escrituração; DEPOIS, o arquivo declara um dia que o mês não tem. Nos dois casos '
+            + 'o PVA recusa — é contra este campo que ele confere o DT_DOC de cada documento.');
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
         ...conferirBlocoDContrib(linhas).erros,
+        ...conferirAritmeticaPisCofins(linhas).erros,
+        ...conferirPeriodoDoArquivo(linhas).erros,
         ...conferirReceitaBrutaDoM210(linhas).erros,
         ...conferirSomaDosItensContrib(linhas).erros,
         ...conferirCadastrosOrfaosContrib(linhas).erros,
