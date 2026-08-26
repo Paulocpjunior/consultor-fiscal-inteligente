@@ -27,11 +27,17 @@ SBC_HOST="${SBC_HOST:?Defina SBC_HOST (ex.: SBC_HOST=sip.spassessoriacontabil.co
 # tem como cair no atendente correto"). Ele está certo, e este parâmetro é o
 # ponto exato disso: quem liga pelo ☎️ do WhatsApp não escolheu departamento —
 # mandar direto para UM ramal é apostar que a dúvida é sempre daquela pessoa.
-# ⚠️ O default 221 era do PRIMEIRO TESTE (um ramal que aceita INVITE e prova
-# que a perna funciona). Para o dia a dia, aponte para a URA/rota de
-# atendimento da HIT — é a MESMA porta por onde entra quem liga no telefone
-# fixo, e a régua da casa é uma triagem só, não duas.
-SBC_DESTINO="${SBC_DESTINO:-221}"                 # ramal/DID/URA no HitPhone que recebe a chamada
+# ✅ DESTINO DE HOJE: 211, a TELEFONISTA (Paulo, 25/08: "O ramal 211 é
+# telefonista ou seja 1 opção quando recebemos ligação"). O default deixou de
+# ser o 221, que era o alvo do PRIMEIRO TESTE — o ramal de uma pessoa.
+# ✅ E o motivo é o mais simples que existe: é assim que a casa atende por
+# QUALQUER meio. "Ambos a URA atende e o cliente NÃO TEM OPÇÃO DE DISCAGEM!
+# Isso nos ajuda, a telefonista ramal 211 atende. E pode transferir" — ou seja,
+# a URA daqui não é menu numérico, e DTMF não decide nada neste projeto.
+# ⚠️ NÃO rotear a chamada de WhatsApp por dono/fila: seria uma SEGUNDA regra
+# para o mesmo cliente (quem liga do celular cai na telefonista, quem liga pelo
+# WhatsApp cairia num ramal). "Mesma coisa, só muda o meio" (Paulo, 25/08).
+SBC_DESTINO="${SBC_DESTINO:-211}"                 # telefonista do HitPhone — a mesma porta do fixo
 HIT_HOST="${HIT_HOST:-177.107.205.201}"
 HIT_PORT="${HIT_PORT:-21694}"
 LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
@@ -162,10 +168,51 @@ rtpstart=10000
 rtpend=10500
 CONF
 
+# ── 🚨 O SBC NASCEU SEM DEIXAR RASTRO (25/08). A primeira ligação REAL entrou
+#    ("Não atendida" no celular do cliente, 14:17) e não havia como provar se
+#    ela chegou aqui: /var/log/asterisk/full não existia (o pacote do Ubuntu
+#    só escreve messages, sem verbose) e o Master.csv do CDR também não.
+#    Ou seja: o log ficou mudo e o silêncio não distinguia "não chegou" de
+#    "chegou e ninguém anotou" — que é a pior forma de silêncio, e a mesma
+#    classe que este projeto persegue em toda tela. Infraestrutura de
+#    diagnóstico que não registra é farol apagado.
+cat > /etc/asterisk/logger.conf <<'CONF'
+[general]
+dateformat = %F %T
+[logfiles]
+console => notice,warning,error
+messages => notice,warning,error
+; O 'full' é o que guarda o VERBOSE — é dele que sai o INVITE da Meta, e é ele
+; que faltava. Sem verbose, a linha do dialplan (NoOp) não é escrita em lugar
+; nenhum e a chamada não deixa marca.
+full => notice,warning,error,verbose
+CONF
+
+# Verbose PERSISTE no arquivo: 'core set verbose' some no primeiro restart, e
+# foi exatamente assim que a ligação de hoje passou sem registro.
+if ! grep -q '^verbose' /etc/asterisk/asterisk.conf; then
+    sed -i 's/^\[options\]/[options]\nverbose = 3/' /etc/asterisk/asterisk.conf
+fi
+
+# CDR: UMA LINHA POR CHAMADA, sempre. É a prova barata de "chegou ou não
+# chegou" — não depende de logger, de verbose nem de alguém estar com o
+# console aberto na hora.
+cat > /etc/asterisk/cdr.conf <<'CONF'
+[general]
+enable = yes
+unanswered = yes
+congestion = yes
+CONF
+cat > /etc/asterisk/cdr_csv.conf <<'CONF'
+[csv]
+usegmtime = no
+loguniqueid = yes
+CONF
+
 # ── A ponte: Meta entra por TLS/SRTP; a HIT recebe INVITE direto em UDP/RTP.
 #    ⚠️ Leiaute da perna Meta NÃO provado contra chamada real — o ajuste fino
 #    sai do log (asterisk -rvvv), nunca de dedução (docs/sbc-whatsapp-hitphone.md).
-cat > /etc/asterisk/pjsip.conf <<CONF
+cat > /etc/asterisk/pjsip.conf <<'CONF'
 [transport-tls]
 type=transport
 protocol=tls
@@ -223,7 +270,7 @@ contact=sip:${HIT_HOST}:${HIT_PORT}
 ${BLOCO_META_SAIDA}
 CONF
 
-cat > /etc/asterisk/extensions.conf <<CONF
+cat > /etc/asterisk/extensions.conf <<'CONF'
 [de-meta]
 ; Toda chamada da Meta cai no destino do HitPhone (ramal/DID ${SBC_DESTINO}).
 exten => _.,1,NoOp(Chamada WhatsApp da Meta -> HIT ${SBC_DESTINO})

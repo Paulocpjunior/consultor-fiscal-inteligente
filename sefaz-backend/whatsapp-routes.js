@@ -37,6 +37,7 @@ import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
     lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
+    ehEventoDeChamada, rotularEventoCru,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -57,6 +58,7 @@ import {
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
+import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
 import { PORTA_SIP_TLS, interpretarCertificado, concluirSondaSbc } from './sbc-sonda.js';
 import { medirSbc } from './sbc-medicao.js';
 import {
@@ -541,7 +543,10 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 const v = d.data().atualizadoEm;
                 return v?.toMillis ? v.toMillis() : (Date.parse(v) || 0);
             };
-            docsConversas = snap.docs.sort((a, b) => quando(b) - quando(a));
+            // Mesmo corte do outro galho, e pela mesma razão: as DUAS consultas
+            // são limitadas ao teto CADA UMA, então a união pode chegar ao
+            // dobro — e o aviso da tela continuaria anunciando o teto.
+            docsConversas = snap.docs.sort((a, b) => quando(b) - quando(a)).slice(0, TETO_LEITURA_CONVERSAS);
         } else {
             let cursorConv = null;
             while (docsConversas.length < TETO_LEITURA_CONVERSAS) {
@@ -551,7 +556,15 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 // eslint-disable-next-line no-await-in-loop
                 const pagina = await q.get();
                 if (pagina.empty) break;
-                docsConversas = docsConversas.concat(pagina.docs);
+                // 🐛 O TETO NÃO CORTAVA NADA (25/08, print do Paulo: chip
+                // "Todas · 500" com o aviso dizendo "mostrando as 300 mais
+                // recentes"). A página do banco é 500 e o teto é 300: a
+                // primeira leitura já trazia 500, o laço saía satisfeito e a
+                // rota devolvia as 500 — anunciando 300. Duas leituras do
+                // mesmo fato na mesma tela, e o defeito é MEU, de quando
+                // baixei o teto sem olhar o tamanho da página.
+                // ✂️ O corte é aqui: o que sai é o que o aviso promete.
+                docsConversas = docsConversas.concat(pagina.docs).slice(0, TETO_LEITURA_CONVERSAS);
                 cursorConv = pagina.docs[pagina.docs.length - 1];
                 if (pagina.docs.length < PAGINA_CONVERSAS) break;
             }
@@ -2426,6 +2439,72 @@ router.post('/canais', requireAdmin, async (req, res) => {
 // Gravação SÓ admin — mesma regra dos departamentos do SaaS (auto-conceder
 // 'recepcao' abriria todas as conversas), e as rules têm a anti-autoconcessão.
 
+/**
+ * 🟢 SINAL DE PRESENÇA — o inbox aberto bate aqui de tempos em tempos.
+ *
+ * `requireAuth` e SEM destinatário no corpo: cada um marca a PRÓPRIA presença.
+ * Aceitar um e-mail no body deixaria alguém marcar presença por outro, e o
+ * único uso disso seria mentir sobre quem está no ar.
+ *
+ * Best-effort de propósito: falhar aqui não pode atrapalhar quem está
+ * atendendo — presença é conforto, mensagem é o trabalho.
+ */
+router.post('/presenca', requireAuth, async (req, res) => {
+    try {
+        const email = String(req.user?.email || '').trim().toLowerCase();
+        if (!email) return res.status(400).json({ ok: false, error: 'Sessão sem e-mail.' });
+        await getDb().collection('whatsapp_presenca').doc(email).set({
+            email, em: new Date().toISOString(), nome: req.user?.name || null,
+        }, { merge: true });
+        return res.json({ ok: true, intervaloMs: INTERVALO_SINAL_MS });
+    } catch (e) {
+        console.warn('[whatsapp/presenca]', e.message);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🟢 QUEM DA FILA ESTÁ NO AR — a pergunta da hora de TRANSFERIR.
+ *
+ * `requireAuth` (não admin): quem transfere é atendente, e é ele que precisa
+ * saber se há alguém do outro lado. Devolve NOME e situação, nunca "offline".
+ */
+router.get('/presenca/fila/:fila', requireAuth, async (req, res) => {
+    try {
+        const fila = String(req.params.fila || '').trim().toLowerCase();
+        if (!filaValida(fila)) return res.status(400).json({ ok: false, error: 'Fila inválida.' });
+        const db = getDb();
+        const [usuarios, presencas] = await Promise.all([
+            db.collection('users').limit(500).get(),
+            db.collection('whatsapp_presenca').limit(500).get(),
+        ]);
+        // A régua de "quem é da fila" é a MESMA do inbox — `filasVisiveis`.
+        // Uma segunda aqui divergiria no primeiro gestor cadastrado.
+        const atendentes = usuarios.docs.map((d) => {
+            const x = d.data() || {};
+            return {
+                email: x.email || null,
+                nome: x.displayName || x.nome || null,
+                filas: filasVisiveis({
+                    email: x.email,
+                    papelAtendimento: x.papelAtendimento,
+                    departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
+                    filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
+                }),
+            };
+        }).filter((a) => a.email);
+        const mapa = {};
+        for (const d of presencas.docs) {
+            const x = d.data() || {};
+            mapa[String(x.email || d.id).toLowerCase()] = x.em || null;
+        }
+        return res.json({ ok: true, ...quemDaFilaEstaNoAr({ fila, atendentes, presencas: mapa }) });
+    } catch (e) {
+        console.error('[whatsapp/presenca/fila]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.get('/atendentes', requireAdmin, async (_req, res) => {
     try {
         const snap = await getDb().collection('users').limit(500).get();
@@ -2887,6 +2966,43 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
         return res.json({ ok: true, conclusao: concluirSonda(sondas), sondas, antesDeLigar: ANTES_DE_LIGAR, horarios });
     } catch (e) {
         console.error('[whatsapp/chamadas/sondar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══ 🔎 EVENTOS DE CHAMADA, CRUS ═══════════════════════════════════════════
+// 25/08, a ligação do CELULAR mostrou a tela real: fora do horário o cliente
+// recebe **"Pedir retorno de ligação"** e a frase "entraremos em contato assim
+// que possível" — uma promessa feita EM NOSSO NOME por uma tela que não é
+// nossa. Se esse pedido chega ao webhook e ninguém o lê, o cliente espera um
+// retorno que não vem.
+//
+// ⚠️ Esta rota NÃO processa nada: ela ACHA o evento cru. O leiaute do pedido
+// de retorno não está provado, e escrever o handler de um payload que ninguém
+// viu seria inventar leiaute — a lição do 1010, do 0500 e do D100. A régua
+// nasce do EVENTO REAL, e é ele que esta rota entrega.
+router.get('/chamadas/eventos-crus', requireAdmin, async (_req, res) => {
+    try {
+        const snap = await getDb().collection('whatsapp_webhook_eventos')
+            .orderBy('recebidoEm', 'desc').limit(200).get();
+        const achados = snap.docs
+            .filter((d) => ehEventoDeChamada(d.data()?.payload))
+            .slice(0, 10)
+            .map((d) => ({
+                em: d.data()?.recebidoEm || null,
+                rotulo: rotularEventoCru(d.data()?.payload),
+                payload: d.data()?.payload || null,
+            }));
+        return res.json({
+            ok: true,
+            achados,
+            // Recorte DITO: "0 de 200 conferidos" é resposta; "0" sozinho
+            // passaria por "a Meta não manda nada", que é outra afirmação.
+            amostra: snap.size,
+            ultimoEventoEm: snap.docs[0]?.data()?.recebidoEm || null,
+        });
+    } catch (e) {
+        console.error('[whatsapp/chamadas/eventos-crus]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

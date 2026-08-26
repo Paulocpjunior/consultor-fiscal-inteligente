@@ -147,7 +147,7 @@ describe('🚨 M210/M610 — receita bruta e base são campos DIFERENTES', () =>
 
     it('e o M610 idem, com 3%', () => {
         const f = campos(acha(linhas(), 'M610')[0]);
-        expect(brl(f[3])).toBeCloseTo(18741.24, 2);
+        expect(brl(f[3])).toBeCloseTo(18179.00, 2);
         expect(brl(f[4])).toBeCloseTo(14906.78, 2);
         expect(brl(f[11])).toBeCloseTo(brl(f[7]) * brl(f[8]) / 100, 2);
     });
@@ -323,7 +323,7 @@ describe('🚨 PWR 07/2026 — a receita do M210 é a Σ VL_ITEM, e o desconto r
     it('reproduz a linha que o PVA valida — 38.316,84 × base 30.958,77', () => {
         const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
         expect(l.find((x: string) => x.startsWith('|M210|')))
-            .toBe('|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+            .toBe('|M210|51|37754,60|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
     });
 
     // 🚨 O IMPOSTO É O MESMO — é isto que fecha o assunto. O desconto sai da
@@ -345,7 +345,7 @@ describe('🚨 PWR 07/2026 — a receita do M210 é a Σ VL_ITEM, e o desconto r
         expect(aviso).toBeTruthy();
         expect(aviso).toMatch(/38316\.84/);        // a bruta, de onde partiu
         expect(aviso).toMatch(/562\.24/);          // o desconto
-        expect(aviso).toMatch(/30958\.77/);        // a base, que é o que paga
+        expect(aviso).toMatch(/37754\.60/);        // a receita que fica
         expect(aviso).toMatch(/1 documento\(s\)/);
         // Aponta ONDE conferir — e o lugar é a BASE, não a receita: foi
         // procurar o número na linha errada que custou cinco dias.

@@ -95,3 +95,45 @@ describe('o painel MOSTRA os quatro interruptores', () => {
         expect(tela).toMatch(/Servidor gravado, mas o SIP NÃO está ligado/);
     });
 });
+
+// ═══ 25/08 — A LIGAÇÃO DO CELULAR FUNCIONOU, e revelou uma PROMESSA ═════════
+// A tela do celular é OUTRA: fora do horário o cliente recebe
+//   "Próximo horário de atendimento por ligação: ter. 13:00 - 17:30
+//    Estamos indisponíveis… Peça um retorno de ligação e entraremos em
+//    contato assim que possível."
+//   [Pedir retorno de ligação] [Conversar com a empresa]
+//
+// Duas coisas de uma vez: (1) a chamada ESTÁ viva e a grade de horário está
+// sendo honrada pela Meta — a recusa era do WhatsApp DESKTOP, que não suporta
+// ligar para número da Business API; (2) existe um botão que promete retorno
+// EM NOSSO NOME, numa tela que não é nossa.
+//
+// 🚨 Se esse pedido chega ao webhook e ninguém o lê, o cliente espera um
+// retorno que não vem — a família da "nota que entra e some", agora com uma
+// promessa explícita em cima.
+//
+// ⚠️ E o handler NÃO se escreve agora: o leiaute não está provado. Escrever o
+// processamento de um payload que ninguém viu é inventar leiaute — a lição do
+// 1010, do 0500 e do D100. O que entra é um LOCALIZADOR do evento real.
+describe('🔎 o pedido de retorno é ACHADO, não deduzido', () => {
+    const rotas = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('a rota entrega o evento CRU e não processa nada', () => {
+        expect(rotas).toMatch(/router\.get\('\/chamadas\/eventos-crus', requireAdmin/);
+        const trecho = rotas.slice(rotas.indexOf("'/chamadas/eventos-crus'"), rotas.indexOf("'/chamadas/eventos-crus'") + 1800);
+        // Nada de gravar/derivar: só ler e devolver.
+        expect(trecho).not.toMatch(/\.set\(|\.update\(/);
+        expect(trecho).toMatch(/payload: d\.data\(\)\?\.payload/);
+    });
+
+    it('o recorte é DITO — "0 de 200" é resposta, "0" sozinho é armadilha', () => {
+        expect(rotas).toMatch(/amostra: snap\.size/);
+        expect(tela).toMatch(/entre os \$\{crus\.amostra\} eventos mais recentes do webhook/);
+    });
+
+    it('e a tela tem o botão (rota sem botão é código morto com cara de entrega)', () => {
+        expect(tela).toMatch(/Ver eventos de chamada \(crus\)/);
+        expect(tela).toMatch(/eventosCrusDeChamada\(\)/);
+    });
+});

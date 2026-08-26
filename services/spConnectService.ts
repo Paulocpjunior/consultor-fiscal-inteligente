@@ -142,14 +142,13 @@ const post = <T>(url: string, body?: unknown, metodo: 'POST' | 'PATCH' | 'DELETE
 const urlConversa = (numero: string, acao: string) =>
     `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/${acao}`;
 
-/** ☎️ Pede ao cliente a permissão de ligação (cartão "Permitir" no WhatsApp). */
-/** ☎️ Liga para o cliente (só depois do "Permitir" dele — a trava é do backend). */
-export const ligarParaCliente = (numero: string) =>
-    post<{
-        mensagem: MensagemInbox; acao?: string; emConducaoPor?: string;
-        code?: number | null; permissao?: string; indeterminado?: boolean;
-    }>(urlConversa(numero, 'ligar'));
+// ☎️ `ligarParaCliente` FOI DELETADA em 25/08. A Meta recusa chamada por API em
+// número no modo SIP (código 131055, provado em 24/08), então a porta só servia
+// a uma ação de tela que já não existia — porta de fetch órfã é o convite para
+// religar um botão que não disca. A rota do backend continua de pé com as
+// travas dela; quando este número sair do modo SIP, a porta volta COM o botão.
 
+/** ☎️ Pede ao cliente a permissão de ligação (cartão "Permitir" no WhatsApp). */
 export const pedirPermissaoLigacao = (numero: string) =>
     post<{
         mensagem: MensagemInbox; acao?: string; janelaFechada?: boolean; emConducaoPor?: string;
@@ -182,6 +181,26 @@ export const removerImagemFila = (fila: string) =>
 export const transferirFila = (numero: string, fila: string, recado?: string) =>
     post<{ numero: string; fila: string; transferidaDe: string; avisoCliente: string; nota: MensagemInbox }>(
         urlConversa(numero, 'fila'), { fila, recado });
+
+/** 🟢 Presença: o inbox aberto bate aqui. Marca a PRÓPRIA — sem destinatário. */
+export const baterPresenca = () =>
+    post<{ intervaloMs: number }>('/api/admin/whatsapp/presenca', {});
+
+export interface PessoaNaFila {
+    email: string; nome: string;
+    situacao: 'no-ar' | 'sem-sinal' | 'sem-registro';
+    texto: string; minutos: number | null;
+}
+export interface PresencaDaFila {
+    fila: string; total: number; noAr: number;
+    pessoas: PessoaNaFila[];
+    /** Só existe quando há o que avisar — fila coberta não ganha alarme. */
+    aviso: string | null;
+}
+
+/** 🟢 Quem da fila está no ar AGORA — a pergunta da hora de transferir. */
+export const presencaDaFila = (fila: string) =>
+    req<PresencaDaFila>(`/api/admin/whatsapp/presenca/fila/${encodeURIComponent(fila)}`);
 
 /** Assumir a conversa (liberar=true devolve pra fila). */
 export const assumirConversa = (numero: string, liberar = false) =>
@@ -407,6 +426,19 @@ export interface SondaSbc {
  * certificado e um SIP OPTIONS. É o que separa "tudo verde e a ligação é
  * recusada" de uma causa com nome.
  */
+/**
+ * 🔎 Os eventos de CHAMADA que a Meta mandou, CRUS. Existe porque a tela dela
+ * promete "peça um retorno de ligação e entraremos em contato" — e o leiaute
+ * desse pedido não está provado aqui. Não processa nada: entrega o evento real
+ * para a régua nascer DELE.
+ */
+export const eventosCrusDeChamada = () =>
+    req<{
+        achados: { em: string | null; rotulo: string; payload: unknown }[];
+        amostra: number;
+        ultimoEventoEm: string | null;
+    }>('/api/admin/whatsapp/chamadas/eventos-crus');
+
 export const sondarSbc = (p?: { hostname?: string; porta?: number }) =>
     post<SondaSbc>('/api/admin/whatsapp/chamadas/sondar-sbc', p || {});
 

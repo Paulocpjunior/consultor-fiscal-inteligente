@@ -20,9 +20,11 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, ligarParaCliente, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
+    baterPresenca, presencaDaFila, PresencaDaFila,
+    eventosCrusDeChamada,
     sondarInstagram, SondaInstagram,
     estadoInstagram, ligarInstagram, EstadoInstagram, EventosInstagram, AssinaturasInstagram, VerificacaoWebhook,
     listarContatos, criarContato, atualizarContato, excluirContato, salvarEtiqueta,
@@ -234,6 +236,24 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         return () => clearInterval(timer);
     }, [recarregar, carregarThread]);
 
+    // 🟢 BATIMENTO DE PRESENÇA — é o que responde "quem está no ar?" na hora
+    // de transferir. Bate a cada minuto, e SÓ com a aba visível: aba
+    // esquecida atrás de outra por três horas continuaria dizendo "no ar", e
+    // aí quem transfere confia num sinal que não é presença de ninguém.
+    // Best-effort: falhar aqui não pode atrapalhar quem está atendendo.
+    useEffect(() => {
+        const bater = () => {
+            if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            baterPresenca().catch(() => { /* presença é conforto, mensagem é o trabalho */ });
+        };
+        bater();
+        const t = setInterval(bater, 60_000);
+        // Voltar para a aba bate na hora: esperar o próximo minuto deixaria a
+        // pessoa "sem sinal" logo depois de sentar na mesa.
+        document.addEventListener('visibilitychange', bater);
+        return () => { clearInterval(t); document.removeEventListener('visibilitychange', bater); };
+    }, []);
+
     // ⚠️ A rolagem para o fim segue presa à FATIA RECENTE, de propósito:
     // carregar histórico acrescenta linhas ACIMA e não pode jogar a pessoa
     // de volta pro rodapé — ela acabou de pedir pra ver o começo.
@@ -306,6 +326,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [transFila, setTransFila] = useState('');
     const [transRecado, setTransRecado] = useState('');
     const [transAviso, setTransAviso] = useState<string | null>(null);
+    // 🟢 Quem está no ar na fila DESTINO — buscado ao escolher a fila, não no
+    // carregamento da tela: é uma pergunta de UM momento, e consultá-la a cada
+    // conversa aberta seria pagar leitura por uma resposta que ninguém pediu.
+    const [presFila, setPresFila] = useState<PresencaDaFila | null>(null);
+    useEffect(() => {
+        if (!transFila) { setPresFila(null); return; }
+        let vivo = true;
+        presencaDaFila(transFila).then((r) => {
+            // Falha vira SILÊNCIO, não alarme: não saber quem está no ar não
+            // pode virar um aviso que parece problema na transferência.
+            if (vivo) setPresFila(r.ok ? r : null);
+        });
+        return () => { vivo = false; };
+    }, [transFila]);
     const acaoTransferir = async () => {
         if (!sel || !transFila || transFila === (sel.fila || 'recepcao')) return;
         setAcaoErro(null);
@@ -400,32 +434,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
     };
 
-    // ☎️ LIGAR para o cliente. O telefone dele TOCA — por isso confirma antes,
-    // como no pedido de permissão (e diferente de tudo que é ajuste interno).
-    const [ligando, setLigando] = useState(false);
-    const acaoLigar = async () => {
-        if (!sel || ligando) return;
-        setPermLigErro(null); setPermLigAviso(null); setPermLigConducao(false);
-        const ok = await pedirConfirmacao(
-            'O telefone do cliente vai TOCAR agora, e a ligação atende no ramal 221 (HitPhone). Ligar?',
-            'Ligar agora',
-        );
-        if (!ok) return;
-        setLigando(true);
-        setPermLigAviso('⏳ Pedindo a ligação à Meta…');
-        try {
-            const r = await ligarParaCliente(sel.numero);
-            if (!r.ok) {
-                const cod = (r as any).code != null ? ` (código ${(r as any).code})` : '';
-                setPermLigErro(`${r.error}${cod}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
-                setPermLigConducao(Boolean((r as any).emConducaoPor));
-                setPermLigAviso(null);
-                return;
-            }
-            setMensagens((m) => [...m, r.mensagem]);
-            setPermLigAviso('☎️ Ligação pedida — atenda no ramal 221 quando tocar.');
-        } finally { setLigando(false); }
-    };
+    // ☎️ NÃO EXISTE AÇÃO DE LIGAR AQUI, e o motivo é a resposta da própria Meta
+    // (24/08, código 131055): "Graph API calls are not allowed for SIP enabled
+    // numbers". Em modo SIP a saída não sai por API — quem disca é o tronco.
+    // A ação existia e ficou ÓRFÃ quando o botão saiu: código morto com cara de
+    // entrega é a isca para alguém religar um caminho que a Meta recusa por
+    // desenho, então ela foi DELETADA em 25/08 junto com a porta de fetch.
+    // A rota do backend (`/conversas/:numero/ligar`) fica de pé com as travas
+    // dela (permissão do cliente, validade, condução) — ela é a régua do dia em
+    // que este número sair do modo SIP, e não é ela que promete botão.
 
     const acaoSituacao = async () => {
         if (!sel) return;
@@ -615,6 +632,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // da sonda de settings: as duas respondem perguntas diferentes e juntá-las
     // faria "gravado na Meta" passar por "a Meta alcança".
     const [sbc, setSbc] = useState<SondaSbc | null>(null);
+    // 🔎 Eventos de chamada CRUS — a tela da Meta promete "peça um retorno de
+    // ligação e entraremos em contato", e o leiaute desse pedido não está
+    // provado. Isto ACHA o evento real; a régua nasce dele, nunca de dedução.
+    const [crus, setCrus] = useState<{ achados: { em: string | null; rotulo: string; payload: unknown }[]; amostra: number } | null>(null);
+    const [lendoCrus, setLendoCrus] = useState(false);
     const [sondandoSbc, setSondandoSbc] = useState(false);
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
         if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
@@ -2338,10 +2360,30 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
                                         {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
                                     </button>
+                                    {/* ✅ 25/08: a frase de sucesso tinha DOIS defeitos, os dois do
+                                        tipo que faz a pessoa procurar problema onde não há.
+                                        (1) Mandava "pode ligar a chave" com a chave JÁ ligada (ela
+                                        nasce ligada) — duas leituras do mesmo fato na mesma tela.
+                                        (2) Dizia "confira o sino" sem dizer ONDE: quem está com o SP
+                                        Connect aberto no NAVEGADOR fica procurando ali, e o sino é
+                                        do aplicativo do Teams. Aviso que aponta um lugar tem de
+                                        apontar um lugar que a pessoa ACHA (regra de 21/08).
+                                        E ela DIZ o que o "aceitou" já prova, porque é isso que tira
+                                        os dois suspeitos da frente sem mais nenhum teste. */}
                                     {teamsTeste && (teamsTeste.resultado.ok ? (
-                                        <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
-                                            ✅ O Graph aceitou — confira o <strong>sino de Atividade</strong> do seu Teams. Chegou lá? Pode ligar a chave.
-                                        </p>
+                                        <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
+                                            <p>
+                                                ✅ <strong>O Graph aceitou.</strong> Isso já prova as duas metades: a permissão
+                                                <strong> TeamsActivity.Send</strong> tem consent e o pacote instalado no seu Teams é o que
+                                                declara <code>activities</code>. Nada mais falta configurar.
+                                            </p>
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                O aviso aparece no <strong>aplicativo do Teams</strong> → barra da esquerda →
+                                                <strong> Atividade</strong> (o sino), não nesta aba do navegador. Pode levar alguns segundos.
+                                                Não chegou em ~1 min? Teams → <strong>Configurações → Notificações e atividade</strong>, e veja se o
+                                                SP Connect está silenciado.
+                                            </p>
+                                        </div>
                                     ) : (
                                         <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
                                             <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
@@ -2349,7 +2391,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <p className="text-slate-500 dark:text-slate-400">
                                                 Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
                                                 app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
-                                                2) o pacote do Teams ainda na versão sem <code>activities</code> — reenviar o zip 1.1.0;
+                                                2) o pacote do Teams instalado é anterior ao <code>activities</code> —
+                                                baixe o atual em <a href="/sp-connect-teams.zip" className="underline">/sp-connect-teams.zip</a> e reenvie;
                                                 3) o SP Connect não instalado no seu Teams.
                                             </p>
                                         </div>
@@ -2738,6 +2781,54 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                             Alvo veio de: {sbc.origemDoAlvo}.
                                                         </p>
                                                     )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* 🔎 O PEDIDO DE RETORNO — promessa feita EM NOSSO NOME.
+                                            Fora do horário, a tela da Meta oferece ao cliente "Pedir
+                                            retorno de ligação" e diz "entraremos em contato assim que
+                                            possível". Se esse pedido chega ao webhook e ninguém lê, o
+                                            cliente espera um retorno que não vem.
+                                            ⚠️ Isto NÃO processa nada: o leiaute não está provado, e
+                                            escrever handler de payload que ninguém viu é inventar
+                                            leiaute. Ele ACHA o evento real. */}
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1.5">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔎 O que a Meta já mandou sobre chamada</p>
+                                            <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
+                                                Fora do horário o cliente vê <strong>"Pedir retorno de ligação"</strong> e a promessa
+                                                de que entraremos em contato. Peça um retorno pelo celular e clique aqui: é deste
+                                                evento que sai a régua para o pedido virar tarefa de alguém.
+                                            </p>
+                                            <button
+                                                onClick={async () => {
+                                                    setLendoCrus(true);
+                                                    try {
+                                                        const r = await eventosCrusDeChamada();
+                                                        setCrus(r.ok ? { achados: r.achados || [], amostra: r.amostra || 0 } : null);
+                                                    } finally { setLendoCrus(false); }
+                                                }}
+                                                disabled={lendoCrus}
+                                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 btn-press whitespace-nowrap">
+                                                {lendoCrus ? 'Lendo…' : '🔎 Ver eventos de chamada (crus)'}
+                                            </button>
+                                            {crus && (
+                                                <div className="text-[10.5px] text-slate-600 dark:text-slate-300 space-y-1">
+                                                    <p>
+                                                        {crus.achados.length === 0
+                                                            ? `Nenhum evento de chamada entre os ${crus.amostra} eventos mais recentes do webhook.`
+                                                            : `${crus.achados.length} evento(s) de chamada entre os ${crus.amostra} mais recentes:`}
+                                                    </p>
+                                                    {crus.achados.map((a, i) => (
+                                                        <details key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1">
+                                                            <summary className="cursor-pointer font-semibold">
+                                                                {a.em ? new Date(a.em).toLocaleString('pt-BR') : 'sem data'} — {a.rotulo}
+                                                            </summary>
+                                                            <pre className="mt-1 text-[9px] bg-slate-900 text-slate-200 rounded p-2 overflow-x-auto max-h-48">
+                                                                {JSON.stringify(a.payload, null, 2)}
+                                                            </pre>
+                                                        </details>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
@@ -3441,6 +3532,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             })()}
                                         </div>
                                     )}
+                                    {/* 🤖 IA DE TRIAGEM (25/08). Ela NASCE DESLIGADA como
+                                        tudo que fala com o CLIENTE, e o texto diz o limite
+                                        dela em vez de vender inteligência: ela CLASSIFICA,
+                                        não responde. Sem essa frase, "IA no bot" se lê como
+                                        "o bot agora tira dúvidas", que é exatamente o que
+                                        ele não pode fazer num escritório contábil. */}
+                                    <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                                        <input type="checkbox" checked={cfg.triagemIaAtiva}
+                                            onChange={(e) => setCfg((c) => (c ? { ...c, triagemIaAtiva: e.target.checked } : c))} />
+                                        <span className="text-[11px] text-slate-700 dark:text-slate-200">
+                                            🤖 IA lê o texto livre e encaminha para a fila certa
+                                            <span className="block text-[9px] text-slate-400">
+                                                sem ela, quem escreve em vez de digitar o número recebe o menu de novo.
+                                                A IA <strong>só classifica</strong> — nunca responde ao cliente, nunca fala de
+                                                imposto, prazo ou valor. Sem certeza, mostra o menu como sempre.
+                                                O atendente vê na conversa que o encaminhamento foi automático.
+                                            </span>
+                                            {/* 🔌 O caminho de VOLTA, dito junto da chave. Sem esta
+                                                linha, "desligo se der problema" é uma aposta: ninguém
+                                                sabe se precisa de deploy nem quando passa a valer.
+                                                O bot relê a config a cada mensagem — por isso vale já. */}
+                                            <span className="block text-[9px] text-emerald-600 dark:text-emerald-400">
+                                                Desmarcar aqui e salvar já vale na <strong>próxima mensagem</strong>, sem deploy —
+                                                e o cliente pode desfazer um encaminhamento errado digitando <strong>#menu</strong>.
+                                            </span>
+                                        </span>
+                                    </label>
                                     <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                                         <input type="checkbox" checked={cfg.avisarClienteTransferencia}
                                             onChange={(e) => setCfg((c) => (c ? { ...c, avisarClienteTransferencia: e.target.checked } : c))} />
@@ -3660,7 +3778,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden md:grid md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_280px]" style={{ height: 'calc(100vh - 140px)', minHeight: '480px' }}>
 
                 {/* ═══ COLUNA 1 — CONVERSAS ═══════════════════════════════════ */}
-                <div className={`${sel ? 'hidden md:flex' : 'flex'} flex-col md:border-r border-slate-200 dark:border-slate-700 min-h-0`}>
+                {/* 🐛 NO CELULAR A LISTA MOSTRAVA 4 CONVERSAS (25/08, print do
+                    Paulo: "no app no celular... não carrega"). E ela carregava:
+                    o defeito é de ESPAÇO. A coluna tem altura fixa
+                    (`100vh - 140px`) e a rolagem era só da lista, DENTRO dela —
+                    enquanto o cabeçalho (busca + barra de avisos + o aviso do
+                    teto + 9 chips de fila) ocupava quase metade da caixa numa
+                    tela de celular. Sobravam ~260px para as linhas, ou seja
+                    quatro. Quem rolava a PÁGINA batia no rodapé e concluía,
+                    com toda a razão, que a lista tinha acabado.
+                    ✂️ No celular quem rola é a COLUNA INTEIRA: o cabeçalho sai
+                    de cena junto e a tela vira lista, como em qualquer app de
+                    mensagem. No md+ nada muda — lá o cabeçalho fica fixo e a
+                    lista rola por dentro, que é o certo com espaço sobrando. */}
+                <div className={`${sel ? 'hidden md:flex' : 'flex'} flex-col md:border-r border-slate-200 dark:border-slate-700 min-h-0 overflow-y-auto md:overflow-hidden`}>
                     <div className="p-2.5 space-y-2 border-b border-slate-200 dark:border-slate-700">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide shrink-0">Conversas</p>
@@ -3811,7 +3942,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto min-h-0">
+                    {/* Sem `flex-1` no celular: aqui a lista tem a altura do
+                        conteúdo e quem rola é a coluna. Com ele, o flex
+                        comprimiria a lista de volta ao tamanho da caixa e o
+                        defeito voltaria inteiro. */}
+                    <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
                         {visiveis.length === 0 && !carregando ? (
                             <div className="p-4 text-[11px] text-slate-500 dark:text-slate-400 space-y-1.5">
                                 {conversas.length === 0 ? (
@@ -4246,6 +4381,24 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </label>
                                     {transFila && (
                                         <div className="space-y-1">
+                                            {/* 🟢 QUEM ESTÁ NO AR NA FILA DESTINO — é aqui que a
+                                                presença vale. Sem isto, transferir para uma fila
+                                                sem ninguém é indistinguível de transferir para uma
+                                                fila cheia: a conversa some da mesa de quem mandou e
+                                                ninguém do outro lado vê.
+                                                ⚠️ Ela INFORMA, não impede: o app mediu o SINAL do
+                                                inbox, não a pessoa. Bloquear por falta de sinal
+                                                barraria transferência legítima para quem está com
+                                                a aba fechada e vai abrir daqui a dez minutos. */}
+                                            {presFila && (
+                                                <div className={`rounded px-2 py-1 text-[10px] leading-snug ${presFila.noAr > 0
+                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                                                    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'}`}>
+                                                    {presFila.noAr > 0
+                                                        ? <>🟢 <strong>{presFila.noAr} de {presFila.total}</strong> no ar em {rotuloCurtoFila(transFila)}: {presFila.pessoas.filter((p) => p.situacao === 'no-ar').map((p) => p.nome).join(', ')}</>
+                                                        : <>⚠️ {presFila.aviso}</>}
+                                                </div>
+                                            )}
                                             <input value={transRecado} onChange={(e) => setTransRecado(e.target.value)}
                                                 placeholder="Recado pra fila destino (opcional — vira nota interna)" className={CAMPO} />
                                             <button onClick={acaoTransferir}
@@ -4285,16 +4438,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         allowed for SIP enabled numbers". Em modo SIP a saída NÃO
                                                         sai por API — quem disca é o tronco. Botão que a Meta
                                                         recusa por desenho é botão que não faz nada. */}
-                                                    {/* ⚠️ A frase diz o ESTADO, não a promessa: discar o 221 só
-                                                        vai completar quando o SBC souber o endereço SIP da Meta,
-                                                        e ele se lê no INVITE da primeira ligação RECEBIDA. Dizer
-                                                        "disque 221" antes disso é a promessa que a tela não
-                                                        cumpre — o defeito que este mesmo bloco acabou de ter. */}
+                                                    {/* ⚠️ A frase diz o ESTADO MEDIDO, não a promessa. Até 25/08
+                                                        ela dizia "falta a primeira ligação RECEBIDA" — o que fazia
+                                                        parecer que bastava alguém ligar. A medição desmentiu: com o
+                                                        gravador do SBC PROVADO ligado, a chamada das 14h52 (dentro
+                                                        da janela) saiu "Não atendida" no celular e o tronco não
+                                                        registrou CDR nem INVITE em três conferências seguidas. Ou
+                                                        seja: a Meta ACEITA a chamada e NÃO a entrega no tronco.
+                                                        Mandar esperar a primeira ligação seria mandar esperar o que
+                                                        não vai acontecer sozinho — quem destrava é o chamado. */}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
                                                         📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone),
                                                         não por aqui — a Meta recusa chamada por API em número SIP.
-                                                        <span className="block text-amber-600 dark:text-amber-400">
-                                                            Em validação: falta a primeira ligação RECEBIDA, que é o que ensina o endereço da Meta ao tronco.
+                                                        <span className="block text-red-600 dark:text-red-400">
+                                                            🛑 Ligação ainda NÃO funciona nos dois sentidos: medido em 25/08, a Meta aceita
+                                                            a chamada e não entrega no nosso tronco (sem INVITE, sem CDR) — chamado aberto com ela.
+                                                            Fale por mensagem enquanto isso.
                                                         </span>
                                                     </p>
                                                 </>

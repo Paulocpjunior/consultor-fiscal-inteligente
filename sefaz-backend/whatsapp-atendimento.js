@@ -231,6 +231,24 @@ export function configPadraoAtendimento() {
         // Agora a escala é DADO: a mensagem, a leitura da resposta e o painel
         // leem daqui, e um teste barra mensagem que peça outra escala.
         avaliacaoEscala: 10,
+        // 🤖 IA DE TRIAGEM (25/08) — lê o texto livre do cliente e escolhe uma
+        // fila DO MENU quando tem certeza; sem certeza, o menu de sempre.
+        //
+        // ✅ NASCE LIGADA POR DECISÃO DO DONO (Paulo, 25/08: *"vamos ligar por
+        // padrão e ver como o pessoal se sai! Se der merda aperto o botão do
+        // off"*). Eu tinha escrito `false` pela régua da casa — o que fala com
+        // o CLIENTE nasce desligado —, e ele decidiu o contrário sabendo do
+        // alcance: o bot já está em 🌐 todos, então isto vale para a carteira
+        // inteira na próxima mensagem.
+        //
+        // ⚠️ O QUE SUSTENTA A DECISÃO, e por isso ela não é temerária: o pior
+        // caso desta IA é o comportamento de ONTEM. Sem certeza, ilegível, fora
+        // do ar ou lenta ⇒ o menu de sempre. Ela nunca responde ao cliente,
+        // nunca inventa fila fora do menu, e o `#menu` desfaz qualquer
+        // encaminhamento errado — pelo próprio cliente, sem depender de nós.
+        // 🔌 E o "botão do off" é real: `rodarBot` relê esta config a CADA
+        // mensagem, então desligar vale na mensagem seguinte, sem deploy.
+        triagemIaAtiva: true,
         horario: {
             dias: [1, 2, 3, 4, 5],
             turnos: [{ inicio: '08:00', fim: '12:00' }, { inicio: '13:00', fim: '17:30' }],
@@ -366,6 +384,13 @@ export function resolverConfig(gravada) {
         avaliacaoEscala: ESCALAS_AVALIACAO.includes(Number(gravada.avaliacaoEscala))
             ? Number(gravada.avaliacaoEscala) : p.avaliacaoEscala,
         avisoTeamsAtivo: typeof gravada.avisoTeamsAtivo === 'boolean' ? gravada.avisoTeamsAtivo : p.avisoTeamsAtivo,
+        // ⚠️ Config gravada ANTES deste campo existir herda o PADRÃO — e como
+        // o dono mandou ligar por padrão (25/08), ela nasce LIGADA no primeiro
+        // deploy. Isso é a decisão dele, tomada com o alcance na mesa, não um
+        // efeito colateral: está dito no `configPadraoAtendimento`.
+        // ✅ E quem DESLIGAR fica desligado: a partir daí o campo existe gravado
+        // como `false`, e o padrão não o reacende num deploy seguinte.
+        triagemIaAtiva: typeof gravada.triagemIaAtiva === 'boolean' ? gravada.triagemIaAtiva : p.triagemIaAtiva,
         horario: gravada.horario && Array.isArray(gravada.horario.turnos) ? gravada.horario : p.horario,
         mensagens: { ...p.mensagens, ...(gravada.mensagens || {}) },
         menu: menuGravado.length ? menuGravado : p.menu,
@@ -562,7 +587,14 @@ export function interpretarEscolhaSubmenu(texto, item) {
 //   {tipo:'responder', texto}  ·  {tipo:'definirFila', fila}
 //   {tipo:'gravarProtocolo', protocolo}  ·  {tipo:'marcarAusenciaEnviada'}
 //   {tipo:'resetarTriagem'}
-export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeContato, config, agora = new Date(), protocoloNovo }) {
+// 🤖 `filaSugerida` é a leitura da IA de triagem, JÁ DECIDIDA lá fora
+// (`whatsapp-triagem-ia.js` + a chamada ao Gemini na rota). Ela entra como
+// PARÂMETRO, e não como chamada aqui dentro, por uma razão de desenho: este
+// cérebro é PURO e síncrono — é isso que permite prová-lo inteiro sem rede.
+// Rede dentro dele obrigaria todo teste do bot a simular o Gemini.
+// ⚠️ E ela só é usada no galho da TRIAGEM: conversa com dono ou com fila não
+// passa por aqui, então a IA não fala por cima de atendimento em andamento.
+export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeContato, config, agora = new Date(), protocoloNovo, filaSugerida = null }) {
     const acoes = [];
     if (!config?.botAtivo) return acoes;             // desligado = silêncio total
     // Fora do alcance = silêncio TOTAL, igual a desligado. É o que permite
@@ -647,7 +679,9 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
         } else if (escolha) {
             confirmarFila(escolha.fila, escolha.rotulo);
         } else {
-            // 1º contato ganha protocolo + saudação; sempre reapresenta o menu.
+            // 1º contato ganha protocolo + saudação — ANTES de qualquer
+            // encaminhamento, senão o cliente é direcionado por uma casa que
+            // ainda não disse "olá" nem deu o protocolo dele.
             if (!conversa.protocolo && protocoloNovo) {
                 acoes.push({ tipo: 'gravarProtocolo', protocolo: protocoloNovo });
                 acoes.push({
@@ -655,7 +689,24 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
                     texto: renderMensagem(config.mensagens.saudacao, { nome: nomeContato || 'Olá', protocolo: protocoloNovo }),
                 });
             }
-            acoes.push({ tipo: 'responder', texto: montarTextoMenu(config) });
+            // 🤖 A IA leu o texto livre e teve CERTEZA de uma fila do menu?
+            // Encaminha como se o cliente tivesse digitado o número — mesma
+            // confirmação, mesmo `#menu` para desfazer. `filaValida` é a
+            // última porta: sugestão fora do catálogo não vira fila NUNCA,
+            // por mais que a régua lá de fora já devesse ter barrado.
+            if (filaSugerida?.fila && filaValida(filaSugerida.fila)) {
+                acoes.push({
+                    tipo: 'registrarTriagemIa',
+                    fila: filaSugerida.fila,
+                    confianca: filaSugerida.confianca ?? null,
+                    motivo: filaSugerida.motivo || null,
+                });
+                confirmarFila(filaSugerida.fila, filaSugerida.rotulo || filaSugerida.fila);
+            } else {
+                // Sem IA, sem certeza ou IA fora do ar: o menu de sempre. É de
+                // propósito que o pior caso da IA seja o comportamento de hoje.
+                acoes.push({ tipo: 'responder', texto: montarTextoMenu(config) });
+            }
         }
     }
 
