@@ -274,6 +274,82 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         fecha();
     })();
 
+    // ── R21. AS OUTRAS CINCO SOMAS C100 × C190 ──────────────────────────────
+    //
+    // FONTE — Guia Prático 3.2.3, C100, uma Validação por campo, todas com a
+    // mesma frase: *"a soma dos valores do campo <X> dos registros analíticos
+    // (C190) deve ser igual ao valor informado neste campo"* — campos 21
+    // (VL_BC_ICMS), 22 (VL_ICMS), 23 (VL_BC_ICMS_ST), 24 (VL_ICMS_ST) e 25
+    // (VL_IPI).
+    //
+    // 🚨 SÓ O VL_DOC ESTAVA CONFERIDO (R14), e as outras CINCO são a MESMA
+    // classe — no MESMO par de registros que já custou um dia inteiro da PWR
+    // (20/08, o VL_OPR sem o IPI). E a condição que produz o defeito continua
+    // ali: **o C100 lê os TOTAIS DO DOCUMENTO e o C190 agrega os ITENS**, duas
+    // fontes diferentes montadas em passos diferentes do gerador. O comentário
+    // do próprio código já afirmava "VL_BC_ICMS — bate com ΣC190" e nada
+    // conferia: regra escrita não é regra travada.
+    //
+    // ⚠️ E O CAMPO 22 É O QUE ALIMENTA A APURAÇÃO: é a soma dos VL_ICMS dos
+    // C190 que vira débito e crédito no E110 (a R7 confere justamente isso).
+    // Um C100 que discorda dos próprios filhos põe o livro e a apuração em
+    // números diferentes para a MESMA nota.
+    //
+    // ⚠️ Um centavo de tolerância: o C190 arredonda por grupo de
+    // CST+CFOP+alíquota, então nota com muitos grupos fecha com centavo.
+    (() => {
+        const SOMAS = [
+            [21, 6, 'VL_BC_ICMS', 'base do ICMS'],
+            [22, 7, 'VL_ICMS', 'ICMS destacado — é ele que vira débito/crédito no E110'],
+            [23, 8, 'VL_BC_ICMS_ST', 'base do ICMS-ST'],
+            [24, 9, 'VL_ICMS_ST', 'ICMS-ST retido'],
+            [25, 11, 'VL_IPI', 'IPI destacado — é ele que alimenta o E520'],
+        ];
+        let atual = null;
+        let somas = null;
+        let filhos = 0;
+        const fecha = () => {
+            // Sem filhos a causa é outra e a R6 já a diz — dois alarmes para um
+            // defeito é o caminho para a equipe ignorar os dois.
+            if (!atual || !filhos) return;
+            const f = campos(atual);
+            for (const [posC100, posC190, nome, oQueE] of SOMAS) {
+                const declarado = num(f[posC100]);
+                const somado = somas[posC190];
+                if (Math.abs(centavos(declarado) - centavos(somado)) <= 1) continue;
+                add(erros, {
+                    regra: 'c100-x-c190-totais', registro: 'C100', campo: `${posC100} - ${nome}`,
+                    valor: declarado.toFixed(2), esperado: somado.toFixed(2), linha: atual,
+                    mensagem: `A nota nº ${f[8] || '?'} declara ${nome} ${declarado.toFixed(2)} e os C190 dela `
+                        + `somam ${somado.toFixed(2)} (diferença de ${Math.abs(declarado - somado).toFixed(2)}).`,
+                    acao: `O C100 lê os TOTAIS do documento e o C190 agrega os ITENS — quando os dois discordam, `
+                        + `ou um item ficou fora do C190, ou o total do XML não é a soma dos itens. É o ${oQueE}.`,
+                    fonte: 'Guia Prático EFD ICMS/IPI 3.2.3, C100 campos 21 a 25: "a soma dos valores do campo '
+                        + 'dos registros analíticos (C190) deve ser igual ao valor informado neste campo".',
+                });
+            }
+        };
+        for (const l of lista) {
+            const reg = registroDe(l);
+            if (reg === 'C100') {
+                fecha();
+                const f = campos(l);
+                // Cancelada sai com os campos VAZIOS (Exceção 1) e sem filhos.
+                atual = ['02', '03'].includes(f[6] || '') ? null : l;
+                somas = { 6: 0, 7: 0, 8: 0, 9: 0, 11: 0 };
+                filhos = 0;
+            } else if (reg === 'C190' && atual) {
+                const c = campos(l);
+                for (const pos of [6, 7, 8, 9, 11]) somas[pos] += num(c[pos]);
+                filhos += 1;
+            } else if (reg === 'C990' || reg === 'D001') {
+                fecha();
+                atual = null;
+            }
+        }
+        fecha();
+    })();
+
     // ── R7. E110 campo 6 = Σ VL_ICMS dos C190 de ENTRADA ────────────────────
     // Regra LITERAL do PVA, com a exceção do 1605 e a inclusão do 5605.
     const c190Entrada = c190s.filter((l) => {
