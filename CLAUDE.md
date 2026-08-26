@@ -5,6 +5,204 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 "DAR FIM DE MÊS" — o ato que vira a RÉGUA de impostos, livros, ficha e
+  do CCI** (26/08, Paulo: *"o fechamento do fim do mês no CFI exige (DAR FIM DE
+  MÊS), essa função é que deve ser usada como régua para nos nortear, usar como
+  base p impostos, livros, ficha financeira, exatamente o que o CCI deve usar
+  como base para importação do contábil"*).
+  🔴 **A CAUSA: o app DEDUZIA que o mês fechou.** A Rotina olhava documentos,
+  ficha, tarefas e envios e concluía — o cabeçalho dela diz, literal: *"Nada
+  aqui 'marca como feito' na mão"*. Isso é honesto para GUIAR e não serve para
+  NORTEAR, porque dedução muda quando a fonte muda: o livro de agosto
+  reimpresso em dezembro sai DIFERENTE se uma nota de agosto chegou em
+  novembro; a ficha de competência entregue podia ser editada e o número mudava
+  **em silêncio** (não havia `fechadoEm`, `fechadoPor` nem versão em
+  `FichaFinanceiraRegistro`); e o Contábil importava valor que podia mudar
+  depois dele ter importado.
+  ✂️ **A COMPOSIÇÃO É O CORAÇÃO**: as 5 etapas da Rotina viram a
+  **PRÉ-CONDIÇÃO** (*"você PODE dar fim de mês?"*) e o ato responde *"o mês FOI
+  fechado — quando, por quem, com qual acervo, com quais valores"*.
+  ⚠️ **E ISSO MUDOU O SIGNIFICADO DO FAROL `ok`**: ele deixou de querer dizer
+  "mês fechado" e passou a dizer "pronto para fechar". Pela régua de 23/08 (o
+  `capturaNfeOk`), o leitor entrou no MESMO PR — o `✓ Mês fechado` da Rotina
+  virou `✓ Pronto para dar fim de mês` + o botão. Meia correção aqui trocaria
+  um erro por uma CONTRADIÇÃO, com uma tela dizendo fechado e a outra aberto.
+  ✅ **O CARIMBO CONGELA TRÊS COISAS, e elas têm de concordar por CONSTRUÇÃO**:
+  o **ACERVO** (instante do corte + `ultNSU`/`maxNSU` — a prova de QUAIS
+  documentos viraram aquele número), os **VALORES APURADOS** e o **LASTRO**
+  (quantos documentos existiam por trás; sem ele o CCI recebe número fechado
+  com ZERO documento atrás, que é o caso EXPERTE de 15/08).
+  🚨 **O CARIMBO LEVA RESULTADO, NUNCA INSUMO** — faturamento, despesa, folha e
+  CMV ficam de fora de propósito: levá-los convidaria o outro lado a
+  RECALCULAR, e dois números para o mesmo fato é o pior defeito de um arquivo
+  fiscal. É a régua já provada no R-2055 (*"a ressalva PROÍBE recalcular do
+  outro lado"*). ⚠️ E apurado ausente vira **null, nunca zero** — zero num
+  campo de saldo é uma AFIRMAÇÃO, e esta atravessa para a contabilidade.
+  ⚠️ **A ÂNCORA É O INSTANTE, e o NSU é a PROVA — não trocar um pelo outro**: o
+  NSU só existe no trilho DistDFe, e cofre de e-mail, portal de SP, ADN e
+  importação manual não têm NSU nenhum, então corte ancorado nele deixaria
+  metade da captura fora da trava.
+  📌 **AS TRÊS DECISÕES DO PAULO, travadas por teste**: (1) fecha o
+  **COLABORADOR**, reabre **SÓ ADMIN** — o número já pode ter sido importado
+  pela contabilidade; (2) **BLOQUEIA** — etapa em âmbar não passa, e não há
+  justificativa que fure (eu recomendei justificativa escrita, ele manteve o
+  bloqueio; ⚠️ consequência dita e aceita: cliente com captura em âmbar por
+  infraestrutura — as 202 do A3, a EXPERTE — **não fecha, e não chega ao CCI**);
+  (3) **uma empresa por vez**, a família do *"ninguém emite em série"*.
+  ⚠️ **E O BLOQUEIO NOMEIA A ETAPA E DIZ ONDE SE RESOLVE** — com a decisão de
+  bloquear, essa lista é a ÚNICA saída que a pessoa tem, e trava sem caminho é
+  trava que a equipe contorna (13/08).
+  ⚠️ **`reaberta` NÃO conta como fechada**, de propósito: tratá-la assim
+  travaria justamente a edição que a reabertura veio permitir. E reabrir não é
+  "desfazer" — é **RETIFICAÇÃO**: motivo escrito (≥15 caracteres, o piso da T3
+  da DCTFWeb), **versão nova** e o valor da versão anterior guardado, que é a
+  única forma de responder depois *"o Contábil importou QUAL número?"*.
+  📌 **A ESCRITA É SÓ DA ROTA, e aqui isso É a trava**: a pré-condição é
+  conferida no backend, então `allow write: if false` nas rules — escrita pelo
+  navegador tornaria o bloqueio inteiro contornável com um `setDoc`.
+  📌 **A ROTINA DE UMA EMPRESA SAI DO MESMO DONO DO PAINEL**
+  (`montarRotinasDaCompetencia`, extraída neste PR): uma segunda montagem
+  divergiria no pior lugar — o painel diria "pronto" e o botão recusaria.
+  🚩 **O QUE ESTE PR NÃO FAZ, e é a próxima leva**: os LEITORES fiscais ainda
+  não perguntam ao carimbo (livro, os dois SPED, guias e DIPAM continuam
+  gerando ao vivo), e o **túnel do CCI ainda não entrega o fechamento**. O que
+  já protege o número hoje é o carimbo guardar uma **CÓPIA** dos apurados —
+  editar a ficha não o altera — mais a trava que recusa a edição da ficha de
+  competência fechada, com a frase mandando pedir a reabertura ao admin.
+
+- **🚨 O CATÁLOGO DE COLEÇÕES TINHA UM FANTASMA — e a varredura só fechava UMA
+  direção** (26/08, achado no caminho do fim de mês). `catalogoBanco.test.ts`
+  barrava `.collection('x')` sem linha no catálogo; a volta — **coleção
+  catalogada que ninguém escreve** — estava aberta, e `lucro_fichas` estava lá.
+  🔴 Ela **NUNCA EXISTIU**: a ficha do Lucro é EMBUTIDA no documento da empresa
+  (`fichaFinanceira[]`). Foi ela que deixou o saldo de IPI em **0,00** até
+  19/08 — a leitura consultava `db.collection('lucro_fichas')` e a query voltava
+  vazia SEMPRE, indistinguível de *"não tem saldo"*. Corrigido o leitor, a linha
+  do catálogo ficou descrevendo o fantasma. É a MESMA família do
+  `tipoTributacao`: **campo/coleção que só existe no lugar que o declara**.
+  📌 E o painel Sistema→Banco já sabia dizer *"catalogada sem uso"* — só que em
+  tempo de EXECUÇÃO e só para quem o abre, que é dev-only. **Trava escrita não
+  é trava ligada.**
+  🐛 **E A VARREDURA NASCEU ERRADA DE DUAS FORMAS, as duas MEDIDAS antes de
+  subir**: (1) ela lia **PROSA** — os dois orquestradores do SPED têm um
+  comentário citando `db.collection('lucro_fichas')` justamente para DIZER que
+  ela não existe, e isso contava como prova de que existe (a IDA tinha o mesmo
+  vício, e as duas brigavam sobre o mesmo fato); (2) o stripper de comentário
+  `/\*[\s\S]*?\*\//` **engoliu 105 KB dos 157 KB do `server.js`** — um `/*`
+  dentro de string faz o casamento atravessar o arquivo — e levou junto
+  `das_envios_cliente`, que está lá em `.collection(...)`, acusando-a de
+  fantasma. **Alarme falso que aparece justamente quando está tudo certo é o
+  jeito conhecido de a equipe desligar a trava.**
+  ✂️ Saem só comentário de LINHA e linhas de bloco que começam com `*`. E a
+  VOLTA **não usa a extração de padrão da IDA**: ali eu já TENHO o nome, então
+  basta procurá-lo — usar a extração acusou SEIS coleções que existem, porque
+  metade do backend nomeia a coleção por CONSTANTE (`const COL_MSGS =
+  'cofre_email_mensagens'`). **Provada criando um fantasma de propósito.**
+  📌 **REGRA QUE FICA: varredura de fonte lê CÓDIGO, nunca prosa — e comer
+  comentário de bloco com regex é perigoso.** É a terceira vez que a leitura de
+  comentário engana uma trava desta casa (o `.select(` da projeção em 22/08, a
+  régua única do ISS no mesmo dia, agora o catálogo).
+
+- **🚨 O PAINEL COBRAVA UM CAMPO QUE NÃO EXISTE — 236 empresas em ALTO por uma
+  pendência IMPOSSÍVEL DE RESOLVER** (26/08, Paulo com dois prints lado a lado:
+  o cadastro da **A CASTELLANO** mostrando *"Regime Tributário: Lucro
+  Presumido"* e o painel de Cadastros incompletos dizendo *"`tipoTributacao` —
+  Tipo (Presumido/Real) não definido"*).
+  🔴 **A varredura fechou a questão em um grep**: `tipoTributacao` aparecia em
+  **DOIS lugares no repo inteiro** — no `diagnostico-cadastros-helper.js`, que
+  o EXIGIA, e no teste dele, que descrevia a exigência. **Nenhuma tela grava,
+  nenhum gerador lê, nenhum importador preenche.** Como ninguém o preenche, a
+  pendência nascia em **100% das empresas do Lucro** — é isso que explica o
+  **236 em ALTO**, e o número não é a carteira torta: é o painel medindo um
+  campo que não existe.
+  🔴 **E É A ARMADILHA DAS DUAS FORMAS NO CADASTRO**: o modal grava
+  `dadosFiscais.regimeTributario` — o campo que nasceu em **18/08** com dono,
+  vocabulário (SIMPLES · LUCRO_PRESUMIDO · LUCRO_REAL · IMUNE · ISENTA) e
+  precedência própria —, e o painel perguntava por outro nome. Quem preenchia
+  no modal **nunca** conseguia apagar a pendência.
+  ✂️ Quem responde agora é o **DONO** (`regimeDaEmpresa`), com a precedência da
+  casa: cadastro explícito > `regimePadrao` > coleção. A pendência só nasce
+  quando `apuracaoDefinida` é **false** — ou seja, quando o regime está mesmo
+  indefinido — e a frase passou a **APONTAR O LUGAR** (*"escolha Lucro
+  Presumido ou Lucro Real em Empresas → Dados Fiscais → Regime Tributário"*),
+  que é a régua do achado 18 de 21/08.
+  ✅ **E IMUNE/ISENTA deixam de virar pendência**: são regimes PRÓPRIOS, não
+  "regime indefinido". Cobrá-los de um templo seria o caso da igreja de 18/08
+  ao contrário.
+  📌 **O CUSTO NÃO É A LINHA ERRADA — É O PAINEL INTEIRO PERDENDO CRÉDITO.**
+  Alarme que a carteira toda recebe e ninguém consegue apagar ensina a equipe a
+  ignorar a lista, **inclusive as 3 pendências CRÍTICAS que estavam certas**.
+  É a família da "rota sem botão" (13/08) e do aviso que aponta lugar
+  inexistente (21/08): quem procura, não acha, e conclui que o app está
+  quebrado.
+  ✂️ **A CLASSE VIROU TRAVA POR VARREDURA** (`pendenciaTemCampoGravavel.test.ts`):
+  todo campo que o diagnóstico exige tem de aparecer em código de produção FORA
+  do próprio helper — campo que só existe no lugar que o cobra é fantasma por
+  definição. A lista de campos é **lida da FONTE** (`add('<campo>'`), nunca
+  copiada, senão ela envelhece no primeiro campo novo. Provada revertendo o
+  `tipoTributacao` de propósito.
+  📌 **REGRA QUE FICA: pendência nasce apontando o campo que a TELA grava, e o
+  teste de gravidade não pode ser a única prova de que ela existe.** O teste
+  antigo passava verde descrevendo a exigência do campo fantasma — ele
+  documentava o defeito em vez de pegá-lo. **Trocar a fixture foi o certo; ela
+  descrevia um mundo que a produção não vive.**
+  ✅ **MEDIDO EM PRODUÇÃO NO MESMO DIA (deploy 820): 236 → 2, e o OK saltou de
+  186 para 420.** Ou seja, **234 das 236 eram alarme falso** — o painel media
+  um campo que não existe. Os **2 que sobraram são reais** (empresa do Lucro
+  com o regime de fato em branco) e os **3 CRÍTICOS continuam**, corretos.
+  📌 **E ISSO FECHA A RÉGUA DE 22/08 pela via certa: impacto se MEDE no painel,
+  não se deduz do código.** Eu tinha escrito aqui *"o número não está conferido
+  em produção"* justamente para não carimbar "236 resolvidas" antes da prova —
+  e a prova veio do print dele, não da minha leitura do diff. **Quando eu deduzi
+  impacto** (o ADN, 22/08) **eu errei; quando esperei o painel, o número veio
+  maior do que eu teria estimado.**
+  ✂️ **E O SUBTÍTULO DA TELA AINDA DESCREVIA O FANTASMA** — *"Alto = DAS/DARF
+  não calcula (sem anexo / **tipo tributação**)"*. A tela tem de nomear o campo
+  que a pessoa PREENCHE, senão ela procura o que não existe; passou a dizer
+  *"sem regime tributário"*, que é o nome do campo no modal.
+
+- **✅ A PWR FECHOU O EFD-CONTRIBUIÇÕES — e com ela o BLOCO C tem recibo pela
+  primeira vez** (26/08, Paulo: *"PWR · MANTOAN · AFFITTARE · PEC · CF BANK —
+  todas essas foram ref. à obrigação EFD CONTRIBUIÇÕES"*). É a **PRIMEIRA
+  INDÚSTRIA** a fechar esta obrigação, e é o que faltava: MANTOAN, HS,
+  AFFITTARE, PEC e CF BANK são todas de SERVIÇO ou de receita sem documento —
+  nenhuma passava pelo bloco C.
+  📌 **O QUE ISSO ENCERRA**: em 20/08 o bloco C do EFD-Contribuições levou
+  **157 recusas de importação** de uma vez (C100 saindo com 24 campos onde o
+  leiaute tem 29, C170 com 23 onde tem 37, a seção de ICMS/IPI inteira PULADA,
+  e os outros 125 erros todos consequência do mesmo defeito de FORMA). Agora
+  o recibo prova: `C100` **29**, `C170` **37**, `M210`/`M610` com **COD_CONT
+  51**, e `M205`/`M605` preenchidos.
+  📌 **E ENCERRA O CASO DOS CINCO DIAS** (25/08, `VL_REC_BRT` 38.316,84 ×
+  37.754,60). A resposta estava na *Validação* do M210 campo 03 do Guia 1.35 —
+  `VL_REC_BRT` é a Σ dos `VL_ITEM` dos C170, que são BRUTOS, e o desconto e o
+  ICMS têm campos PRÓPRIOS. O imposto nunca esteve errado; o recibo confirma
+  que a base reduzida (Tema 69) e o rateio do desconto saem certos no arquivo.
+  🏁 **O PLACAR DO EFD-CONTRIBUIÇÕES: SEIS empresas e CINCO formas de arquivo
+  provadas por recibo** — detalhado só com documento de SERVIÇO (MANTOAN),
+  detalhado com documento + F600 de retenção (HS PROJETOS), consolidado só com
+  F550 (AFFITTARE), detalhado com documento + F100 (PEC), sem documento nenhum
+  com F100 de aplicação financeira (CF BANK) e agora **detalhado de INDÚSTRIA,
+  pelo bloco C** (PWR). **As seis saem do MESMO gerador** — o que muda é a
+  régua que decide o perfil, nunca um caminho paralelo por cliente.
+  ✅ **E A PWR PASSA A SER A ÚNICA EMPRESA COM AS DUAS OBRIGAÇÕES FECHADAS**:
+  o EFD ICMS/IPI dela fechou em 20/08 e o EFD-Contribuições agora. Ou seja, o
+  mesmo cliente tem os dois arquivos aceitos saindo do mesmo app — que é a
+  prova ponta a ponta que faltava para a família do Lucro.
+  ⚠️ **O QUE ISSO NÃO PROVA, e não pode virar leitura larga**: (1) **seis
+  clientes fechados não são a carteira fechada** — quem diz quem pode migrar
+  continua sendo a 🏁 Fila de migração, cliente a cliente, e o gargalo hoje é
+  CAPTURA (202 empresas com A3, 42 sem A1 válido), não leiaute; (2) o **bloco
+  D** continua sem recibo — nenhuma das seis tem CT-e no EFD-Contribuições, e
+  ele só fecha com empresa do NÃO-cumulativo que tenha frete contratado;
+  (3) o **E510 (IPI)** e o **E200/E210 (ST)** seguem sem passar pelo PVA.
+  🚩 **E FICA UMA PERGUNTA NOMEADA, não uma suposição**: não sei se estes
+  arquivos foram regerados ANTES ou DEPOIS do deploy 815. Se foi depois, eles
+  são também a prova em PRODUÇÃO de que as travas de 26/08 nasceram MUDAS no
+  arquivo correto — que é justamente o que o teste de controle existia para
+  medir. Carimbar isso sem saber seria o "print prova o ARQUIVO, não o código"
+  ao contrário.
+
 - **🚨 O LADO DA CONTRAPARTE TINHA CINCO CÓPIAS — e o próprio dono já carregava
   o aviso do defeito que elas têm** (26/08, fechando a pendência nomeada em
   22/08: *"restam ~60 leituras cruas de `direcao` e elas NÃO foram triadas uma

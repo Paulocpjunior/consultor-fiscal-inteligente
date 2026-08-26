@@ -13,6 +13,29 @@
 // Cada campo faltante e' uma "pendencia" que impede UM caminho do sistema.
 // O painel lista quem tem o que faltando.
 // ============================================================================
+//
+// 🚨 O CAMPO `tipoTributacao` NÃO EXISTIA EM LUGAR NENHUM — e era ele que
+// classificava 236 empresas como ALTO (26/08, Paulo, com os dois prints: o
+// cadastro da A CASTELLANO mostrando "Regime Tributário: Lucro Presumido" e o
+// painel dizendo *"tipoTributacao — Tipo (Presumido/Real) não definido"*).
+//
+// A varredura fechou a questão: `tipoTributacao` aparecia em DOIS lugares no
+// repo inteiro — neste helper, que o EXIGIA, e no teste dele, que descrevia a
+// exigência. **Nenhuma tela grava, nenhum gerador lê, nenhum importador
+// preenche.** Ou seja: era uma pendência IMPOSSÍVEL DE RESOLVER, e como
+// ninguém a preenche, ela nascia em **100% das empresas do Lucro**.
+//
+// É a "rota sem botão" (13/08) na forma mais cara — pendência sem caminho de
+// resolução — combinada com a armadilha das duas formas: o modal grava
+// `dadosFiscais.regimeTributario` (o campo que nasceu em 18/08, com dono e
+// vocabulário próprios) e o painel perguntava por outro nome.
+//
+// 📌 E o custo não é o alarme errado numa empresa: é o painel INTEIRO perdendo
+// crédito. Alarme que aparece em toda a carteira e não tem como ser resolvido
+// ensina a equipe a ignorar a lista — inclusive as 3 pendências CRÍTICAS que
+// estão certas.
+// ============================================================================
+import { regimeDaEmpresa } from './regime-tributario.js';
 
 /**
  * @param {object} empresa  shape de simples_empresas/* ou lucro_empresas/*
@@ -52,8 +75,21 @@ export function pendenciasCadastro(empresa, regime) {
         }
     }
     if (regime === 'lucro') {
-        if (!empresa.tipoTributacao) {
-            add('tipoTributacao', 'Tipo (Presumido/Real) não definido', 'Cálculo de DARF e SPED');
+        // Quem responde é o DONO (`regimeDaEmpresa`, 18/08): ele lê o campo que
+        // a tela de fato grava, com a precedência da casa — cadastro explícito
+        // > `regimePadrao` > coleção. A pendência só nasce quando a apuração
+        // fica mesmo INDEFINIDA, e aí ela aponta o lugar de resolver.
+        const r = regimeDaEmpresa({
+            ...empresa,
+            colecao: empresa.colecao || 'lucro_empresas',
+        });
+        if (!r.apuracaoDefinida) {
+            add(
+                'dadosFiscais.regimeTributario',
+                'Regime tributário não definido — escolha Lucro Presumido ou Lucro Real '
+                    + 'em Empresas → Dados Fiscais → Regime Tributário',
+                'Cálculo de DARF e SPED',
+            );
         }
     }
 
@@ -65,6 +101,6 @@ export function gravidadeCadastro(pendencias) {
     if (!pendencias || !pendencias.length) return 'ok';
     const tem = (c) => pendencias.some((p) => p.campo === c || p.campo.endsWith(`.${c}`));
     if (tem('cnpj') || tem('uf') || tem('codMunIBGE')) return 'critico';
-    if (tem('anexo') || tem('tipoTributacao')) return 'alto';
+    if (tem('anexo') || tem('regimeTributario')) return 'alto';
     return 'medio';
 }

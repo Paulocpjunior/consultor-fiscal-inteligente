@@ -14,10 +14,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
+import FimDeMesBloco from './FimDeMesBloco';
 
 interface Props {
     /** Leva o colaborador à tela da etapa (App resolve o SearchType). */
     onIrPara?: (etapaId: string, empresa: RotinaEmpresa['empresa']) => void;
+    /** Só admin REABRE competência fechada (decisão do Paulo, 26/08) — sem
+     *  isso o botão nem aparece, e botão que não faz nada é pior que botão
+     *  nenhum. Fechar continua sendo do colaborador. */
+    ehAdmin?: boolean;
 }
 
 const competenciaAtual = (): string => {
@@ -75,7 +80,7 @@ const Trilha: React.FC<{ etapas: EtapaRotina[]; destaque?: string }> = ({ etapas
     </div>
 );
 
-const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
+const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [dados, setDados] = useState<PainelRotina | null>(null);
     const [carregando, setCarregando] = useState(false);
@@ -358,10 +363,27 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara }) => {
                                                 Ir para {p.onde.split('→')[0].trim()}
                                             </button>
                                         </div>
-                                    ) : (
-                                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                                            ✓ Mês fechado: notas capturadas e validadas, apuração feita, obrigações entregues e guia enviada com o rito.
-                                        </p>
+                                    ) : null}
+
+                                    {/* 🔒 DAR FIM DE MÊS (26/08).
+                                        ⚠️ AQUI ESTAVA O "✓ Mês fechado" — uma DEDUÇÃO: as 5
+                                        etapas fecharam, logo o mês fechou. Agora "fechado" é
+                                        FATO (quem, quando, qual acervo, quais valores), e as 5
+                                        etapas viram a PRÉ-CONDIÇÃO do ato. O booleano mudou de
+                                        significado e o leitor entrou no MESMO PR — a régua de
+                                        23/08, senão uma tela diria fechado e a outra aberto.
+
+                                        E ele aparece SEMPRE, não só quando não há próximo passo:
+                                        com etapa aberta o bloco DIZ o que bloqueia e leva lá —
+                                        com a decisão de BLOQUEAR, essa lista é a única saída. */}
+                                    {r.empresa?.id && (
+                                        <FimDeMesBloco
+                                            empresaId={r.empresa.id}
+                                            competencia={competencia}
+                                            ehAdmin={ehAdmin}
+                                            onIrPara={(etapaId) => onIrPara?.(etapaId, r.empresa)}
+                                            onMudou={() => carregar(competencia)}
+                                        />
                                     )}
                                 </div>
                             );

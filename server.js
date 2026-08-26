@@ -38,6 +38,7 @@ import dctfwebRouter from './sefaz-backend/dctfweb-routes.js';
 import dareRouter from './sefaz-backend/dare-routes.js';
 import envioImpostoRouter from './sefaz-backend/envio-imposto-routes.js';
 import rotinaFiscalRouter from './sefaz-backend/rotina-fiscal-routes.js';
+import fimDeMesRouter from './sefaz-backend/fim-de-mes-routes.js';
 import dipamRouter from './sefaz-backend/dipam-routes.js';
 import lucroEmpresasRouter from './sefaz-backend/lucro-empresas-routes.js';
 import xmlDownloadRouter from './sefaz-backend/xml-download-routes.js';
@@ -367,6 +368,8 @@ app.use('/api/admin/dctfweb', dctfwebRouter);
 app.use('/api/admin/dare', dareRouter);
 app.use('/api/admin/envio-imposto', envioImpostoRouter);
 app.use('/api/admin/rotina-fiscal', rotinaFiscalRouter);
+// 🔒 DAR FIM DE MÊS — o ato que vira a base de impostos, livros, ficha e CCI.
+app.use('/api/admin/fim-de-mes', fimDeMesRouter);
 app.use('/api/admin/dipam', dipamRouter);
 app.use('/api/admin/lucro', lucroEmpresasRouter);
 app.use('/api/admin/sefaz', xmlDownloadRouter);

@@ -24,7 +24,8 @@
 // ============================================================================
 import { readFileSync } from 'fs';
 import { join } from 'path';
-// @ts-expect-error — módulo backend .js sem .d.ts
+// O módulo ganhou `.d.ts` em 26/08 (o fim de mês precisou dele no FRONTEND) —
+// o silenciador saiu, e o tsc passou a conferir o que se importa daqui.
 import { competenciaParaGerarArquivo } from '../sefaz-backend/competencia.js';
 
 const RAIZ = join(__dirname, '..');
@@ -41,6 +42,11 @@ describe('🚨 a competência da geração passa pelo dono', () => {
         for (const lixo of ['', null, undefined, 'julho', '2026-13', '13/2026']) {
             const r = competenciaParaGerarArquivo(lixo);
             expect({ lixo, ok: r.ok }).toEqual({ lixo, ok: false });
+            // O `.d.ts` que nasceu em 26/08 tipou o retorno como UNIÃO — então
+            // o tsc agora exige estreitar antes de ler o `erro`. É a trava
+            // fazendo o trabalho dela: sem isto, ler `.erro` de um retorno
+            // `ok:true` daria `undefined` e o `toMatch` passaria por acidente.
+            if (r.ok) throw new Error(`"${lixo}" deveria ter sido recusado`);
             expect(r.erro).toMatch(/AAAA-MM/);
             // A frase tem de dizer POR QUE isso importa — "inválido" sozinho
             // manda a pessoa procurar defeito de digitação num problema que

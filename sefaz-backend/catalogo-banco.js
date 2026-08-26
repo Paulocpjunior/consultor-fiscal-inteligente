@@ -75,7 +75,12 @@ export const CATALOGO_BANCO = [
     { colecao: 'das_cron_logs', grupo: 'Simples · DAS', funcionalidade: 'Execuções do cron de DAS/vencimentos' },
 
     // ── Lucro / DCTFWeb / guias ────────────────────────────────────────────
-    { colecao: 'lucro_fichas', grupo: 'Lucro · Federal', funcionalidade: 'Fichas mensais do Lucro (faturamento/apuração)' },
+    // 🗑️ `lucro_fichas` SAIU (26/08): a coleção NUNCA EXISTIU — a ficha do
+    // Lucro é EMBUTIDA no documento da empresa (`fichaFinanceira[]`, por
+    // `mesReferencia`). Foi ela que deixou o saldo de IPI em 0,00 até 19/08:
+    // a leitura consultava `db.collection('lucro_fichas')` e a query voltava
+    // vazia SEMPRE, indistinguível de "não tem saldo". Corrigido o leitor, a
+    // linha do catálogo ficou descrevendo o fantasma — e agora há varredura.
     { colecao: 'dctfweb_declaracoes', grupo: 'Lucro · Federal', funcionalidade: 'Declarações DCTFWeb transmitidas' },
     { colecao: 'dctfweb_mit_preenchimentos', grupo: 'Lucro · Federal', funcionalidade: 'Preenchimentos do MIT' },
     { colecao: 'dctfweb_mit_retificacoes', grupo: 'Lucro · Federal', funcionalidade: 'Auditoria de retificações do MIT' },
@@ -104,6 +109,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'sped_inventario', grupo: 'Integrações', funcionalidade: 'Bloco H do SPED Fiscal — contagem física do inventário (H005/H010); 1 doc por empresa × data do inventário' },
     { colecao: 'sped_saldos_abertura', grupo: 'Integrações', funcionalidade: '🧮 Saldo credor de ABERTURA (E110 c.14 / E520 c.7 do último SPED ENTREGUE, colado) — 1 doc por empresa; o transporte mês a mês é calculado, nunca redigitado' },
     { colecao: 'sped_ciap_bens', grupo: 'Integrações', funcionalidade: 'CIAP / Bloco G do SPED Fiscal — bens do imobilizado com crédito de ICMS em 48 parcelas; 1 doc por empresa' },
+    { colecao: 'fechamentos_competencia', grupo: 'Cadastro & Acesso', funcionalidade: '🔒 DAR FIM DE MÊS — o ato que fecha a competência e vira a base de impostos, livros, ficha financeira e da importação do Contábil (CCI): congela o ACERVO (instante do corte + ultNSU/maxNSU), os VALORES apurados e o LASTRO, com versão a cada reabertura; 1 doc por empresa × competência' },
     { colecao: 'contadores', grupo: 'Cadastro & Acesso', funcionalidade: 'Catálogo de contadores do escritório (identificação dos relatórios) — escolhido por empresa no modal Dados Fiscais' },
     { colecao: 'nbs_codigos_oficiais', grupo: 'Catálogos', funcionalidade: 'Catálogo NBS oficial' },
 
