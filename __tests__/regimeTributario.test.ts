@@ -21,7 +21,6 @@ import {
     validarRegimeParaGravacao, REGIMES, REGIMES_VALIDOS,
 // @ts-ignore
 } from '../sefaz-backend/regime-tributario.js';
-// @ts-ignore
 import { resolverRegime, CATALOGO, obrigacoesAplicaveis } from '../sefaz-backend/catalogo-obrigacoes.js';
 // @ts-ignore
 import { normalizarEmpresaCadastro } from '../sefaz-backend/cadastro-central.js';

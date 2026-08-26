@@ -34,7 +34,6 @@ import { cfopParaEscriturar, type CfopCtx } from './iobSageExportService';
  * velho e explicando a operação errada.
  */
 import { SUFIXOS_COMPRA_PRODUTO as SUFIXOS_COMPRA, SUFIXOS_ST_VENDA } from '../sefaz-backend/cfop-correlacao.js';
-// @ts-ignore — módulo backend com .d.ts próprio
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 export type MotivoCorrelacao = 'override' | 'natureza' | 'natureza-st' | 'espelho' | 'sem-conversao';

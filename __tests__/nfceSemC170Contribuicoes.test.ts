@@ -27,7 +27,6 @@ import {
     conferirC170DeNfce, conferirCadastrosOrfaosContrib, avisosDaPrevalidacaoContrib,
 // @ts-ignore — módulo JS do backend, sem tipos
 } from '../sefaz-backend/sped-contrib-campos.js';
-// @ts-ignore
 import { buildBlocoC_Contrib } from '../sefaz-backend/sped-contrib-blocos.js';
 
 const semQuebra = (l: string) => String(l).replace(/\r?\n$/, '');
@@ -228,7 +227,6 @@ import {
     conferirSomaDosItensContrib,
 // @ts-ignore
 } from '../sefaz-backend/sped-contrib-campos.js';
-// @ts-ignore
 import { buildBlocoM } from '../sefaz-backend/sped-contrib-blocos.js';
 
 describe('🚨 o desconto incondicional sai da BASE, por campo próprio', () => {

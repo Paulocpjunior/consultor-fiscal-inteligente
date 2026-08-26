@@ -22,7 +22,6 @@ import type { DocumentoFiscal } from '../types';
 // por ENTRADAS, a compra de produtor rural (art. 136) sumia — ela fica gravada
 // como 'saida' até o backfill passar — e aparecia ao filtrar por SAÍDAS. É a
 // mesma régua que o SPED, o `.FML` e o `getView` da lista já usam.
-// @ts-ignore — módulo backend com .d.ts próprio
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 /** A direção EFETIVA do documento — nunca o campo cru. */

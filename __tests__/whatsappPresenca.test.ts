@@ -17,7 +17,6 @@ import * as path from 'path';
 import {
     JANELA_NO_AR_MS, INTERVALO_SINAL_MS,
     situacaoDaPresenca, quemDaFilaEstaNoAr,
-// @ts-ignore — módulo JS do backend, sem tipos
 } from '../sefaz-backend/whatsapp-presenca.js';
 
 const raiz = (...p: string[]) => path.join(process.cwd(), ...p);
