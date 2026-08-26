@@ -37,7 +37,7 @@ import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
     lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
-    ehEventoDeChamada, rotularEventoCru,
+    ehEventoDeChamada, rotularEventoCru, naturezaDoEventoCru,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -3110,14 +3110,23 @@ router.get('/chamadas/eventos-crus', requireAdmin, async (_req, res) => {
         // pedido: 1000 é barato perto de responder a pergunta errada.
         const snap = await getDb().collection('whatsapp_webhook_eventos')
             .orderBy('recebidoEm', 'desc').limit(1000).get();
-        const achados = snap.docs
-            .filter((d) => ehEventoDeChamada(d.data()?.payload))
+        const daChamada = snap.docs.filter((d) => ehEventoDeChamada(d.data()?.payload));
+        const achados = daChamada
             .slice(0, 10)
             .map((d) => ({
                 em: d.data()?.recebidoEm || null,
                 rotulo: rotularEventoCru(d.data()?.payload),
+                // 🚨 A NATUREZA separada do rótulo: é ela que impede o painel
+                // de responder "chegou ligação" contando encanamento de
+                // PERMISSÃO (26/08 — os 4 achados eram todos `permissao`).
+                natureza: naturezaDoEventoCru(d.data()?.payload),
                 payload: d.data()?.payload || null,
             }));
+        const porNatureza = daChamada.reduce((acc, d) => {
+            const n = naturezaDoEventoCru(d.data()?.payload);
+            acc[n] = (acc[n] || 0) + 1;
+            return acc;
+        }, {});
         return res.json({
             ok: true,
             achados,
@@ -3131,6 +3140,8 @@ router.get('/chamadas/eventos-crus', requireAdmin, async (_req, res) => {
                 de: snap.docs[snap.size - 1]?.data()?.recebidoEm || null,
                 ate: snap.docs[0]?.data()?.recebidoEm || null,
             },
+            // Quantos de cada NATUREZA — permissão não é ligação.
+            porNatureza,
         });
     } catch (e) {
         console.error('[whatsapp/chamadas/eventos-crus]', e);
