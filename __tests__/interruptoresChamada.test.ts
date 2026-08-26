@@ -127,9 +127,15 @@ describe('🔎 o pedido de retorno é ACHADO, não deduzido', () => {
         expect(trecho).toMatch(/payload: d\.data\(\)\?\.payload/);
     });
 
-    it('o recorte é DITO — "0 de 200" é resposta, "0" sozinho é armadilha', () => {
+    it('o recorte é DITO — "0 de N" é resposta, "0" sozinho é armadilha', () => {
+        // ⚠️ ESTE TESTE PRENDIA A FRASE INTEIRA e reprovou a própria correção
+        // que a régua mandava fazer (26/08): a frase dizia "eventos de chamada"
+        // contando resposta de PERMISSÃO, e consertá-la quebrava o teste.
+        // Trava que prende a FORMA impede o conserto; o que importa é a
+        // INTENÇÃO — o tamanho da amostra aparece na tela, junto do número.
         expect(rotas).toMatch(/amostra: snap\.size/);
-        expect(tela).toMatch(/entre os \$\{crus\.amostra\} eventos mais recentes do webhook/);
+        expect(tela).toMatch(/\$\{crus\.amostra\}/);
+        expect(tela).toMatch(/mais recentes/);
     });
 
     it('e a tela tem o botão (rota sem botão é código morto com cara de entrega)', () => {

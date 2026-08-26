@@ -657,7 +657,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // 🔎 Eventos de chamada CRUS — a tela da Meta promete "peça um retorno de
     // ligação e entraremos em contato", e o leiaute desse pedido não está
     // provado. Isto ACHA o evento real; a régua nasce dele, nunca de dedução.
-    const [crus, setCrus] = useState<{ achados: { em: string | null; rotulo: string; payload: unknown }[]; amostra: number } | null>(null);
+    const [crus, setCrus] = useState<{ achados: { em: string | null; rotulo: string; natureza?: string; payload: unknown }[]; amostra: number; janela?: { de: string | null; ate: string | null } | null; porNatureza?: Record<string, number> } | null>(null);
     const [lendoCrus, setLendoCrus] = useState(false);
     const [sondandoSbc, setSondandoSbc] = useState(false);
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
@@ -2831,7 +2831,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     setLendoCrus(true);
                                                     try {
                                                         const r = await eventosCrusDeChamada();
-                                                        setCrus(r.ok ? { achados: r.achados || [], amostra: r.amostra || 0 } : null);
+                                                        setCrus(r.ok ? { achados: r.achados || [], amostra: r.amostra || 0, janela: r.janela || null, porNatureza: r.porNatureza || {} } : null);
                                                     } finally { setLendoCrus(false); }
                                                 }}
                                                 disabled={lendoCrus}
@@ -2840,11 +2840,34 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </button>
                                             {crus && (
                                                 <div className="text-[10.5px] text-slate-600 dark:text-slate-300 space-y-1">
+                                                    {/* 🚨 PERMISSÃO NÃO É LIGAÇÃO. O painel achava 4 eventos e
+                                                        os chamava de "eventos de chamada" — os quatro eram o
+                                                        "Permitir" do cliente. Quem abre isto para saber se a
+                                                        LIGAÇÃO chegou lia o 4 e concluía que sim. */}
                                                     <p>
                                                         {crus.achados.length === 0
-                                                            ? `Nenhum evento de chamada entre os ${crus.amostra} eventos mais recentes do webhook.`
-                                                            : `${crus.achados.length} evento(s) de chamada entre os ${crus.amostra} mais recentes:`}
+                                                            ? `Nenhum evento entre os ${crus.amostra} mais recentes do webhook.`
+                                                            : `${crus.achados.length} evento(s) entre os ${crus.amostra} mais recentes — ${crus.porNatureza?.permissao || 0} de PERMISSÃO, ${crus.porNatureza?.chamada || 0} de CHAMADA:`}
                                                     </p>
+                                                    {!crus.porNatureza?.chamada && (
+                                                        <p className="text-amber-700 dark:text-amber-400">
+                                                            ⚠️ Nenhum evento de chamada de verdade — e <strong>isso é o esperado</strong>: em modo
+                                                            SIP a Meta não manda a ligação pelo webhook, só a permissão. Ou seja,
+                                                            <strong> este painel não responde "a ligação chegou?"</strong>. Quem responde é o
+                                                            INVITE/CDR do tronco na hora da tentativa.
+                                                        </p>
+                                                    )}
+                                                    {/* 🚨 A JANELA É O QUE FAZ O ZERO VALER. Sem ela, "nenhum
+                                                        evento" e "não olhei até a hora da ligação" ficam
+                                                        idênticos — e a conclusão errada manda abrir chamado
+                                                        (ou fechar um) sobre nada. */}
+                                                    {crus.janela?.de && (
+                                                        <p className="text-slate-400">
+                                                            Conferi de <strong>{new Date(crus.janela.de).toLocaleString('pt-BR')}</strong> até{' '}
+                                                            <strong>{crus.janela.ate ? new Date(crus.janela.ate).toLocaleString('pt-BR') : '—'}</strong>.
+                                                            {crus.achados.length === 0 && ' Se a ligação foi FORA dessa janela, este zero não responde nada.'}
+                                                        </p>
+                                                    )}
                                                     {crus.achados.map((a, i) => (
                                                         <details key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1">
                                                             <summary className="cursor-pointer font-semibold">

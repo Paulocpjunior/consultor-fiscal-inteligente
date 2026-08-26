@@ -37,7 +37,7 @@ import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
     lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
-    ehEventoDeChamada, rotularEventoCru,
+    ehEventoDeChamada, rotularEventoCru, naturezaDoEventoCru,
 } from './whatsapp-chamadas.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
@@ -3102,23 +3102,46 @@ router.get('/chamadas/sondar', requireAdmin, async (_req, res) => {
 // nasce do EVENTO REAL, e é ele que esta rota entrega.
 router.get('/chamadas/eventos-crus', requireAdmin, async (_req, res) => {
     try {
+        // 🚨 A AMOSTRA PRECISA ALCANÇAR A HORA DA LIGAÇÃO (26/08, Paulo:
+        // *"acabei de tentar a ligação, chegou a tocar 1x"* às 09:30). Com 200
+        // eventos numa caixa de 300 conversas, a janela pode ser de MINUTOS —
+        // e aí "0 achados" se lê como "a Meta não mandou nada" quando o certo
+        // seria "não olhei até lá". É consulta de diagnóstico, admin, roda a
+        // pedido: 1000 é barato perto de responder a pergunta errada.
         const snap = await getDb().collection('whatsapp_webhook_eventos')
-            .orderBy('recebidoEm', 'desc').limit(200).get();
-        const achados = snap.docs
-            .filter((d) => ehEventoDeChamada(d.data()?.payload))
+            .orderBy('recebidoEm', 'desc').limit(1000).get();
+        const daChamada = snap.docs.filter((d) => ehEventoDeChamada(d.data()?.payload));
+        const achados = daChamada
             .slice(0, 10)
             .map((d) => ({
                 em: d.data()?.recebidoEm || null,
                 rotulo: rotularEventoCru(d.data()?.payload),
+                // 🚨 A NATUREZA separada do rótulo: é ela que impede o painel
+                // de responder "chegou ligação" contando encanamento de
+                // PERMISSÃO (26/08 — os 4 achados eram todos `permissao`).
+                natureza: naturezaDoEventoCru(d.data()?.payload),
                 payload: d.data()?.payload || null,
             }));
+        const porNatureza = daChamada.reduce((acc, d) => {
+            const n = naturezaDoEventoCru(d.data()?.payload);
+            acc[n] = (acc[n] || 0) + 1;
+            return acc;
+        }, {});
         return res.json({
             ok: true,
             achados,
-            // Recorte DITO: "0 de 200 conferidos" é resposta; "0" sozinho
+            // Recorte DITO: "0 de 1000 conferidos" é resposta; "0" sozinho
             // passaria por "a Meta não manda nada", que é outra afirmação.
             amostra: snap.size,
             ultimoEventoEm: snap.docs[0]?.data()?.recebidoEm || null,
+            // 🚨 E A JANELA DE TEMPO É O QUE FAZ O ZERO VALER: sem ela não dá
+            // para saber se a hora da ligação está DENTRO do que foi olhado.
+            janela: {
+                de: snap.docs[snap.size - 1]?.data()?.recebidoEm || null,
+                ate: snap.docs[0]?.data()?.recebidoEm || null,
+            },
+            // Quantos de cada NATUREZA — permissão não é ligação.
+            porNatureza,
         });
     } catch (e) {
         console.error('[whatsapp/chamadas/eventos-crus]', e);

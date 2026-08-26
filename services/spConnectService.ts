@@ -460,9 +460,14 @@ export interface SondaSbc {
  */
 export const eventosCrusDeChamada = () =>
     req<{
-        achados: { em: string | null; rotulo: string; payload: unknown }[];
+        achados: { em: string | null; rotulo: string; natureza: string; payload: unknown }[];
         amostra: number;
         ultimoEventoEm: string | null;
+        /** Quantos de cada natureza — permissão NÃO é ligação. */
+        porNatureza: Record<string, number>;
+        /** 🚨 De quando até quando a amostra alcança. Sem isso, "0 achados" e
+         *  "não olhei até lá" ficam indistinguíveis. */
+        janela: { de: string | null; ate: string | null };
     }>('/api/admin/whatsapp/chamadas/eventos-crus');
 
 export const sondarSbc = (p?: { hostname?: string; porta?: number }) =>

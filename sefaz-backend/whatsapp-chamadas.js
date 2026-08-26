@@ -320,6 +320,30 @@ export function ehEventoDeChamada(payload) {
     return /"(calls|call_permission_[a-z]+|call_status|callback[_a-z]*)"/i.test(texto);
 }
 
+/**
+ * 🚨 A NATUREZA DO EVENTO — porque "4 eventos de chamada" respondia a pergunta
+ * ERRADA (26/08, Paulo: *"acabei de tentar a ligação, chegou a tocar 1x"*).
+ *
+ * O painel achou 4 eventos e os chamou de "eventos de chamada". Os quatro eram
+ * `call_permission_reply` — o "Permitir" do cliente, encanamento de PERMISSÃO,
+ * não ligação nenhuma. Quem abre o painel para saber se a LIGAÇÃO chegou lê o
+ * 4 e conclui que sim.
+ *
+ * ⚠️ E a distinção não é cosmética: em modo SIP a Meta **não manda evento de
+ * chamada no webhook** (medido em 25/08 — só `call_permission_reply`). Ou
+ * seja, este painel É INCAPAZ de responder "a ligação chegou?", e o certo é
+ * ele DIZER isso em vez de deixar o número responder por ele. Quem responde é
+ * o CDR do SBC.
+ */
+export function naturezaDoEventoCru(payload) {
+    let texto;
+    try { texto = JSON.stringify(payload || {}); } catch { return 'ilegivel'; }
+    if (/"call_permission_(reply|request)"/i.test(texto)) return 'permissao';
+    if (/callback/i.test(texto)) return 'pedido-de-retorno';
+    if (/"(calls|call_status)"/i.test(texto)) return 'chamada';
+    return 'desconhecida';
+}
+
 /** Rótulo humano do que aquele evento cru PARECE ser — com a ressalva. */
 export function rotularEventoCru(payload) {
     let texto;

@@ -16,6 +16,8 @@ import {
     extrairEventosChamada, resumoDaChamada, traduzirEventoChamada,
 } from '../sefaz-backend/whatsapp-chamadas';
 import { configPadraoAtendimento } from '../sefaz-backend/whatsapp-atendimento';
+// @ts-ignore — módulo JS do backend sem tipos próprios
+import { naturezaDoEventoCru } from '../sefaz-backend/whatsapp-chamadas.js';
 
 describe('interpretarSondaChamadas', () => {
     it('a Meta dizendo ENABLED é LIGADO, e a resposta diz em qual campo', () => {
@@ -339,5 +341,88 @@ describe('🔌 fiação — a escrita mora na rota, com releitura e sem grade pr
         expect(corpo).toContain('bruto');
         // Reentrega da Meta não conta não-lida duas vezes.
         expect(corpo).toContain('jaExiste');
+    });
+});
+
+// ============================================================================
+// 🚨 "0 EVENTOS" SÓ VALE SE A AMOSTRA ALCANÇOU A HORA DA LIGAÇÃO
+//
+// 26/08, Paulo: *"acabei de tentar a ligação, chegou a tocar 1x"* — às 09:30,
+// e ela aparece como "Não atendida" no celular dele. A pergunta que decide se
+// isso é avanço (a Meta passou a entregar) ou o mesmo bloqueio de 25/08 é uma
+// só: **chegou evento no nosso webhook naquele minuto?**
+//
+// O painel lia os 200 eventos mais recentes. Numa caixa de 300 conversas isso
+// pode ser uma janela de MINUTOS — e aí "nenhum evento de chamada" se lê como
+// *"a Meta não mandou nada"* quando o certo seria *"não olhei até lá"*. Duas
+// conclusões opostas a partir do mesmo zero: uma fecha o chamado com a Meta,
+// a outra abre.
+// ============================================================================
+describe('🚨 o painel de eventos crus diz ATÉ ONDE olhou', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require('path') as typeof import('path');
+    const rota = fs.readFileSync(path.join(__dirname, '..', 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = fs.readFileSync(path.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+    const bloco = rota.slice(rota.indexOf("router.get('/chamadas/eventos-crus'"));
+
+    it('a resposta carrega a JANELA de tempo da amostra', () => {
+        expect(bloco.slice(0, 2200)).toMatch(/janela: \{/);
+        expect(bloco.slice(0, 2200)).toMatch(/de: snap\.docs\[snap\.size - 1\]/);
+    });
+
+    it('e a tela MOSTRA a janela, com a ressalva quando não achou nada', () => {
+        expect(tela).toMatch(/crus\.janela\?\.de/);
+        expect(tela).toMatch(/este zero não responde nada/);
+    });
+
+    it('a amostra alcança mais que uma manhã movimentada', () => {
+        // 200 numa caixa de 300 conversas não chega em 09:30 depois do almoço.
+        expect(bloco.slice(0, 2200)).toMatch(/\.limit\(1000\)/);
+    });
+});
+
+// ============================================================================
+// 🚨 PERMISSÃO NÃO É LIGAÇÃO — o painel respondia a pergunta ERRADA
+//
+// 26/08, print do Paulo depois do teste de ligação: o painel achou **4
+// eventos de chamada** na janela que cobre 09:30. Os quatro eram
+// `call_permission_reply` — o "Permitir" do cliente. Quem abre o painel para
+// saber se a LIGAÇÃO chegou lê o 4 e conclui que sim.
+//
+// ⚠️ E a distinção não é cosmética: em modo SIP a Meta NÃO manda evento de
+// chamada no webhook (medido em 25/08). Este painel é INCAPAZ de responder "a
+// ligação chegou?" — e o certo é ele dizer isso, em vez de deixar um número
+// responder por ele. Quem responde é o INVITE/CDR do tronco.
+// ============================================================================
+describe('🚨 o painel separa permissão de chamada', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs2 = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path2 = require('path') as typeof import('path');
+    const tela = fs2.readFileSync(path2.join(__dirname, '..', 'components/SpConnect/index.tsx'), 'utf8');
+
+    it('a natureza distingue permissão, chamada e pedido de retorno', () => {
+        expect(naturezaDoEventoCru({ field: 'call_permission_reply' })).toBe('permissao');
+        expect(naturezaDoEventoCru({ field: 'call_permission_request' })).toBe('permissao');
+        expect(naturezaDoEventoCru({ field: 'calls' })).toBe('chamada');
+        expect(naturezaDoEventoCru({ algo: 'callback_request' })).toBe('pedido-de-retorno');
+    });
+
+    it('🚨 o "Permitir" do cliente NÃO conta como ligação', () => {
+        // Era exatamente esse o payload dos 4 achados do print.
+        expect(naturezaDoEventoCru({ field: 'call_permission_reply' })).not.toBe('chamada');
+    });
+
+    it('payload ilegível não vira "chamada" por descuido', () => {
+        const circular: any = {}; circular.eu = circular;
+        expect(naturezaDoEventoCru(circular)).toBe('ilegivel');
+    });
+
+    it('🚨 e a tela DIZ que este painel não responde "a ligação chegou?"', () => {
+        expect(tela).toMatch(/de PERMISSÃO/);
+        expect(tela).toMatch(/não responde "a ligação chegou\?"/);
+        expect(tela).toMatch(/INVITE\/CDR do tronco/);
     });
 });

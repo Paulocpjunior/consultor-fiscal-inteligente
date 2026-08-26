@@ -374,10 +374,104 @@ resultado é **"Não atendida"**.
 E **nenhum INVITE chega ao SBC**: nem CDR, nem log, com o gravador ligado e
 conferido. Teste das 14:52 de 25/08, dentro da janela.
 
+🆕 **26/08, 09:30 — A CHAMADA PASSOU A TOCAR.** Antes ela era recusada de
+saída; nesta tentativa o celular tocou **uma vez** e terminou como *"Não
+atendida"*. É um fato NOVO e não é pouco: alguma coisa mudou do lado da Meta
+entre 25 e 26/08. ⚠️ Mas ele **não prova entrega no tronco** — quem responde
+isso é o INVITE/CDR do Asterisk naquele minuto, e o webhook não serve para
+isso (ver a ressalva logo abaixo).
+
+🆕 **E O CAMINHO ATÉ O SBC FOI PROVADO A PARTIR DO ALVO QUE A META GUARDA**
+(26/08, 11:24 — botão 🔌 do painel, que lê o `sip.servers[]` do `GET /settings`
+e abre a conexão de verdade): DNS `sip.spassessoriacontabil.com.br` →
+**35.185.197.118**, porta **5061**, **TLSv1.2**, certificado público válido até
+**22/11/2026** (emissor YE1), e **SIP OPTIONS respondido com 200 OK** pelo
+Asterisk PBX 20.6.0. Ou seja: não é DNS, não é firewall, não é certificado, e
+não é endereço errado — o alvo testado é o MESMO que a Meta tem gravado.
+
 ⚠️ Também não chega evento de chamada no WEBHOOK — só o
 `call_permission_reply`. Em modo SIP a sinalização É o INVITE, então a ligação
 NUNCA vai virar linha na conversa vindo do webhook: quando ela passar a chegar,
 o registro tem de sair do CDR do SBC.
+
+### 🔎 Como medir isso em UM comando (dentro do SBC)
+
+Responder *"chegou INVITE?"* dependia de saber Asterisk — caminho do log, nome
+do CSV do CDR, comandos do pjsip. **Medição que depende de conhecimento
+especializado é medição que não acontece**, e foi por isso que a conversa com a
+Meta ficou parada esperando um dado que ninguém coletava.
+
+🚨 **São DUAS máquinas, e confundir isso custou uma rodada** (26/08): o script
+mora no REPO (no Mac) e precisa rodar DENTRO da VM do SBC. Rodar `sudo bash
+scripts/sbc-diagnostico.sh` no Mac devolve *"No such file or directory"* —
+foi o que aconteceu, e a culpa é da instrução que dizia só "dentro do SBC".
+
+O comando abaixo resolve os dois de uma vez: manda o script pela conexão e
+executa lá, **sem copiar arquivo nenhum**.
+
+```bash
+cd ~/consultor-fiscal-inteligente && git pull       # traz o script
+
+gcloud compute ssh sbc-whatsapp \
+  --project=consultorfiscalapp --zone=us-west1-a \
+  --command='sudo bash -s -- 09:3' < scripts/sbc-diagnostico.sh
+```
+
+Para armar a captura da PRÓXIMA ligação, troque `09:3` por `--ao-vivo`.
+
+⚠️ **Se o `gcloud` não existir no Mac** (o `.zprofile` do Paulo aponta para um
+SDK que foi movido — a linha de erro aparece a cada terminal novo): confira com
+`gcloud version`. Sem ele, o caminho é o **Cloud Shell** do console do Google
+(`console.cloud.google.com`, ícone `>_`), que já vem autenticado — ali o mesmo
+`gcloud compute ssh` funciona, bastando trazer o script por `git clone`.
+
+Ele confere o **gravador primeiro** (silêncio só vale se ele estava ligado —
+lição de 25/08), diz **até onde o log alcança** (rotação invalida o zero),
+procura o INVITE, o CDR e — o que faltava — as **recusas nossas** (401/403/488).
+*"Tocou uma vez e caiu"* é o sintoma clássico de INVITE que CHEGA e é recusado:
+se aparecer recusa ali, a causa deixou de ser da Meta e passou a ser nossa.
+
+A saída já vem com as conclusões possíveis e a ação de cada uma.
+
+🚨 **E A PRIMEIRA RODADA DE VERDADE NÃO VALEU — a ferramenta caiu na armadilha
+que ela existe para impedir** (26/08, `--ao-vivo` pela VM). Dois defeitos:
+a flag `--ao-vivo` era lida como se fosse a JANELA e descia até o `grep`
+(`grep: unrecognized option`, três vezes), e a dica de rodar de novo saía
+`sudo bash bash $(date …)` — sob `bash -s`, que é o caminho que funciona, `$0`
+é literalmente "bash".
+
+⚠️ **O caro não foi o erro de argumento: foi o veredito ter concluído mesmo
+assim.** Ele lia `${ACHADOS:-0}`, então "não consegui contar" virou "contei e
+deu zero", e a saída afirmou 🟡 *"NENHUM INVITE na janela"* sobre três buscas
+que **nunca rodaram**. É a régua de 06/08 — campo de valor não recebe default —
+dentro do diagnóstico que nasceu justamente para ninguém concluir no escuro.
+Corrigido: contagem começa VAZIA, o desfecho ⚪ **NÃO CONSEGUI CONTAR** existe
+e é distinto de zero medido (`grep -c` sai com 1 quando conta zero e com ≥2
+quando erra — é o código de saída que separa os dois), e as travas rodam o
+script de verdade em vez de varrer a fonte.
+
+✅ **E COM A VERSÃO CORRIGIDA A MEDIÇÃO SAIU — 26/08, 15:53.** O veredito voltou
+🟡 **NENHUM INVITE na janela, com o gravador LIGADO** — e não ⚪ "não consegui
+contar", ou seja **a busca de fato rodou**. Como a rodada foi com `--ao-vivo`
+sem janela, o filtro virou **o dia inteiro de 26/08**, e o log cobre de
+**25/08 17:48:18 a 26/08 15:53:18**: a tentativa das 09:30 está dentro. A
+seção 6 fecha a outra ponta — **nenhuma recusa nossa** (401/403/404/407/488/603).
+
+📌 **É este o fato que faltava no chamado, e ele é mais forte que o esperado**:
+não é "não achamos no minuto X", é **nenhum INVITE no dia inteiro**, com o
+gravador provado ligado e sem recusa nossa. Já está no texto do chamado abaixo.
+
+⚠️ **O que este dado NÃO separa**: o log mostra o que o **Asterisk** vê. Se o
+INVITE fosse barrado antes dele (firewall/rede), o log estaria igualmente
+vazio. É por isso que a pergunta sobre os **IPs de origem** continua no
+chamado — e por isso a captura `pjsip set logger on`, armada na mesma rodada,
+vale a próxima ligação: ela grava o **pacote SIP CRU recebido**, inclusive o
+que o Asterisk recusaria antes do dialplan. Uma ligação + uma rodada com o
+minuto fecham isso em definitivo.
+
+⚠️ **E o CDR NÃO existe nesta VM**, então o log é testemunha única. Conferir
+`sudo asterisk -rx 'cdr show status'` antes de tratar a ausência de CDR como
+corroboração: hoje ela não é nem prova nem contraprova.
 
 ### Conclusão
 
@@ -408,9 +502,28 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 > rede confirma DNS, porta, handshake TLS e resposta SIP.
 >
 > Com logging verbose e CDR habilitados e verificados ANTES do teste, uma
-> chamada às 14:52 (dentro da janela) não gerou nenhum registro: nenhum
-> INVITE, nenhuma entrada de CDR.
+> chamada às 14:52 de 25/08 (dentro da janela) não gerou nenhum registro:
+> nenhum INVITE, nenhuma entrada de CDR.
 >
-> Pergunta: o que impede o roteamento das chamadas para o tronco SIP
-> configurado? Há alguma etapa de validação/aprovação do servidor SIP, ou
-> allowlist de IP, pendente do lado de vocês?
+> Em 26/08, às 09:30 (dentro da janela), a chamada passou a TOCAR uma vez no
+> aparelho do chamador antes de terminar como "Não atendida" — comportamento
+> diferente do dia anterior.
+>
+> Varredura do log do Asterisk feita em 26/08 às 15:53, cobrindo o período
+> contínuo de 25/08 17:48 a 26/08 15:53 (portanto incluindo a tentativa das
+> 09:30): ZERO linhas com INVITE em todo o dia 26/08, com o logging verbose
+> comprovadamente ativo no momento da varredura. E nenhuma resposta de recusa
+> nossa (401/403/404/407/488/603) no mesmo período — ou seja, não é o caso de
+> a chamada chegar e ser rejeitada pelo nosso lado: ela não chega.
+>
+> Verificação do caminho feita em 26/08 às 11:24, a partir do endereço que
+> consta em sip.servers[]: DNS sip.spassessoriacontabil.com.br →
+> 35.185.197.118, porta 5061 aberta, TLSv1.2, certificado público válido até
+> 22/11/2026, e SIP OPTIONS respondido com 200 OK (Asterisk PBX 20.6.0). O
+> destino está acessível a partir da internet pública.
+>
+> Perguntas: (1) o que impede o roteamento das chamadas para o tronco SIP
+> configurado? (2) há etapa de validação/aprovação do servidor SIP, ou
+> allowlist de IP de origem, pendente do lado de vocês? (3) de quais IPs de
+> origem partem os INVITEs, para que possamos confirmar que não há bloqueio no
+> nosso lado?
