@@ -657,7 +657,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // 🔎 Eventos de chamada CRUS — a tela da Meta promete "peça um retorno de
     // ligação e entraremos em contato", e o leiaute desse pedido não está
     // provado. Isto ACHA o evento real; a régua nasce dele, nunca de dedução.
-    const [crus, setCrus] = useState<{ achados: { em: string | null; rotulo: string; payload: unknown }[]; amostra: number } | null>(null);
+    const [crus, setCrus] = useState<{ achados: { em: string | null; rotulo: string; payload: unknown }[]; amostra: number; janela?: { de: string | null; ate: string | null } | null } | null>(null);
     const [lendoCrus, setLendoCrus] = useState(false);
     const [sondandoSbc, setSondandoSbc] = useState(false);
     const aplicarChamada = async (p: Parameters<typeof configurarChamadas>[0], confirmacao: string) => {
@@ -2831,7 +2831,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     setLendoCrus(true);
                                                     try {
                                                         const r = await eventosCrusDeChamada();
-                                                        setCrus(r.ok ? { achados: r.achados || [], amostra: r.amostra || 0 } : null);
+                                                        setCrus(r.ok ? { achados: r.achados || [], amostra: r.amostra || 0, janela: r.janela || null } : null);
                                                     } finally { setLendoCrus(false); }
                                                 }}
                                                 disabled={lendoCrus}
@@ -2845,6 +2845,17 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                             ? `Nenhum evento de chamada entre os ${crus.amostra} eventos mais recentes do webhook.`
                                                             : `${crus.achados.length} evento(s) de chamada entre os ${crus.amostra} mais recentes:`}
                                                     </p>
+                                                    {/* 🚨 A JANELA É O QUE FAZ O ZERO VALER. Sem ela, "nenhum
+                                                        evento" e "não olhei até a hora da ligação" ficam
+                                                        idênticos — e a conclusão errada manda abrir chamado
+                                                        (ou fechar um) sobre nada. */}
+                                                    {crus.janela?.de && (
+                                                        <p className="text-slate-400">
+                                                            Conferi de <strong>{new Date(crus.janela.de).toLocaleString('pt-BR')}</strong> até{' '}
+                                                            <strong>{crus.janela.ate ? new Date(crus.janela.ate).toLocaleString('pt-BR') : '—'}</strong>.
+                                                            {crus.achados.length === 0 && ' Se a ligação foi FORA dessa janela, este zero não responde nada.'}
+                                                        </p>
+                                                    )}
                                                     {crus.achados.map((a, i) => (
                                                         <details key={i} className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1">
                                                             <summary className="cursor-pointer font-semibold">
