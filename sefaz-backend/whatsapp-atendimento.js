@@ -608,6 +608,13 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
     // de escrever).
     if (/^#?sair$/i.test(texto)) {
         acoes.push({ tipo: 'resetarTriagem' });
+        // 🚨 E SOLTA A CONDUÇÃO (25/08): o `#sair` limpava a FILA e deixava o
+        // DONO. A conversa ficava presa na mesa de quem já tinha terminado, e
+        // quando o cliente voltasse o bot continuaria mudo — conversa com dono
+        // é atendimento em andamento, e o bot não fala por cima dele.
+        // Encerrar é encerrar nos dois lados: pelo ✅ do atendente e pelo
+        // #sair do cliente, o estado final é o MESMO.
+        acoes.push({ tipo: 'liberarConducao' });
         acoes.push({ tipo: 'resolverConversa', por: 'cliente' });
         acoes.push({ tipo: 'responder', texto: config.mensagens.sair });
         if (config.avaliacaoAtiva) {

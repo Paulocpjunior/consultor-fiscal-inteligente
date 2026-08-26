@@ -175,11 +175,21 @@ describe('decidirAutomacao — o cérebro, puro', () => {
         expect(acoes).toEqual([]);
     });
 
-    it('#sair encerra: reseta a triagem, RESOLVE (por cliente) e — com a pesquisa ligada — pede a nota', () => {
+    it('#sair encerra: reseta a triagem, SOLTA a condução, RESOLVE (por cliente) e — com a pesquisa ligada — pede a nota', () => {
         const acoes = decidirAutomacao({ conversa: { fila: 'fiscal' }, textoMensagem: '#sair', config: cfg, agora: dentroDoExpediente });
-        expect(acoes[0]).toEqual({ tipo: 'resetarTriagem' });
-        expect(acoes[1]).toEqual({ tipo: 'resolverConversa', por: 'cliente' });
-        expect(acoes[2].texto).toContain('encerrado');
+        // ⚠️ TRAVA TROCADA (25/08): ela prendia a ORDEM por índice
+        // (`acoes[1]`, `acoes[2]`), então acrescentar o `liberarConducao` —
+        // que era o que FALTAVA — reprovava a correção. O que importa é o
+        // conjunto de ações e a mensagem vir DEPOIS delas, não a posição.
+        const tipos = acoes.map((a: any) => a.tipo);
+        expect(tipos).toContain('resetarTriagem');
+        // Sem soltar a condução, a conversa ficava presa na mesa de quem já
+        // tinha terminado — e o bot, que não fala por cima de atendimento em
+        // andamento, ficava mudo quando o cliente voltasse.
+        expect(tipos).toContain('liberarConducao');
+        expect(acoes.some((a: any) => a.tipo === 'resolverConversa' && a.por === 'cliente')).toBe(true);
+        expect(acoes.find((a: any) => a.tipo === 'responder')?.texto).toContain('encerrado');
+        expect(tipos.indexOf('responder')).toBeGreaterThan(tipos.indexOf('resolverConversa'));
         expect(acoes.some((a: any) => a.tipo === 'marcarAguardandoAvaliacao')).toBe(false); // pesquisa desligada
         const comPesquisa = decidirAutomacao({
             conversa: { fila: 'fiscal' }, textoMensagem: '#sair',
