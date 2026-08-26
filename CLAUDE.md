@@ -5,6 +5,58 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O GUIA TEM 343 LINHAS DE "Validação:" E NINGUÉM AS TINHA LIDO** (26/08,
+  logo depois de o bloco D fechar). O Guia entrou no repo em 25/08 e serviu
+  para responder DUAS perguntas pontuais; a varredura mostrou que ele carrega
+  **343 validações oficiais**, e **92 delas** são de registros que o gerador de
+  fato emite. Cruzando com a prevalidação, duas classes inteiras não estavam
+  cobertas.
+  ✂️ **(1) `VL = base × alíquota ÷ 100`, exigida em SEIS registros** — A170
+  (campos 12 e 16), C170 (30 e 36), D101/D105 (08), F100 (10 e 14) e F550 (07
+  e 12). O Guia escreve a conta por extenso no D101: *"Sendo o Campo
+  'VL_BC_PIS' = 1.000.000,00 e o Campo 'ALIQ_PIS' = 1,6500, então o Campo
+  'VL_PIS' será igual a: 1.000.000,00 x 1,65 / 100 = 16.500,00"*.
+  🚨 **É A ASSINATURA DO CAMPO DESLOCADO, e ela é a que esta casa mais paga**:
+  o M210 da MANTOAN (18/08) declarava base **R$ 0,65** com contribuição de
+  **R$ 285,28** — os VALORES estavam certos e a FORMA errada, com o registro se
+  desmentindo dentro de si mesmo. **A contagem de campos pega o registro que
+  PERDEU campos; esta pega o que manteve a contagem e trocou as casas.**
+  🐛 **E A CONTA SOZINHA NÃO PEGAVA O CASO MAIS PROVÁVEL — descoberto medindo a
+  própria régua, antes de subir**: multiplicação é **COMUTATIVA**, então base e
+  alíquota trocadas de casa dão exatamente o mesmo produto, e a trava ficava
+  MUDA no deslocamento de UM campo. Quem desempata é o que a alíquota **É**: um
+  PERCENTUAL. Nenhuma alíquota ad valorem de PIS/COFINS passa de 100%, então
+  número maior ali é o campo do vizinho ocupando a casa. **Medir a trava é
+  parte de escrevê-la** — a versão que "passava nos testes" tinha um buraco do
+  tamanho do caso real.
+  ⚠️ **A TOLERÂNCIA DE DOIS CENTAVOS É O QUE FAZ ELA SERVIR, e a prova é um
+  arquivo ACEITO**: o F550 da AFFITTARE traz 21.811,34 × 0,65% = 141,7737
+  declarado como **141,76** — o próprio e-Fiscal arredonda para baixo, e a
+  Receita aceitou. Alarme sobre arredondamento legítimo é o jeito conhecido de
+  a equipe desligar a trava; e campo deslocado erra por ORDEM DE GRANDEZA,
+  nunca por um centavo.
+  ⚠️ **E A LINHA COM ALÍQUOTA POR QUANTIDADE FICA DE FORA**: a própria
+  validação diz *"campo 26 **ou** campo 28"* — ali a conta é reais por unidade,
+  sem dividir por 100. Acusá-la seria alarme sobre linha correta.
+  ✂️ **(2) O PERÍODO DO 0000 TEM DE SER UM MÊS INTEIRO** (campos 06 e 07:
+  *"deve ser o primeiro dia do mesmo mês de referência"* e *"o último dia do
+  mês a que se refere a escrituração"*). É o campo mais caro do arquivo — ele
+  diz **A QUE MÊS** tudo aquilo se refere. A varredura de competência de 22/08
+  fechou o lado da PORTA, onde o efeito era arquivo VAZIO; aqui o efeito seria
+  arquivo **CHEIO entregue no mês errado**, que é pior, porque ninguém confere
+  data de período a olho. Fevereiro bissexto está no teste.
+  ⚠️ **Data ilegível é acusada como FORMATO, não como mês errado** — dizer a
+  falha errada manda procurar problema no lugar errado.
+  📌 **O QUE NÃO ENTROU, E POR QUÊ**: das 92, a maioria depende de tabela
+  oficial que **não está neste repo** (Municípios do IBGE, Países, 4.3.7, 0400,
+  0450) ou pergunta sobre registro que o gerador não emite. Conferir contra
+  tabela deduzida seria inventar a tabela — é o 1405 com outra roupa.
+  📌 **REGRA QUE FICA: fonte oficial no repo não é fonte oficial LIDA.** O Guia
+  passou um dia respondendo só as duas perguntas que me levaram até ele. As
+  validações que ele carrega são a lista de recusas do PVA escrita ANTES de
+  elas acontecerem — e ler essa lista é mais barato que descobri-la uma volta
+  de PVA por vez, que é exatamente o gargalo que o Paulo nomeou em 20/08.
+
 - **🚨 O BLOCO D NÃO É "O CT-e DO MÊS" — É A AQUISIÇÃO DE FRETE COM DIREITO A
   CRÉDITO, e o gerador tratava como se fosse o primeiro** (26/08, pendência
   nomeada desde 21/08 e cobrada pela trava de contagem que subiu no dia
