@@ -26,9 +26,10 @@ import {
     INDICADORES_NATUREZA_FRETE, INDICADORES_TIPO_FRETE, regimeAdmiteBlocoD,
     cadastroDoFreteContratado, decidirFreteNoBlocoD, avisosDoBlocoD,
     CST_FRETE_COM_CREDITO, CST_FRETE_SEM_CREDITO,
-// @ts-ignore — módulo JS do backend, sem tipos
+// ⚠️ Sem silenciador de tipo: os dois módulos têm `.d.ts`, então o tsc CONFERE
+// os tipos aqui. Calar o aviso faria o módulo voltar a ser `any` e o `.d.ts` do
+// lado parar de valer para quem importa.
 } from '../sefaz-backend/frete-contratado-bloco-d.js';
-// @ts-ignore
 import { buildBlocoD_Contrib } from '../sefaz-backend/sped-contrib-blocos.js';
 import {
     conferirBlocoDContrib, conferirContagemDeCampos, CAMPOS_POR_REGISTRO,
