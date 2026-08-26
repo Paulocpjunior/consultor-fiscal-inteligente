@@ -505,14 +505,17 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 > chamada às 14:52 de 25/08 (dentro da janela) não gerou nenhum registro:
 > nenhum INVITE, nenhuma entrada de CDR.
 >
-> Em 26/08, às 09:30 (dentro da janela), a chamada passou a TOCAR uma vez no
-> aparelho do chamador antes de terminar como "Não atendida" — comportamento
-> diferente do dia anterior.
+> Em 26/08 houve DUAS tentativas do mesmo chamador, ambas dentro da janela de
+> atendimento e ambas com permissão de chamada vigente (o próprio WhatsApp do
+> chamador exibe "A empresa pode ligar para você até 2 de setembro"): às 09:30
+> e às 14:06. As duas TOCARAM uma vez no aparelho do chamador antes de terminar
+> como "Não atendida" — comportamento diferente do dia anterior, em que a
+> chamada era recusada de imediato.
 >
 > Varredura do log do Asterisk feita em 26/08 às 15:53, cobrindo o período
-> contínuo de 25/08 17:48 a 26/08 15:53 (portanto incluindo a tentativa das
-> 09:30): ZERO linhas com INVITE em todo o dia 26/08, com o logging verbose
-> comprovadamente ativo no momento da varredura. E nenhuma resposta de recusa
+> contínuo de 25/08 17:48 a 26/08 15:53 — portanto incluindo AS DUAS tentativas
+> (09:30 e 14:06): ZERO linhas com INVITE em todo o dia 26/08, com o logging
+> verbose ativo e verificado na mesma rodada. E nenhuma resposta de recusa
 > nossa (401/403/404/407/488/603) no mesmo período — ou seja, não é o caso de
 > a chamada chegar e ser rejeitada pelo nosso lado: ela não chega.
 >
