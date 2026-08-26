@@ -181,6 +181,15 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
         // conversa continua sendo a que o atendente já está usando.
         ...(canal.canalId ? { canalId: canal.canalId } : {}),
         ultimaMensagem: { resumo: resumoParaConversa(msg), direcao: 'entrada', em: msg.timestamp || agora },
+        // 🚨 MENSAGEM NOVA REABRE (25/08, print do Paulo): a conversa ficava
+        // com o selo "✅ resolvida" e o contador de NÃO LIDAS subindo ao mesmo
+        // tempo — duas leituras do mesmo fato na mesma linha. Conversa que
+        // recebeu mensagem não está resolvida; quem lê o selo escolhe a
+        // metade que preferir, e a que diz "resolvida" é a que faz ninguém
+        // abrir.
+        // ⚠️ `resolvidaPor` fica: quem encerrou o atendimento ANTERIOR é fato
+        // histórico, e apagá-lo perderia a auditoria de quem fechou o quê.
+        status: 'aberta',
         // Mensagem do cliente ABRE/renova a janela de 24h — é ela que a F2 mostra.
         janela24hAte: janela24hAte(msg.timestamp || agora),
         naoLidas: admin.firestore.FieldValue.increment(1),
@@ -461,6 +470,13 @@ async function capturarAvaliacao(db, msg) {
         await convRef.set({
             aguardandoAvaliacao: false,
             avaliacao: { nota, em: agora },
+            // ⚠️ A NOTA NÃO REABRE O ATENDIMENTO. Toda mensagem do cliente
+            // reabre a conversa (senão o selo "resolvida" convive com o
+            // contador de não lidas), mas a resposta da PESQUISA é a última
+            // linha do atendimento que acabou, não um assunto novo — reabrir
+            // por causa dela devolveria à mesa da equipe uma conversa que
+            // fechou certinho, todas as vezes que alguém desse nota.
+            status: 'resolvida',
             atualizadoEm: agora,
         }, { merge: true });
         await db.collection('whatsapp_avaliacoes').add({

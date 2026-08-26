@@ -1477,6 +1477,19 @@ router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
             status: s,
             resolvidaPor: s === 'resolvida' ? eu : null,
             ...(s === 'aberta' ? { aguardandoAvaliacao: false } : {}),
+            // 🚨 ENCERRAR TAMBÉM SOLTA A CONVERSA (25/08, teste do Paulo: ele
+            // encerrou, deu a nota, mandou "bom dia" e o app ficou MUDO).
+            // A causa era duas respostas para o MESMO fato: quando o CLIENTE
+            // encerra pelo `#sair`, o bot já fazia `resetarTriagem` e a fila
+            // era limpa; quando o ATENDENTE encerra pelo ✅, nada era limpo.
+            // A conversa ficava com fila e dono de um atendimento que acabou —
+            // e o galho da triagem só roda SEM fila e SEM dono, então a
+            // mensagem seguinte do cliente não virava menu, nem triagem, nem
+            // IA. Do lado dele: escreveu e ninguém respondeu.
+            // ✂️ Atendimento encerrado é atendimento que acabou: a conversa
+            // volta para a triagem, sem dono. Se o cliente voltar, é um
+            // atendimento NOVO — e é aí que o menu e a IA têm de agir.
+            ...(s === 'resolvida' ? { fila: null, atribuidoA: null, submenuAberto: null } : {}),
             atualizadoEm: agora,
         }, { merge: true });
 
