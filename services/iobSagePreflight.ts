@@ -16,7 +16,6 @@
  * item aqui, e não mais uma rodada perdida.
  */
 import type { DocumentoFiscal } from '../types';
-// @ts-ignore — módulo backend com .d.ts próprio
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 import {
     exportarParaIobSage, participanteDoDoc, numeroDaNota, cfopParaEscriturar,

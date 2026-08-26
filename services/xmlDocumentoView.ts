@@ -24,7 +24,6 @@
 // como 'saida' até o backfill do sync-cron passar. O SPED e o `.FML` já a
 // escrituram como ENTRADA desde 22/08; a Central de Documentos — lista,
 // filtro, CSV e PDF — continuava dizendo o contrário.
-// @ts-ignore — módulo backend com .d.ts próprio
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 // "É nota de serviço?" — o MESMO dono que separa o bloco A do C no SPED. Ele
 // conhece as formas raras do rótulo (o `nfseNacional` do ADN, os blocos

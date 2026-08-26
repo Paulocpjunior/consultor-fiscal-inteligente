@@ -10,7 +10,6 @@ import type {
 } from '../../types';
 import { parseSpedFiscalFile } from '../../services/spedFiscalParserService';
 import { conferXmlContraSped, type XmlConferenciaInput } from '../../services/spedFiscalConferenceService';
-// @ts-ignore — módulo backend com .d.ts próprio
 import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { listDocumentos, getDocumentosByChaves, getDocumentosByCnpjPeriodo } from '../../services/xmlFiscalService';
 import { salvarSpedArquivo } from '../../services/spedFiscalStorageService';

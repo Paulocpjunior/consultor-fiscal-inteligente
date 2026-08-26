@@ -38,11 +38,9 @@ import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
 // fica gravada como 'saida' até o backfill passar, e este painel é o número
 // que a equipe compara com o livro e com o SPED.
-// @ts-ignore — módulo backend com .d.ts próprio
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 const direcaoDoDocumento = (d: any): string => (direcaoEfetivaDoc(d) as string) || '';
-// @ts-ignore — módulo backend com .d.ts próprio
 import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import {

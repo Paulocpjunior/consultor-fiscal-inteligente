@@ -19,7 +19,6 @@ import {
     conferirPerfilConsolidado, indRegCumDoArquivoGerado,
 // @ts-ignore
 } from '../sefaz-backend/sped-contrib-campos.js';
-// @ts-ignore
 import { buildBlocoM } from '../sefaz-backend/sped-contrib-blocos.js';
 
 /** As duas linhas exatamente como saíram do arquivo que o PVA recusou. */

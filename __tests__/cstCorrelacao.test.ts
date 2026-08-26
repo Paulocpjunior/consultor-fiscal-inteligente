@@ -8,11 +8,9 @@
  *
  * É a mesma assimetria do CFOP, um campo adiante — a nota é do FORNECEDOR.
  */
-// @ts-ignore — módulo JS do backend
 import {
     cstDoLancamento, partesDoCst, resumirCst, CST_POR_DESTINO, DESTINOS_SEM_DECISAO,
     validarCstEscriturado,
-// @ts-ignore
 } from '../sefaz-backend/cst-correlacao.js';
 
 describe('partesDoCst aceita as duas formas do XML', () => {
