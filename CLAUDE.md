@@ -5,6 +5,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TELA DIZIA "PRONTO" E O BOTÃO RECUSAVA — na MESMA tela, e o dono que
+  eu esqueci foi o do INSUMO** (27/08, print do Paulo: REGINA CELIA PIRES ·
+  07/2026 com `5/5 etapas`, os cinco selos verdes, *"✓ Pronto para dar fim de
+  mês"* — e, ao clicar, *"3 etapa(s) da rotina ainda não fecharam"*, com
+  CAPTURA, APURAÇÃO e GUIAS abertas).
+  🔴 **A causa é sutil, e é a mais fácil de repetir.** Em 26/08 eu extraí
+  `montarRotinasDaCompetencia` justamente para o painel e o ato não divergirem,
+  e escrevi no comentário da rota do ato que *"uma segunda montagem divergiria
+  no pior lugar"*. **O dono da MONTAGEM foi respeitado; o do CARREGAMENTO,
+  não** — a rota do fim de mês montava o objeto da empresa **à mão**, com nove
+  campos, e a mão esquecia exatamente os que decidem três etapas:
+  · **`ccmSp`** ausente ⇒ o ISS responde `sem-ccm` ⇒ **piora a CAPTURA**;
+  · **`fichaFinanceira` / `faturamentoManual` / `faturamentoMensalDetalhado`**
+  ausentes ⇒ `acharApuracaoDaCompetencia` devolve **null** ⇒ a APURAÇÃO fica
+  pendente **e** a GUIA — que fecha em `'na'` quando o mês apurou ZERO — volta a
+  `'pendente'`. Três etapas caídas por um objeto literal.
+  ✂️ `rotina-empresa-insumo.js` (PURO) é o dono de *"o que a Rotina precisa de
+  uma empresa"*, e as duas rotas o chamam. ⚠️ Ele NÃO podia morar em
+  `rotina-fiscal-routes.js`: aquele arquivo puxa express e firebase-admin e
+  **não carrega no jest** — a primeira versão nasceu lá e o teste nem subiu.
+  **Régua dentro de rota é régua sem prova**, pela enésima vez.
+  📌 **REGRA QUE FICA: dono de montagem não basta — quem CARREGA o insumo dela
+  é dono também.** Objeto montado à mão para alimentar uma régua é uma segunda
+  cópia com outra roupa, e ela envelhece em SILÊNCIO no primeiro campo novo.
+  Travado por **varredura** (`rotinaMesmoInsumo.test.ts`): quem chama
+  `montarRotinasDaCompetencia` tem de conhecer o dono, e **objeto literal na
+  lista de empresas quebra a build**. Provada revertendo o defeito.
+  🐛 **E UMA TRAVA LITERAL REPROVOU A CORREÇÃO** (a 6ª vez desta família): a
+  trava da UF de 15/08 exigia o TEXTO `uf: d.dadosFiscais?.uf || d.uf` dentro de
+  `rotina-fiscal-routes.js` — e a leitura mudou de casa. Trocada pela INTENÇÃO
+  (o dono entrega a UF nas duas formas, e ausência devolve `''`, que acende).
+  ⚠️ **E o sintoma era o pior possível**: nada quebrou, nada explodiu — a tela
+  e o botão só passaram a contar histórias diferentes sobre a mesma empresa.
+
 - **🔒 "EMPRESA FECHADA, IMPOSTO ENVIADO, PÁGINA VIRADA — NÃO PODE FICAR EM
   VERMELHO"** (27/08, Paulo, com o print da AC MASON). O carimbo do fim de mês
   existia desde 26/08 e **as etapas continuavam mandando na cor**: elas são

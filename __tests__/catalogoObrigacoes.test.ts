@@ -407,9 +407,26 @@ describe('🚨 prazo ESTADUAL só vale para a UF dele', () => {
         expect(e.prazoDeOutraUf.length).toBeGreaterThan(0);
     });
 
-    it('a rota manda a UF do cliente — sem ela a régua não roda', () => {
+    // 🐛 ESTA TRAVA PRENDIA A FORMA, NÃO A INTENÇÃO — e reprovou a correção que
+    // a régua mandava fazer (27/08). Ela exigia o texto
+    // `uf: d.dadosFiscais?.uf || d.uf` DENTRO de `rotina-fiscal-routes.js`; a
+    // leitura mudou de casa para o módulo PURO `rotina-empresa-insumo.js`
+    // (rota não carrega no jest — régua dentro de rota é régua sem prova), e o
+    // teste quebrou com o código CERTO. É a família do `IND_REG_CUM` e do
+    // `cfopPorNota`: teste que trava a FONTE impede a correção.
+    //
+    // Agora ela pergunta pelo COMPORTAMENTO — o dono do insumo entrega a UF,
+    // nas duas formas em que ela é gravada — e só o repasse à régua continua
+    // sendo conferido no texto da rota.
+    it('a UF do cliente chega à régua — sem ela o prazo estadual não vale', () => {
+        const { empresaDaRotina } = require('../sefaz-backend/rotina-empresa-insumo.js');
+        const base = { cnpj: '11222333000181' };
+        expect(empresaDaRotina('e1', 'lucro_empresas', { ...base, dadosFiscais: { uf: 'PR' } }).uf).toBe('PR');
+        expect(empresaDaRotina('e1', 'lucro_empresas', { ...base, uf: 'MG' }).uf).toBe('MG');
+        // Sem UF cadastrada NÃO se inventa: é a `uf-desconhecida`, que acende.
+        expect(empresaDaRotina('e1', 'lucro_empresas', base).uf).toBe('');
+
         const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/rotina-fiscal-routes.js'), 'utf8');
         expect(rota).toMatch(/uf: e\.uf/);
-        expect(rota).toMatch(/uf: d\.dadosFiscais\?\.uf \|\| d\.uf/);
     });
 });
