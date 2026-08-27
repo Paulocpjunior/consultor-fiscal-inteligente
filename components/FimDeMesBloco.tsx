@@ -217,16 +217,50 @@ const FimDeMesBloco: React.FC<Props> = ({
 
     // ── ABERTA: pronta ou bloqueada ─────────────────────────────────────────
     if (pre?.pode) {
+        // ═══════════════════════════════════════════════════════════════════
+        // 🚨 UMA AFIRMAÇÃO QUE O APP ACABOU DE DESMENTIR NÃO FICA NA TELA.
+        //
+        // Print do Paulo (27/08, REGINA CELIA): "✓ Pronto para dar fim de mês"
+        // em VERDE com a recusa em VERMELHO logo abaixo. O `pre.pode` sai das
+        // ETAPAS que o painel leu; o ato recusa por OUTRAS razões também
+        // (competência ilegível, mês já fechado, sem apuração) — e nenhuma
+        // delas é bloqueio de etapa, então a caixa continuava se dizendo
+        // pronta enquanto a linha de baixo dizia o contrário.
+        //
+        // Isto é INDEPENDENTE da causa daquele print (que era o Simples sem
+        // ficha, corrigido no backend): é a classe. Qualquer recusa futura que
+        // não seja bloqueio de etapa cairia na mesma contradição.
+        // ═══════════════════════════════════════════════════════════════════
+        const recusouSemBloqueio = !!erro && bloqueiosDaRecusa.length === 0;
         return (
-            <div className="rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-2 space-y-1">
+            <div className={`rounded-lg border p-2 space-y-1 ${
+                recusouSemBloqueio
+                    ? 'border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20'
+                    : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+            }`}>
                 {/* Era aqui que ficava o "✓ Mês fechado" por DEDUÇÃO. Agora ele
-                    diz o que de fato é: pronto para o ato. */}
-                <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                    ✓ Pronto para dar fim de mês
-                </p>
-                <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
-                    Notas capturadas e validadas, apuração feita, obrigações entregues e guia enviada com o rito.
-                </p>
+                    diz o que de fato é: pronto para o ato — e para de dizê-lo
+                    no instante em que o ato prova que não estava. */}
+                {recusouSemBloqueio ? (
+                    <>
+                        <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                            ⚠ O fim de mês foi RECUSADO
+                        </p>
+                        <p className="text-[11px] text-amber-900/80 dark:text-amber-200/80">
+                            As cinco etapas estão fechadas, mas o ato não passou — o motivo está abaixo.
+                            Nenhuma etapa está bloqueando: é outra coisa.
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                            ✓ Pronto para dar fim de mês
+                        </p>
+                        <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
+                            Notas capturadas e validadas, apuração feita, obrigações entregues e guia enviada com o rito.
+                        </p>
+                    </>
+                )}
                 <button
                     onClick={fechar}
                     disabled={ocupado}

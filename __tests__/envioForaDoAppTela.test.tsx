@@ -99,3 +99,67 @@ describe('📋 a porta do envio declarado', () => {
         expect(await screen.findByText(/O app NÃO enviou esta guia/)).toBeTruthy();
     });
 });
+
+// ============================================================================
+// 🚨 UMA AFIRMAÇÃO QUE O APP ACABOU DE DESMENTIR NÃO FICA NA TELA
+//
+// Print do Paulo (27/08, REGINA CELIA): **"✓ Pronto para dar fim de mês"** em
+// VERDE com a recusa em VERMELHO logo abaixo, na mesma caixa.
+//
+// O `pre.pode` sai das ETAPAS que o painel leu; o ato recusa por OUTRAS razões
+// também (competência ilegível, mês já fechado, sem apuração) — e nenhuma é
+// bloqueio de etapa, então a caixa continuava se dizendo pronta enquanto a
+// linha de baixo dizia o contrário.
+//
+// ⚠️ Isto é INDEPENDENTE da causa daquele print (o Simples sem ficha, corrigido
+// no backend): é a CLASSE. Qualquer recusa futura que não seja bloqueio de
+// etapa cairia na mesma contradição.
+// ============================================================================
+describe('🚨 a caixa para de dizer "pronto" quando o ato recusa', () => {
+    // ⚠️ O ato PERGUNTA antes (`window.confirm`) — fechar muda o que o Contábil
+    // importa, e só um admin desfaz. Em jsdom o confirm devolve `undefined`, e
+    // sem isto o clique nem chega ao backend.
+    beforeEach(() => { window.confirm = jest.fn(() => true); });
+
+    const montarPronta = () => render(
+        <FimDeMesBloco empresaId="e1" competencia="2026-07" fechamento={null} bloqueios={[]} />,
+    );
+
+    it('sem clicar, ela diz que está pronta', () => {
+        const { container } = montarPronta();
+        expect(container.textContent).toMatch(/Pronto para dar fim de mês/);
+    });
+
+    it('recusa SEM bloqueio de etapa apaga o "pronto" e assume a recusa', async () => {
+        const { darFimDeMes } = require('../services/fimDeMesService');
+        darFimDeMes.mockResolvedValueOnce({
+            ok: false,
+            erro: 'Sem apuração registrada nesta competência não há valor a fechar.',
+            bloqueios: [],
+        });
+        const { container } = montarPronta();
+        fireEvent.click(screen.getByText(/Dar fim de mês/));
+        expect(await screen.findByText(/O fim de mês foi RECUSADO/)).toBeTruthy();
+        // A afirmação desmentida SAI da tela — não convive com a recusa.
+        expect(container.textContent).not.toMatch(/Pronto para dar fim de mês/);
+        // E a frase diz que NÃO é etapa, senão a pessoa vai procurar bloqueio
+        // que não existe.
+        expect(container.textContent).toMatch(/Nenhuma etapa está bloqueando/);
+        expect(container.textContent).toMatch(/Sem apuração registrada/);
+    });
+
+    // ⚠️ Quando a recusa TEM bloqueio de etapa, nada muda: ali a lista de
+    // etapas abertas já é a explicação, e ela é a única saída que a pessoa tem.
+    it('recusa COM bloqueio de etapa continua mostrando a lista', async () => {
+        const { darFimDeMes } = require('../services/fimDeMesService');
+        darFimDeMes.mockResolvedValueOnce({
+            ok: false,
+            erro: '1 etapa(s) da rotina ainda não fecharam',
+            bloqueios: [bloqueio('captura', 'Capturar notas')],
+        });
+        const { container } = montarPronta();
+        fireEvent.click(screen.getByText(/Dar fim de mês/));
+        expect(await screen.findByText(/Fim de mês bloqueado/)).toBeTruthy();
+        expect(container.textContent).not.toMatch(/O fim de mês foi RECUSADO/);
+    });
+});
