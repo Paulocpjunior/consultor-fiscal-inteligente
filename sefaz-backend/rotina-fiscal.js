@@ -24,6 +24,12 @@ import { docCancelado } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { acharFichaCompetencia } from './ipi-varredura.js';
+// 🏠 A receita de LOCAÇÃO — ela não tem documento por natureza (é o caso
+// AFFITTARE, e foi dele que o F550 nasceu). Sem ela a etapa de captura cobra
+// uma nota de saída que NUNCA vai existir.
+import { receitaDeLocacao } from './receita-sem-documento-f550.js';
+// 🔒 O carimbo do fim de mês — quem responde "esta competência foi fechada?".
+import { competenciaFechada } from './fim-de-mes.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -53,6 +59,35 @@ const FECHADAS = new Set(['concluida', 'na']);
  */
 export function etapaFechada(e) {
     return FECHADAS.has(String(e?.status || ''));
+}
+
+/**
+ * 🏠 A RECEITA DESTA COMPETÊNCIA É INTEIRAMENTE DE LOCAÇÃO?
+ *
+ * Nasce do caso **AC MASON** (Paulo, 27/08: *"essa empresa é só aluguel, a
+ * obrigação já foi entregue e as guias enviadas para o cliente — como atualizar
+ * para ficar verde?"*). A Rotina cobrava dela uma **nota de SAÍDA** que nunca
+ * vai existir: aluguel não gera documento, é por isso que o **F550** existe.
+ *
+ * ⚠️ A COMPARAÇÃO É COM O TOTAL, e isso é a trava: empresa que aluga E vende
+ * TEM documento a capturar, e exemplá-la silenciaria livro a menor — o erro
+ * caro. `faturamentoMesTotal` inclui a locação da matriz (conferido em
+ * `handleSaveFicha`), então "locação ≥ total" significa "não há outra receita".
+ *
+ * ⚠️ E receita ILEGÍVEL não exime: ausência não é prova, e aqui a dúvida cai
+ * para o lado de continuar acendendo.
+ */
+export function receitaSoDeLocacao(apuracao) {
+    const locacao = Number(apuracao?.receitaDeLocacao || 0);
+    if (!(locacao > 0)) return false;
+    // 🐛 `Number(null)` é **0** e `Number.isFinite(0)` é **true** — a 1ª versão
+    // deste `if` deixava a receita AUSENTE passar por "receita zero", e aí
+    // "locação ≥ 0" eximia a empresa inteira. É a MESMA pegadinha do farol de
+    // lastro (15/08) e do regime do catálogo. O `== null` vem SEMPRE primeiro.
+    if (apuracao?.receita == null) return false;
+    const receita = Number(apuracao.receita);
+    if (!Number.isFinite(receita)) return false;
+    return locacao >= receita - 0.01;
 }
 
 const etapa = (id, status, resumo, acao = null, extra = {}) => {
@@ -110,6 +145,11 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
             fonte: 'lucro',
             totalImpostos: Number.isFinite(Number(ficha.totalImpostos)) ? Number(ficha.totalImpostos) : null,
             receita: Number.isFinite(Number(ficha.faturamentoMesTotal)) ? Number(ficha.faturamentoMesTotal) : null,
+            // 🏠 A RECEITA DE LOCAÇÃO viaja junto (27/08, caso AC MASON): ela é
+            // receita SEM DOCUMENTO, então a etapa de captura não pode cobrar
+            // nota de saída de quem só tem aluguel. Sem este campo a Rotina não
+            // tinha como saber — ela só via `faturamentoMesTotal`.
+            receitaDeLocacao: receitaDeLocacao(ficha) || 0,
         };
     }
 
@@ -158,14 +198,33 @@ export function montarRotinaFiscal({
     // captura e conferir o Diagnóstico" é mandar procurar defeito onde não há.
     // Muda a CAUSA e a primeira parada; a etapa continua acendendo igual.
     capturaPorAgenteLocal = false,
+    // 🔒 O CARIMBO DO FIM DE MÊS (`fechamentos_competencia`). Quando ele existe
+    // e está 'fechada', o mês é FATO fechado — a página virou. Ver o bloco no
+    // fim desta função.
+    fechamento = null,
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
     const saidas = docs.filter((d) => d.direcao === 'saida').length;
+    // 🏠 Aluguel puro: a receita não tem documento por natureza.
+    const soLocacao = receitaSoDeLocacao(apuracao);
+    const locacao = Number(apuracao?.receitaDeLocacao || 0);
 
     // ── 1. CAPTURA ──────────────────────────────────────────────────────────
     let eCaptura;
-    if (docs.length === 0) {
+    if (soLocacao && saidas === 0) {
+        // 🏠 NÃO HÁ NOTA DE SAÍDA A CAPTURAR — e dizer o contrário é o alarme
+        // que a pessoa não tem como apagar (a família do `tipoTributacao`).
+        // 'na' quando não entrou NADA (não se afirma captura que não houve) e
+        // 'concluida' quando as entradas vieram — ali a captura de fato rodou.
+        const frase = `Receita de LOCAÇÃO de ${fmtBRL(locacao)} — aluguel não gera nota fiscal `
+            + '(é a receita que vai ao F550), então não há saída a capturar.';
+        eCaptura = docs.length === 0
+            ? etapa('captura', 'na', frase, null,
+                { entradas: 0, saidas: 0, total: 0, receitaSemDocumento: locacao })
+            : etapa('captura', 'concluida', `${entradas} entrada(s) capturada(s) · ${frase}`, null,
+                { entradas, saidas: 0, total: docs.length, receitaSemDocumento: locacao });
+    } else if (docs.length === 0) {
         eCaptura = etapa('captura', 'pendente',
             capturaPorAgenteLocal
                 ? 'Nenhuma nota capturada nesta competência — e esta empresa captura por certificado A3.'
@@ -196,7 +255,13 @@ export function montarRotinaFiscal({
     // livro é gerado do XML ORIGINAL. Estava sendo capturada e ninguém via.
     const cce = varrerCcesDoPeriodo(docs).resumo;
     let eValidacao;
-    if (docs.length === 0) {
+    if (docs.length === 0 && soLocacao) {
+        // 🏠 Sem documento porque não há documento — não é "falta validar",
+        // é "não há o que validar". Vermelho aqui seria o mesmo alarme sem
+        // ação um degrau abaixo.
+        eValidacao = etapa('validacao', 'na', 'Não há nota nesta competência — a receita é de locação.',
+            null, { resumos: 0, canceladas: 0, cce });
+    } else if (docs.length === 0) {
         eValidacao = etapa('validacao', 'pendente', 'Sem notas para validar.',
             'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0, cce });
     } else if (resumos > 0) {
@@ -260,6 +325,11 @@ export function montarRotinaFiscal({
             documentos: docs.length,
             rotulo: temImposto ? 'Imposto apurado' : 'Receita lançada',
             capturaPorAgenteLocal,
+            // 🏠 O lastro do aluguel é a PRÓPRIA ficha: ele não tem documento
+            // por natureza. Sem isto a empresa de locação pura acende "sem
+            // lastro" todo mês sobre um número certo — e quem decide se a
+            // receita é TODA de locação é a régua acima, nunca o farol.
+            receitaSemDocumento: soLocacao ? locacao : 0,
         });
         // ⚠️ AS DUAS situações de ausência acendem. A do A3 (`-agente-local`)
         // só muda a CAUSA e a primeira parada — deixá-la de fora silenciaria
@@ -443,18 +513,46 @@ export function montarRotinaFiscal({
     const proxima = etapas.find((e) => !etapaFechada(e)) || null;
     const fechadas = etapas.filter(etapaFechada).length;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 PÁGINA VIRADA — o carimbo VENCE as etapas (Paulo, 27/08: *"empresa
+    // fechada, imposto enviado, página virada! Não pode ficar em vermelho"*).
+    //
+    // As cinco etapas são a PRÉ-CONDIÇÃO do fim de mês, e o ato só passa com
+    // todas fechadas (a decisão de BLOQUEAR, 26/08). Depois do carimbo elas
+    // continuam sendo RECALCULADAS a cada abertura da tela — e qualquer coisa
+    // que mude depois (uma tarefa reaberta, uma nota que chegou atrasada) fazia
+    // a empresa voltar ao vermelho num mês que a pessoa já entregou.
+    //
+    // O carimbo é FATO — quem fechou, quando, com qual acervo e quais valores.
+    // Uma etapa recalculada é DEDUÇÃO. Fato vence dedução: sem `proximoPasso`
+    // (não há próximo passo num mês fechado) e farol próprio, que não é
+    // 'pendente' nem 'atencao'.
+    //
+    // ⚠️ 'reaberta' NÃO conta como fechada (`competenciaFechada`): a reabertura
+    // existe justamente para permitir a edição, e tratá-la como fechada
+    // esconderia o retrabalho que ela abre.
+    //
+    // ⚠️ E as etapas CONTINUAM sendo entregues como estão — o mês fechado não
+    // apaga o que mudou depois, ele só para de COBRAR. Quem quiser ver o que
+    // mudou abre o card; quem reabrir volta a receber o próximo passo.
+    // ═══════════════════════════════════════════════════════════════════════
+    const mesFechado = competenciaFechada(fechamento);
+
     return {
         empresa: empresa || null,
         competencia,
         iss: ajusteIss.iss,
         etapas,
-        proximoPasso: proxima
-            ? { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo }
-            : null,
+        fechamento: fechamento || null,
+        proximoPasso: (mesFechado || !proxima) ? null
+            : { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo },
         progresso: { concluidas: fechadas, total: etapas.length },
-        // Só é 'ok' quando as CINCO fecham — mês pela metade não é mês fechado.
-        farol: fechadas === etapas.length ? 'ok'
-            : etapas.some((e) => e.status === 'pendente') ? 'pendente' : 'atencao',
+        // 'fechado' é FATO (o carimbo). 'ok' passou a querer dizer **pronto
+        // para fechar** desde 26/08 — as cinco etapas fecharam e ninguém deu o
+        // fim de mês ainda.
+        farol: mesFechado ? 'fechado'
+            : fechadas === etapas.length ? 'ok'
+                : etapas.some((e) => e.status === 'pendente') ? 'pendente' : 'atencao',
     };
 }
 
@@ -575,21 +673,41 @@ function fmtBRL(v) {
  */
 export function resumirFunil(rotinas) {
     const funil = ETAPAS_ROTINA.map((e) => ({ id: e.id, ordem: e.ordem, nome: e.nome, empresas: [] }));
-    let completos = 0;
+    // 🚨 "MÊS FECHADO" ERA DEDUÇÃO AQUI — e era leitura MINHA deixada para trás.
+    //
+    // O contador antigo era `if (!r.proximoPasso) completos++`, ou seja "as
+    // cinco etapas fecharam ⇒ o mês fechou". Em 26/08 o card parou de deduzir
+    // isso (`✓ Mês fechado` virou o ato) e o FUNIL continuou deduzindo: a MESMA
+    // tela com duas leituras do mesmo fato, que é o defeito que esta casa mais
+    // paga. É a régua de 23/08 outra vez — **quando um booleano muda de
+    // significado, os LEITORES dele entram no mesmo PR**, e este eu esqueci.
+    //
+    // Agora são DOIS números, porque pedem ações OPOSTAS: `fechados` é fato
+    // (nada a fazer) e `prontos` é um CLIQUE que ninguém deu — fundir os dois
+    // faria N empresas prontas passarem por entregues.
+    let fechados = 0;
+    let prontos = 0;
     for (const r of rotinas || []) {
-        if (!r?.proximoPasso) { completos++; continue; }
+        if (competenciaFechada(r?.fechamento)) { fechados++; continue; }
+        if (!r?.proximoPasso) { prontos++; continue; }
         const alvo = funil.find((f) => f.id === r.proximoPasso.id);
         if (alvo) alvo.empresas.push(r.empresa?.nome || r.empresa?.cnpj || '—');
     }
     const total = (rotinas || []).length;
+    const parados = total - fechados - prontos;
     return {
         total,
-        completos,
+        fechados,
+        prontos,
+        // Compatibilidade do payload: `completos` era "não tem próximo passo",
+        // e é isso que ele continua sendo — fechados + prontos.
+        completos: fechados + prontos,
         etapas: funil.map((f) => ({ ...f, qtd: f.empresas.length, empresas: f.empresas.slice(0, 100) })),
         resumo: total === 0
             ? 'Nenhuma empresa na seleção.'
-            : completos === total
-                ? `${total} empresa(s) com o mês fechado.`
-                : `${completos} de ${total} empresa(s) com o mês fechado — ${total - completos} paradas em alguma etapa.`,
+            : `${fechados} de ${total} empresa(s) com o mês FECHADO`
+                + (prontos > 0 ? ` · ${prontos} pronta(s) para dar fim de mês` : '')
+                + (parados > 0 ? ` · ${parados} parada(s) em alguma etapa` : '')
+                + '.',
     };
 }

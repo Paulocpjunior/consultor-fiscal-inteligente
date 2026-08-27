@@ -53,6 +53,10 @@ const PONTO: Record<string, string> = {
 const ICONE: Record<string, string> = { concluida: '✓', na: '–', atencao: '!', pendente: '•' };
 
 const FAROL_CARD: Record<string, string> = {
+    // 🔒 FECHADO é FATO (o carimbo), e a página virou: borda discreta, sem cor
+    // de alarme. `ok` é "pronto para fechar" — ainda pede um clique, então
+    // continua verde para chamar quem vai dá-lo.
+    fechado: 'border-slate-200 dark:border-slate-700 opacity-75',
     ok: 'border-emerald-300 dark:border-emerald-700',
     atencao: 'border-amber-300 dark:border-amber-700',
     pendente: 'border-red-300 dark:border-red-700',
@@ -194,9 +198,20 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                     </p>
                                 </button>
                             ))}
+                            {/* 🚨 ESTE NÚMERO ERA DEDUÇÃO — "não tem próximo
+                                passo ⇒ mês fechado". Agora ele é o CARIMBO, e
+                                "pronta para fechar" saiu para um contador
+                                PRÓPRIO: as duas pedem ações opostas (uma não
+                                pede nada, a outra pede um clique), e juntas
+                                faziam empresa pronta passar por entregue. */}
                             <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/10 p-2">
-                                <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Mês fechado</p>
-                                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{dados.funil.completos}</p>
+                                <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Mês FECHADO</p>
+                                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{dados.funil.fechados ?? 0}</p>
+                                {(dados.funil.prontos ?? 0) > 0 && (
+                                    <p className="text-[10px] text-blue-600 dark:text-blue-400">
+                                        + {dados.funil.prontos} pronta(s) para fechar
+                                    </p>
+                                )}
                             </div>
                         </div>
                         {etapaFiltro && (

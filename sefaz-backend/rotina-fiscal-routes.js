@@ -353,6 +353,13 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         envios: enviosPorEmpresa.get(e.id) || [],
         capturaAtiva: e.capturaAtiva,
         capturaPorAgenteLocal: empresasA3.has(e.id),
+        // 🔒 O carimbo ENTRA no núcleo, não é grudado depois: é ele que decide
+        // se ainda há próximo passo. Empresa com o mês fechado não volta ao
+        // vermelho porque uma tarefa foi reaberta depois (Paulo, 27/08:
+        // *"empresa fechada, imposto enviado, página virada"*). O núcleo
+        // devolve o carimbo na rotina — é dele que o bloco "Dar fim de mês"
+        // se alimenta, e buscá-lo por card foi o que produziu o 429.
+        fechamento: carimbos.get(String(e.id || '')) || null,
     }));
 
     // 🔒 O carimbo viaja JUNTO da rotina: é ele que o bloco "Dar fim de mês"
@@ -400,9 +407,12 @@ router.get('/painel', requireAuth, async (req, res) => {
 
         // Ordem de trabalho: quem está mais atrás aparece primeiro — é a fila
         // do dia, não uma lista alfabética.
+        // ⚠️ A empresa FECHADA vai por ÚLTIMO, depois até das que estão prontas
+        // para fechar: a pronta ainda pede um clique, a fechada não pede nada.
+        // Sem isso as duas empatavam em 99 e se misturavam no fim da fila.
         rotinas.sort((a, b) => {
-            const oa = a.proximoPasso?.ordem ?? 99;
-            const ob = b.proximoPasso?.ordem ?? 99;
+            const oa = a.farol === 'fechado' ? 100 : (a.proximoPasso?.ordem ?? 99);
+            const ob = b.farol === 'fechado' ? 100 : (b.proximoPasso?.ordem ?? 99);
             if (oa !== ob) return oa - ob;
             return String(a.empresa?.nome || '').localeCompare(String(b.empresa?.nome || ''), 'pt-BR');
         });

@@ -57,6 +57,11 @@ export interface LinhaGuia {
     iss: string | null;
     /** Etapas em ordem, para a trilha colorida. */
     etapas: { id: string; nome: string; status: string }[];
+    /**
+     * 🔒 O mês foi FECHADO (carimbo do "Dar fim de mês") — página virada.
+     * Diferente de "as cinco etapas fecharam", que ainda pede o clique do ato.
+     */
+    fechado: boolean;
     /** Peso de ordenação — quanto menor, mais urgente. */
     peso: number;
 }
@@ -86,6 +91,14 @@ const etapaDe = (r: RotinaEmpresa, id: string): EtapaRotina | undefined =>
  */
 export function corDaEmpresa(r: RotinaEmpresa): CorGuia {
     if (!r?.etapas?.length) return 'cinza';
+    // 🔒 PÁGINA VIRADA vence tudo (Paulo, 27/08: *"empresa fechada, imposto
+    // enviado, página virada! Não pode ficar em vermelho"*). O carimbo é FATO;
+    // as etapas são recalculadas a cada abertura da tela, e qualquer coisa que
+    // mude depois do fechamento (tarefa reaberta, nota atrasada) pintava de
+    // vermelho um mês que a pessoa já entregou. Inclusive a agravação por
+    // ATRASADA: o fim de mês só passa com as obrigações entregues, então
+    // "atrasada" num mês fechado é ruído sobre trabalho feito.
+    if (r.farol === 'fechado') return 'verde';
     const atrasadas = Number(etapaDe(r, 'obrigacoes')?.atrasadas || 0);
     if (atrasadas > 0) return 'vermelho';
     if (r.farol === 'pendente') return 'vermelho';
@@ -129,6 +142,7 @@ export function montarLinhaGuia(r: RotinaEmpresa): LinhaGuia {
         obrigacoes: obrig?.resumo || 'Sem obrigações lidas.',
         iss: pendenciasIss.length ? pendenciasIss.join(' · ') : null,
         etapas: (r.etapas || []).map((e) => ({ id: e.id, nome: e.nome, status: e.status })),
+        fechado: r.farol === 'fechado',
         peso: PESO_COR[cor],
     };
 }
@@ -150,7 +164,11 @@ export function montarGuiaDoMes(rotinas: RotinaEmpresa[] | undefined): { linhas:
 
 export function resumirGuia(linhas: LinhaGuia[]): ResumoGuia {
     const total = linhas.length;
-    const fechadas = linhas.filter((l) => !l.proximoPasso).length;
+    // 🔒 FECHADA é o CARIMBO, não "não tem próximo passo" — esta era a mesma
+    // dedução que o funil da Rotina fazia. Quem tem as cinco etapas fechadas e
+    // não recebeu o ato ainda pede um clique, e some se contado como fechada.
+    const fechadas = linhas.filter((l) => l.fechado).length;
+    const prontas = linhas.filter((l) => !l.fechado && !l.proximoPasso).length;
     const vermelhas = linhas.filter((l) => l.cor === 'vermelho').length;
     const ambares = linhas.filter((l) => l.cor === 'ambar').length;
     const atrasadas = linhas.reduce((t, l) => t + l.atrasadas, 0);
@@ -161,6 +179,7 @@ export function resumirGuia(linhas: LinhaGuia[]): ResumoGuia {
     const frase = total === 0
         ? 'Nenhuma empresa na sua carteira nesta competência — se isso está errado, peça ao admin para atribuir.'
         : `${fechadas} de ${total} cliente(s) com o mês fechado`
+            + (prontas > 0 ? ` · ${prontas} pronto(s) para dar fim de mês` : '')
             + (atrasadas > 0 ? ` · ${atrasadas} obrigação(ões) ATRASADA(S)` : '')
             + (naSemana > 0 ? ` · ${naSemana} cliente(s) com vencimento nesta semana` : '')
             + '.';
@@ -173,11 +192,13 @@ export function guiaParaPdf(linhas: LinhaGuia[]): (string | number)[][] {
     return linhas.map((l) => [
         l.nome,
         l.regime === 'simples' ? 'Simples' : 'Lucro',
-        l.cor === 'verde' ? 'FECHADO' : l.cor === 'vermelho' ? 'ATENÇÃO' : l.cor === 'ambar' ? 'RESSALVA' : 'SEM DADO',
+        l.fechado ? 'FECHADO'
+            : l.cor === 'verde' ? 'PRONTO P/ FECHAR'
+                : l.cor === 'vermelho' ? 'ATENÇÃO' : l.cor === 'ambar' ? 'RESSALVA' : 'SEM DADO',
         l.progresso,
         l.prazo ? `${l.prazo.obrigacao} — ${l.prazo.rotulo}` : (l.atrasadas ? `${l.atrasadas} atrasada(s)` : '—'),
         l.obrigacoes,
         l.captura,
-        l.proximoPasso || 'Mês fechado',
+        l.proximoPasso || (l.fechado ? 'Mês fechado' : 'Dê o fim de mês'),
     ]);
 }

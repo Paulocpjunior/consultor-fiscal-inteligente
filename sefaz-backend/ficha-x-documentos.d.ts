@@ -18,9 +18,16 @@ export function conferirFichaContraDocumentos(p: {
      * continua sendo lacuna.
      */
     capturaPorAgenteLocal?: boolean;
+    /**
+     * Receita da competência que NÃO GERA documento por natureza — hoje a
+     * **locação** (a que vai ao F550). Sem isto a empresa de aluguel puro
+     * acende "sem lastro" todo mês, sobre um número certo (caso AC MASON,
+     * 27/08). Quem decide se a receita é INTEIRAMENTE de locação é o chamador.
+     */
+    receitaSemDocumento?: number;
 }): {
     situacao: 'sem-valor' | 'sem-documento' | 'sem-documento-agente-local'
-        | 'com-lastro' | 'contagem-indisponivel';
+        | 'lastro-sem-documento' | 'com-lastro' | 'contagem-indisponivel';
     cor: 'ok' | 'atencao' | 'falha' | 'neutro';
     mensagem: string;
     acao: string | null;

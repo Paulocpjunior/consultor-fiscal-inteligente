@@ -122,3 +122,57 @@ describe('Rotina do mês: apuração com valor e ZERO documento não é "conclu�
         expect(e.lastro).toBeUndefined();
     });
 });
+
+// ============================================================================
+// 🏠 A AUSÊNCIA QUE É DESENHO — receita sem documento por natureza (27/08)
+//
+// Caso AC MASON: empresa de LOCAÇÃO pura acendia **falha** ("apuração sem
+// lastro") todo mês sobre um número certo, mandando "destravar a captura" de
+// uma nota que não existe. Aluguel não gera documento — é exatamente a receita
+// que o F550 do EFD-Contribuições existe para declarar.
+//
+// ⚠️ Quem decide se a receita é INTEIRAMENTE de locação é o CHAMADOR
+// (`receitaSoDeLocacao`, na Rotina). Aqui só se honra o que ele afirmou:
+// empresa que também vende tem documento a capturar.
+// ============================================================================
+describe('🏠 receita que não gera documento', () => {
+    it('não acusa "sem lastro" quando o valor vem de receita sem documento', () => {
+        const r = conferirFichaContraDocumentos({
+            valorApurado: 1500, documentos: 0, rotulo: 'Imposto apurado',
+            receitaSemDocumento: 21811.34,
+        });
+        expect(r.situacao).toBe('lastro-sem-documento');
+        expect(r.mensagem).toMatch(/LOCAÇÃO/);
+        expect(r.mensagem).toMatch(/21\.811,34/);
+        expect(r.mensagem).toMatch(/F550/);
+        expect(r.acao).toBeNull();
+    });
+
+    // ⚠️ NEUTRO, nunca 'ok': não há documento para conferir, então dizer
+    // "com lastro" seria afirmar uma conferência que não houve.
+    it('é NEUTRO, não verde — não houve conferência nenhuma', () => {
+        const r = conferirFichaContraDocumentos({
+            valorApurado: 1500, documentos: 0, receitaSemDocumento: 100,
+        });
+        expect(r.cor).toBe('neutro');
+        expect(r.cor).not.toBe('ok');
+    });
+
+    // 🔒 TRAVA NASCE VERDE: quem não passa o campo (a Varredura de IPI e todos
+    // os leitores de antes) continua recebendo exatamente o que recebia.
+    it('sem o campo, nada muda — a falha continua sendo falha', () => {
+        const r = conferirFichaContraDocumentos({ valorApurado: 1500, documentos: 0 });
+        expect(r.situacao).toBe('sem-documento');
+        expect(r.cor).toBe('falha');
+        expect(conferirFichaContraDocumentos({ valorApurado: 1500, documentos: 0, receitaSemDocumento: 0 }).situacao)
+            .toBe('sem-documento');
+    });
+
+    // A contagem que FALHOU continua vindo antes: null não é zero, e não é
+    // "explicado por locação" — é "não sabemos".
+    it('contagem indisponível vence a receita sem documento', () => {
+        expect(conferirFichaContraDocumentos({
+            valorApurado: 1500, documentos: null, receitaSemDocumento: 100,
+        }).situacao).toBe('contagem-indisponivel');
+    });
+});
