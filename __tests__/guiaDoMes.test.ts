@@ -28,13 +28,21 @@ const rotina = (over: any = {}): any => ({
     ],
     proximoPasso: null,
     progresso: { concluidas: 5, total: 5 },
-    farol: 'ok',
+    // 🔒 'fechado' é o CARIMBO do "Dar fim de mês" — o fato. Esta fixture dizia
+    // `'ok'` para significar "mês fechado", e isso deixou de ser verdade em
+    // 26/08: `'ok'` passou a querer dizer **pronto para fechar**. Trocar a
+    // fixture é o certo; ela descrevia um mundo que a produção não vive mais.
+    farol: 'fechado',
     ...over,
 });
 
 describe('a cor é a do farol da rotina — sem régua paralela', () => {
-    it('cinco etapas fechadas é verde', () => {
+    it('mês FECHADO é verde', () => {
         expect(corDaEmpresa(rotina())).toBe('verde');
+    });
+
+    it('pronto para fechar também é verde — mas é outro estado', () => {
+        expect(corDaEmpresa(rotina({ farol: 'ok' }))).toBe('verde');
     });
 
     it('farol pendente é vermelho', () => {
@@ -62,6 +70,22 @@ describe('a cor é a do farol da rotina — sem régua paralela', () => {
             ],
         });
         expect(corDaEmpresa(r)).toBe('vermelho');
+    });
+
+    // 🔒 Paulo, 27/08: *"empresa fechada, imposto enviado, página virada! Não
+    // pode ficar em vermelho"*. As etapas são RECALCULADAS a cada abertura da
+    // tela; o carimbo é FATO. Fato vence dedução — inclusive a agravação por
+    // atrasada, já que o fim de mês só passa com as obrigações entregues.
+    it('mês FECHADO não volta ao vermelho por obrigação que atrasou depois', () => {
+        const r = rotina({
+            farol: 'fechado',
+            etapas: [
+                etapa('captura', 'concluida'), etapa('validacao', 'concluida'), etapa('apuracao', 'concluida'),
+                etapa('obrigacoes', 'pendente', { atrasadas: 3 }),
+                etapa('guias', 'pendente'),
+            ],
+        });
+        expect(corDaEmpresa(r)).toBe('verde');
     });
 });
 
@@ -166,6 +190,21 @@ describe('o resumo da carteira é honesto', () => {
         expect(g.resumo.atrasadas).toBe(2);
         expect(g.resumo.naSemana).toBe(1);
         expect(g.resumo.frase).toMatch(/2 obrigação\(ões\) ATRASADA\(S\)/);
+    });
+
+    // 🚨 "FECHADA" ERA DEDUZIDA de `!proximoPasso` — e desde 26/08 quem não tem
+    // próximo passo pode estar apenas PRONTO, esperando o clique do ato. Fundir
+    // os dois faria empresa pronta passar por entregue, que é a diferença entre
+    // "nada a fazer" e "um clique a dar".
+    it('PRONTA para fechar não é contada como fechada', () => {
+        const g = montarGuiaDoMes([
+            rotina(),
+            rotina({ empresa: { id: 'e2', nome: 'B', cnpj: '2', regime: 'lucro' }, farol: 'ok' }),
+        ]);
+        expect(g.resumo.fechadas).toBe(1);
+        expect(g.resumo.frase).toMatch(/1 pronto\(s\) para dar fim de mês/);
+        expect(guiaParaPdf(g.linhas).map((l) => l[2])).toEqual(
+            expect.arrayContaining(['FECHADO', 'PRONTO P/ FECHAR']));
     });
 
     it('carteira VAZIA não vira "tudo certo" — é falta de vínculo', () => {

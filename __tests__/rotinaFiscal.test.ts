@@ -141,8 +141,20 @@ describe('3. apuração', () => {
 describe('3b. de onde vem a prova da apuração', () => {
     it('Lucro: a ficha do mês, com o total apurado', () => {
         const emp = { fichaFinanceira: [{ mesReferencia: '2026-07', totalImpostos: 900, faturamentoMesTotal: 50000 }] };
-        expect(acharApuracaoDaCompetencia(emp, '2026-07')).toEqual({ fonte: 'lucro', totalImpostos: 900, receita: 50000 });
+        expect(acharApuracaoDaCompetencia(emp, '2026-07'))
+            .toEqual({ fonte: 'lucro', totalImpostos: 900, receita: 50000, receitaDeLocacao: 0 });
         expect(acharApuracaoDaCompetencia(emp, '2026-08')).toBeNull();
+    });
+
+    // 🏠 A LOCAÇÃO viaja junto porque a Rotina não tinha como saber que a
+    // empresa é de aluguel puro — ela só via `faturamentoMesTotal`, e a
+    // receita sem documento é indistinguível de "não capturou" nele.
+    it('Lucro: a receita de LOCAÇÃO viaja junto, lida pelo dono do F550', () => {
+        const emp = { fichaFinanceira: [{
+            mesReferencia: '2026-07', totalImpostos: 1500,
+            faturamentoMesTotal: 21811.34, faturamentoMesLocacao: 21811.34,
+        }] };
+        expect(acharApuracaoDaCompetencia(emp, '2026-07').receitaDeLocacao).toBe(21811.34);
     });
 
     it('Simples: o faturamento lançado do mês (o histórico de cálculo não é gravado por tela nenhuma)', () => {
@@ -262,7 +274,28 @@ describe('funil da carteira', () => {
         expect(porId.captura).toBe(2);
         expect(porId.apuracao).toBe(1);
         expect(f.etapas.find((e: any) => e.id === 'captura').empresas).toEqual(['A', 'B']);
-        expect(f.resumo).toMatch(/3 paradas/);
+        expect(f.resumo).toMatch(/3 parada\(s\)/);
+        // Nenhuma tem carimbo: a que não tem próximo passo está PRONTA, não
+        // fechada. Os dois números existem porque as ações são opostas.
+        expect(f.fechados).toBe(0);
+        expect(f.prontos).toBe(1);
+    });
+
+    // 🚨 ESTE CONTADOR ERA DEDUÇÃO — leitura minha deixada para trás quando o
+    // card parou de deduzir "mês fechado" em 26/08. Uma tela, duas leituras do
+    // mesmo fato: exatamente o defeito que esta casa mais paga.
+    it('"mês FECHADO" sai do CARIMBO, nunca de "não tem próximo passo"', () => {
+        const f = resumirFunil([
+            rotina('A', { fechamento: { estado: 'fechada' } }),
+            rotina('B', {}),                                        // pronta, sem carimbo
+            rotina('C', { fechamento: { estado: 'reaberta' } }),     // reaberta NÃO é fechada
+            rotina('D', { documentos: [] }),                         // parada na captura
+        ]);
+        expect(f.fechados).toBe(1);
+        expect(f.prontos).toBe(2);
+        expect(f.completos).toBe(3);
+        expect(f.resumo).toMatch(/1 de 4 empresa\(s\) com o mês FECHADO/);
+        expect(f.resumo).toMatch(/2 pronta\(s\) para dar fim de mês/);
     });
 
     it('carteira vazia não vira "tudo certo"', () => {
@@ -422,5 +455,123 @@ describe('carta de correção na etapa de validação', () => {
         const r = completo();
         expect(etapaDe(r, 'validacao').status).toBe('concluida');
         expect(etapaDe(r, 'validacao').cce.cces).toBe(0);
+    });
+});
+
+// ============================================================================
+// 🔒 PÁGINA VIRADA — o carimbo do fim de mês VENCE as etapas
+//
+// Paulo, 27/08, com o print da AC MASON: *"empresa fechada, imposto enviado,
+// página virada! Não pode ficar em vermelho"*.
+//
+// As cinco etapas são a PRÉ-CONDIÇÃO do ato (a decisão de BLOQUEAR, 26/08),
+// mas elas continuam sendo RECALCULADAS a cada abertura da tela — e qualquer
+// coisa que mude depois (tarefa reaberta, nota que chegou atrasada) devolvia a
+// empresa ao vermelho num mês que a pessoa já entregou.
+//
+// Carimbo é FATO; etapa recalculada é DEDUÇÃO. Fato vence dedução.
+// ============================================================================
+describe('🔒 mês fechado não volta a cobrar', () => {
+    it('com o carimbo, não há próximo passo e o farol é FECHADO', () => {
+        const r = completo({ fechamento: { estado: 'fechada', fechadoPor: 'ana@x' } });
+        expect(r.farol).toBe('fechado');
+        expect(r.proximoPasso).toBeNull();
+        // O carimbo volta na rotina — é dele que o bloco "Dar fim de mês" vive
+        // (buscá-lo por card foi o HTTP 429 de 27/08).
+        expect(r.fechamento).toEqual({ estado: 'fechada', fechadoPor: 'ana@x' });
+    });
+
+    it('etapa que reabriu DEPOIS do fechamento não devolve a empresa ao vermelho', () => {
+        const r = completo({
+            fechamento: { estado: 'fechada' },
+            tarefas: [tarefa({ status: 'a_fazer', vencimento: '2026-07-20' })],
+            envios: [],
+        });
+        // As etapas continuam DIZENDO o que mudou — o mês fechado não apaga o
+        // fato, ele só para de COBRAR.
+        expect(etapaDe(r, 'obrigacoes').status).toBe('pendente');
+        expect(r.farol).toBe('fechado');
+        expect(r.proximoPasso).toBeNull();
+    });
+
+    it('REABERTA não conta como fechada — a reabertura existe para permitir a edição', () => {
+        const r = completo({ fechamento: { estado: 'reaberta' }, documentos: [] });
+        expect(r.farol).toBe('pendente');
+        expect(r.proximoPasso?.id).toBe('captura');
+    });
+
+    it('sem carimbo, as cinco etapas fechadas dão "pronto para fechar" (ok), não "fechado"', () => {
+        expect(completo().farol).toBe('ok');
+    });
+});
+
+// ============================================================================
+// 🏠 ALUGUEL NÃO GERA NOTA — a cobrança impossível de resolver
+//
+// AC MASON (27/08): empresa de LOCAÇÃO pura aparecia com "nenhuma nota de
+// SAÍDA" e "apuração sem lastro" TODO mês, sobre números certos. É a receita
+// que o **F550** existe para declarar justamente porque não tem documento.
+//
+// É a família do `tipoTributacao` (26/08): alarme que a pessoa não consegue
+// apagar ensina a equipe a ignorar o farol inteiro.
+// ============================================================================
+describe('🏠 receita de locação — sem documento por natureza', () => {
+    const locacao = (over: any = {}) => completo({
+        documentos: [],
+        apuracao: { fonte: 'lucro', totalImpostos: 1500, receita: 21811.34, receitaDeLocacao: 21811.34 },
+        ...over,
+    });
+
+    it('não cobra nota de saída de quem só tem aluguel', () => {
+        const r = locacao();
+        const cap = etapaDe(r, 'captura');
+        expect(cap.status).toBe('na');
+        expect(cap.resumo).toMatch(/LOCAÇÃO/);
+        expect(cap.resumo).toMatch(/F550/);
+        expect(cap.acao).toBeNull();
+    });
+
+    it('a validação não pede para validar nota que não existe', () => {
+        expect(etapaDe(locacao(), 'validacao').status).toBe('na');
+    });
+
+    it('o lastro do imposto é a própria ficha — nem "sem lastro", nem "conferido"', () => {
+        const lastro = etapaDe(locacao(), 'apuracao').lastro;
+        expect(lastro.situacao).toBe('lastro-sem-documento');
+        expect(lastro.cor).toBe('neutro');
+        expect(etapaDe(locacao(), 'apuracao').status).toBe('concluida');
+    });
+
+    it('com aluguel E entrada capturada, a captura fecha dizendo as duas coisas', () => {
+        const r = locacao({ documentos: [doc()] });
+        const cap = etapaDe(r, 'captura');
+        expect(cap.status).toBe('concluida');
+        expect(cap.resumo).toMatch(/1 entrada\(s\)/);
+        expect(cap.resumo).toMatch(/LOCAÇÃO/);
+    });
+
+    // ⚠️ A TRAVA: empresa que aluga E VENDE tem documento a capturar, e
+    // exemplá-la silenciaria livro a menor — o erro caro.
+    it('quem tem OUTRA receita além do aluguel continua sendo cobrado pela saída', () => {
+        const r = completo({
+            documentos: [doc()],
+            apuracao: { fonte: 'lucro', totalImpostos: 1500, receita: 50000, receitaDeLocacao: 21811.34 },
+        });
+        expect(etapaDe(r, 'captura').status).toBe('atencao');
+        expect(etapaDe(r, 'captura').resumo).toMatch(/nenhuma nota de SAÍDA/);
+    });
+
+    // ⚠️ Receita ILEGÍVEL não exime: ausência não é prova, e a dúvida cai para
+    // o lado de continuar acendendo.
+    it('receita ilegível NÃO exime — ausência não é prova', () => {
+        const r = completo({
+            documentos: [],
+            apuracao: { fonte: 'lucro', totalImpostos: 1500, receita: null, receitaDeLocacao: 21811.34 },
+        });
+        expect(etapaDe(r, 'captura').status).toBe('pendente');
+    });
+
+    it('sem locação nenhuma, nada muda no comportamento antigo', () => {
+        expect(etapaDe(completo({ documentos: [] }), 'captura').status).toBe('pendente');
     });
 });

@@ -5,6 +5,62 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 "EMPRESA FECHADA, IMPOSTO ENVIADO, PÁGINA VIRADA — NÃO PODE FICAR EM
+  VERMELHO"** (27/08, Paulo, com o print da AC MASON). O carimbo do fim de mês
+  existia desde 26/08 e **as etapas continuavam mandando na cor**: elas são
+  RECALCULADAS a cada abertura da tela, então qualquer coisa que mude depois do
+  fechamento — uma tarefa reaberta, uma nota que chegou atrasada — devolvia ao
+  VERMELHO um mês que a pessoa já entregou. **Carimbo é FATO; etapa recalculada
+  é DEDUÇÃO. Fato vence dedução**: com o carimbo, `proximoPasso` é **null** e o
+  farol é `'fechado'` — e as etapas continuam DIZENDO o que mudou, porque o mês
+  fechado não apaga o fato, ele só **para de COBRAR**.
+  🔴 **E O FUNIL AINDA DEDUZIA — leitura MINHA deixada para trás.** O contador
+  era `if (!r.proximoPasso) completos++`, ou seja *"as cinco etapas fecharam ⇒ o
+  mês fechou"*. Em 26/08 o CARD parou de deduzir isso e o FUNIL, na MESMA tela,
+  continuou: duas leituras do mesmo fato lado a lado, que é o defeito que esta
+  casa mais paga. É a régua de 23/08 outra vez — **quando um booleano muda de
+  significado, os LEITORES dele entram no mesmo PR** —, e o leitor que eu
+  esqueci foi o meu.
+  ✂️ São **DOIS números agora, porque pedem ações OPOSTAS**: `fechados` (o
+  carimbo — nada a fazer) e `prontos` (as cinco fecharam e falta o CLIQUE do
+  ato). Fundir os dois faz empresa pronta passar por entregue. O mesmo vale no
+  **Guia do Mês** (`resumirGuia` contava `!proximoPasso`) e no **PDF**, que
+  passou a imprimir `FECHADO` × `PRONTO P/ FECHAR`.
+  ⚠️ **E a agravação por ATRASADA não vale em mês fechado**: o fim de mês só
+  passa com as obrigações entregues (a decisão de BLOQUEAR), então "atrasada"
+  ali é ruído sobre trabalho feito. `reaberta` continua **não** contando como
+  fechada — ela existe justamente para permitir a edição.
+  📌 **REGRA QUE FICA: cor de tela de trabalho sai do FATO carimbado, não do
+  recálculo.** Alarme sobre trabalho já entregue é o jeito mais rápido de a
+  equipe parar de olhar o farol — a família do `tipoTributacao` (26/08), do
+  outro lado.
+
+- **🏠 ALUGUEL NÃO GERA NOTA — e a Rotina cobrava a saída que nunca vai
+  existir** (27/08, mesmo print: *"essa empresa é só aluguel"*). A etapa de
+  CAPTURA dizia *"nenhuma nota de SAÍDA"* e a de APURAÇÃO dizia *"sem lastro"*,
+  as duas TODO MÊS, sobre números CERTOS — e mandando *"destravar a captura"* de
+  um documento que não existe. **É a receita que o F550 existe para declarar**
+  (AFFITTARE, 20/08: *"o faturamento dela é aluguel, então não tem captura de
+  notas"*), e a Rotina não tinha como saber: `acharApuracaoDaCompetencia`
+  devolvia só `faturamentoMesTotal`, no qual receita sem documento é
+  indistinguível de "não capturou".
+  ✂️ A `receitaDeLocacao` (o DONO, do F550 — nunca uma segunda leitura da ficha)
+  viaja na apuração, e `receitaSoDeLocacao` decide. Captura vira **'na'** quando
+  não entrou nada e **'concluida'** quando as entradas vieram; o lastro ganhou a
+  situação `lastro-sem-documento`, **NEUTRA, nunca 'ok'** — não há documento
+  para conferir, então dizer "com lastro" seria afirmar uma conferência que não
+  houve. O que a frase faz é DIZER de onde vem o número.
+  ⚠️ **A TRAVA É A COMPARAÇÃO COM O TOTAL**: só exime quem tem `locação ≥
+  faturamentoMesTotal`. Empresa que aluga **E vende** tem documento a capturar,
+  e exemplá-la silenciaria **livro a menor**, que é o erro caro.
+  🐛 **E `Number(null)` MORDEU PELA QUARTA VEZ**: ele é **0**, `isFinite(0)` é
+  **true**, então receita AUSENTE passava por "receita zero" e `locação ≥ 0`
+  eximia a empresa inteira. Pego pelo teste do próprio caso. **O `== null` vem
+  SEMPRE primeiro.**
+  📌 **REGRA QUE FICA: alarme que a pessoa NÃO CONSEGUE apagar não é rigor, é
+  desgaste** — e o custo não é a linha errada, é o painel inteiro perdendo
+  crédito (a lição das 236 empresas em ALTO por um campo fantasma, 26/08).
+
 - **🚨 UMA REQUISIÇÃO POR CARD DERRUBA A TELA — HTTP 429, e o defeito foi MEU**
   (27/08, print do Paulo: a Rotina do Mês trazendo `HTTP 429` no lugar da
   lista). Ao ligar o "Dar fim de mês" eu pus o bloco dentro do `map` das
