@@ -32,7 +32,7 @@ import { receitaDeLocacao } from './receita-sem-documento-f550.js';
 import { competenciaFechada } from './fim-de-mes.js';
 // 🔒 Duas perguntas, dois donos: "este envio fechou o RITO?" e "o canal PROVA
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
-import { envioCompletoPeloRito, canalComprovaEnvio } from './envio-imposto-painel.js';
+import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
 
 export const ETAPAS_ROTINA = [
@@ -490,7 +490,20 @@ export function montarRotinaFiscal({
     // arquivar; tipo sem obrigação mensal não tem o que baixar). Resultado:
     // o painel dava o envio por completo e a Rotina o deixava em ÂMBAR para
     // sempre, travando o fim de mês de uma empresa cujo rito fechou.
-    const enviosOk = envios.filter((e) => envioCompletoPeloRito(e).completo).length;
+    //
+    // 🚨 E A BAIXA É DA OBRIGAÇÃO, NÃO DO ENVIO (27/08, VINCENZO GUERRA):
+    // `3 envio(s), 1 completo(s)` sobre um DAS que o app ENVIOU e o cliente
+    // PAGOU. Os outros dois são o MESMO DAS indo de novo, e na segunda vez a
+    // baixa não acha tarefa PENDENTE — a primeira já concluiu. Quem responde
+    // pelo conjunto é `conferirRitoDosEnvios`.
+    const rito = conferirRitoDosEnvios(envios);
+    const enviosOk = rito.filter((r) => r.completo).length;
+    const reenvios = rito.filter((r) => r.baixaJaFeitaNaObrigacao).length;
+    // ⚠️ CAUSA JUNTO DO NÚMERO: *"veja em Envios (rito) o que ficou sem cópia
+    // ou sem baixa"* é "vá procurar" — e quem lê a Rotina está justamente
+    // tentando saber o que falta. As causas já vêm nomeadas pelo dono.
+    const causas = [...new Set(rito.flatMap((r) => r.pendencias.map((p) => p.causa)))];
+    const naoConferidos = rito.filter((r) => !r.completo && r.naoConferido).length;
     // ⚠️ O QUE O APP NÃO PODE AFIRMAR sai CONTADO, nunca escondido: mailto,
     // WhatsApp e o envio DECLARADO só provam que a composição abriu (ou que
     // alguém disse que enviou). Isso NÃO trava — a etapa nunca exigiu prova de
@@ -509,17 +522,26 @@ export function montarRotinaFiscal({
             'Envie a guia pelo app — a cópia na pasta IMPOSTOS, o gestor em cópia e a baixa da obrigação saem automáticos.',
             { envios: 0, completos: 0 });
     } else if (enviosOk < envios.length) {
+        const oQueFalta = [
+            ...causas,
+            naoConferidos > 0
+                ? `${naoConferidos} envio(s) sem registro das etapas do rito (auditoria anterior ao rito #293)`
+                : null,
+        ].filter(Boolean);
         eGuias = etapa('guias', 'atencao',
             `${envios.length} envio(s), ${enviosOk} completo(s) pelo rito.`,
-            'Veja em Envios (rito) o que ficou sem cópia no SharePoint ou sem baixa da obrigação.',
-            { envios: envios.length, completos: enviosOk, semProva, declarados });
+            `${oQueFalta.join(' · ')}. Resolva em Vencimentos e Obrigações → Envios (rito).`,
+            { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });
     } else {
         eGuias = etapa('guias', 'concluida',
             `${envios.length} guia(s) enviada(s) com o rito completo`
+            // O reenvio vai DITO: sem ele, quem contou 3 envios não entende
+            // por que a linha fala de 1 obrigação.
+            + (reenvios > 0 ? ` · ${reenvios} reenvio(s) da mesma guia` : '')
             + (declarados > 0 ? ` · ${declarados} DECLARADA(S) como enviada(s) por fora do app` : '')
             + '.',
             null,
-            { envios: envios.length, completos: enviosOk, semProva, declarados });
+            { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });
     }
 
     // ── ISS de SP capital, DENTRO da linha ──────────────────────────────────
@@ -527,6 +549,21 @@ export function montarRotinaFiscal({
     eCaptura = ajusteIss.captura;
     eValidacao = ajusteIss.validacao;
     eGuias = ajusteIss.guias;
+
+    // 📋 DECLARAR ENVIO POR FORA só faz sentido para guia que o app NÃO enviou.
+    //
+    // A saída nasce onde a trava aparece — mas quando o registro do envio EXISTE
+    // e o que falta é o RITO (a cópia na pasta), declarar OUTRO envio não fecha
+    // nada e convida a declarar o que o app já fez. É a mesma família da
+    // recusa que o Paulo apontou na VINCENZO: o app enviou, e a tela oferecia
+    // "já enviei por fora".
+    //
+    // Continua valendo onde a guia de fato não saiu pelo app: nenhum envio na
+    // competência, ou ISS do município pendente (o app não emite guia da PMSP).
+    eGuias = {
+        ...eGuias,
+        podeDeclararEnvio: envios.length === 0 || (ajusteIss.iss?.pendencias?.length || 0) > 0,
+    };
 
     const etapas = [eCaptura, eValidacao, eApuracao, eObrigacoes, eGuias];
 

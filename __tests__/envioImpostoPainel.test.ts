@@ -5,7 +5,9 @@
  * METADE não é sucesso — cópia no SharePoint e baixa da obrigação fazem parte
  * do envio, e cada pendência precisa sair com motivo e ação.
  */
-import { montarPainelEnvios, pendenciaSharePoint, pendenciaBaixa } from '../sefaz-backend/envio-imposto-painel.js';
+import {
+    montarPainelEnvios, pendenciaSharePoint, pendenciaBaixa, conferirRitoDosEnvios,
+} from '../sefaz-backend/envio-imposto-painel.js';
 
 const envio = (over: any = {}) => ({
     empresaNome: 'CLIENTE LTDA',
@@ -171,5 +173,76 @@ describe('🚨 não conferido ≠ completo', () => {
         );
         expect(src).toContain('naoConferidos');
         expect(src).toMatch(/sem registro das etapas do rito/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 A BAIXA É DA OBRIGAÇÃO, O ARQUIVO É DO ENVIO
+//
+// 27/08, VINCENZO GUERRA BANANAS · 07/2026 (Paulo, com o print da lista de DAS
+// ao lado: guia PAGA e ✉ ENVIADA em 12/08): *"ESSE FOI ENVIADO PELO SISTEMA,
+// ELE TEM QUE ENTENDER"*. A Rotina dizia `3 envio(s), 1 completo(s) pelo rito`
+// — os outros dois são o MESMO DAS indo de novo, e na segunda vez a baixa não
+// acha tarefa PENDENTE (a primeira já concluiu), caindo em `sem-tarefa`, que é
+// pendência de verdade.
+// ════════════════════════════════════════════════════════════════════════════
+describe('reenvio da mesma guia', () => {
+    const das = (over: any = {}) => envio({ tipo: 'DAS', ...over });
+
+    it('a baixa dada por um envio resolve a etapa para os irmãos da MESMA obrigação', () => {
+        const rito = conferirRitoDosEnvios([
+            das(),                                        // deu a baixa
+            das({ baixa: { status: 'sem-tarefa' } }),      // reenvio
+            das({ baixa: { status: 'sem-tarefa' } }),      // reenvio
+        ]);
+        expect(rito.every((r) => r.completo)).toBe(true);
+        expect(rito.filter((r) => r.baixaJaFeitaNaObrigacao)).toHaveLength(2);
+        // Quem deu a própria baixa NÃO é reenvio.
+        expect(rito[0].baixaJaFeitaNaObrigacao).toBe(false);
+    });
+
+    it('⚠️ mas o ARQUIVO é de cada envio — SharePoint não se dissolve pelo irmão', () => {
+        const rito = conferirRitoDosEnvios([
+            das(),
+            das({ baixa: { status: 'sem-tarefa' }, sharePoint: { status: 'sem-config' } }),
+        ]);
+        expect(rito[1].completo).toBe(false);
+        expect(rito[1].pendencias.map((p: any) => p.causa)).toEqual(['Empresa sem pasta do SharePoint']);
+        // A baixa saiu da lista (não há segunda baixa a dar), o arquivo ficou.
+        expect(rito[1].baixaJaFeitaNaObrigacao).toBe(true);
+    });
+
+    it('obrigação DIFERENTE não é coberta — tipo e competência entram na chave', () => {
+        const rito = conferirRitoDosEnvios([
+            das(),
+            das({ tipo: 'DARF', baixa: { status: 'sem-tarefa' } }),
+            das({ competencia: '2026-06', baixa: { status: 'sem-tarefa' } }),
+        ]);
+        expect(rito.filter((r) => r.completo)).toHaveLength(1);
+        expect(rito[1].pendencias).toHaveLength(1);
+        expect(rito[2].pendencias).toHaveLength(1);
+    });
+
+    it('e a EMPRESA também — baixa de um cliente não fecha a do outro', () => {
+        const rito = conferirRitoDosEnvios([
+            das(),
+            das({ empresaCnpj: '22222222000191', baixa: { status: 'sem-tarefa' } }),
+        ]);
+        expect(rito[1].completo).toBe(false);
+    });
+
+    it('o painel conta o reenvio À PARTE e DIZ na frase — 3 completos com 2 baixas que não existem confunde', () => {
+        const p = montarPainelEnvios([
+            das(),
+            das({ baixa: { status: 'sem-tarefa' } }),
+            das({ baixa: { status: 'sem-tarefa' } }),
+        ], { competencia: '2026-07' });
+        expect(p.completos).toBe(3);
+        expect(p.incompletos).toBe(0);
+        expect(p.reenvios).toBe(2);
+        expect(p.farol).toBe('ok');
+        expect(p.resumo).toMatch(/2 reenvio\(s\) da mesma guia/);
+        // E a fila de trabalho não ganha "dê baixa manual" numa tarefa concluída.
+        expect(Object.keys(p.pendencias)).toHaveLength(0);
     });
 });

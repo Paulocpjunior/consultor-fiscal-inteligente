@@ -5,6 +5,60 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "ESSE FOI ENVIADO PELO SISTEMA, ELE TEM QUE ENTENDER" — a BAIXA é da
+  OBRIGAÇÃO, o ARQUIVO é do ENVIO, e tratar as duas como "coisas do envio"
+  travava o mês de quem fez tudo certo** (27/08, Paulo com dois prints da
+  VINCENZO GUERRA BANANAS · 07/2026: a Rotina em `4/5` com *"3 envio(s), 1
+  completo(s) pelo rito"*, e ao lado a lista de DAS mostrando a MESMA guia
+  **Paga** e **✉ Enviada 12/08/2026**).
+  🔴 **Os dois estavam certos — o app ENVIOU.** Os outros dois registros são o
+  MESMO DAS indo de novo, e na segunda vez o rito não acha tarefa **PENDENTE**
+  (a primeira já concluiu), então a baixa caía em `sem-tarefa`, que é pendência
+  de verdade (o cron não gerou). Ou seja: **reenviar a guia ao cliente
+  PUNIA quem reenviou**, para sempre, com a etapa em âmbar.
+  ⚠️ **É a MESMA armadilha do `ja-baixada`, que eu tinha fechado horas antes —
+  só que pelo lado do ACERVO.** O `ja-baixada` conserta o registro NOVO; os que
+  já estavam gravados continuam dizendo `sem-tarefa`, e nenhum backfill os
+  alcança sem adivinhar o motivo de cada um. **Quem responde é a LEITURA**, como
+  sempre nesta casa (`docCancelado`, `modeloDoDoc`, `direcaoEfetivaDoc`).
+  ✂️ `conferirRitoDosEnvios` (dono, em `envio-imposto-painel.js`) responde pelo
+  **CONJUNTO**: se OUTRO envio da mesma obrigação deu a baixa, a etapa está
+  cumprida para os irmãos — e `envioCompletoPeloRito` ganhou o parâmetro
+  `baixaJaFeitaNaObrigacao`, para continuar sendo o ÚNICO dono da pergunta (dois
+  julgadores divergiriam no primeiro status novo).
+  🚨 **E A RÉGUA NÃO É "a obrigação foi entregue ⇒ está tudo certo" — as duas
+  etapas têm UNIDADES DIFERENTES, e é isso que ela diz**: a **baixa** existe UMA
+  vez por obrigação (dar baixa duas vezes na mesma tarefa não é possível), então
+  ela se dissolve pelo irmão; o **arquivamento** é de um ARQUIVO, e dois DARFs
+  distintos da mesma competência são dois arquivos — um no SharePoint **não põe
+  o outro lá**. Dissolver o SharePoint junto apagaria exatamente o arquivo que
+  faltou na pasta. Chave da obrigação: **empresa + tipo + competência** (as três,
+  travadas por teste — baixa de um cliente não fecha a do outro).
+  ⚠️ **E O REENVIO VAI DITO, nunca some**: `3 envio(s)` virando `1 obrigação` sem
+  explicação faz quem contou procurar as duas baixas que nunca vão existir. A
+  linha diz *"· 2 reenvio(s) da mesma guia"*, e o painel do rito conta
+  `reenvios` à parte — ele lê o MESMO dono, senão a tela e a Rotina voltam a
+  discordar sobre o mesmo envio.
+  📌 **E A AÇÃO PAROU DE MANDAR PROCURAR**: era *"veja em Envios (rito) o que
+  ficou sem cópia no SharePoint ou sem baixa"* — "vá procurar", para quem está
+  justamente tentando saber o que falta. As causas já vinham NOMEADAS do dono
+  (`pendenciaSharePoint`/`pendenciaBaixa`) e a etapa não as usava. **Causa junto
+  do número vale para a AÇÃO também.**
+  ✂️ **E A PORTA DO ENVIO DECLARADO ESTAVA OFERECIDA NO LUGAR ERRADO** — o
+  *"📋 Já enviei esta guia por fora"*, que nasceu horas antes, aparecia
+  justamente neste print, convidando o Paulo a DECLARAR um envio que o app fez.
+  `podeDeclararEnvio` sai da ETAPA (a tela não reimplementa a pergunta): é
+  **false** quando o registro existe e o que falta é o RITO — declarar outro
+  envio ali não fecha nada —, e continua **true** onde a guia de fato não saiu
+  pelo app (nenhum envio na competência, ou ISS do município, que o app não
+  emite). É a régua de *"a saída nasce onde a trava aparece"* um nível mais
+  fundo: **onde ela não resolve, ela não aparece.**
+  📌 **REGRA QUE FICA: pergunta sobre um envio que só o CONJUNTO responde não se
+  faz envio a envio.** A auditoria é por envio porque a AÇÃO de arquivar é por
+  envio; a baixa não é. Quando uma régua julga item a item um fato que é do
+  grupo, ela acusa o membro certo pelo motivo do vizinho — e aqui isso trancava
+  o fim de mês de quem seguiu o processo. Provado revertendo as duas direções.
+
 - **🚨 O FIM DE MÊS NUNCA FUNCIONOU PARA O SIMPLES — a maior parte da carteira**
   (27/08, print do Paulo: REGINA CELIA PIRES · 07/2026, Simples, com 1 NFS-e de
   R$ 5.000 no relatório de Serviços prestados). A tela mostrava as **cinco
