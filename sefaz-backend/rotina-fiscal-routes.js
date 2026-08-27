@@ -362,6 +362,12 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         fechamento: carimbos.get(String(e.id || '')) || null,
     }));
 
+    // 🔒 O carimbo viaja JUNTO da rotina: é ele que o bloco "Dar fim de mês"
+    // precisa, e buscá-lo por card foi o que produziu o 429.
+    for (const r of rotinas) {
+        r.fechamento = carimbos.get(String(r.empresa?.id || '')) || null;
+    }
+
     // O ISS e as CONTAGENS voltam juntos: os três são montados AQUI, numa
     // leitura só, e o painel os publica. Recalculá-los fora faria os dois
     // divergirem — que é justamente o motivo desta função existir.
