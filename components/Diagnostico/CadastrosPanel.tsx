@@ -63,8 +63,20 @@ const CadastrosPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     {/* ⚠️ Dizia "tipo tributação" — o nome do campo FANTASMA que o painel
                         cobrava e que ninguém gravava (26/08). A tela tem de descrever o
                         campo que a pessoa preenche, senão ela procura o que não existe. */}
-                    <b> Alto</b> = DAS/DARF não calcula (sem anexo / sem regime tributário).
-                    <b> Médio</b> = identificação ou CNAE faltando.
+                    <b> Alto</b> = a entrega para — DAS/DARF não calcula (sem anexo / sem regime
+                    tributário), ou o PVA recusa o arquivo (classificação de IPI, natureza da PJ).
+                    <b> Médio</b> = o arquivo sai com um padrão que pode não ser o desta empresa
+                    (prazo do ICMS, apropriação de crédito, conta contábil), ou falta identificação/CNAE.
+                </p>
+                {/* 🚦 A credibilidade do painel mora nesta frase: em 26/08 ele
+                    cobrava um campo fantasma de 236 empresas e 234 eram alarme
+                    falso. Os campos do SPED nascem de uma CONDIÇÃO do cadastro
+                    — comércio não é cobrado pelo 0002, LTDA comum não é cobrada
+                    pela natureza da PJ, empresa em SP não é cobrada pelo prazo. */}
+                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                    🚦 Os campos do SPED só são cobrados de quem PRECISA deles — a classificação de
+                    IPI só de quem se declarou contribuinte, a natureza da PJ só de entidade
+                    imune/isenta, o prazo do ICMS só de contribuinte fora de SP.
                 </p>
 
                 {data && (

@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚦 O DIAGNÓSTICO DE CADASTROS NÃO CONHECIA UM ÚNICO CAMPO QUE FAZ O PVA
+  RECUSAR** (27/08, fechando o gargalo que o Paulo nomeou em 20/08 — *"o vai e
+  vem o dia todo"*). O painel **Cadastros incompletos** cobria SEIS campos —
+  CNPJ, nome, UF, código IBGE, anexo e CNAE — e **nenhum deles é o que trava o
+  arquivo**. Os que travam são de TABELA OFICIAL, o app se recusa a deduzi-los
+  (regra da casa), e a falta só aparecia **na hora de gerar**: uma volta de PVA
+  por vez, cliente a cliente, descobrindo o mesmo campo com outro CNPJ.
+  ✂️ Entraram OITO, cada um lido do cadastro e cada um com o lugar de preencher
+  na frase: `classEstabIpi` (0002), `indNatPJ` (0000 do Contribuições),
+  `indAproCredPisCofins` (0110), `contaContabilReceitaFinanceiraNome`/`Nivel`
+  (0500) e `icmsDiaVencimento`/`icmsCodRec` (E116).
+  🚨 **A TRAVA QUE DECIDE O MÓDULO É "SÓ ACUSA QUEM PRECISA" — e ela é a lição
+  do `tipoTributacao` aplicada ANTES de custar.** Cobrar a classificação de
+  estabelecimento industrial de um comércio, ou a natureza da PJ de uma LTDA,
+  faria a carteira inteira nascer em âmbar por campo que aquele grupo nunca vai
+  preencher — foi exatamente assim que 236 empresas viraram ALTO e **234 eram
+  alarme falso**. Cada pendência nasce de uma CONDIÇÃO do próprio cadastro:
+  0002 só de quem se declarou **contribuinte de IPI**; IND_NAT_PJ só de
+  **imune/isenta/sem fins lucrativos** (na LTDA comum o `00` é a resposta
+  CERTA); IND_APRO_CRED só do **Lucro Real** (no cumulativo não há crédito a
+  apropriar); o 0500 só de quem **já cadastrou a conta** (a coerência é tudo ou
+  nada — sem nome e nível o COD_CTA some do F100); o E116 só de **contribuinte
+  de ICMS FORA de SP** (o padrão do gerador é o dia 20, que é o de SP, e sem IE
+  a empresa nem apura ICMS). **O caso comum nasce VERDE** — empresa do Lucro em
+  SP não ganha nenhuma linha nova —, e a trava foi provada removendo a condição
+  do 0002: **15 testes caem** na hora.
+  📌 **E A SEVERIDADE SEPARA DUAS COISAS QUE PEDEM AÇÕES DIFERENTES**: ALTO é o
+  que **impede a entrega** (recusa do PVA, ou o arquivo afirmando "sociedade
+  empresária em geral" sobre um templo); MÉDIO é o que **sai com um padrão que
+  pode não ser o da empresa** — o arquivo passa, e fundir os dois faria a fila
+  perder a ordem.
+  📌 **O QUE FICOU DE FORA VAI NOMEADO, nunca esquecido**: `perfilEFD` (quem
+  atribui A/B/C é o fisco ESTADUAL — acusar todo mundo seria o fantasma de
+  novo), `contribuinteIpi` (a régua tem prova POSITIVA, o IPI destacado na
+  saída; cobrar do cadastro acenderia em todo comércio que compra de indústria)
+  e os campos do **1900** e do **frete/bloco D**, que dependem da FICHA e de
+  DOCUMENTO — coisas que este helper não vê, e que a própria geração já denuncia
+  com a recusa literal.
+  ⚠️ **E os oito passaram pela trava do fantasma** (`pendenciaTemCampoGravavel`):
+  os oito estão na whitelist E no modal desde os PRs que os criaram, então
+  nenhum é pendência impossível de apagar.
+
 - **🚨 "ESSE FOI ENVIADO PELO SISTEMA, ELE TEM QUE ENTENDER" — a BAIXA é da
   OBRIGAÇÃO, o ARQUIVO é do ENVIO, e tratar as duas como "coisas do envio"
   travava o mês de quem fez tudo certo** (27/08, Paulo com dois prints da
