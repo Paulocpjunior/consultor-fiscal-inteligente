@@ -52,6 +52,20 @@ describe('📋 a porta do envio declarado', () => {
         expect(container.textContent).not.toMatch(/Já enviei esta guia por fora/);
     });
 
+    // 🚨 27/08, VINCENZO GUERRA (Paulo: *"ESSE FOI ENVIADO PELO SISTEMA, ELE TEM
+    // QUE ENTENDER"*): quando o app JÁ enviou a guia e o que falta é o RITO,
+    // declarar outro envio não fecha nada — e convida a declarar o que o app
+    // fez. Quem decide é a etapa; a tela não reimplementa a pergunta.
+    it('NÃO aparece quando o app já enviou e o que falta é o rito', () => {
+        montar([{ ...bloqueio('guias', 'Emitir e enviar guias'), podeDeclararEnvio: false }]);
+        expect(screen.queryByText(/Já enviei esta guia por fora/)).toBeNull();
+    });
+
+    it('continua aparecendo quando a etapa diz que a guia não saiu pelo app', () => {
+        montar([{ ...bloqueio('guias', 'Emitir e enviar guias'), podeDeclararEnvio: true }]);
+        expect(screen.getByText(/Já enviei esta guia por fora/)).toBeTruthy();
+    });
+
     // 🚨 O QUE A TELA DIZ É METADE DA ENTREGA: quem clica precisa saber, ANTES,
     // que o app não vai enviar nada e que o envio fica sem prova.
     it('ao abrir, DIZ que o app não envia e que fica sem prova de entrega', async () => {

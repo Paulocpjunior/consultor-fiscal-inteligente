@@ -409,7 +409,11 @@ const Bloqueios: React.FC<{
     declarar?: React.ReactNode;
 }> = ({ bloqueios, onIrPara, declarar }) => {
     if (!bloqueios.length) return null;
-    const travaGuia = bloqueios.some((b) => b.id === 'guias');
+    // ⚠️ E só quando declarar RESOLVE: se o app já enviou a guia e o que falta
+    // é o rito, oferecer "já enviei por fora" convida a declarar o que o app
+    // fez (Paulo, 27/08, VINCENZO: *"ESSE FOI ENVIADO PELO SISTEMA"*). Quem
+    // decide é a etapa — a tela não reimplementa a pergunta.
+    const travaGuia = bloqueios.some((b) => b.id === 'guias' && b.podeDeclararEnvio !== false);
     return (
         <div className="rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 p-2 space-y-1">
             <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">

@@ -21,6 +21,13 @@ export interface BloqueioFimDeMes {
     resumo: string | null;
     acao: string | null;
     onde: string | null;
+    /**
+     * Declarar um envio feito por fora resolve ESTE bloqueio? É false quando o
+     * app JÁ enviou a guia e o que falta é o rito (a cópia na pasta) — ali
+     * declarar outro envio não fecha nada e convida a declarar o que o app fez.
+     * `null` em bloqueio que não é de guia.
+     */
+    podeDeclararEnvio?: boolean | null;
 }
 
 export interface FechamentoCompetencia {

@@ -16,7 +16,7 @@
 // ============================================================================
 // @ts-expect-error — módulo .js puro
 import { conferirDeclaracao, textoDaDeclaracao, MEIOS_FORA_DO_APP, MOTIVO_MINIMO, CANAL_FORA_DO_APP } from '../sefaz-backend/envio-fora-do-app.js';
-// @ts-expect-error — módulo .js puro
+// (o `.d.ts` vizinho declara estes — ver envio-imposto-painel.d.ts)
 import { canalComprovaEnvio, envioCompletoPeloRito } from '../sefaz-backend/envio-imposto-painel.js';
 // @ts-expect-error — módulo .js puro
 import { montarRotinaFiscal } from '../sefaz-backend/rotina-fiscal.js';

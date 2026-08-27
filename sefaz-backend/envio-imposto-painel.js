@@ -118,18 +118,80 @@ export function canalComprovaEnvio(canal) {
  * Duas leituras do mesmo fato — o defeito que esta casa mais paga —, e a de
  * baixo é a que decide se alguém pode virar a página.
  *
- * @returns {{completo: boolean, naoConferido: boolean, pendencias: object[]}}
+ * @param {object} e envio (doc de `impostos_enviados`)
+ * @param {object} [opts]
+ * @param {boolean} [opts.baixaJaFeitaNaObrigacao] OUTRO envio da MESMA
+ *   obrigação (empresa + tipo + competência) já deu a baixa. Ver
+ *   `conferirRitoDosEnvios` — quem computa esse fato é o conjunto, nunca o
+ *   envio isolado, que não tem como saber dos irmãos.
+ * @returns {{completo: boolean, naoConferido: boolean, pendencias: object[], baixaJaFeitaNaObrigacao: boolean}}
  */
-export function envioCompletoPeloRito(e) {
-    const naoConferido = semRegistroSharePoint(e) || semRegistroBaixa(e);
-    const pendencias = [pendenciaSharePoint(e), pendenciaBaixa(e)].filter(Boolean);
+export function envioCompletoPeloRito(e, { baixaJaFeitaNaObrigacao = false } = {}) {
+    const semBaixa = !baixaJaFeitaNaObrigacao && semRegistroBaixa(e);
+    const naoConferido = semRegistroSharePoint(e) || semBaixa;
+    const pendencias = [
+        pendenciaSharePoint(e),
+        baixaJaFeitaNaObrigacao ? null : pendenciaBaixa(e),
+    ].filter(Boolean);
     return {
         // ⚠️ SEM REGISTRO NÃO É COMPLETO — é NÃO CONFERIDO, e tem ação própria.
         // Auditoria gravada antes do rito #293 existir cai exatamente aqui.
         completo: !naoConferido && pendencias.length === 0,
         naoConferido,
         pendencias,
+        baixaJaFeitaNaObrigacao,
     };
+}
+
+/** A OBRIGAÇÃO a que um envio se refere: empresa + tipo + competência. */
+export function chaveDaObrigacao(e) {
+    const cnpj = String(e?.empresaCnpj || e?.empresaId || '').replace(/\D/g, '');
+    const tipo = String(e?.tipo || '—').trim().toUpperCase();
+    const comp = String(e?.competencia || '').trim();
+    return `${cnpj}|${tipo}|${comp}`;
+}
+
+/**
+ * 🚨 A BAIXA É DA OBRIGAÇÃO; O ARQUIVO É DO ENVIO — e tratar as duas como
+ * "coisas do envio" fazia o REENVIO da mesma guia virar pendência ETERNA
+ * (27/08, caso VINCENZO GUERRA BANANAS: *"ESSE FOI ENVIADO PELO SISTEMA, ELE
+ * TEM QUE ENTENDER"*).
+ *
+ * O print: `3 envio(s), 1 completo(s) pelo rito` travando a etapa 5 — e a
+ * lista de DAS ao lado mostrando a guia de 07/2026 **Paga** e **✉ Enviada**.
+ * Os dois estavam certos: o app ENVIOU. O que ele não sabia é que os outros
+ * dois registros são o MESMO DAS indo de novo — e a baixa, na segunda vez,
+ * não acha tarefa PENDENTE (a primeira já concluiu), então caía em
+ * `sem-tarefa`, que é pendência de verdade (o cron não gerou).
+ *
+ * ⚠️ **AS DUAS ETAPAS TÊM UNIDADES DIFERENTES, e é isso que a régua diz**:
+ *  · a **baixa** existe UMA vez por obrigação — dar baixa duas vezes na mesma
+ *    tarefa não é possível nem faria sentido, então baixa dada por um irmão
+ *    RESOLVE a etapa para todos;
+ *  · o **arquivamento** é de um ARQUIVO — dois DARFs distintos da mesma
+ *    competência são dois arquivos, e um deles no SharePoint não põe o outro
+ *    lá. Pendência de SharePoint NÃO se dissolve pelo irmão.
+ *
+ * Deduzir "a obrigação foi entregue ⇒ está tudo certo" apagaria justamente o
+ * arquivo que faltou na pasta.
+ *
+ * @param {Array} envios envios do MESMO recorte (a Rotina já filtra a
+ *   competência; a chave carrega a empresa, então lista de carteira serve)
+ * @returns {Array<{envio: object, chave: string, completo: boolean, naoConferido: boolean, pendencias: object[], baixaJaFeitaNaObrigacao: boolean}>}
+ */
+export function conferirRitoDosEnvios(envios) {
+    const lista = Array.isArray(envios) ? envios : [];
+    const baixouAObrigacao = (e) => {
+        const st = e?.baixa?.status;
+        return st === 'baixada' || st === 'ja-baixada';
+    };
+    const comBaixa = new Set(lista.filter(baixouAObrigacao).map(chaveDaObrigacao));
+    return lista.map((e) => {
+        const chave = chaveDaObrigacao(e);
+        // ⚠️ "Coberta por OUTRO envio" — quem deu a própria baixa não é reenvio.
+        const coberta = !baixouAObrigacao(e) && comBaixa.has(chave);
+        return { envio: e, chave, ...envioCompletoPeloRito(e, { baixaJaFeitaNaObrigacao: coberta }) };
+    });
 }
 
 /**
@@ -159,8 +221,17 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         // do rito — é o limite do que o app pode afirmar.
         semProvaDeEnvio: [],
         enviadosPeloServidor: 0,
+        // Envios da mesma obrigação que outro envio já baixou — reenvio da
+        // MESMA guia. Não é pendência (não há segunda baixa a dar), e some da
+        // fila de trabalho: mandar "dê baixa manual" numa tarefa já concluída
+        // é alarme com ação impossível.
+        reenvios: 0,
         valorTotal: 0,
     };
+
+    // 🔒 O CONJUNTO responde pela baixa (ver `conferirRitoDosEnvios`): o painel
+    // e a Rotina do Mês perguntam a mesma coisa e têm de responder igual.
+    const rito = new Map(conferirRitoDosEnvios(lista).map((r) => [r.envio, r]));
 
     for (const e of lista) {
         const tipo = String(e.tipo || '—').toUpperCase();
@@ -169,9 +240,10 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
 
         // Quem responde é o DONO — o painel e a Rotina do Mês perguntam a mesma
         // coisa, e até 27/08 respondiam diferente sobre `sem-pdf`/`sem-tarefa`.
-        const rito = envioCompletoPeloRito(e);
-        const problemas = rito.pendencias;
-        const semRegistro = rito.naoConferido;
+        const r = rito.get(e) || envioCompletoPeloRito(e);
+        const problemas = r.pendencias;
+        const semRegistro = r.naoConferido;
+        if (r.baixaJaFeitaNaObrigacao) painel.reenvios++;
         if (problemas.length > 0) painel.incompletos++;
         else if (semRegistro) {
             const faltam = [
@@ -214,16 +286,19 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
     const naoConferidos = painel.naoConferidos.length;
     painel.farol = painel.total === 0 ? 'vazio'
         : (painel.incompletos > 0 || naoConferidos > 0) ? 'atencao' : 'ok';
+    // O reenvio vai DITO: sem isso, "3 envios · 3 completos" com 2 reenvios no
+    // meio faz quem lê procurar as duas baixas que nunca vão existir.
+    const reenvios = painel.reenvios ? ` · ${painel.reenvios} reenvio(s) da mesma guia (a baixa já estava dada)` : '';
     painel.resumo = painel.total === 0
         ? 'Nenhum imposto enviado nesta competência ainda.'
         : painel.incompletos === 0 && naoConferidos === 0
-            ? `${painel.total} envio(s), todos completos (arquivados e com baixa).`
+            ? `${painel.total} envio(s), todos completos (arquivados e com baixa)${reenvios}.`
             : painel.incompletos === 0
                 // Sem pendência, mas com envio que não dá para conferir: o
                 // absoluto some da frase — dizer "todos completos" aqui seria
                 // afirmar o que a rodada não estabeleceu.
-                ? `${painel.completos} de ${painel.total} envio(s) completos — ${naoConferidos} sem registro das etapas do rito.`
+                ? `${painel.completos} de ${painel.total} envio(s) completos — ${naoConferidos} sem registro das etapas do rito${reenvios}.`
                 : `${painel.completos} de ${painel.total} envio(s) completos — ${painel.incompletos} ficaram pela metade`
-                  + `${naoConferidos ? ` e ${naoConferidos} sem registro das etapas` : ''}.`;
+                  + `${naoConferidos ? ` e ${naoConferidos} sem registro das etapas` : ''}${reenvios}.`;
     return painel;
 }

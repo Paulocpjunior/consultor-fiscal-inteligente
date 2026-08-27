@@ -248,6 +248,59 @@ describe('5. guias (rito #293)', () => {
         expect(semBaixa.acao).toMatch(/Envios \(rito\)/);
     });
 
+    // ⚠️ CAUSA JUNTO DO NÚMERO: "veja em Envios (rito) o que ficou sem cópia ou
+    // sem baixa" é "vá procurar" — e quem lê a Rotina está justamente tentando
+    // saber o que falta.
+    it('a ação NOMEIA a causa, não manda procurar', () => {
+        const e = etapaDe(completo({ envios: [envio({ sharePoint: { status: 'sem-config' } })] }), 'guias');
+        expect(e.acao).toMatch(/Empresa sem pasta do SharePoint/);
+        expect(e.causas).toEqual(['Empresa sem pasta do SharePoint']);
+    });
+
+    it('envio sem registro das etapas sai DITO como tal, não como pendência inventada', () => {
+        const e = etapaDe(completo({ envios: [{ tipo: 'DAS', competencia: '2026-07' }] }), 'guias');
+        expect(e.status).toBe('atencao');
+        expect(e.acao).toMatch(/sem registro das etapas do rito/);
+    });
+
+    // 🚨 27/08, VINCENZO GUERRA BANANAS · 07/2026 — Paulo, com o print da lista
+    // de DAS ao lado (guia PAGA e ✉ ENVIADA em 12/08): *"ESSE FOI ENVIADO PELO
+    // SISTEMA, ELE TEM QUE ENTENDER"*. A Rotina dizia `3 envio(s), 1
+    // completo(s)`: os outros dois são o MESMO DAS indo de novo, e na segunda
+    // vez a baixa não acha tarefa PENDENTE (a primeira já concluiu).
+    it('REENVIO da mesma guia não trava a etapa — a baixa é da OBRIGAÇÃO', () => {
+        const e = etapaDe(completo({
+            envios: [
+                envio(),
+                envio({ baixa: { status: 'sem-tarefa' } }),
+                envio({ baixa: { status: 'sem-tarefa' } }),
+            ],
+        }), 'guias');
+        expect(e.status).toBe('concluida');
+        // E o reenvio vai DITO: sem isso, quem contou 3 envios não entende por
+        // que a linha fala de uma guia só.
+        expect(e.resumo).toMatch(/2 reenvio\(s\) da mesma guia/);
+        expect(e.reenvios).toBe(2);
+    });
+
+    it('⚠️ mas o ARQUIVO é de cada envio — reenvio sem cópia no SharePoint continua travando', () => {
+        const e = etapaDe(completo({
+            envios: [envio(), envio({ baixa: { status: 'sem-tarefa' }, sharePoint: { status: 'sem-config' } })],
+        }), 'guias');
+        expect(e.status).toBe('atencao');
+        expect(e.acao).toMatch(/Empresa sem pasta do SharePoint/);
+        // E a causa que NÃO existe mais não aparece na frase.
+        expect(e.acao).not.toMatch(/Sem obrigação correspondente/);
+    });
+
+    it('guias DIFERENTES no mesmo mês continuam contando separado', () => {
+        const e = etapaDe(completo({
+            envios: [envio(), envio({ tipo: 'DARF', baixa: { status: 'sem-tarefa' } })],
+        }), 'guias');
+        expect(e.status).toBe('atencao');
+        expect(e.acao).toMatch(/Sem obrigação correspondente/);
+    });
+
     it('apuração zerada não cobra guia — mas só quando a apuração existe', () => {
         const naoSeAplica = completo({ envios: [], apuracao: { totalImpostos: 0 } });
         expect(etapaDe(naoSeAplica, 'guias').status).toBe('na');
@@ -573,5 +626,33 @@ describe('🏠 receita de locação — sem documento por natureza', () => {
 
     it('sem locação nenhuma, nada muda no comportamento antigo', () => {
         expect(etapaDe(completo({ documentos: [] }), 'captura').status).toBe('pendente');
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📋 A PORTA DO ENVIO DECLARADO — ela resolve ESTE bloqueio?
+//
+// A saída nasce onde a trava aparece; mas onde o app JÁ enviou a guia e o que
+// falta é o RITO, declarar outro envio não fecha nada e convida a declarar o
+// que o app fez (Paulo, 27/08, VINCENZO).
+// ════════════════════════════════════════════════════════════════════════════
+describe('podeDeclararEnvio', () => {
+    it('nenhuma guia enviada → declarar é a saída legítima', () => {
+        expect(etapaDe(completo({ envios: [] }), 'guias').podeDeclararEnvio).toBe(true);
+    });
+
+    it('app enviou e o rito ficou pela metade → declarar NÃO resolve', () => {
+        const e = etapaDe(completo({ envios: [envio({ sharePoint: { status: 'sem-config' } })] }), 'guias');
+        expect(e.status).toBe('atencao');
+        expect(e.podeDeclararEnvio).toBe(false);
+    });
+
+    it('ISS do município pendente → declarar volta a valer (o app não emite guia da PMSP)', () => {
+        const e = etapaDe(completo({
+            envios: [envio()],
+            iss: { aplicavel: true, situacao: 'ok', aRecolher: 500, notas: 3 },
+        }), 'guias');
+        expect(e.status).toBe('atencao');
+        expect(e.podeDeclararEnvio).toBe(true);
     });
 });

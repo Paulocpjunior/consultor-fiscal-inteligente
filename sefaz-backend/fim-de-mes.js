@@ -130,6 +130,9 @@ export function podeDarFimDeMes(rotina) {
     const bloqueios = etapas.filter((e) => !etapaFechada(e)).map((e) => ({
         id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
         resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
+        // 📋 A porta do envio DECLARADO só aparece onde ela resolve — quem
+        // decide é a etapa, não a tela (ver `podeDeclararEnvio` na Rotina).
+        podeDeclararEnvio: typeof e.podeDeclararEnvio === 'boolean' ? e.podeDeclararEnvio : null,
     }));
     if (bloqueios.length) {
         return {
