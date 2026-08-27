@@ -5,6 +5,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 FASE 5 DO TÚNEL: o CCI importa o FECHAMENTO, nunca a ficha** (26/08,
+  Paulo: *"o departamento contábil, através do CCI, deve fazer a importação com
+  a mesma exatidão dos valores apurados e o mês fechado"*).
+  🔴 **A ficha é um registro VIVO** — alguém edita e o número muda. Servi-la
+  pelo túnel faria o Contábil puxar um valor que pode mudar depois dele ter
+  importado, e a divergência voltaria pela porta de trás, calada. O que
+  atravessa é o **CARIMBO**: imutável e VERSIONADO.
+  🚨 **E O CCI NÃO RECALCULA — a `ressalva` vai em TODA linha entregue.** É a
+  régua já provada no R-2055 (12/08): *"a ressalva PROÍBE recalcular do outro
+  lado"*. Dois números para o mesmo fato é o pior defeito de um arquivo fiscal,
+  e é exatamente isso que este túnel existe para impedir.
+  📌 **TRÊS RECUSAS DELIBERADAS**: (1) competência **ABERTA não entrega valor**
+  (`podeImportar` só é true em 'fechada') — entregar número de mês aberto seria
+  entregar um valor que ainda vai mudar; (2) **REABERTA BLOQUEIA** a importação
+  — decisão do Paulo, que abriu exceção à régua da casa (*"acende, não
+  bloqueia"*) **porque é dinheiro em duas contabilidades** —, e a resposta DIZ
+  qual versão o Contábil pode ter importado, senão ele fica com o número velho
+  sem saber que ele mudou; (3) empresa **sem fechamento NÃO SOME da lista** —
+  sumir faria o Contábil concluir *"este cliente não teve movimento"*, uma
+  afirmação que ninguém fez.
+  ⚠️ **O LASTRO ATRAVESSA, e o resumo o conta À PARTE** (`semLastro`): número
+  fechado que pode ter ZERO documento por trás é o caso EXPERTE (15/08), e sem
+  a ressalva ele chega limpo na tela de quem vai lançar na contabilidade.
+  ⚠️ **A competência é OBRIGATÓRIA na consulta** e recusa com o motivo — sem ela
+  não dá para dizer QUAL mês foi fechado, e importar o mês errado não volta
+  atrás.
+  📌 **O ID DO CARIMBO SAI DO DONO** (`idDoFechamento`) também aqui — a
+  competência circula em quatro formas, e a rota normaliza na porta.
+
 - **🔒 OS LEITORES DO FIM DE MÊS — o arquivo passou a sair do ACERVO QUE O
   CARIMBO CONGELOU** (26/08, a segunda leva). O carimbo guardava o instante do
   corte e **ninguém o lia**: os dois SPED continuavam gerando do acervo de
