@@ -33,10 +33,16 @@ import {
     darFimDeMes, reabrirCompetencia,
     type FechamentoCompetencia, type BloqueioFimDeMes,
 } from '../services/fimDeMesService';
+// 📋 A porta do envio DECLARADO. Ela é um ATO (um clique por vez), como
+// fechar e reabrir — a leitura continua vindo por props.
+import { registrarEnvioForaDoApp, meiosForaDoApp, type MeioForaDoApp } from '../services/envioImpostoService';
 
 interface Props {
     empresaId: string;
     competencia: string;
+    /** Para a declaração de envio fora do app (auditoria por CNPJ). */
+    empresaCnpj?: string;
+    empresaNome?: string;
     /** O carimbo, vindo do painel — NUNCA buscado aqui (ver o 429 acima). */
     fechamento?: FechamentoCompetencia | null;
     /** Os bloqueios, derivados das etapas que o painel já calculou. */
@@ -56,7 +62,8 @@ const fmtDataHora = (iso?: string | null) => {
 };
 
 const FimDeMesBloco: React.FC<Props> = ({
-    empresaId, competencia, fechamento: f, bloqueios: bloqueiosDoPainel,
+    empresaId, competencia, empresaCnpj, empresaNome,
+    fechamento: f, bloqueios: bloqueiosDoPainel,
     ehAdmin, onIrPara, onMudou,
 }) => {
     const [ocupado, setOcupado] = useState(false);
@@ -95,6 +102,14 @@ const FimDeMesBloco: React.FC<Props> = ({
         setPedindoMotivo(false); setMotivo('');
         onMudou?.();
     };
+
+    // 📋 A porta do envio declarado, montada UMA vez e passada aos três ramos.
+    const declarar = (
+        <DeclararEnvio
+            empresaId={empresaId} empresaCnpj={empresaCnpj} empresaNome={empresaNome}
+            competencia={competencia} onMudou={onMudou}
+        />
+    );
 
     // Os bloqueios da RECUSA vencem os do painel: eles são do instante do
     // clique, e a tela não pode mostrar dois retratos do mesmo fato.
@@ -193,7 +208,7 @@ const FimDeMesBloco: React.FC<Props> = ({
                         {ocupado ? 'Fechando…' : '🔒 Dar fim de mês novamente'}
                     </button>
                 ) : (
-                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} />
+                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} />
                 )}
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
             </div>
@@ -220,14 +235,14 @@ const FimDeMesBloco: React.FC<Props> = ({
                     {ocupado ? 'Fechando…' : '🔒 Dar fim de mês'}
                 </button>
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
-                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} />}
+                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} declarar={declarar} />}
             </div>
         );
     }
 
     return (
         <div className="space-y-1">
-            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} />
+            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} />
             {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
         </div>
     );
@@ -239,8 +254,128 @@ const FimDeMesBloco: React.FC<Props> = ({
  * Trava sem caminho é trava que a equipe contorna (13/08) — e com a decisão de
  * BLOQUEAR, esta lista é a única saída que a pessoa tem.
  */
-const Bloqueios: React.FC<{ bloqueios: BloqueioFimDeMes[]; onIrPara?: (id: string) => void }> = ({ bloqueios, onIrPara }) => {
+/**
+ * 📋 DECLARAR UM ENVIO QUE ACONTECEU FORA DO APP.
+ *
+ * Paulo, 27/08 (AC MASON): *"a obrigação já foi entregue e as guias enviadas
+ * para o cliente"* — e a etapa 5 travava o fim de mês, porque reenviar pelo app
+ * DUPLICARIA a guia no cliente.
+ *
+ * ⚠️ **NENHUMA RÉGUA MORA AQUI.** O piso do texto, a lista de meios e a recusa
+ * de data no futuro vivem no backend (`envio-fora-do-app.js`). Esta tela DIZ o
+ * que o backend respondeu — validar aqui criaria a segunda cópia, e ela
+ * divergiria no primeiro meio novo.
+ */
+const DeclararEnvio: React.FC<{
+    empresaId: string; empresaCnpj?: string; empresaNome?: string; competencia: string;
+    onMudou?: () => void;
+}> = ({ empresaId, empresaCnpj, empresaNome, competencia, onMudou }) => {
+    const [aberto, setAberto] = useState(false);
+    const [meios, setMeios] = useState<MeioForaDoApp[]>([]);
+    const [tipo, setTipo] = useState('');
+    const [meio, setMeio] = useState('');
+    const [comoFoi, setComoFoi] = useState('');
+    const [quando, setQuando] = useState('');
+    const [erro, setErro] = useState<string | null>(null);
+    const [feito, setFeito] = useState<string | null>(null);
+    const [salvando, setSalvando] = useState(false);
+
+    // A lista vem do BACKEND — copiá-la aqui faria a tela oferecer um id que
+    // o backend recusa no dia em que um meio entrar.
+    const abrir = async () => {
+        setAberto(true);
+        if (meios.length) return;
+        try { setMeios(await meiosForaDoApp()); } catch (e: any) { setErro(e?.message || 'Não consegui carregar os meios.'); }
+    };
+
+    const salvar = async () => {
+        if (!empresaCnpj) { setErro('Empresa sem CNPJ legível — não dá para registrar o envio.'); return; }
+        setSalvando(true); setErro(null);
+        try {
+            const r = await registrarEnvioForaDoApp({
+                empresaId, empresaCnpj, empresaNome: empresaNome || '',
+                tipo: tipo.trim().toUpperCase(), competencia,
+                meio, comoFoi, quando,
+            });
+            if (!r.ok) { setErro(r.error || 'Não consegui registrar.'); return; }
+            // A frase do backend DIZ que o app não enviou — mostrá-la é o que
+            // impede alguém de ler isto como "o app mandou a guia".
+            setFeito(r.declaracao?.texto || 'Envio registrado.');
+            setComoFoi(''); setTipo('');
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao registrar.');
+        } finally { setSalvando(false); }
+    };
+
+    if (!aberto) {
+        return (
+            <button
+                onClick={abrir}
+                className="text-[11px] px-2 py-1 rounded border border-slate-400 text-slate-700 dark:text-slate-200"
+            >
+                📋 Já enviei esta guia por fora — registrar
+            </button>
+        );
+    }
+
+    return (
+        <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2 space-y-2">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                <span className="font-semibold">Registrar um envio que já aconteceu.</span>{' '}
+                O app <span className="font-semibold">não vai enviar nada</span> — ele grava a sua
+                declaração, com o seu nome e a data, e o envio fica marcado como{' '}
+                <span className="font-semibold">sem prova de entrega</span>.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input
+                    value={tipo} onChange={(e) => setTipo(e.target.value)}
+                    placeholder="Guia (DAS, DARF, DARE…)"
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                />
+                <select
+                    value={meio} onChange={(e) => setMeio(e.target.value)}
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                >
+                    <option value="">Por qual meio?</option>
+                    {meios.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                <input
+                    type="date" value={quando} onChange={(e) => setQuando(e.target.value)}
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                />
+            </div>
+            <textarea
+                value={comoFoi} onChange={(e) => setComoFoi(e.target.value)}
+                rows={2}
+                placeholder="Como a guia chegou ao cliente? (esta frase é o que responde a pergunta daqui a três meses)"
+                className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+            />
+            {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
+            {feito && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ {feito}</p>}
+            <div className="flex gap-2">
+                <button
+                    onClick={salvar} disabled={salvando}
+                    className="text-[11px] px-3 py-1.5 rounded bg-slate-700 text-white disabled:opacity-50"
+                >
+                    {salvando ? 'Registrando…' : 'Registrar o envio'}
+                </button>
+                <button onClick={() => setAberto(false)} className="text-[11px] px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const Bloqueios: React.FC<{
+    bloqueios: BloqueioFimDeMes[];
+    onIrPara?: (id: string) => void;
+    /** 📋 A porta do envio declarado — só aparece quando a GUIA é o bloqueio. */
+    declarar?: React.ReactNode;
+}> = ({ bloqueios, onIrPara, declarar }) => {
     if (!bloqueios.length) return null;
+    const travaGuia = bloqueios.some((b) => b.id === 'guias');
     return (
         <div className="rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 p-2 space-y-1">
             <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
@@ -263,6 +398,12 @@ const Bloqueios: React.FC<{ bloqueios: BloqueioFimDeMes[]; onIrPara?: (id: strin
                     )}
                 </div>
             ))}
+            {/* 📋 A SAÍDA NASCE ONDE A TRAVA APARECE (Paulo autorizou em 27/08).
+                Trava sem caminho é trava que a equipe contorna — e aqui o
+                contorno seria mandar a guia DE NOVO ao cliente. Só aparece
+                quando é a GUIA que bloqueia: oferecê-la ao lado de "falta
+                capturar" convidaria a declarar o que não foi feito. */}
+            {travaGuia && declarar}
         </div>
     );
 };

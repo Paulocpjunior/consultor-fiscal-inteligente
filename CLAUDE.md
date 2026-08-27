@@ -5,6 +5,49 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📋 REGISTRAR UM ENVIO QUE ACONTECEU FORA DO APP — e isso NÃO fura "nada se
+  marca à mão"** (27/08, Paulo autorizou: *"pode fazer o registro feito por
+  fora"*). O caso é a AC MASON: *"a obrigação já foi entregue e as guias
+  enviadas para o cliente"* — e a etapa 5 travava o fim de mês, porque
+  **reenviar pelo app DUPLICARIA a guia no cliente**. A empresa ficava parada
+  por trabalho que já tinha sido feito.
+  📌 **A REGRA FUNDADORA CONTINUA DE PÉ, e a leitura dela é que estava
+  estreita**: a etapa 5 **NUNCA exigiu prova de ENTREGA** — `mailto` e WhatsApp
+  sempre a fecharam, e `canalComprovaEnvio` diz desde 05/08 que eles não provam
+  nada. O que ela exige é o **RITO**. O que entra agora é um envio cujo rito se
+  cumpre com o que existe, mais uma **DECLARAÇÃO com autor, data e meio
+  escrito** — o desenho da T3 da DCTFWeb e da reabertura do fim de mês.
+  ✂️ `envio-fora-do-app.js` (PURO): meio de lista FECHADA (com "outro", que
+  obriga a escrever qual), texto com o piso de **15 caracteres**, **data no
+  futuro RECUSADA** (declarar envio que ainda não aconteceu fecharia o mês sobre
+  trabalho não feito; no passado é legítimo, é o caso) e **autor obrigatório** —
+  declaração sem autor é declaração de ninguém, e é o autor que a torna
+  aceitável no lugar da prova do servidor.
+  ⚠️ **O CANAL CONTINUA SEM PROVAR NADA, por construção**: `canalComprovaEnvio`
+  devolve **false** para `fora-do-app`, então ele entra em `semProvaDeEnvio`, a
+  etapa conta `declarados`/`semProva`, e a frase gravada DIZ *"o app NÃO enviou
+  esta guia e não tem prova de entrega"*. O mês fecha; a ressalva fica.
+  📌 **A SAÍDA NASCE ONDE A TRAVA APARECE** — no bloco de bloqueios do fim de
+  mês, e **só quando a GUIA é o bloqueio**: oferecê-la ao lado de *"falta
+  capturar"* convidaria a declarar o que não foi feito.
+  🔴 **E A FEATURE CRIOU UMA ARMADILHA QUE O TESTE PEGOU**: quem entrega a
+  obrigação por fora dá baixa em Vencimentos e **só depois** registra o envio —
+  aí o rito não acha tarefa PENDENTE e caía em `sem-tarefa`, que é **pendência
+  de verdade** (o cron não gerou). **O caminho certo punia quem o seguia.**
+  Nasceu `ja-baixada`: a tarefa EXISTE e já estava concluída, desfecho legítimo.
+  ⚠️ E `sem-tarefa` **continua** sendo pendência — os dois eram o mesmo status,
+  e são fatos com ações opostas.
+  🚨 **NO CAMINHO, O DEFEITO MAIOR: a etapa 5 REIMPLEMENTAVA "o rito fechou?"**
+  (`sharePoint === 'arquivado' && baixa === 'baixada'`) enquanto o **PAINEL do
+  rito, ao lado, já tratava `sem-pdf` como desfecho LEGÍTIMO** (envio sem anexo
+  — aviso de guia já paga: não há o que arquivar). O painel dava por COMPLETO e
+  a Rotina deixava em ÂMBAR **para sempre**, travando o fim de mês de empresa
+  cujo rito fechou. Dono único: `envioCompletoPeloRito`.
+  📌 **A TELA SE PROVA POR RENDER, nunca por varredura** (a lição de 20/08): o
+  teste monta o bloco, clica e lê que a tela DIZ, antes do clique, que o app não
+  vai enviar nada. E a **lista de meios vem do BACKEND** — copiá-la para a tela
+  faria ela oferecer um id que o backend recusa no primeiro meio novo.
+
 - **🚨 A TELA DIZIA "PRONTO" E O BOTÃO RECUSAVA — na MESMA tela, e o dono que
   eu esqueci foi o do INSUMO** (27/08, print do Paulo: REGINA CELIA PIRES ·
   07/2026 com `5/5 etapas`, os cinco selos verdes, *"✓ Pronto para dar fim de

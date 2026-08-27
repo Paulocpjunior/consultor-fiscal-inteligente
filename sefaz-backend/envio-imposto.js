@@ -154,6 +154,11 @@ async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
  * @param {string} p.tipo         'DAS' | 'DARF' | 'DCTFWEB' | 'DARE' | 'FGTS' | 'SPED' | ...
  * @param {string} p.competencia  'AAAA-MM' | 'MM/AAAA'
  * @param {string} [p.canal]      'email-graph' (servidor) | 'email-app' (mailto) | 'whatsapp'
+ *                                | 'fora-do-app' (DECLARADO — o app não enviou)
+ * @param {object} [p.declaracao] quando o canal é 'fora-do-app': a declaração
+ *   já CONFERIDA por `conferirDeclaracao` (meio, comoFoi, quando, declaradoPor).
+ *   Ela é o que substitui a prova do servidor — e `canalComprovaEnvio` continua
+ *   devolvendo false, então o envio entra em `semProvaDeEnvio`.
  * @param {string} [p.para]       destinatário
  * @param {string[]} [p.copiaPara]
  * @param {string} [p.pdfBase64]  arquivo enviado (cópia pro SharePoint)
@@ -204,12 +209,18 @@ export async function executarRitoEnvioImposto(p) {
                 .where('competencia', '==', compTarefa)
                 .get();
             const cnpjAlvo = String(p.empresaCnpj || '').replace(/\D/g, '');
-            const alvos = snap.docs.filter((d) => {
+            // A empresa PRIMEIRO, o status depois — a ordem importa: sem isso
+            // "a tarefa já estava concluída" e "não existe tarefa" viram o
+            // mesmo `sem-tarefa`, e são fatos com ações opostas.
+            const daEmpresa = snap.docs.filter((d) => {
                 const t = d.data();
-                if (t.status === 'concluida' || t.status === 'cancelada') return false;
                 if (p.empresaId && t.empresaId === p.empresaId) return true;
                 if (empresa && t.empresaId === empresa.id) return true;
                 return cnpjAlvo && String(t.empresaCnpj || '').replace(/\D/g, '') === cnpjAlvo;
+            });
+            const alvos = daEmpresa.filter((d) => {
+                const st = d.data().status;
+                return st !== 'concluida' && st !== 'cancelada';
             });
             for (const d of alvos) {
                 await d.ref.update({
@@ -220,12 +231,26 @@ export async function executarRitoEnvioImposto(p) {
                     baixaCanal: p.canal || null,
                 });
             }
+            // 🚨 "JÁ BAIXADA" NÃO É "SEM TAREFA" (27/08, achado ao ligar o envio
+            // DECLARADO). A pessoa que entregou a obrigação por fora dá baixa
+            // em Vencimentos e SÓ DEPOIS registra o envio — fazendo na ordem
+            // certa, ela caía em `sem-tarefa`, que é PENDÊNCIA, e a etapa 5
+            // ficava em âmbar travando o fim de mês. Ou seja: o caminho certo
+            // punia quem o seguia.
+            //
+            // A tarefa EXISTE e está concluída: o rito não tem o que fazer, e
+            // isso é desfecho legítimo — não é o cron que faltou.
             resultado.baixa = alvos.length > 0
                 ? { status: 'baixada', obrigacao, competencia: compTarefa, tarefas: alvos.length }
-                : {
-                    status: 'sem-tarefa', obrigacao, competencia: compTarefa,
-                    motivo: 'Nenhuma tarefa pendente desta obrigação/competência (já concluída ou ainda não gerada pelo cron).',
-                };
+                : daEmpresa.length > 0
+                    ? {
+                        status: 'ja-baixada', obrigacao, competencia: compTarefa, tarefas: daEmpresa.length,
+                        motivo: 'A obrigação já estava concluída (ou cancelada) em Vencimentos quando o envio foi registrado.',
+                    }
+                    : {
+                        status: 'sem-tarefa', obrigacao, competencia: compTarefa,
+                        motivo: 'Nenhuma tarefa desta obrigação/competência para esta empresa — o cron mensal não gerou.',
+                    };
         } catch (e) {
             resultado.baixa = { status: 'erro', motivo: e.message, obrigacao, competencia: compTarefa };
         }
@@ -242,6 +267,11 @@ export async function executarRitoEnvioImposto(p) {
             tipo: String(p.tipo || '').toUpperCase(),
             competencia: normalizarCompetencia(p.competencia),
             canal: p.canal || null,
+            // 📋 A DECLARAÇÃO, quando o envio aconteceu FORA do app. Ela é o
+            // motivo escrito com autor e data — o desenho da T3 da DCTFWeb e da
+            // reabertura do fim de mês. Sem ela o canal 'fora-do-app' seria um
+            // clique, e clique fácil transforma exceção em rotina.
+            declaracao: p.declaracao || null,
             para: p.para || null,
             copiaPara: [...new Set([GESTOR_EMAIL, ...(p.copiaPara || [])])],
             valor: Number.isFinite(Number(p.valor)) ? Number(p.valor) : null,

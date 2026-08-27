@@ -24,7 +24,7 @@ export interface EnvioImpostoInput {
     tipo: string;
     /** 'AAAA-MM' ou 'MM/AAAA' */
     competencia: string;
-    canal: 'email-app' | 'email-graph' | 'whatsapp';
+    canal: 'email-app' | 'email-graph' | 'whatsapp' | 'fora-do-app';
     para?: string;
     pdfBase64?: string | null;
     pdfFileName?: string;
@@ -33,6 +33,49 @@ export interface EnvioImpostoInput {
     debitos?: Array<{ codigo: string; extensao?: string | null; descricao?: string | null; valor?: number | null; departamento?: string | null }>;
     /** Reenvio proposital: motivo escrito, gravado com quem seguiu. */
     reenvioMotivo?: string | null;
+    /** 📋 Só no canal 'fora-do-app' — a declaração. O backend RECUSA sem ela. */
+    meio?: string;
+    comoFoi?: string;
+    quando?: string;
+}
+
+/** Um meio de envio fora do app — a lista vem do BACKEND, nunca copiada. */
+export interface MeioForaDoApp { id: string; label: string; }
+
+/**
+ * 📋 Os meios de envio fora do app.
+ *
+ * ⚠️ Ela é LIDA do backend de propósito: copiar a lista para cá criaria a
+ * segunda cópia, e no dia em que um meio entrar a tela ofereceria um id que o
+ * backend RECUSA — o erro chegaria como "escolha o meio" sobre um meio
+ * escolhido.
+ */
+export async function meiosForaDoApp(): Promise<MeioForaDoApp[]> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Sessão expirada');
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/meios-fora-do-app', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data.meios || [];
+}
+
+/**
+ * 📋 REGISTRA UM ENVIO QUE ACONTECEU FORA DO APP.
+ *
+ * Caso AC MASON (27/08): a guia já tinha ido ao cliente, a etapa 5 travava o
+ * fim de mês, e reenviar pelo app DUPLICARIA a guia. O que o app não pode é
+ * fingir que enviou: o canal é `fora-do-app`, `canalComprovaEnvio` devolve
+ * **false** para ele, e a declaração (meio + texto + data + autor) fica gravada
+ * na auditoria. O mês fecha; a ressalva fica.
+ */
+export async function registrarEnvioForaDoApp(
+    input: Omit<EnvioImpostoInput, 'canal' | 'para' | 'pdfBase64'>
+        & { meio: string; comoFoi: string; quando: string },
+): Promise<RitoResultado & { declaracao?: { texto: string } | null }> {
+    return registrarEnvioImposto({ ...input, canal: 'fora-do-app' });
 }
 
 export interface RitoResultado {

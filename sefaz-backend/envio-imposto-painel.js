@@ -54,6 +54,12 @@ export function pendenciaSharePoint(e) {
 export function pendenciaBaixa(e) {
     const st = e?.baixa?.status;
     if (!st || st === 'baixada') return null;
+    // 🚨 `ja-baixada` é DESFECHO LEGÍTIMO, não lacuna (27/08): a tarefa existe
+    // e já estava concluída em Vencimentos quando o envio foi registrado — é o
+    // que acontece com quem entrega a obrigação por fora, dá baixa e SÓ DEPOIS
+    // registra o envio. Tratá-la como pendência punia justamente quem seguiu a
+    // ordem certa, e travava o fim de mês da empresa.
+    if (st === 'ja-baixada') return null;
     if (st === 'sem-tarefa') {
         return {
             causa: 'Sem obrigação correspondente na aba Vencimentos',
@@ -87,6 +93,43 @@ export function pendenciaBaixa(e) {
 export function canalComprovaEnvio(canal) {
     const c = String(canal || '').trim().toLowerCase();
     return c === 'email-graph' || c === 'whatsapp-api';
+}
+
+/**
+ * 🔒 ESTE ENVIO FECHOU O RITO? — dono único da pergunta (27/08).
+ *
+ * ═══ POR QUE ELE NASCEU ═════════════════════════════════════════════════════
+ *
+ * A Rotina do Mês reimplementava a resposta:
+ *
+ *     e.sharePoint?.status === 'arquivado' && e.baixa?.status === 'baixada'
+ *
+ * e o PAINEL, aqui, já dizia outra coisa: `sem-pdf` é desfecho **LEGÍTIMO**
+ * (envio sem anexo — aviso de guia já paga: não há o que arquivar), e
+ * `ja-baixada` também. Ou seja: o painel dava o envio por COMPLETO e a Rotina
+ * o deixava em ÂMBAR para sempre, travando o fim de mês de uma empresa cujo
+ * rito fechou.
+ *
+ * ⚠️ `sem-tarefa` NÃO é desfecho legítimo e continua sendo pendência — ali a
+ * tarefa não existe, e isso é o cron mensal que não gerou. A distinção entre
+ * ele e o `ja-baixada` nasceu com o envio DECLARADO, e foi o teste que a
+ * cobrou.
+ *
+ * Duas leituras do mesmo fato — o defeito que esta casa mais paga —, e a de
+ * baixo é a que decide se alguém pode virar a página.
+ *
+ * @returns {{completo: boolean, naoConferido: boolean, pendencias: object[]}}
+ */
+export function envioCompletoPeloRito(e) {
+    const naoConferido = semRegistroSharePoint(e) || semRegistroBaixa(e);
+    const pendencias = [pendenciaSharePoint(e), pendenciaBaixa(e)].filter(Boolean);
+    return {
+        // ⚠️ SEM REGISTRO NÃO É COMPLETO — é NÃO CONFERIDO, e tem ação própria.
+        // Auditoria gravada antes do rito #293 existir cai exatamente aqui.
+        completo: !naoConferido && pendencias.length === 0,
+        naoConferido,
+        pendencias,
+    };
 }
 
 /**
@@ -124,8 +167,11 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         painel.porTipo[tipo] = (painel.porTipo[tipo] || 0) + 1;
         if (Number.isFinite(Number(e.valor))) painel.valorTotal += Number(e.valor);
 
-        const problemas = [pendenciaSharePoint(e), pendenciaBaixa(e)].filter(Boolean);
-        const semRegistro = semRegistroSharePoint(e) || semRegistroBaixa(e);
+        // Quem responde é o DONO — o painel e a Rotina do Mês perguntam a mesma
+        // coisa, e até 27/08 respondiam diferente sobre `sem-pdf`/`sem-tarefa`.
+        const rito = envioCompletoPeloRito(e);
+        const problemas = rito.pendencias;
+        const semRegistro = rito.naoConferido;
         if (problemas.length > 0) painel.incompletos++;
         else if (semRegistro) {
             const faltam = [

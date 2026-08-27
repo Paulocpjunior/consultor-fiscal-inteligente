@@ -24,6 +24,7 @@ import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates
 import { nomeArquivoGuia } from './nome-arquivo-guia.js';
 import { conferirDebitosJaEnviados, avisoDeRepeticao } from './debito-ja-enviado.js';
 import { formasDaCompetencia } from './competencia.js';
+import { conferirDeclaracao, textoDaDeclaracao, CANAL_FORA_DO_APP, MEIOS_FORA_DO_APP } from './envio-fora-do-app.js';
 
 const router = Router();
 
@@ -49,6 +50,16 @@ async function lerTemplatesDoFiscal() {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+/**
+ * Os meios de envio fora do app — a tela LÊ daqui.
+ *
+ * Copiar a lista para o frontend criaria a segunda cópia: no dia em que um
+ * meio entrar, a tela ofereceria um id que o backend RECUSA.
+ */
+router.get('/meios-fora-do-app', requireAuth, (_req, res) => {
+    return res.json({ ok: true, meios: MEIOS_FORA_DO_APP });
+});
+
 router.post('/registrar', requireAuth, async (req, res) => {
     try {
         const {
@@ -61,9 +72,32 @@ router.post('/registrar', requireAuth, async (req, res) => {
         const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
 
+        // 📋 ENVIO DECLARADO — a guia saiu FORA do app (a AC MASON, 27/08:
+        // "as guias já foram enviadas para o cliente" e a etapa 5 travava o
+        // fim de mês, porque reenviar pelo app duplicaria a guia no cliente).
+        //
+        // ⚠️ A DECLARAÇÃO É CONFERIDA AQUI, ANTES de gravar: meio da lista,
+        // texto com o piso da T3, data que não está no futuro e AUTOR. Sem o
+        // autor a declaração é de ninguém — e é ele que a torna aceitável no
+        // lugar da prova do servidor.
+        let declaracao = null;
+        if (String(canal || '') === CANAL_FORA_DO_APP) {
+            const conf = conferirDeclaracao({
+                meio: req.body?.meio,
+                comoFoi: req.body?.comoFoi,
+                quando: req.body?.quando,
+                quem: req.user?.email || req.user?.uid || null,
+            });
+            // 400, nunca 500: declaração incompleta é RESPOSTA, e a frase diz
+            // o que falta.
+            if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+            declaracao = conf.declaracao;
+        }
+
         const r = await executarRitoEnvioImposto({
             empresaId, empresaCnpj, empresaNome, tipo, competencia,
             canal: canal || 'email-app',
+            declaracao,
             para: para || null,
             pdfBase64, pdfFileName,
             valor,
@@ -75,7 +109,12 @@ router.post('/registrar', requireAuth, async (req, res) => {
             enviadoPor: req.user?.email || req.user?.uid || null,
         });
         console.log(`[envio-imposto] ${tipo} ${empresaCnpj} ${competencia} via ${canal || 'email-app'} por ${req.user?.email} — sp=${r.sharePoint.status} baixa=${r.baixa.status}`);
-        return res.json({ ok: true, gestor: GESTOR_EMAIL, ...r });
+        return res.json({
+            ok: true, gestor: GESTOR_EMAIL, ...r,
+            // A frase volta para a tela DIZER que o app não enviou nada — quem
+            // declarou precisa ver isso na hora, não só na auditoria.
+            declaracao: declaracao ? { ...declaracao, texto: textoDaDeclaracao(declaracao) } : null,
+        });
     } catch (e) {
         console.error('[envio-imposto/registrar]', e);
         return res.status(500).json({ ok: false, error: e.message });
