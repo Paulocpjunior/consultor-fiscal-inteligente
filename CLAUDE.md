@@ -32,6 +32,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   honrar. No Simples o valor do DAS **não vive na ficha** (ele é emitido no card
   do Simples), então o que o carimbo congela ali é o **ACERVO e o LASTRO**, e a
   `apuradoRessalva` DIZ isso — para o CCI e para quem ler o histórico.
+  🚨 **E A TELA AINDA SE CONTRADIZIA POR CONSTRUÇÃO — a classe, independente
+  desta causa.** `pre.pode` sai das ETAPAS que o painel leu; o ato recusa por
+  OUTRAS razões também (competência ilegível, mês já fechado, sem apuração), e
+  **nenhuma delas é bloqueio de etapa** — então a caixa continuava dizendo
+  *"✓ Pronto para dar fim de mês"* em VERDE com a recusa em VERMELHO logo
+  abaixo. Agora, recusa sem bloqueio de etapa **apaga o "pronto"** e a caixa
+  assume *"⚠ O fim de mês foi RECUSADO — nenhuma etapa está bloqueando: é outra
+  coisa"*, que também impede a pessoa de procurar etapa aberta que não existe.
+  📌 **REGRA QUE FICA: afirmação que o app ACABOU DE DESMENTIR não fica na
+  tela.** Corrigir só a causa deixaria a próxima recusa cair na mesma
+  contradição. Provado por RENDER — clicando.
   ⚠️ **E o LASTRO estava apagado no Simples pelo mesmo motivo**: ele cruzava
   `ficha?.totalImpostos ?? 0` → `sem-valor`. Passou a cruzar o MESMO número da
   etapa 3 (imposto no Lucro, receita lançada no Simples) — apagado se lê como
