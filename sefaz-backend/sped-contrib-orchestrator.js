@@ -39,6 +39,10 @@ import {
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
 import { participanteDoDocumento } from './participante-doc-helper.js';
+// 🔒 O acervo que o fim de mês congelou — MESMO dono do EFD ICMS/IPI: dois
+// recortes diferentes fariam os dois arquivos do mesmo mês discordarem.
+import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
+import { lerFechamentoDaCompetencia } from './fechamento-store.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -93,6 +97,26 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         .where('competencia', '==', competencia);
     const snap = await notasQuery.get();
     let notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
+    //
+    // Paulo: o fim de mês *"deve ser usada como régua para nos nortear, usar
+    // como base p impostos, livros, ficha financeira"*. Sem este recorte, o
+    // arquivo de agosto REGERADO em dezembro sairia DIFERENTE se uma nota de
+    // agosto chegou em novembro — e o Contábil já teria importado o outro
+    // número. É a divergência que o ato existe para matar.
+    //
+    // ⚠️ Sem fechamento (ou com a competência REABERTA) nada muda: quem não
+    // usar o ato gera exatamente como antes.
+    // ═══════════════════════════════════════════════════════════════════════
+    const fechamento = await lerFechamentoDaCompetencia(db, empresaId, competencia);
+    const recorte = recortarPeloFechamento(notas, fechamento);
+    notas = recorte.docs;
+    // ⚠️ Os avisos ficam guardados: `warnings` só nasce mais abaixo, e um
+    // `push` aqui seria ReferenceError — a MESMA classe que derrubou a
+    // geração do SPED em 20/08, e que a trava de nomes do backend pega.
+    const avisosDoFechamento = avisosDoRecorte(recorte);
 
     // ─── 3b. A RECEITA SEM DOCUMENTO decide o PERFIL — e o perfil decide quem
     //         entra (por isso ela é lida AQUI, antes de coletar participante e
@@ -279,6 +303,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
 
     // ─── 6. Warnings ───
     const warnings = [];
+    warnings.push(...avisosDoFechamento);
     if (entradasForaDaConsolidada > 0) {
         warnings.push(
             `${entradasForaDaConsolidada} documento(s) de ENTRADA (serviço tomado/aquisição) ficaram FORA da `

@@ -5,6 +5,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 OS LEITORES DO FIM DE MÊS — o arquivo passou a sair do ACERVO QUE O
+  CARIMBO CONGELOU** (26/08, a segunda leva). O carimbo guardava o instante do
+  corte e **ninguém o lia**: os dois SPED continuavam gerando do acervo de
+  HOJE. Sem isto, o arquivo de agosto regerado em dezembro sai DIFERENTE se uma
+  nota de agosto chegou em novembro — e o Contábil já importou o outro número.
+  🚨 **A ARMADILHA QUE DECIDIU O DESENHO, e ela foi MEDIDA**: o instante de
+  chegada é gravado em **DOIS nomes e DOIS tipos** — `createdAt`/`importadoEm`,
+  como Firestore Timestamp em três trilhos e como **string ISO** no
+  `nfse-sp-importer.js:172`. Um `.where('createdAt','<=',corte)` deixaria de
+  fora, **EM SILÊNCIO**, todo documento gravado como string: o Firestore ordena
+  por TIPO, e string nunca cai num range de Timestamp. Seria o livro a MENOR,
+  na direção mais cara. Por isso a comparação é **em MEMÓRIA**, por um dono só
+  (`chegouEmMs`, que lê as quatro formas).
+  ⚠️ **`dhEmi` FICA DE FORA de propósito** — ele diz quando a nota foi EMITIDA,
+  não quando ela chegou aqui. Usá-lo faria a nota emitida em 30/08 e capturada
+  em 02/09 passar pelo corte como se já estivesse na base, que é exatamente o
+  caso que o Paulo descreveu.
+  ⚠️ **AUSÊNCIA NÃO É PROVA, e aqui isso decide O LADO DO ERRO**: documento sem
+  instante legível **FICA** e sai NOMEADO. Tirá-lo produziria livro a MENOR (o
+  erro caro); mantê-lo produz no máximo um documento a mais que o carimbo
+  contou — e o aviso leva o total do carimbo para conferir.
+  📌 **O ID DO CARIMBO É RÉGUA ÚNICA** (`idDoFechamento`, em
+  `fechamento-store.js`): a competência circula em quatro formas, e
+  `${id}_07/2026` é um documento DIFERENTE de `${id}_2026-07`. **A varredura
+  pegou a segunda cópia na hora** — a trava da ficha montava o id à mão. O I/O
+  é que difere entre os dois SDK (admin × modular); o ID, não.
+  📌 **E O `warnings` SÓ NASCE DEPOIS DO PONTO DO RECORTE** nos dois
+  orquestradores — um `push` ali seria `ReferenceError`, a MESMA classe que
+  derrubou a geração do SPED em 20/08. Os avisos ficam guardados e entram onde
+  o array existe.
+  ✅ Sem fechamento — ou com a competência **REABERTA** — nada muda: quem não
+  usar o ato gera exatamente como antes. E o recorte **nasce MUDO** quando nada
+  ficou de fora, senão seria alarme sobre arquivo normal.
+
 - **🔒 "DAR FIM DE MÊS" — o ato que vira a RÉGUA de impostos, livros, ficha e
   do CCI** (26/08, Paulo: *"o fechamento do fim do mês no CFI exige (DAR FIM DE
   MÊS), essa função é que deve ser usada como régua para nos nortear, usar como

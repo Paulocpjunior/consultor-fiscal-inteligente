@@ -36,16 +36,14 @@ import {
     conferirReabertura, aplicarReabertura, descreverFechamento,
 } from './fim-de-mes.js';
 
+import { COLECAO_FECHAMENTOS as COLECAO, idDoFechamento, lerFechamentoDaCompetencia } from './fechamento-store.js';
+
 const router = Router();
-const COLECAO = 'fechamentos_competencia';
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp();
     return admin.firestore();
 }
-
-/** Id estável: fechar de novo sobrescreve a MESMA linha, nunca cria a segunda. */
-const idDoFechamento = (empresaId, competencia) => `${empresaId}_${competencia}`;
 
 /** As duas coleções de empresa — a ficha do Lucro é EMBUTIDA no documento. */
 async function carregarEmpresa(db, empresaId) {
@@ -91,8 +89,9 @@ async function situacaoDaCompetencia(db, user, empresaId, competencia) {
     const empresa = await carregarEmpresa(db, empresaId);
     if (!empresa) return { erro: 'Empresa não encontrada.', status: 404 };
 
-    const fechSnap = await db.collection(COLECAO).doc(idDoFechamento(empresaId, comp)).get();
-    const fechamento = fechSnap.exists ? (fechSnap.data() || null) : null;
+    // O carimbo sai do dono da leitura — o id é régua única (a competência
+    // circula em quatro formas, e `_07/2026` é outro id que `_2026-07`).
+    const fechamento = await lerFechamentoDaCompetencia(db, empresaId, comp);
 
     // A rotina sai do MESMO dono do painel — segunda montagem divergiria, e a
     // divergência apareceria como "a tela diz pronto e o botão recusa".
