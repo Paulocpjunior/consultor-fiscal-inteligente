@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 CONFERIR O ESTADO DA MAIN ANTES DE CADA MERGE — não só depois** (27/08,
+  Paulo autorizou: *"sim quero que confira, assim evita ter q mandar outro
+  agente auditar seu trabalho"*).
+  🔴 **O CASO**: outro agente (`AI Assistant <sistema@gemini.local>`) empurrou
+  DOIS commits **direto na main, sem PR**. O primeiro (`hardening`) extraiu
+  helpers do backend para `services/` — e a imagem de runtime do `Dockerfile`
+  só copia `dist`, `server.js` e `sefaz-backend`, então o import de
+  `../services/*` **derrubou o contêiner no boot**. O meu PR do túnel (#1059)
+  entrou em seguida, mesclou a main para resolver conflito, **herdou o defeito
+  e caiu com ele** — deploy vermelho num código que passou no meu gate.
+  ✂️ **O RITO PASSA A SER**: antes de mesclar, ler o último deploy da main. Se
+  ele está VERMELHO, ou espero a correção ou digo isso no PR — mesclar em cima
+  de uma main quebrada faz o meu trabalho aparecer como o defeito.
+  ⚠️ **E O GATE VERDE NÃO SUBSTITUI ISSO**: `lint`/`jest`/`build` não olham o
+  `Dockerfile`. Foi só o deploy que pegou — e é por isso que a conferência é do
+  DEPLOY, não dos testes.
+  📌 **O QUE O OUTRO AGENTE ACERTOU, e fica dito porque é justo**: o mesmo
+  commit tirou a `VITE_GEMINI_API_KEY` do bundle do frontend — a chave estava
+  sendo assada no JS servido ao navegador **sem nenhum código lê-la**
+  (conferido: sobra só a declaração em `vite-env.d.ts`). Era superfície de
+  vazamento, e saiu. O defeito não foi de conhecimento, foi de RITO.
+
 - **🚨 A CARTEIRA ERA CORTADA EM 500 VÍNCULOS — EM SILÊNCIO, e os dois sintomas
   eram o MESMO defeito** (27/08, Paulo com o print: *"todas as empresas estavam
   com responsáveis, hoje fui ver tinha 21 sem. Quando coloco a atribuição, ele
