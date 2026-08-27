@@ -410,6 +410,10 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                         <FimDeMesBloco
                                             empresaId={r.empresa.id}
                                             competencia={competencia}
+                                            // 📋 Para a declaração de envio fora do app: a
+                                            // auditoria de `impostos_enviados` é por CNPJ.
+                                            empresaCnpj={r.empresa.cnpj}
+                                            empresaNome={r.empresa.nome}
                                             // 🚨 O carimbo e os bloqueios vêm do PAINEL, que já leu
                                             // tudo numa requisição. Cada card buscando o seu era
                                             // ~400 requisições simultâneas — o HTTP 429 de 27/08.

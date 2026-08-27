@@ -30,6 +30,10 @@ import { acharFichaCompetencia } from './ipi-varredura.js';
 import { receitaDeLocacao } from './receita-sem-documento-f550.js';
 // 🔒 O carimbo do fim de mês — quem responde "esta competência foi fechada?".
 import { competenciaFechada } from './fim-de-mes.js';
+// 🔒 Duas perguntas, dois donos: "este envio fechou o RITO?" e "o canal PROVA
+// a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
+import { envioCompletoPeloRito, canalComprovaEnvio } from './envio-imposto-painel.js';
+import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -477,8 +481,22 @@ export function montarRotinaFiscal({
     }
 
     // ── 5. GUIAS ────────────────────────────────────────────────────────────
-    // Completo = enviada COM o rito (arquivada no SharePoint e com baixa).
-    const enviosOk = envios.filter((e) => e.sharePoint?.status === 'arquivado' && e.baixa?.status === 'baixada').length;
+    // 🔒 QUEM DIZ SE O RITO FECHOU É O DONO (`envioCompletoPeloRito`), nunca
+    // uma segunda leitura aqui.
+    //
+    // Até 27/08 esta linha era `sharePoint === 'arquivado' && baixa ===
+    // 'baixada'` — e o PAINEL do rito, ao lado, já tratava `sem-pdf` e
+    // `sem-tarefa` como desfechos LEGÍTIMOS (envio sem anexo não tem o que
+    // arquivar; tipo sem obrigação mensal não tem o que baixar). Resultado:
+    // o painel dava o envio por completo e a Rotina o deixava em ÂMBAR para
+    // sempre, travando o fim de mês de uma empresa cujo rito fechou.
+    const enviosOk = envios.filter((e) => envioCompletoPeloRito(e).completo).length;
+    // ⚠️ O QUE O APP NÃO PODE AFIRMAR sai CONTADO, nunca escondido: mailto,
+    // WhatsApp e o envio DECLARADO só provam que a composição abriu (ou que
+    // alguém disse que enviou). Isso NÃO trava — a etapa nunca exigiu prova de
+    // ENTREGA, ela exige o RITO —, mas vai dito na linha e viaja no carimbo.
+    const semProva = envios.filter((e) => !canalComprovaEnvio(e.canal)).length;
+    const declarados = envios.filter((e) => String(e.canal || '') === CANAL_FORA_DO_APP).length;
     // Apuração fechada em ZERO não gera guia — cobrar envio aqui seria pendência
     // falsa (empresa sem movimento no mês).
     const semImpostoAPagar = !!apuracao && Number(apuracao.totalImpostos) === 0;
@@ -494,10 +512,14 @@ export function montarRotinaFiscal({
         eGuias = etapa('guias', 'atencao',
             `${envios.length} envio(s), ${enviosOk} completo(s) pelo rito.`,
             'Veja em Envios (rito) o que ficou sem cópia no SharePoint ou sem baixa da obrigação.',
-            { envios: envios.length, completos: enviosOk });
+            { envios: envios.length, completos: enviosOk, semProva, declarados });
     } else {
-        eGuias = etapa('guias', 'concluida', `${envios.length} guia(s) enviada(s) com o rito completo.`, null,
-            { envios: envios.length, completos: enviosOk });
+        eGuias = etapa('guias', 'concluida',
+            `${envios.length} guia(s) enviada(s) com o rito completo`
+            + (declarados > 0 ? ` · ${declarados} DECLARADA(S) como enviada(s) por fora do app` : '')
+            + '.',
+            null,
+            { envios: envios.length, completos: enviosOk, semProva, declarados });
     }
 
     // ── ISS de SP capital, DENTRO da linha ──────────────────────────────────
