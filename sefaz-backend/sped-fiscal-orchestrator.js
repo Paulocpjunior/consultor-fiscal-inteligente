@@ -37,6 +37,10 @@ import {
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
+// 🔒 O acervo que o fim de mês congelou — o dono da pergunta "este documento
+// já estava aqui quando o mês foi fechado?".
+import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
+import { lerFechamentoDaCompetencia } from './fechamento-store.js';
 // RÉGUA ÚNICA da leitura da ficha por competência (mesReferencia tem 3 formas).
 import { acharFichaCompetencia } from './ipi-varredura.js';
 
@@ -120,6 +124,26 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     }
     // Ignora docs marcados como duplicata (vencedor do merge fica na lista).
     notas = notas.filter(n => !n._merged_into);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
+    //
+    // Paulo: o fim de mês *"deve ser usada como régua para nos nortear, usar
+    // como base p impostos, livros, ficha financeira"*. Sem este recorte, o
+    // arquivo de agosto REGERADO em dezembro sairia DIFERENTE se uma nota de
+    // agosto chegou em novembro — e o Contábil já teria importado o outro
+    // número. É a divergência que o ato existe para matar.
+    //
+    // ⚠️ Sem fechamento (ou com a competência REABERTA) nada muda: quem não
+    // usar o ato gera exatamente como antes.
+    // ═══════════════════════════════════════════════════════════════════════
+    const fechamento = await lerFechamentoDaCompetencia(db, empresaId, periodoFim);
+    const recorte = recortarPeloFechamento(notas, fechamento);
+    notas = recorte.docs;
+    // ⚠️ Os avisos ficam guardados: `warnings` só nasce mais abaixo, e um
+    // `push` aqui seria ReferenceError — a MESMA classe que derrubou a
+    // geração do SPED em 20/08, e que a trava de nomes do backend pega.
+    const avisosDoFechamento = avisosDoRecorte(recorte);
 
     // ─── 4. Extrai participantes unicos (entrada + saida) ───
     //
@@ -252,6 +276,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
 
     // ─── 6. Warnings ───
     const warnings = [];
+    warnings.push(...avisosDoFechamento);
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
     }
