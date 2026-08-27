@@ -86,6 +86,11 @@ RUN node_modules/.bin/playwright install chromium
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
 COPY sefaz-backend ./sefaz-backend
+# Helpers compartilhados que tambem sao importados pelo backend em runtime.
+# Copia-los explicitamente evita levar toda a arvore TypeScript do frontend
+# para a imagem final e mantem o contrato de runtime visivel no Dockerfile.
+COPY services/sp-connect-message-origin.js ./services/sp-connect-message-origin.js
+COPY services/ultrafox-browser-parser.js ./services/ultrafox-browser-parser.js
 
 # Roda como root porque Playwright precisa de acesso a libs nativas.
 # Cloud Run isola via gVisor então isso é OK.
