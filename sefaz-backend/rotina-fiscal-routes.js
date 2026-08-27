@@ -20,6 +20,9 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
 import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
+// 🚨 O DONO DO INSUMO DA ROTINA — módulo PURO. A rota do ato montava este
+// objeto à mão e a tela dizia "pronto" enquanto o botão recusava (27/08).
+import { empresaDaRotina, COLECOES_DA_ROTINA } from './rotina-empresa-insumo.js';
 // 🔒 Os carimbos do fim de mês da competência, em UMA query. Ver o comentário
 // de `lerFechamentosDaCompetencia`: cada card buscando o seu era ~400 idas ao
 // Firestore e o HTTP 429 do print de 27/08.
@@ -92,36 +95,11 @@ const competenciaAtual = () => {
  */
 async function carregarEmpresas(db) {
     const out = [];
-    for (const [col, regime] of [['simples_empresas', 'simples'], ['lucro_empresas', 'lucro']]) {
+    for (const [col] of COLECOES_DA_ROTINA) {
         const snap = await db.collection(col).get();
         snap.forEach((doc) => {
-            const d = doc.data() || {};
-            if (d._deleted || d._merged_into) return;
-            const cnpj = soDigitos(d.cnpj);
-            if (cnpj.length !== 14) return;
-            const df = d.dadosFiscais || {};
-            out.push({
-                id: doc.id,
-                cnpj,
-                nome: d.razaoSocial || d.nome || d.fantasia || '—',
-                regime,
-                // Para o catálogo dizer se COBRE este cliente: ele resolve o
-                // regime fiscal pela coleção + regimePadrao (Lucro sem o campo
-                // vira INDEFINIDO, e adivinhar regime é adivinhar imposto).
-                colecao: col,
-                regimePadrao: d.regimePadrao || d.dadosFiscais?.regimePadrao || '',
-                uf: d.dadosFiscais?.uf || d.uf || '',
-                capturaAtiva: d.capturarSefaz !== false,
-                // ISS de SP capital: município, CCM e SUP decidem se há guia do
-                // município no mês (e se a captura da NFS-e sequer roda).
-                codMunIBGE: String(df.codMunIBGE || d.codMunIBGE || '').trim(),
-                ccmSp: String(df.ccmSp || d.ccmSp || '').replace(/\D/g, ''),
-                issFixoSup: (d.issPadraoConfig?.tipo || df.issConfig?.tipo) === 'sup_fixo',
-                // usados só pra achar a prova da apuração da competência
-                fichaFinanceira: d.fichaFinanceira || null,
-                faturamentoManual: d.faturamentoManual || null,
-                faturamentoMensalDetalhado: d.faturamentoMensalDetalhado || null,
-            });
+            const e = empresaDaRotina(doc.id, col, doc.data());
+            if (e) out.push(e);
         });
     }
     return out;
