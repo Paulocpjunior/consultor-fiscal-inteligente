@@ -393,7 +393,43 @@ export async function listarAppsAssinadosNaWaba(deps = {}) {
     });
     const corpo = await r.json().catch(() => ({}));
     if (!r.ok) return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}` };
-    return { ok: true, wabaId: w.wabaId, apps: interpretarAppsAssinados(corpo) };
+    const apps = interpretarAppsAssinados(corpo);
+    // ⚠️ Falha ao descobrir o nosso app NÃO derruba a lista: ela continua útil
+    // sem a marca. O que não pode é a marca sair ERRADA — por isso `nosso` é
+    // `null` (desconhecido) quando não deu para perguntar, nunca `false`.
+    const meu = await descobrirAppDoToken({ cfg, fetchImpl: doFetch }).catch(() => ({ ok: false }));
+    return {
+        ok: true,
+        wabaId: w.wabaId,
+        nossoAppId: meu.ok ? meu.appId : null,
+        apps: apps.map((a) => ({ ...a, nosso: meu.ok ? a.id === meu.appId : null })),
+    };
+}
+
+/**
+ * 🚨 QUAL DESSES APPS É O NOSSO? — a pergunta que a lista não respondia.
+ *
+ * 26/08: o painel mostrou `Business Agent · API_Oficial · f-bot` assinados na
+ * WABA, e o Paulo precisava decidir QUAL remover ao cortar a plataforma
+ * antiga. Três nomes sem dono é uma lista que não dá para agir: remover o
+ * errado desliga o recebimento de mensagem do escritório inteiro.
+ *
+ * Quem responde é a própria Meta: `debug_token` diz de qual APP o token é.
+ * É fonte, não dedução — e é a única forma segura, porque o NOME que o app
+ * tem na Meta não é escolhido por nós e pode ser qualquer coisa.
+ */
+export async function descobrirAppDoToken(deps = {}) {
+    const cfg = deps.cfg || configWhatsapp(deps.env);
+    const doFetch = deps.fetchImpl || fetch;
+    if (!cfg.token) return { ok: false, erro: 'Canal não configurado.' };
+    const url = `${GRAPH_BASE}/debug_token?input_token=${encodeURIComponent(cfg.token)}`;
+    const r = await doFetch(url, { headers: { Authorization: `Bearer ${cfg.token}` } });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, erro: corpo?.error?.message || `HTTP ${r.status}` };
+    const d = corpo?.data || {};
+    const appId = d.app_id ? String(d.app_id) : null;
+    if (!appId) return { ok: false, erro: 'A Meta não devolveu o app do token.' };
+    return { ok: true, appId, nome: d.application || null };
 }
 
 /** Assina O NOSSO app (o dono do token) na WABA — é isto que liga o fluxo real. */

@@ -102,7 +102,13 @@ export function subirPdf(
 // ─── Assinatura da WABA (a 2ª amarração do webhook) ─────────────────────────
 export function listarAppsAssinadosNaWaba(deps?: Record<string, unknown>): Promise<{
     ok: boolean; wabaId?: string; erro?: string;
-    apps?: { id: string | null; nome: string | null }[];
+    /** O app DONO do token — quem responde é o `debug_token` da Meta. */
+    nossoAppId?: string | null;
+    /** `nosso: null` = não deu para perguntar. Nunca `false` por omissão. */
+    apps?: { id: string | null; nome: string | null; nosso?: boolean | null }[];
+}>;
+export function descobrirAppDoToken(deps?: Record<string, unknown>): Promise<{
+    ok: boolean; appId?: string; nome?: string | null; erro?: string;
 }>;
 export function assinarWaba(deps?: Record<string, unknown>): Promise<{
     ok: boolean; wabaId?: string; erro?: string; acao?: string;
