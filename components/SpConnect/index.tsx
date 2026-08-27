@@ -2632,9 +2632,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             "as ligações devem obedecer os mesmos horários das mensagens").
                                             O que aparece depois de gravar é o que a Meta GUARDOU: a rota
                                             re-lê as settings — validação por resultado, não por status. */}
-                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
-                                            🛠 Gravar na Meta
-                                        </p>
+                                        {/* 🚨 O RECORTE VAI JUNTO DO BOTÃO, não só no topo da aba (26/08):
+                                            o Paulo rolou até aqui e perguntou "não vejo botão" — o seletor de
+                                            número estava fora da tela, e daqui dá para clicar em "Cadastrar
+                                            tronco SIP" sem enxergar EM QUAL número isso vai ser gravado.
+                                            Escrita cujo alvo não está à vista é a família do recorte que não
+                                            se declara — e aqui o alvo errado grava destino SIP no número que
+                                            hoje funciona. O seletor está repetido de propósito: quem grava
+                                            precisa ver o alvo no momento do clique, não ter visto antes. */}
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                                🛠 Gravar na Meta
+                                            </p>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400">no número</span>
+                                            <select value={canalChamada} onChange={(e) => trocarCanalChamada(e.target.value)}
+                                                className="text-[11px] font-semibold rounded border border-slate-300 dark:border-slate-600 bg-transparent px-1.5 py-0.5">
+                                                {canais.map((c) => (
+                                                    <option key={c.id} value={c.id}>
+                                                        {c.rotulo}{c.numeroExibicao ? ` · ${c.numeroExibicao}` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         {chamadaErro && (
                                             <p className="text-[11px] text-red-600 dark:text-red-400">
                                                 ⛔ A Meta recusou a gravação: {chamadaErro}

@@ -83,6 +83,25 @@ describe('☎️ e a tela deixa escolher — e diz a consequência', () => {
         expect(tela).toMatch(/segue o número da CONVERSA/);
     });
 
+    // ── 26/08, segunda rodada: "não vejo botão" ────────────────────────────
+    // O seletor existia, no TOPO da aba. O Paulo rolou até os botões de
+    // gravação e o alvo tinha saído da tela — de onde ele estava, dava para
+    // clicar em "Cadastrar tronco SIP" sem enxergar em qual número aquilo ia
+    // ser escrito. Recorte que só se declara no alto é recorte que some na
+    // rolagem, e aqui o alvo errado grava destino SIP no número que funciona.
+    it('🚨 o alvo aparece TAMBÉM junto dos botões que gravam', () => {
+        const bloco = tela.slice(tela.indexOf('🛠 Gravar na Meta'), tela.indexOf('Aplicar os horários'));
+        expect(bloco).toMatch(/no número/);
+        expect(bloco).toMatch(/trocarCanalChamada/);
+    });
+
+    it('e o seletor de cima continua lá — os dois mexem no MESMO estado', () => {
+        // Dois seletores com estados diferentes seriam a leitura dupla que
+        // este PR existe para matar.
+        const ocorrencias = (tela.match(/onChange=\{\(e\) => trocarCanalChamada\(e\.target\.value\)\}/g) || []);
+        expect(ocorrencias.length).toBe(2);
+    });
+
     it('as três chamadas do front levam o canal', () => {
         expect(tela).toMatch(/sondarChamadas\(canal \?\? canalChamada\)/);
         expect(tela).toMatch(/configurarChamadas\(\{ \.\.\.p, canal: canalChamada \}\)/);
