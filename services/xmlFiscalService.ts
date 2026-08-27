@@ -22,6 +22,7 @@ import {
     type QueryConstraint,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './firebaseConfig';
+import { lerTodosOsVinculos } from './carteiraVinculos';
 import { fetchAllDocs } from './firestorePaginate';
 import { listarEmpresasPerfilBackend } from './empresasPerfilService';
 import {
@@ -83,10 +84,14 @@ async function getCarteiraScope(user: User): Promise<CarteiraScope | null> {
     if (!uid || !db) return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };
 
     try {
-        const snap = await getDocs(query(collection(db, 'carteiras'), fbLimit(500)));
-        const todosVinculos: CarteiraVinculoLike[] = snap.docs.map(d => d.data() as any);
-        const meusVinculos = todosVinculos.filter(v => vinculoPertenceAoUsuario(v, user, uid));
-        return montaCarteiraScope(uid, meusVinculos, !snap.empty);
+        // 🚨 AQUI O TETO MUDO ERA PIOR QUE NA TELA DA CARTEIRA: este escopo
+        // decide QUAIS EMPRESAS O COLABORADOR ENXERGA na Central de XMLs. O
+        // vínculo que caía fora do `fbLimit(500)` fazia a empresa SUMIR da
+        // visão dele — parecendo falha de captura, que manda procurar defeito
+        // onde não há. Escopo truncado não se resolve avisando: não se trunca.
+        const leitura = await lerTodosOsVinculos<CarteiraVinculoLike>((_id, dados) => dados as any);
+        const meusVinculos = leitura.vinculos.filter(v => vinculoPertenceAoUsuario(v, user, uid));
+        return montaCarteiraScope(uid, meusVinculos, leitura.total > 0);
     } catch (err: any) {
         console.warn('getCarteiraScope:', err?.message);
         return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };

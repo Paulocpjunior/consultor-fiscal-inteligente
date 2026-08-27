@@ -22,6 +22,9 @@ import {
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import type { User } from '../types';
 import { vinculoPertenceAoUsuario } from './visibilidadeCarteira';
+// 🚨 Dono ÚNICO da leitura dos vínculos — eram duas cópias do mesmo teto
+// mudo de 500, e a segunda decidia o ESCOPO da Central de XMLs.
+import { lerTodosOsVinculos } from './carteiraVinculos';
 
 const COLLECTION = 'carteiras';
 
@@ -60,11 +63,16 @@ export interface NovoVinculo {
 export async function listarCarteiras(user: User | null): Promise<VinculoCarteira[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     try {
-        const snap = await getDocs(query(collection(db, COLLECTION), fbLimit(500)));
-        const todos: VinculoCarteira[] = snap.docs.map(d => ({
-            id: d.id,
-            ...(d.data() as Omit<VinculoCarteira, 'id'>),
+        // 🚨 ERA `fbLimit(500)` — teto MUDO. Com 420 empresas e principal +
+        // backup a carteira passou de 500 vínculos, e os que ficaram fora da
+        // página viravam "Sem responsável" na tela (Paulo, 27/08: 21 empresas).
+        // E atribuir respondia "já atende" porque a conferência de duplicata
+        // consulta por empresaId+colaboradorUid, que NÃO passa pela página
+        // cortada: o vínculo existia, quem não o via era a lista.
+        const leitura = await lerTodosOsVinculos<VinculoCarteira>((id, dados) => ({
+            id, ...(dados as Omit<VinculoCarteira, 'id'>),
         }));
+        const todos = leitura.vinculos;
 
         const isAdmin = user.role === 'admin';
         const uid = auth?.currentUser?.uid;

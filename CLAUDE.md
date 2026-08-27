@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A CARTEIRA ERA CORTADA EM 500 VÍNCULOS — EM SILÊNCIO, e os dois sintomas
+  eram o MESMO defeito** (27/08, Paulo com o print: *"todas as empresas estavam
+  com responsáveis, hoje fui ver tinha 21 sem. Quando coloco a atribuição, ele
+  indica que já responsável, mas não sai desse STATUS"*).
+  🔴 A leitura era `getDocs(query(collection(db,'carteiras'), fbLimit(500)))` —
+  **teto MUDO**. Com **420 empresas × (principal + backup)** a carteira passou
+  de 500 vínculos, e os que ficaram fora da página não voltavam: a empresa
+  aparecia como *"Sem responsável"*. **Elas não perderam o responsável — a tela
+  parou de vê-los.**
+  🔴 **E é por isso que atribuir dizia "já atende"**: a conferência de duplicata
+  consulta por `where(empresaId, colaboradorUid)`, e ESSA consulta acha o
+  vínculo, porque não passa pela página cortada. Como o handler só recarregava
+  `if (!r.jaExistia)`, a linha continuava *"Sem responsável"* — e **a única
+  saída que sobra para quem não vê efeito é repetir o clique** (a família do
+  "Já importado" sem estado, 14/08).
+  🔴 **A SEGUNDA CÓPIA DO MESMO TETO ERA PIOR**: ela estava em
+  `getCarteiraScope` (`xmlFiscalService`), que decide **QUAIS EMPRESAS O
+  COLABORADOR ENXERGA** na Central de XMLs — ali o vínculo fora da página faz a
+  empresa **SUMIR da visão dele**, parecendo falha de captura, que manda
+  procurar defeito onde não há.
+  ✂️ Dono único `lerTodosOsVinculos` (casca) + `carteiraVinculosNucleo.ts`
+  (PURO — a casca puxa o `firebaseConfig`, que usa `import.meta.env` e **não
+  carrega no jest**: régua em módulo que o teste não carrega é régua sem prova).
+  Teto novo de **20.000**, e ele **AVISA** em vez de cortar calado.
+  📌 **REGRA QUE FICA: `fbLimit` sobre a coleção INTEIRA é corte de ESCOPO, não
+  de exibição — e escopo truncado não se resolve avisando, resolve-se não
+  truncando.** A régua de 30/07 (*"lista cortada SEMPRE diz mostrando X de N"*)
+  vale para o que a pessoa LÊ; quando o corte decide o que ela PODE VER e sobre
+  o que pode AGIR, avisar é tarde. O aviso fica como rede, para o dia do teto
+  novo — e ele diz a CONSEQUÊNCIA (*"reatribuir por causa disto não corrige
+  nada, porque o vínculo já existe"*), senão a pessoa reatribui à toa.
+  📌 **E O `carregar()` PASSOU A RODAR SEMPRE.** O `if (!r.jaExistia)` partia de
+  *"já existia ⇒ a tela já mostra"* — premissa que este defeito derrubou. A
+  frase também mudou: *"já atendia — a lista estava desatualizada e foi
+  recarregada"*, senão quem lê continua sem entender por que o status não
+  mudava. Recarregar sempre custa uma leitura e nunca mente.
+
 - **🔒 FASE 5 DO TÚNEL: o CCI importa o FECHAMENTO, nunca a ficha** (26/08,
   Paulo: *"o departamento contábil, através do CCI, deve fazer a importação com
   a mesma exatidão dos valores apurados e o mês fechado"*).
