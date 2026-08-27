@@ -5,6 +5,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O FIM DE MÊS NUNCA FUNCIONOU PARA O SIMPLES — a maior parte da carteira**
+  (27/08, print do Paulo: REGINA CELIA PIRES · 07/2026, Simples, com 1 NFS-e de
+  R$ 5.000 no relatório de Serviços prestados). A tela mostrava as **cinco
+  etapas verdes** e *"✓ Pronto para dar fim de mês"*; o botão recusava com
+  *"Sem apuração registrada nesta competência não há valor a fechar"*. **Duas
+  leituras do mesmo fato na mesma tela, pela TERCEIRA vez na semana.**
+  🔴 **A CAUSA ESTAVA NO COMENTÁRIO QUE EU ESCREVI NA PRÓPRIA RECUSA**: *"a
+  etapa 3 da rotina já teria barrado, então isto é cinto e suspensório"*.
+  Premissa **errada** — a etapa 3 fecha pelo DONO
+  (`acharApuracaoDaCompetencia`), que conhece **TRÊS fontes**: a
+  `fichaFinanceira[]` do Lucro, o `faturamentoManual` e o
+  `faturamentoMensalDetalhado` do Simples. **Só a primeira é "ficha"**, e o
+  carimbo lia só ela.
+  📌 **REGRA QUE FICA: "cinto e suspensório" é um cheiro, não um argumento.**
+  Uma segunda conferência que repete a primeira por OUTRA leitura não é
+  redundância — é uma segunda régua esperando divergir. Ou ela chama o mesmo
+  dono, ou ela é a régua nova que ninguém percebeu que criou.
+  ✂️ `montarFimDeMes` passou a receber a `apuracao` do dono; a recusa só vale
+  quando **não há nenhuma das três**. E o carimbo passou a dizer
+  `apuradoFonte` — sem ela o Contábil recebe um `apurado` todo `null` do
+  Simples e conclui *"este cliente não teve movimento"*, afirmação que ninguém
+  fez.
+  ⚠️ **E A RECEITA NÃO ENTRA NO APURADO**: ela é **INSUMO**, e insumo convida o
+  outro lado a RECALCULAR — a régua do R-2055, que este carimbo existe para
+  honrar. No Simples o valor do DAS **não vive na ficha** (ele é emitido no card
+  do Simples), então o que o carimbo congela ali é o **ACERVO e o LASTRO**, e a
+  `apuradoRessalva` DIZ isso — para o CCI e para quem ler o histórico.
+  ⚠️ **E o LASTRO estava apagado no Simples pelo mesmo motivo**: ele cruzava
+  `ficha?.totalImpostos ?? 0` → `sem-valor`. Passou a cruzar o MESMO número da
+  etapa 3 (imposto no Lucro, receita lançada no Simples) — apagado se lê como
+  "conferido".
+
 - **📋 REGISTRAR UM ENVIO QUE ACONTECEU FORA DO APP — e isso NÃO fura "nada se
   marca à mão"** (27/08, Paulo autorizou: *"pode fazer o registro feito por
   fora"*). O caso é a AC MASON: *"a obrigação já foi entregue e as guias
