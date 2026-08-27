@@ -44,6 +44,15 @@ const OPCOES_URL = `https://${PORTAL_HOST}/contribuinte/opcoes.aspx`;
 // Conservador: o portal SP ja eh rate-limit por sessao; nao quero piorar.
 const RETRY_BACKOFF_MS = [0, 3_000, 9_000];
 
+function urlSemSegredos(valor) {
+    try {
+        const u = new URL(valor);
+        return `${u.origin}${u.pathname}`;
+    } catch {
+        return '(URL inválida)';
+    }
+}
+
 // ─── 1 TENTATIVA isolada (sem retry) ─────────────────────────────────────
 async function tentativaLoginHeadlessPortalSp() {
     const certs = await loadCertificate();
@@ -86,13 +95,13 @@ async function tentativaLoginHeadlessPortalSp() {
 
         // Captura console errors pra diagnóstico
         page.on('pageerror', e => console.error('[headless] pageerror:', e.message));
-        page.on('requestfailed', r => console.error('[headless] requestfailed:', r.url(), r.failure()?.errorText));
+        page.on('requestfailed', r => console.error('[headless] requestfailed:', urlSemSegredos(r.url()), r.failure()?.errorText));
 
         // Navega pra LoginICP
         const resp = await page.goto(LOGIN_URL, { waitUntil: 'networkidle', timeout: 60000 });
         const finalUrl = page.url();
         const status = resp?.status?.() || 0;
-        console.log(`[headless-login] LoginICP final URL: ${finalUrl} (status ${status})`);
+        console.log(`[headless-login] LoginICP final URL: ${urlSemSegredos(finalUrl)} (status ${status})`);
 
         // Status 5xx aqui = manutencao do portal SP.
         if (status >= 500) {
@@ -105,7 +114,7 @@ async function tentativaLoginHeadlessPortalSp() {
         const urlPos = page.url();
         const title = await page.title().catch(() => '?');
         const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '').catch(() => '');
-        console.log(`[headless-login] URL pós-wait: ${urlPos} title="${title}" body-head="${bodyText.replace(/\s+/g, ' ').slice(0, 200)}"`);
+        console.log(`[headless-login] URL pós-wait: ${urlSemSegredos(urlPos)} title="${title}" body-bytes=${bodyText.length}`);
 
         // Detecta texto de manutencao mesmo com HTTP 200 (portal SP retorna 200
         // com "Sistema em manutencao" no body em janelas curtas de atualizacao).
@@ -159,12 +168,12 @@ async function tentativaLoginHeadlessPortalSp() {
 
             const urlFinal = page.url();
             const titleFinal = await page.title().catch(() => '?');
-            console.log(`[headless-login] URL após clique: ${urlFinal} title="${titleFinal}"`);
+            console.log(`[headless-login] URL após clique: ${urlSemSegredos(urlFinal)} title="${titleFinal}"`);
         }
 
         if (urlPos.includes('relogin.aspx') || urlPos.includes('avisoacesso')) {
             throw new HeadlessLoginError('cert-rejeitado',
-                `Portal SP rejeitou cert (redirect ${urlPos}).`);
+                `Portal SP rejeitou cert (redirect ${urlSemSegredos(urlPos)}).`);
         }
 
         // Coleta todos os cookies do contexto

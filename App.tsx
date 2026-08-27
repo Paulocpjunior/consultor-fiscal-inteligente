@@ -498,28 +498,6 @@ const App: React.FC = () => {
         return Object.keys(errors).length === 0;
     };
 
-    const checkApiKey = async () => {
-        if ((import.meta as any).env?.VITE_GEMINI_API_KEY) return true;
-
-        // @ts-ignore
-        if (window.aistudio) {
-            try {
-                // @ts-ignore
-                const hasKey = await window.aistudio.hasSelectedApiKey();
-                if (!hasKey) {
-                    // @ts-ignore
-                    await window.aistudio.openSelectKey();
-                    return true;
-                }
-                return true;
-            } catch (e) {
-                console.error("Erro ao verificar chave da API:", e);
-                return false;
-            }
-        }
-        return false;
-    };
-
     const handleSearch = useCallback(async (currentQuery1: string, currentQuery2?: string, contextOverride?: any) => {
         if (isLoading) return;
         if (!validateInputs(currentQuery1, currentQuery2)) return;
@@ -528,8 +506,6 @@ const App: React.FC = () => {
         setError(null);
         setResult(null);
         setComparisonResult(null);
-
-        await checkApiKey();
 
         const currentSearchType = contextOverride?.type || searchType;
         const currentMode = contextOverride?.mode || mode;
@@ -607,8 +583,6 @@ const App: React.FC = () => {
         setIsLoading(true);
         setError(null);
         setResult(null);
-
-        await checkApiKey();
 
         if (currentUser) authService.logAction(currentUser.id, currentUser.name, 'search_reforma', query);
 

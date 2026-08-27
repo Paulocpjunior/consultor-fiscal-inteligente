@@ -56,9 +56,9 @@ import {
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
 import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario } from '../../sefaz-backend/whatsapp-atendimento.js';
-import { saiuPorOutraPlataforma } from '../../sefaz-backend/whatsapp-webhook.js';
+import { saiuPorOutraPlataforma } from '../../services/sp-connect-message-origin.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
-import { interpretarConversaTxt } from '../../sefaz-backend/whatsapp-import-ultrafox.js';
+import { interpretarConversaTxt } from '../../services/ultrafox-browser-parser.js';
 
 const TOM_TICK: Record<string, string> = {
     ok: 'text-emerald-600 dark:text-emerald-400',

@@ -379,8 +379,8 @@ const REGUAS_VIGIADAS: Regua[] = [
     },
     {
         nome: 'De quem é a mensagem que falhou (nossa × da outra plataforma)',
-        dono: 'sefaz-backend/whatsapp-webhook.js',
-        comoUsar: "import { saiuPorOutraPlataforma } from 'sefaz-backend/whatsapp-webhook.js'",
+        dono: 'services/sp-connect-message-origin.js',
+        comoUsar: "import { saiuPorOutraPlataforma } from 'services/sp-connect-message-origin.js'",
         porque: 'Print do Paulo em 17/08 (conversa da Agatha): a falha de mídia apareceu num balão que a '
             + 'própria tela rotulava "mensagem enviada por outra plataforma" — e a linha de baixo mandava '
             + 'o colaborador converter um PDF que ele nunca enviou. Eram DUAS réguas pro mesmo fato, e '

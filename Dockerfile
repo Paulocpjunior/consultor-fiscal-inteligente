@@ -10,7 +10,6 @@ COPY . .
 
 # ARGs necessarios para o Vite injetar nas envs do bundle no build-time.
 # Os valores vem do gcloud run deploy --build-env-vars-file ou Cloud Build.
-ARG VITE_GEMINI_API_KEY
 ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN
 ARG VITE_FIREBASE_PROJECT_ID
@@ -29,7 +28,6 @@ ARG APP_COMMIT
 # a tela mostra pra diferenciar build novo de HTML velho em cache.
 ARG APP_BUILD_NUMBER
 
-ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
 ENV VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
 ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID

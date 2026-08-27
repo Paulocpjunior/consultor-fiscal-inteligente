@@ -7,6 +7,18 @@ import {
     dataBrParaIso, interpretarConversaTxt, interpretarMensagensCsv,
     idMensagemImportada, prepararMensagensDoTxt,
 } from '../sefaz-backend/whatsapp-import-ultrafox.js';
+import {
+    dataBrParaIso as dataBrParaIsoBrowser,
+    interpretarConversaTxt as interpretarConversaTxtBrowser,
+} from '../services/ultrafox-browser-parser.js';
+
+describe('parser compartilhado com o navegador', () => {
+    it('mantém a mesma leitura do backend', () => {
+        const txt = '[16/08/2026, 14:32:05] Cliente: Olá\ncontinuação';
+        expect(interpretarConversaTxtBrowser(txt)).toEqual(interpretarConversaTxt(txt));
+        expect(dataBrParaIsoBrowser('16/08/2026', '14:32')).toBe(dataBrParaIso('16/08/2026', '14:32'));
+    });
+});
 
 describe('CSV genérico', () => {
     it('detecta ; , e TAB (ler um delimitador só devolve zero linha em silêncio)', () => {
