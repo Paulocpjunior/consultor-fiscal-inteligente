@@ -633,12 +633,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     } | null>(null);
     const [sondando, setSondando] = useState(false);
     const [sondaErro, setSondaErro] = useState<string | null>(null);
-    const rodarSonda = async () => {
+    // ☎️ DE QUAL NÚMERO ESTAMOS FALANDO (Paulo, 26/08): *"já que nosso tronco
+    // chave na URA é o 3155-1554, as ligações por WhatsApp saem por ele; o
+    // 3337 continua sendo o WhatsApp principal"*. A chamada é POR NÚMERO —
+    // sonda, horários, ícone e destino SIP são settings do phone_number_id.
+    // 🚨 Sem este seletor a aba mentia por construção: com dois números
+    // cadastrados, ela lia e ESCREVIA sempre no principal, e o resultado
+    // aparecia no painel da Meta do número errado.
+    const [canalChamada, setCanalChamada] = useState<string>('principal');
+    const rodarSonda = async (canal?: string) => {
         setSondando(true); setSondaErro(null);
-        const r = await sondarChamadas();
+        const r = await sondarChamadas(canal ?? canalChamada);
         setSondando(false);
         if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar, horarios: r.horarios ?? null });
         else setSondaErro(r.error || 'A sonda não respondeu.');
+    };
+    // Trocar de número LIMPA o que estava na tela antes de medir o novo:
+    // resultado do número anterior ao lado do seletor já trocado é a leitura
+    // dupla de sempre — a pessoa lê o estado de um como se fosse do outro.
+    const trocarCanalChamada = (id: string) => {
+        setCanalChamada(id);
+        setSonda(null); setSbc(null); setChamadaResultado(null);
+        setChamadaErro(null); setSondaErro(null);
     };
 
     // 🛠 Escrita explícita na Meta (Paulo, 23/08): horários = os das mensagens;
@@ -664,7 +680,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!await pedirConfirmacao(confirmacao, 'Gravar na Meta')) return;
         setAplicandoChamada(p.acao); setChamadaErro(null); setChamadaResultado(null);
         try {
-            const r = await configurarChamadas(p);
+            const r = await configurarChamadas({ ...p, canal: canalChamada });
             if (!r.ok) { setChamadaErro(r.error || 'A Meta recusou a gravação.'); return; }
             setChamadaResultado({ acao: r.acao, calling: r.calling });
             await rodarSonda(); // a tela volta a dizer o estado REAL, relido da Meta
@@ -1161,6 +1177,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [multiCanal, setMultiCanal] = useState(false);
     const [canalErro, setCanalErro] = useState<string | null>(null);
     const [canalForm, setCanalForm] = useState({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+    // Guarda QUAL canal está em edição — só para a tela dizer que vai
+    // sobrescrever. A gravação já sobrescreve por `id`; sem este aviso, o
+    // botão "Cadastrar número" faria parecer que cria um segundo.
+    const [canalEditando, setCanalEditando] = useState<string | null>(null);
     // 📱 Ativar na Cloud API: PIN de 6 dígitos, por canal. Ele NÃO é guardado —
     // some do estado assim que a Meta responde.
     const [pinCanal, setPinCanal] = useState<Record<string, string>>({});
@@ -1216,6 +1236,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     useEffect(() => { carregarCanais(); }, [carregarCanais]);
     const rotuloCanal = (id: string | null | undefined) =>
         canais.find((c) => c.id === (id || 'principal'))?.rotulo || 'Número principal';
+    // ✏️ Carrega o canal no formulário. O `id` vai junto e é ele que faz a
+    // gravação SOBRESCREVER em vez de criar outro — o backend grava por
+    // `doc(id).set()`.
+    // 🚨 E carrega TODOS os campos, não só o que se quer mudar: o `.set()` é
+    // sem merge, então salvar com o formulário pela metade APAGARIA o
+    // `envToken` e o número pararia de funcionar, calado. É a armadilha do
+    // `setDoc` sem merge de 21/08, do lado da tela.
+    const editarCanal = (c: CanalWhatsapp) => {
+        setCanalEditando(c.id);
+        setCanalErro(null);
+        setCanalForm({
+            id: c.id,
+            rotulo: c.rotulo || '',
+            phoneNumberId: c.phoneNumberId || '',
+            envToken: c.envToken || '',
+            numeroExibicao: c.numeroExibicao || '',
+            wabaId: c.wabaId || '',
+        });
+    };
+
+    const cancelarEdicaoCanal = () => {
+        setCanalEditando(null);
+        setCanalErro(null);
+        setCanalForm({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+    };
+
     const cadastrarCanal = async () => {
         setSalvandoCanal(true);
         setCanalErro(null);
@@ -1223,6 +1269,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             const r = await salvarCanal(canalForm);
             if (!r.ok) { setCanalErro(r.error || 'Falha ao salvar o canal.'); return; }
             setCanalForm({ id: '', rotulo: '', phoneNumberId: '', envToken: '', numeroExibicao: '', wabaId: '' });
+            setCanalEditando(null);
             await carregarCanais();
         } finally { setSalvandoCanal(false); }
     };
@@ -2520,7 +2567,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     não efeito de um clique de diagnóstico.
                                 </p>
 
-                                <button onClick={rodarSonda} disabled={sondando}
+                                {/* ☎️ DE QUAL NÚMERO — Paulo, 26/08: o tronco da URA é o 3155-1554,
+                                    então é NELE que a ligação de WhatsApp deve entrar; o 3337 segue
+                                    como o WhatsApp de mensagem. Chamada é setting do phone_number_id:
+                                    sem escolher, esta aba lia e ESCREVIA sempre no principal. */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">☎️ Número desta configuração</p>
+                                    <select value={canalChamada} onChange={(e) => trocarCanalChamada(e.target.value)} className={CAMPO}>
+                                        {canais.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.rotulo}{c.numeroExibicao ? ` · ${c.numeroExibicao}` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                        ⚠️ A ligação segue o número da CONVERSA: quem fala com um número vê o ☎️
+                                        <strong> daquele</strong> número. Configurar aqui não move a ligação dos outros.
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                        Sonda, horários, ícone e destino SIP abaixo valem para o número escolhido acima.
+                                    </p>
+                                </div>
+
+                                {/* ⚠️ `onClick={rodarSonda}` passaria o EVENTO do clique como se fosse
+                                    o canal — pego pelo tsc, não por mim. Argumento posicional
+                                    novo em função usada como handler é essa armadilha. */}
+                                <button onClick={() => rodarSonda()} disabled={sondando}
                                     className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
                                     {sondando ? 'Perguntando à Meta…' : '🔎 Sondar o estado na Meta'}
                                 </button>
@@ -2560,9 +2632,28 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             "as ligações devem obedecer os mesmos horários das mensagens").
                                             O que aparece depois de gravar é o que a Meta GUARDOU: a rota
                                             re-lê as settings — validação por resultado, não por status. */}
-                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-1">
-                                            🛠 Gravar na Meta
-                                        </p>
+                                        {/* 🚨 O RECORTE VAI JUNTO DO BOTÃO, não só no topo da aba (26/08):
+                                            o Paulo rolou até aqui e perguntou "não vejo botão" — o seletor de
+                                            número estava fora da tela, e daqui dá para clicar em "Cadastrar
+                                            tronco SIP" sem enxergar EM QUAL número isso vai ser gravado.
+                                            Escrita cujo alvo não está à vista é a família do recorte que não
+                                            se declara — e aqui o alvo errado grava destino SIP no número que
+                                            hoje funciona. O seletor está repetido de propósito: quem grava
+                                            precisa ver o alvo no momento do clique, não ter visto antes. */}
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                                🛠 Gravar na Meta
+                                            </p>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400">no número</span>
+                                            <select value={canalChamada} onChange={(e) => trocarCanalChamada(e.target.value)}
+                                                className="text-[11px] font-semibold rounded border border-slate-300 dark:border-slate-600 bg-transparent px-1.5 py-0.5">
+                                                {canais.map((c) => (
+                                                    <option key={c.id} value={c.id}>
+                                                        {c.rotulo}{c.numeroExibicao ? ` · ${c.numeroExibicao}` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                         {chamadaErro && (
                                             <p className="text-[11px] text-red-600 dark:text-red-400">
                                                 ⛔ A Meta recusou a gravação: {chamadaErro}
@@ -2768,7 +2859,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 onClick={async () => {
                                                     setSondandoSbc(true); setSbc(null);
                                                     try {
-                                                        const r = await sondarSbc(sipHost.trim() ? { hostname: sipHost.trim(), porta: Number(sipPorta) || 5061 } : undefined);
+                                                        const r = await sondarSbc(sipHost.trim() ? { hostname: sipHost.trim(), porta: Number(sipPorta) || 5061, canal: canalChamada } : { canal: canalChamada });
                                                         setSbc(r.ok ? r : ({ conclusao: { veredito: 'indeterminado', motivo: r.error || 'Falha ao sondar.', acao: 'Tente de novo; se persistir, é falha do próprio app.' } } as SondaSbc));
                                                     } finally { setSondandoSbc(false); }
                                                 }}
@@ -3165,15 +3256,30 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     {c.rotulo}
                                                     {c.origem === 'env' && <span className="ml-1.5 text-[9px] font-bold text-slate-400">padrão · Cloud Run</span>}
                                                 </p>
-                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${c.pronto
-                                                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                                                    : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
-                                                    {c.pronto ? 'pronto' : 'incompleto'}
-                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                    {/* ✏️ CADASTRO SEM COMO CORRIGIR É BECO (26/08): o painel
+                                                        nascera só com "➕ Novo número", e o 1º cadastro real saiu
+                                                        com um dígito a mais no número de exibição. Sem editar, a
+                                                        saída era redigitar tudo com o MESMO `id` — que o painel
+                                                        nem mostrava. É a família do ✕ do FUNRURAL (14/08): botão
+                                                        que grava nasce com o caminho de volta. */}
+                                                    {c.origem !== 'env' && (
+                                                        <button onClick={() => editarCanal(c)}
+                                                            className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 btn-press">
+                                                            ✏️ editar
+                                                        </button>
+                                                    )}
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${c.pronto
+                                                        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                                        : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
+                                                        {c.pronto ? 'pronto' : 'incompleto'}
+                                                    </span>
+                                                </div>
                                             </div>
                                             <p className="text-[10px] text-slate-400">
                                                 {c.numeroExibicao || 'número não informado'} · id {c.phoneNumberId || '—'}
                                                 {c.envToken ? ` · token em ${c.envToken}` : ''}
+                                                {c.origem !== 'env' && <span className="ml-1 text-slate-500">· canal <code>{c.id}</code></span>}
                                             </p>
                                             {!c.pronto && (c.faltas || []).length > 0 && (
                                                 <p className="text-[10px] text-red-600 dark:text-red-400">falta: {(c.faltas || []).join(' · ')}</p>
@@ -3208,7 +3314,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     ))}
                                 </div>
                                 <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-2.5 space-y-1.5">
-                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">➕ Novo número</p>
+                                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                        {canalEditando ? `✏️ Editando o canal "${canalEditando}"` : '➕ Novo número'}
+                                    </p>
+                                    {canalEditando && (
+                                        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                            Salvar SOBRESCREVE este canal. Os campos vieram preenchidos de propósito —
+                                            apagar um deles apaga o cadastro dele, não o deixa como estava.
+                                        </p>
+                                    )}
                                     <div className="grid grid-cols-2 gap-1.5">
                                         <input value={canalForm.id} onChange={(e) => setCanalForm((f) => ({ ...f, id: e.target.value }))} placeholder="id (ex.: rh)" className={CAMPO} />
                                         <input value={canalForm.rotulo} onChange={(e) => setCanalForm((f) => ({ ...f, rotulo: e.target.value }))} placeholder="Rótulo (ex.: RH)" className={CAMPO} />
@@ -3218,10 +3332,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         <input value={canalForm.wabaId} onChange={(e) => setCanalForm((f) => ({ ...f, wabaId: e.target.value }))} placeholder="WABA id (opcional)" className={`${CAMPO} col-span-2`} />
                                     </div>
                                     {canalErro && <p className="text-[11px] text-red-600 dark:text-red-400">{canalErro}</p>}
-                                    <button onClick={cadastrarCanal} disabled={salvandoCanal}
-                                        className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                        {salvandoCanal ? 'Salvando…' : 'Cadastrar número'}
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                        <button onClick={cadastrarCanal} disabled={salvandoCanal}
+                                            className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                            {salvandoCanal ? 'Salvando…' : canalEditando ? 'Salvar alterações' : 'Cadastrar número'}
+                                        </button>
+                                        {canalEditando && (
+                                            <button onClick={cancelarEdicaoCanal}
+                                                className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 btn-press">
+                                                Cancelar
+                                            </button>
+                                        )}
+                                    </div>
                                     <p className="text-[10px] text-slate-400">
                                         Depois de cadastrar: no Cloud Run, crie a variável com esse NOME e o token do número.
                                         A entrada é roteada pelo próprio aviso da Meta — nada de adivinhar de quem é a mensagem.

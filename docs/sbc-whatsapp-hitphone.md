@@ -473,6 +473,40 @@ minuto fecham isso em definitivo.
 `sudo asterisk -rx 'cdr show status'` antes de tratar a ausência de CDR como
 corroboração: hoje ela não é nem prova nem contraprova.
 
+### 🚨 O NÚMERO IRMÃO É O EXPERIMENTO CONTROLADO (26/08, 18:29)
+
+O Paulo ligou para o **3155-1554** (o BM, cadastrado como 2º canal no mesmo dia)
+e a chamada **tocou NORMALMENTE** até terminar como "Não atendida" — não caiu no
+primeiro toque, que é o sintoma do 3337.
+
+📌 **É a melhor evidência do dia, e ela não veio de medição minha: veio de um
+teste que ele fez por outro motivo.** Ela isola a variável, coisa que nenhuma
+das conferências anteriores conseguiu:
+
+| | 3337-1554 | 3155-1554 |
+|---|---|---|
+| WABA | a mesma | a mesma |
+| Permissão de chamada | vigente até 02/09 | vigente até 02/09 |
+| Chamador / aparelho | o mesmo | o mesmo |
+| Dia | 26/08 | 26/08 |
+| **Modo SIP** | **sim** (aponta o nosso SBC) | **não** |
+| **Resultado** | **toca 1× e morre** | **toca normal** |
+
+Ou seja: conta, permissão, janela de atendimento e chamador estão **descartados
+como causa**. O que quebra é específico da entrega SIP.
+
+⚠️ **A ÚLTIMA PREMISSA A CONFERIR — e ela não se deduz**: que o 3155 de fato NÃO
+está em modo SIP. O app só escreveu `sip.servers[]` para o 3337, mas quem
+responde é a Meta, na aba **"Configurações de ligação"** de cada número. Comparar
+as duas abas é um clique e vira o par de prints que acompanha o chamado.
+Carimbar sem isso seria afirmar configuração de terceiro que ninguém leu.
+
+📌 **REGRA QUE FICA: quando existe um irmão quase idêntico, ele é a melhor
+conferência disponível** — mais barata que instrumentar e mais conclusiva, porque
+elimina de uma vez todas as variáveis que os dois compartilham. É a mesma régua
+do "comparar com o arquivo assinado da PRÓPRIA empresa" (24/08, CF BANK), agora
+em infraestrutura.
+
 ### Conclusão
 
 O que falta não está no SBC nem na configuração que o app escreve. **Não há o
@@ -486,8 +520,22 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 
 ### Texto do chamado (Meta / suporte da WABA)
 
+🐛 **O `phone_number_id` daqui estava com UM dígito errado até 26/08** —
+`1167203`**`28`**`6473367` onde a tela da Meta mostra `1167203`**`20`**`6473367`.
+Corrigido lendo o **Gerenciador do WhatsApp → Números de telefone → (o número)
+→ "Identificação do número de telefone"**, que é a fonte. Um dígito trocado num
+chamado manda o suporte olhar outro número (ou nenhum), e a resposta volta
+dizendo que está tudo certo — a volta mais cara que existe, porque parece
+resposta. **Identificador de conta se COPIA da tela do órgão, nunca se digita.**
+
+⚠️ **E a WABA tem DOIS números**, os dois `Conectado`: `+55 11 3337-1554`
+(`1167203206473367`, o do atendimento e o desta ocorrência) e
+`+55 11 3155-1554` (`1163613100164959`, o BM). O chamado é sobre o **3337**;
+dizer só "nosso número" numa conta com dois é convite para o suporte olhar o
+errado.
+
 > Número: +55 11 3337-1554 · WABA 1289687319936644 · phone_number_id
-> 1167203286473367.
+> 1167203206473367.
 >
 > Chamadas de usuário para a empresa (Business Calling API em modo SIP) são
 > aceitas e terminam como "Não atendida" — nenhum INVITE chega ao nosso SBC.
@@ -519,12 +567,13 @@ de provar que o gravador estava ligado é que o vazio virou prova.
 > nossa (401/403/404/407/488/603) no mesmo período — ou seja, não é o caso de
 > a chamada chegar e ser rejeitada pelo nosso lado: ela não chega.
 >
-> Varredura do log do Asterisk feita em 26/08 às 15:53, cobrindo o período
-> contínuo de 25/08 17:48 a 26/08 15:53 (portanto incluindo a tentativa das
-> 09:30): ZERO linhas com INVITE em todo o dia 26/08, com o logging verbose
-> comprovadamente ativo no momento da varredura. E nenhuma resposta de recusa
-> nossa (401/403/404/407/488/603) no mesmo período — ou seja, não é o caso de
-> a chamada chegar e ser rejeitada pelo nosso lado: ela não chega.
+> COMPARAÇÃO ENTRE OS DOIS NÚMEROS DA MESMA WABA, no mesmo dia e com o mesmo
+> chamador: uma chamada para o +55 11 3155-1554 (phone_number_id
+> 1163613100164959, que NÃO está em modo SIP) às 18:29 tocou NORMALMENTE até
+> terminar como "Não atendida", enquanto as chamadas para o +55 11 3337-1554
+> (em modo SIP) tocam UMA vez e terminam de imediato. Mesma conta, mesma
+> permissão de chamada vigente, mesma janela de atendimento, mesmo aparelho
+> chamador. A única variável diferente entre os dois números é o modo SIP.
 >
 > Verificação do caminho feita em 26/08 às 11:24, a partir do endereço que
 > consta em sip.servers[]: DNS sip.spassessoriacontabil.com.br →

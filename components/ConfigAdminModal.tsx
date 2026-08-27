@@ -495,12 +495,33 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                     <div className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-[11px]">
                                         {webhook.assinaturaWaba.ok ? (
                                             <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                {/* 🚨 LISTA DE NOMES NÃO É RESPOSTA (26/08): ao cortar a
+                                                    plataforma antiga, o Paulo precisava saber QUAL desses
+                                                    apps remover — e três nomes sem dono não decidem nada.
+                                                    Remover o errado desliga o recebimento do escritório
+                                                    inteiro. Quem diz qual é o nosso é a Meta (`debug_token`),
+                                                    nunca o nome (que não é escolhido por nós). */}
                                                 <span className="text-slate-600 dark:text-slate-300">
                                                     <strong>Apps assinados na WABA:</strong>{' '}
-                                                    {(webhook.assinaturaWaba.apps || []).length
-                                                        ? (webhook.assinaturaWaba.apps || []).map((a) => a.nome || a.id).join(' · ')
-                                                        : 'NENHUM — é por isso que mensagem real não chega'}
+                                                    {(webhook.assinaturaWaba.apps || []).length ? (
+                                                        (webhook.assinaturaWaba.apps || []).map((a, i) => (
+                                                            <span key={a.id || i}>
+                                                                {i > 0 && ' · '}
+                                                                <span className={a.nosso ? 'font-bold text-emerald-700 dark:text-emerald-400' : ''}>
+                                                                    {a.nome || a.id}
+                                                                </span>
+                                                                {a.nosso === true && ' ✓ este é o nosso'}
+                                                                {a.nosso === false && ' — de terceiro'}
+                                                            </span>
+                                                        ))
+                                                    ) : 'NENHUM — é por isso que mensagem real não chega'}
                                                 </span>
+                                                {(webhook.assinaturaWaba.apps || []).some((a) => a.nosso === null) && (
+                                                    <span className="block w-full text-[10px] text-amber-700 dark:text-amber-400">
+                                                        ⚠️ Não consegui perguntar à Meta qual app é o nosso — nenhuma marca acima
+                                                        significa "não sei", não "não é nosso". Não remova nada com esta ressalva na tela.
+                                                    </span>
+                                                )}
                                                 <button
                                                     onClick={assinarWaba}
                                                     className="text-[10px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold whitespace-nowrap"
