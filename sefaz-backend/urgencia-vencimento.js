@@ -75,6 +75,20 @@ export function urgenciaDominante(urgencias) {
 }
 
 const DIA_MS = 24 * 60 * 60 * 1000;
+const FUSO_FISCAL = 'America/Sao_Paulo';
+const FORMATADOR_DIA_FISCAL = new Intl.DateTimeFormat('en-CA', {
+    timeZone: FUSO_FISCAL,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+function chaveDiaFiscal(data) {
+    const partes = Object.fromEntries(
+        FORMATADOR_DIA_FISCAL.formatToParts(data).map((p) => [p.type, p.value]),
+    );
+    return Date.UTC(Number(partes.year), Number(partes.month) - 1, Number(partes.day));
+}
 
 /**
  * Dias entre hoje e um vencimento, em dias de CALENDÁRIO (não em horas).
@@ -88,17 +102,28 @@ const DIA_MS = 24 * 60 * 60 * 1000;
  * @returns {number|null} null quando não há data legível — ausente ≠ futura.
  */
 export function diasAteVencimento(vencimento, agoraMs = Date.now()) {
-    const d = paraData(vencimento);
-    if (!d) return null;
-    const meiaNoite = (x) => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
-    return Math.round((meiaNoite(d) - meiaNoite(new Date(agoraMs))) / DIA_MS);
+    const diaVencimento = paraDiaFiscal(vencimento);
+    const agora = new Date(agoraMs);
+    if (diaVencimento == null || !Number.isFinite(agora.getTime())) return null;
+    return Math.round((diaVencimento - chaveDiaFiscal(agora)) / DIA_MS);
 }
 
-function paraData(v) {
+function paraDiaFiscal(v) {
     if (!v) return null;
+    // Datas fiscais sem horário representam um DIA, não um instante UTC.
+    // Preservar os componentes evita que "2026-08-07" vire 06/08 em São Paulo.
+    if (typeof v === 'string') {
+        const dataPura = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+        if (dataPura) {
+            return Date.UTC(Number(dataPura[1]), Number(dataPura[2]) - 1, Number(dataPura[3]));
+        }
+    }
     if (typeof v?.toDate === 'function') {
-        try { return v.toDate(); } catch { return null; }
+        try {
+            const data = v.toDate();
+            return Number.isFinite(data?.getTime?.()) ? chaveDiaFiscal(data) : null;
+        } catch { return null; }
     }
     const d = v instanceof Date ? v : new Date(v);
-    return Number.isFinite(d.getTime()) ? d : null;
+    return Number.isFinite(d.getTime()) ? chaveDiaFiscal(d) : null;
 }

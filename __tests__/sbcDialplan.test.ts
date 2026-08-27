@@ -226,7 +226,7 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
     // Recorta a montagem do STARTUP e a executa com valores de exemplo — o
     // mesmo caminho que roda na máquina do Paulo, sem tocar em gcloud.
     const gerado = (() => {
-        const i = script.indexOf('STARTUP=$(mktemp)');
+        const i = script.indexOf('STARTUP=$(mktemp "${TMPDIR:-/tmp}/cfi-sbc-startup.XXXXXX")');
         const j = script.indexOf('\nEOF\n', i) + '\nEOF\n'.length;
         const dir = fs.mkdtempSync(join(os.tmpdir(), 'sbc-'));
         const monta = join(dir, 'monta.sh');
@@ -240,8 +240,9 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
             script.slice(i, j),
         ].join('\n'));
         execSync(`bash ${monta}`, { stdio: 'pipe' });
-        const arquivos = fs.readdirSync(dir).filter((f) => f.startsWith('tmp.'));
-        return fs.readFileSync(join(dir, arquivos[0]), 'utf8');
+        const arquivos = fs.readdirSync(dir).filter((f) => f.startsWith('cfi-sbc-startup.'));
+        expect(arquivos).toHaveLength(1);
+        return fs.readFileSync(join(dir, arquivos[0]!), 'utf8');
     })();
 
     it('o arquivo que vai para a VM tem sintaxe válida', () => {
@@ -271,7 +272,7 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
     });
 
     it('nenhuma CRASE no heredoc externo (ela vira comando no shell LOCAL)', () => {
-        const i = script.indexOf('STARTUP=$(mktemp)');
+        const i = script.indexOf('STARTUP=$(mktemp "${TMPDIR:-/tmp}/cfi-sbc-startup.XXXXXX")');
         const j = script.indexOf('\nEOF\n', i);
         const comCrase = script.slice(i, j).split('\n')
             .map((l, n) => ({ n, l })).filter(({ l }) => l.includes('`'));

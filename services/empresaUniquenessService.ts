@@ -68,7 +68,9 @@ async function buscarCnpjNaColecao(
             }
         }
         if (snap.docs.length < 500) return null;
-        cursor = snap.docs[snap.docs.length - 1];
+        const ultimoDocumento = snap.docs.at(-1);
+        if (!ultimoDocumento) return null;
+        cursor = ultimoDocumento;
     }
 }
 
