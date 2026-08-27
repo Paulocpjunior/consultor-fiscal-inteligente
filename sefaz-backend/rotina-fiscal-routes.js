@@ -20,6 +20,10 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
 import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
+// 🔒 Os carimbos do fim de mês da competência, em UMA query. Ver o comentário
+// de `lerFechamentosDaCompetencia`: cada card buscando o seu era ~400 idas ao
+// Firestore e o HTTP 429 do print de 27/08.
+import { lerFechamentosDaCompetencia } from './fechamento-store.js';
 
 /**
  * Cobertura do catálogo para UM cliente.
@@ -331,6 +335,9 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         console.warn('[rotina] tipo de certificado indisponível:', e.message);
     }
 
+    // UMA query para os carimbos da competência inteira — nunca uma por empresa.
+    const carimbos = await lerFechamentosDaCompetencia(db, competencia);
+
     const rotinas = empresas.map((e) => montarRotinaFiscal({
         // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
         // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
@@ -347,6 +354,12 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         capturaAtiva: e.capturaAtiva,
         capturaPorAgenteLocal: empresasA3.has(e.id),
     }));
+
+    // 🔒 O carimbo viaja JUNTO da rotina: é ele que o bloco "Dar fim de mês"
+    // precisa, e buscá-lo por card foi o que produziu o 429.
+    for (const r of rotinas) {
+        r.fechamento = carimbos.get(String(r.empresa?.id || '')) || null;
+    }
 
     // O ISS e as CONTAGENS voltam juntos: os três são montados AQUI, numa
     // leitura só, e o painel os publica. Recalculá-los fora faria os dois

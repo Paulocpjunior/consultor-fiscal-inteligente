@@ -23,15 +23,24 @@
  * reabrir vivem no backend. A tela exibe o que ele respondeu — cópia da régua
  * na tela é contornável, e divergiria.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
+// ⚠️ AQUI SÓ ENTRAM OS **ATOS** (fechar/reabrir). A LEITURA saiu de propósito:
+// este bloco é renderizado uma vez por EMPRESA, e um `fetch` no mount virava
+// ~400 requisições simultâneas ao abrir a Rotina do Mês — foi o **HTTP 429** do
+// print de 27/08. O estado chega por PROPS, do painel, que já lê tudo numa
+// leitura só. Ver `lerFechamentosDaCompetencia`.
 import {
-    situacaoFimDeMes, darFimDeMes, reabrirCompetencia,
-    type SituacaoFimDeMes, type BloqueioFimDeMes,
+    darFimDeMes, reabrirCompetencia,
+    type FechamentoCompetencia, type BloqueioFimDeMes,
 } from '../services/fimDeMesService';
 
 interface Props {
     empresaId: string;
     competencia: string;
+    /** O carimbo, vindo do painel — NUNCA buscado aqui (ver o 429 acima). */
+    fechamento?: FechamentoCompetencia | null;
+    /** Os bloqueios, derivados das etapas que o painel já calculou. */
+    bloqueios: BloqueioFimDeMes[];
     /** Só admin reabre (decisão do Paulo) — sem isso o botão nem aparece. */
     ehAdmin?: boolean;
     /** Leva à tela da etapa que está bloqueando. */
@@ -46,22 +55,15 @@ const fmtDataHora = (iso?: string | null) => {
     return isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR');
 };
 
-const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrPara, onMudou }) => {
-    const [sit, setSit] = useState<SituacaoFimDeMes | null>(null);
+const FimDeMesBloco: React.FC<Props> = ({
+    empresaId, competencia, fechamento: f, bloqueios: bloqueiosDoPainel,
+    ehAdmin, onIrPara, onMudou,
+}) => {
     const [ocupado, setOcupado] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [bloqueiosDaRecusa, setBloqueiosDaRecusa] = useState<BloqueioFimDeMes[]>([]);
     const [motivo, setMotivo] = useState('');
     const [pedindoMotivo, setPedindoMotivo] = useState(false);
-
-    const carregar = useCallback(async () => {
-        setErro(null);
-        const r = await situacaoFimDeMes(empresaId, competencia);
-        setSit(r);
-        if (!r.ok) setErro(r.erro || 'Não foi possível ler a situação da competência.');
-    }, [empresaId, competencia]);
-
-    useEffect(() => { void carregar(); }, [carregar]);
 
     const fechar = async () => {
         // ⚠️ PERGUNTA ANTES: fechar muda o que o Contábil vai importar, e só um
@@ -80,7 +82,8 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
             setBloqueiosDaRecusa(r.bloqueios || []);
             return;
         }
-        await carregar();
+        // Quem recarrega é o PAINEL — uma leitura para a tela toda. Recarregar
+        // aqui seria a leitura por empresa voltando pela porta de trás.
         onMudou?.();
     };
 
@@ -90,19 +93,13 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
         setOcupado(false);
         if (!r.ok) { setErro(r.erro || 'Não foi possível reabrir.'); return; }
         setPedindoMotivo(false); setMotivo('');
-        await carregar();
         onMudou?.();
     };
 
-    if (!sit) {
-        return <p className="text-[11px] text-slate-400">Lendo a situação da competência…</p>;
-    }
-
-    const f = sit.fechamento;
-    const pre = sit.precondicao;
-    // Os bloqueios da RECUSA vencem os da leitura: eles são do instante do
+    // Os bloqueios da RECUSA vencem os do painel: eles são do instante do
     // clique, e a tela não pode mostrar dois retratos do mesmo fato.
-    const bloqueios = bloqueiosDaRecusa.length ? bloqueiosDaRecusa : (pre?.bloqueios || []);
+    const bloqueios = bloqueiosDaRecusa.length ? bloqueiosDaRecusa : bloqueiosDoPainel;
+    const pre = { pode: bloqueiosDoPainel.length === 0 };
 
     // ── FECHADA ─────────────────────────────────────────────────────────────
     if (f && f.estado === 'fechada') {

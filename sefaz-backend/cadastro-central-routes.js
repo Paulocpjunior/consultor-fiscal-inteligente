@@ -43,7 +43,7 @@ import {
 // 🔒 FASE 5 — o Contábil importa o FECHAMENTO, nunca a ficha (a ficha é um
 // registro VIVO: alguém edita e o número muda depois da importação).
 import { linhaDoFechamento, resumirFechamentos } from './cadastro-central-fechamentos.js';
-import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+import { lerFechamentoDaCompetencia, lerFechamentosDaCompetencia } from './fechamento-store.js';
 import { normalizarCompetencia } from './competencia.js';
 
 const router = Router();
@@ -276,11 +276,14 @@ router.get('/fechamentos', autorizar, async (req, res) => {
         }
         const db = getDb();
         const { empresas } = await lerCadastro(db);
-        const linhas = [];
-        for (const empresa of empresas) {
-            const fechamento = await lerFechamentoDaCompetencia(db, empresa.id, competencia);
-            linhas.push(linhaDoFechamento({ empresa, competencia, fechamento }));
-        }
+        // 🚨 UMA query para os carimbos da competência inteira. O laço que
+        // estava aqui fazia ~420 leituras por chamada — a MESMA classe que
+        // produziu o HTTP 429 na Rotina do Mês (27/08), e aqui num túnel que
+        // outro app chama.
+        const carimbos = await lerFechamentosDaCompetencia(db, competencia);
+        const linhas = empresas.map((empresa) => linhaDoFechamento({
+            empresa, competencia, fechamento: carimbos.get(String(empresa.id)) || null,
+        }));
         return res.json({ ok: true, competencia, resumo: resumirFechamentos(linhas), fechamentos: linhas });
     } catch (e) {
         console.error('[cadastro-central/fechamentos]', e);

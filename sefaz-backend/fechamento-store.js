@@ -46,3 +46,39 @@ export async function lerFechamentoDaCompetencia(db, empresaId, competencia) {
         return null;
     }
 }
+
+/**
+ * TODOS os carimbos de uma competência — **uma query só**.
+ *
+ * 🚨 NASCEU DE UM DEFEITO MEU (27/08, o print do Paulo com **HTTP 429** na
+ * Rotina do Mês): eu pus o bloco do fim de mês dentro do `map` das empresas, e
+ * cada card disparava o próprio `GET /situacao` no mount. Com ~400 clientes
+ * isso é ~400 requisições simultâneas contra um teto de 600/min — e, pior,
+ * cada uma relia o MÊS INTEIRO de documentos.
+ *
+ * A régua estava escrita no topo do arquivo que eu editei: *"junta as quatro
+ * fontes reais numa leitura só — nada por empresa, senão seriam ~400 idas ao
+ * Firestore"*.
+ *
+ * ⚠️ Filtra por `competencia`, não pelo id: o id é `${empresaId}_${comp}` e
+ * montar 400 ids para um `getAll` seria a mesma leitura por empresa com outra
+ * roupa.
+ */
+export async function lerFechamentosDaCompetencia(db, competencia) {
+    const comp = normalizarCompetencia(competencia);
+    const mapa = new Map();
+    if (!comp || !db) return mapa;
+    try {
+        const snap = await db.collection(COLECAO_FECHAMENTOS)
+            .where('competencia', '==', comp).get();
+        snap.forEach((d) => {
+            const dados = d.data() || {};
+            if (dados.empresaId) mapa.set(String(dados.empresaId), dados);
+        });
+    } catch (e) {
+        // Falha devolve o mapa VAZIO — "gere/mostre como sempre", que é o
+        // comportamento de antes do ato. Nunca derruba a tela da carteira.
+        console.warn(`[fechamento-store] carimbos de ${comp} indisponíveis:`, e.message);
+    }
+    return mapa;
+}

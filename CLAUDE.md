@@ -5,6 +5,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 UMA REQUISIÇÃO POR CARD DERRUBA A TELA — HTTP 429, e o defeito foi MEU**
+  (27/08, print do Paulo: a Rotina do Mês trazendo `HTTP 429` no lugar da
+  lista). Ao ligar o "Dar fim de mês" eu pus o bloco dentro do `map` das
+  empresas, e **cada card disparava o próprio `GET /situacao` no mount**. Com
+  ~400 clientes isso é ~400 requisições SIMULTÂNEAS contra o teto de 600/min do
+  `apiLimiter` — e, pior, **cada uma relia o MÊS INTEIRO de documentos**, porque
+  a rota monta a rotina daquela empresa.
+  🔴 **A RÉGUA ESTAVA ESCRITA NO TOPO DO ARQUIVO QUE EU EDITEI**, desde 28/07:
+  *"junta as quatro fontes reais numa leitura só (**nada por empresa, senão
+  seriam ~400 idas ao Firestore**)"*. Não foi falta de conhecimento: foi não ter
+  lido o cabeçalho do que eu estava mexendo.
+  ✂️ `lerFechamentosDaCompetencia` — **UMA query** para a competência inteira,
+  filtrando por `competencia` (montar 400 ids para um `getAll` seria a leitura
+  por empresa com outra roupa). O painel anexa o carimbo a cada rotina e o bloco
+  recebe **tudo por PROPS**: ele só chama o backend quando a PESSOA AGE (fechar,
+  reabrir), que é um clique por vez.
+  🔴 **E O TÚNEL DO CCI TINHA O MESMO DEFEITO** — um laço de ~420 leituras por
+  chamada, numa rota que OUTRO APP consome. Corrigido no mesmo PR.
+  📌 **REGRA QUE FICA: componente renderizado POR LINHA de uma lista de carteira
+  recebe o estado por PROPS — quem lê é o painel, uma vez.** Se o componente
+  precisa de um dado que o painel não tem, quem muda é o PAINEL. Travado por
+  varredura (`semRequisicaoPorCard.test.ts`): o bloco não pode importar a
+  leitura por empresa nem ter `useEffect` de carga, e quem responde pela
+  carteira inteira não lê carimbo dentro de laço.
+  ⚠️ **E o 429 é o sintoma BARULHENTO — o silencioso era o custo.** A tela
+  gritou; o que ninguém veria é que abrir a Rotina passou a custar ~400 leituras
+  do mês inteiro. Defeito que aparece é sorte.
+
 - **🔒 CONFERIR O ESTADO DA MAIN ANTES DE CADA MERGE — não só depois** (27/08,
   Paulo autorizou: *"sim quero que confira, assim evita ter q mandar outro
   agente auditar seu trabalho"*).

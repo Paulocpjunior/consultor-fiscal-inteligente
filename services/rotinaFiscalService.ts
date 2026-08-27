@@ -49,6 +49,14 @@ export interface IssDaRotina {
 }
 
 export interface RotinaEmpresa {
+    /**
+     * 🔒 O carimbo do fim de mês desta empresa/competência — vem do PAINEL.
+     *
+     * Ele viaja aqui de propósito: cada card buscando o seu era ~400
+     * requisições simultâneas ao abrir a Rotina, e foi o **HTTP 429** de
+     * 27/08. `null` = competência aberta.
+     */
+    fechamento?: import('./fimDeMesService').FechamentoCompetencia | null;
     empresa: { id: string; nome: string; cnpj: string; regime: 'simples' | 'lucro' } | null;
     competencia: string;
     iss: IssDaRotina | null;

@@ -58,6 +58,21 @@ const FAROL_CARD: Record<string, string> = {
     pendente: 'border-red-300 dark:border-red-700',
 };
 
+/**
+ * As etapas ABERTAS viram os bloqueios do fim de mês.
+ *
+ * ⚠️ Isto NÃO é uma segunda cópia da régua: quem decide o que é "fechada" é o
+ * backend, e ele já mandou o `status` de cada etapa pronto. Aqui é só o
+ * recorte das que não fecharam — e é o que evita uma requisição por card
+ * (o HTTP 429 de 27/08).
+ */
+const FECHADAS_NA_TELA = new Set(['concluida', 'na']);
+export const bloqueiosDasEtapas = (etapas: EtapaRotina[]) =>
+    (etapas || []).filter((e) => !FECHADAS_NA_TELA.has(e.status)).map((e) => ({
+        id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
+        resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
+    }));
+
 /** Trilha das 5 etapas de uma empresa. */
 const Trilha: React.FC<{ etapas: EtapaRotina[]; destaque?: string }> = ({ etapas, destaque }) => (
     <div className="flex items-center gap-0 flex-wrap">
@@ -380,6 +395,11 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                         <FimDeMesBloco
                                             empresaId={r.empresa.id}
                                             competencia={competencia}
+                                            // 🚨 O carimbo e os bloqueios vêm do PAINEL, que já leu
+                                            // tudo numa requisição. Cada card buscando o seu era
+                                            // ~400 requisições simultâneas — o HTTP 429 de 27/08.
+                                            fechamento={r.fechamento || null}
+                                            bloqueios={bloqueiosDasEtapas(r.etapas)}
                                             ehAdmin={ehAdmin}
                                             onIrPara={(etapaId) => onIrPara?.(etapaId, r.empresa)}
                                             onMudou={() => carregar(competencia)}
