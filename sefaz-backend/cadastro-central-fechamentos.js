@@ -110,6 +110,14 @@ export function linhaDoFechamento({ empresa, competencia, fechamento }) {
         fechadoPor: fechamento.fechadoPor?.email || null,
         // RESULTADO, nunca insumo — o carimbo já nasce assim (`CAMPOS_APURADOS`).
         apurado: fechamento.apurado || null,
+        // 🔒 DE ONDE VEIO O APURADO, e a ressalva quando ele é do Simples.
+        //
+        // Sem isto o Contábil recebe um `apurado` todo `null` e conclui *"este
+        // cliente não teve movimento"* — afirmação que ninguém fez. No Simples
+        // o valor do DAS não vive na ficha: ele é emitido no card do Simples,
+        // e o que este carimbo congela é o ACERVO e o LASTRO do mês.
+        apuradoFonte: fechamento.apuradoFonte || null,
+        apuradoRessalva: fechamento.apuradoRessalva || null,
         // 🚨 O LASTRO ATRAVESSA. Sem ele o Contábil importa número fechado que
         // pode ter ZERO documento por trás (o caso EXPERTE, 15/08) sem nenhuma
         // ressalva na tela dele.

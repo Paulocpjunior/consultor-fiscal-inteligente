@@ -22,6 +22,10 @@ export interface LinhaDoFechamento {
     fechadoPor: string | null;
     /** RESULTADO, nunca insumo. Ausência é `null`, nunca 0. */
     apurado: Record<string, number | null> | null;
+    /** 'ficha-lucro' | 'simples' | 'simples-detalhado' — de onde veio o apurado. */
+    apuradoFonte?: string | null;
+    /** Ressalva do Simples: o valor do DAS não vive na ficha. */
+    apuradoRessalva?: string | null;
     lastro: { situacao: string | null; cor: string | null; mensagem: string | null } | null;
     corte: {
         instante: string | null;

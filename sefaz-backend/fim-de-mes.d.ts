@@ -50,6 +50,10 @@ export interface Fechamento {
     corte: CorteDoFechamento | null;
     /** Valores APURADOS — ausência é `null`, nunca 0. */
     apurado: Record<string, number | null>;
+    /** 'ficha-lucro' | 'simples' | 'simples-detalhado'. */
+    apuradoFonte?: string | null;
+    /** Ressalva do Simples: o valor do DAS não vive na ficha financeira. */
+    apuradoRessalva?: string | null;
     fichaId: string | null;
     lastro: unknown | null;
     etapas: EtapaNoFechamento[];
@@ -90,6 +94,12 @@ export function montarFimDeMes(args: {
     ficha: unknown;
     corte?: CorteDoFechamento | null;
     lastro?: unknown;
+    /**
+     * A apuração do DONO (`acharApuracaoDaCompetencia`) — ela conhece as TRÊS
+     * fontes. Sem ela o Simples, que não tem `fichaFinanceira`, era recusado
+     * com "sem apuração registrada" DEPOIS de a Rotina dizer "pronto".
+     */
+    apuracao?: { fonte?: string; totalImpostos?: number | null; receita?: number | null } | null;
     quem?: Partial<QuemFechou> | null;
     agoraIso: string;
     anterior?: Partial<Fechamento> | null;

@@ -28,6 +28,10 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { montarRotinasDaCompetencia } from './rotina-fiscal-routes.js';
+// 🚨 O DONO DA APURAÇÃO — ele conhece as TRÊS fontes (ficha do Lucro,
+// faturamentoManual e faturamentoMensalDetalhado do Simples). O carimbo lia
+// só a ficha e bloqueava a carteira inteira do Simples.
+import { acharApuracaoDaCompetencia } from './rotina-fiscal.js';
 // 🚨 O DONO DO INSUMO — este bloco montava o objeto da empresa à mão e a tela
 // dizia "pronto" enquanto o botão recusava (27/08). Ver o módulo.
 import { empresaDaRotina, COLECOES_DA_ROTINA } from './rotina-empresa-insumo.js';
@@ -176,11 +180,20 @@ router.post('/fechar', requireAuth, async (req, res) => {
         // derruba o fechamento — ela só deixa o carimbo sem a ressalva, e o
         // núcleo grava `null`, que é "não conferi", nunca "está tudo certo".
         let lastro = null;
+        const apuracao = acharApuracaoDaCompetencia(r.empresa.paraRotina, r.competencia);
         try {
+            // ⚠️ O NÚMERO É O MESMO QUE A ETAPA 3 CRUZA: no Lucro o imposto da
+            // ficha, no Simples a RECEITA lançada (lá o `totalImpostos` é null
+            // porque o DAS não vive na ficha). Ler só a ficha deixava a maior
+            // parte da carteira com o lastro apagado — e apagado se lê como
+            // "conferido".
+            const temImposto = apuracao?.totalImpostos != null
+                && Number.isFinite(Number(apuracao.totalImpostos));
             lastro = conferirFichaContraDocumentos({
-                valorApurado: Number(ficha?.totalImpostos ?? 0),
+                valorApurado: temImposto ? apuracao.totalImpostos : (apuracao?.receita ?? Number(ficha?.totalImpostos ?? 0)),
                 documentos: eCaptura ? contagem.total : null,
-                rotulo: 'A apuração',
+                rotulo: temImposto ? 'A apuração' : 'A receita lançada',
+                receitaSemDocumento: 0,
             });
         } catch (e) {
             console.warn('[fim-de-mes] lastro indisponível:', e.message);
@@ -193,6 +206,9 @@ router.post('/fechar', requireAuth, async (req, res) => {
             regime: r.empresa.colecao === 'simples_empresas' ? 'SIMPLES' : (r.empresa.regimePadrao || null),
             rotina: r.rotina,
             ficha,
+            // A MESMA leitura que fechou a etapa 3 — perguntar de outro jeito
+            // aqui foi o que fez a tela dizer "pronto" e o botão recusar.
+            apuracao,
             corte: montarCorte({ agoraIso, state: cursor, documentos: contagem }),
             lastro,
             quem: { uid: req.user?.uid || null, email: req.user?.email || null, nome: req.user?.name || null },

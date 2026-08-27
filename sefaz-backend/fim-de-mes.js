@@ -176,6 +176,10 @@ export function montarCorte({ agoraIso, state, documentos }) {
 export function montarFimDeMes({
     empresaId, competencia, regime = null,
     rotina, ficha, corte, lastro = null,
+    // 🚨 A APURAÇÃO VEM DO DONO (`acharApuracaoDaCompetencia`), não da ficha.
+    // Ver o bloco da recusa logo abaixo: a ficha é do LUCRO, e o Simples —
+    // que é a maior parte da carteira — não tem nenhuma.
+    apuracao = null,
     quem, agoraIso, anterior = null,
 }) {
     const comp = normalizarCompetencia(competencia);
@@ -201,9 +205,25 @@ export function montarFimDeMes({
     const pre = podeDarFimDeMes(rotina);
     if (!pre.pode) return { ok: false, bloqueios: pre.bloqueios, motivo: pre.motivo };
 
-    // A ficha é a fonte dos valores. Sem ficha não há o que carimbar — e a
-    // etapa 3 da rotina já teria barrado, então isto é cinto e suspensório.
-    if (!ficha) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 ISTO BLOQUEAVA TODO O SIMPLES — e o comentário antigo dizia por quê,
+    // com a premissa errada: *"a etapa 3 da rotina já teria barrado, então isto
+    // é cinto e suspensório"*.
+    //
+    // Falso. A etapa 3 fecha pelo DONO (`acharApuracaoDaCompetencia`), que
+    // conhece TRÊS fontes: a `fichaFinanceira[]` do Lucro, o `faturamentoManual`
+    // e o `faturamentoMensalDetalhado` do Simples. Só a PRIMEIRA é "ficha".
+    //
+    // Resultado, no print do Paulo (REGINA CELIA PIRES · 07/2026, Simples): a
+    // Rotina dizia **"✓ Pronto para dar fim de mês"** com as cinco etapas
+    // verdes, e o botão recusava com *"sem apuração registrada"*. **Duas
+    // leituras do mesmo fato na mesma tela**, pela terceira vez esta semana —
+    // e desta o alcance é a maior parte da carteira, porque o Simples nunca
+    // teve fim de mês.
+    //
+    // A pré-condição é a ROTINA. Quem chegou aqui já passou pela etapa 3.
+    // ═══════════════════════════════════════════════════════════════════════
+    if (!ficha && !apuracao) {
         return {
             ok: false, bloqueios: [],
             motivo: 'Sem apuração registrada nesta competência não há valor a fechar.',
@@ -225,6 +245,21 @@ export function montarFimDeMes({
             fechadoPor: quem ? { uid: quem.uid || null, email: quem.email || null, nome: quem.nome || null } : null,
             corte: corte || null,
             apurado: valoresApuradosDaFicha(ficha),
+            // 🔒 DE ONDE VEIO O APURADO — sem isto o CCI não sabe interpretar o
+            // que recebeu, e um `apurado` todo null do Simples se leria como
+            // "este cliente não teve movimento", que é uma afirmação que
+            // ninguém fez.
+            apuradoFonte: ficha ? 'ficha-lucro' : (apuracao?.fonte || null),
+            // ⚠️ E a RESSALVA do Simples: o valor do DAS **não vive na ficha**
+            // — ele é calculado e emitido no card do Simples e registrado em
+            // `das_emitidos`. Carimbar zero aqui seria afirmar que não há
+            // imposto; carimbar a RECEITA seria levar INSUMO, e insumo convida
+            // o outro lado a RECALCULAR (a régua do R-2055).
+            apuradoRessalva: (!ficha && apuracao)
+                ? 'Cliente do Simples Nacional: a apuração desta competência é o faturamento lançado, '
+                  + 'e o valor do DAS não vive na ficha financeira — ele é emitido no card do Simples. '
+                  + 'Este carimbo congela o ACERVO e o LASTRO do mês; o valor do DAS se confere lá.'
+                : null,
             fichaId: ficha?.id || null,
             lastro: lastro || null,
             // O RETRATO das etapas no instante do fechamento. Sem ele, meses
