@@ -108,7 +108,13 @@ export interface WebhookStatus {
     faltas: string[];
     caminhoWebhook: string;
     /** Apps assinados na WABA — a 2ª amarração: sem o nosso app aqui, evento real não chega. */
-    assinaturaWaba: { ok: boolean; wabaId?: string; apps?: { id: string | null; nome: string | null }[]; erro?: string } | null;
+    assinaturaWaba: {
+        ok: boolean; wabaId?: string; erro?: string;
+        /** Qual app é o NOSSO — vem do `debug_token` da Meta, não de dedução. */
+        nossoAppId?: string | null;
+        /** `nosso: null` = não deu para perguntar; nunca `false` por omissão. */
+        apps?: { id: string | null; nome: string | null; nosso?: boolean | null }[];
+    } | null;
     ultimoEventoEm: string | null;
     ultimosStatus: WebhookStatusEntrega[];
     ultimasMensagens: WebhookMensagemRecebida[];
