@@ -303,11 +303,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **A ROTINA DE UMA EMPRESA SAI DO MESMO DONO DO PAINEL**
   (`montarRotinasDaCompetencia`, extraída neste PR): uma segunda montagem
   divergiria no pior lugar — o painel diria "pronto" e o botão recusaria.
-  🚩 **O QUE ESTE PR NÃO FAZ, e é a próxima leva**: os LEITORES fiscais ainda
-  não perguntam ao carimbo (livro, os dois SPED, guias e DIPAM continuam
-  gerando ao vivo), e o **túnel do CCI ainda não entrega o fechamento**. O que
-  já protege o número hoje é o carimbo guardar uma **CÓPIA** dos apurados —
-  editar a ficha não o altera — mais a trava que recusa a edição da ficha de
+  ⚠️ **E ISSO NÃO BASTOU — o insumo divergiu no dia seguinte** (o print da
+  REGINA CELIA, 27/08): o dono da MONTAGEM foi respeitado e o do CARREGAMENTO
+  não, então a tela dizia "pronto" e o botão recusava exatamente como este
+  comentário previa. Ver o mata-burro do `rotina-empresa-insumo.js`.
+  ✅ **AS DUAS PENDÊNCIAS DESTE PR FECHARAM EM 27/08**: os dois SPED passaram a
+  gerar do ACERVO QUE O CARIMBO CONGELOU (`acervo-do-fechamento.js`) e o
+  **túnel do CCI entrega** (`/api/admin/cadastro/fechamentos`) — com o Contábil
+  **consumindo** do outro lado (`reinf/fechamento-cfi.js` no
+  `plano-contas-iob`), no lugar do apurado que era DIGITADO lá.
+  🚩 **O QUE AINDA GERA AO VIVO**: guias e DIPAM não perguntam ao carimbo. O que
+  protege o número hoje é o carimbo guardar uma **CÓPIA** dos apurados — editar
+  a ficha não o altera — mais a trava que recusa a edição da ficha de
   competência fechada, com a frase mandando pedir a reabertura ao admin.
 
 - **🚨 O CATÁLOGO DE COLEÇÕES TINHA UM FANTASMA — e a varredura só fechava UMA
