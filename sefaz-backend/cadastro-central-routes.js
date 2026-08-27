@@ -9,6 +9,8 @@
 //   GET /api/admin/cadastro/responsaveis/:cnpj
 //   GET /api/admin/cadastro/certificados          (fase 3 — METADADO, nunca a chave)
 //   GET /api/admin/cadastro/certificados/:cnpj
+//   GET /api/admin/cadastro/fechamentos?competencia=      (fase 5 — o CCI importa)
+//   GET /api/admin/cadastro/fechamentos/:cnpj?competencia=
 //
 // Ideia do Paulo (07/08), depois que a colaboradora recebeu "CNPJ não
 // cadastrado" para uma empresa cadastrada. O mesmo cliente vive no CFI, no
@@ -38,6 +40,11 @@ import { montarCertificados, aptidaoDeAssinatura } from './cadastro-central-cert
 import {
     montarUsuariosCadastro, normalizarUsuarioCadastro, acessoAoModulo, validarDepartamentos,
 } from './cadastro-central-departamentos.js';
+// 🔒 FASE 5 — o Contábil importa o FECHAMENTO, nunca a ficha (a ficha é um
+// registro VIVO: alguém edita e o número muda depois da importação).
+import { linhaDoFechamento, resumirFechamentos } from './cadastro-central-fechamentos.js';
+import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+import { normalizarCompetencia } from './competencia.js';
 
 const router = Router();
 
@@ -235,6 +242,79 @@ router.get('/certificados/:cnpj', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[cadastro-central/certificados/cnpj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── FECHAMENTOS DA COMPETÊNCIA (fase 5, 26/08) ──────────────────────────────
+//
+// Paulo: *"o departamento contábil, através do CCI, deve fazer a importação
+// com a mesma exatidão dos valores apurados e o mês fechado"*.
+//
+// ⚠️ O QUE ATRAVESSA É O CARIMBO, NUNCA A FICHA. A ficha é um registro VIVO —
+// servi-la aqui faria o Contábil puxar um valor que pode mudar depois, e a
+// divergência voltaria pela porta de trás, calada.
+//
+// ⚠️ E O CCI NÃO RECALCULA: a `ressalva` vai em toda linha entregue. É a régua
+// já provada no R-2055 — dois números para o mesmo fato é o pior defeito de um
+// arquivo fiscal.
+
+/** A competência da consulta — sem ela não há o que responder. */
+function competenciaDaQuery(req) {
+    return normalizarCompetencia(req.query.competencia);
+}
+
+router.get('/fechamentos', autorizar, async (req, res) => {
+    try {
+        const competencia = competenciaDaQuery(req);
+        if (!competencia) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Informe a competência (?competencia=AAAA-MM). Sem ela não dá para dizer QUAL '
+                    + 'mês foi fechado — e importar o mês errado não volta atrás.',
+            });
+        }
+        const db = getDb();
+        const { empresas } = await lerCadastro(db);
+        const linhas = [];
+        for (const empresa of empresas) {
+            const fechamento = await lerFechamentoDaCompetencia(db, empresa.id, competencia);
+            linhas.push(linhaDoFechamento({ empresa, competencia, fechamento }));
+        }
+        return res.json({ ok: true, competencia, resumo: resumirFechamentos(linhas), fechamentos: linhas });
+    } catch (e) {
+        console.error('[cadastro-central/fechamentos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/fechamentos/:cnpj', autorizar, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.params.cnpj);
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        }
+        const competencia = competenciaDaQuery(req);
+        if (!competencia) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência (?competencia=AAAA-MM).' });
+        }
+        const db = getDb();
+        const { empresas } = await lerCadastro(db);
+        const empresa = acharEmpresaPorCnpj(empresas, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI. Confira o número; se estiver `
+                    + 'certo, a empresa precisa ser cadastrada.',
+            });
+        }
+        // Empresa cadastrada e com a competência ABERTA responde 200 com o
+        // motivo, não 404: ela existe, e "ainda não fechou" é a resposta, não a
+        // ausência dela — é o mesmo desenho do certificado.
+        const fechamento = await lerFechamentoDaCompetencia(db, empresa.id, competencia);
+        return res.json({ ok: true, ...linhaDoFechamento({ empresa, competencia, fechamento }) });
+    } catch (e) {
+        console.error('[cadastro-central/fechamentos/cnpj]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
