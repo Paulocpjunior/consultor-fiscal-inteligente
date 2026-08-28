@@ -232,7 +232,11 @@ export interface PainelEnvios {
     /** Envios sem registro das etapas do rito — não são completos nem pendência. */
     naoConferidos?: string[];
     porTipo?: Record<string, number>;
-    pendencias?: Record<string, { qtd: number; acao: string; empresas: string[] }>;
+    pendencias?: Record<string, {
+        qtd: number; acao: string; empresas: string[];
+        /** ♻️ Os envios desta causa — é com eles que se refaz o rito. */
+        envioIds?: string[];
+    }>;
     semGestorEmCopia?: string[];
     valorTotal?: number;
     farol?: 'ok' | 'atencao' | 'vazio';
@@ -454,4 +458,34 @@ export async function perguntarDebitosJaEnviados(input: {
     } catch (e: any) {
         return { ok: false, indeterminado: true, error: e?.message || 'falha na consulta' };
     }
+}
+
+
+/**
+ * ♻️ REFAZER O RITO de envios já registrados (admin).
+ *
+ * O status do rito é um CARIMBO do instante do envio: consertar a causa depois
+ * — cadastrar a pasta, gerar a tarefa, corrigir o proxy — não o move sozinho, e
+ * o fim de mês fica travado para sempre (Paulo, 28/08: *"Já criei a pasta e
+ * continua assim"*).
+ *
+ * ⚠️ Não emite nada e não reenvia nada ao cliente: só tenta de novo o
+ * arquivamento e a baixa, que são idempotentes.
+ */
+export async function refazerRitoDosEnvios(logIds: string[]): Promise<{
+    ok: boolean; error?: string;
+    total?: number; arquivados?: number; baixados?: number; semPdf?: number; falhas?: number;
+    resultados?: Array<{ logId: string; ok?: boolean; erro?: string; texto?: string }>;
+}> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/refazer-rito', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logIds }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
 }

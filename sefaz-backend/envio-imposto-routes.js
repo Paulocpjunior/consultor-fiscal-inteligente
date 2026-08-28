@@ -14,6 +14,9 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import { montarPainelEnvios } from './envio-imposto-painel.js';
+// ♻️ Refazer o rito de um envio já registrado — o carimbo é histórico e não
+// se move sozinho quando a causa é consertada depois.
+import { refazerRitoDoEnvio } from './refazer-rito-store.js';
 import { executarRitoEnvioImposto, GESTOR_EMAIL } from './envio-imposto.js';
 import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
@@ -514,6 +517,63 @@ router.get('/painel', requireAuth, async (req, res) => {
         return res.json({ ok: true, gestor: GESTOR_EMAIL, ...painel });
     } catch (e) {
         console.error('[envio-imposto/painel]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * ♻️ REFAZER O RITO de envios já registrados.
+ *
+ * Paulo, 28/08 (VINCENZO GUERRA): *"Já criei a pasta e continua assim, o que eu
+ * faço?"*. O status do rito é um CARIMBO HISTÓRICO — consertar a causa depois
+ * (cadastrar a pasta, gerar a tarefa, corrigir o tenant do proxy) não o move, e
+ * o mês ficava travado para sempre. A única saída oferecida era reenviar a guia
+ * ao cliente, o que DUPLICA a cobrança.
+ *
+ * ⚠️ **LOTE AQUI É SEGURO, e a diferença para "ninguém emite em série" (28/07)
+ * é concreta**: aquela regra protege a EMISSÃO, que cria cobrança. Isto não
+ * emite nada — arquiva um arquivo que já existe e conclui uma tarefa que já
+ * deveria estar concluída, e as duas operações são IDEMPOTENTES. E a causa é
+ * coletiva por natureza: "12 empresas sem pasta" é UMA tarefa.
+ *
+ * ⚠️ Mesmo assim o teto é explícito e a RECUSA diz o número — cortar calado
+ * faria "50 refeitos" passar por "os 200 rodaram".
+ */
+const TETO_REFAZER = 50;
+
+router.post('/refazer-rito', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
+        const ids = Array.isArray(req.body?.logIds) ? req.body.logIds.map(String).filter(Boolean) : [];
+        if (!ids.length) return res.status(400).json({ ok: false, error: 'Informe os envios a refazer (logIds).' });
+        if (ids.length > TETO_REFAZER) {
+            return res.status(400).json({
+                ok: false,
+                error: `São ${ids.length} envios e o teto por rodada é ${TETO_REFAZER}. `
+                    + 'Rode em partes — cortar aqui faria a tela dizer que todos passaram.',
+            });
+        }
+
+        const quem = req.user?.email || req.user?.uid || null;
+        const resultados = [];
+        for (const logId of ids) {
+            try {
+                resultados.push({ logId, ...(await refazerRitoDoEnvio({ logId, quem })) });
+            } catch (e) {
+                // Um envio que explode NÃO derruba a rodada — e volta NOMEADO.
+                resultados.push({ logId, ok: false, erro: e.message });
+            }
+        }
+        const arquivados = resultados.filter((r) => r.sharePoint?.status === 'arquivado').length;
+        const baixados = resultados.filter((r) => ['baixada', 'ja-baixada'].includes(r.baixa?.status)).length;
+        const semPdf = resultados.filter((r) => r.pdfIndisponivel).length;
+        const falhas = resultados.filter((r) => r.ok === false).length;
+        console.log(`[envio-imposto/refazer-rito] ${ids.length} envio(s) por ${quem} — ${arquivados} arquivados, ${baixados} baixados`);
+        return res.json({
+            ok: true, total: ids.length, arquivados, baixados, semPdf, falhas, resultados,
+        });
+    } catch (e) {
+        console.error('[envio-imposto/refazer-rito]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

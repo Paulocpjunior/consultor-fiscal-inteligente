@@ -8,7 +8,7 @@
  * pendência vem agrupada POR CAUSA — que é como se resolve.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { painelEnviosImposto, type PainelEnvios } from '../services/envioImpostoService';
+import { painelEnviosImposto, refazerRitoDosEnvios, type PainelEnvios } from '../services/envioImpostoService';
 
 const competenciaAtual = (): string => {
     const d = new Date();
@@ -99,6 +99,16 @@ const EnviosImpostoPainel: React.FC = () => {
                                 {info.qtd}× {causa}
                             </p>
                             <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">{info.acao}</p>
+                            {/* ♻️ A SAÍDA NASCE ONDE A TRAVA APARECE — e aqui ela
+                                é POR CAUSA, porque é assim que o trabalho se faz:
+                                consertada a pasta (ou o proxy), estes envios
+                                precisam ser tentados de novo, senão o carimbo
+                                antigo trava o fim de mês para sempre. */}
+                            <RefazerRito
+                                causa={causa}
+                                ids={info.envioIds || []}
+                                onFeito={() => carregar(competencia)}
+                            />
                             <details className="mt-1">
                                 <summary className="text-[11px] cursor-pointer text-slate-500 dark:text-slate-400">
                                     Ver empresas ({info.empresas.length})
@@ -150,6 +160,70 @@ const EnviosImpostoPainel: React.FC = () => {
                     )}
                 </>
             )}
+        </div>
+    );
+};
+
+/**
+ * ♻️ REFAZER O RITO desta causa.
+ *
+ * Paulo, 28/08 (VINCENZO GUERRA): *"Já criei a pasta e continua assim, o que eu
+ * faço?"*. O status do rito é um CARIMBO do instante do envio — consertar a
+ * causa depois não o move.
+ *
+ * ⚠️ **A tela DIZ, antes do clique, que nada é reenviado ao cliente.** Sem isso
+ * o botão parece "mandar a guia de novo", que é exatamente o que ninguém pode
+ * fazer sem duplicar a cobrança.
+ *
+ * ⚠️ E nenhuma régua mora aqui: o que é refazível, o teto e a frase do
+ * resultado vêm do backend.
+ */
+const RefazerRito: React.FC<{ causa: string; ids: string[]; onFeito: () => void }> = ({ causa, ids, onFeito }) => {
+    const [rodando, setRodando] = useState(false);
+    const [saida, setSaida] = useState<string | null>(null);
+
+    if (!ids.length) return null;
+
+    const rodar = async () => {
+        if (!window.confirm(
+            `Refazer o rito de ${ids.length} envio(s) — "${causa}"?\n\n`
+            + 'NADA é reenviado ao cliente. O app só tenta de novo a cópia na pasta IMPOSTOS e a baixa '
+            + 'da obrigação. Faz sentido depois de você ter corrigido a causa (cadastrar a pasta, gerar '
+            + 'a tarefa, consertar a conexão).',
+        )) return;
+        setRodando(true); setSaida(null);
+        try {
+            const r = await refazerRitoDosEnvios(ids);
+            if (!r.ok) { setSaida(`Erro: ${r.error}`); return; }
+            // O resultado sai por PARTES, e o que NÃO deu vai junto: "12
+            // refeitos" sobre uma rodada em que o arquivamento falhou de novo
+            // seria a meia-verdade de sempre.
+            const partes = [
+                `${r.arquivados ?? 0} arquivado(s)`,
+                `${r.baixados ?? 0} baixado(s)`,
+                (r.semPdf ?? 0) > 0 ? `${r.semPdf} sem o PDF guardado (o app não guarda a guia depois do envio)` : null,
+                (r.falhas ?? 0) > 0 ? `${r.falhas} falhou/falharam` : null,
+            ].filter(Boolean);
+            setSaida(`De ${r.total} envio(s): ${partes.join(' · ')}.`);
+            onFeito();
+        } catch (e: any) {
+            setSaida(`Erro: ${e?.message || 'falha'}`);
+        } finally { setRodando(false); }
+    };
+
+    return (
+        <div className="mt-1.5 space-y-1">
+            <button
+                onClick={rodar} disabled={rodando}
+                className="text-[11px] px-2 py-1 rounded border border-amber-500 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+            >
+                {rodando ? 'Refazendo…' : `♻️ Refazer o rito destes ${ids.length}`}
+            </button>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                Não reenvia guia ao cliente — só tenta de novo a cópia na pasta e a baixa.
+                Use depois de corrigir a causa acima.
+            </p>
+            {saida && <p className="text-[11px] text-slate-700 dark:text-slate-200">{saida}</p>}
         </div>
     );
 };

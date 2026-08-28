@@ -5,6 +5,53 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **♻️ O STATUS DO RITO É UM CARIMBO HISTÓRICO — consertar a causa depois NÃO
+  o move, e o mês travado ficava travado para sempre** (28/08, Paulo na
+  VINCENZO GUERRA: *"Já criei a pasta e continua assim, o que eu faço?"*).
+  🔴 `sharePoint: {status}` e `baixa: {status}` são gravados no INSTANTE do
+  envio, em `impostos_enviados`. Cadastrar a pasta, gerar a tarefa que faltava
+  ou corrigir o tenant do proxy conserta a CAUSA — e o registro continua
+  dizendo `sem-config` / `sem-tarefa` para sempre. A etapa 5 nunca fecha.
+  🚨 **E A ÚNICA SAÍDA OFERECIDA ERA REENVIAR A GUIA**, que DUPLICA a cobrança
+  no cliente. Ou seja: trava sem caminho, com o único caminho visível sendo o
+  errado — a combinação que a casa mais teme (13/08).
+  ✂️ `refazer-rito-envio.js` (PURO) decide o que se tenta de novo; a casca
+  chama os **DONOS** do envio (`arquivarGuiaNoSharePoint`,
+  `darBaixaDaObrigacao`, extraídos do rito no MESMO PR). Duas implementações do
+  mesmo upload divergiriam, e a divergência apareceria como *"no envio
+  funcionou e no refazer não"*.
+  📌 **ISTO NÃO É "MARCAR COMO FEITO"**, e a diferença é estrutural: nada é
+  carimbado à mão — quem responde continua sendo o SharePoint (o upload de
+  verdade) e a coleção `tarefas` (a baixa de verdade). Falhando de novo, o
+  registro passa a dizer o motivo NOVO, que é mais informativo que o antigo.
+  ⚠️ **O QUE NÃO SE REFAZ, com o motivo na tela**: `arquivado`/`baixada`/
+  `ja-baixada` já fecharam (tentar subiria o mesmo arquivo duas vezes), e
+  `sem-pdf` é desfecho LEGÍTIMO — envio sem anexo não tem o que arquivar, e
+  oferecer "refazer" ali promete o que não existe. ⚠️ Já **sem registro
+  nenhum** É refazível: auditoria anterior ao rito #293 não guarda o resultado,
+  e refazer é justamente o que descobre o estado real.
+  🚨 **O PDF NÃO FICA NO REGISTRO DO ENVIO** (`anexouPdf` é só um booleano) —
+  quem tem o arquivo é a coleção da guia, e hoje isso vale para o **DAS**
+  (`das_emitidos.pdfBase64`). Sem ele o arquivamento **não é sequer tentado**:
+  gravar `erro` ali apagaria o `sem-config`, que é a causa REAL e a que tem
+  conserto. E a ausência sai DITA, com a saída (reenviar pelo app refaz o rito
+  inteiro) — some calado seria o defeito com outra roupa.
+  📌 **LOTE AQUI É SEGURO, e a diferença para *"ninguém emite em série"*
+  (28/07) é concreta**: aquela regra protege a EMISSÃO, que cria cobrança.
+  Refazer não emite nada — arquiva um arquivo que já existe e conclui uma
+  tarefa que já deveria estar concluída, e **as duas operações são
+  IDEMPOTENTES** (a baixa só toca tarefa aberta; tarefa concluída volta como
+  `ja-baixada`). E a causa é coletiva por natureza: *"12 empresas sem pasta"* é
+  UMA tarefa — por isso o botão é POR CAUSA, no painel que já agrupa assim.
+  ⚠️ Teto de 50 por rodada, **RECUSADO com o número** em vez de cortado calado.
+  ⚠️ **E O HISTÓRICO FICA** (`ritoRefeito[]`, as 10 últimas, com antes/depois/
+  quem/quando): *"por que este envio dizia `sem-config` e agora diz
+  `arquivado`?"* é a pergunta que alguém faz ao conferir a competência.
+  📌 **REGRA QUE FICA: status que é CARIMBO de um instante precisa de um jeito
+  de ser refeito quando a causa se conserta.** Sem isso ele não é registro, é
+  sentença — e a diferença aparece meses depois, num mês que não fecha por um
+  problema que já foi resolvido.
+
 - **🚨 "✓ CONECTADO" EM VERDE COM 57 ERROS DE TOKEN LOGO ABAIXO — e é o MESMO
   proxy que arquiva a guia do rito** (28/08, print do Paulo no card **Conexão
   SharePoint**, enquanto ele tentava destravar o fim de mês da VINCENZO).
