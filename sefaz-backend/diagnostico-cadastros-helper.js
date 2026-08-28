@@ -232,6 +232,38 @@ function pendenciasDoSped(df, regimeDaFicha, add) {
 }
 
 /**
+ * 🚦 A EQUIPE ATACA POR CAUSA, NÃO POR EMPRESA.
+ *
+ * Com 400 clientes e catorze campos possíveis, uma lista de empresas não é
+ * fila de trabalho — é um muro. *"12 empresas sem a classificação de IPI"* é
+ * UMA tarefa; doze linhas soltas são doze mistérios. É o mesmo desenho do
+ * painel de envios do rito (#293), que agrupa a pendência pela causa.
+ *
+ * Ordena por quantidade porque é assim que se escolhe o que fazer primeiro.
+ *
+ * @param {Array<{nome?:string, cnpj?:string, pendencias?:Array}>} empresas
+ * @returns {Array<{campo:string, descricao:string, impacto:string, qtd:number, empresas:string[]}>}
+ */
+export function resumirPendenciasPorCampo(empresas) {
+    const porCampo = new Map();
+    for (const e of empresas || []) {
+        for (const p of e?.pendencias || []) {
+            let bucket = porCampo.get(p.campo);
+            if (!bucket) {
+                bucket = { campo: p.campo, descricao: p.descricao, impacto: p.impacto, qtd: 0, empresas: [] };
+                porCampo.set(p.campo, bucket);
+            }
+            bucket.qtd++;
+            // Teto de exibição: a contagem continua inteira, só a lista corta —
+            // e quem lê tem o filtro por campo para ver todas.
+            if (bucket.empresas.length < 50) bucket.empresas.push(e.nome || e.cnpj || '—');
+        }
+    }
+    return [...porCampo.values()].sort((a, b) => b.qtd - a.qtd
+        || String(a.campo).localeCompare(String(b.campo), 'pt-BR'));
+}
+
+/**
  * Classifica gravidade pela quantidade de pendências críticas (UF/IBGE/CNPJ).
  *
  * ⚠️ ALTO é o que IMPEDE a entrega — recusa do PVA ou afirmação errada à

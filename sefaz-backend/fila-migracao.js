@@ -28,14 +28,58 @@
 //    parecer travada quando metade dela já podia ter migrado.
 // ============================================================================
 
-/** Áreas de bloqueio, na ordem em que se resolve. A 1ª é o próximo passo. */
-export const AREAS_BLOQUEIO = ['captura-entrada', 'captura-saida', 'blocos'];
+/**
+ * Áreas de bloqueio, na ordem em que se resolve. A 1ª é o próximo passo.
+ *
+ * 🚦 `cadastro` vem PRIMEIRO (27/08) por dois motivos: é o único que depende
+ * só de nós (os outros esperam o cliente, o agente ou o certificado), e é o
+ * mais barato — alguém preenche um campo. Numa fila ordenada por esforço, o
+ * que se resolve hoje tem de vir antes do que se resolve com terceiro.
+ */
+export const AREAS_BLOQUEIO = ['cadastro', 'captura-entrada', 'captura-saida', 'blocos'];
 
 const ONDE = {
+    cadastro: 'Diagnóstico → Cadastros incompletos',
     'captura-entrada': 'Central de XMLs → Captura → 🔎 Prova de captura',
     'captura-saida': 'Central de XMLs → Importar → ✅ O cliente fez certo?',
     blocos: 'Central de XMLs → 🚦 Migração',
 };
+
+/**
+ * Bloqueio de CADASTRO: falta campo que faz o PVA recusar o arquivo.
+ *
+ * 🚨 A FILA DIZIA "PRONTA" SOBRE EMPRESA QUE O PVA VAI RECUSAR. Ela media
+ * captura de entrada, captura de saída e blocos — e nenhum deles vê o
+ * cadastro. Um cliente com a captura fechada e sem a classificação do
+ * estabelecimento industrial (0002) aparecia no topo da fila, migrava, e a
+ * recusa chegava depois: é o gargalo de 20/08 entrando pela porta de trás.
+ *
+ * ⚠️ A SEVERIDADE DECIDE — e ela é a mesma do diagnóstico:
+ *  · CRÍTICO/ALTO **bloqueia**: sem UF, sem regime ou sem código de tabela
+ *    oficial o arquivo não sai, ou sai afirmando o que não é;
+ *  · MÉDIO vira **ressalva**: o arquivo sai com um padrão que pode não ser o
+ *    daquela empresa (o prazo do ICMS, a apropriação de crédito). Bloquear
+ *    aqui pararia a onda por algo que a entrega suporta.
+ *
+ * ⚠️ E `null` NÃO É "cadastro em dia": é conferência que não aconteceu, e vira
+ * ressalva NOMEADA. Silêncio verde é o defeito que esta fila existe para não
+ * cometer (regra 1 do cabeçalho).
+ */
+function bloqueioCadastro(cadastro) {
+    if (!cadastro) return null;
+    const grav = cadastro.gravidade;
+    if (grav !== 'critico' && grav !== 'alto') return null;
+    const lista = (cadastro.pendencias || [])
+        .filter((p) => p && p.descricao)
+        .map((p) => p.descricao);
+    return {
+        area: 'cadastro',
+        motivo: `Cadastro incompleto (${grav}): ${lista.join(' · ')}`,
+        acao: 'Preencha em Empresas → Dados Fiscais. Sem estes campos o arquivo não sai '
+            + 'ou sai declarando o que a empresa não é — e a recusa só aparece no PVA.',
+        codigo: grav,
+    };
+}
 
 /**
  * Bloqueio de ENTRADA: a captura contra a SEFAZ está completa?
@@ -115,9 +159,15 @@ function bloqueioBlocos(prontidao) {
  * @param {object} [p.veredito] saída de `vereditoDoCnpj` (prova de captura)
  * @param {object} [p.aptidao]  linha de `montarAptidaoSaida`
  * @param {object} [p.prontidao] linha de `montarProntidaoMigracao`
+ * @param {object} [p.cadastro] { gravidade, pendencias } — de
+ *   `pendenciasCadastro`/`gravidadeCadastro`. Quem CALCULA é a rota, que tem o
+ *   documento inteiro; este núcleo recebe o FATO, nunca o doc cru.
  */
-export function montarFilaEmpresa({ empresa, veredito = null, aptidao = null, prontidao = null }) {
+export function montarFilaEmpresa({
+    empresa, veredito = null, aptidao = null, prontidao = null, cadastro = null,
+}) {
     const bloqueios = [
+        bloqueioCadastro(cadastro),
         bloqueioEntrada(veredito),
         bloqueioSaida(aptidao),
         bloqueioBlocos(prontidao),
@@ -127,6 +177,21 @@ export function montarFilaEmpresa({ empresa, veredito = null, aptidao = null, pr
     const ressalvas = (prontidao?.entregaEfdIcms && Array.isArray(prontidao.atencoes))
         ? prontidao.atencoes.filter(Boolean)
         : [];
+
+    // ⚠️ MÉDIO do cadastro não trava a onda, mas não some: o arquivo sai com um
+    // padrão que pode não ser o desta empresa, e ninguém confere isso a olho.
+    if (cadastro?.gravidade === 'medio') {
+        for (const p of cadastro.pendencias || []) {
+            if (p?.descricao) ressalvas.push(`Cadastro: ${p.descricao}`);
+        }
+    }
+    // ⚠️ Conferência que não aconteceu NÃO é cadastro em dia (regra 1).
+    if (!cadastro) {
+        ressalvas.push(
+            'Cadastro não conferido nesta leitura — campos como a classificação de IPI (0002) '
+            + 'ou a natureza da PJ fazem o PVA recusar, e não foram olhados aqui.',
+        );
+    }
 
     const proximo = bloqueios[0] || null;
     return {
@@ -167,6 +232,8 @@ export function montarFilaMigracao({ empresas = [], vereditos, aptidoes, prontid
         veredito: ler(vereditos, e.id),
         aptidao: ler(aptidoes, e.id),
         prontidao: ler(prontidoes, e.id),
+        // A rota calcula e pendura na empresa — ela é quem tem o doc inteiro.
+        cadastro: e.cadastro || null,
     }));
 
     // Quem está a UM passo vem antes de quem está a três: é assim que a onda

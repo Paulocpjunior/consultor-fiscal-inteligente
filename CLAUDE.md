@@ -5,6 +5,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚦 NÚMERO SEM FILA NÃO É FERRAMENTA — o painel de cadastros passou a atacar
+  por CAUSA, e a fila de migração passou a conhecer o cadastro** (27/08, na
+  sequência do mata-burro abaixo). Duas metades da mesma coisa:
+  ✂️ **(1) POR CAUSA, NÃO POR EMPRESA.** Com ~400 clientes e catorze campos
+  possíveis, uma lista de empresas não é fila de trabalho — é um muro. *"12
+  empresas sem a classificação de IPI"* é UMA tarefa; doze linhas soltas são
+  doze mistérios. `resumirPendenciasPorCampo` agrupa e ordena por QUANTIDADE
+  (alfabético ali seria uma lista, não uma fila), e o clique na causa filtra.
+  É o MESMO desenho do painel de envios do rito (#293), que já fazia isso.
+  ⚠️ **E o filtro por causa VENCE o de gravidade**: quem clicou em "12" quer as
+  doze, não a interseção com o filtro que estava aberto — interseção silenciosa
+  faria o número da tela desmentir a lista logo abaixo.
+  ⚠️ **E o vazio muda de FRASE**: com a causa filtrada, "nenhuma empresa nessa
+  gravidade" seria a afirmação errada; o certo é *"nenhuma empresa com esta
+  pendência"*. A mesma classe do farol honesto, na escala do estado vazio.
+  🔴 **(2) A FILA DE MIGRAÇÃO DIZIA "PRONTA" SOBRE EMPRESA QUE O PVA VAI
+  RECUSAR.** Ela media captura de entrada, captura de saída e blocos — e
+  **nenhum dos três vê o cadastro**. Cliente com a captura fechada e sem o 0002
+  aparecia no TOPO da fila, migrava, e a recusa chegava depois: o gargalo de
+  20/08 entrando pela porta de trás. `cadastro` virou a QUARTA área, e vem
+  **PRIMEIRO** na ordem — é o único bloqueio que depende só de nós e o mais
+  barato (alguém preenche um campo), e numa fila ordenada por esforço o que se
+  resolve hoje vem antes do que espera terceiro.
+  ⚠️ **A SEVERIDADE DECIDE, e é a MESMA do diagnóstico**: ALTO/CRÍTICO bloqueia;
+  MÉDIO vira RESSALVA (o arquivo sai com um padrão que pode não ser o daquela
+  empresa — bloquear ali pararia a onda por algo que a entrega suporta).
+  ⚠️ **E `cadastro` ausente NÃO é "cadastro em dia"** — vira ressalva NOMEADA,
+  que é a regra 1 do cabeçalho da própria fila: ausência de sinal nunca é
+  prontidão.
+  📌 **QUEM CALCULA É A ROTA, e isso é a lição de 27/08 aplicada**: a rota da
+  fila monta uma PROJEÇÃO da empresa à mão, e o núcleo puro recebe o FATO
+  (`{gravidade, pendencias}`), nunca o doc cru. Travado por **varredura** —
+  se a rota parar de calcular, a fila volta a dizer "pronta" e nada acusaria.
+  🐛 **E O TESTE DE RENDER ACHOU UM DEFEITO PRÉ-EXISTENTE NA BUSCA**:
+  `cnpj.includes('')` é **sempre true**, então procurar um texto sem dígitos
+  ("zzz") devolvia a **carteira INTEIRA** — e lista cheia se lê como "achei
+  tudo" quando o certo é "não achei nada". É o silêncio falso ao contrário, e
+  só apareceu porque a tela foi provada **clicando**, não por varredura de
+  fonte (a régua de 20/08).
+
 - **🚦 O DIAGNÓSTICO DE CADASTROS NÃO CONHECIA UM ÚNICO CAMPO QUE FAZ O PVA
   RECUSAR** (27/08, fechando o gargalo que o Paulo nomeou em 20/08 — *"o vai e
   vem o dia todo"*). O painel **Cadastros incompletos** cobria SEIS campos —
