@@ -10,6 +10,10 @@ import {
 import { importXmlManual, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { isFirebaseConfigured, auth } from '../../services/firebaseConfig';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+// 🚨 O veredito da conexão sai do RESULTADO da última rodada, não de
+// `configured` (que só diz que as variáveis estão preenchidas). Ver o print de
+// 28/08: verde em cima, 57 erros de token embaixo.
+import { vereditoConexaoSharePoint } from '../../services/sharepointConexaoVeredito';
 
 interface SharePointLastSync {
     competencia?: string;
@@ -215,13 +219,38 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
                     Conexão SharePoint
                 </h3>
-                {health === null ? (
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Verificando...</p>
-                ) : health.configured ? (
-                    <p className="text-xs" style={{ color: 'var(--success, #22c55e)' }}>
-                        ✓ Conectado · {health.sharepointHost} · {health.sitePath}
-                    </p>
-                ) : (
+                {/* 🚨 O VEREDITO SAI DO RESULTADO, NÃO DE `configured` (28/08).
+                    `configured` responde "as variáveis estão preenchidas?" — e
+                    no print do Paulo elas estavam, com 57 erros de
+                    `AADSTS90002: Tenant not found` logo abaixo. Verde em cima,
+                    verdade embaixo: duas leituras do mesmo fato no mesmo card,
+                    com a mentira na posição do veredito. */}
+                {(() => {
+                    const v = vereditoConexaoSharePoint({ health, lastSync: autoSyncLastSync });
+                    if (v.cor === 'erro' && health && !health.configured) return null;  // o bloco detalhado abaixo
+                    const cores: Record<string, string> = {
+                        ok: 'var(--success, #22c55e)',
+                        atencao: 'var(--warning, #f59e0b)',
+                        erro: 'var(--danger, #ef4444)',
+                        indeterminado: 'var(--text-muted)',
+                    };
+                    return (
+                        <div className="text-xs space-y-1" style={{ color: cores[v.cor] }}>
+                            <p className={v.cor === 'ok' ? '' : 'font-semibold'}>
+                                {v.titulo}
+                                {v.cor === 'ok' && health?.sharepointHost
+                                    && ` · ${health.sharepointHost} · ${health.sitePath}`}
+                            </p>
+                            {v.detalhe && (
+                                <p className="font-mono text-[11px] break-all" style={{ color: 'var(--text-muted)' }}>
+                                    {v.detalhe}
+                                </p>
+                            )}
+                            {v.acao && <p style={{ color: 'var(--text-muted)' }}>→ {v.acao}</p>}
+                        </div>
+                    );
+                })()}
+                {health === null ? null : health.configured ? null : (
                     <div className="text-xs space-y-1" style={{ color: 'var(--danger, #ef4444)' }}>
                         <p className="font-semibold">✗ Proxy SharePoint indisponível.</p>
                         <p style={{ color: 'var(--text-muted)' }}>
