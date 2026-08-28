@@ -543,6 +543,14 @@ export function montarRotinaFiscal({
     // ou sem baixa"* é "vá procurar" — e quem lê a Rotina está justamente
     // tentando saber o que falta. As causas já vêm nomeadas pelo dono.
     const causas = [...new Set(rito.flatMap((r) => r.pendencias.map((p) => p.causa)))];
+    // ⚠️ E A AÇÃO VIAJA JUNTO DA CAUSA (28/08, VINCENZO). O dono já devolve as
+    // duas — *"Preencha grupo + pasta em Central de XMLs → Integrações →
+    // SharePoint"*, *"Gere as tarefas da competência e dê baixa manual"* — e a
+    // Rotina jogava a ação FORA, ficando com um genérico *"Resolva em Envios
+    // (rito)"*. Só que em Envios (rito) não se cria pasta de SharePoint nem se
+    // gera tarefa: era "vá procurar" com mais passos, na tela de quem está
+    // justamente tentando saber o que fazer.
+    const acoesDoRito = [...new Set(rito.flatMap((r) => r.pendencias.map((p) => p.acao)))];
     const naoConferidos = rito.filter((r) => !r.completo && r.naoConferido).length;
     // ⚠️ O QUE O APP NÃO PODE AFIRMAR sai CONTADO, nunca escondido: mailto,
     // WhatsApp e o envio DECLARADO só provam que a composição abriu (ou que
@@ -570,7 +578,14 @@ export function montarRotinaFiscal({
         ].filter(Boolean);
         eGuias = etapa('guias', 'atencao',
             `${envios.length} envio(s), ${enviosOk} completo(s) pelo rito.`,
-            `${oQueFalta.join(' · ')}. Resolva em Vencimentos e Obrigações → Envios (rito).`,
+            // CAUSA **e** AÇÃO. A causa junto do número é regra da casa; o que
+            // faltava era a ação de CADA causa — antes vinha um genérico
+            // "Resolva em Envios (rito)", e em Envios (rito) não se cria pasta
+            // de SharePoint nem se gera tarefa.
+            `${oQueFalta.join(' · ')}.`
+            + (acoesDoRito.length
+                ? ` → ${acoesDoRito.join(' · ')}`
+                : ' Resolva em Vencimentos e Obrigações → Envios (rito).'),
             { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });
     } else {
         eGuias = etapa('guias', 'concluida',

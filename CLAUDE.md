@@ -5,6 +5,50 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O BLOQUEIO DO FIM DE MÊS TINHA DUAS MONTAGENS — e a da TELA esquecia
+  campos, em silêncio** (28/08, VINCENZO GUERRA BANANAS 63027940000194, com
+  dois prints lado a lado: a Rotina em **4/5** travando com *"5. Emitir e
+  enviar guias — 3 envio(s), 1 completo(s) pelo rito"* e o botão *"📋 Já enviei
+  esta guia por fora"* embaixo; ao lado, o DAS da MESMA competência **Pago** e
+  **✉ Enviada 12/08/2026**).
+  📖 Paulo, literal: *"foi enviado pelo sistema e até pago já… Ele tinha que
+  entender automaticamente né? … **Mesmo fazendo esse registro ai ele não
+  assume pra encerrar o mês**"*.
+  🔴 **A RÉGUA ESTAVA CERTA — quem errava era a PROJEÇÃO.** `podeDeclararEnvio`
+  nasceu em 27/08 para essa MESMA empresa e respondia `false` (o app enviou, o
+  que falta é o rito). Só que `bloqueiosDasEtapas`, na Rotina, montava o
+  bloqueio **À MÃO** com sete campos e **não copiava o campo**. Na tela,
+  `undefined !== false` ⇒ a porta aparecia. Ele registrou o envio e o mês
+  continuou travado, porque declarar outro envio **não cria pasta de SharePoint
+  nem gera a obrigação que falta em Vencimentos** — que são as duas causas
+  reais, e as duas estavam NOMEADAS na própria linha.
+  ⚠️ **E A MESMA LACUNA, AO CONTRÁRIO, APAGAVA A PORTA NOVA**: a etapa 4 manda
+  `podeDeclararCobertura: true` e a tela pergunta `=== true`, então a saída da
+  MANTOAN — criada horas antes — ficava **INVISÍVEL** justamente na tela onde a
+  trava aparece. Um mesmo esquecimento, dois defeitos opostos.
+  ✂️ `bloqueioDaEtapa` (dono único, em `fim-de-mes.js`, que é PURO) — o painel
+  faz o RECORTE (é o que evita a requisição por card, o HTTP 429 de 27/08) e a
+  PROJEÇÃO vem do dono. O teste exige que painel e recusa do ato devolvam
+  objetos **IDÊNTICOS**.
+  📌 **REGRA QUE FICA: objeto montado à mão para atravessar uma fronteira é uma
+  segunda cópia com outra roupa.** É a lição de 27/08 (`rotina-empresa-insumo`)
+  na PONTA OPOSTA: lá era o INSUMO montado à mão, aqui é a SAÍDA. E o sintoma é
+  o mesmo — nada quebra, nada explode: as duas telas só passam a contar
+  histórias diferentes sobre a mesma empresa.
+  ⚠️ **E O COMENTÁRIO DA CÓPIA JURAVA QUE ELA NÃO ERA UMA CÓPIA**: *"Isto NÃO é
+  uma segunda cópia da régua: quem decide o que é 'fechada' é o backend"*. Era
+  verdade sobre o **status** e falso sobre os **campos** — e foi essa
+  meia-verdade que fez a linha passar por revisada. Comentário que afirma
+  "não é cópia" merece a pergunta: cópia de QUÊ, exatamente?
+  ✂️ **E A AÇÃO PASSOU A VIAJAR JUNTO DA CAUSA.** O dono (`pendenciaSharePoint`
+  /`pendenciaBaixa`) devolve as duas — *"Preencha grupo + pasta em Central de
+  XMLs → Integrações → SharePoint"*, *"Gere as tarefas da competência e dê baixa
+  manual"* — e a Rotina jogava a AÇÃO fora, ficando com um genérico *"Resolva
+  em Envios (rito)"*. Só que **em Envios (rito) não se cria pasta de SharePoint
+  nem se gera tarefa**: era "vá procurar" com mais passos, na tela de quem está
+  justamente tentando saber o que fazer. Agora saem as DUAS (causa `→` ação) —
+  uma asserção que exigia o genérico foi TROCADA, porque ela descrevia o vício.
+
 - **🚨 O M210/M610 SAÍA COM OS QUATRO CAMPOS DE AJUSTE EM BRANCO — e a causa
   era uma DEDUÇÃO minha escrita no comentário do gerador** (28/08, DGB
   CONSULTORIA 21903193000160 · 08/2026, **8 recusas**, quatro por registro).

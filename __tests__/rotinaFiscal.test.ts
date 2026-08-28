@@ -245,7 +245,11 @@ describe('5. guias (rito #293)', () => {
         expect(semSp.status).toBe('atencao');
         const semBaixa = etapaDe(completo({ envios: [envio({ baixa: { status: 'sem-tarefa' } })] }), 'guias');
         expect(semBaixa.status).toBe('atencao');
-        expect(semBaixa.acao).toMatch(/Envios \(rito\)/);
+        // 🚨 ASSERÇÃO TROCADA (28/08, VINCENZO): ela exigia o genérico "Envios
+        // (rito)" — que era justamente o "vá procurar". Em Envios (rito) não se
+        // gera tarefa nem se cria pasta de SharePoint: a ação de cada causa
+        // mora no dono (`pendenciaBaixa`) e a Rotina a jogava fora.
+        expect(semBaixa.acao).toMatch(/Gere as tarefas da competência/);
     });
 
     // ⚠️ CAUSA JUNTO DO NÚMERO: "veja em Envios (rito) o que ficou sem cópia ou

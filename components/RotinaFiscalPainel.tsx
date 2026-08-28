@@ -15,6 +15,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
+// 🔒 A PROJEÇÃO DO BLOQUEIO VEM DO DONO — montá-la aqui à mão foi o defeito da
+// VINCENZO (28/08). O módulo é PURO (só puxa `rotina-fiscal` e `competencia`),
+// então a tela o importa direto, como já faz com as outras réguas do backend.
+import { bloqueioDaEtapa } from '../sefaz-backend/fim-de-mes.js';
+import type { BloqueioFimDeMes } from '../services/fimDeMesService';
 
 interface Props {
     /** Leva o colaborador à tela da etapa (App resolve o SearchType). */
@@ -65,17 +70,23 @@ const FAROL_CARD: Record<string, string> = {
 /**
  * As etapas ABERTAS viram os bloqueios do fim de mês.
  *
- * ⚠️ Isto NÃO é uma segunda cópia da régua: quem decide o que é "fechada" é o
- * backend, e ele já mandou o `status` de cada etapa pronto. Aqui é só o
- * recorte das que não fecharam — e é o que evita uma requisição por card
- * (o HTTP 429 de 27/08).
+ * O RECORTE é daqui (é o que evita uma requisição por card — o HTTP 429 de
+ * 27/08). A PROJEÇÃO, não: ela vem de `bloqueioDaEtapa`, o mesmo dono que o
+ * backend usa na recusa do ato.
+ *
+ * 🚨 ATÉ 28/08 ELA ERA MONTADA À MÃO AQUI, com sete campos — e esquecia
+ * `podeDeclararEnvio`. Resultado no print do Paulo (VINCENZO GUERRA): o app
+ * ENVIOU a guia, o cliente PAGOU, a etapa mandava `false`… e a Rotina oferecia
+ * *"📋 Já enviei esta guia por fora"* assim mesmo, porque `undefined !== false`.
+ * Ele registrou, e o mês continuou travado. A porta convidava a declarar o que
+ * o app já tinha feito, e a que resolvia de verdade não existia.
+ *
+ * ⚠️ E a mesma lacuna, ao contrário, APAGAVA a porta nova da etapa 4 (a tela
+ * pergunta `=== true`): a saída da MANTOAN ficava invisível justamente aqui.
  */
 const FECHADAS_NA_TELA = new Set(['concluida', 'na']);
-export const bloqueiosDasEtapas = (etapas: EtapaRotina[]) =>
-    (etapas || []).filter((e) => !FECHADAS_NA_TELA.has(e.status)).map((e) => ({
-        id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
-        resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
-    }));
+export const bloqueiosDasEtapas = (etapas: EtapaRotina[]): BloqueioFimDeMes[] =>
+    (etapas || []).filter((e) => !FECHADAS_NA_TELA.has(e.status)).map(bloqueioDaEtapa);
 
 /** Trilha das 5 etapas de uma empresa. */
 const Trilha: React.FC<{ etapas: EtapaRotina[]; destaque?: string }> = ({ etapas, destaque }) => (

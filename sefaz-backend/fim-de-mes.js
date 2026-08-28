@@ -111,6 +111,55 @@ export function valoresApuradosDaFicha(ficha) {
 }
 
 /**
+ * 🚨 O BLOQUEIO DE UMA ETAPA — DONO ÚNICO (28/08, VINCENZO GUERRA).
+ *
+ * ═══ POR QUE ELE PRECISOU NASCER ════════════════════════════════════════════
+ *
+ * Esta projeção existia DUAS vezes: aqui e em `bloqueiosDasEtapas`, na Rotina
+ * do Mês. A da tela era montada À MÃO, com sete campos — e **esqueceu
+ * `podeDeclararEnvio`**, que tinha nascido no dia anterior justamente para
+ * fazer a porta do envio declarado sumir onde ela não resolve.
+ *
+ * O efeito, no print do Paulo: na VINCENZO o app ENVIOU a guia (e o cliente
+ * PAGOU), o campo dizia `false`… e a Rotina oferecia *"📋 Já enviei esta guia
+ * por fora"* assim mesmo, porque `undefined !== false`. Ele registrou, e o mês
+ * continuou travado — *"mesmo fazendo esse registro ele não assume"*. A porta
+ * existia convidando a declarar o que o app já tinha feito.
+ *
+ * ⚠️ E a MESMA lacuna, na direção contrária, apagava a porta NOVA: a etapa 4
+ * manda `podeDeclararCobertura: true` e a tela pergunta `=== true`, então a
+ * saída da MANTOAN ficava INVISÍVEL justamente na tela onde a trava aparece.
+ *
+ * 📌 É a lição de 27/08 (`rotina-empresa-insumo.js`) na outra ponta: lá era o
+ * INSUMO montado à mão, aqui é a SAÍDA. **Objeto montado à mão para atravessar
+ * uma fronteira é uma segunda cópia com outra roupa, e ela envelhece em
+ * SILÊNCIO no primeiro campo novo** — e nada quebra: as duas telas só passam a
+ * contar histórias diferentes sobre a mesma empresa.
+ */
+export function bloqueioDaEtapa(e) {
+    return {
+        id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
+        resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
+        // 📋 A porta do envio DECLARADO só aparece onde ela resolve — quem
+        // decide é a etapa, não a tela (ver `podeDeclararEnvio` na Rotina).
+        podeDeclararEnvio: typeof e.podeDeclararEnvio === 'boolean' ? e.podeDeclararEnvio : null,
+        // 📋 E a porta da COBERTURA declarada, pela MESMA régua: ela só existe
+        // quando o que trava é obrigação que o catálogo admite não cobrir. Nas
+        // outras causas (regime indefinido, prazo de outra UF, UF ausente) há
+        // conserto, e declarar por cima apagaria o caminho.
+        podeDeclararCobertura: typeof e.podeDeclararCobertura === 'boolean' ? e.podeDeclararCobertura : null,
+        // As obrigações NOMEADAS: é essa lista que a declaração precisa
+        // mencionar, e é ela que a leitura compara depois.
+        propostas: Array.isArray(e.propostas) ? e.propostas : null,
+        // ⚠️ AS CAUSAS DO RITO, NOMEADAS pelo dono (`pendenciaSharePoint` /
+        // `pendenciaBaixa`). Sem elas a tela só sabe DIZER o que falta e não
+        // sabe para ONDE mandar — e foi assim que a única porta oferecida na
+        // VINCENZO virou a que não resolvia nenhuma das duas causas.
+        causas: Array.isArray(e.causas) ? e.causas : null,
+    };
+}
+
+/**
  * PRÉ-CONDIÇÃO: esta competência pode ser fechada?
  *
  * Lê as ETAPAS que a Rotina produziu — **nunca reimplementa a régua delas**.
@@ -127,21 +176,7 @@ export function podeDarFimDeMes(rotina) {
                 + 'para saber o que está aberto, e fechar no escuro é fechar sem base.',
         };
     }
-    const bloqueios = etapas.filter((e) => !etapaFechada(e)).map((e) => ({
-        id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
-        resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
-        // 📋 A porta do envio DECLARADO só aparece onde ela resolve — quem
-        // decide é a etapa, não a tela (ver `podeDeclararEnvio` na Rotina).
-        podeDeclararEnvio: typeof e.podeDeclararEnvio === 'boolean' ? e.podeDeclararEnvio : null,
-        // 📋 E a porta da COBERTURA declarada, pela MESMA régua: ela só existe
-        // quando o que trava é obrigação que o catálogo admite não cobrir. Nas
-        // outras causas (regime indefinido, prazo de outra UF, UF ausente) há
-        // conserto, e declarar por cima apagaria o caminho.
-        podeDeclararCobertura: typeof e.podeDeclararCobertura === 'boolean' ? e.podeDeclararCobertura : null,
-        // As obrigações NOMEADAS: é essa lista que a declaração precisa
-        // mencionar, e é ela que a leitura compara depois.
-        propostas: Array.isArray(e.propostas) ? e.propostas : null,
-    }));
+    const bloqueios = etapas.filter((e) => !etapaFechada(e)).map(bloqueioDaEtapa);
     if (bloqueios.length) {
         return {
             pode: false,
