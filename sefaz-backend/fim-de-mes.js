@@ -133,6 +133,14 @@ export function podeDarFimDeMes(rotina) {
         // 📋 A porta do envio DECLARADO só aparece onde ela resolve — quem
         // decide é a etapa, não a tela (ver `podeDeclararEnvio` na Rotina).
         podeDeclararEnvio: typeof e.podeDeclararEnvio === 'boolean' ? e.podeDeclararEnvio : null,
+        // 📋 E a porta da COBERTURA declarada, pela MESMA régua: ela só existe
+        // quando o que trava é obrigação que o catálogo admite não cobrir. Nas
+        // outras causas (regime indefinido, prazo de outra UF, UF ausente) há
+        // conserto, e declarar por cima apagaria o caminho.
+        podeDeclararCobertura: typeof e.podeDeclararCobertura === 'boolean' ? e.podeDeclararCobertura : null,
+        // As obrigações NOMEADAS: é essa lista que a declaração precisa
+        // mencionar, e é ela que a leitura compara depois.
+        propostas: Array.isArray(e.propostas) ? e.propostas : null,
     }));
     if (bloqueios.length) {
         return {

@@ -1030,6 +1030,54 @@ export function conferirM205ComValorZero(linhas) {
     return { erros };
 }
 
+/**
+ * 🚨 OS QUATRO CAMPOS DE AJUSTE DO M210/M610 EM BRANCO — recusa do PVA,
+ * literal (DGB CONSULTORIA 21903193000160 · 08/2026, 28/08, **8 erros**):
+ *
+ *   "Campo de preenchimento obrigatório."
+ *   5 - VL_AJUS_ACRES_BC · 6 - VL_AJUS_REDUC_BC · 12 - VL_AJUS_ACRES ·
+ *   13 - VL_AJUS_REDUC  →  "Registro/Campo não informado ou inválido"
+ *
+ * sobre a linha `|M210|51|106553,01|106553,01|||106553,01|0,6500|||692,59||||692,59|`.
+ *
+ * Quatro por registro, dois registros. O gerador os deixava vazios por uma
+ * DEDUÇÃO minha ("campo de valor não recebe default") que a regra de 06/08
+ * nunca autorizou: ela diz que **zero só entra quando zero É a resposta**, e
+ * aqui é — o app não gera M220/M620, então não há ajuste, e isso é fato.
+ *
+ * ⚠️ SÓ ESTES QUATRO. `QUANT_BC`/`ALIQ_QUANT` (a alternativa por quantidade) e
+ * `VL_CONT_DIFER`/`VL_CONT_DIFER_ANT` (diferimento) NÃO foram acusados, e
+ * exigi-los aqui produziria alarme sobre arquivo que o PVA aceita.
+ */
+const AJUSTES_OBRIGATORIOS_M210 = [
+    { pos: 5, nome: 'VL_AJUS_ACRES_BC' },
+    { pos: 6, nome: 'VL_AJUS_REDUC_BC' },
+    { pos: 12, nome: 'VL_AJUS_ACRES' },
+    { pos: 13, nome: 'VL_AJUS_REDUC' },
+];
+
+export function conferirAjustesDoM210(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = String(l || '').split('|');
+        const reg = c[1];
+        if (reg !== 'M210' && reg !== 'M610') continue;
+        // `c[0]` é o vazio antes da primeira barra, então o campo N está em
+        // `c[N]` — a mesma contagem que o PVA usa (REG é o campo 1).
+        const vazios = AJUSTES_OBRIGATORIOS_M210.filter((a) => String(c[a.pos] ?? '').trim() === '');
+        if (!vazios.length) continue;
+        erros.push({
+            regra: 'M210_AJUSTE_VAZIO',
+            registro: reg,
+            mensagem: `${reg} com ${vazios.length} campo(s) de ajuste em branco `
+                + `(${vazios.map((a) => `${a.pos} - ${a.nome}`).join(' · ')}) — o PVA recusa com `
+                + '"Campo de preenchimento obrigatório". Sem ajuste, o valor é 0,00: aqui o zero É a '
+                + 'resposta, não um default.',
+        });
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
@@ -1057,6 +1105,7 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
         ...conferirConsolidacao1900(linhas).erros,
         ...conferirM205ComValorZero(linhas).erros,
+        ...conferirAjustesDoM210(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

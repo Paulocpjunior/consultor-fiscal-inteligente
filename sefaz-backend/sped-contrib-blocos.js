@@ -1181,6 +1181,16 @@ export function buildBlocoF(dados) {
 // BLOCO M — Apuracao PIS/COFINS
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * "NÃO HOUVE AJUSTE" — o zero que é RESPOSTA, não default.
+ *
+ * O PVA recusa os quatro campos de ajuste do M210/M610 em branco (DGB, 28/08),
+ * e o app não gera M220/M620: quando não há registro de ajuste, o valor
+ * ajustado é zero, e isso é FATO. É a exceção que a própria regra de 06/08
+ * escreve — *"zero só entra quando zero É a resposta"*.
+ */
+const SEM_AJUSTE = fmt.formatValue(0);
+
 export function buildBlocoM(dados) {
     const linhas = [];
     const regimeApuracao = dados.regimeApuracao || '2';
@@ -1461,8 +1471,24 @@ export function buildBlocoM(dados) {
     // QUANT_BC_PIS · ALIQ_PIS_QUANT · VL_CONT_APUR · VL_AJUS_ACRES ·
     // VL_AJUS_REDUC · VL_CONT_DIFER · VL_CONT_DIFER_ANT · VL_CONT_PER.
     //
-    // Campo de ajuste/diferimento que esta empresa não tem sai VAZIO, nunca
-    // 0,00 inventado: campo de valor não recebe default (regra de 06/08).
+    // 🚨 OS QUATRO CAMPOS DE AJUSTE SÃO OBRIGATÓRIOS — e saíam VAZIOS (28/08,
+    // DGB CONSULTORIA 21903193000160 · 08/2026, **8 recusas**, quatro por
+    // registro): *"Campo de preenchimento obrigatório · 5 - VL_AJUS_ACRES_BC ·
+    // 6 - VL_AJUS_REDUC_BC · 12 - VL_AJUS_ACRES · 13 - VL_AJUS_REDUC"*, com
+    // *"Registro/Campo não informado ou inválido"* em cada um.
+    //
+    // O comentário que estava aqui dizia o contrário — *"campo de ajuste sai
+    // VAZIO, nunca 0,00 inventado"* —, e essa era uma DEDUÇÃO minha. A regra
+    // de 06/08 nunca proibiu isto: ela diz que **zero só entra quando zero É a
+    // resposta**, e é exatamente o caso — a empresa NÃO TEM ajuste, e o app
+    // não gera M220/M620, então o zero é fato, não "não sabemos".
+    //
+    // ⚠️ E SÓ ESTES QUATRO. O PVA listou 8 erros — quatro por registro — e
+    // deixou de fora `QUANT_BC` / `ALIQ_QUANT` (a alternativa por QUANTIDADE,
+    // excludente com a alíquota ad valorem) e `VL_CONT_DIFER` /
+    // `VL_CONT_DIFER_ANT` (diferimento, de fato opcional). Preencher os oito
+    // "por simetria" seria a mesma dedução que produziu este defeito, na
+    // direção contrária.
     // M205 — Detalhamento por código de receita (visão DCTF).
     //
     // Paulo, 20/08: *"esse registro nós preenchemos manual, tem a possibilidade
@@ -1508,13 +1534,13 @@ export function buildBlocoM(dados) {
             // VL_BC_CONT 16.055,60.
             fmt.formatValue(totalReceitaSaida),  // VL_REC_BRT
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT  ← recebia a alíquota
-            '', '',                             // ajustes de BC (acréscimo/redução)
+            SEM_AJUSTE, SEM_AJUSTE,             // 5-6 ajustes de BC — obrigatórios
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT_AJUS (sem ajuste = a própria BC)
             fmt.formatValue(aliq.pis * 100, 4), // ALIQ_PIS
-            '', '',                             // QUANT_BC_PIS · ALIQ_PIS_QUANT
+            '', '',                             // QUANT_BC_PIS · ALIQ_PIS_QUANT (por quantidade)
             fmt.formatValue(totalPisSaida),     // VL_CONT_APUR
-            '', '',                             // ajustes de contribuição
-            '', '',                             // diferimento (período e anterior)
+            SEM_AJUSTE, SEM_AJUSTE,             // 12-13 ajustes da contribuição — obrigatórios
+            '', '',                             // diferimento (período e anterior) — opcionais
             fmt.formatValue(totalPisSaida),     // VL_CONT_PER
         ]));
     }
@@ -1529,12 +1555,12 @@ export function buildBlocoM(dados) {
             'M210', COD_CONT_APLICACAO_FINANCEIRA,
             fmt.formatValue(finM.receita),          // VL_REC_BRT
             fmt.formatValue(finM.receita),          // VL_BC_CONT — sem exclusão aqui
-            '', '',
+            SEM_AJUSTE, SEM_AJUSTE,                 // 5-6 ajustes de BC
             fmt.formatValue(finM.receita),          // VL_BC_CONT_AJUS
             fmt.formatValue(finM.aliqPis * 100, 4), // ALIQ_PIS (0,65)
             '', '',
             fmt.formatValue(finM.pis),              // VL_CONT_APUR
-            '', '', '', '',
+            SEM_AJUSTE, SEM_AJUSTE, '', '',         // 12-13 ajustes · diferimento
             fmt.formatValue(finM.pis),              // VL_CONT_PER
         ]));
     }
@@ -1605,13 +1631,13 @@ export function buildBlocoM(dados) {
             'M610', codCont,
             fmt.formatValue(totalReceitaSaida),    // VL_REC_BRT — receita ≠ base
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT
-            '', '',                                // ajustes de BC
+            SEM_AJUSTE, SEM_AJUSTE,                // 5-6 ajustes de BC — obrigatórios
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT_AJUS
             fmt.formatValue(aliq.cofins * 100, 4), // ALIQ_COFINS
-            '', '',                                // QUANT_BC · ALIQ_QUANT
+            '', '',                                // QUANT_BC · ALIQ_QUANT (por quantidade)
             fmt.formatValue(totalCofinsSaida),     // VL_CONT_APUR
-            '', '',                                // ajustes de contribuição
-            '', '',                                // diferimento
+            SEM_AJUSTE, SEM_AJUSTE,                // 12-13 ajustes da contribuição
+            '', '',                                // diferimento — opcionais
             fmt.formatValue(totalCofinsSaida),     // VL_CONT_PER
         ]));
     }
@@ -1623,12 +1649,12 @@ export function buildBlocoM(dados) {
             'M610', COD_CONT_APLICACAO_FINANCEIRA,
             fmt.formatValue(finM.receita),
             fmt.formatValue(finM.receita),
-            '', '',
+            SEM_AJUSTE, SEM_AJUSTE,
             fmt.formatValue(finM.receita),
             fmt.formatValue(finM.aliqCofins * 100, 4),
             '', '',
             fmt.formatValue(finM.cofins),
-            '', '', '', '',
+            SEM_AJUSTE, SEM_AJUSTE, '', '',
             fmt.formatValue(finM.cofins),
         ]));
     }

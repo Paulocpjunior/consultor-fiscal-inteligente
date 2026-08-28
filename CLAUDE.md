@@ -5,6 +5,103 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O M210/M610 SAÍA COM OS QUATRO CAMPOS DE AJUSTE EM BRANCO — e a causa
+  era uma DEDUÇÃO minha escrita no comentário do gerador** (28/08, DGB
+  CONSULTORIA 21903193000160 · 08/2026, **8 recusas**, quatro por registro).
+  📖 A recusa, literal: *"Campo de preenchimento obrigatório"* + *"Registro/
+  Campo não informado ou inválido"* em **5 - VL_AJUS_ACRES_BC · 6 -
+  VL_AJUS_REDUC_BC · 12 - VL_AJUS_ACRES · 13 - VL_AJUS_REDUC**, sobre a linha
+  `|M210|51|106553,01|106553,01|||106553,01|0,6500|||692,59||||692,59|`.
+  🔴 **O comentário do gerador dizia o CONTRÁRIO, e era meu**: *"campo de
+  ajuste/diferimento sai VAZIO, nunca 0,00 inventado: campo de valor não recebe
+  default (regra de 06/08)"*. A regra de 06/08 **nunca disse isso** — ela diz
+  que *"zero só entra quando zero É a resposta ('não houve ajuste'), nunca
+  quando é 'não sabemos'"*, e este é literalmente o exemplo que ela dá: o app
+  não gera M220/M620, então **não há ajuste**, e o zero é FATO.
+  ✂️ `SEM_AJUSTE = fmt.formatValue(0)` nas quatro casas, nas quatro linhas
+  (M210/M610 comum e da receita financeira), e a recusa virou regra da
+  prevalidação no MESMO PR (`conferirAjustesDoM210`), que lê as LINHAS e
+  **nasce verde** sobre o que o gerador produz.
+  ⚠️ **SÓ ESTES QUATRO, e a contenção é o coração**: o PVA listou 8 erros —
+  quatro por registro — e **não** acusou `QUANT_BC`/`ALIQ_QUANT` (a alternativa
+  por QUANTIDADE, excludente com a alíquota ad valorem) nem `VL_CONT_DIFER`/
+  `VL_CONT_DIFER_ANT` (diferimento, de fato opcional). Preencher os oito "por
+  simetria" seria a MESMA dedução que produziu o defeito, na direção contrária.
+  📌 **TRÊS FIXTURES TROCADAS, e isso é o certo**: um teste exigia os oito
+  campos VAZIOS e três travavam a linha do M210 da PWR sem os `0,00`. Eles
+  descreviam uma dedução minha, não o leiaute — trocar a régua para o teste
+  passar seria manter o arquivo recusado.
+  📌 **REGRA QUE FICA: comentário que AFIRMA uma regra da casa tem de citá-la
+  certo.** Este dizia "regra de 06/08" e afirmava o oposto do que ela diz — e
+  passou meses porque quem lê um comentário com data e número acredita nele. É
+  o vício de 13/08 (*"regra escrita não é regra travada"*) na forma mais cara:
+  regra escrita ERRADA, que a próxima pessoa cita de volta.
+
+- **🚨 A COLUNA PRESTADOR SAÍA "—" NUM MÊS E CHEIA NO OUTRO — e a correção
+  esteve na main por 18 MINUTOS antes de ser revertida** (28/08, Paulo, no
+  modal de Relatórios: *"veja a diferença de um mês para o outro com relação ao
+  campo prestador de serviços"*).
+  🔴 A causa é a armadilha das duas formas, agora em `linhasServicos`: ela
+  escolhia a contraparte com `d.tomador || d.destinatario` / `d.prestador ||
+  d.emitente` — **só o bloco ANINHADO**. E a NFS-e do **portal de SP**, que é o
+  trilho da maioria das notas, grava `prestadorNome`/`tomadorNome` e
+  `xNomeEmit`/`xNomeDest` **ACHATADOS** e **não grava bloco aninhado nenhum**.
+  Mês importado pelo NAVEGADOR (que grava `{prestador, tomador}`) ⇒ coluna
+  cheia; mês capturado pelo PORTAL ⇒ `—` na competência inteira.
+  ✂️ Quem responde é `contraparteDoc` — **o dono, no MESMO arquivo, 200 linhas
+  acima**. `linhasRetencoes` e `servicosPorCodigo` já o chamavam: esta era a
+  única que ainda perguntava sozinha.
+  🚨 **E O ANINHADO PODE EXISTIR PELA METADE**: a NFS-e do **ADN** grava
+  `prestador: { cnpjCpf }` — bloco com documento e **sem nome**. Um
+  `temLado ? aninhado : chato` puro daria o bloco incompleto por resposta e a
+  coluna sairia vazia com o nome gravado no campo do lado. Por isso o aninhado
+  passou a vencer **CAMPO A CAMPO**, onde ele tem valor; o achatado preenche o
+  resto. Nunca menos informação do que já havia.
+  📌 **E ISTO É UM CASO DE RITO, NÃO SÓ DE CÓDIGO**: outro agente
+  (`AI Assistant <sistema@gemini.local>`) fez o MESMO diagnóstico às 12h45
+  (#1074) e às 13h03 o #1075 o reverteu como *"alteração visual feita por
+  engano no relatório interno do Fiscal"* — ou seja, saiu por estar FORA DO
+  ESCOPO daquele agente, não por ter quebrado nada. Vinte minutos depois o
+  Paulo trouxe exatamente esse defeito. **Correção certa revertida por escopo
+  vira defeito de novo** — e o que sobrou do #1074 (o `prestador`/`tomador`
+  aninhado nos leitores do REINF) está CERTO e ficou.
+  ⚠️ A trava é por **VARREDURA** sobre o CÓDIGO (comentário fora, senão a prosa
+  que EXPLICA a correção reprova a correção — a mordida do ISS em 22/08): a
+  escolha do lado à mão quebra a build. Provada revertendo, 6 testes caem.
+
+- **📋 A ETAPA 4 NÃO TINHA COMO FECHAR — NUNCA** (28/08, CLINICA MEDICA MANTOAN
+  13344638000191 · 07/2026, print do Paulo: *"Das empresas que são só serviços
+  e obrigações e envio de impostos, para encerrar o mês… pra encerrar o mês
+  essas duas etapas está como se não tivesse feita"*).
+  🔴 A etapa dizia *"7 obrigação(ões) entregue(s) · o catálogo NÃO cobre 1
+  obrigação(ões) deste regime: **INSS Patronal (depende de folha)**"*, com a
+  ação *"não dê o mês por fechado por causa da lista"*. **E ela não ia fechar em
+  competência nenhuma**: o INSS patronal depende da FOLHA, que vive no módulo de
+  DP. O app mandava, para sempre, não fechar o mês de quem fez todo o trabalho —
+  é o alarme que a pessoa NÃO CONSEGUE apagar (27/08) na forma mais cara: ele
+  não desgasta, ele **TRANCA**.
+  ✂️ `obrigacao-fora-do-catalogo.js` (PURO): a entrega se DECLARA, com o mesmo
+  desenho do envio declarado e da reabertura — obrigações NOMEADAS, texto com o
+  piso de 15 caracteres, **data no futuro RECUSADA** e **autor obrigatório**.
+  📌 **ISTO NÃO FURA A TRAVA T1 — ela protege a VISIBILIDADE, não a entrega.**
+  A T1 existe porque obrigação que não vira tarefa não aparece em lugar nenhum e
+  o mês fecharia sobre uma lista incompleta. A entrega dessas obrigações sempre
+  foi humana, por fora, porque o app não tem o prazo nem o insumo. O mês fecha; a
+  obrigação continua NOMEADA no resumo, agora como DECLARADA.
+  🚨 **SÓ A OBRIGAÇÃO *PROPOSTA* É DECLARÁVEL, e é o coração do módulo.** As
+  outras três causas de `coberturaIncompleta` TÊM CONSERTO, e declarar por cima
+  delas apagaria o caminho: **regime INDEFINIDO** (define-se na ficha), **prazo
+  de OUTRA UF** — a mais perigosa, porque a data ESTÁ na tela e parece certa — e
+  **UF não cadastrada** (Dados Fiscais). É a régua do *"a saída nasce onde a
+  trava aparece — e onde ela não resolve, ela não aparece"* (27/08).
+  ⚠️ **QUEM TIRA A TRAVA É A COMPARAÇÃO NA LEITURA**, não a gravação: a
+  declaração cobre pelos NOMES, então obrigação NOVA que ela não menciona faz a
+  etapa voltar a acusar. Quitação de julho não alcança o que apareceu depois. Por
+  isso a lista vem do BACKEND para a tela — campo livre faria a declaração passar
+  e a trava continuar de pé, calada.
+  📌 E a leitura é **UMA query por competência** (`lerCoberturasDaCompetencia`),
+  anexada pelo painel — leitura por card foi o HTTP 429 de 27/08.
+
 - **🚨 A RETENÇÃO DA FICHA NÃO CHEGAVA AO ARQUIVO — o SPED declarava a recolher
   MAIOR que o devido** (28/08, MONICA MOROMIZATO 01641443000124 · 07/2026;
   Paulo autorizou: *"sim pode montar"*). A Memória de Apuração dizia **PIS

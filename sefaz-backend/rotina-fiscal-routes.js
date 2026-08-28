@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
-import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
+import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
 import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
@@ -27,6 +27,12 @@ import { empresaDaRotina, COLECOES_DA_ROTINA } from './rotina-empresa-insumo.js'
 // de `lerFechamentosDaCompetencia`: cada card buscando o seu era ~400 idas ao
 // Firestore e o HTTP 429 do print de 27/08.
 import { lerFechamentosDaCompetencia } from './fechamento-store.js';
+// 📋 A entrega DECLARADA das obrigações fora do catálogo — UMA query para a
+// competência inteira, pelo mesmo motivo do carimbo: ler por card foi o 429.
+import { lerCoberturasDaCompetencia, gravarCoberturaDeclarada } from './cobertura-declarada-store.js';
+// A régua da declaração é PURA e mora no dono — a rota só faz I/O.
+import { conferirDeclaracaoCobertura, textoDaDeclaracaoCobertura } from './obrigacao-fora-do-catalogo.js';
+import { normalizarCompetencia } from './competencia.js';
 
 /**
  * Cobertura do catálogo para UM cliente.
@@ -315,6 +321,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
 
     // UMA query para os carimbos da competência inteira — nunca uma por empresa.
     const carimbos = await lerFechamentosDaCompetencia(db, competencia);
+    const coberturasDeclaradas = await lerCoberturasDaCompetencia(db, competencia);
 
     const rotinas = empresas.map((e) => montarRotinaFiscal({
         // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
@@ -338,6 +345,9 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         // devolve o carimbo na rotina — é dele que o bloco "Dar fim de mês"
         // se alimenta, e buscá-lo por card foi o que produziu o 429.
         fechamento: carimbos.get(String(e.id || '')) || null,
+        // 📋 A declaração entra no NÚCLEO, como o carimbo: é ela que decide
+        // se a etapa 4 ainda trava por obrigação que o catálogo não cobre.
+        declaracaoCobertura: coberturasDeclaradas.get(String(e.id || '')) || null,
     }));
 
     // 🔒 O carimbo viaja JUNTO da rotina: é ele que o bloco "Dar fim de mês"
@@ -418,6 +428,60 @@ router.get('/painel', requireAuth, async (req, res) => {
     } catch (e) {
         console.error('[rotina-fiscal/painel]', e);
         return res.status(500).json({ ok: false, error: `Falha ao montar a rotina: ${e.message}` });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/rotina-fiscal/cobertura-declarada
+//
+// 📋 DECLARAR QUE AS OBRIGAÇÕES FORA DO CATÁLOGO FORAM ENTREGUES POR FORA.
+//
+// Paulo, 28/08 (CLINICA MEDICA MANTOAN 07/2026): a etapa 4 dizia *"o catálogo
+// NÃO cobre 1 obrigação deste regime: INSS Patronal (depende de folha)"* e
+// mandava *"não dê o mês por fechado"* — e essa etapa NUNCA ia fechar, porque o
+// INSS patronal depende da folha, que vive no módulo de DP.
+//
+// ⚠️ A RÉGUA É DO MÓDULO PURO, conferida ANTES de gravar: obrigações NOMEADAS,
+// texto com o piso da T3, data que não está no futuro e AUTOR. E o que
+// realmente decide se a trava sai é a COMPARAÇÃO NA LEITURA
+// (`coberturaDeclarada`): declaração que não menciona uma obrigação nova deixa
+// a etapa acusando de novo — quitação de julho não alcança o que apareceu
+// depois dela.
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/cobertura-declarada', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, empresaCnpj, competencia, obrigacoes, comoFoi, quando } = req.body || {};
+        const comp = normalizarCompetencia(competencia);
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+        // Competência ilegível RECUSA com o motivo — gravar no mês errado daria
+        // quitação a uma competência que ninguém declarou.
+        if (!comp) return res.status(400).json({ ok: false, error: 'Competência ilegível.' });
+        if (!(await podeAcessarEmpresaId(req.user, empresaId))) {
+            return res.status(403).json({ ok: false, error: 'Esta empresa não está na sua carteira.' });
+        }
+
+        const conf = conferirDeclaracaoCobertura({
+            obrigacoes, comoFoi, quando,
+            quem: req.user?.email || req.user?.uid || null,
+        });
+        // 400, nunca 500: declaração incompleta é RESPOSTA, e a frase diz o que
+        // falta preencher.
+        if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+
+        const doc = await gravarCoberturaDeclarada(getDb(), {
+            empresaId, empresaCnpj, competencia: comp, declaracao: conf.declaracao,
+        });
+        console.log(`[rotina-fiscal] cobertura declarada ${empresaId} ${comp} por ${conf.declaracao.declaradoPor}`);
+        return res.json({
+            ok: true,
+            // A frase volta para a tela DIZER que o app não tem prova da
+            // entrega — quem declarou precisa ver isso na hora, não só na
+            // auditoria.
+            declaracao: { ...doc, texto: textoDaDeclaracaoCobertura(conf.declaracao) },
+        });
+    } catch (e) {
+        console.error('[rotina-fiscal/cobertura-declarada]', e);
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 
