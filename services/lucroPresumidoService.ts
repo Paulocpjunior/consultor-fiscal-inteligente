@@ -59,7 +59,19 @@ export interface LucroEmpresaResumo {
     nome: string | null;
     cnpj: string | null;
     uf: string | null;
+    /**
+     * ⚠️ CAMPO ANTIGO — não é a resposta sobre o regime. Uma entidade IMUNE
+     * tem `regimePadrao` vazio, e a lista escrevia "Presumido" em cima dele.
+     * Quem responde é `regime`, abaixo.
+     */
     regimePadrao: 'Presumido' | 'Real' | null;
+    /** A resposta do DONO (`regimeDaEmpresa`), com a origem. */
+    regime?: {
+        codigo: string;
+        rotulo: string;
+        origem: 'cadastro' | 'regimePadrao' | 'colecao' | 'nenhuma';
+        apuracaoDefinida: boolean;
+    } | null;
     codCliente: string | null;
     /**
      * CONTAGEM de fichas — nunca o array.
@@ -110,6 +122,7 @@ export const getEmpresasResumo = async (currentUser?: User | null): Promise<Lucr
                 cnpj: String((e as any).cnpj || '').replace(/\D/g, '') || null,
                 uf: String((e as any).uf || '').toUpperCase() || null,
                 regimePadrao: (e as any).regimePadrao || null,
+                regime: (e as any).regime || null,
                 codCliente: String((e as any).codCliente ?? (e as any).dadosFiscais?.codCliente ?? '') || null,
                 fichas: ((e as any).fichaFinanceira || []).length,
                 capturarSefaz: (e as any).capturarSefaz !== false,

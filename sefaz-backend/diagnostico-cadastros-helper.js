@@ -36,6 +36,9 @@
 // estão certas.
 // ============================================================================
 import { regimeDaEmpresa } from './regime-tributario.js';
+// Dono de "esta empresa apura ICMS?" — cadastro vence a inscrição estadual.
+// Duas leituras divergiriam entre este painel e a fila de migração.
+import { contribuinteIcms } from './migracao-prontidao.js';
 
 /**
  * @param {object} empresa  shape de simples_empresas/* ou lucro_empresas/*
@@ -208,9 +211,13 @@ function pendenciasDoSped(df, regimeDaFicha, add) {
     // padrão do gerador é o dia 20, que é o de SP, e o código de receita é
     // ESTADUAL — o app não inventa nenhum dos dois. Dentro de SP o padrão está
     // certo no caso comum, então cobrar ali seria alarme sem ação.
+    // ⚠️ QUEM RESPONDE É O DONO, e o CADASTRO vence a inscrição estadual: ter IE
+    // não é apurar ICMS (empresa de serviço em Brasília — 28/08). Marcada
+    // "não", ela sai da pendência; sem marcação, a IE segue respondendo, então
+    // nada muda para quem não preencheu.
     const uf = String(df.uf || '').trim().toUpperCase();
     const contribuinteIcmsForaDeSp = regime !== 'SIMPLES'
-        && uf && uf !== 'SP' && !vazio(df.inscricaoEstadual);
+        && uf && uf !== 'SP' && contribuinteIcms({ dadosFiscais: df });
     if (contribuinteIcmsForaDeSp) {
         if (vazio(df.icmsDiaVencimento)) {
             add(

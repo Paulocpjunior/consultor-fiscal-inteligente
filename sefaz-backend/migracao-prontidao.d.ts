@@ -55,3 +55,10 @@ export function montarProntidaoMigracao(
     docs: Array<Record<string, unknown>>,
     empresas: Array<{ id: string; nome?: string; cnpj?: string; regime?: string; uf?: string; industriaCadastro?: boolean }>,
 ): ProntidaoResultado;
+
+/**
+ * A empresa apura ICMS? O CADASTRO (`contribuinteIcms`, sim/não) vence a
+ * dedução pela inscrição estadual — ter IE não é apurar ICMS (28/08, as
+ * empresas de serviço de Brasília). Lê a forma achatada e a aninhada.
+ */
+export function contribuinteIcms(empresa: unknown): boolean;

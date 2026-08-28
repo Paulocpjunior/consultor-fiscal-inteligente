@@ -5,6 +5,66 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 M205/M605 SAÍRAM COM 0,00 — e a guarda EXISTIA: ela comparava o FLOAT, e
+  a linha imprimia outro número** (28/08, DGB CONSULTORIA 21903193000160 ·
+  07/2026, **12 recusas do PVA**; Paulo: *"os registros 205 e 605 não deveriam
+  ter sido considerados, pois se referem a valores retidos"*).
+  📖 A recusa, literal: *"O registro de detalhamento (M205/M605) não deve
+  existir quando o valor informado no campo Valor da Contribuição Não
+  Cumulativa a Recolher/Pagar é 0"* + *"Valor informado deve ser maior que
+  zero"* — DUAS por registro.
+  🔴 **A causa não foi guarda faltando** (`vlRecCumPis > 0` estava lá). A
+  contribuição sai de **base × alíquota** (106.553,01 × 0,65% = **692,5945650**)
+  e a retenção vem do documento **em centavos** (**692,59**): sobra **0,00456**,
+  que é `> 0` para o JavaScript e **0,00** para o formatador. O registro nasceu
+  porque a régua olhou um número que o arquivo não ia mostrar.
+  ✂️ `zeroNoArquivo(v)` (`Math.round(v*100) === 0`) decide a EXISTÊNCIA dos dois
+  registros, e a recusa virou regra da prevalidação no MESMO PR
+  (`conferirM205ComValorZero`), que lê as LINHAS e **nasce verde** sobre o
+  arquivo provado da PWR.
+  📌 **REGRA QUE FICA: quem decide se um registro EXISTE tem de ler o número que
+  vai SAIR NA LINHA, não o float.** Retenção que cobre a contribuição inteira é
+  o caso comum de prestador de serviço — a sobra de arredondamento é estrutural
+  ali, não acidente. É a família do "conferência que audita a intenção em vez do
+  arquivo" (o C100 com modelo 55 e chave 65, meses sem ninguém ver).
+
+- **🚨 A TELA ESCREVIA "Presumido" SOBRE UMA COMUNIDADE IMUNE — e ter INSCRIÇÃO
+  ESTADUAL não é apurar ICMS** (28/08, Paulo, dois achados da mesma família,
+  os dois da armadilha das duas formas):
+  🔴 **(1) `emp.regimePadrao || 'Presumido'`** na lista do Lucro. Campo antigo
+  VAZIO virava **AFIRMAÇÃO** de um regime que ninguém escolheu — e quem marcou
+  IMUNE no modal gravou em OUTRO campo (`regimeTributario`, o que tem dono e
+  vocabulário desde 18/08). *"Mesmo atualizando o cadastro delas como IMUNE, o
+  regime padrão continua como PRESUMIDO"*: por dentro o app já estava certo
+  (`regimeDaEmpresa` tem a precedência cadastro > regimePadrao > coleção) —
+  **quem mentia era a coluna**.
+  ✂️ O resumo passou a devolver a resposta do DONO (`regime: {codigo, rotulo,
+  origem, apuracaoDefinida}`) e a coluna a mostrá-la, com a ORIGEM no title.
+  `regimePadrao` continua saindo — outros leitores o usam —, o que muda é QUEM
+  a tela mostra. ⚠️ **Indefinido sai DITO** ("Não definido", em âmbar), nunca
+  disfarçado de Presumido, e o CABEÇALHO deixou de dizer "Regime Padrão", que
+  era o nome do campo antigo — cabeçalho que nomeia outro campo manda conferir
+  a coisa errada.
+  📌 **NÃO precisou de aba nova para as imunes**, que era o pedido: o campo já
+  existia e já funcionava. Pedido de tela nova às vezes é sintoma de tela velha
+  mentindo — vale perguntar o que a pessoa VIU antes de construir.
+  🔴 **(2) O E116 era cobrado de quem tem IE** (*"as empresas de SERVIÇOS de
+  Brasília, nós entregamos o SPED, mas elas não recolhem ICMS"* — RADIO E TV
+  IBIRAPUERA, DF). Ter inscrição estadual **não é** apurar ICMS.
+  ✂️ Campo `contribuinteIcms` (sim/não) no cadastro, **mesmo desenho do
+  `contribuinteIpi`**: o cadastro VENCE a dedução, e sem marcação a IE segue
+  respondendo — assim nada muda para quem não preencheu. O dono é ÚNICO
+  (`contribuinteIcms` em `migracao-prontidao.js`, lido também pelo diagnóstico)
+  e lê as DUAS formas (achatada e aninhada), porque a rota da fila projeta no
+  topo e o diagnóstico tem `dadosFiscais` — ler uma só faria a mesma empresa ter
+  duas respostas em duas telas.
+  ⚠️ **O gerador já estava seguro**: o E116 só sai com ICMS a recolher > 0, então
+  serviço puro nunca teve o registro. O defeito era só do PAINEL — e conferir
+  isso ANTES evitou "corrigir" um gerador que estava certo.
+  📌 **REGRA QUE FICA: quando o dono reclama de um número, pergunte primeiro se
+  quem erra é o CÁLCULO ou a EXIBIÇÃO.** Nos dois casos aqui era a exibição, e
+  em (1) a régua de trás estava certa desde 18/08 — dez dias mostrando o oposto.
+
 - **🚪 "NÃO ACHO AONDE" — a fila nova estava atrás de um card com OUTRO NOME, e
   o SearchType dela não renderizava nada** (28/08, Paulo com o print do menu
   ABERTO: ele estava no lugar certo e não achou). A lista de cadastros mora numa

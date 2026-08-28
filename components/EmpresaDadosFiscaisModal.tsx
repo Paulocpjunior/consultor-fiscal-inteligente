@@ -365,6 +365,34 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 onChange={v => handleField('classEstabIpi', v)}
                                 placeholder="Só p/ contribuinte de IPI — código do registro 0002"
                             />
+                            {/* 🏛️ CONTRIBUINTE DE ICMS — 28/08, Paulo: *"as empresas
+                                de SERVIÇOS de Brasília, nós entregamos o SPED, mas
+                                elas não recolhem ICMS, como fazer para não ficar
+                                constando como pendência"*.
+                                O app usava a INSCRIÇÃO ESTADUAL como prova, e ter IE
+                                não é apurar ICMS — empresa de serviço fora de SP
+                                acendia pendência do E116 sem ter o registro. Mesmo
+                                desenho do IPI: quem responde é o cadastro, o app não
+                                deduz, e "não informado" mantém o comportamento antigo. */}
+                            <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-slate-500 dark:text-slate-400">
+                                    Contribuinte de ICMS
+                                </label>
+                                <select
+                                    value={dados.contribuinteIcms || ''}
+                                    onChange={e => handleField('contribuinteIcms', e.target.value)}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                >
+                                    <option value="">Não informado — o app decide pela inscrição estadual</option>
+                                    <option value="sim">Sim — apura ICMS</option>
+                                    <option value="nao">Não — só serviço (ISS), não apura ICMS</option>
+                                </select>
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Decide o E116 (ICMS a recolher) do SPED Fiscal. Marcado <b>Não</b>, o registro
+                                    não sai e o prazo/código de receita do ICMS deixam de ser cobrados no
+                                    diagnóstico de cadastros.
+                                </p>
+                            </div>
                             {/* 🚨 EFD-Contribuições: havendo F550 (receita de
                                 ALUGUEL, que não gera documento capturável), o
                                 registro 1900 é OBRIGATÓRIO — recusa do PVA na

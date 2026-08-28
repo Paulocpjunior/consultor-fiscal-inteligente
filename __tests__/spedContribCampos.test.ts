@@ -352,3 +352,64 @@ describe('🚨 a contagem só protege o registro que está NELA', () => {
         expect(s.naoConferidos).toContain('9XYZ');  // este não: volta nomeado
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 M205/M605 COM VALOR ZERO — recusa do PVA (DGB CONSULTORIA · 07/2026, 28/08)
+//
+// "O registro de detalhamento (M205/M605) não deve existir quando o valor
+//  informado no campo Valor da Contribuição ... a Recolher/Pagar é 0" e
+// "Valor informado deve ser maior que zero." — duas recusas por registro.
+//
+// ⚠️ E o gerador TINHA a guarda (`> 0`). Errou porque comparava o FLOAT: a
+// contribuição vem de base × alíquota (106.553,01 × 0,65% = 692,5945650) e a
+// retenção do documento em centavos (692,59). Sobrava 0,0045 — maior que zero
+// para o `>`, e 0,00 na linha impressa.
+// ════════════════════════════════════════════════════════════════════════════
+describe('M205/M605 não existe sem valor a recolher', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { conferirM205ComValorZero } = require('../sefaz-backend/sped-contrib-campos.js');
+
+    it('acusa as linhas reais da DGB', () => {
+        const r = conferirM205ComValorZero(['|M205|12|810902|0,00|', '|M605|12|217201|0,00|']);
+        expect(r.erros).toHaveLength(2);
+        expect(r.erros[0].mensagem).toMatch(/não deve existir/);
+        expect(r.erros[0].mensagem).toMatch(/maior que zero/);
+    });
+
+    // 🔒 NASCE VERDE no arquivo correto — a linha provada da PWR (03/2026).
+    it('registro com valor não é acusado', () => {
+        expect(conferirM205ComValorZero(['|M205|12|810902|104,36|', '|M605|12|217201|481,66|']).erros)
+            .toEqual([]);
+    });
+
+    it('campo vazio também é acusado — vazio não é "tem valor"', () => {
+        expect(conferirM205ComValorZero(['|M205|12|810902||']).erros).toHaveLength(1);
+    });
+
+    it('não confunde outros registros do bloco M', () => {
+        expect(conferirM205ComValorZero(['|M200|0,00|0,00|', '|M210|51|106553,01|']).erros).toEqual([]);
+    });
+});
+
+// A régua que decidiu o defeito: o que sai NA LINHA é o que manda.
+describe('zeroNoArquivo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { zeroNoArquivo } = require('../sefaz-backend/base-pis-cofins.js');
+
+    it('a sobra de arredondamento da DGB é ZERO no arquivo', () => {
+        // 106553,01 × 0,65% = 692,5945650 ; retenção 692,59
+        expect(zeroNoArquivo(106553.01 * 0.0065 - 692.59)).toBe(true);
+    });
+
+    it('meio centavo arredonda para 0,01 e NÃO é zero', () => {
+        expect(zeroNoArquivo(0.005)).toBe(false);
+        expect(zeroNoArquivo(0.004)).toBe(true);
+    });
+
+    it('valor de verdade não é zero, e ilegível é tratado como zero', () => {
+        expect(zeroNoArquivo(104.36)).toBe(false);
+        expect(zeroNoArquivo(null)).toBe(true);
+        expect(zeroNoArquivo(undefined)).toBe(true);
+        expect(zeroNoArquivo(NaN)).toBe(true);
+    });
+});

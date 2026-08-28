@@ -31,6 +31,8 @@
 // (24/07), em que empresa excluída ressuscitava.
 // ============================================================================
 
+import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
+
 /** Campos do CADASTRO — o que a lista precisa para a pessoa escolher. */
 export const CAMPOS_RESUMO = [
     'nome',
@@ -101,6 +103,25 @@ export function montarResumoLucro(docs = []) {
             cnpj: soDigitos(d.cnpj) || null,
             uf: texto(d.uf).toUpperCase() || null,
             regimePadrao: d.regimePadrao || null,
+            // 🚨 A COLUNA ESCREVIA "Presumido" SOBRE UMA COMUNIDADE IMUNE
+            // (28/08, Paulo, print da COMUNIDADE EVANGELICA DE PASSOS): a lista
+            // fazia `regimePadrao || 'Presumido'` — quando o campo antigo está
+            // vazio, a TELA AFIRMAVA um regime que ninguém escolheu. E ele
+            // tinha marcado IMUNE no modal, que grava `regimeTributario`: a
+            // armadilha das duas formas, com a tela lendo a forma velha.
+            //
+            // Quem responde é o DONO, com a precedência da casa (cadastro >
+            // regimePadrao > coleção). `regimePadrao` continua saindo porque
+            // outros leitores o usam — o que muda é QUEM a tela mostra.
+            regime: (() => {
+                const r = regimeDaEmpresa({ ...d, colecao: 'lucro_empresas' });
+                return {
+                    codigo: r.regime,
+                    rotulo: rotuloRegime(r.regime),
+                    origem: r.origem,
+                    apuracaoDefinida: r.apuracaoDefinida,
+                };
+            })(),
             codCliente: texto(d.codCliente ?? d.dadosFiscais?.codCliente) || null,
             // Só a CONTAGEM. É ela que o selo de duplicata usa para dizer qual
             // cadastro manter — o array em si fica no servidor.

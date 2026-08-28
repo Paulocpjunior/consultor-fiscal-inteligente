@@ -241,3 +241,31 @@ export const CODIGOS_RECEITA_M205 = {
 export function codigosReceitaM205(naoCumulativo) {
     return naoCumulativo ? null : CODIGOS_RECEITA_M205.cumulativo;
 }
+
+/**
+ * 🚨 O QUE O ARQUIVO VAI DIZER É O QUE DECIDE — não o float.
+ *
+ * 28/08, DGB CONSULTORIA 21903193000160 · 07/2026, **12 recusas do PVA**:
+ * *"O registro de detalhamento (M205/M605) não deve existir quando o valor
+ * informado no campo Valor da Contribuição Não Cumulativa a Recolher/Pagar é
+ * 0"* e *"Valor informado deve ser maior que zero"*. O arquivo trazia
+ * `|M205|12|810902|0,00|`.
+ *
+ * A causa NÃO foi a guarda faltando — ela existia (`vlRecCumPis > 0`). Foi o
+ * float: a contribuição sai da BASE × ALÍQUOTA (106.553,01 × 0,65% =
+ * **692,5945650**) e a retenção vem do documento já em centavos (**692,59**).
+ * A diferença é **0,00456…** — maior que zero para o `>`, e **0,00** para o
+ * formatador. O registro nasceu porque a régua olhou um número que o arquivo
+ * não ia mostrar.
+ *
+ * Por isso a pergunta certa é *"quantos CENTAVOS vão sair na linha?"*. Quem
+ * decide a existência de um registro tem de ler o mesmo número que o PVA lê.
+ *
+ * @param {number} valor
+ * @returns {boolean} o valor sai como 0,00 no arquivo?
+ */
+export function zeroNoArquivo(valor) {
+    const n = Number(valor);
+    if (!Number.isFinite(n)) return true;
+    return Math.round(n * 100) === 0;
+}
