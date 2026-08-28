@@ -32,6 +32,8 @@ const CadastrosPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const [erro, setErro] = useState<string | null>(null);
     const [filtro, setFiltro] = useState<GravidadeCadastro | 'todas'>('critico');
     const [busca, setBusca] = useState('');
+    // 🚦 Filtro por CAUSA: clicar em "12 sem classificação de IPI" mostra as 12.
+    const [campoFiltro, setCampoFiltro] = useState<string | null>(null);
 
     const carregar = async () => {
         setLoading(true); setErro(null);
@@ -45,11 +47,21 @@ const CadastrosPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
         if (!data) return [];
         const q = busca.trim().toLowerCase();
         return data.empresas.filter((e) => {
-            if (filtro !== 'todas' && e.gravidade !== filtro) return false;
+            // O filtro por CAUSA vence o de gravidade: quem clicou na causa
+            // quer TODAS as empresas dela, não a interseção com o filtro que
+            // estava aberto — interseção silenciosa faria "12" mostrar 3.
+            if (campoFiltro) {
+                if (!e.pendencias.some((p) => p.campo === campoFiltro)) return false;
+            } else if (filtro !== 'todas' && e.gravidade !== filtro) return false;
             if (!q) return true;
-            return e.nome.toLowerCase().includes(q) || e.cnpj.includes(q.replace(/\D/g, ''));
+            // 🐛 `cnpj.includes('')` é SEMPRE true: buscar um texto sem dígitos
+            // ("zzz") devolvia a carteira INTEIRA, que se lê como "achei tudo"
+            // quando o certo é "não achei nada". Só compara CNPJ se a busca
+            // tiver dígito.
+            const digitos = q.replace(/\D/g, '');
+            return e.nome.toLowerCase().includes(q) || (!!digitos && e.cnpj.includes(digitos));
         });
-    }, [data, filtro, busca]);
+    }, [data, filtro, busca, campoFiltro]);
 
     const card: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' };
 
@@ -97,7 +109,7 @@ const CadastrosPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
                 <div className="flex gap-1 text-xs">
                     {(['critico', 'alto', 'medio', 'todas'] as const).map(f => (
-                        <button key={f} onClick={() => setFiltro(f as any)}
+                        <button key={f} onClick={() => { setFiltro(f as any); setCampoFiltro(null); }}
                             className="px-3 py-2 rounded-lg font-bold transition-colors"
                             style={{ background: filtro === f ? 'var(--accent)' : 'var(--bg-card)', color: filtro === f ? '#fff' : 'var(--text-muted)', border: `1px solid ${filtro === f ? 'var(--accent)' : 'var(--border-default)'}` }}>
                             {f === 'todas' ? 'Todas' : gravLabel[f as GravidadeCadastro]}
@@ -115,10 +127,56 @@ const CadastrosPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                 <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)' }}>{erro}</div>
             )}
 
+            {/* 🚦 A EQUIPE ATACA POR CAUSA. Com 400 clientes, uma lista de
+                empresas é um muro: "12 empresas sem a classificação de IPI" é
+                UMA tarefa, doze linhas soltas são doze mistérios. Mesmo desenho
+                do painel de envios do rito (#293). */}
+            {data?.porCampo && data.porCampo.length > 0 && (
+                <div className="p-4 rounded-xl space-y-2" style={card}>
+                    <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                        Por causa — clique para ver as empresas
+                    </p>
+                    {data.porCampo.map((c) => {
+                        const ativo = campoFiltro === c.campo;
+                        return (
+                            <button
+                                key={c.campo}
+                                onClick={() => setCampoFiltro(ativo ? null : c.campo)}
+                                className="w-full text-left p-2 rounded-lg flex items-start gap-3"
+                                style={{
+                                    background: ativo ? 'var(--accent-soft)' : 'var(--bg-card)',
+                                    border: `1px solid ${ativo ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                                }}
+                            >
+                                <span className="text-lg font-bold min-w-[2.5rem] text-right" style={{ color: 'var(--text-primary)' }}>
+                                    {c.qtd}
+                                </span>
+                                <span className="flex-1 min-w-0">
+                                    <span className="block text-xs" style={{ color: 'var(--text-secondary)' }}>{c.descricao}</span>
+                                    <span className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                        <span className="font-mono">{c.campo}</span> · impacto: {c.impacto}
+                                    </span>
+                                </span>
+                            </button>
+                        );
+                    })}
+                    {campoFiltro && (
+                        <button onClick={() => setCampoFiltro(null)}
+                            className="text-xs px-3 py-1.5 rounded-lg"
+                            style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
+                            ✕ Limpar filtro por causa
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className="space-y-2">
                 {!loading && lista.length === 0 && (
                     <div className="p-6 rounded-xl text-center text-sm" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--success)' }}>
-                        ✓ Nenhuma empresa nessa gravidade.
+                        {/* Vazio com filtro por causa aberto não é "está tudo
+                            certo" — é "ninguém tem ESTA causa". Dizer a frase
+                            errada faz alguém concluir o contrário. */}
+                        {campoFiltro ? '✓ Nenhuma empresa com esta pendência.' : '✓ Nenhuma empresa nessa gravidade.'}
                     </div>
                 )}
                 {lista.map((emp) => <EmpresaCard key={emp.cnpj} emp={emp} />)}

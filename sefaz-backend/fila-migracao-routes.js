@@ -21,6 +21,11 @@ import { requireAdmin } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarFilaMigracao } from './fila-migracao.js';
 import { vereditoDoCnpj, ehResumo } from './prova-captura.js';
+// 🚦 O cadastro entra na conta de quem migra: sem a classificação do 0002 ou
+// a natureza da PJ o PVA RECUSA, e a fila dizia "pronta" assim mesmo. Quem
+// calcula é aqui, onde o documento inteiro existe — passar a projeção feita à
+// mão para a régua é o defeito de 27/08 (a tela dizia pronto e o botão recusava).
+import { pendenciasCadastro, gravidadeCadastro } from './diagnostico-cadastros-helper.js';
 import { montarAptidaoSaida } from './aptidao-saida.js';
 import { montarProntidaoMigracao } from './migracao-prontidao.js';
 import { selecionarCertA1PorBase } from './cert-base-helper.js';
@@ -55,6 +60,10 @@ async function carregarEmpresas(db) {
                 capturarSefaz: d.capturarSefaz !== false,
                 inscricaoEstadual: df.inscricaoEstadual || d.inscricaoEstadual || '',
                 industriaCadastro: df.indAtividade === 'industrial' || df.naturezaAtividade === 'industria',
+                cadastro: (() => {
+                    const pendencias = pendenciasCadastro(d, regime);
+                    return { gravidade: gravidadeCadastro(pendencias), pendencias };
+                })(),
             });
         });
     }

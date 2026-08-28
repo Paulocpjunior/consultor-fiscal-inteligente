@@ -3,7 +3,7 @@
  * Errar aqui = bloquear geração SPED ou cálculo DAS sem aviso claro.
  */
 // @ts-expect-error — módulo .js puro
-import { pendenciasCadastro, gravidadeCadastro } from '../sefaz-backend/diagnostico-cadastros-helper.js';
+import { pendenciasCadastro, gravidadeCadastro, resumirPendenciasPorCampo } from '../sefaz-backend/diagnostico-cadastros-helper.js';
 
 describe('pendenciasCadastro — campos críticos', () => {
     it('empresa SIMPLES completa → zero pendências', () => {
@@ -295,5 +295,58 @@ describe('🚦 pendências que travam o SPED', () => {
         it('⚠️ empresa de serviço (sem IE) fora de SP não é cobrada', () => {
             expect(campos(lucro({ uf: 'PR' }))).toEqual([]);
         });
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚦 A EQUIPE ATACA POR CAUSA, NÃO POR EMPRESA
+//
+// Com 400 clientes, uma lista de empresas não é fila de trabalho — é um muro.
+// "12 empresas sem a classificação de IPI" é UMA tarefa; doze linhas soltas
+// são doze mistérios. Mesmo desenho do painel de envios do rito (#293).
+// ════════════════════════════════════════════════════════════════════════════
+describe('resumirPendenciasPorCampo', () => {
+    const pend = (campo: string) => ({ campo, descricao: `falta ${campo}`, impacto: 'x' });
+
+    it('agrupa por campo e conta as empresas', () => {
+        const r = resumirPendenciasPorCampo([
+            { nome: 'A', pendencias: [pend('dadosFiscais.classEstabIpi')] },
+            { nome: 'B', pendencias: [pend('dadosFiscais.classEstabIpi'), pend('cnae')] },
+        ]);
+        expect(r.map((x: any) => [x.campo, x.qtd])).toEqual([
+            ['dadosFiscais.classEstabIpi', 2],
+            ['cnae', 1],
+        ]);
+        expect(r[0].empresas).toEqual(['A', 'B']);
+    });
+
+    // 📌 Ordena por quantidade porque é assim que se escolhe o que fazer
+    // primeiro — alfabético aqui seria uma lista, não uma fila.
+    it('a mais frequente vem primeiro', () => {
+        const r = resumirPendenciasPorCampo([
+            { nome: 'A', pendencias: [pend('z')] },
+            { nome: 'B', pendencias: [pend('a')] },
+            { nome: 'C', pendencias: [pend('a')] },
+        ]);
+        expect(r[0].campo).toBe('a');
+    });
+
+    it('carteira sem pendência devolve lista vazia — não inventa causa', () => {
+        expect(resumirPendenciasPorCampo([{ nome: 'A', pendencias: [] }])).toEqual([]);
+        expect(resumirPendenciasPorCampo([])).toEqual([]);
+    });
+
+    // ⚠️ O teto corta a AMOSTRA, nunca a contagem: quem lê o número precisa do
+    // total, e o filtro por campo mostra todas.
+    it('a lista de empresas tem teto, a contagem não', () => {
+        const muitas = Array.from({ length: 60 }, (_, i) => ({ nome: `E${i}`, pendencias: [pend('a')] }));
+        const r = resumirPendenciasPorCampo(muitas);
+        expect(r[0].qtd).toBe(60);
+        expect(r[0].empresas).toHaveLength(50);
+    });
+
+    it('empresa sem nome cai no CNPJ, e nunca em branco', () => {
+        const r = resumirPendenciasPorCampo([{ cnpj: '11111111000191', pendencias: [pend('a')] }]);
+        expect(r[0].empresas).toEqual(['11111111000191']);
     });
 });
