@@ -72,16 +72,13 @@ export function contraparteDoc(d: DocumentoFiscal): any {
     // mordeu este projeto — e era por isso que a coluna
     // "Fornecedor/Remetente" do Livro saía toda com "—" (VINCENZO, 12/08).
     const emitente = temLado(d.emitente) ? d.emitente : (temLado(d.prestador) ? d.prestador : {
-        cnpjCpf: x.prestadorCnpj || x.cnpjEmit || x.cnpjEmitente || '',
-        // A captura NFS-e SP grava o participante em campos canônicos chatos
-        // (`prestadorNome`/`prestadorCnpj`). Sem estes fallbacks, o relatório
-        // preservava número e valores da nota, mas imprimia "—" no prestador.
-        nome: x.prestadorNome || x.xNomeEmit || x.nomeEmit || '',
+        cnpjCpf: x.cnpjEmit || x.cnpjEmitente || '',
+        nome: x.xNomeEmit || x.nomeEmit || '',
         ie: x.ieEmit || '', uf: x.ufEmit || '', codMunIBGE: x.codMunEmit || '',
     });
     const destinatario = temLado(d.destinatario) ? d.destinatario : (temLado(d.tomador) ? d.tomador : {
-        cnpjCpf: x.tomadorCnpj || x.cnpjDest || x.cnpjDestinatario || '',
-        nome: x.tomadorNome || x.xNomeDest || x.nomeDest || '',
+        cnpjCpf: x.cnpjDest || x.cnpjDestinatario || '',
+        nome: x.xNomeDest || x.nomeDest || '',
         ie: x.ieDest || '', uf: x.ufDest || '', codMunIBGE: x.codMunDest || '',
     });
     // 🚨 QUEM DECIDE O LADO É O DONO, não uma cópia (26/08). A cópia daqui
@@ -273,9 +270,7 @@ export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'sa
         // **Retenções**, que é a que alimenta a conferência do R-4020.
         .filter(d => docValido(d) && ehNotaDeServico(d) && direcaoDoc(d) === direcao)
         .map(d => {
-            // Usa a régua única de contraparte: ela conhece tanto o schema
-            // aninhado do XML quanto os campos chatos da captura NFS-e SP.
-            const parte: any = contraparteDoc(d);
+            const parte: any = direcao === 'saida' ? (d.tomador || d.destinatario) : (d.prestador || d.emitente);
             const v = d.valores || {};
             const base = v.baseCalculo ?? d.valorTotal ?? 0;
             // As duas formas de gravação, lidas pelo DONO da régua.
