@@ -63,6 +63,11 @@ const direcaoDoc = (d: DocumentoFiscal): 'entrada' | 'saida' =>
     (direcaoEfetivaDoc(d) as 'entrada' | 'saida');
 const contabilDoc = (d: DocumentoFiscal) => d.totais?.vNF || d.valorTotal || 0;
 
+/** Descarta chave vazia — o aninhado só VENCE onde ele de fato responde. */
+const semVazios = (o: any) => Object.fromEntries(
+    Object.entries(o || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+);
+
 /** Contraparte (quem não é a empresa): destinatário na saída e na nota própria de entrada. */
 export function contraparteDoc(d: DocumentoFiscal): any {
     const x = d as any;
@@ -71,16 +76,31 @@ export function contraparteDoc(d: DocumentoFiscal): any {
     // e o abrasf gravam ANINHADO. Ler só o aninhado é a armadilha que mais
     // mordeu este projeto — e era por isso que a coluna
     // "Fornecedor/Remetente" do Livro saía toda com "—" (VINCENZO, 12/08).
-    const emitente = temLado(d.emitente) ? d.emitente : (temLado(d.prestador) ? d.prestador : {
-        cnpjCpf: x.cnpjEmit || x.cnpjEmitente || '',
-        nome: x.xNomeEmit || x.nomeEmit || '',
+    //
+    // 🚨 E O ANINHADO PODE EXISTIR PELA METADE (28/08): a NFS-e do **ADN**
+    // grava `prestador: { cnpjCpf }` — bloco com documento e SEM NOME. Um
+    // `temLado ? aninhado : chato` puro daria o bloco incompleto por resposta
+    // e a coluna sairia vazia com o nome gravado no campo do lado. Por isso o
+    // aninhado só vence CAMPO A CAMPO, onde ele tem valor; o achatado
+    // preenche o resto. Nunca menos informação do que já havia.
+    const chatoEmit = {
+        // A NFS-e do portal de SP e do ADN nomeiam o lado de SERVIÇO
+        // (`prestadorCnpj`/`prestadorNome`); o importer de NF-e usa `…Emit`.
+        cnpjCpf: x.cnpjEmit || x.cnpjEmitente || x.prestadorCnpj || '',
+        nome: x.xNomeEmit || x.nomeEmit || x.prestadorNome || '',
         ie: x.ieEmit || '', uf: x.ufEmit || '', codMunIBGE: x.codMunEmit || '',
-    });
-    const destinatario = temLado(d.destinatario) ? d.destinatario : (temLado(d.tomador) ? d.tomador : {
-        cnpjCpf: x.cnpjDest || x.cnpjDestinatario || '',
-        nome: x.xNomeDest || x.nomeDest || '',
+        municipio: x.municipioEmit || x.xMunEmit || '',
+    };
+    const chatoDest = {
+        cnpjCpf: x.cnpjDest || x.cnpjDestinatario || x.tomadorCnpj || x.tomadorCpf || '',
+        nome: x.xNomeDest || x.nomeDest || x.tomadorNome || '',
         ie: x.ieDest || '', uf: x.ufDest || '', codMunIBGE: x.codMunDest || '',
-    });
+        municipio: x.municipioDest || x.xMunDest || '',
+    };
+    const juntar = (aninhado: any, chato: any) =>
+        (temLado(aninhado) ? { ...chato, ...semVazios(aninhado) } : chato);
+    const emitente = juntar(temLado(d.emitente) ? d.emitente : d.prestador, chatoEmit);
+    const destinatario = juntar(temLado(d.destinatario) ? d.destinatario : d.tomador, chatoDest);
     // 🚨 QUEM DECIDE O LADO É O DONO, não uma cópia (26/08). A cópia daqui
     // reconhecia a nota própria de entrada só por `tpNF === '0'`, SEM o laço
     // que o dono tem — e o comentário do próprio dono já diz por que ele
@@ -270,7 +290,23 @@ export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'sa
         // **Retenções**, que é a que alimenta a conferência do R-4020.
         .filter(d => docValido(d) && ehNotaDeServico(d) && direcaoDoc(d) === direcao)
         .map(d => {
-            const parte: any = direcao === 'saida' ? (d.tomador || d.destinatario) : (d.prestador || d.emitente);
+            // 🚨 ERA A SEGUNDA CÓPIA DA CONTRAPARTE — e ela lia SÓ o bloco
+            // ANINHADO (28/08, Paulo: *"veja a diferença de um mês para o
+            // outro com relação ao campo prestador de serviços"*).
+            //
+            // A NFS-e do **portal de SP** (o trilho que traz a maioria das
+            // notas) grava `prestadorNome`/`tomadorNome` e `xNomeEmit`/
+            // `xNomeDest` ACHATADOS, e **não grava bloco aninhado nenhum** —
+            // então `d.prestador` era `undefined`, `d.emitente` também, e a
+            // coluna Prestador/Tomador saía "—" na competência inteira. No mês
+            // importado pelo navegador (que grava `{prestador, tomador}`) ela
+            // aparecia. Mesma tela, mesmo cliente, dois meses diferentes.
+            //
+            // Quem responde é o DONO, que lê as duas formas e conhece a nota
+            // própria de entrada — a cópia daqui não conhecia nem uma nem a
+            // outra. `linhasRetencoes` e `servicosPorCodigo`, ao lado, já o
+            // chamavam: esta era a única que ainda perguntava sozinha.
+            const parte: any = contraparteDoc(d);
             const v = d.valores || {};
             const base = v.baseCalculo ?? d.valorTotal ?? 0;
             // As duas formas de gravação, lidas pelo DONO da régua.

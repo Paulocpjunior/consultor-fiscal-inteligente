@@ -34,6 +34,9 @@ import { competenciaFechada } from './fim-de-mes.js';
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
 import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
+// 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
+// sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
+import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -206,6 +209,9 @@ export function montarRotinaFiscal({
     // e está 'fechada', o mês é FATO fechado — a página virou. Ver o bloco no
     // fim desta função.
     fechamento = null,
+    // 📋 A declaração de que as obrigações FORA DO CATÁLOGO foram entregues por
+    // fora (empresa + competência). Ausente, nada muda.
+    declaracaoCobertura = null,
 }) {
     const docs = documentos || [];
     const entradas = docs.filter((d) => d.direcao === 'entrada').length;
@@ -417,6 +423,11 @@ export function montarRotinaFiscal({
     // obrigação que nunca foi listada. Âmbar, porque o que falta não é entrega:
     // é o app admitindo que não sabe o prazo — e quem entrega é a pessoa.
     if (cobertura?.coberturaIncompleta) {
+        // O estado ANTES da piora — é para ele que a etapa volta quando a
+        // entrega é declarada. Recalcular ali seria uma segunda montagem.
+        const statusAntesDaCobertura = eObrigacoes.status;
+        const resumoAntesDaCobertura = eObrigacoes.resumo;
+        const acaoAntesDaCobertura = eObrigacoes.acao;
         const props = (cobertura.propostas || [])
             .map((r) => `${r.label || r.obrigacao}${r.dependeDe ? ` (depende de ${r.dependeDe})` : ''}`);
         const indefinido = cobertura.regime === 'INDEFINIDO';
@@ -452,6 +463,35 @@ export function montarRotinaFiscal({
         eObrigacoes.regimeIndefinido = indefinido;
         eObrigacoes.propostas = props;
         eObrigacoes.prazoDeOutraUf = outraUf.map((r) => r.label || r.obrigacao);
+
+        // 📋 A ENTREGA DECLARADA TIRA A TRAVA — e a obrigação continua NOMEADA.
+        //
+        // 28/08 (MANTOAN): *"o catálogo NÃO cobre 1 obrigação: INSS Patronal
+        // (depende de folha)"* com a ação *"não dê o mês por fechado por causa
+        // da lista"*. Essa etapa NUNCA ia fechar: o INSS patronal depende da
+        // folha, que vive no módulo de DP. O app mandava, para sempre, não
+        // fechar o mês de quem já tinha feito o trabalho.
+        //
+        // ⚠️ A declaração só alcança a obrigação PROPOSTA (`podeDeclararCobertura`
+        // decide). Regime indefinido, prazo de outra UF e UF ausente TÊM
+        // conserto — declarar por cima deles apagaria o caminho.
+        eObrigacoes.podeDeclararCobertura = podeDeclararCobertura(eObrigacoes);
+        const dec = coberturaDeclarada(eObrigacoes, declaracaoCobertura);
+        if (dec.cobre) {
+            // Volta ao que a etapa era ANTES da piora, com a ressalva na frase:
+            // o mês fecha, e quem ler depois sabe que aquelas obrigações não
+            // viraram tarefa e não têm prova no app.
+            eObrigacoes = {
+                ...eObrigacoes,
+                status: statusAntesDaCobertura,
+                resumo: `${resumoAntesDaCobertura} · ${props.length} obrigação(ões) fora do catálogo `
+                    + `DECLARADA(S) como entregue(s) por ${declaracaoCobertura.declaradoPor}`,
+                acao: acaoAntesDaCobertura,
+                coberturaDeclarada: true,
+                declaracaoCobertura,
+                podeDeclararCobertura: false,
+            };
+        }
     }
 
     // DIPAM: a compra de produtor rural entra na GIA e no Registro 1400 da EFD

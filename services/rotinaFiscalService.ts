@@ -144,3 +144,28 @@ export async function carregarRotinaFiscal(competencia: string, empresaIds?: str
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return data;
 }
+
+/**
+ * 📋 DECLARAR QUE AS OBRIGAÇÕES FORA DO CATÁLOGO FORAM ENTREGUES POR FORA.
+ *
+ * ⚠️ **NENHUMA RÉGUA MORA AQUI.** O piso do texto, a recusa de data no futuro e
+ * a exigência do autor vivem no backend (`obrigacao-fora-do-catalogo.js`).
+ * Validar na tela criaria a segunda cópia — e ela divergiria no primeiro
+ * ajuste da régua.
+ */
+export async function declararCoberturaForaDoCatalogo(p: {
+    empresaId: string; empresaCnpj?: string; competencia: string;
+    obrigacoes: string[]; comoFoi: string; quando: string;
+}): Promise<{ ok: boolean; error?: string; declaracao?: { texto: string } }> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/cobertura-declarada', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}

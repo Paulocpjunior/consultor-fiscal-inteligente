@@ -177,3 +177,59 @@ describe('🚨 a caixa para de dizer "pronto" quando o ato recusa', () => {
         expect(container.textContent).not.toMatch(/O fim de mês foi RECUSADO/);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📋 A PORTA DA COBERTURA — a obrigação que o catálogo NÃO cobre
+//
+// 28/08, CLINICA MEDICA MANTOAN (Paulo, com o print): *"pra encerrar o mês
+// essas duas etapas está como se não tivesse feita"*. A etapa 4 acusava *"o
+// catálogo NÃO cobre 1 obrigação: INSS Patronal (depende de folha)"* — e ela
+// NUNCA ia fechar, porque a folha vive no módulo de DP.
+//
+// A mesma régua do envio declarado: a porta só aparece ONDE ELA RESOLVE, e
+// quem decide é o backend.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📋 a porta da cobertura declarada', () => {
+    const bObrig = (over: any = {}) => ({
+        id: 'obrigacoes', ordem: 4, nome: 'Entregar obrigações',
+        onde: 'Vencimentos', resumo: 'x', acao: 'y',
+        podeDeclararCobertura: true,
+        propostas: ['INSS Patronal (depende de folha)'],
+        ...over,
+    });
+
+    it('aparece quando a obrigação FORA DO CATÁLOGO é o bloqueio', () => {
+        montar([bObrig()]);
+        expect(screen.getByText(/Já entreguei estas obrigações por fora/)).toBeTruthy();
+    });
+
+    // ⚠️ Regime indefinido, prazo de outra UF e UF ausente TÊM conserto — e
+    // declarar por cima deles apagaria o caminho. Quem decide é o backend.
+    it('NÃO aparece quando o backend diz que a declaração não resolve', () => {
+        montar([bObrig({ podeDeclararCobertura: false })]);
+        expect(screen.queryByText(/Já entreguei estas obrigações por fora/)).toBeNull();
+    });
+
+    it('NÃO aparece em bloqueio de outra etapa', () => {
+        montar([bloqueio('captura', 'Capturar notas')]);
+        expect(screen.queryByText(/Já entreguei estas obrigações por fora/)).toBeNull();
+    });
+
+    // 🚨 A tela DIZ, antes do clique, QUAIS obrigações e que o app não tem
+    // prova da entrega — senão isto se lê como "o app entregou".
+    it('ao abrir, NOMEIA as obrigações e diz que o app não tem prova', () => {
+        const { container } = montar([bObrig()]);
+        fireEvent.click(screen.getByText(/Já entreguei estas obrigações por fora/));
+        expect(container.textContent).toMatch(/INSS Patronal/);
+        expect(container.textContent).toMatch(/não tem prova/);
+    });
+
+    // A lista vem do BACKEND: campo livre faria a declaração passar aqui e a
+    // trava continuar de pé, porque a leitura compara os NOMES.
+    it('não há campo para digitar o nome da obrigação', () => {
+        const { container } = montar([bObrig()]);
+        fireEvent.click(screen.getByText(/Já entreguei estas obrigações por fora/));
+        const textos = Array.from(container.querySelectorAll('input[type="text"], input:not([type])'));
+        expect(textos).toHaveLength(0);
+    });
+});

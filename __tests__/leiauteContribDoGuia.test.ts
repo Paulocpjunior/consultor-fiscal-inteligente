@@ -105,7 +105,12 @@ describe('🚨 os registros que o gerador EMITE estão cobertos', () => {
             '|C010|31947349000169|2|',
             '|C100|1|0|26767102000120|55|00|001|7|3526|24072026|24072026|18179,00|0|562,24'
                 + '||18741,24|9|0,00|0,00|0,00|18179,00|3272,22|0,00|0,00|0,00|121,82|562,24|||',
-            '|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|',
+        // ⚠️ Os quatro `0,00` são os campos de AJUSTE (5, 6, 12, 13): eles saíam
+        // VAZIOS e o PVA recusou com "Campo de preenchimento obrigatório"
+        // (DGB, 28/08). Sem M220/M620 não há ajuste, e aqui o zero É a
+        // resposta. Quantidade (9-10) e diferimento (14-15) seguem vazios —
+        // esses o PVA não acusou.
+            '|M210|51|38316,84|30958,77|0,00|0,00|30958,77|0,6500|||201,23|0,00|0,00|||201,23|',
             '|M205|12|810902|201,23|',
             '|9999|113|',
         ];
