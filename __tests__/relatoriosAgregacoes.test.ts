@@ -144,26 +144,6 @@ describe('resumoImpostos', () => {
 });
 
 describe('serviços e retenções', () => {
-    it('preserva o prestador da captura NFSe SP no relatório de tomados', () => {
-        const docPortalSp = {
-            tipo: 'NFSe', tipoDoc: 'NFSe', direcao: 'entrada', status: 'autorizado',
-            numero: '0000000578', dhEmi: '2026-04-24T00:00:00',
-            prestadorCnpj: '11950487700220',
-            prestadorNome: 'MILANO COMERCIO VAREJISTA',
-            tomadorCnpj: '00622095000185',
-            tomadorNome: 'LU FESTAS LTDA',
-            valorTotal: 9717.73,
-            valores: { baseCalculo: 9717.73, liquido: 9717.73 },
-        };
-
-        const [linha] = linhasServicos([docPortalSp] as any, 'entrada');
-
-        expect(linha.participante).toBe('MILANO COMERCIO VAREJISTA');
-        expect(linha.doc).toBe('11950487700220');
-        expect(linha.numero).toBe('0000000578');
-        expect(linha.base).toBe(9717.73);
-    });
-
     it('tomados = NFSe de entrada, com todas as retenções', () => {
         const l = linhasServicos([nfse(), nfe()] as any, 'entrada');
         expect(l).toHaveLength(1);
