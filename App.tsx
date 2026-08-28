@@ -1384,12 +1384,18 @@ const App: React.FC = () => {
                             RECUPERACAO_PRAZOS → RecuperacaoHub
                             DIAGNOSTICO_DOCS/CADASTROS/CERT_MONITOR/CONFIG/ANOMALIAS → DiagnosticoHub */}
 
-                        {searchType === SearchType.SAUDE_GERAL && (
+                        {/* 🚪 UM ramo para os DOIS caminhos: o card do hub e o
+                            atalho direto para a sub-aba. Dois ramos separados
+                            remontariam o componente e o `subInicial` viraria
+                            loteria — o atalho levaria à aba anterior. */}
+                        {(searchType === SearchType.SAUDE_GERAL
+                            || searchType === SearchType.DIAGNOSTICO_CADASTROS) && (
                             <ErrorBoundary modulo="App">
                             <Suspense fallback={<LoadingSpinner />}>
                                 <DiagnosticoHub
                                     currentUser={currentUser}
                                     onShowToast={setToastMessage}
+                                    subInicial={searchType}
                                 />
                             </Suspense>
                             </ErrorBoundary>
