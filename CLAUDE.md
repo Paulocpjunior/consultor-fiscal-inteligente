@@ -45,11 +45,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   *"o cadastro/env está preenchido?"* é STATUS; quem responde *"funciona?"* é a
   última tentativa REAL. Onde os dois aparecem no mesmo card, o do resultado
   manda — e o do status vira detalhe, nunca o título.
-  🚩 **A CORREÇÃO DO TENANT É OPERACIONAL, e não é neste repo**: o proxy é o
-  serviço `consultor-fiscal-proxy` (Cloud Run, us-west1), com `GRAPH_TENANT_ID`
-  / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET` próprios. Enquanto ele não for
-  corrigido, **nenhum fim de mês fecha pela etapa 5** — e o app agora DIZ isso
-  em vez de mostrar verde.
+  ✅ **E A CORREÇÃO ERA NESTE REPO — eu disse que era operacional e estava
+  ERRADO.** O tenant vive **CRAVADO** em `.github/workflows/deploy-proxy.yml`
+  (`--update-env-vars=SHAREPOINT_TENANT_ID=dfa9a1d2-…`), e o `proxy-backend/`
+  mora aqui também. Ou seja: **mexer no console do Cloud Run seria desfeito no
+  próximo deploy do proxy** — eu quase mandei o Paulo fazer exatamente isso.
+  📌 **REGRA QUE FICA: antes de dizer "é operacional, não é código", PROCURE o
+  valor no repo.** Um `grep` do GUID respondeu o que eu tinha dado por
+  impossível, e a diferença é entre um commit e uma ida ao console que o
+  próximo deploy apaga. **Env cravada em workflow é a fonte da verdade; a tela
+  do Cloud Run é só o retrato dela.**
+  🔎 **O TENANT CERTO É PÚBLICO — não precisou de acesso nenhum**:
+  `login.microsoftonline.com/<domínio>/v2.0/.well-known/openid-configuration`
+  devolve o issuer com o GUID. Conferido pelos DOIS domínios do escritório
+  (`spassessoriacontabil.com.br` e `spassessoriacontabilcombr.onmicrosoft.com`),
+  os dois dando **`8b8254a4-9a63-4c2d-81a2-577942081943`** — e o antigo
+  respondendo `invalid_tenant` na cara. Endpoint de descoberta, zero segredo.
+  🐛 **E A MINHA PRIMEIRA AÇÃO NA TELA APONTAVA A VARIÁVEL ERRADA**: eu escrevi
+  `GRAPH_TENANT_ID`, e o proxy lê **`SHAREPOINT_TENANT_ID`** — ele MISTURA os
+  prefixos (tenant e client id são `SHAREPOINT_*`, só o secret é `GRAPH_*`).
+  Nome de variável em mensagem de ação se lê do código, nunca da memória: o
+  colaborador procura exatamente o que está escrito, e não acha.
+  ✂️ **E O `/health` DO PROXY ERA A RAIZ DO VERDE**: `configured: Boolean(
+  CLIENT_ID && CLIENT_SECRET)` — ele **nunca olhou o tenant**. Nasceu
+  `checkAuth()`, que TENTA o token e devolve `tokenOk` + a mensagem da
+  Microsoft inteira; o `_tokenCache` faz a chamada seguinte sair de graça.
+  `configured` fica, porque distinguir *"faltou preencher"* de *"preencheram
+  errado"* é o que dá a ação certa — mas ele deixou de ser o veredito.
+  ⚠️ **E `tokenOk` ausente NÃO vira erro**: proxy antigo não tem o campo, e
+  ausência não é recusa — ali quem responde continua sendo a última rodada.
 
 - **🚨 O BLOQUEIO DO FIM DE MÊS TINHA DUAS MONTAGENS — e a da TELA esquecia
   campos, em silêncio** (28/08, VINCENZO GUERRA BANANAS 63027940000194, com

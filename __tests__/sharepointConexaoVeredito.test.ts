@@ -63,12 +63,101 @@ describe('🚨 o caso do print — configurado NÃO é conectado', () => {
         expect(v.acao).toMatch(/preencher grupo\/pasta do cliente não resolve/);
     });
 
-    it('aponta o serviço e as variáveis que se corrigem', () => {
+    // 🚨 ASSERÇÃO TROCADA no mesmo dia, e por um achado: a primeira versão
+    // mandava corrigir "GRAPH_TENANT_ID no serviço consultor-fiscal-proxy" —
+    // e as DUAS metades estavam erradas. A variável é `SHAREPOINT_TENANT_ID`
+    // (o proxy mistura os prefixos: tenant e client id são SHAREPOINT_*, só o
+    // secret é GRAPH_*), e o lugar não é o console do Cloud Run: o valor vive
+    // CRAVADO em `.github/workflows/deploy-proxy.yml`, então mudar na tela é
+    // desfeito no próximo deploy do proxy.
+    it('aponta o ARQUIVO que manda, não a tela que o deploy sobrescreve', () => {
         const v = vereditoConexaoSharePoint({
             health: { configured: true }, lastSync: SYNC_DO_PRINT, agoraMs: AGORA,
         });
-        expect(v.acao).toMatch(/consultor-fiscal-proxy/);
-        expect(v.acao).toMatch(/GRAPH_TENANT_ID/);
+        expect(v.acao).toMatch(/deploy-proxy\.yml/);
+        expect(v.acao).toMatch(/desfeito no próximo deploy/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚦 O PROXY PASSOU A RESPONDER DIRETO (`tokenOk`) — ele TENTA o token no
+// /health, em vez de dizer "ok" só porque as variáveis existem. Assim a tela
+// não precisa esperar uma rodada de sync para saber que está quebrado.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚦 tokenOk — a pergunta honesta, respondida pelo proxy', () => {
+    it('token recusado é vermelho na hora, sem depender de rodada', () => {
+        const v = vereditoConexaoSharePoint({
+            health: { configured: true, tokenOk: false, tokenErro: ERRO_DO_PRINT },
+            lastSync: null,
+            agoraMs: AGORA,
+        });
+        expect(v.cor).toBe('erro');
+        expect(v.detalhe).toMatch(/AADSTS90002/);
+        expect(v.acao).toMatch(/deploy-proxy\.yml/);
+    });
+
+    // ⚠️ `undefined` é PROXY ANTIGO, não recusa. Ausência de campo não pode
+    // virar acusação — ali quem responde continua sendo a última rodada.
+    it('proxy antigo (sem o campo) não vira erro por omissão', () => {
+        const v = vereditoConexaoSharePoint({
+            health: { configured: true },
+            lastSync: { timestamp: HA_1H, totalErros: 0 },
+            agoraMs: AGORA,
+        });
+        expect(v.cor).toBe('ok');
+    });
+
+    it('token aceito com rodada limpa é verde', () => {
+        const v = vereditoConexaoSharePoint({
+            health: { configured: true, tokenOk: true },
+            lastSync: { timestamp: HA_1H, totalErros: 0 },
+            agoraMs: AGORA,
+        });
+        expect(v.cor).toBe('ok');
+    });
+
+    // O token pode estar OK e a PASTA errada — são falhas diferentes, com
+    // ações diferentes, e o token bom não pode apagar o erro da rodada.
+    it('token OK não silencia erro de pasta na rodada', () => {
+        const v = vereditoConexaoSharePoint({
+            health: { configured: true, tokenOk: true },
+            lastSync: { timestamp: HA_1H, totalErros: 3, results: [{ empresaNome: 'X', erro: 'itemNotFound' }] },
+            agoraMs: AGORA,
+        });
+        expect(v.cor).toBe('atencao');
+        expect(v.detalhe).toMatch(/itemNotFound/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔒 O TENANT CERTO FICA TRAVADO — ele foi conferido no endpoint público de
+// descoberta da Microsoft, e é a única coisa que impede o defeito de voltar
+// no próximo deploy do proxy.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🔒 o workflow do proxy não carrega mais o tenant errado', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('fs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require('path');
+    const wf: string = fs.readFileSync(
+        path.resolve(__dirname, '..', '.github/workflows/deploy-proxy.yml'), 'utf8',
+    );
+    // Só o CÓDIGO: o comentário do arquivo cita o tenant errado justamente
+    // para explicar o defeito, e a prosa não pode reprovar a correção.
+    const codigo = wf.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+
+    it('o tenant recusado pela Microsoft não está mais no deploy', () => {
+        expect(codigo).not.toMatch(/dfa9a1d2-de5d-4652-8179-2e6b15b6bce8/);
+    });
+
+    it('e o tenant conferido está', () => {
+        expect(codigo).toMatch(/SHAREPOINT_TENANT_ID=8b8254a4-9a63-4c2d-81a2-577942081943/);
+    });
+
+    // ⚠️ O comentário FICA: sem ele, a próxima pessoa não sabe por que este
+    // GUID é este, e o "conserto" seria copiar de novo do lugar errado.
+    it('o arquivo explica de onde veio o valor', () => {
+        expect(wf).toMatch(/openid-configuration/);
     });
 });
 

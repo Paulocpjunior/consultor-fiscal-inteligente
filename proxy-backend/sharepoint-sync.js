@@ -266,6 +266,16 @@ export async function uploadXmlToFolder(accessToken, folderPath, filename, conte
 
 /**
  * Check whether the required SharePoint/Graph credentials are present.
+ *
+ * ⚠️ **`configured` responde "as variáveis estão preenchidas?", NÃO "funciona?"**
+ * — e ele nem olha o TENANT. Foi essa a raiz do verde mentiroso de 28/08: o
+ * tenant estava cravado errado no workflow do proxy, a Microsoft respondia
+ * `AADSTS90002: Tenant not found`, e o card do CFI mostrava
+ * `✓ Conectado` porque `CLIENT_ID` e `CLIENT_SECRET` estavam lá.
+ *
+ * Quem responde "funciona?" é `checkAuth()`, abaixo. Este campo fica, porque
+ * distinguir "faltou preencher" de "preencheram errado" é justamente o que dá
+ * a ação certa — mas ele deixou de ser o veredito.
  */
 export function checkCredentials() {
     return {
@@ -276,4 +286,33 @@ export function checkCredentials() {
         sharepointHost: SHAREPOINT_HOST,
         sitePath: SITE_PATH,
     };
+}
+
+/**
+ * 🚦 A PERGUNTA HONESTA: **a Microsoft aceita este token?**
+ *
+ * Validação por RESULTADO, não por status — a primeira regra permanente deste
+ * projeto. Ela TENTA o token de verdade; o `_tokenCache` faz a chamada seguinte
+ * sair de graça, então o /health não vira custo por requisição.
+ *
+ * Nunca lança: health que explode é health que não responde, e aí a tela não
+ * consegue nem dizer o que está errado.
+ */
+export async function checkAuth() {
+    const base = checkCredentials();
+    if (!base.configured) {
+        return {
+            ...base,
+            tokenOk: false,
+            tokenErro: 'Credenciais não configuradas (SHAREPOINT_CLIENT_ID / GRAPH_CLIENT_SECRET).',
+        };
+    }
+    try {
+        await getAccessToken();
+        return { ...base, tokenOk: true, tokenErro: null };
+    } catch (e) {
+        // A mensagem da Microsoft vai INTEIRA: foi ela que resolveu o caso de
+        // 28/08 (o `AADSTS90002` nomeia o tenant recusado na cara).
+        return { ...base, tokenOk: false, tokenErro: String(e?.message || e).slice(0, 600) };
+    }
 }

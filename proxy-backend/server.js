@@ -10,6 +10,7 @@ import {
     syncXmlsFromFolder,
     uploadXmlToFolder,
     checkCredentials,
+    checkAuth,
 } from './sharepoint-sync.js';
 
 const app = express();
@@ -102,10 +103,18 @@ app.get('/health', (_req, res) => {
 app.use('/api/sharepoint', requireProxyAuth);
 
 // ─── SharePoint: Health check ────────────────────────────────────────────────
-app.get('/api/sharepoint/health', (_req, res) => {
-    const status = checkCredentials();
+// 🚦 O /health TENTA O TOKEN — validação por RESULTADO, não por status.
+//
+// Até 28/08 ele respondia `ok` sempre que CLIENT_ID e CLIENT_SECRET existiam,
+// SEM olhar o tenant. Com o tenant cravado errado no workflow, o proxy não
+// gravava NADA (nem XML, nem a cópia da guia do rito) e o card do CFI mostrava
+// "✓ Conectado" em verde. `configured` continua saindo — ele distingue "faltou
+// preencher" de "preencheram errado", e são ações diferentes —, mas o VEREDITO
+// agora é `tokenOk`.
+app.get('/api/sharepoint/health', async (_req, res) => {
+    const status = await checkAuth();
     res.json({
-        status: status.configured ? 'ok' : 'missing_credentials',
+        status: status.tokenOk ? 'ok' : (status.configured ? 'auth_failed' : 'missing_credentials'),
         ...status,
         timestamp: new Date().toISOString(),
     });

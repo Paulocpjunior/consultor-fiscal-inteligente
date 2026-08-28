@@ -23,7 +23,16 @@ export interface SharePointSyncResult {
 }
 
 export interface SharePointHealthStatus {
+    /**
+     * ⚠️ "as variáveis estão preenchidas?", NÃO "funciona?". Ele nem olha o
+     * tenant — foi por isso que o card mostrou `✓ Conectado` com o token sendo
+     * recusado pela Microsoft (28/08). Quem responde o veredito é `tokenOk`.
+     */
     configured: boolean;
+    /** A Microsoft ACEITOU o token? `undefined` = proxy antigo, sem o campo. */
+    tokenOk?: boolean;
+    /** A mensagem da Microsoft, inteira, quando ela recusou. */
+    tokenErro?: string | null;
     tenantId?: string;
     clientIdSet?: boolean;
     sharepointHost?: string;
