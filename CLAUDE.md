@@ -5,6 +5,52 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "✓ CONECTADO" EM VERDE COM 57 ERROS DE TOKEN LOGO ABAIXO — e é o MESMO
+  proxy que arquiva a guia do rito** (28/08, print do Paulo no card **Conexão
+  SharePoint**, enquanto ele tentava destravar o fim de mês da VINCENZO).
+  📖 O card, literal: `✓ Conectado · spassessoriacontabilcombr.sharepoint.com ·
+  /sites/ClientesSP2` — e, uma linha abaixo: *"⚠ 28/08/2026, 15:48 · 0 novos ·
+  0 dup · **57 erros** … SAÍDA: Azure AD token error (400):
+  `AADSTS90002: Tenant 'dfa9a1d2-…' not found`"*.
+  🔴 **DUAS LEITURAS DO MESMO FATO NO MESMO CARD, com a mentira na posição do
+  VEREDITO.** A causa: o card lia `health.configured`, e esse campo responde
+  *"as variáveis de ambiente estão preenchidas?"* — não *"o token funciona?"*.
+  **Tenant que não existe é configurado E quebrado ao mesmo tempo.** É a
+  PRIMEIRA regra permanente deste projeto invertida (*validação por RESULTADO,
+  nunca por status*), a mesma do trilho NFS-e SP que ficou semanas verde com 0
+  sucessos e 121 falhas.
+  🚨 **E O CUSTO NÃO É ESTÉTICO: É O MESMO PROXY.** O auto-sync dos XMLs
+  (`fetchFromProxy`) e a **cópia da guia na pasta IMPOSTOS do rito**
+  (`uploadProxy`, em `envio-imposto.js`) batem os dois em
+  `SHAREPOINT_PROXY_URL`. Com o token falhando, **nada é gravado** — e a etapa
+  5 nunca fecha, para cliente nenhum. Foi assim que a VINCENZO chegou a
+  *"empresa sem pasta do SharePoint"* travando o mês: ele criou a pasta, e o
+  problema estava três camadas atrás.
+  ⚠️ **E O CARD "Conexão SharePoint" FALA DE OUTRO CAMINHO**: o `testAuth` que
+  o alimenta usa o `sharepoint-provider.js` INTERNO (`SHAREPOINT_TENANT_ID`),
+  que funciona. O que grava é o PROXY, com credencial própria. Verde sobre um
+  caminho que ninguém usa para arquivar.
+  ✂️ `vereditoConexaoSharePoint` (PURO): o veredito sai do RESULTADO da última
+  rodada. Erro com assinatura de CREDENCIAL (`AADSTS`, `invalid_client`, 401,
+  403) vira **vermelho** com a mensagem da Microsoft inteira e a ação dizendo
+  as três coisas que ninguém deduziria — que a guia do rito também não é
+  arquivada, que o fim de mês trava por causa disso, e que **preencher
+  grupo/pasta do cliente NÃO resolve**.
+  ⚠️ **Erro de PASTA continua sendo âmbar**, de propósito: a ação dele é outra
+  (conferir o caminho), e mandar mexer no proxy por causa dele seria alarme com
+  a primeira parada errada.
+  ⚠️ **E SEM RODADA NÃO É VERDE** — vira `indeterminado`. "Configurado" prova
+  que alguém preencheu as variáveis, não que a gravação funciona.
+  📌 **REGRA QUE FICA: `configured` NUNCA é veredito.** Todo campo que responde
+  *"o cadastro/env está preenchido?"* é STATUS; quem responde *"funciona?"* é a
+  última tentativa REAL. Onde os dois aparecem no mesmo card, o do resultado
+  manda — e o do status vira detalhe, nunca o título.
+  🚩 **A CORREÇÃO DO TENANT É OPERACIONAL, e não é neste repo**: o proxy é o
+  serviço `consultor-fiscal-proxy` (Cloud Run, us-west1), com `GRAPH_TENANT_ID`
+  / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET` próprios. Enquanto ele não for
+  corrigido, **nenhum fim de mês fecha pela etapa 5** — e o app agora DIZ isso
+  em vez de mostrar verde.
+
 - **🚨 O BLOQUEIO DO FIM DE MÊS TINHA DUAS MONTAGENS — e a da TELA esquecia
   campos, em silêncio** (28/08, VINCENZO GUERRA BANANAS 63027940000194, com
   dois prints lado a lado: a Rotina em **4/5** travando com *"5. Emitir e
