@@ -94,10 +94,10 @@ export function normalizarNotaTomada(d) {
         dataFatoGerador: texto(d?.dataFatoGerador || d?.dhEmi) || null,
         competencia: texto(d?.competencia) || null,
 
-        prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),
-        prestadorNome: texto(d?.prestadorNome || d?.xNomeEmit || d?.emitente?.nome) || null,
+        prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.prestador?.cnpjCpf || d?.prestador?.cnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),
+        prestadorNome: texto(d?.prestadorNome || d?.prestador?.nome || d?.prestador?.razaoSocial || d?.xNomeEmit || d?.emitente?.nome) || null,
         // O tomador é o CLIENTE do escritório — é ele quem declara o R-4020.
-        tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
+        tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.tomador?.cnpjCpf || d?.tomador?.cnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
 
         base: base === undefined ? null : r2(base),
         ir: r2(fed.ir ?? 0),
