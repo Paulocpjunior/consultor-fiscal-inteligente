@@ -5,6 +5,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚪 "NÃO ACHO AONDE" — a fila nova estava atrás de um card com OUTRO NOME, e
+  o SearchType dela não renderizava nada** (28/08, Paulo com o print do menu
+  ABERTO: ele estava no lugar certo e não achou). A lista de cadastros mora numa
+  sub-aba de **Diagnóstico & Saúde**, e ninguém adivinha isso procurando
+  "Cadastros". É a família do card CFOP (18/08) e da guia separada sem botão
+  (17/08): **a tela existia, funcionava, e a única pessoa que sabia onde era,
+  era eu.**
+  🔴 **E o atalho nem existia**: `SearchType.DIAGNOSTICO_CADASTROS` tinha
+  descrição, tinha mapa para a sub-aba (`SEARCHTYPE_TO_SUBTAB`) — e o `App.tsx`
+  só renderizava o hub para `SAUDE_GERAL`. Navegar para ele mostrava **NADA**.
+  ✂️ Card próprio **📋 Cadastros Incompletos** (admin-only, como a rota) + o hub
+  aceitando `subInicial`. ⚠️ **UM ramo no App para os dois SearchTypes**: dois
+  ramos remontariam o componente e o `subInicial` viraria loteria; e o `useState`
+  só lê o inicial no MOUNT, então sem o `useEffect` trocar de card deixaria o hub
+  na aba ANTERIOR — atalho que leva ao lugar errado é pior que atalho nenhum.
+  📌 **É EXCEÇÃO DELIBERADA à consolidação do menu, e o motivo fica escrito**: os
+  outros diagnósticos se abrem uma vez para conferir; este virou **fila de
+  trabalho recorrente** (os campos que fazem o PVA recusar). **Fila que ninguém
+  acha não é fila.**
+  ⚠️ **E o teste tem uma armadilha própria**: o RÓTULO da sub-aba também diz
+  "Cadastros Incompletos" e está SEMPRE na tela — procurar por ele passa verde
+  sem provar nada. A âncora é o subtítulo do PAINEL. Provado removendo o card e
+  o `useEffect` de propósito.
+
 - **🚦 NÚMERO SEM FILA NÃO É FERRAMENTA — o painel de cadastros passou a atacar
   por CAUSA, e a fila de migração passou a conhecer o cadastro** (27/08, na
   sequência do mata-burro abaixo). Duas metades da mesma coisa:

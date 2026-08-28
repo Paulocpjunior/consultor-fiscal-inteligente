@@ -47,7 +47,7 @@ export const searchDescriptions: Record<SearchType, string> = {
     [SearchType.VENCIMENTOS_SEMANA]: 'Vencimentos da Semana — obrigações fiscais que vencem nos próximos 7 dias (ou estão atrasadas), filtradas pela sua carteira. Visão do dia-a-dia.',
     [SearchType.DIAGNOSTICO_DOCS]: 'Diagnóstico Docs Fiscais — varredura de saúde das NF-e capturadas: notas sem chave/competência/direção/valor, chaves duplicadas em 2+ docs (somente administradores).',
     [SearchType.SIMPLES_SUBLIMITE]: 'Alerta de sublimite Simples — calcula RBT12 de cada empresa Simples e classifica contra teto (R$ 4,8M) e sublimite ICMS/ISS (R$ 3,6M). Risco de exclusão automática.',
-    [SearchType.DIAGNOSTICO_CADASTROS]: 'Cadastros Incompletos — empresas com UF/IBGE/anexo/CNAE faltando que bloqueiam o SPED ou cálculo do DAS (somente administradores).',
+    [SearchType.DIAGNOSTICO_CADASTROS]: 'Cadastros Incompletos — a fila dos campos que travam a entrega: UF/IBGE/anexo/CNAE (SPED e DAS não geram) e os de tabela oficial que fazem o PVA RECUSAR (classificação de IPI do 0002, natureza da PJ, apropriação de crédito, conta contábil, prazo do ICMS). Agrupado por causa (somente administradores).',
     [SearchType.CERT_MONITOR]: 'Certificados Digitais — monitora vencimento dos certs (S&P + por empresa). Cert vencido = SERPRO/SEFAZ/e-CAC param sem aviso.',
     [SearchType.DIAGNOSTICO_CONFIG]: 'Configurações Operacionais — detecta env vars faltando (SERPRO/SharePoint/CRON_SECRET/etc) e modos operacionais incorretos. Só admin, sem expor valores.',
     [SearchType.SAUDE_GERAL]: 'Saúde Geral — agrega os 4 diagnósticos (cadastros + documentos + certs + configs) numa única tela. Status global OK/MÉDIO/ALTO/CRÍTICO/DEGRADADO.',
@@ -152,6 +152,13 @@ export const MENU_GRUPOS: MenuGrupo[] = [
     {
         titulo: 'Fiscalização & Recuperação', cor: '#0891b2', cards: [
             { type: SearchType.SAUDE_GERAL, label: 'Diagnóstico & Saúde', Icon: ShieldIcon },
+            // 🚪 CARD PRÓPRIO, e isso é exceção deliberada à consolidação do
+            // menu (Paulo, 28/08: *"não acho aonde"* — ele procurou "Cadastros"
+            // e o card se chama "Diagnóstico & Saúde"). O que separa este dos
+            // outros diagnósticos é o USO: os outros se abrem uma vez para
+            // conferir; este virou FILA DE TRABALHO recorrente, com os campos
+            // que fazem o PVA recusar. Fila que ninguém acha não é fila.
+            { type: SearchType.DIAGNOSTICO_CADASTROS, label: 'Cadastros Incompletos', Icon: DocumentTextIcon, adminOnly: true },
             { type: SearchType.RECUPERACAO_TRIBUTARIA, Icon: ScaleIcon },
             { type: SearchType.NFP_PRO_CLOUD, label: 'Consulta Situação Fiscal', Icon: SearchIcon, adminOnly: true },
         ],
