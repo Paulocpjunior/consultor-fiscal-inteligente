@@ -187,11 +187,11 @@ export function normalizarServicoTomado(d) {
         chave: texto(d?.chave) || null,
         competencia: texto(d?.competencia) || null,
 
-        prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),
-        prestadorNome: texto(d?.prestadorNome || d?.xNomeEmit || d?.emitente?.nome) || null,
+        prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.prestador?.cnpjCpf || d?.prestador?.cnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),
+        prestadorNome: texto(d?.prestadorNome || d?.prestador?.nome || d?.prestador?.razaoSocial || d?.xNomeEmit || d?.emitente?.nome) || null,
         // O TOMADOR é o cliente do escritório — é ele quem declara o R-2010,
         // e é o CNPJ dele que vai em `nrInscEstab`.
-        tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
+        tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.tomador?.cnpjCpf || d?.tomador?.cnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
 
         vlrBruto: bruto === undefined ? null : r2(bruto),
         // O que a NOTA diz que foi retido. Nome honesto: é retenção previdenciária

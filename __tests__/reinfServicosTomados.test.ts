@@ -89,11 +89,12 @@ describe('a nota chega nas DUAS formas do documento', () => {
     test('forma ANINHADA do XML', () => {
         const n = normalizarServicoTomado({
             tipoDoc: 'NFSe', direcao: 'entrada',
-            emitente: { cnpjCpf: '03222111000130', nome: 'LIMPEZA TOTAL LTDA' },
-            destinatario: { cnpjCpf: '32602701000197' },
+            prestador: { cnpjCpf: '03222111000130', nome: 'LIMPEZA TOTAL LTDA' },
+            tomador: { cnpjCpf: '32602701000197' },
             valores: { valorServicos: 5755.54, inss: 506.49 },
         });
         expect(n.prestadorCnpj).toBe('03222111000130');
+        expect(n.prestadorNome).toBe('LIMPEZA TOTAL LTDA');
         expect(n.tomadorCnpj).toBe('32602701000197');
         expect(n.inssRetido).toBe(506.49);
     });

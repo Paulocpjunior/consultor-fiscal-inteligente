@@ -28,8 +28,8 @@ const achatada = (over: any = {}) => ({
 /** A mesma nota vinda de XML importado (forma OBJETO). */
 const objeto = (over: any = {}) => ({
     tipoDoc: 'NFSe', direcao: 'entrada', status: 'autorizado', competencia: '2026-07',
-    emitente: { cnpjCpf: '60532082000147', nome: 'CLINIPAR SERVICOS MEDICOS LTDA' },
-    destinatario: { cnpjCpf: TOMADOR },
+    prestador: { cnpjCpf: '60532082000147', nome: 'CLINIPAR SERVICOS MEDICOS LTDA' },
+    tomador: { cnpjCpf: TOMADOR },
     valores: { valorServicos: 590.10, pis: 3.84, cofins: 17.70, csll: 5.90, ir: 0 },
     ...over,
 });
@@ -38,6 +38,7 @@ describe('lê as DUAS formas do documento', () => {
     it('forma achatada do portal', () => {
         const n = normalizarNotaTomada(achatada());
         expect(n.prestadorCnpj).toBe('60532082000147');
+        expect(n.prestadorNome).toBe('CLINIPAR SERVICOS MEDICOS LTDA');
         expect(n.base).toBe(590.10);
         expect(n.pis).toBe(3.84);
     });
@@ -45,6 +46,7 @@ describe('lê as DUAS formas do documento', () => {
     it('forma objeto do XML', () => {
         const n = normalizarNotaTomada(objeto());
         expect(n.prestadorCnpj).toBe('60532082000147');
+        expect(n.prestadorNome).toBe('CLINIPAR SERVICOS MEDICOS LTDA');
         expect(n.base).toBe(590.10);
         expect(n.csllOuTotal).toBe(5.90);
     });
