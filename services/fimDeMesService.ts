@@ -37,6 +37,12 @@ export interface BloqueioFimDeMes {
     podeDeclararCobertura?: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
     propostas?: string[] | null;
+    /**
+     * As causas do rito, nomeadas pelo dono do painel de envios ("Empresa sem
+     * pasta do SharePoint", "Sem obrigação correspondente na aba Vencimentos").
+     * `null` fora da etapa 5.
+     */
+    causas?: string[] | null;
 }
 
 export interface FechamentoCompetencia {

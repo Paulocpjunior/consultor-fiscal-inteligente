@@ -70,7 +70,28 @@ export interface Bloqueio {
     resumo: string | null;
     acao: string | null;
     onde: string | null;
+    /**
+     * Declarar um envio feito por fora resolve ESTE bloqueio? `false` quando o
+     * app JÁ enviou a guia e o que falta é o rito. `null` fora da etapa 5.
+     */
+    podeDeclararEnvio: boolean | null;
+    /** Idem para a obrigação que o catálogo não cobre (etapa 4). */
+    podeDeclararCobertura: boolean | null;
+    /** As obrigações fora do catálogo, NOMEADAS — o que a declaração cobre. */
+    propostas: string[] | null;
+    /** As causas do rito, nomeadas pelo dono do painel de envios. */
+    causas: string[] | null;
 }
+
+/**
+ * A projeção de UMA etapa aberta como bloqueio — dono único.
+ *
+ * ⚠️ A Rotina do Mês monta os bloqueios do card a partir das etapas que já
+ * recebeu (o painel lê tudo de uma vez, ver o HTTP 429 de 27/08). Ela DEVE
+ * chamar esta função: montar o objeto à mão foi o que apagou
+ * `podeDeclararEnvio` e deixou a porta errada na tela da VINCENZO.
+ */
+export function bloqueioDaEtapa(etapa: unknown): Bloqueio;
 
 export function valoresApuradosDaFicha(ficha: unknown): Record<string, number | null>;
 
