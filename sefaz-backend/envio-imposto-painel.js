@@ -259,10 +259,15 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         } else painel.completos++;
 
         for (const p of problemas) {
-            const bucket = painel.pendencias[p.causa] || (painel.pendencias[p.causa] = { qtd: 0, acao: p.acao, empresas: [] });
+            const bucket = painel.pendencias[p.causa]
+                || (painel.pendencias[p.causa] = { qtd: 0, acao: p.acao, empresas: [], envioIds: [] });
             bucket.qtd++;
             const rotulo = `${e.empresaNome || e.empresaCnpj || '—'} · ${tipo} ${e.competencia || ''}`.trim();
             if (bucket.empresas.length < 50 && !bucket.empresas.includes(rotulo)) bucket.empresas.push(rotulo);
+            // ♻️ O ID viaja para a tela poder REFAZER o rito desta causa (28/08).
+            // A causa é a unidade de trabalho — "12 empresas sem pasta" é UMA
+            // tarefa —, e sem o id a tela só saberia DIZER o problema.
+            if (e.id && bucket.envioIds.length < 200 && !bucket.envioIds.includes(e.id)) bucket.envioIds.push(e.id);
         }
 
         // Gestor SEMPRE em cópia é regra da ordem técnica — se faltou, o envio

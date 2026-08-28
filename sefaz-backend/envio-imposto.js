@@ -117,7 +117,7 @@ async function uploadProxy(folderPath, filename, contentBase64, mimeType) {
 }
 
 // Resolve a empresa (por id OU por CNPJ) nas duas coleções, pulando zumbis.
-async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
+export async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
     const cnpjAlvo = String(empresaCnpj || '').replace(/\D/g, '');
     for (const col of ['simples_empresas', 'lucro_empresas']) {
         if (empresaId) {
@@ -166,40 +166,42 @@ async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
  * @param {string} [p.enviadoPor] e-mail/uid do colaborador
  * @param {number} [p.valor]
  */
-export async function executarRitoEnvioImposto(p) {
-    const db = getDb();
-    const resultado = {
-        sharePoint: { status: 'sem-pdf' },
-        baixa: { status: 'sem-tarefa' },
-        logId: null,
-    };
-
-    const empresa = await resolverEmpresa(db, { empresaId: p.empresaId, empresaCnpj: p.empresaCnpj });
-
-    // 1. Cópia no SharePoint (pasta IMPOSTOS do período do cliente).
-    const pdf = limparBase64(p.pdfBase64);
-    if (pdf) {
-        const cfg = empresa?.data?.sharePointConfig;
-        const folder = cfg ? buildFolderPathImpostos(cfg.grupo, cfg.empresaPasta, p.competencia) : null;
-        if (!folder) {
-            resultado.sharePoint = {
-                status: 'sem-config',
-                motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → Integrações → SharePoint.',
-            };
-        } else {
-            const nome = p.pdfFileName
-                || `${String(p.tipo || 'imposto').toLowerCase()}_${String(p.empresaCnpj).replace(/\D/g, '')}_${normalizarCompetencia(p.competencia) || 'competencia'}.pdf`;
-            try {
-                await uploadProxy(folder, nome, pdf, 'application/pdf');
-                resultado.sharePoint = { status: 'arquivado', folder, filename: nome };
-            } catch (e) {
-                resultado.sharePoint = { status: 'erro', motivo: e.message, folder };
-            }
-        }
+/**
+ * 🔒 ARQUIVAR A GUIA NA PASTA IMPOSTOS — dono único.
+ *
+ * Extraído do rito em 28/08 para que o **♻️ refazer** use exatamente esta
+ * gravação, e não uma segunda cópia dela: duas implementações do mesmo upload
+ * divergiriam no primeiro ajuste de caminho, e a divergência apareceria como
+ * "no envio funcionou e no refazer não".
+ */
+export async function arquivarGuiaNoSharePoint({ empresa, pdf, competencia, tipo, empresaCnpj, pdfFileName }) {
+    const cfg = empresa?.data?.sharePointConfig;
+    const folder = cfg ? buildFolderPathImpostos(cfg.grupo, cfg.empresaPasta, competencia) : null;
+    if (!folder) {
+        return {
+            status: 'sem-config',
+            motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → Integrações → SharePoint.',
+        };
     }
+    const nome = pdfFileName
+        || `${String(tipo || 'imposto').toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${normalizarCompetencia(competencia) || 'competencia'}.pdf`;
+    try {
+        await uploadProxy(folder, nome, pdf, 'application/pdf');
+        return { status: 'arquivado', folder, filename: nome };
+    } catch (e) {
+        return { status: 'erro', motivo: e.message, folder };
+    }
+}
 
-    // 2. Baixa da obrigação na aba Vencimentos e Obrigações (reverso da
-    //    pendência do cron mensal). Sem tarefa correspondente → segue em paz.
+/**
+ * 🔒 BAIXA DA OBRIGAÇÃO — dono único, pela mesma razão do arquivamento.
+ *
+ * ⚠️ Ela é IDEMPOTENTE por construção: só conclui tarefa que ainda está
+ * aberta, e tarefa já concluída volta como `ja-baixada` (desfecho legítimo).
+ * É isso que permite refazê-la sem medo de "baixar duas vezes".
+ */
+export async function darBaixaDaObrigacao(db, p) {
+    const empresa = p.empresa;
     const obrigacao = obrigacaoDoTipo(p.tipo);
     const compTarefa = competenciaTarefa(p.competencia);
     if (obrigacao && compTarefa) {
@@ -240,7 +242,7 @@ export async function executarRitoEnvioImposto(p) {
             //
             // A tarefa EXISTE e está concluída: o rito não tem o que fazer, e
             // isso é desfecho legítimo — não é o cron que faltou.
-            resultado.baixa = alvos.length > 0
+            return alvos.length > 0
                 ? { status: 'baixada', obrigacao, competencia: compTarefa, tarefas: alvos.length }
                 : daEmpresa.length > 0
                     ? {
@@ -252,11 +254,30 @@ export async function executarRitoEnvioImposto(p) {
                         motivo: 'Nenhuma tarefa desta obrigação/competência para esta empresa — o cron mensal não gerou.',
                     };
         } catch (e) {
-            resultado.baixa = { status: 'erro', motivo: e.message, obrigacao, competencia: compTarefa };
+            return { status: 'erro', motivo: e.message, obrigacao, competencia: compTarefa };
         }
-    } else if (!obrigacao) {
-        resultado.baixa = { status: 'sem-tarefa', motivo: `Tipo ${p.tipo} não tem obrigação mensal correspondente na aba de tarefas.` };
     }
+    // Tipo sem obrigação mensal (ou competência ilegível): não há o que baixar,
+    // e isso é FATO, não falha — a etapa não pode cobrar tarefa inexistente.
+    return { status: 'sem-tarefa', motivo: `Tipo ${p.tipo} não tem obrigação mensal correspondente na aba de tarefas.` };
+}
+
+export async function executarRitoEnvioImposto(p) {
+    const db = getDb();
+    const resultado = {
+        sharePoint: { status: 'sem-pdf' },
+        baixa: { status: 'sem-tarefa' },
+        logId: null,
+    };
+
+    const empresa = await resolverEmpresa(db, { empresaId: p.empresaId, empresaCnpj: p.empresaCnpj });
+
+    // 1. Cópia no SharePoint (pasta IMPOSTOS do período do cliente).
+    const pdf = limparBase64(p.pdfBase64);
+    if (pdf) resultado.sharePoint = await arquivarGuiaNoSharePoint({ empresa, pdf, ...p });
+
+    // 2. Baixa da obrigação na aba Vencimentos e Obrigações.
+    resultado.baixa = await darBaixaDaObrigacao(db, { empresa, ...p });
 
     // 3. Auditoria central.
     try {
