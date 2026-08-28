@@ -989,6 +989,47 @@ export function conferirPeriodoDoArquivo(linhas) {
     return { erros: periodoDoArquivoComum(linhas, POS_DT_FIN_CONTRIBUICOES) };
 }
 
+/**
+ * 🚨 M205/M605 COM VALOR ZERO — recusa do PVA, literal (DGB CONSULTORIA
+ * 21903193000160 · 07/2026, 28/08):
+ *
+ *   "O registro de detalhamento (M205/M605) não deve existir quando o valor
+ *    informado no campo Valor da Contribuição Não Cumulativa a Recolher/Pagar
+ *    é 0 do campo Valor da Contribuição"
+ *   "Valor informado deve ser maior que zero."
+ *
+ * São DUAS recusas por registro, e a causa é a mesma: o detalhamento por código
+ * de receita existe para dizer sob qual receita da DCTF o valor A RECOLHER
+ * será pago. Sem valor a recolher — quando a RETENÇÃO cobre a contribuição
+ * inteira — não há o que detalhar.
+ *
+ * ⚠️ E o gerador não errou por falta de guarda: ele tinha `> 0`. Errou porque
+ * comparava o FLOAT (0,0045 de sobra entre a contribuição calculada e a
+ * retenção em centavos) enquanto a linha imprimia `0,00`. Esta regra lê o
+ * ARQUIVO, que é o que o PVA lê.
+ */
+export function conferirM205ComValorZero(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = String(l || '').split('|');
+        const reg = c[1];
+        if (reg !== 'M205' && reg !== 'M605') continue;
+        // |M205|NUM_CAMPO|COD_REC|VL_DEBITO|
+        const bruto = String(c[4] ?? '').trim();
+        const n = Number(bruto.replace(/\./g, '').replace(',', '.'));
+        if (bruto !== '' && Number.isFinite(n) && Math.round(n * 100) !== 0) continue;
+        erros.push({
+            regra: 'M205_VALOR_ZERO',
+            registro: reg,
+            mensagem: `${reg} com valor ${bruto || '(vazio)'} — o PVA recusa duas vezes: "o registro de `
+                + 'detalhamento não deve existir quando o valor a recolher é 0" e "valor informado deve ser '
+                + 'maior que zero". Quando a RETENÇÃO cobre a contribuição inteira não há valor a detalhar, '
+                + `e o ${reg} não deve sair.`,
+        });
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
@@ -1015,6 +1056,7 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirCodModContraChave(linhas),
         ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
         ...conferirConsolidacao1900(linhas).erros,
+        ...conferirM205ComValorZero(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

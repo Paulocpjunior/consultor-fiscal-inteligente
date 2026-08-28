@@ -1501,6 +1501,8 @@ export interface EmpresaDadosFiscais {
      * código 9 do ISS fixo, que veio do cadastro).
      */
     contribuinteIpi?: 'sim' | 'nao' | '';
+    /** Apura ICMS? Vence a dedução pela inscrição estadual (E116). */
+    contribuinteIcms?: 'sim' | 'nao' | '';
     classEstabIpi?: string;
     /**
      * 🚨 **Consolidação da receita no registro 1900 do EFD-Contribuições.**

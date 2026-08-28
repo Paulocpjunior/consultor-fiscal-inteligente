@@ -41,7 +41,7 @@ import { convertCfopParaEntrada, serieDoC100 } from './sped-fiscal-blocoC.js';
 // ICMS fora da base (Tema 69). Estava faltando nos DOIS lugares que a usam (o
 // C170 e o bloco M), e nos dois na direção mais cara.
 import {
-    receitaDoItem, baseDoItem, receitaEBaseDoDocumento, codigosReceitaM205,
+    receitaDoItem, baseDoItem, receitaEBaseDoDocumento, codigosReceitaM205, zeroNoArquivo,
     descontosDosItens, valoresLiquidosDosItens,
 } from './base-pis-cofins.js';
 // O valor total do documento (mercadorias + acessórias + ST + IPI − desconto) —
@@ -1484,9 +1484,13 @@ export function buildBlocoM(dados) {
     }
 
     const m205 = codigosReceitaM205(isNaoCumulativo);
-    if (m205 && vlRecCumPis > 0) {
+    // ⚠️ A GUARDA LÊ O QUE VAI NO ARQUIVO, não o float (28/08, DGB): a
+    // contribuição vem de base × alíquota e a retenção do documento, então
+    // sobrava 0,0045 — maior que zero para o `>`, e 0,00 na linha. O PVA
+    // recusa o M205 que existe com valor zero.
+    if (m205 && !zeroNoArquivo(vlRecCumPis)) {
         linhas.push(fmt.buildLine(['M205', m205.numCampo, m205.pis, fmt.formatValue(vlRecCumPis)]));
-    } else if (!m205 && vlRecNcPis > 0 && Array.isArray(dados.warnings)) {
+    } else if (!m205 && !zeroNoArquivo(vlRecNcPis) && Array.isArray(dados.warnings)) {
         dados.warnings.push(
             'M205/M605 (detalhamento por código de receita, visão DCTF) NÃO foi gerado: o código de receita do '
             + 'regime NÃO-CUMULATIVO não está provado contra nenhum arquivo aceito, e este app não deduz código '
@@ -1581,7 +1585,8 @@ export function buildBlocoM(dados) {
     // M605 — o par do M205, do lado da COFINS. Mesmo código provado, mesma
     // recusa em deduzir o do não-cumulativo (o aviso já saiu no M205; repetir
     // aqui seria ruído).
-    if (m205 && vlRecCumCofins > 0) {
+    // ⚠️ Mesma régua do M205 — ver o comentário lá.
+    if (m205 && !zeroNoArquivo(vlRecCumCofins)) {
         linhas.push(fmt.buildLine(['M605', m205.numCampo, m205.cofins, fmt.formatValue(vlRecCumCofins)]));
     }
     // O par do M205 da apuração diferenciada (receita financeira).

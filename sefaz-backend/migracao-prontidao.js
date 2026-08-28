@@ -98,8 +98,31 @@ export function entregaEfdIcms(empresa) {
     return contribuinteIcms(empresa) && empresa?.regime === 'lucro';
 }
 
+/**
+ * A empresa apura ICMS?
+ *
+ * 🏛️ 28/08, Paulo: *"as empresas de SERVIÇOS de Brasília, nós entregamos o
+ * SPED, mas elas não recolhem ICMS, como fazer para não ficar constando como
+ * pendência"*. A régua era só a INSCRIÇÃO ESTADUAL — e ter IE não é apurar
+ * ICMS: empresa de serviço fora de SP acendia a pendência do E116 sem ter o
+ * registro.
+ *
+ * ⚠️ O CADASTRO VENCE A DEDUÇÃO, e é o mesmo desenho do `contribuinteIpi`: o
+ * app não decide o que é fato da empresa. Sem cadastro, a IE segue respondendo
+ * — assim nada muda para quem não preencheu.
+ *
+ * ⚠️ E lê as DUAS formas (aninhada e achatada): a rota da fila projeta
+ * `inscricaoEstadual` no topo, o diagnóstico tem `dadosFiscais`. Ler uma só
+ * faria a mesma empresa ter duas respostas em duas telas.
+ */
 export function contribuinteIcms(empresa) {
-    const ie = String(empresa?.inscricaoEstadual || '').trim().toUpperCase();
+    const df = empresa?.dadosFiscais || {};
+    const marcado = String(df.contribuinteIcms ?? empresa?.contribuinteIcms ?? '')
+        .trim().toLowerCase();
+    if (marcado === 'sim') return true;
+    if (marcado === 'nao' || marcado === 'não') return false;
+
+    const ie = String(df.inscricaoEstadual ?? empresa?.inscricaoEstadual ?? '').trim().toUpperCase();
     if (!ie) return false;
     if (/^ISENT/.test(ie)) return false;
     return /\d/.test(ie);

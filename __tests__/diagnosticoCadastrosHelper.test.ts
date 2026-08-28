@@ -350,3 +350,45 @@ describe('resumirPendenciasPorCampo', () => {
         expect(r[0].empresas).toEqual(['11111111000191']);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🏛️ TER INSCRIÇÃO ESTADUAL NÃO É APURAR ICMS
+//
+// 28/08, Paulo: *"as empresas de SERVIÇOS de Brasília, nós entregamos o SPED,
+// mas elas não recolhem ICMS, como fazer para não ficar constando como
+// pendência"*. A régua usava a IE como prova, e a RADIO E TV IBIRAPUERA (DF)
+// acendeu o E116 sem ter o registro. Mesmo desenho do IPI: o cadastro responde,
+// o app não deduz.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🏛️ contribuinte de ICMS decide o E116', () => {
+    const df = (extra: any = {}) => ({
+        cnpj: '12345678000190', nome: 'RADIO E TV', regimePadrao: 'LUCRO_PRESUMIDO',
+        dadosFiscais: { uf: 'DF', codMunIBGE: '5300108', ...extra },
+    });
+    const campos = (e: any) => pendenciasCadastro(e, 'lucro').map((p: any) => p.campo);
+
+    it('marcada "não", o E116 deixa de ser cobrado — serviço em Brasília', () => {
+        expect(campos(df({ inscricaoEstadual: '123', contribuinteIcms: 'nao' }))).toEqual([]);
+    });
+
+    // ⚠️ Sem marcação nada muda: a IE segue respondendo, então quem não
+    // preencheu não vê comportamento novo.
+    it('sem marcação, a inscrição estadual continua respondendo', () => {
+        expect(campos(df({ inscricaoEstadual: '123' })))
+            .toEqual(['dadosFiscais.icmsDiaVencimento', 'dadosFiscais.icmsCodRec']);
+    });
+
+    // ⚠️ E o cadastro VENCE a dedução nos dois sentidos: quem se declara
+    // contribuinte é cobrado mesmo sem IE gravada.
+    it('marcada "sim" sem IE, o E116 volta a ser cobrado', () => {
+        expect(campos(df({ contribuinteIcms: 'sim' })))
+            .toEqual(['dadosFiscais.icmsDiaVencimento', 'dadosFiscais.icmsCodRec']);
+    });
+
+    it('em SP continua fora — o padrão do gerador é o prazo de lá', () => {
+        expect(pendenciasCadastro({
+            cnpj: '12345678000190', nome: 'X', regimePadrao: 'LUCRO_PRESUMIDO',
+            dadosFiscais: { uf: 'SP', codMunIBGE: '3550308', contribuinteIcms: 'sim' },
+        }, 'lucro')).toEqual([]);
+    });
+});
