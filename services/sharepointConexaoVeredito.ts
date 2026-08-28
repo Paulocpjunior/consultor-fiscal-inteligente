@@ -33,6 +33,21 @@
 
 export type CorConexao = 'ok' | 'atencao' | 'erro' | 'indeterminado';
 
+/**
+ * A ação da falha de credencial — UMA frase, lida pelos dois caminhos (o
+ * `tokenOk` do proxy e o erro da última rodada). Duas cópias divergiriam, e
+ * esta carrega três coisas que ninguém deduz sozinho: que a guia do rito
+ * também não é arquivada, que o fim de mês trava por causa disso, e que
+ * preencher grupo/pasta do cliente NÃO resolve.
+ *
+ * ⚠️ O tenant vive CRAVADO em `.github/workflows/deploy-proxy.yml` — arrumar
+ * no console do Cloud Run é desfeito no próximo deploy do proxy.
+ */
+export const ACAO_CREDENCIAL = 'Enquanto isto durar, NENHUM arquivo é gravado no SharePoint — nem os XMLs, '
+    + 'nem a cópia da guia na pasta IMPOSTOS (é a mesma porta). O fim de mês fica travado na etapa 5. '
+    + 'O tenant e o client id vivem CRAVADOS em .github/workflows/deploy-proxy.yml (mudar só no Cloud Run '
+    + 'é desfeito no próximo deploy do proxy) — preencher grupo/pasta do cliente não resolve isto.';
+
 export interface VereditoConexao {
     cor: CorConexao;
     titulo: string;
@@ -43,7 +58,15 @@ export interface VereditoConexao {
 }
 
 export interface HealthSharePoint {
+    /** "as variáveis estão preenchidas?" — NÃO é veredito. */
     configured?: boolean;
+    /**
+     * A Microsoft ACEITOU o token? Esta é a pergunta honesta, e o proxy passou
+     * a respondê-la em 28/08. `undefined` = proxy ainda sem o campo (aí quem
+     * responde é o resultado da última rodada, que é mais lento mas serve).
+     */
+    tokenOk?: boolean;
+    tokenErro?: string | null;
     sharepointHost?: string;
     sitePath?: string;
 }
@@ -106,6 +129,22 @@ export function vereditoConexaoSharePoint(p: {
         };
     }
 
+    // 🚦 O PROXY RESPONDE DIRETO quando é novo o bastante: `tokenOk` é ele
+    // tendo TENTADO o token agora. Não precisa esperar uma rodada de sync para
+    // saber que a Microsoft está recusando.
+    //
+    // ⚠️ `=== false` de propósito: `undefined` é proxy ANTIGO (sem o campo), e
+    // ausência não é recusa — ali quem responde continua sendo o resultado da
+    // última rodada.
+    if (health.tokenOk === false) {
+        return {
+            cor: 'erro',
+            titulo: '✗ Configurado, mas o proxy NÃO consegue autenticar na Microsoft.',
+            detalhe: health.tokenErro || null,
+            acao: ACAO_CREDENCIAL,
+        };
+    }
+
     const motivo = primeiroMotivoDoSync(lastSync);
     const ehCredencial = !!motivo && ASSINATURA_CREDENCIAL.test(motivo);
 
@@ -117,10 +156,7 @@ export function vereditoConexaoSharePoint(p: {
             cor: 'erro',
             titulo: '✗ Configurado, mas o proxy NÃO consegue autenticar na Microsoft.',
             detalhe: motivo,
-            acao: 'Enquanto isto durar, NENHUM arquivo é gravado no SharePoint — nem os XMLs, nem a cópia da '
-                + 'guia na pasta IMPOSTOS (é a mesma porta). O fim de mês fica travado na etapa 5. '
-                + 'Corrija GRAPH_TENANT_ID / GRAPH_CLIENT_ID / GRAPH_CLIENT_SECRET no serviço '
-                + '`consultor-fiscal-proxy` — preencher grupo/pasta do cliente não resolve isto.',
+            acao: ACAO_CREDENCIAL,
         };
     }
 
