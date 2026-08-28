@@ -30,6 +30,11 @@ import { receitaFinanceiraDaFicha } from './receita-aplicacao-financeira.js';
 // MM/YYYY) — igualdade estrita perderia a ficha em silêncio, e uma segunda
 // cópia da normalização é o começo de duas respostas divergentes.
 import { acharFichaCompetencia } from './ipi-varredura.js';
+// 🚨 A retenção da FICHA é a fonte do F600 quando ela existe (28/08, MONICA
+// MOROMIZATO): o arquivo declarava a recolher MAIOR que o devido porque o F600
+// só via a retenção GRAVADA NO DOCUMENTO. A ficha é a mesma fonte da guia que
+// o cliente paga — calcular aqui faria o DARF e o SPED discordarem.
+import { montarF600DaFicha } from './retencao-f600-da-ficha.js';
 import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
@@ -304,6 +309,12 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+
+    // ⚠️ AQUI, e não antes: `warnings` só nasce nesta linha, e empilhar aviso
+    // acima dela seria `ReferenceError` — a classe que derrubou a geração do
+    // SPED em 20/08.
+    const retencaoDaFicha = montarF600DaFicha({ notas, ficha: fichaDaComp });
+    warnings.push(...retencaoDaFicha.avisos);
     if (entradasForaDaConsolidada > 0) {
         warnings.push(
             `${entradasForaDaConsolidada} documento(s) de ENTRADA (serviço tomado/aquisição) ficaram FORA da `
@@ -395,6 +406,18 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         // `saldoCredorIpiAnterior` (19/08, PWR): os dois viajam aqui.
         contrib1900CodMod: empresa?.dadosFiscais?.contrib1900CodMod || '',
         contrib1900CodSit: empresa?.dadosFiscais?.contrib1900CodSit || '',
+        // 🚨 O F600 SAI DA FICHA QUANDO ELA DECLARA RETENÇÃO (28/08, autorizado
+        // pelo Paulo). Sem isso o M200/M600 declarava a recolher A MAIOR: a
+        // MONICA MOROMIZATO 07/2026 tinha PIS retido 64,11 na ficha e 0,00 no
+        // arquivo. Ausente na ficha, o caminho antigo (ler o documento) segue
+        // valendo — `retencoesF600` só é preenchido quando há o que aplicar.
+        retencoesF600: retencaoDaFicha.aplicou
+            ? {
+                eventos: retencaoDaFicha.eventos,
+                totalPis: retencaoDaFicha.totalPis,
+                totalCofins: retencaoDaFicha.totalCofins,
+            }
+            : null,
         warnings,
     };
 }

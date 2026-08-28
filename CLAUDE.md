@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A RETENÇÃO DA FICHA NÃO CHEGAVA AO ARQUIVO — o SPED declarava a recolher
+  MAIOR que o devido** (28/08, MONICA MOROMIZATO 01641443000124 · 07/2026;
+  Paulo autorizou: *"sim pode montar"*). A Memória de Apuração dizia **PIS
+  Retido 64,11 · COFINS Retido 295,86** e o M200 do PVA mostrava **retenção
+  0,00 · a recolher 157,38** — o devido é 93,27.
+  ✅ **A CONTA FECHA CENTAVO A CENTAVO e é ela que prova quem estava certo**: as
+  notas de tomador **PJ** somam 9.862,04 (9.148,99 + 445,59 + 267,46); 0,65%
+  disso é 64,10 e 3% é 295,86, exatamente o que a ficha declara. **A ficha
+  estava certa**; o F600 é que coletava a retenção **GRAVADA NO DOCUMENTO**, e
+  só uma nota tinha o campo — ainda por cima errado (`12,44` = **4,65% de
+  267,46**, a **CSRF inteira** jogada em COFINS: o `csllOuTotal` de 07/08).
+  ✂️ `retencao-f600-da-ficha.js` (PURO): quando a ficha declara retenção, ela é
+  a FONTE, e o módulo só **DISTRIBUI** o total pelas notas — o F600 é por
+  documento e exige o CNPJ da fonte pagadora.
+  🚨 **POR QUE A FONTE É A FICHA E NÃO UMA CONTA MINHA**: ela alimenta a GUIA
+  que o cliente paga. Calcular aqui faria o **DARF e o SPED declararem números
+  diferentes sobre o mesmo fato** — a régua do R-2055 (*"a ressalva PROÍBE
+  recalcular do outro lado"*). O total vem dela; o rateio é derivado e sai
+  CARIMBADO (`origem: 'ficha-rateada'`), porque número derivado não se
+  apresenta como fato lido do documento.
+  ⚠️ **TRÊS RECUSAS DELIBERADAS**: ficha sem retenção **não aplica** (o caminho
+  antigo, que lê o documento, segue valendo — o app não inventa retenção);
+  **CSLL fica fora** (o F600 leva só PIS e COFINS, régua do assinado da HS
+  PROJETOS em 19/08 — somá-la declara retenção a maior); e **tomador PF não
+  ancora** (art. 30 da Lei 10.833/2003 é de PJ para PJ).
+  ⚠️ **E RETENÇÃO SEM NOTA QUE A ANCORE NÃO VIRA SILÊNCIO**: sem nota de saída
+  com tomador PJ o F600 não sai, e o aviso DIZ que o M200 está declarando A
+  MAIOR — some calado seria o defeito com outra roupa.
+  📌 **A SOBRA DO RATEIO VAI À MAIOR BASE, e isso DIFERE do C170 de propósito**:
+  lá ela vai ao último item; aqui a lista vem ordenada por base DECRESCENTE, e
+  "o último" é a MENOR — um centavo de sobra numa nota de um centavo declararia
+  retenção de 100% sobre ela. Pego pelo próprio teste.
+  📌 **REGRA QUE FICA: quando o arquivo e a guia bebem de fontes diferentes,
+  eles VÃO divergir — e a divergência aparece no PVA, não na tela.** O F600 lia
+  documento e a apuração lia ficha; ninguém percebeu até o número do M200 não
+  bater com a Memória de Apuração.
+
 - **🚨 M205/M605 SAÍRAM COM 0,00 — e a guarda EXISTIA: ela comparava o FLOAT, e
   a linha imprimia outro número** (28/08, DGB CONSULTORIA 21903193000160 ·
   07/2026, **12 recusas do PVA**; Paulo: *"os registros 205 e 605 não deveriam
