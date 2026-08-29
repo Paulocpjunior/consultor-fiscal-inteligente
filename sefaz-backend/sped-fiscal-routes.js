@@ -16,6 +16,7 @@ import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 // sobre o arquivo, antes de alguém abrir o PVA (Paulo, 20/08: o gargalo é o
 // vai-e-vem). Cada regra carrega a recusa LITERAL como fonte.
 import { prevalidarSpedFiscal, resumoPrevalidacao } from './sped-prevalidacao.js';
+import { conferirContagemDeCamposFiscal } from './sped-fiscal-campos.js';
 // 🧮 A abertura do saldo credor vem do SPED ENTREGUE colado — nunca digitada.
 import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { competenciaParaGerarArquivo } from './competencia.js';
@@ -390,6 +391,12 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
             ok: prevalidacao.erros.length === 0,
             resumo: prevalidacao.resumo,
             erros: prevalidacao.erros,
+            // 🚨 O QUE A TRAVA DE CONTAGEM **NÃO** CONFERIU sai junto — silêncio
+            // não é aprovação. Foi o silêncio da trava do EFD-Contribuições,
+            // que só cobria os onze registros provados por recibo, que deixou o
+            // 0500 sair com o leiaute do arquivo VIZINHO por meses (24/08). O
+            // header do outro arquivo já leva esta lista; este não levava.
+            naoConferidos: conferirContagemDeCamposFiscal(linhasDoArquivo).naoConferidos,
         })));
         return res.send(buffer);
     } catch (e) {
