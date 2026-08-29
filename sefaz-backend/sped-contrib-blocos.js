@@ -1383,6 +1383,14 @@ export function buildBlocoM(dados) {
     // que o M200 desconta depende dela — por isso ela é resolvida ANTES do
     // M100. Ela é chamada PURA sobre a ficha, sem depender de nada abaixo.
     const finM = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
+    // 🚨 A CONTRIBUIÇÃO DO PERÍODO É CALCULADA UMA VEZ. Ela decide DOIS
+    // registros — quanto crédito o M100/M500 declara descontado (campo 14) e
+    // quanto o M200/M600 desconta (campo 03) —, e duas expressões iguais hoje
+    // divergem na primeira correção que tocar só uma delas. Foi isso que o
+    // comentário do M100 já dizia, e a primeira versão desta correção repetiu
+    // a conta mesmo assim.
+    const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
+    const vlContribCofins = totalCofinsSaida + (finM ? finM.cofins : 0);
 
     // M100 — Credito PIS (nao-cumulativo)
     //
@@ -1420,7 +1428,7 @@ export function buildBlocoM(dados) {
         // mesmo lugar: dois cálculos fariam o M100 e o M200 discordarem sobre
         // o crédito usado, dentro do mesmo arquivo.
         const dispPis = totalPisEntrada;
-        const descPis = Math.min(dispPis, totalPisSaida + (finM ? finM.pis : 0));
+        const descPis = Math.min(dispPis, vlContribPis);
         linhas.push(fmt.buildLine([
             'M100', '01', '0',
             fmt.formatValue(totalBcEntrada),
@@ -1458,7 +1466,6 @@ export function buildBlocoM(dados) {
     // do M210/M610 (COD_CONT 02), não somada à apuração comum: juntar
     // declararia parte da receita sob a alíquota errada.
     // (declarado acima, antes do M100 — o crédito descontado precisa dele)
-    const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
     const vlCredDescontPis = isNaoCumulativo ? Math.min(totalPisEntrada, vlContribPis) : 0;
     // A retenção declarada é a REAL (soma dos F600); o "a recolher" é que não
     // desce de zero. Cap na retenção esconderia o saldo a compensar.
@@ -1627,7 +1634,7 @@ export function buildBlocoM(dados) {
     // trocadas, e os campos 13 e 15, obrigatórios, saíam vazios).
     if (isNaoCumulativo && totalCofinsEntrada > 0) {
         const dispCof = totalCofinsEntrada;
-        const descCof = Math.min(dispCof, totalCofinsSaida + (finM ? finM.cofins : 0));
+        const descCof = Math.min(dispCof, vlContribCofins);
         linhas.push(fmt.buildLine([
             'M500', '01', '0',
             fmt.formatValue(totalBcEntrada),
@@ -1646,7 +1653,6 @@ export function buildBlocoM(dados) {
 
     // M600 — Contribuicao COFINS do periodo. Mesmo leiaute do M200 (provado no
     // mesmo arquivo aceito: |M600|0|0|0|0|0|0|0|528|528|0|0|0|).
-    const vlContribCofins = totalCofinsSaida + (finM ? finM.cofins : 0);
     const vlCredDescontCofins = isNaoCumulativo ? Math.min(totalCofinsEntrada, vlContribCofins) : 0;
     const vlRecNcCofins = isNaoCumulativo ? Math.max(vlContribCofins - vlCredDescontCofins - retCofins, 0) : 0;
     const vlRecCumCofins = isNaoCumulativo ? 0 : Math.max(vlContribCofins - retCofins, 0);

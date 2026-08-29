@@ -36,6 +36,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fariam o M100 e o M200 discordarem sobre o crédito usado **dentro do mesmo
   arquivo**. A receita financeira subiu de posição no gerador porque ela entra
   na contribuição do período — e o crédito descontado depende dela.
+  🐛 **E EU REPETI A EXPRESSÃO NA PRIMEIRA VERSÃO DA PRÓPRIA CORREÇÃO** — o
+  comentário dizia *"dois cálculos fariam o M100 e o M200 discordarem"* e o
+  código ao lado calculava a contribuição duas vezes. Hoje elas concordavam por
+  coincidência de TEXTO; a primeira correção que tocasse só uma as faria divergir
+  em silêncio. `vlContribPis`/`vlContribCofins` subiram para antes do M100 e a
+  varredura exige **uma ocorrência por tributo**. 📌 **Comentário que enuncia a
+  régua não é a régua** — é o vício de 13/08 (*"regra escrita não é regra
+  travada"*), desta vez a três linhas de distância.
+  ✅ **E a trava de nomes do backend (20/08) pegou o meu erro no caminho**: ao
+  hoistar as declarações eu apaguei a do COFINS, e o `check-backend-nomes`
+  parou a esteira com o nome usado sem declaração — exatamente o defeito que
+  derrubou a geração do SPED naquele dia.
   🚦 **A regra da prevalidação nasceu junto** (`conferirCreditoDoM100`), com as
   três contas do Guia citadas, e **nasce VERDE sobre o gerador corrigido** —
   provada contra a linha do leiaute ANTIGO, que ela acusa.
