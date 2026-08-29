@@ -618,3 +618,141 @@ describe('🔒 o bloco 0 emite o 0300 quando a empresa tem CIAP', () => {
         expect((dados.warnings as string[]).join(' ')).toMatch(/COD_CTA sai VAZIO/);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R37 — os ajustes do E110 batem com os E111 filhos.
+//
+// O Guia 3.2.3 diz POR EXTENSO de onde cada campo vem, separando pelo **4º
+// caractere** do COD_AJ_APUR (com o 3º = '0', que é o ajuste da APURAÇÃO):
+// campo 04 ← '0' · 05 ← '1' · 08 ← '2' · 09 ← '3'.
+//
+// 🚨 É a MESMA classe do E110 campo 11 (02/08): cada total, isolado, está
+// certo; o que não fecha é a EXPRESSÃO — e é a apuração que vira a GUIA. A R17
+// confere o E110 consigo mesmo; esta confere contra os FILHOS, que é onde o
+// gerador monta o número num passo diferente.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 os ajustes do E110 batem com os E111', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { buildBlocoE } = require('../sefaz-backend/sped-fiscal-blocoE.js');
+    const REG0000 = L('0000', '020', '0', '01072026', '31072026', 'EMPRESA X', '11111111000191');
+    type ErroE = { regra: string; campo?: string; mensagem?: string };
+    const so111 = (r: { erros: ErroE[] }): ErroE[] => r.erros.filter((e) => e.regra === 'e110-x-e111');
+
+    // Os quatro tipos que o E110 separa, um de cada, com o código real da
+    // tabela 5.1.1 de SP (UF + 6 dígitos; 3º = '0' = apuração própria).
+    //
+    // 🐛 E A PRIMEIRA VERSÃO DESTAS FIXTURES ESTAVA ERRADA — pelo MESMO vício
+    // que este PR já corrigiu no D100: **eu contei o caractere errado.** O
+    // código é `UF + 6 dígitos`, então o "3º caractere" é o 1º DÍGITO e o "4º"
+    // é o 2º dígito — `SP001002` tem 4º caractere '0', não '1'. Os quatro
+    // ajustes caíram todos no campo 04 e a regra concordou (nasce verde), que
+    // é o certo: **quem estava errado era a fixture.** Posição se lê contando,
+    // nunca de olho.
+    const AJUSTES = [
+        { codigo: 'SP000001', descricao: 'outros débitos', valor: 100 },      // 3º '0' · 4º '0'
+        { codigo: 'SP010002', descricao: 'estorno de crédito', valor: 50 },   // 3º '0' · 4º '1'
+        { codigo: 'SP020003', descricao: 'outros créditos', valor: 30 },      // 3º '0' · 4º '2'
+        { codigo: 'SP030004', descricao: 'estorno de débito', valor: 20 },    // 3º '0' · 4º '3'
+    ];
+    const blocoE = () => buildBlocoE({
+        competenciaInicio: '2026-07', competenciaFim: '2026-07',
+        empresa: { cnpj: '11111111000191', _regime: 'lucro', dadosFiscais: { uf: 'SP' } },
+        notas: [], ajustesApuracao: AJUSTES, warnings: [] as string[],
+    }).map(sq);
+
+    it('nasce VERDE sobre o bloco E do gerador REAL, com os 4 tipos de ajuste', () => {
+        const linhas = blocoE();
+        // guarda: sem E111 o teste passaria por vazio
+        expect(linhas.filter((l: string) => l.startsWith('|E111|'))).toHaveLength(4);
+        expect(so111(prevalidarSpedFiscal([REG0000, ...linhas]))).toEqual([]);
+    });
+
+    it('acusa o total de ajuste a débito adulterado', () => {
+        const linhas = blocoE().map((l: string) => (l.startsWith('|E110|')
+            ? l.replace('|100,00|', '|999,00|') : l));
+        const e = so111(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e.some((x) => String(x.campo).includes('VL_TOT_AJ_DEBITOS'))).toBe(true);
+    });
+
+    it('acusa o estorno de crédito adulterado', () => {
+        const linhas = blocoE().map((l: string) => (l.startsWith('|E110|')
+            ? l.replace('|50,00|', '|55,00|') : l));
+        const e = so111(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e.some((x) => String(x.campo).includes('VL_ESTORNOS_CRED'))).toBe(true);
+    });
+
+    // ⚠️ O 3º caractere separa a apuração PRÓPRIA (E111) da ST (E220): um
+    // código de ST no meio não pode ser somado no E110, e a lista `validos` do
+    // dono já o manda para o outro registro.
+    it('ajuste de ST (3º caractere 1) não entra na conta do E110', () => {
+        const comSt = buildBlocoE({
+            competenciaInicio: '2026-07', competenciaFim: '2026-07',
+            empresa: { cnpj: '11111111000191', _regime: 'lucro', dadosFiscais: { uf: 'SP' } },
+            notas: [],
+            ajustesApuracao: [...AJUSTES, { codigo: 'SP100005', descricao: 'ST', valor: 700 }],
+            warnings: [] as string[],
+        }).map(sq);
+        expect(so111(prevalidarSpedFiscal([REG0000, ...comSt]))).toEqual([]);
+    });
+
+    it('arquivo sem E110 fica MUDO', () => {
+        expect(so111(prevalidarSpedFiscal([REG0000]))).toEqual([]);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R38 — os campos 03/07 do E110 vêm dos C197.
+//
+// 🚨 Esta regra NOMEIA uma premissa do app que o Guia contraria. O gerador do
+// DIFAL escreve, no próprio aviso, *"o DÉBITO na apuração não vem do C197 —
+// lance o ajuste correspondente na aba Ajustes E111"*, e crava os campos 03/07
+// em ZERO. O Guia diz que eles são a Σ dos C197. O app NÃO escolhe qual das
+// duas: o COD_AJ é ESTADUAL e é ele que decide — a regra diz as DUAS saídas.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 os campos 03/07 do E110 vêm dos C197', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    const REG0000 = L('0000', '020', '0', '01072026', '31072026', 'EMPRESA X', '11111111000191');
+    // |E110|02..|03 VL_AJ_DEBITOS|04|05|06|07 VL_AJ_CREDITOS|08|09|10|11|12|13|14|15|
+    const e110 = (ajDeb = '0,00', ajCred = '0,00') => L('E110',
+        '0,00', ajDeb, '0,00', '0,00', '0,00', ajCred, '0,00', '0,00',
+        '0,00', '0,00', '0,00', '0,00', '0,00', '0,00');
+    // |C197|COD_AJ|DESCR|COD_ITEM|VL_BC|ALIQ|VL_ICMS|VL_OUTROS|
+    const c197 = (cod: string, vl: string) =>
+        L('C197', cod, 'DIFAL', '', '1000,00', '18,00', vl, '0,00');
+    const so197 = (r: { erros: Array<{ regra: string; campo?: string; acao?: string }> }) =>
+        r.erros.filter((e) => e.regra === 'e110-x-c197');
+
+    // 🚨 O ESTADO DE HOJE: o app emite o C197 e crava o campo 03 em zero.
+    it('acusa o C197 de DÉBITO com o campo 03 zerado — a premissa que o Guia contraria', () => {
+        const e = so197(prevalidarSpedFiscal([REG0000, c197('SP300000', '60,00'), e110()]));
+        expect(e).toHaveLength(1);
+        expect(String(e[0].campo)).toContain('VL_AJ_DEBITOS');
+        // A ação DIZ as duas saídas e proíbe deduzir.
+        expect(String(e[0].acao)).toMatch(/DUAS vezes/);
+        expect(String(e[0].acao)).toMatch(/Não deduza/);
+    });
+
+    it('com o campo 03 somando os C197, não acusa', () => {
+        expect(so197(prevalidarSpedFiscal([REG0000, c197('SP300000', '60,00'), e110('60,00')]))).toEqual([]);
+    });
+
+    it('C197 de CRÉDITO cai no campo 07', () => {
+        const e = so197(prevalidarSpedFiscal([REG0000, c197('SP000000', '40,00'), e110()]));
+        expect(String(e[0].campo)).toContain('VL_AJ_CREDITOS');
+    });
+
+    // ⚠️ O 4º caractere fora da lista do Guia ('0' ou '3'..'8') não entra na
+    // soma — somá-lo inventaria divergência sobre arquivo correto.
+    it('4º caractere fora da lista do Guia não entra na soma', () => {
+        expect(so197(prevalidarSpedFiscal([REG0000, c197('SP310000', '60,00'), e110()]))).toEqual([]);
+    });
+
+    // ⚠️ E o caso COMUM da carteira: sem C197 nenhum, a regra fica MUDA — é o
+    // que faz ela servir, porque hoje quase ninguém cadastrou o COD_AJ.
+    it('arquivo sem C197 fica MUDO', () => {
+        expect(so197(prevalidarSpedFiscal([REG0000, e110()]))).toEqual([]);
+    });
+});

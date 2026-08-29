@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O C195/C197 TAMBÉM SAÍA GRUDADO — a SEGUNDA instância viva do caso
+  REALITY achada no MESMO dia, e o método que achou as duas foi o mesmo** (29/08,
+  ao escrever a regra dos ajustes do E110).
+  🔴 `montarC197Difal` montava a linha à mão (`[...].join('|')`), sem o `|`
+  inicial e sem o `\r\n`, e o bloco C empurra essas linhas direto para o
+  arquivo. Medido: `"C195|OBS1|DIFAL aquisicao interestadual|"`.
+  ⚠️ **E ela nunca apareceu pelo mesmo motivo do bloco G**: o C197 só sai com o
+  **COD_AJ da tabela 5.3 CADASTRADO**, e ninguém cadastrou — o próprio aviso do
+  módulo diz *"falta o código de ajuste… código de ajuste não se inventa"*. É a
+  sorte do IPI em E200/E210, do Bloco H zerado e do M100/M500.
+  📌 **REGRA QUE FICA (a de ontem, agora com DUAS provas): trava que roda sobre
+  o ARQUIVO só protege o bloco que alguém GEROU.** O que produz esses defeitos
+  não é desconhecimento — é o registro que **nenhum cliente emite ainda**
+  envelhecer protegido no papel. Onde o gerador depende de um cadastro que
+  ninguém preencheu, a trava de forma nasce **dentro do módulo**.
+  🚦 **E as duas regras dos ajustes entraram junto (R37/R38)**, com as
+  validações do Guia 3.2.3 que dizem por extenso de onde cada campo do E110 vem:
+  · **R37** — campos **04/05/08/09** = Σ `VL_AJ_APUR` dos **E111**, separados
+  pelo **4º caractere** do `COD_AJ_APUR` (0 ajuste a débito · 1 estorno de
+  crédito · 2 ajuste a crédito · 3 estorno de débito), com o 3º = '0' (apuração
+  PRÓPRIA — o 3º = '1' é ST e vai ao E220). Nasce VERDE sobre o `buildBlocoE`
+  real. É a classe do E110 campo 11 (02/08): cada total, isolado, está certo, e
+  o que não fecha é a EXPRESSÃO — só que a R17 confere o E110 **consigo mesmo** e
+  esta confere contra os **FILHOS**, que é onde o gerador monta o número num
+  passo diferente.
+  🚨 **· R38 — e ela NOMEIA uma premissa do app que o Guia contraria.** O
+  gerador do DIFAL escreve, no próprio aviso, *"o DÉBITO na apuração não vem do
+  C197 — lance o ajuste correspondente na aba Ajustes E111"*, e crava os campos
+  **03/07** em ZERO; o Guia diz que eles são a **Σ dos C197** (3º caractere
+  3/4/5 débito · 0/1/2 crédito). Se a equipe cadastrar um COD_AJ de débito **e**
+  lançar o E111 do mesmo valor, o arquivo declara o DIFAL **duas vezes**; se
+  lançar só o E111, o campo 03 sai zerado com um C197 de débito no arquivo.
+  ⚠️ **O app NÃO escolhe qual das duas** — o `COD_AJ` é ESTADUAL e é ele que
+  decide. A regra diz as DUAS saídas e proíbe deduzir, que é a disciplina do
+  1405 e do `PARTSEM`.
+  🐛 **E O TESTE PEGOU UM ERRO MEU DE CONTAGEM DE CARACTERE, pela segunda vez no
+  mesmo PR**: o código é `UF + 6 dígitos`, então o *"3º caractere"* é o **1º
+  DÍGITO** e o *"4º"* é o **2º dígito** — `SP001002` tem 4º caractere `'0'`, não
+  `'1'`. Meus quatro ajustes caíram todos no campo 04, o gerador somou 200 ali e
+  **a regra concordou**: quem estava errado era a FIXTURE. É o irmão do D100 com
+  as posições do C100, no mesmo dia. **Posição se lê contando, nunca de olho.**
+
 - **🚨 O 0300 NUNCA EXISTIU — todo bem do CIAP saía ÓRFÃO no G125** (29/08, na
   sequência da correção do bloco G).
   📖 **O Guia 3.2.3 é literal nos DOIS lados**: no G125 campo 02, *"o código

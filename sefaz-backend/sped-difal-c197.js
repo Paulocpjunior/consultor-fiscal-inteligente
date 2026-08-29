@@ -26,6 +26,14 @@
 // cliente — igual ao G125 e ao bloco de ST. Os testes travam a estrutura.
 // ============================================================================
 
+// 🚨 29/08 — AS LINHAS SAÍAM SEM O `|` INICIAL E SEM O `\r\n`, montadas à mão
+// com `join('|')`. O orquestrador junta os blocos com `join('')`, então o
+// C195/C197 saía COLADO na linha anterior do bloco C. É a SEGUNDA instância
+// viva do caso REALITY (21/08) achada no mesmo dia — a primeira foi o bloco G —,
+// e ela nunca apareceu porque o C197 só sai com o COD_AJ da tabela 5.3
+// CADASTRADO, e ninguém cadastrou ainda. A lição de 21/08 estava escrita:
+// *"módulo novo que bypassar o buildLine cai na R15"*.
+import * as fmt from './sped-fiscal-format.js';
 import { ufEmitente, cfopNaOticaDeEntrada } from './participante-doc-helper.js';
 // Régua única do cancelamento (status + cStat + evento 110111) e da direção.
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
@@ -169,9 +177,9 @@ export function montarC197Difal({
 
         const linhas = [];
         if (codObservacao) {
-            linhas.push(['C195', codObservacao, 'DIFAL aquisicao interestadual', ''].join('|'));
+            linhas.push(fmt.buildLine(['C195', codObservacao, 'DIFAL aquisicao interestadual']));
         }
-        linhas.push([
+        linhas.push(fmt.buildLine([
             'C197',
             String(codigoAjuste).trim(),      // COD_AJ (tabela 5.3 do estado)
             'DIFAL aquisicao interestadual',  // DESCR_COMPL_AJ
@@ -180,8 +188,7 @@ export function montarC197Difal({
             dec(aliqInterna),                 // ALIQ_ICMS
             dec(calc.difal),                  // VL_ICMS
             dec(0),                           // VL_OUTROS
-            '',
-        ].join('|'));
+        ]));
         linhasPorChave[chave] = linhas;
     }
 
