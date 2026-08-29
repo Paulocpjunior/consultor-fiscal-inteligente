@@ -5,6 +5,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O BLOCO 9 É A ARITMÉTICA QUE O PVA CONFERE PRIMEIRO — e ninguém a
+  conferia** (29/08, fechando o cruzamento no EFD **ICMS/IPI**: dos 35 registros
+  com conteúdo que o gerador emite, **13 não tinham regra**, e 9900/9990/9999
+  estavam entre eles).
+  📖 O Guia 3.2.3 é literal nos três: o **9900** *"verifica se o número de
+  linhas no arquivo do tipo informado no campo REG_BLC … é igual ao valor
+  informado"*, e conta *"todos os registros …, **inclusive os posteriores a
+  este registro**"*; o **9990** conta as linhas do bloco 9; o **9999** *"o
+  número de linhas existentes no arquivo inteiro"*, *"considerar também o
+  próprio registro 9999"*.
+  🚨 **O RISCO É O MAIOR DE TODOS: o PVA não IMPORTA o arquivo.** Não é recusa
+  de campo que se conserta e reenvia — é o arquivo inteiro barrado na porta. E
+  a casa já sabia disso: em 24/08 (AFFITTARE) ficou escrito que *"acrescentar
+  UMA linha ao bloco 1 mexe em QUATRO contadores"*, e naquele dia a conferência
+  foi **à mão**.
+  ⚠️ **A REGRA MORA NA AUDITORIA, não na prevalidação de uma família**: o bloco
+  9 é **MECANISMO** (contagem de linhas), idêntico nos dois arquivos — é a casa
+  da `linhasMalformadas`, e pelo mesmo motivo. Deixá-la numa família só é a
+  "meia trava" do COD_MUN do 0150 (22/08).
+  📖 **E a segunda regra (R31) é o par 1010 × 1400**: o `IND_VA` e a existência
+  do registro 1400 são **o mesmo fato dito duas vezes**, e o comentário do
+  próprio gerador registra que **o PVA recusa as DUAS combinações erradas**.
+  ⚠️ **ELA NÃO PODE IR PARA O MÓDULO COMUM**: o `1010` do EFD-**Contribuições**
+  é OUTRO registro — *Processo Referenciado (ação judicial)* —, e foi
+  exatamente confundir os dois que fez o gerador declarar um processo judicial
+  com os campos preenchidos com `'N'` (MANTOAN, 17/08). **Mesmo número, arquivo
+  diferente, leiaute diferente.** E só o `IND_VA` é conferido: os outros
+  indicadores apontam registros que o app **não gera**, então `'N'` é sempre a
+  resposta certa e cobrar coerência ali seria alarme sobre arquivo correto.
+  🐛 **E O TESTE DA LIGAÇÃO NÃO PROVAVA NADA — pego desplugando de propósito.**
+  Ele pedia que a auditoria **NÃO acusasse** o arquivo certo, e isso é verdade
+  também quando a regra **não está ligada**: com o `conferirBloco9` removido do
+  `auditarSaidaSped`, o teste continuava VERDE.
+  📌 **REGRA QUE FICA: ligação se prova pela POSITIVA — arquivo QUEBRADO tem de
+  acusar.** Teste que afirma AUSÊNCIA passa igual com a trava desligada; é a
+  mesma classe do silêncio falso que a casa persegue desde 22/08 (*ausência de
+  alarme não pode ser indistinguível de "está tudo certo"*), agora dentro do
+  próprio teste.
+
 - **🚨 O M100/M500 SE DESMENTIA POR DENTRO — o crédito saía como AJUSTE e como
   DIFERIDO, e o DISPONÍVEL saía ZERO** (29/08, achado ao fechar o cruzamento do
   EFD-Contribuições — o M100 e o M500 eram dois dos cinco registros sem regra).

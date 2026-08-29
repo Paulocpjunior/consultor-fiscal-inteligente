@@ -130,6 +130,105 @@ export function linhasMalformadas(linhas) {
 }
 
 /**
+ * O BLOCO 9 FECHA COM O ARQUIVO — a aritmética que o PVA confere PRIMEIRO.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, literal:
+ *  · **9900**, campo 03 (QTD_REG_BLC), Validação: *"verifica se o número de
+ *    linhas no arquivo do tipo informado no campo REG_BLC do registro 9900 é
+ *    igual ao valor informado neste campo"*; e o cabeçalho do registro: *"Todos
+ *    os registros referenciados neste arquivo, **inclusive os posteriores a
+ *    este registro**, devem ter uma linha totalizadora"*;
+ *  · **9990**, campo 02: a quantidade de linhas do Bloco 9;
+ *  · **9999**, campo 02, Validação: *"o número de linhas (registros)
+ *    existentes no arquivo inteiro é igual ao valor informado no campo
+ *    QTD_LIN"*, e *"deve considerar também o próprio registro 9999"*.
+ *
+ * 🚨 **POR QUE ELA MORA AQUI, e não na prevalidação de uma família só**: o
+ * bloco 9 é o MESMO mecanismo nos dois arquivos — contagem de linhas, sem
+ * leiaute nenhum de permeio. É a casa da `linhasMalformadas`, e pelo mesmo
+ * motivo. Deixá-la numa família protegeria um arquivo e deixaria o outro
+ * descoberto (a "meia trava" do COD_MUN do 0150, 22/08).
+ *
+ * 🚨 **E O RISCO É O MAIOR DE TODOS: o PVA não IMPORTA o arquivo.** Não é uma
+ * recusa de campo que se conserta e reenvia — é o arquivo inteiro recusado na
+ * porta. Em 24/08 (AFFITTARE) a lição ficou escrita: *"acrescentar UMA linha
+ * ao bloco 1 mexe em QUATRO contadores"*, e naquele dia a conferência foi
+ * feita à mão. Aqui ela passa a ser automática, em todo arquivo gerado.
+ *
+ * ⚠️ **A CONTAGEM INCLUI O PRÓPRIO BLOCO 9** — é o que o Guia manda, e é
+ * exatamente onde um contador se perde: o 9900 conta as linhas 9900, o 9990 e
+ * o 9999 que ainda vão ser escritas.
+ */
+export function conferirBloco9(linhas) {
+    const lista = (linhas || []).map(String).filter((l) => String(l).trim());
+    const noves = lista.filter((l) => registroDe(l) === '9999');
+    // Arquivo sem bloco 9 não é "arquivo errado": é arquivo PARCIAL (um bloco
+    // isolado num teste, por exemplo). Acusar ali seria alarme sobre recorte.
+    if (!noves.length) return [];
+
+    const suspeitas = [];
+    const contagemReal = new Map();
+    for (const l of lista) {
+        const r = registroDe(l);
+        if (!r) continue;
+        contagemReal.set(r, (contagemReal.get(r) || 0) + 1);
+    }
+
+    // ── 9900: o que ele declara × o que o arquivo tem ───────────────────────
+    const declarado = new Map();
+    for (const l of lista) {
+        if (registroDe(l) !== '9900') continue;
+        const reg = String(campo(l, 2) || '').trim();
+        const qtd = Number(String(campo(l, 3) || '').replace(/\D/g, ''));
+        if (reg) declarado.set(reg, (declarado.get(reg) || 0) + (Number.isFinite(qtd) ? qtd : 0));
+    }
+    if (declarado.size) {
+        const divergentes = [];
+        for (const [reg, real] of contagemReal) {
+            const dec = declarado.get(reg);
+            if (dec === undefined) { divergentes.push(`${reg}: o 9900 não totaliza (o arquivo tem ${real})`); continue; }
+            if (dec !== real) divergentes.push(`${reg}: 9900 diz ${dec}, o arquivo tem ${real}`);
+        }
+        for (const [reg, dec] of declarado) {
+            if (!contagemReal.has(reg)) divergentes.push(`${reg}: o 9900 totaliza ${dec} e o arquivo não tem nenhum`);
+        }
+        if (divergentes.length) {
+            suspeitas.push({
+                registro: '9900', tipo: 'bloco9-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `O 9900 não bate com o arquivo em ${divergentes.length} tipo(s) de registro: `
+                    + `${divergentes.slice(0, 6).join(' · ')}${divergentes.length > 6 ? ' · …' : ''}. `
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO, reporte com o print.',
+            });
+        }
+    }
+
+    // ── 9990: linhas do bloco 9 ─────────────────────────────────────────────
+    const l9990 = lista.find((l) => registroDe(l) === '9990');
+    if (l9990) {
+        const doBloco9 = lista.filter((l) => /^9\d{3}$/.test(registroDe(l))).length;
+        const dec = Number(String(campo(l9990, 2) || '').replace(/\D/g, ''));
+        if (Number.isFinite(dec) && dec !== doBloco9) {
+            suspeitas.push({
+                registro: '9990', tipo: 'bloco9-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `O 9990 declara ${dec} linha(s) no bloco 9 e o arquivo tem ${doBloco9}. `
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO.',
+            });
+        }
+    }
+
+    // ── 9999: o arquivo INTEIRO, incluindo a própria linha ──────────────────
+    const dec9999 = Number(String(campo(noves[0], 2) || '').replace(/\D/g, ''));
+    if (Number.isFinite(dec9999) && dec9999 !== lista.length) {
+        suspeitas.push({
+            registro: '9999', tipo: 'bloco9-nao-fecha', gravidade: 'bloqueia',
+            detalhe: `O 9999 declara ${dec9999} linha(s) e o arquivo tem ${lista.length}. `
+                + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO, reporte com o print.',
+        });
+    }
+    return suspeitas;
+}
+
+/**
  * @param {string[]} linhas  arquivo gerado, linha a linha
  * @returns {{suspeitas: Array<{registro:string, tipo:string, gravidade:'bloqueia'|'atencao', detalhe:string}>}}
  */
@@ -151,6 +250,12 @@ export function auditarSaidaSped(linhas) {
     // enquanto o defeito é do MECANISMO (módulo formando linha fora do
     // buildLine), não do leiaute.
     for (const suspeita of linhasMalformadas(lista)) suspeitas.push(suspeita);
+
+    // ── 0b. O BLOCO 9 FECHA COM O ARQUIVO ───────────────────────────────────
+    // Mesma casa e mesmo motivo da forma da linha: é MECANISMO (contagem), não
+    // leiaute, e vale igual nas duas famílias. E é o erro mais caro de todos —
+    // o PVA não IMPORTA o arquivo, então não há recusa de campo para consertar.
+    for (const suspeita of conferirBloco9(lista)) suspeitas.push(suspeita);
 
     // ── 1. Coluna de valor zerada em TODAS as linhas de um detalhe ──────────
     // Esta é a assinatura do bloco H: 400 itens, todos com QTD 0,00. Um item
