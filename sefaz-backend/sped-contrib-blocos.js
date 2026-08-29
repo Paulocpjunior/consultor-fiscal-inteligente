@@ -1466,6 +1466,7 @@ export function buildBlocoM(dados) {
     // do M210/M610 (COD_CONT 02), não somada à apuração comum: juntar
     // declararia parte da receita sob a alíquota errada.
     // (declarado acima, antes do M100 — o crédito descontado precisa dele)
+
     const vlCredDescontPis = isNaoCumulativo ? Math.min(totalPisEntrada, vlContribPis) : 0;
     // A retenção declarada é a REAL (soma dos F600); o "a recolher" é que não
     // desce de zero. Cap na retenção esconderia o saldo a compensar.
