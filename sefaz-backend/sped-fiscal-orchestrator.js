@@ -645,9 +645,17 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  * @returns {Promise<string>} arquivo .txt em encoding Windows-1252.
  */
 export async function montarBlocos({ dados }) {
+    // 🚨 O BLOCO C É MONTADO ANTES DO 0 — a ORDEM DE EXECUÇÃO, não a do arquivo.
+    //
+    // O `0460` (Tabela de Observações) mora no bloco 0 e só pode existir quando
+    // ALGUÉM o referencia: o Guia 3.2.3 valida nos DOIS sentidos — o C195 exige
+    // um 0460, e o 0460 exige *"existir em pelo menos um registro dos demais
+    // blocos"*. Quem sabe se o C195 saiu é o bloco C, e ele grava a resposta em
+    // `dados.difalTemC195`. A ordem de CONCATENAÇÃO continua a oficial (0 → B →
+    // C → …), travada por teste.
+    const linhasBlocoC = buildBlocoC(dados);
     const linhasBloco0 = buildBloco0(dados);
     const linhasBlocoB = buildBlocoB();   // vazio
-    const linhasBlocoC = buildBlocoC(dados);
     const linhasBlocoD = buildBlocoD(dados);  // CTe modelo 57
     const linhasBlocoE = buildBlocoE(dados);  // ICMS (E100/E110/E116) + IPI (E200/E210 se houver)
     // Bloco G — CIAP real quando a empresa tem bens cadastrados; senão, vazio.

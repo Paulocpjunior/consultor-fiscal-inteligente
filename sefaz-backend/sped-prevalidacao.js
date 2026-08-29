@@ -1388,6 +1388,47 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         fecha();
     })();
 
+    // ── R40. O COD_OBS do C195 e o 0460 se referenciam nos DOIS sentidos ────
+    //
+    // 📖 FONTE — Guia 3.2.3, C195 campo 02: *"o código informado deve constar
+    // do registro 0460"*; e 0460 campo 02: *"o valor informado neste campo deve
+    // existir em pelo menos um registro dos demais blocos"*.
+    //
+    // 🚨 É a família do item órfão do 0200 (PWR, 19/08), do participante órfão
+    // do 0150 e do bem do G125 sem 0300 (achado horas antes) — **e esta corta
+    // nos DOIS sentidos**: o cadastro sem referência também é recusado.
+    (() => {
+        const c195s = doReg('C195');
+        const r0460 = doReg('0460');
+        const cadastrados = new Set(r0460.map((l) => String(campos(l)[2] || '').trim()));
+        const usados = new Set(c195s.map((l) => String(campos(l)[2] || '').trim()).filter(Boolean));
+        const orfaos = [...usados].filter((c) => !cadastrados.has(c));
+        if (orfaos.length) {
+            add(erros, {
+                regra: 'c195-obs-orfa', registro: 'C195', campo: '2 - COD_OBS', linha: c195s[0],
+                valor: orfaos.join(', '), esperado: 'um 0460 por código',
+                mensagem: `O C195 aponta a observação ${orfaos.join(', ')} e o arquivo não traz o 0460 dela.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O 0460 é a Tabela de Observações; sem ele '
+                    + 'o C195 referencia um cadastro que o arquivo não declara.',
+                fonte: 'Guia Prático 3.2.3, C195 campo 02: "o código informado deve constar do registro 0460".',
+            });
+        }
+        // ⚠️ E a volta: cadastro que ninguém referencia também é recusa.
+        const semUso = [...cadastrados].filter((c) => c && !usados.has(c));
+        if (semUso.length) {
+            add(erros, {
+                regra: 'c195-obs-orfa', registro: '0460', campo: '2 - COD_OBS', linha: r0460[0],
+                valor: semUso.join(', '), esperado: 'ao menos um registro que o use',
+                mensagem: `O 0460 declara a observação ${semUso.join(', ')} e nenhum registro do arquivo a `
+                    + 'referencia.',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. Esta validação corta nos DOIS sentidos: '
+                    + 'o cadastro sem uso é recusado igual ao uso sem cadastro.',
+                fonte: 'Guia Prático 3.2.3, 0460 campo 02: "o valor informado neste campo deve existir em '
+                    + 'pelo menos um registro dos demais blocos".',
+            });
+        }
+    })();
+
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────
     //
     // 📖 FONTE — Guia 3.2.3, G125 campo 02: *"o código informado neste campo

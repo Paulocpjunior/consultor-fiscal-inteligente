@@ -5,6 +5,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O 0460 NÃO EXISTIA — e esta validação corta nos DOIS SENTIDOS** (29/08,
+  fechando o cruzamento do EFD ICMS/IPI **medindo**, não afirmando).
+  📌 **O que fechou a conta foi rodar a medição de novo**: eu tinha escrito no
+  de-para que *"os 35 registros com conteúdo estão cobertos"*, e o cruzamento
+  automático devolveu **DOIS descobertos** — `0005` e `C195`. O primeiro era
+  imprecisão minha (o 0005 ficou coberto por uma **trava de tamanho**, não por
+  uma regra de prevalidação, e o texto não dizia isso); o segundo era **buraco
+  de verdade**. **Cobertura se mede; não se declara.**
+  📖 **O Guia 3.2.3 valida os dois lados**: C195 campo 02 — *"o código informado
+  deve constar do registro 0460"*; e 0460 campo 02 — *"o valor informado neste
+  campo deve existir em **pelo menos um registro dos demais blocos**"*.
+  🔴 O app emitia o C195 com o `COD_OBS` do cadastro e **nenhum 0460**. É a
+  família do item órfão do 0200 (PWR, 19/08), do participante órfão do 0150 e do
+  bem do G125 sem 0300 — o **terceiro órfão fechado no mesmo dia**.
+  🚨 **E POR CORTAR NOS DOIS SENTIDOS, o 0460 não pode sair "sempre que
+  cadastrado"**: cadastro sem referência é recusado igual. Quem sabe se o C195
+  saiu é o **bloco C** — e ele grava o fato (`dados.difalTemC195`) para o bloco 0
+  ler.
+  ⚠️ **ISSO EXIGIU INVERTER A ORDEM DE EXECUÇÃO** (bloco C antes do 0), e a
+  **ordem de CONCATENAÇÃO continua a oficial**, travada por teste. Trocar as
+  duas de uma vez seria o defeito mais silencioso possível — **o PVA lê a
+  ORDEM**, e um arquivo com os blocos fora de sequência não é importado.
+  ⚠️ **E o `TXT` do 0460 não é inventado**: ele leva a MESMA anotação que o C195
+  já escreve no `TXT_COMPL`, agora de uma constante só (`TXT_OBS_DIFAL`). Duas
+  descrições para a mesma observação fariam o arquivo se contradizer.
+
 - **🚨 A TRAVA DE CONTAGEM NÃO VÊ TAMANHO — o FANTASIA saía com 91 caracteres
   num campo de 60** (29/08, fechando o **0005**, o último registro descoberto
   do cruzamento do EFD ICMS/IPI).
