@@ -82,14 +82,28 @@ const RESUMO = {
 
 beforeEach(() => {
     jest.clearAllMocks();
+    // jsdom não implementa scrollIntoView — o clique chama, e sem o stub ele
+    // explodiria antes de aplicar o filtro.
+    (Element.prototype as any).scrollIntoView = jest.fn();
     listarMock.mockResolvedValue({ resumo: RESUMO, empresas: EMPRESAS });
 });
 
 const USER = { uid: 'u1', email: 'p.c.pereira@me.com', role: 'admin' } as any;
 
+// ⚠️ Duas armadilhas de query aqui, e as duas são do próprio desenho da tela:
+//  · o `<option>` novo tem o MESMO texto do link (o select passou a nomear o
+//    filtro), então `getByText` acha os dois;
+//  · o CARD em volta é `role="button"` e o nome acessível dele INCLUI o texto
+//    do link, então `getByRole('button', {name})` acha o card também.
+// O alvo é o elemento `<button>` de verdade.
+const link = (re: RegExp) => screen.getAllByRole('button', { name: re })
+    .find((el) => el.tagName === 'BUTTON')!;
+const linkA3 = () => link(/A3 sem entrega do agente/);
+const linkNfseSp = () => link(/NFS-e SP sem entrega/);
+
 const abrir = async () => {
     const r = render(<EmpresasStatusCapturaPanel currentUser={USER} />);
-    await screen.findByText(/A3 sem entrega do agente/);
+    await screen.findByText(/A3 sem entrega do agente/, { selector: 'button' });
     return r;
 };
 
@@ -103,7 +117,7 @@ const abrir = async () => {
 describe('🚨 os links "sem entrega" filtram de verdade', () => {
     it('⚠ NFS-e SP sem entrega mostra a LAV, não a bloqueada', async () => {
         const { container } = await abrir();
-        fireEvent.click(screen.getByText(/NFS-e SP sem entrega/));
+        fireEvent.click(linkNfseSp());
         await waitFor(() => expect(container.textContent).toMatch(/LAV COMERCIO DE AUTOPECAS/));
         // 🚨 A prova do borbulhamento: com ele, o card sobrepõe com
         // `bloqueadas` e é ESTA empresa que aparece.
@@ -113,7 +127,7 @@ describe('🚨 os links "sem entrega" filtram de verdade', () => {
 
     it('⚠ A3 sem entrega do agente mostra a A3, não a bloqueada', async () => {
         const { container } = await abrir();
-        fireEvent.click(screen.getByText(/A3 sem entrega do agente/));
+        fireEvent.click(linkA3());
         await waitFor(() => expect(container.textContent).toMatch(/EMPRESA A3 SEM ENTREGA/));
         expect(container.textContent).not.toMatch(/EMPRESA BLOQUEADA/);
         expect(container.textContent).not.toMatch(/LAV COMERCIO/);
@@ -137,7 +151,7 @@ describe('o link limpa a busca, como o card', () => {
     it('busca aberta não corta o resultado do link', async () => {
         const { container } = await abrir();
         fireEvent.change(screen.getByPlaceholderText(/buscar/i), { target: { value: 'zzz-nao-existe' } });
-        fireEvent.click(screen.getByText(/NFS-e SP sem entrega/));
+        fireEvent.click(linkNfseSp());
         await waitFor(() => expect(container.textContent).toMatch(/LAV COMERCIO DE AUTOPECAS/));
     });
 });
@@ -192,5 +206,71 @@ describe('🔒 todo botão dentro de card-filtro para o borbulhamento', () => {
             }
         }
         expect(faltando).toEqual([]);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 A SEGUNDA QUEIXA DO MESMO DIA: *"é clicável mas não está funcional"*.
+//
+// Depois do `stopPropagation` o filtro passou a ser APLICADO — e a tela
+// continuou sem dizer isso. O `<select>` é o único lugar que mostra QUAL
+// filtro está valendo, e ele **não tinha opção** para os dois novos: exibia
+// "🚨 Bloqueadas" enquanto a tabela mostrava outra coisa.
+//
+// E o resultado ficava FORA DA TELA: os cards estão no topo, a barra de
+// filtros e a tabela ficam abaixo do bloco "Importar códigos". O clique mudava
+// tudo sem nada visível se mexer.
+//
+// 📌 **REGRA QUE FICA: filtro que a tela não sabe NOMEAR é filtro que ninguém
+// confia** — e clique cujo efeito acontece fora do campo de visão se lê como
+// clique que não fez nada. Aplicar não basta: tem de DIZER e tem de MOSTRAR.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 a tela DIZ qual filtro está aplicado', () => {
+    const selectDoFiltro = () =>
+        screen.getByRole('combobox', { name: '' }) as HTMLSelectElement;
+
+    it('o select passa a mostrar "NFS-e SP sem entrega"', async () => {
+        await abrir();
+        fireEvent.click(linkNfseSp());
+        await waitFor(() => expect(selectDoFiltro().value).toBe('nfsesp-sem-entrega'));
+    });
+
+    it('o select passa a mostrar "A3 sem entrega"', async () => {
+        await abrir();
+        fireEvent.click(linkA3());
+        await waitFor(() => expect(selectDoFiltro().value).toBe('a3-sem-entrega'));
+    });
+
+    // 🚨 A prova da opção faltando: sem o <option>, um select controlado
+    // devolve '' (o DOM recusa um value que não existe) — e a tela fica
+    // afirmando o filtro ERRADO.
+    it('as duas opções existem na lista', async () => {
+        await abrir();
+        const valores = [...selectDoFiltro().options].map((o) => o.value);
+        expect(valores).toContain('a3-sem-entrega');
+        expect(valores).toContain('nfsesp-sem-entrega');
+    });
+});
+
+describe('o clique leva os olhos até o resultado', () => {
+    it('link e card rolam a lista para a vista', async () => {
+        await abrir();
+        const scroll = (Element.prototype as any).scrollIntoView as jest.Mock;
+        fireEvent.click(linkNfseSp());
+        expect(scroll).toHaveBeenCalled();
+
+        scroll.mockClear();
+        fireEvent.click(screen.getByText(/Captura NFe OK/));
+        expect(scroll).toHaveBeenCalled();
+    });
+
+    // ⚠️ O select NÃO rola: quem já está nele veria a página pular embaixo do
+    // dedo, que é pior que não rolar.
+    it('mudar pelo select não rola', async () => {
+        await abrir();
+        const scroll = (Element.prototype as any).scrollIntoView as jest.Mock;
+        scroll.mockClear();
+        fireEvent.change(screen.getByDisplayValue(/Bloqueadas/), { target: { value: 'todas' } });
+        expect(scroll).not.toHaveBeenCalled();
     });
 });
