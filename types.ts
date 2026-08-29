@@ -1505,6 +1505,27 @@ export interface EmpresaDadosFiscais {
     contribuinteIcms?: 'sim' | 'nao' | '';
     classEstabIpi?: string;
     /**
+     * 🏭 **Bloco K — controle da produção e do estoque (EFD ICMS/IPI).**
+     *
+     * 📖 Guia Prático 3.2.3: o bloco é *"relativo aos estabelecimentos
+     * industriais ou a eles equiparados pela legislação federal e pelos
+     * atacadistas"*, e *"os contribuintes optantes pelo Simples Nacional estão
+     * dispensados de apresentarem este bloco, em virtude da Resolução Comitê
+     * Gestor do Simples Nacional nº 94"*.
+     *
+     * ⚠️ O app **NÃO DEDUZ** quem é industrial: a 🚦 Migração detecta produção
+     * pelos CFOPs, mas detectar movimento é SINAL, não enquadramento.
+     */
+    entregaBlocoK?: boolean;
+    /**
+     * Leiaute do K010 — **escolha do contribuinte** (Ajuste SINIEF 02/09):
+     * `0` simplificado · `1` completo · `2` restrito aos saldos de estoque.
+     *
+     * ⚠️ Escolher por ele faria o arquivo prometer detalhamento que o PVA
+     * cobra. Sem escolha, o bloco não sai e a falta vai nomeada.
+     */
+    leiauteBlocoK?: '0' | '1' | '2' | '';
+    /**
      * 🚨 **Consolidação da receita no registro 1900 do EFD-Contribuições.**
      *
      * Havendo F550 (receita sem documento — aluguel), o 1900 é OBRIGATÓRIO.

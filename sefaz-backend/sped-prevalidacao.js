@@ -846,6 +846,99 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // R27–R29 — BLOCO K, nascendo COM as regras (29/08)
+    //
+    // 📌 O bloco K é o primeiro deste projeto a estrear com a prevalidação no
+    // MESMO PR do gerador. As quatro pendências que a auditoria achou (H005,
+    // H010, E210/E220/E250, E510) existiam justamente por o contrário: código
+    // escrito primeiro, regra depois — e "depois" custou uma volta de PVA por
+    // cliente. Estas regras **nascem VERDES** sobre o que o gerador produz.
+    // ════════════════════════════════════════════════════════════════════════
+    const k200s = doReg('K200');
+    const k100s = doReg('K100');
+
+    // ── R27. A data do estoque é a DT_FIN do K100 ───────────────────────────
+    //
+    // FONTE — Guia 3.2.3, K200 campo 02 (DT_EST), Validação: *"a data do
+    // estoque deve ser igual à data final do período de apuração – campo
+    // DT_FIN do Registro K100"*.
+    if (k200s.length && k100s.length) {
+        // ⚠️ `campos()[1]` é o REG — o campo 02 do leiaute é o índice 2.
+        const dtFinK100 = String(campos(k100s[0])[3] || '').trim();
+        const fora = k200s.filter((l) => String(campos(l)[2] || '').trim() !== dtFinK100);
+        if (dtFinK100 && fora.length) {
+            add(erros, {
+                regra: 'k200-dt-est', registro: 'K200', campo: '2 - DT_EST', linha: fora[0],
+                valor: String(campos(fora[0])[2] || ''), esperado: dtFinK100,
+                mensagem: `${fora.length} linha(s) de estoque com data diferente da DT_FIN do K100 (${dtFinK100}).`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: 'Guia Prático 3.2.3, K200 campo 02: "a data do estoque deve ser igual à data final '
+                    + 'do período de apuração – campo DT_FIN do Registro K100".',
+            });
+        }
+    }
+
+    // ── R28. Item do bloco K que o 0200 não cadastra ────────────────────────
+    //
+    // FONTE — Guia 3.2.3, K200 campo 03 (COD_ITEM), Validação: *"o valor
+    // informado no campo deve existir no campo COD_ITEM do registro 0200"*.
+    // Mesma família do H010 órfão (R22) e do participante do 0150.
+    const kComItem = [...k200s, ...doReg('K230'), ...doReg('K235')];
+    if (kComItem.length) {
+        const itens0200K = new Set(doReg('0200').map((l) => campos(l)[2]).filter(Boolean));
+        // No K200 e no K235 o COD_ITEM é o campo 03; no K230 é o 05.
+        const codDaLinha = (l) => (registroDe(l) === 'K230' ? campos(l)[5] : campos(l)[3]);
+        const orfaos = [...new Set(
+            kComItem.map(codDaLinha).filter((c) => c && itens0200K.size && !itens0200K.has(c)),
+        )];
+        if (orfaos.length) {
+            add(erros, {
+                regra: 'k-item-orfao', registro: 'K200', campo: '3 - COD_ITEM', linha: kComItem[0],
+                valor: orfaos.slice(0, 5).join(', '), esperado: 'COD_ITEM cadastrado no 0200',
+                mensagem: `${orfaos.length} item(ns) do bloco K não estão declarados no 0200 `
+                    + `(${orfaos.slice(0, 5).join(', ')}${orfaos.length > 5 ? '…' : ''}).`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recusa item que a Tabela de '
+                    + 'Identificação não conhece.',
+                fonte: 'Guia Prático 3.2.3, K200 campo 03: "o valor informado no campo deve existir no '
+                    + 'campo COD_ITEM do registro 0200".',
+            });
+        }
+    }
+
+    // ── R29. Estoque de/em poder de TERCEIRO sem participante ───────────────
+    //
+    // FONTE — Guia 3.2.3, K200 campo 06 (COD_PART), Validação: *"o
+    // preenchimento do campo é obrigatório se o campo IND_EST for igual a 1 ou
+    // 2"* — e o participante tem de existir no 0150.
+    if (k200s.length) {
+        const parts0150 = new Set(doReg('0150').map((l) => campos(l)[2]).filter(Boolean));
+        for (const l of k200s) {
+            const c = campos(l);
+            const indEst = String(c[5] || '').trim();
+            const codPart = String(c[6] || '').trim();
+            if (!['1', '2'].includes(indEst)) continue;
+            if (!codPart) {
+                add(erros, {
+                    regra: 'k200-cod-part', registro: 'K200', campo: '6 - COD_PART', linha: l,
+                    valor: '', esperado: 'participante do 0150',
+                    mensagem: `Estoque com IND_EST ${indEst} (poder de terceiro) sem COD_PART.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                    fonte: 'Guia Prático 3.2.3, K200 campo 06: "o preenchimento do campo é obrigatório se '
+                        + 'o campo IND_EST for igual a 1 ou 2".',
+                });
+            } else if (parts0150.size && !parts0150.has(codPart)) {
+                add(erros, {
+                    regra: 'k200-cod-part', registro: 'K200', campo: '6 - COD_PART', linha: l,
+                    valor: codPart, esperado: 'participante declarado no 0150',
+                    mensagem: `O participante ${codPart} do estoque de terceiro não está no 0150.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                    fonte: 'Guia Prático 3.2.3, K200 campo 06 — o participante deve existir no registro 0150.',
+                });
+            }
+        }
+    }
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';

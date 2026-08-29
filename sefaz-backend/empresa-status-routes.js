@@ -712,6 +712,14 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // é o cadastro; o app não deduz. Campo entra na whitelist E no modal no
     // MESMO PR (regra do #382).
     'contribuinteIcms',
+    // 🏭 Bloco K (29/08). Quem apresenta o controle da produção e do estoque é
+    // o estabelecimento INDUSTRIAL ou equiparado — e o app NÃO DEDUZ isso: a
+    // 🚦 Migração detecta produção pelos CFOPs, mas detectar movimento é SINAL,
+    // não enquadramento. O LEIAUTE (K010) é ESCOLHA do contribuinte (Ajuste
+    // SINIEF 02/09: 0 simplificado · 1 completo · 2 restrito aos saldos) e
+    // escolher por ele faria o arquivo prometer detalhamento que o PVA cobra.
+    // Os dois entram na whitelist E no modal no MESMO PR (regra do #382).
+    'entregaBlocoK', 'leiauteBlocoK',
     // Consolidação da receita no 1900 do EFD-Contribuições. Havendo F550 o
     // registro é OBRIGATÓRIO (recusa do PVA na AFFITTARE 07/2026, 24/08), e
     // COD_MOD/COD_SIT são TABELA OFICIAL que depende de qual documento a

@@ -394,6 +394,52 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                     diagnóstico de cadastros.
                                 </p>
                             </div>
+                            {/* 🏭 BLOCO K — 29/08, Paulo: *"pode fazer o bloco k"*.
+                                Quem apresenta o controle da produção e do estoque é o
+                                estabelecimento INDUSTRIAL ou equiparado, e o app NÃO
+                                DEDUZ isso: a 🚦 Migração detecta produção pelos CFOPs,
+                                mas detectar movimento é SINAL, não enquadramento.
+                                O LEIAUTE é ESCOLHA do contribuinte (K010, Ajuste SINIEF
+                                02/09) — escolher por ele faria o arquivo prometer
+                                detalhamento que o PVA cobra, a família da recusa "o
+                                registro não deve ser informado para esse perfil". */}
+                            <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-slate-500 dark:text-slate-400">
+                                    Entrega o bloco K (produção e estoque)
+                                </label>
+                                <select
+                                    value={dados.entregaBlocoK ? 'sim' : ''}
+                                    onChange={e => handleField('entregaBlocoK', e.target.value === 'sim')}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                >
+                                    <option value="">Não — o bloco K sai sem dados</option>
+                                    <option value="sim">Sim — indústria ou equiparado</option>
+                                </select>
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    Optante do <b>Simples Nacional é dispensado</b> (Resolução CGSN 94).
+                                    O apontamento de produção/estoque se informa em SPED Fiscal → 🏭 Bloco K —
+                                    sem ele o bloco sai <b>vazio</b>, nunca zerado.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold mb-1.5 text-slate-500 dark:text-slate-400">
+                                    Leiaute do bloco K (K010)
+                                </label>
+                                <select
+                                    value={dados.leiauteBlocoK || ''}
+                                    onChange={e => handleField('leiauteBlocoK', e.target.value)}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                >
+                                    <option value="">Não escolhido — o app não escolhe por você</option>
+                                    <option value="0">0 — simplificado</option>
+                                    <option value="1">1 — completo</option>
+                                    <option value="2">2 — restrito aos saldos de estoque</option>
+                                </select>
+                                <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
+                                    É <b>opção do contribuinte</b> (Ajuste SINIEF 02/09). O simplificado
+                                    desobriga o consumo por item (K235); o restrito leva só o saldo (K200).
+                                </p>
+                            </div>
                             {/* 🚨 EFD-Contribuições: havendo F550 (receita de
                                 ALUGUEL, que não gera documento capturável), o
                                 registro 1900 é OBRIGATÓRIO — recusa do PVA na

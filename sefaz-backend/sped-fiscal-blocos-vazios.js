@@ -34,7 +34,10 @@ export const buildBlocoB = () => buildBlocoVazio('B');
 // buildBlocoE foi pra ./sped-fiscal-blocoE.js (com E100/E110 zerada).
 export const buildBlocoG = () => buildBlocoVazio('G');
 // buildBlocoH foi pra ./sped-fiscal-blocoH.js (com H005/H010 reais).
-export const buildBlocoK = () => buildBlocoVazio('K');
+// buildBlocoK foi pra ./sped-fiscal-blocoK.js (com K010/K100/K200/K230/K235
+// reais). A versão vazia foi DELETADA de propósito: código morto é a isca para
+// alguém reativar a régua velha — e aqui a régua velha declara, todo mês, um
+// bloco K sem dados em quem entrega o controle de produção.
 /**
  * Bloco 1 — gera 1001|0| + 1010|…| + (1400 por municipio) + 1990|N|.
  *

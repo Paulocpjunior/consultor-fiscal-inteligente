@@ -107,6 +107,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'sage_codigos_participantes', grupo: 'Integrações', funcionalidade: 'De→Para de códigos de participante do E-Fiscal (Exportar SAGE) — 1 doc por empresa' },
     { colecao: 'sped_ajustes_apuracao', grupo: 'Integrações', funcionalidade: 'Ajustes da apuração ICMS (Registro E111 do SPED Fiscal) — 1 doc por empresa×competência' },
     { colecao: 'sped_inventario', grupo: 'Integrações', funcionalidade: 'Bloco H do SPED Fiscal — contagem física do inventário (H005/H010); 1 doc por empresa × data do inventário' },
+    { colecao: 'sped_bloco_k', grupo: 'Integrações', funcionalidade: 'Bloco K do SPED Fiscal — apontamento de produção e estoque (K200/K230/K235); 1 doc por empresa × competência' },
     { colecao: 'sped_saldos_abertura', grupo: 'Integrações', funcionalidade: '🧮 Saldo credor de ABERTURA (E110 c.14 / E520 c.7 do último SPED ENTREGUE, colado) — 1 doc por empresa; o transporte mês a mês é calculado, nunca redigitado' },
     { colecao: 'sped_ciap_bens', grupo: 'Integrações', funcionalidade: 'CIAP / Bloco G do SPED Fiscal — bens do imobilizado com crédito de ICMS em 48 parcelas; 1 doc por empresa' },
     { colecao: 'rotina_coberturas_declaradas', grupo: 'Cadastro & Acesso', funcionalidade: '📋 Entrega DECLARADA das obrigações que o catálogo NÃO cobre (INSS patronal, ISS municipal) — sem ela a etapa 4 da Rotina mandava, para sempre, não fechar o mês; 1 doc por empresa × competência' },

@@ -31,6 +31,7 @@ const FilaMigracao = lazy(() => import('./FilaMigracao'));
 const CreditoAcumulado = lazy(() => import('./CreditoAcumulado'));
 const CiapBlocoG = lazy(() => import('./CiapBlocoG'));
 const InventarioBlocoH = lazy(() => import('./InventarioBlocoH'));
+const BlocoK = lazy(() => import('./BlocoK'));
 const ConferenciaEspelho = lazy(() => import('./ConferenciaEspelho'));
 
 interface Props {
@@ -56,7 +57,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'ajustes' | 'saldo' | 'ciap' | 'inventario' | 'credito' | 'migracao' | 'fila' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
+type SpedTab = 'gerar' | 'ajustes' | 'saldo' | 'ciap' | 'inventario' | 'bloco-k' | 'credito' | 'migracao' | 'fila' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 // MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
@@ -429,6 +430,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             📦 Inventário (Bloco H)
                         </button>
                         <button
+                            onClick={() => setSpedTab('bloco-k')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'bloco-k' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'bloco-k' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'bloco-k' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            🏭 Bloco K (produção)
+                        </button>
+                        <button
                             onClick={() => setSpedTab('credito')}
                             className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
                             style={{
@@ -571,6 +583,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {spedTab === 'migracao' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
                     <ProntidaoMigracao onShowToast={onShowToast} />
+                </Suspense>
+            )}
+
+            {spedTab === 'bloco-k' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <BlocoK currentUser={currentUser} empresas={empresas} onShowToast={onShowToast} />
                 </Suspense>
             )}
 
