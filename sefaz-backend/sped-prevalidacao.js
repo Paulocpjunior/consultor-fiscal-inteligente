@@ -626,6 +626,226 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // só é a "meia trava" do COD_MUN do 0150 — aqui os campos são o 04 e o 05.
     for (const e of conferirPeriodoDoArquivo(lista, POS_DT_FIN_ICMS_IPI)) add(erros, e);
 
+    // ════════════════════════════════════════════════════════════════════════
+    // R21–R25 — OS REGISTROS QUE NUNCA VIRAM O PVA (29/08)
+    //
+    // A auditoria do de-para mostrou QUATRO pendências antigas com a mesma
+    // forma: código escrito, corrigido, e **nunca validado** — inventário
+    // (bloco H), ST (E210/E220/E250) e IPI (E510). Cruzando os registros que
+    // os geradores EMITEM com os que esta prevalidação COBRE, esses seis
+    // (H005, H010, E210, E220, E250, E510) tinham **zero** regra.
+    //
+    // 📌 A doutrina do "PVA de bolso" era *recusa aprendida entra no mesmo PR*.
+    // Aqui ela vai um passo antes: o Guia 3.2.3 está no repo desde 20/08, e a
+    // VALIDAÇÃO OFICIAL entra ANTES de a recusa acontecer — que é a única
+    // forma de não gastar a volta de PVA para descobrir o que já estava
+    // escrito. Cada regra abaixo cita a validação do Guia, como as outras.
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── R21. O total do inventário tem de ser a soma dos itens ──────────────
+    //
+    // FONTE — Guia 3.2.3, H005 campo 03 (VL_INV), Validação: *"deve ser igual
+    // à soma do campo VL_ITEM do registro H010"*.
+    //
+    // 🚨 É a MESMA classe do VL_DOC × Σ VL_OPR do C100/C190 (20/08, PWR), que
+    // o PVA **não recusa** — ele só imprime um total menor. Aqui o campo é o
+    // valor do ESTOQUE, e o Guia é explícito uma linha acima: *"Atribuir valor
+    // Zero ao inventário significa escriturar sem estoque"*.
+    const h005s = doReg('H005');
+    const h010s = doReg('H010');
+    if (h005s.length && h010s.length) {
+        const somaItens = h010s.reduce((acc, l) => acc + num(campos(l)[6]), 0);
+        const totalDeclarado = h005s.reduce((acc, l) => acc + num(campos(l)[3]), 0);
+        if (Math.abs(centavos(somaItens) - centavos(totalDeclarado)) > 1) {
+            add(erros, {
+                regra: 'h005-x-h010', registro: 'H005', campo: '3 - VL_INV', linha: h005s[0],
+                valor: totalDeclarado.toFixed(2), esperado: somaItens.toFixed(2),
+                mensagem: `O H005 declara estoque de ${totalDeclarado.toFixed(2)} e os ${h010s.length} `
+                    + `item(ns) do H010 somam ${somaItens.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O H005 é o total do inventário que a '
+                    + 'fiscalização lê.',
+                fonte: 'Guia Prático 3.2.3, H005 campo 03: "deve ser igual à soma do campo VL_ITEM do '
+                    + 'registro H010".',
+            });
+        }
+    }
+
+    // ── R22. Item do inventário que o 0200 não cadastra ─────────────────────
+    //
+    // FONTE — Guia 3.2.3, H010 campo 02 (COD_ITEM), Validação: *"o valor
+    // informado no campo deve existir no campo COD_ITEM do registro 0200"*; e
+    // campo 03 (UNID): *"o valor deve ser informado no registro 0200, campo
+    // UNID_INV"*.
+    //
+    // É a família do participante do 0150 e do item do 0200 órfãos — registro
+    // que referencia um cadastro que o arquivo não traz.
+    if (h010s.length) {
+        const itens0200 = new Set(doReg('0200').map((l) => campos(l)[2]).filter(Boolean));
+        const semCadastro = h010s
+            .map((l) => campos(l)[2])
+            .filter((cod) => cod && itens0200.size && !itens0200.has(cod));
+        if (semCadastro.length) {
+            const unicos = [...new Set(semCadastro)];
+            add(erros, {
+                regra: 'h010-item-orfao', registro: 'H010', campo: '2 - COD_ITEM',
+                valor: unicos.slice(0, 5).join(', '), esperado: 'COD_ITEM cadastrado no 0200',
+                linha: h010s[0],
+                mensagem: `${unicos.length} item(ns) do inventário não estão declarados no 0200 `
+                    + `(${unicos.slice(0, 5).join(', ')}${unicos.length > 5 ? '…' : ''}).`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recusa item de inventário que a '
+                    + 'Tabela de Identificação não conhece.',
+                fonte: 'Guia Prático 3.2.3, H010 campo 02: "o valor informado no campo deve existir no '
+                    + 'campo COD_ITEM do registro 0200".',
+            });
+        }
+    }
+
+    // ── R23. Bem de terceiro sem o participante ─────────────────────────────
+    //
+    // FONTE — Guia 3.2.3, H010 campo 07 (IND_PROP), Validação: *"se preenchido
+    // com valor '1' (posse de terceiros) ou '2' (propriedade de terceiros), o
+    // campo COD_PART será [obrigatório]"*; e campo 08: *"o valor fornecido
+    // deve constar no campo COD_PART do registro 0150"*.
+    //
+    // ⚠️ Declarar posse de terceiro SEM dizer de quem é o bem é a mesma
+    // omissão do COD_PART vazio no C100 — e aqui ela muda de quem é o estoque.
+    if (h010s.length) {
+        const parts0150 = new Set(doReg('0150').map((l) => campos(l)[2]).filter(Boolean));
+        const semParticipante = h010s.filter((l) => {
+            const c = campos(l);
+            return ['1', '2'].includes(String(c[7] || '').trim())
+                && (!c[8] || !String(c[8]).trim() || (parts0150.size && !parts0150.has(c[8])));
+        });
+        if (semParticipante.length) {
+            add(erros, {
+                regra: 'h010-terceiro-sem-part', registro: 'H010', campo: '8 - COD_PART',
+                valor: '', esperado: 'COD_PART cadastrado no 0150', linha: semParticipante[0],
+                mensagem: `${semParticipante.length} item(ns) declaram posse/propriedade de TERCEIRO `
+                    + '(IND_PROP 1 ou 2) sem participante válido no 0150.',
+                acao: 'Preencha o participante do bem no cadastro do inventário (📦 Inventário, card SPED) — '
+                    + 'o arquivo está dizendo que o estoque é de outro sem dizer de quem.',
+                fonte: 'Guia Prático 3.2.3, H010 campos 07 e 08.',
+            });
+        }
+    }
+
+    // ── R24. A guia do ST tem de cobrar o que o E210 apurou ─────────────────
+    //
+    // FONTE — Guia 3.2.3, E250 campo 03 (VL_OR), Validação: *"o valor da soma
+    // deste campo deve corresponder à soma dos campos VL_ICMS_RECOL_ST e
+    // DEB_ESP_ST do registro E210"*.
+    //
+    // 🚨 É a GÊMEA da R18 (E110 × E116), do lado do ST — e vale ainda mais
+    // aqui: a apuração de ST é POR UF e **cada UF é uma GNRE**. Livro apurando
+    // um valor e obrigação cobrando outro é o defeito que ninguém confere a
+    // olho, agora multiplicado pelo número de estados.
+    const e250s = doReg('E250');
+    const e210s = doReg('E210');
+    if (e250s.length && e210s.length) {
+        const somaOrSt = e250s.reduce((acc, l) => acc + num(campos(l)[3]), 0);
+        const devidoNoE210 = e210s.reduce((acc, l) => acc + num(campos(l)[13]) + num(campos(l)[15]), 0);
+        if (Math.abs(centavos(somaOrSt) - centavos(devidoNoE210)) > 1) {
+            add(erros, {
+                regra: 'e210-x-e250', registro: 'E250', campo: '3 - VL_OR', linha: e250s[0],
+                valor: somaOrSt.toFixed(2), esperado: devidoNoE210.toFixed(2),
+                mensagem: `O E210 apura ${devidoNoE210.toFixed(2)} de ST a recolher (VL_ICMS_RECOL_ST + `
+                    + `DEB_ESP_ST) e os E250 somam ${somaOrSt.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É deste número que sai a GNRE de cada UF.',
+                fonte: 'Guia Prático 3.2.3, E250 campo 03: "o valor da soma deste campo deve corresponder à '
+                    + 'soma dos campos VL_ICMS_RECOL_ST e DEB_ESP_ST do registro E210".',
+            });
+        }
+    }
+
+    // ── R25. O E510 tem de fechar com o E520 ────────────────────────────────
+    //
+    // FONTE — Guia 3.2.3, E510, Validação: *"O total de créditos e dos débitos
+    // informados neste registro deverá ser igual ao total dos créditos e
+    // débitos dos registros C190 e do registro E520"*.
+    //
+    // 🚨 É a conferência que faltava no E510 — o registro que este projeto
+    // acertou por leitura de arquivo aceito (11/08) e **nunca provou**. O
+    // e510 é por CFOP+CST, e a direção do CFOP separa crédito de débito: 1/2/3
+    // é ENTRADA (crédito), 5/6/7 é SAÍDA (débito).
+    //
+    // ⚠️ O par C190 já é conferido pela regra do IPI que existe desde 26/08;
+    // aqui o lado que faltava é o E520, que é de onde sai o saldo.
+    // ⚠️ `e520s` já foi lido lá em cima (a regra do crédito de IPI, 26/08) —
+    // reusa em vez de sombrear.
+    const e510s = doReg('E510');
+    if (e510s.length && e520s.length) {
+        let credE510 = 0;
+        let debE510 = 0;
+        for (const l of e510s) {
+            const c = campos(l);
+            const cfop = String(c[2] || '').trim();
+            const vlIpi = num(c[6]);
+            if (/^[123]/.test(cfop)) credE510 += vlIpi;
+            else if (/^[567]/.test(cfop)) debE510 += vlIpi;
+        }
+        // E520: 02 VL_SD_ANT_IPI · 03 VL_DEB_IPI · 04 VL_CRED_IPI
+        const debE520 = e520s.reduce((acc, l) => acc + num(campos(l)[3]), 0);
+        const credE520 = e520s.reduce((acc, l) => acc + num(campos(l)[4]), 0);
+        for (const [nome, doE510, doE520] of [
+            ['débito', debE510, debE520],
+            ['crédito', credE510, credE520],
+        ]) {
+            if (Math.abs(centavos(doE510) - centavos(doE520)) > 1) {
+                add(erros, {
+                    regra: 'e510-x-e520', registro: 'E510', campo: '6 - VL_IPI', linha: e510s[0],
+                    valor: doE510.toFixed(2), esperado: doE520.toFixed(2),
+                    mensagem: `O E510 soma ${doE510.toFixed(2)} de ${nome} de IPI e o E520 declara `
+                        + `${doE520.toFixed(2)}. A consolidação por CFOP/CST não fecha com a apuração.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. É do E520 que sai o saldo de IPI do mês.',
+                    fonte: 'Guia Prático 3.2.3, E510: "O total de créditos e dos débitos informados neste '
+                        + 'registro deverá ser igual ao total dos créditos e débitos dos registros C190 e do '
+                        + 'registro E520".',
+                });
+            }
+        }
+    }
+
+    // ── R26. MES_REF do E250 vazio ou fora da competência ───────────────────
+    //
+    // FONTE — Guia 3.2.3, E250 campo 10 (MES_REF): *"Informe o mês de
+    // referência no formato 'mmaaaa'"*, Obrig. **O** (incluído no leiaute a
+    // partir de jan/2011); Validação: *"não pode ser superior à competência do
+    // campo DT_INI do registro 0000"*.
+    //
+    // 🚨 O gerador emitia este campo VAZIO — achado desta mesma auditoria. É a
+    // classe do M210 da DGB (28/08): campo obrigatório em branco, recusa
+    // `Campo de preenchimento obrigatório`.
+    if (e250s.length) {
+        const dtIni = campos(doReg('0000')[0] || '')[4] || '';
+        const compArquivo = String(dtIni).replace(/\D/g, '').slice(2, 8);
+        for (const l of e250s) {
+            const mesRef = String(campos(l)[10] || '').trim();
+            if (!mesRef) {
+                add(erros, {
+                    regra: 'e250-mes-ref', registro: 'E250', campo: '10 - MES_REF', linha: l,
+                    valor: '', esperado: compArquivo || 'mmaaaa',
+                    mensagem: 'MES_REF vazio — é campo OBRIGATÓRIO no E250 desde jan/2011.',
+                    acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                    fonte: 'Guia Prático 3.2.3, E250 campo 10: "Informe o mês de referência no formato '
+                        + '\'mmaaaa\'" (Obrig. O).',
+                });
+            } else if (compArquivo && mesRef.length === 6) {
+                // Compara AAAAMM para não depender da ordem do texto.
+                const chave = (m) => `${m.slice(2)}${m.slice(0, 2)}`;
+                if (chave(mesRef) > chave(compArquivo)) {
+                    add(erros, {
+                        regra: 'e250-mes-ref', registro: 'E250', campo: '10 - MES_REF', linha: l,
+                        valor: mesRef, esperado: `≤ ${compArquivo}`,
+                        mensagem: `MES_REF ${mesRef} é posterior à competência do arquivo (${compArquivo}).`,
+                        acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                        fonte: 'Guia Prático 3.2.3, E250 campo 10: "não pode ser superior à competência do '
+                            + 'campo DT_INI do registro 0000".',
+                    });
+                }
+            }
+        }
+    }
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';

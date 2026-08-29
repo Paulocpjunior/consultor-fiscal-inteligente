@@ -5,6 +5,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚦 VALIDAÇÃO OFICIAL ENTRA ANTES DA RECUSA — a doutrina do "PVA de bolso"
+  avançou um passo** (29/08, Paulo: *"feche as pendências de PVA que dependem
+  de você"*).
+  📌 **A separação que faz a ordem ser executável**: eu **não rodo o PVA** — o
+  recibo exige o arquivo passar por lá, e isso é da equipe. O que depende de mim
+  é **tudo que faria essa volta FALHAR**.
+  🔎 **O gatilho foi um cruzamento, não uma lista**: os registros que os
+  geradores EMITEM × os que a prevalidação COBRE. **Seis tinham ZERO regra** —
+  `H005`, `H010`, `E210`, `E220`, `E250`, `E510` — e eram **exatamente** os das
+  quatro pendências antigas do de-para (bloco H, ST, IPI). Não era coincidência:
+  registro que nunca viu o PVA é registro que nunca gerou recusa, e a doutrina
+  antiga (*recusa aprendida entra no MESMO PR*) **só aprende com o que já
+  doeu**.
+  ✂️ **A doutrina passa a ser: validação OFICIAL entra ANTES de a recusa
+  acontecer.** O Guia 3.2.3 está no repo desde 20/08 — gastar uma volta de PVA
+  para descobrir o que já está escrito é o gargalo de 20/08 se repetindo **por
+  escolha**. Entraram seis regras (R21–R26), cada uma com a validação LITERAL do
+  Guia como fonte, todas nascendo VERDES.
+  ✅ **E o leiaute do H005 fechou SEM o PVA.** O comentário do gerador dizia *"a
+  doc oficial é bloqueada pela rede do ambiente … o arquivo PRECISA passar pelo
+  PVA"* — verdade em 06/08, **falsa desde 20/08**. Lido, o Guia confirma
+  `REG|DT_INV|VL_INV|MOT_INV` (4 campos, o que o gerador emite) e traz, na mesma
+  seção, *"Atribuir valor Zero ao inventário significa escriturar sem estoque"*
+  — a decisão de 06/08 por escrito.
+  🚨 **E A LEITURA ACHOU UM DEFEITO VIVO: o `MES_REF` do E250 saía VAZIO.**
+  Campo **10**, **obrigatório desde jan/2011** (*"Informe o mês de referência no
+  formato 'mmaaaa'"*, Obrig. **O**). É a classe do M210 da DGB (28/08) — campo
+  obrigatório em branco, recusa `Campo de preenchimento obrigatório` garantida
+  na primeira empresa com ST a recolher. ⚠️ Ele é **DERIVADO do `DT_INI`**, nunca
+  da data de hoje: competência regerada meses depois tem de dizer a competência
+  DELA — e é essa a própria Validação do Guia (*"não pode ser superior à
+  competência do DT_INI"*).
+  📌 **E UMA FIXTURE FOI TROCADA, pelo motivo certo**: um teste exigia o E250
+  **sem** o MES_REF. Ele documentava o defeito em vez de pegá-lo — o mesmo do
+  teste que exigia os ajustes do M210 vazios.
+  ⚠️ **O que isto NÃO fecha, e vai dito**: nenhuma das quatro pendências vira
+  ✅. Elas continuam esperando **uma rodada real no PVA** — o que muda é que a
+  rodada deixou de estar apostada em registros sem nenhuma conferência. E a
+  **prova FORTE do E510** (reproduzir um aceito a partir dos XMLs-fonte) segue
+  aberta: a regra nova confere a coerência INTERNA com o E520, não o valor
+  contra a fonte.
+  🐛 **E a trava do `.d.ts` mordeu o meu teste na hora**: pus `@ts-expect-error`
+  num import cujo `.d.ts` já existe. Silenciar ali devolveria o módulo a `any` e
+  o tipo pararia de valer — é o defeito que derrubou o deploy 799.
+
 - **🚨 O TERCEIRO TRILHO TAMBÉM AFIRMAVA CAPTURA PELO CADASTRO — e era ELE o
   caso da LAV** (29/08, Paulo mandando a LINHA dela: *"a empresa em questão
   está com o cadastro ok"* — e estava mesmo).

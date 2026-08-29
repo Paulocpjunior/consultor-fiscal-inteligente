@@ -157,6 +157,18 @@ const dec = (n) => (Number.isFinite(Number(n)) ? Number(n) : 0).toFixed(2).repla
  * @param {string} p.dtFin            DDMMAAAA
  * @param {object} [p.obrigacoesPorUf] { UF: { dtVcto, codRec } } para o E250
  */
+/**
+ * MES_REF do E250 (`mmaaaa`) a partir do DT_INI do 0000 (`DDMMAAAA`).
+ *
+ * Devolve `''` quando a data não é legível — campo de competência não recebe
+ * palpite, e a prevalidação acusa o vazio com a recusa literal.
+ */
+export function mesRefDoPeriodo(dtIni) {
+    const d = String(dtIni || '').replace(/\D/g, '');
+    if (d.length !== 8) return '';
+    return d.slice(2, 8);   // DD MMAAAA → MMAAAA
+}
+
 export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dtFin, obrigacoesPorUf = {} }) {
     const { grupos, semUf } = agruparStPorUf(notas, ufEmpresa);
     const avisos = [];
@@ -228,7 +240,22 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
             if (o.dtVcto && o.codRec) {
                 // Mesmos 9 campos do E116 (IND_OBR…MES_REF), espelho do bloco próprio.
                 linhas.push([
-                    'E250', '000', dec(ap.icmsRecolher), o.dtVcto, o.codRec, '', '', '', '', '',
+                    'E250', '000', dec(ap.icmsRecolher), o.dtVcto, o.codRec, '', '', '', '',
+                    // 🚨 CAMPO 10 — MES_REF, **OBRIGATÓRIO** desde jan/2011 e
+                    // que saía VAZIO (29/08, auditoria do de-para).
+                    //
+                    // Guia 3.2.3, E250 campo 10: *"Informe o mês de referência
+                    // no formato 'mmaaaa'"*, Obrig. **O**. Campo obrigatório em
+                    // branco é a recusa `Campo de preenchimento obrigatório` —
+                    // a mesma do M210 da DGB (28/08).
+                    //
+                    // ⚠️ Ele é DERIVADO do período do arquivo (`dtIni`, que já
+                    // chega em DDMMAAAA), nunca da data de hoje: o E250 de uma
+                    // competência regerada meses depois tem de dizer a
+                    // competência DELA. E a Validação do Guia é justamente essa
+                    // — *"não pode ser superior à competência do campo DT_INI
+                    // do registro 0000"*.
+                    mesRefDoPeriodo(dtIni),
                 ]);
             } else {
                 avisos.push(

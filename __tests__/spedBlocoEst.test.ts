@@ -213,8 +213,13 @@ describe('montarLinhasStBlocoE', () => {
             ...base,
             obrigacoesPorUf: { SP: { dtVcto: '10082026', codRec: '046-2' } },
         });
+        // 🚨 FIXTURE TROCADA (29/08): ela descrevia o E250 com o campo 10
+        // (MES_REF) VAZIO — e ele é **OBRIGATÓRIO** desde jan/2011 (Guia 3.2.3,
+        // E250 campo 10: *"Informe o mês de referência no formato 'mmaaaa'"*,
+        // Obrig. O). O teste documentava o defeito em vez de pegá-lo, como o
+        // teste que exigia os ajustes do M210 vazios (28/08, DGB).
         expect(r.linhas).toContainEqual(
-            ['E250', '000', '1000,00', '10082026', '046-2', '', '', '', '', ''],
+            ['E250', '000', '1000,00', '10082026', '046-2', '', '', '', '', '072026'],
         );
     });
 
