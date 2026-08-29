@@ -5,6 +5,42 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TRAVA DE CONTAGEM NÃO VÊ TAMANHO — o FANTASIA saía com 91 caracteres
+  num campo de 60** (29/08, fechando o **0005**, o último registro descoberto
+  do cruzamento do EFD ICMS/IPI).
+  📌 **O 0005 não tem NENHUMA "Validação:" no Guia** — só tamanhos e
+  obrigatoriedade. Foi lendo a TABELA que o defeito apareceu: o campo era
+  cortado em **100** e o leiaute dá **060**. O 0000 é que tem `NOME` de 100 —
+  **campos diferentes, registros diferentes**, e foi carregar um para o outro
+  que produziu o erro. Medido com uma razão social real: **91 caracteres**, que
+  é a recusa *"Tamanho do campo inválido"* (a família do `COD_ENQ 318,68` da
+  PWR, 20/08).
+  📌 **E `conferirContagemDeCampos` (18/08) É CEGA PARA ISSO**: ela conta
+  CAMPOS, e aqui a contagem está certa — o que estoura é o TAMANHO de um deles.
+  É a mesma cegueira que deixou o M210 da MANTOAN passar com as casas trocadas.
+  ✂️ **A trava nova é sobre a SAÍDA**: gera o bloco 0 com valores LONGOS em todo
+  campo e mede o que sai, contra os tamanhos COPIADOS da tabela do Guia,
+  registro a registro. Varredura do `sanitizeString(x, N)` no fonte provaria que
+  a constante está certa; esta prova que o **ARQUIVO** está — e é o arquivo que
+  o PVA lê.
+  🔴 **E ELA ACHOU UM SEGUNDO: o `sanitizeCep` não cortava NADA.** CEP com lixo
+  colado saía com 30 dígitos num campo de `008*`. ⚠️ **E cortar em 8 seria PIOR
+  que o estouro**: CEP truncado é um CEP **DIFERENTE**, que o PVA aceita e
+  aponta outro município — a família do `1405`. Agora: **até 8 dígitos completa
+  com zero à ESQUERDA** (recuperação legítima — o zero se perde quando o
+  cadastro grava o CEP como número) e **mais de 8 devolve VAZIO**, com a falta
+  DITA na geração. Ausência o PVA acusa; CEP errado, não.
+  🐛 **E A VARREDURA ME PEGOU DE NOVO — a QUARTA vez do dia, agora na minha
+  própria tabela.** Ela acusou quatro estouros e **três eram a tabela
+  desalinhada**: a extração por regex do Guia tinha perdido o **UF** do 0000 e o
+  **UNID_INV**/**ALIQ_ICMS** do 0200, jogando IE, COD_MUN, TIPO_ITEM, COD_NCM e
+  EX_IPI para a casa do vizinho. **Só uma das quatro era defeito de verdade.**
+  Quem desempatou foi, pela quarta vez, **rodar o gerador e contar a linha**.
+  📌 **REGRA QUE FICA: alarme de varredura nova se TRIA antes de virar
+  correção.** Se eu tivesse "consertado" os quatro, teria apertado três campos
+  CERTOS para caber numa tabela que eu li errado — e o arquivo sairia truncado
+  em produção por causa da trava que existia para protegê-lo.
+
 - **🚨 OS AJUSTES DE ST ESTAVAM NA CASA DO VIZINHO — o saldo fechava e o campo
   mentia** (29/08, indo escrever a última regra do cruzamento do EFD ICMS/IPI).
   📖 **O Guia 3.2.3 nomeia os quatro campos do E210 sem margem**: **06

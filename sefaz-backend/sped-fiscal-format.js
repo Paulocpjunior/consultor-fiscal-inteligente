@@ -146,9 +146,26 @@ function sanitizeCnpjCpf(s) {
 }
 
 /** Sanitiza CEP pra ficar so com digitos. */
+/**
+ * CEP do SPED — o leiaute dá `008*`, ou seja tamanho FIXO de 8 dígitos.
+ *
+ * 🚨 29/08 — ela só tirava os não-dígitos e NÃO cortava: um CEP com lixo colado
+ * saía com 30 caracteres num campo de 8 (recusa "Tamanho do campo inválido").
+ *
+ * ⚠️ E cortar em 8 seria PIOR que o estouro: CEP truncado é um CEP DIFERENTE,
+ * que o PVA aceita e aponta outro município — é a família do `1405` e do
+ * `PARTSEM`. Então:
+ *  · **até 8 dígitos** → completa com zero à ESQUERDA. Isso é RECUPERAÇÃO, não
+ *    invenção: o zero se perde quando o cadastro grava o CEP como número, e ele
+ *    é implícito ("01310-100" gravado como 1310100).
+ *  · **mais de 8** → devolve VAZIO. Ausência o PVA acusa; CEP errado, não.
+ */
 function sanitizeCep(s) {
     if (!s) return '';
-    return String(s).replace(/\D/g, '');
+    const d = String(s).replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length > 8) return '';
+    return d.padStart(8, '0');
 }
 
 /**

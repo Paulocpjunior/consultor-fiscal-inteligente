@@ -91,6 +91,21 @@ function buildBloco0(dados) {
     // ── 0005 — Dados Complementares ─────────────────────────────────────
     linhas.push(build0005(dados));
 
+    // 🚨 CEP ILEGÍVEL SAI VAZIO — e a ausência vai DITA, nunca calada.
+    // `sanitizeCep` completa o zero à esquerda (recuperação legítima: ele se
+    // perde quando o cadastro grava o CEP como número) e DESCARTA o que tem
+    // mais de 8 dígitos, porque CEP truncado é um CEP DIFERENTE, que o PVA
+    // aceita e aponta outro município — a família do `1405`. O campo é
+    // `Obrig. O`, então quem lê precisa saber por que ele saiu em branco.
+    const cepCru = String(dados.empresa?.dadosFiscais?.cep || '').replace(/\D/g, '');
+    if (cepCru && cepCru.length > 8 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `0005: o CEP cadastrado tem ${cepCru.length} dígitos e o campo aceita 8 — ele saiu VAZIO, e o `
+            + 'PVA vai recusar com "Campo de preenchimento obrigatório". O app NÃO corta o número: CEP '
+            + 'truncado é um CEP de outro lugar. Corrija em Empresas → Dados Fiscais.',
+        );
+    }
+
     // ── 0100 — Contabilista ─────────────────────────────────────────────
     linhas.push(build0100(dados));
 
@@ -232,7 +247,12 @@ function build0005(dados) {
     const df = dados.empresa.dadosFiscais || {};
     return fmt.buildLine([
         '0005',
-        fmt.sanitizeString(dados.empresa.nomeFantasia || dados.empresa.nome, 100),
+        // 🚨 O leiaute dá **060** ao FANTASIA (o 0000 é que tem NOME de 100), e
+        // este campo cortava em 100: razão social longa saía com 91 caracteres
+        // num campo de 60, que é a recusa "Tamanho do campo inválido" — a
+        // família do `COD_ENQ 318,68` da PWR (20/08). A trava de contagem conta
+        // CAMPOS, não TAMANHO, então ela ficava muda aqui.
+        fmt.sanitizeString(dados.empresa.nomeFantasia || dados.empresa.nome, 60),
         fmt.sanitizeCep(df.cep),
         fmt.sanitizeString(df.logradouro || '', 60),
         fmt.sanitizeString(df.numero || '', 10),
