@@ -24,8 +24,11 @@
 // MECANISMO (contagem), idêntico nos dois arquivos. É a casa da
 // `linhasMalformadas`, e pelo mesmo motivo — a "meia trava" do COD_MUN (22/08).
 // ============================================================================
-// @ts-expect-error — módulo backend .js sem .d.ts
-import { conferirBloco9, auditarSaidaSped } from '../sefaz-backend/sped-auditoria-saida.js';
+// ⚠️ SEM `@ts-expect-error`: este módulo TEM `.d.ts`, e silenciar ali devolve
+// tudo a `any` — o tipo para de valer justamente no arquivo que ele protege
+// (o defeito que derrubou o deploy 799). Função nova no `.js` entra no `.d.ts`
+// no MESMO PR.
+import { conferirBloco9, conferirContadoresDeBloco, auditarSaidaSped } from '../sefaz-backend/sped-auditoria-saida.js';
 // @ts-expect-error — módulo backend .js sem .d.ts
 import { buildBloco9 } from '../sefaz-backend/sped-fiscal-bloco9.js';
 
@@ -104,7 +107,7 @@ describe('🚨 e ela pega as três formas de não fechar', () => {
         const s = conferirBloco9(torto);
         const e = s.find((x: { registro: string }) => x.registro === '9999');
         expect(e).toBeTruthy();
-        expect(String(e.detalhe)).toMatch(/declara 1 linha/);
+        expect(String(e!.detalhe)).toMatch(/declara 1 linha/);
     });
 
     // 📖 "inclusive os posteriores a este registro" — o 9900 conta as próprias
@@ -129,6 +132,78 @@ describe('⚠️ arquivo sem bloco 9 fica MUDO', () => {
     it('lista vazia não explode', () => {
         expect(conferirBloco9(null)).toEqual([]);
         expect(conferirBloco9([])).toEqual([]);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 CADA BLOCO FECHA CONSIGO MESMO — o contador que o bloco 9 NÃO vê.
+//
+// 📖 Guia 3.2.3: todo **X990** traz no campo 02 a quantidade de linhas do
+// bloco X, **inclusive ele mesmo**.
+//
+// 🚨 O `conferirBloco9` fecha o ARQUIVO e não fecha os BLOCOS: um 9900 correto
+// convive com um G990 errado, porque o 9900 conta que existe **1 linha** de
+// G990 — não o que ela DECLARA. E o custo é o mesmo, o maior de todos: o PVA
+// não IMPORTA o arquivo.
+//
+// ⚠️ E ela alcança o RECORTE, que é onde os defeitos de 29/08 moravam: o bloco
+// G (um cliente só) e o C197 (ninguém cadastrou) envelheceram quebrados porque
+// *"trava que roda sobre o ARQUIVO só protege o bloco que alguém GEROU"*. Esta
+// roda sobre o BLOCO, então acusa num arquivo que nem tem 9999.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 cada X990 fecha com o próprio bloco', () => {
+    it('nasce VERDE sobre o arquivo do gerador real', () => {
+        expect(conferirContadoresDeBloco(arquivoReal(CORPO))).toEqual([]);
+    });
+
+    it('e VERDE sobre o RECORTE, sem bloco 9 nenhum', () => {
+        // 📌 É esta linha que a separa do `conferirBloco9`, que fica mudo aqui.
+        expect(conferirContadoresDeBloco(CORPO)).toEqual([]);
+        expect(conferirBloco9(CORPO)).toEqual([]);
+    });
+
+    it('acusa o 0990 que não bate — mesmo com o bloco 9 REFEITO em cima', () => {
+        // O 0990 mente e o gerador do bloco 9 recontá o arquivo INTEIRO: o
+        // 9900/9990/9999 fecham, e só esta regra vê o defeito.
+        const corpoTorto = CORPO.map((l) => (l.startsWith('|0990|') ? L('0990', '9') : l));
+        const arq = arquivoReal(corpoTorto);
+        expect(conferirBloco9(arq)).toEqual([]);          // o bloco 9 está CERTO
+        const s = conferirContadoresDeBloco(arq);
+        expect(s.some((x: { registro: string }) => x.registro === '0990')).toBe(true);
+        expect(String(s[0].detalhe)).toMatch(/declara 9 linha\(s\) no bloco 0 e o arquivo tem 4/);
+    });
+
+    it('acusa o C990 e diz que a contagem inclui ele mesmo', () => {
+        const arq = arquivoReal(CORPO.map((l) => (l.startsWith('|C990|') ? L('C990', '3') : l)));
+        const s = conferirContadoresDeBloco(arq);
+        const e = s.find((x: { registro: string }) => x.registro === 'C990');
+        expect(e).toBeTruthy();
+        expect(String(e!.detalhe)).toMatch(/inclui o próprio C990/);
+    });
+
+    // ⚠️ O 9990 tem DONO (conferirBloco9). Dois alarmes para o mesmo defeito é
+    // o caminho conhecido para a equipe desligar os dois.
+    it('NÃO duplica o alarme do 9990', () => {
+        const arq = arquivoReal(CORPO).map((l) => (l.startsWith('|9990|') ? L('9990', '99') : l));
+        expect(conferirContadoresDeBloco(arq)
+            .filter((x: { registro: string }) => x.registro === '9990')).toEqual([]);
+        // e quem responde por ele continua respondendo
+        expect(conferirBloco9(arq).some((x: { registro: string }) => x.registro === '9990')).toBe(true);
+    });
+
+    // 📌 Ligação se prova pela POSITIVA — teste de ausência passa igual com a
+    // regra desplugada (a lição do próprio conferirBloco9, no mesmo arquivo).
+    it('a auditoria de saída roda a regra — provado com bloco QUEBRADO', () => {
+        const arq = arquivoReal(CORPO.map((l) => (l.startsWith('|0990|') ? L('0990', '9') : l)));
+        expect(auditarSaidaSped(arq).suspeitas
+            .some((s: { tipo: string }) => s.tipo === 'contador-de-bloco-nao-fecha')).toBe(true);
+        expect(auditarSaidaSped(arquivoReal(CORPO)).suspeitas
+            .filter((s: { tipo: string }) => s.tipo === 'contador-de-bloco-nao-fecha')).toEqual([]);
+    });
+
+    it('lista vazia não explode', () => {
+        expect(conferirContadoresDeBloco(null)).toEqual([]);
+        expect(conferirContadoresDeBloco([])).toEqual([]);
     });
 });
 

@@ -229,6 +229,77 @@ export function conferirBloco9(linhas) {
 }
 
 /**
+ * CADA BLOCO FECHA CONSIGO MESMO — o contador que o `conferirBloco9` não vê.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3: todo registro **X990** traz, no campo 02
+ * (QTD_LIN_X), *"a quantidade total de linhas do Bloco X"*, e a contagem
+ * **inclui o próprio X990**.
+ *
+ * 🚨 **O `conferirBloco9` (29/08) fecha o ARQUIVO e NÃO fecha os blocos.** Ele
+ * confere o 9900 (quantas linhas de cada TIPO), o 9990 (o bloco 9) e o 9999 (o
+ * arquivo inteiro) — e nenhum dos três olha o **0990**, o **C990**, o **G990**,
+ * o **K990**… Um 9900 correto convive com um G990 errado: o 9900 conta que
+ * existe 1 linha de G990, não o que ela DECLARA.
+ *
+ * 🚨 **É a MESMA recusa mais cara de todas: o PVA não IMPORTA o arquivo.** E a
+ * casa já pagou por ela à mão — em 24/08 (AFFITTARE) ficou escrito que
+ * *"acrescentar UMA linha ao bloco 1 mexe em QUATRO contadores"*, e a
+ * conferência daquele dia foi feita a olho, registro a registro.
+ *
+ * ⚠️ **ELA PROTEGE O BLOCO ISOLADO, e é por isso que ela vale a pena mesmo
+ * depois do bloco 9**: o contador de bloco é auto-contido, então ela acusa num
+ * recorte que nem tem 9999 — que é exatamente onde os defeitos de 29/08
+ * moravam (o bloco G, que UM cliente gera; o C197, que ninguém cadastrou). A
+ * lição daquele dia foi *"trava que roda sobre o ARQUIVO só protege o bloco que
+ * alguém GEROU"*; esta roda sobre o BLOCO.
+ *
+ * ⚠️ **O 9990 fica de FORA, de propósito**: ele já tem dono no
+ * `conferirBloco9`, e dois alarmes para o mesmo defeito é o caminho conhecido
+ * para a equipe ignorar os dois.
+ *
+ * ⚠️ **E ela é por VARREDURA, nunca por lista** (`^[0-9A-Z]990$`): lista de
+ * blocos envelhece no primeiro bloco novo — e envelhece em SILÊNCIO, que é o
+ * jeito mais caro. O bloco K entrou em 29/08 e teria ficado de fora de uma.
+ */
+export function conferirContadoresDeBloco(linhas) {
+    const lista = (linhas || []).map(String).filter((l) => String(l).trim());
+    const suspeitas = [];
+
+    for (const l of lista) {
+        const reg = registroDe(l);
+        // O 9990 tem dono (conferirBloco9). Duplicar alarme desliga os dois.
+        if (!reg || reg === '9990' || !/^[0-9A-Z]990$/.test(reg)) continue;
+
+        const bloco = reg[0];
+        // Linhas do bloco = as que começam pela letra/dígito dele, inclusive o
+        // próprio X990 — é o que o Guia manda contar.
+        const doBloco = lista.filter((x) => {
+            const r = registroDe(x);
+            return r && r[0] === bloco && /^[0-9A-Z]\d{3}$/.test(r);
+        }).length;
+
+        const dec = Number(String(campo(l, 2) || '').replace(/\D/g, ''));
+        if (!Number.isFinite(dec)) {
+            suspeitas.push({
+                registro: reg, tipo: 'contador-de-bloco-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `${reg}: a quantidade de linhas do bloco ${bloco} está ilegível. `
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO.',
+            });
+            continue;
+        }
+        if (dec !== doBloco) {
+            suspeitas.push({
+                registro: reg, tipo: 'contador-de-bloco-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `${reg} declara ${dec} linha(s) no bloco ${bloco} e o arquivo tem ${doBloco}. `
+                    + 'A contagem inclui o próprio ' + reg + '. '
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO, reporte com o print.',
+            });
+        }
+    }
+    return suspeitas;
+}
+
+/**
  * @param {string[]} linhas  arquivo gerado, linha a linha
  * @returns {{suspeitas: Array<{registro:string, tipo:string, gravidade:'bloqueia'|'atencao', detalhe:string}>}}
  */
@@ -256,6 +327,12 @@ export function auditarSaidaSped(linhas) {
     // leiaute, e vale igual nas duas famílias. E é o erro mais caro de todos —
     // o PVA não IMPORTA o arquivo, então não há recusa de campo para consertar.
     for (const suspeita of conferirBloco9(lista)) suspeitas.push(suspeita);
+
+    // ── 0c. CADA BLOCO FECHA CONSIGO MESMO ──────────────────────────────────
+    // O bloco 9 fecha o ARQUIVO; o X990 fecha o BLOCO, e um não substitui o
+    // outro — um 9900 correto convive com um G990 errado. Esta alcança o
+    // recorte que nem tem 9999, que é onde mora o bloco de um cliente só.
+    for (const suspeita of conferirContadoresDeBloco(lista)) suspeitas.push(suspeita);
 
     // ── 1. Coluna de valor zerada em TODAS as linhas de um detalhe ──────────
     // Esta é a assinatura do bloco H: 400 itens, todos com QTD 0,00. Um item

@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O BLOCO 9 FECHA O ARQUIVO E NÃO FECHA OS BLOCOS — o `X990` de cada
+  bloco não era conferido por NADA** (29/08, re-medindo o cruzamento depois de
+  o bloco 0 ganhar três registros).
+  📖 O Guia 3.2.3 dá a cada **X990** o campo 02 com *"a quantidade total de
+  linhas do Bloco X"*, contagem que **inclui o próprio X990**.
+  🔴 De manhã eu fechei o bloco 9 (9900 · 9990 · 9999) e escrevi que era *"a
+  aritmética que o PVA confere PRIMEIRO"*. Era metade: o **9900 conta que
+  existe UMA linha de G990 — não o que ela DECLARA**. Um 9900 correto convive
+  com um G990, C990 ou 0990 errado, e o custo é o mesmo, o maior de todos: **o
+  PVA não IMPORTA o arquivo**.
+  🚨 **E ELA ALCANÇA O RECORTE, que é o que a separa do bloco 9**: o contador
+  de bloco é AUTO-CONTIDO, então ela acusa num arquivo que nem tem 9999 — que
+  é exatamente onde os defeitos de hoje moravam. A lição da manhã foi *"trava
+  que roda sobre o ARQUIVO só protege o bloco que alguém GEROU"* (o bloco G, de
+  um cliente só; o C197, que ninguém cadastrou); **esta roda sobre o BLOCO**.
+  ⚠️ **O 9990 fica de FORA de propósito** — ele já tem dono no
+  `conferirBloco9`, e dois alarmes para o mesmo defeito é o caminho conhecido
+  para a equipe desligar os dois.
+  ⚠️ **E é por VARREDURA (`^[0-9A-Z]990$`), nunca por lista**: lista de blocos
+  envelhece no primeiro bloco novo, em SILÊNCIO — o bloco K nasceu hoje e teria
+  ficado de fora de uma.
+  ✅ **Nasce VERDE medida sobre os geradores REAIS** (bloco 0 com os três
+  registros novos: `0990|10` × 10 linhas; bloco G: `G990|2` × 2) e a ligação foi
+  **provada desplugando** — o teste da positiva cai sozinho.
+  📌 **E A MEDIÇÃO DEU 11 DESCOBERTOS COM UM ACHADO SÓ — a régua da triagem
+  pela QUINTA vez no mesmo dia.** Os `X001` já estavam cobertos por regra
+  GENÉRICA da auditoria (IND_MOV=0 com bloco vazio), o `0005` está coberto pela
+  **trava de TAMANHO** (não por regra de prevalidação — e o de-para agora diz
+  isso), e o 0460 e o 0100 "sumidos" da minha medição eram **fixture**: o 0460
+  lê `difalCodObservacao` e o 0100 lê `dados.contador`, e eu tinha passado os
+  dois no lugar errado. **Um achado real em onze alarmes.**
+  🐛 **E O `.d.ts` ESTAVA ATRÁS DO `.js`, com o teste silenciando a diferença**:
+  `conferirBloco9` subiu de manhã sem entrar no `.d.ts`, e o import do teste
+  carregava um `@ts-expect-error` que devolvia o **módulo inteiro a `any`** — o
+  tipo parava de valer justamente no arquivo que ele protege (o defeito do
+  deploy 799). As duas funções entraram no `.d.ts` e o silenciador saiu.
+
 - **🚨 EU CRIEI UM ÓRFÃO NOVO CORRIGINDO O ÓRFÃO ANTIGO — e o que o achou foi
   perguntar "e para onde ESTE campo aponta?"** (29/08, horas depois de o 0300
   entrar).
