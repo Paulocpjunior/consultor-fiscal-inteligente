@@ -177,7 +177,7 @@ export function montarC197Difal({
 
         const linhas = [];
         if (codObservacao) {
-            linhas.push(fmt.buildLine(['C195', codObservacao, 'DIFAL aquisicao interestadual']));
+            linhas.push(fmt.buildLine(['C195', codObservacao, TXT_OBS_DIFAL]));
         }
         linhas.push(fmt.buildLine([
             'C197',
@@ -217,4 +217,41 @@ export function montarC197Difal({
     );
 
     return { porNota, linhasPorChave, avisos, totalDifal };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O 0460 — O CADASTRO QUE O C195 REFERENCIA E O ARQUIVO NÃO TRAZIA
+//
+// 📖 Guia 3.2.3, 0460 campo 02, Validação: *"o valor informado neste campo deve
+// existir em pelo menos um registro dos demais blocos"*; e o C195 campo 02:
+// *"o código informado deve constar do registro 0460"*.
+//
+// 🔴 O app emitia o C195 com o `COD_OBS` do cadastro e **nenhum 0460**: a
+// anotação apontava para uma tabela que o arquivo não declara. É a MESMA classe
+// do bem do G125 sem 0300 (achada horas antes), do item órfão do 0200 (PWR,
+// 19/08) e do participante órfão do 0150.
+//
+// ⚠️ E A VALIDAÇÃO CORTA NOS DOIS SENTIDOS: um 0460 que NENHUM registro
+// referencia também é recusado. Por isso ele só sai quando o C195 de fato saiu —
+// e é o bloco C que sabe disso, não o cadastro.
+//
+// ⚠️ O `TXT` é `Obrig. O` e NÃO é inventado: ele leva a MESMA anotação que o
+// C195 já escreve no `TXT_COMPL`. Duas descrições para a mesma observação
+// fariam o arquivo se contradizer.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A anotação que o C195 e o 0460 compartilham — uma fonte, não duas. */
+export const TXT_OBS_DIFAL = 'DIFAL aquisicao interestadual';
+
+/**
+ * 0460 — Tabela de Observações do Lançamento Fiscal.
+ *
+ * @param {string} codObservacao COD_OBS cadastrado (o mesmo que vai no C195).
+ * @param {boolean} houveC195    O bloco C emitiu ao menos um C195?
+ * @returns {string[]} zero ou uma linha.
+ */
+export function montarRegistro0460(codObservacao, houveC195) {
+    const cod = String(codObservacao || '').trim();
+    if (!cod || !houveC195) return [];
+    return [fmt.buildLine(['0460', fmt.sanitizeString(cod, 6), TXT_OBS_DIFAL])];
 }

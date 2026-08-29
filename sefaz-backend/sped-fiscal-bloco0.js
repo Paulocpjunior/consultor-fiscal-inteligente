@@ -25,6 +25,10 @@ import { ccmSpDaEmpresa } from './ccm-sp.js';
 // esse cadastro para o G125, e duas leituras fariam os dois registros
 // discordarem sobre o mesmo bem dentro do mesmo arquivo.
 import { montarRegistros0300 } from './sped-bloco-g.js';
+// 🚨 O 0460 é o cadastro que o C195 referencia — e o dono dele é o módulo do
+// DIFAL, que também escreve o C195. Uma fonte, não duas: descrições diferentes
+// para a MESMA observação fariam o arquivo se contradizer.
+import { montarRegistro0460 } from './sped-difal-c197.js';
 // TIPO_ITEM/NCM do item de serviço — a MESMA régua do bloco 0 do
 // EFD-Contribuições; duas cópias declarariam tipos diferentes para o mesmo item
 // em dois arquivos do mesmo mês.
@@ -137,6 +141,14 @@ function buildBloco0(dados) {
     const r0300 = montarRegistros0300(dados.ciap?.bens);
     for (const l of r0300.linhas) linhas.push(l);
     if (Array.isArray(dados.warnings)) for (const a of r0300.avisos) dados.warnings.push(a);
+
+    // ── 0460 — Tabela de Observações do Lançamento Fiscal ───────────────
+    // Só sai quando o bloco C de fato emitiu um C195 (`dados.difalTemC195`, que
+    // ele grava): o Guia valida nos DOIS sentidos — o C195 exige o 0460, e o
+    // 0460 exige existir em pelo menos um registro dos demais blocos.
+    for (const l of montarRegistro0460(dados.difalCodObservacao, dados.difalTemC195)) {
+        linhas.push(l);
+    }
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
     // Total de linhas do bloco INCLUINDO o proprio 0990

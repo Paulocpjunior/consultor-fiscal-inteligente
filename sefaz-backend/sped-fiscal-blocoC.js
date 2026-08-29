@@ -182,6 +182,13 @@ export function buildBlocoC(dados) {
         for (const a of difal.avisos) dados.warnings.push(`DIFAL aquisição (C197): ${a}`);
     }
     dados.difalAquisicaoResumo = { total: difal.totalDifal, notas: difal.porNota };
+    // 🚨 QUEM SABE SE O C195 SAIU É AQUI — e o bloco 0 precisa saber, porque o
+    // `0460` que o C195 referencia só pode existir se ALGUÉM o referenciar
+    // (Guia 3.2.3, 0460 campo 02: "deve existir em pelo menos um registro dos
+    // demais blocos"). Sem este fato o bloco 0 emitiria um 0460 ÓRFÃO ou
+    // deixaria o C195 apontando para o nada — as duas são recusa.
+    dados.difalTemC195 = Object.values(difalPorChave)
+        .some((ls) => ls.some((l) => String(l).startsWith('|C195|')));
 
     // Nota própria de IMPORTAÇÃO: o destinatário também é a própria empresa,
     // então o COD_PART sai com o CNPJ dela — o EXPORTADOR estrangeiro não vem

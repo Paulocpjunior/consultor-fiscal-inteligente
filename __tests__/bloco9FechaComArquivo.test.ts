@@ -836,3 +836,88 @@ describe('📖 os ajustes do E210 (ST) batem com os E220', () => {
         expect(so220(prevalidarSpedFiscal([REG0000]))).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R40 — o COD_OBS do C195 e o 0460 se referenciam nos DOIS sentidos.
+//
+// 🚨 O app emitia o C195 com o COD_OBS do cadastro e NENHUM 0460: a anotação
+// apontava para uma tabela que o arquivo não declara. É a família do item órfão
+// do 0200 (PWR, 19/08), do participante órfão do 0150 e do bem do G125 sem 0300
+// — e esta corta nos DOIS sentidos: o cadastro sem uso também é recusado.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 o C195 e o 0460 se referenciam nos dois sentidos', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarC197Difal, montarRegistro0460 } = require('../sefaz-backend/sped-difal-c197.js');
+    const REG0000 = L('0000', '020', '0', '01072026', '31072026', 'EMPRESA X', '11111111000191');
+    const soObs = (r: { erros: Array<{ regra: string; registro?: string; mensagem?: string }> }) =>
+        r.erros.filter((e) => e.regra === 'c195-obs-orfa');
+
+    const difal = () => montarC197Difal({
+        notas: [{
+            chave: 'CH1', numero: '9', direcao: 'entrada', status: 'autorizado',
+            ufEmit: 'MG', ufDest: 'SP', cnpjEmit: '22222222000191',
+            empresaCnpj: '11111111000191',
+            itens: [{ cfop: '2556', vProd: 1000, vICMS: 120, pICMS: 12, vBC: 1000 }],
+            totais: { vNF: 1000 },
+        }],
+        ufEmpresa: 'SP', aliqInternaPadrao: 18, aliqInternaPorChave: {},
+        codigoAjuste: 'SP50000001', codObservacao: '001',
+    });
+
+    it('nasce VERDE com o 0460 que o bloco 0 passou a emitir', () => {
+        const c = difal().linhasPorChave.CH1.map(sq);
+        const cadastro = montarRegistro0460('001', true).map(sq);
+        expect(cadastro).toHaveLength(1);
+        expect(c.some((l: string) => l.startsWith('|C195|'))).toBe(true);
+        expect(soObs(prevalidarSpedFiscal([REG0000, ...cadastro, ...c]))).toEqual([]);
+    });
+
+    // 🔴 O estado de antes: C195 sem 0460 nenhum.
+    it('acusa o C195 sem o 0460 — o estado de antes de 29/08', () => {
+        const c = difal().linhasPorChave.CH1.map(sq);
+        const e = soObs(prevalidarSpedFiscal([REG0000, ...c]));
+        expect(e).toHaveLength(1);
+        expect(e[0].registro).toBe('C195');
+    });
+
+    // ⚠️ E a VOLTA: o 0460 que ninguém referencia também é recusado — foi por
+    // isso que ele só sai quando o bloco C de fato emitiu o C195.
+    it('acusa o 0460 que nenhum registro usa', () => {
+        const e = soObs(prevalidarSpedFiscal([REG0000, ...montarRegistro0460('001', true).map(sq)]));
+        expect(e).toHaveLength(1);
+        expect(e[0].registro).toBe('0460');
+    });
+
+    it('sem C195 e sem 0460 fica MUDO', () => {
+        expect(soObs(prevalidarSpedFiscal([REG0000]))).toEqual([]);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔒 A ORDEM DE EXECUÇÃO MUDOU; a do ARQUIVO, não.
+//
+// O bloco C passou a ser montado ANTES do 0 (ele é quem sabe se o C195 saiu),
+// mas a concatenação continua na ordem oficial. Trocar as duas coisas de uma
+// vez seria o defeito mais silencioso possível: o PVA lê a ORDEM.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🔒 a ordem dos blocos no arquivo continua a oficial', () => {
+    const ler = (p: string) => require('fs').readFileSync(require('path').join(__dirname, '..', p), 'utf8');
+    const semComentario = (s: string) => s
+        .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    const src = semComentario(ler('sefaz-backend/sped-fiscal-orchestrator.js'));
+
+    it('a concatenação segue 0 → B → C → D → E → G → H → K → 1 → 9', () => {
+        const i = src.indexOf('const linhasAteAqui');
+        const trecho = src.slice(i, i + 700);
+        const ordem = [...trecho.matchAll(/\.\.\.linhasBloco([0-9A-K])/g)].map((m) => m[1]);
+        // O 9 fecha o arquivo (ele CONTA os anteriores, então vem por último).
+        expect(ordem).toEqual(['0', 'B', 'C', 'D', 'E', 'G', 'H', 'K', '1', '9']);
+    });
+
+    it('e o bloco C é EXECUTADO antes do 0, que é o que o 0460 exige', () => {
+        expect(src.indexOf('const linhasBlocoC = buildBlocoC(dados)'))
+            .toBeLessThan(src.indexOf('const linhasBloco0 = buildBloco0(dados)'));
+    });
+});
