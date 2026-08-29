@@ -18,6 +18,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 // 0150 e 0190 têm o MESMO leiaute nas duas famílias, e o aviso do COD_MUN
 // (recusa de 18/08) vivia só aqui — o EFD ICMS/IPI ficava mudo sobre o
 // MESMO registro. Dono único.
@@ -319,7 +320,12 @@ function build0140(dados) {
         // TRADUÇÃO para o arquivo, e traduzir é trabalho do gerador.
         ieDoArquivo(df.inscricaoEstadual),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
-        fmt.sanitizeString(empresa.ccmSp || '', 15),
+        // 🚨 Inscrição Municipal — pelo DONO (`ccm-sp.js`). Esta linha tinha
+        // DOIS defeitos: lia só a forma ACHATADA (`empresa.ccmSp`), então quem
+        // preencheu no modal Dados Fiscais (`dadosFiscais.ccmSp`, o canônico)
+        // saía com o campo VAZIO; e os SÓ-ZEROS do contorno da equipe entravam
+        // como se fossem inscrição — afirmação falsa num arquivo fiscal.
+        fmt.sanitizeString(ccmSpDaEmpresa({ dadosFiscais: df, ccmSp: empresa.ccmSp }), 15),
         fmt.sanitizeString(df.codSuframa || '', 9),
     ]);
 }

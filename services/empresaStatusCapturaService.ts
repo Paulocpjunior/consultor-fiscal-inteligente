@@ -39,6 +39,19 @@ export interface EmpresaStatusCaptura {
     capturarSefaz: boolean;
     capturaNfeOk: boolean;
     capturaNfseSpOk: boolean;
+    /** O trilho do portal de SP já ENTREGOU? (RESULTADO, não cadastro.) */
+    coberturaNfseSp?: {
+        situacao: 'nao-se-aplica' | 'nfsesp-sem-entrega' | 'nfsesp-com-erro' | 'nfsesp-entregue';
+        cor: 'neutro' | 'atencao' | 'ok';
+        aplicavel: boolean;
+        entregou: boolean | null;
+        texto: string | null;
+        acao: string | null;
+        entregueEm: number | null;
+        diasDesdeEntrega: number | null;
+        prestadasUlt?: number | null;
+        tomadasUlt?: number | null;
+    } | null;
     capturaNfseNacionalOk: boolean;
     capturaNfseNacionalVia?: 'cloud-a1' | 'a3-local' | 'inativa' | 'bloqueada';
     motivosBloqueio: string[];
@@ -75,6 +88,9 @@ export interface EmpresaStatusResumo {
     capturaNfeOk: number;
     capturaNfeBloqueada: number;
     capturaNfseSpOk: number;
+    nfseSpSemEntrega: number;
+    nfseSpComErro: number;
+    nfseSpEntregue: number;
     capturaNfseNacionalOk: number;
 }
 
@@ -310,7 +326,10 @@ export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
         e.nfseSpAutorizado ? 'sim' : 'não',
         e.nfseNacionalDfeAtivo ? 'sim' : 'não',
         e.capturaNfeOk ? 'sim' : 'NÃO',
-        e.capturaNfseSpOk ? 'sim' : 'NÃO',
+        // ⚠️ Exportar não pode perder a ressalva: 'sim' num CSV sobre empresa
+        // que o trilho nunca visitou é a mesma mentira do pill verde.
+        e.coberturaNfseSp?.entregou === false ? 'NÃO ENTREGOU'
+            : e.capturaNfseSpOk ? 'sim' : 'NÃO',
         e.capturaNfseNacionalOk ? 'sim' : 'NÃO',
         e.coberturaA3?.situacao === 'a3-entregue'
             ? `sim (${new Date(e.coberturaA3.entregueEm as number).toLocaleDateString('pt-BR')})`

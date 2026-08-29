@@ -41,7 +41,7 @@ interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega' | 'nfsesp-sem-entrega';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -380,8 +380,10 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 // entregou: o filtro existe justamente para a pessoa parar de
                 // olhar essas empresas.
                 case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk
-                    && e.coberturaA3?.situacao !== 'a3-sem-entrega';
+                    && e.coberturaA3?.situacao !== 'a3-sem-entrega'
+                    && e.coberturaNfseSp?.entregou !== false;
                 case 'a3-sem-entrega': return e.coberturaA3?.situacao === 'a3-sem-entrega';
+                case 'nfsesp-sem-entrega': return e.coberturaNfseSp?.entregou === false;
                 case 'todas':
                 default: return true;
             }
@@ -492,6 +494,19 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             title="Empresas A3 cujo agente local cfi-a3 nunca entregou documento. Não prova que ele não rodou — rodada sem movimento não deixa registro."
                         >
                             ⚠ {r.a3SemEntrega} A3 sem entrega do agente ›
+                        </button>
+                    )}
+                    {/* Mesmo desenho, outro trilho: o número que o "✓ NFSe SP"
+                        escondia. Sem ele o cabeçalho conta cadastro e não
+                        conta captura (caso LAV, 29/08). */}
+                    {!!(r.nfseSpSemEntrega || r.nfseSpComErro) && (
+                        <button
+                            type="button"
+                            onClick={() => setFiltro('nfsesp-sem-entrega')}
+                            className="text-xs text-amber-700 underline text-left"
+                            title="Empresas do portal da capital cujo trilho nunca baixou nota, ou cujo último download falhou. O laço do portal cruza o dropdown de prestadores com o nosso cadastro pelo CCM — quem não casa é pulada sem gerar erro."
+                        >
+                            ⚠ {(r.nfseSpSemEntrega || 0) + (r.nfseSpComErro || 0)} NFS-e SP sem entrega ›
                         </button>
                     )}
                 </div>
@@ -803,7 +818,20 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     : (e.coberturaA3?.texto || undefined)}
                                                 label="NFe"
                                             />
-                                            <Pill ok={e.capturaNfseSpOk} label="NFSe SP" />
+                                            {/* 🚨 TERCEIRO ESTADO, como no NFe: o cadastro diz
+                                                que existe caminho, a última rodada do portal diz
+                                                se ele ENTREGOU. Verde ao lado de "nunca baixou
+                                                nota desta empresa" seriam duas leituras do mesmo
+                                                fato na mesma tela. */}
+                                            <Pill
+                                                ok={e.capturaNfseSpOk}
+                                                alerta={e.coberturaNfseSp?.situacao === 'nfsesp-sem-entrega'
+                                                    || e.coberturaNfseSp?.situacao === 'nfsesp-com-erro'}
+                                                title={e.coberturaNfseSp?.acao
+                                                    ? `${e.coberturaNfseSp.texto} ${e.coberturaNfseSp.acao}`
+                                                    : (e.coberturaNfseSp?.texto || undefined)}
+                                                label="NFSe SP"
+                                            />
                                             <Pill
                                                 ok={e.capturaNfseNacionalOk}
                                                 label={e.capturaNfseNacionalVia === 'a3-local' ? 'NFSe Nac A3' : 'NFSe Nac'}

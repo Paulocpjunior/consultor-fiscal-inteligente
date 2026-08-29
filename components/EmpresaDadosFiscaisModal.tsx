@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import type { EmpresaDadosFiscais } from '../types';
 import { CloseIcon, BuildingIcon } from './Icons';
 import { sanitizarDadosFiscais } from '../services/empresaDadosFiscaisSanitize';
+import { soZerosComoVazio } from '../sefaz-backend/ccm-sp.js';
 import { buscarCep } from '../services/cepService';
 import { listarContadores, salvarContador, type Contador } from '../services/contadoresService';
 // As tabelas do frete contratado vêm do DONO no backend — reescrevê-las aqui
@@ -293,7 +294,7 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 {/* Aviso vivo: município preenchido ≠ capital + CCM com
                                     valor = cadastro enganando o trilho NFS-e SP (caso
                                     DARCY/Santos com 000000000, 26/07). */}
-                                {(dados.ccmSp || '').replace(/\D/g, '').replace(/0/g, '') !== '' &&
+                                {soZerosComoVazio(dados.ccmSp) != null &&
                                     (dados.codMunIBGE || '').replace(/\D/g, '').length === 7 &&
                                     (dados.codMunIBGE || '').replace(/\D/g, '') !== '3550308' && (
                                     <p className="text-[11px] text-amber-500 mt-1">

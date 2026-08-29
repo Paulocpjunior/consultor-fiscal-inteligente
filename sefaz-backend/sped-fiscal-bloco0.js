@@ -16,6 +16,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 // TIPO_ITEM/NCM do item de serviço — a MESMA régua do bloco 0 do
 // EFD-Contribuições; duas cópias declarariam tipos diferentes para o mesmo item
 // em dois arquivos do mesmo mês.
@@ -184,7 +185,12 @@ function build0000(dados) {
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),
         fmt.sanitizeString(df.inscricaoEstadual || '', 14),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
-        fmt.sanitizeString(df.ccmSp || empresa.ccmSp || '', 15),  // Inscricao Municipal (cadastro unico dadosFiscais, fallback legado)
+        // 🚨 Inscrição Municipal — pelo DONO (`ccm-sp.js`), que lê as duas
+        // formas E trata os SÓ-ZEROS como vazio. Até 29/08 esta linha escrevia
+        // `00000000` no arquivo quando a equipe usava o contorno dos oito zeros
+        // no cadastro: campo em branco é AUSÊNCIA, oito zeros é uma AFIRMAÇÃO
+        // falsa de inscrição, e a diferença é a que esta casa paga caro.
+        fmt.sanitizeString(ccmSpDaEmpresa({ dadosFiscais: df, ccmSp: empresa.ccmSp }), 15),
         fmt.sanitizeString(df.codSuframa || '', 9),
         perfilDoArquivo(dados),
         df.indAtividade === 'industrial' ? '0' : '1',

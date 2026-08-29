@@ -71,6 +71,33 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O CCM DE SP — duas formas, e os SÓ-ZEROS como vazio',
+        dono: 'sefaz-backend/ccm-sp.js',
+        comoUsar: "import { ccmSpDaEmpresa, temCcmSp, ccmSpParaGravar, soZerosComoVazio } from 'sefaz-backend/ccm-sp.js'",
+        porque: '29/08, LAV COMERCIO DE AUTOPECAS: *"não está capturando as NFS-e de serviços tomados pelo '
+            + 'cliente"* — a MESMA empresa do caso dos oito zeros de 21/08, voltando com outro sintoma. A régua '
+            + 'nasceu no `.ts` do sanitize e FICOU LÁ, então o backend — que lê o CCM em nove lugares — não a '
+            + 'conhecia. E `\'00000000\'` é **truthy**: o `if (!ccm)` de cada leitor recebia "sim, tem CCM" '
+            + 'sobre um campo que significa "não tem". O 0000 dos DOIS SPED declarava `00000000` no campo '
+            + 'Inscrição Municipal (afirmação falsa num arquivo fiscal); o portal de SP indexava a empresa sob '
+            + 'a chave `00000000`, nunca casava com o dropdown de prestadores e a pulava **sem gerar uma linha '
+            + 'de erro**; e a tela pintava `✓ NFSe SP` engolindo o bloqueio *"falta Inscrição Municipal (CCM)"*, '
+            + 'que era justamente a frase que resolveria o caso.',
+        assinaturas: [
+            // A leitura crua das duas formas — como os nove leitores estavam.
+            /ccmSp\s*\|\|\s*\w+\.ccmSp/,
+            // A régua dos zeros reimplementada (o modal tinha a terceira cópia:
+            // `.replace(/\D/g,'').replace(/0/g,'') !== ''`).
+            /replace\(\/0\/g/,
+        ],
+        permitido: [
+            // A gravação valida o TAMANHO do CCM (6-11 dígitos) além de aplicar
+            // a régua dos zeros — é outra pergunta, e ela já delega o "é vazio?"
+            // ao dono.
+            'sefaz-backend/empresa-status-routes.js',
+        ],
+    },
+    {
         nome: 'A COMPETÊNCIA ESTÁ FECHADA? — o fim de mês (DAR FIM DE MÊS)',
         dono: 'sefaz-backend/fim-de-mes.js',
         comoUsar: "import { competenciaFechada, podeDarFimDeMes } from 'sefaz-backend/fim-de-mes.js'",

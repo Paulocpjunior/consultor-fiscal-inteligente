@@ -5,6 +5,105 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CCM COM OITO ZEROS ATRAVESSOU O BACKEND INTEIRO COMO SE FOSSE
+  INSCRIÇÃO — e a régua existia desde 21/08, no lugar errado** (29/08, LAV
+  COMERCIO DE AUTOPECAS, relato do colaborador via Paulo: *"foi detectado que
+  não está capturando as NFS-e de serviços tomados pelo cliente e isso já
+  deveria ter sido resolvido"*, com a linha de status dizendo `A1 · ✓ ativa ·
+  ✓ NFe · **✓ NFSe SP** · ✓ Captura OK` e o relatório de Serviços tomados
+  mostrando *"0 NFS-e · base R$ 0,00"* na mesma competência).
+  🔴 **É A MESMA EMPRESA DE 21/08, voltando com OUTRO sintoma.** Naquele dia a
+  colaboradora disse *"coloco uma sequência de 8 zeros"* e a régua
+  `soZerosComoVazio` nasceu — **em `services/empresaDadosFiscaisSanitize.ts`**,
+  e ficou lá. O backend, que lê o CCM em **nove** lugares, não a conhecia. E
+  `'00000000'` sobrevive ao `.replace(/\D/g,'')` e é **TRUTHY**: o `if (!ccm)`
+  de cada leitor recebia *"sim, tem CCM"* sobre um campo que significa *"não
+  tem"*.
+  🚨 **O MAIS CARO É O ARQUIVO FISCAL**: o 0000 dos DOIS SPED escrevia
+  `00000000` no campo **Inscrição Municipal**. Campo em branco é AUSÊNCIA; oito
+  zeros é uma **AFIRMAÇÃO FALSA** de inscrição — é a família do `1405` e do
+  `PARTSEM`, num campo que a fiscalização lê. ⚠️ E o do EFD-**Contribuições**
+  tinha o defeito EM DOBRO: lia só a forma **ACHATADA** (`empresa.ccmSp`), então
+  quem preencheu no modal (`dadosFiscais.ccmSp`, o canônico) saía com o campo
+  **VAZIO** — a armadilha das duas formas escondida dentro da mesma linha.
+  🚨 **E A CAPTURA SUMIA POR CONSTRUÇÃO, SEM NENHUM ERRO.** O
+  `nfse-sp-portal-orchestrator` indexa as empresas **POR CCM**
+  (`mapa.set(ccm, …)`) e o laço é dirigido pelo **DROPDOWN de prestadores do
+  portal**. Com a chave `'00000000'` a empresa entra no mapa, **nunca casa com
+  prestador nenhum** e é pulada **sem gerar sequer uma linha em `detalhes`** —
+  não é *"falhou"*, é como se ela não existisse. Nenhum log, nenhum contador,
+  nenhum farol.
+  🔴 **E A TELA AFIRMAVA O CONTRÁRIO, engolindo a frase que resolveria**: em
+  `empresa-status-routes.js`, `nfseSpAplicavel` cai em `!!emp.ccmSp` quando não
+  há município cadastrado — então os zeros faziam o app **DECIDIR** que o trilho
+  da capital se aplica —, e `capturaNfseSpOk = !!emp.ccmSp &&
+  !!emp.nfseSpAutorizadoEm` saía **true**, pintando `✓ NFSe SP` e **engolindo o
+  bloqueio** *"NFS-e SP: falta Inscrição Municipal (CCM)"*, que é exatamente o
+  que o colaborador precisava ler.
+  ✂️ `sefaz-backend/ccm-sp.js` (PURO, em `REGUAS_VIGIADAS`) é o dono, e ele
+  MUDOU DE CASA de propósito: quem lê o CCM é o BACKEND, e o `.ts` do sanitize
+  agora **IMPORTA** dele. **Eram QUATRO cópias**, e uma delas se declarava:
+  *"espelho em JS da régua de services/empresaDadosFiscaisSanitize — o backend
+  não importa TS; mudar uma é mudar a outra"* (em `empresas-perfil-routes.js`).
+  **Cópia que avisa que é cópia continua sendo cópia** — o comentário não
+  substitui o import, ele só documenta a dívida.
+  ⚠️ **NADA É APAGADO NO BANCO**: o app IGNORA os zeros na LEITURA, que é a
+  régua desta casa desde sempre (`docCancelado`, `modeloDoDoc`,
+  `direcaoEfetivaDoc`) — campo gravado pode mentir, e quem responde é a régua da
+  leitura. Varrer a base para reescrever cadastro seria mexer no que a equipe
+  digitou sem ninguém pedir.
+  🐛 **E A VARREDURA ACHOU TRÊS LEITORES QUE A MINHA LISTA NÃO TINHA** — dois
+  painéis e o `xmlFiscalService`. É a diferença entre trava por VARREDURA e
+  trava por LISTA (13/08) medida na hora: a lista que eu escrevi de cabeça tinha
+  onze arquivos e faltavam três.
+  📌 **REGRA QUE FICA: régua nasce na casa de quem MAIS lê, não na de quem
+  primeiro precisou.** Esta nasceu no frontend porque o sintoma de 21/08 era de
+  tela, e o custo real estava em nove leitores do backend — inclusive dois
+  geradores de arquivo fiscal. Quando a régua responde sobre um campo de
+  CADASTRO, a casa dela é o backend, e o `.ts` importa.
+
+- **🚨 "✓ NFSe SP" SAÍA DE DOIS CAMPOS DE CADASTRO — a primeira regra
+  permanente deste projeto invertida pela SEGUNDA vez** (29/08, mesmo caso LAV).
+  A decisão era `capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm`:
+  alguém preencheu o CCM e marcou a data ⇒ a tela **AFIRMA** que a captura está
+  OK. **Nada ali olhava se o trilho alguma vez baixou um CSV desta empresa.**
+  📌 É literalmente o `temA3Proprio` de 23/08 com outro nome — e naquele dia a
+  lição já tinha sido escrita: *validação por RESULTADO, nunca por status*. A
+  diferença é que o A3 foi corrigido e **este trilho não entrou junto**.
+  ✂️ `captura-nfse-sp-cobertura.js` (PURO, irmão do `captura-a3-cobertura.js`)
+  responde pelo RESULTADO, lendo `nfsesp_portal_state` — que é mais rico que o
+  do A3 e distingue **TRÊS fatos com ações opostas**: **nunca visitada** (não há
+  documento de estado — o caso LAV), **rodou e ERROU** (o número de notas não
+  diz nada enquanto o download falha, e a mensagem da Prefeitura vai INTEIRA) e
+  **rodou e trouxe zero**.
+  ⚠️ **ZERO NOTAS CONTINUA VERDE, e é isso que faz a régua servir**: empresa de
+  comércio tem meses sem NFS-e tomada, e acusar ali seria o alarme que ninguém
+  consegue apagar — o jeito conhecido de a equipe parar de olhar o farol.
+  ⚠️ **NUNCA VISITADA É ÂMBAR, NÃO VERMELHO**: vermelho afirmaria que o trilho
+  está quebrado; o que o app mediu é que ele nunca entregou nada DESTA empresa.
+  E a ação nomeia as **TRÊS causas** — CCM que não casa com o dropdown,
+  autorização que a empresa não concluiu, cron que não rodou desde o cadastro —
+  porque a primeira parada é outra em cada uma, e *"confira a captura"* seria
+  mandar procurar.
+  ⚠️ **NENHUM SLA INVENTADO**: "entregou há 180 dias" devolve a DATA e os dias,
+  nunca um veredito de "parado" — cravar janela aqui seria inventar prazo.
+  🚨 **E OS QUATRO LEITORES ENTRARAM NO MESMO PR** (a régua de 23/08: *quando um
+  booleano muda de significado, os LEITORES dele entram junto*): o **pill** ganhou
+  o terceiro estado (âmbar, e o alerta VENCE o ok), o filtro **"tudo OK"** exclui
+  quem nunca recebeu entrega, o **KPI** mostra o número com clique para a lista, e
+  o **CSV** leva a ressalva (`NÃO ENTREGOU`). Meia correção trocaria um erro por
+  uma CONTRADIÇÃO na mesma tela.
+  ⚠️ **UMA query para a carteira inteira** (`nfsesp_portal_state`), anexada pelo
+  painel — leitura por card foi o HTTP 429 de 27/08. E falha de leitura **não
+  derruba o painel nem vira "nunca entregou"**: sem o mapa a cobertura fica
+  indefinida e o pill volta ao que era, porque afirmar ausência por rede que
+  piscou mandaria conferir cadastro que está certo.
+  🚩 **O QUE ISTO NÃO PROVA, e vai dito**: eu **não sei** se o CCM da LAV é hoje
+  a sequência de zeros — a tela é que responde isso, e é justamente para ela
+  passar a responder que o pill mudou. Os dois defeitos são reais e valem por si;
+  carimbar a causa dela sem o print seria o *"print prova o ARQUIVO, não o
+  código"* na direção contrária.
+
 - **♻️ O STATUS DO RITO É UM CARIMBO HISTÓRICO — consertar a causa depois NÃO
   o move, e o mês travado ficava travado para sempre** (28/08, Paulo na
   VINCENZO GUERRA: *"Já criei a pasta e continua assim, o que eu faço?"*).

@@ -44,6 +44,7 @@ import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 const direcaoDoDocumento = (d: any): string => (direcaoEfetivaDoc(d) as string) || '';
 import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
+import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
 import {
     podeVerDocumentoPorCarteira,
     podeVerEmpresaPorCarteira,
@@ -300,7 +301,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 regimeSugerido: 'SIMPLES' as RegimeSugerido,
                 uf: df.uf,
                 inscricaoEstadual: df.inscricaoEstadual,
-                ccmSp: df.ccmSp || (data as any).ccmSp,
+                ccmSp: ccmSpDaEmpresa(data) || undefined,
                 createdBy: data.createdBy,
                 // Campos da conferência de cadastro — sem eles o FALLBACK fazia
                 // toda empresa parecer pendente quando o backend caía (03/08).
@@ -328,7 +329,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 regimeSugerido: inferirRegimeLucro(data),
                 uf: df.uf,
                 inscricaoEstadual: df.inscricaoEstadual,
-                ccmSp: df.ccmSp || data.ccmSp,
+                ccmSp: ccmSpDaEmpresa(data) || undefined,
                 createdBy: data.createdBy,
                 codMunIBGE: df.codMunIBGE || (data as any).codMunIBGE,
                 email: (data as any).email || df.email,
