@@ -39,7 +39,7 @@
  */
 
 import {
-    conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_CONTRIBUICOES,
+    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirContador0100, POS_DT_FIN_CONTRIBUICOES,
     conferirPeriodoDoArquivo as periodoDoArquivoComum,
 } from './sped-c100-regras-comuns.js';
 // A contagem oficial dos 184 registros lidos por inteiro no Guia 1.35 — gerada
@@ -1106,6 +1106,10 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirConsolidacao1900(linhas).erros,
         ...conferirM205ComValorZero(linhas).erros,
         ...conferirAjustesDoM210(linhas).erros,
+        // 🚨 O 0100 tinha DEFAULT INVENTADO nos dois geradores (29/08) —
+        // 'CONTADOR SP CONTABIL' e '1SP123456/O-7'. Apagado o default, o campo
+        // sai VAZIO, e vazio o PVA acusa: esta regra o pega antes.
+        ...conferirContador0100(linhas),
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

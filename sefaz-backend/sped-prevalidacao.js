@@ -43,6 +43,7 @@ import { linhasMalformadas } from './sped-auditoria-saida.js';
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, POS_DT_FIN_ICMS_IPI,
+    conferirContador0100,
 } from './sped-c100-regras-comuns.js';
 
 const campos = (linha) => String(linha || '').split('|');
@@ -588,6 +589,13 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
             });
         }
     }
+
+    // ── R30. 0100 — NOME, CPF e CRC, e o DV do CPF ──────────────────────────
+    // Irmã da R13 (que cobra EMAIL/COD_MUN, obrigatórios SÓ nesta família). Ela
+    // mora no módulo COMUM porque estes três campos e a validação do DV valem
+    // nos dois arquivos — e porque o default INVENTADO que a motivou existia
+    // nos DOIS geradores.
+    for (const e of conferirContador0100(lista)) add(erros, e);
 
     // ── R15. Linha malformada — tudo no arquivo é |REG|…|, sem exceção ──────
     // Caso REALITY 0899 · 07/2026 (21/08): o gerador de ST devolvia linhas sem

@@ -36,7 +36,7 @@ import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem,
     unidadeDoItem, descreverUnidade,
 } from './sped-selecao-documentos.js';
-import { getContadorPadrao } from './contador-escrituracao.js';
+import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 // 🔒 O acervo que o fim de mês congelou — o dono da pergunta "este documento
 // já estava aqui quando o mês foi fechado?".
@@ -594,12 +594,23 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         warnings.push(`DIPAM não pôde ser apurada (${err.message}) — o Registro 1400 sai vazio. Confira antes de transmitir.`);
     }
 
+    // O contabilista é conferido ANTES de virar linha: campo obrigatório do
+    // 0100 que sai vazio é recusa do PVA, e campo INVENTADO é pior — ele passa.
+    const contadorDoArquivo = getContadorPadrao();
+    const conf = conferirContador(contadorDoArquivo);
+    if (conf.aviso) warnings.push(conf.aviso);
+
     return {
         empresa,
         // O regime decide a DISPENSA do bloco K (Resolução CGSN 94) — ele já
         // foi resolvido acima; relê-lo no gerador seria a segunda leitura.
         regime,
-        contador: getContadorPadrao(),
+        // 🚨 O contabilista do 0100 não recebe mais default INVENTADO: NOME e
+        // CRC saíam 'CONTADOR SP CONTABIL' / '1SP123456/O-7' quando a env
+        // faltava (29/08). Faltando, o campo sai VAZIO e a falta vai DITA —
+        // some calado seria o arquivo declarando um profissional que não
+        // existe, num campo que a fiscalização lê.
+        contador: contadorDoArquivo,
         competenciaInicio: periodoInicio,
         competenciaFim: periodoFim,
         notas,
