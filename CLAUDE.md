@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CANAL "PREFEITURA SP" DIZIA "CCM NÃO CONFIGURADO" PARA A CARTEIRA
+  INTEIRA — inclusive para quem tem CCM e para quem nem é de SP** (29/08, na
+  sequência do caso LAV).
+  🔴 **A causa é um ARGUMENTO QUE NINGUÉM PASSA**: o provider tem a assinatura
+  `listarMensagensPrefeituraSP(empresaCnpj, ccmSp)` e os **dois** chamadores
+  passavam UM argumento só. Com `ccmSp` sempre `undefined`, o canal caía no
+  early return e devolvia, para TODA empresa, *"CCM (inscrição municipal SP)
+  não configurado — preencha em Empresas → Dados Fiscais"*.
+  🚨 **São DOIS defeitos somados, e o segundo é o pior**: (1) a frase é **FALSA
+  sobre o cadastro** de quem preencheu o CCM — o custo do dia inteiro do caso
+  LAV, de novo; (2) e ela manda preencher um campo que a maioria da carteira
+  **não tem e não precisa** — o CCM só existe em **SP capital**, e a medição de
+  22/08 mostrou 272 dos 394 municípios com sistema próprio. É o *"aviso que
+  aponta um lugar que não resolve"* (achado 18, 21/08) na forma mais cara: a
+  pessoa procura, **preenche**, e nada muda.
+  ✂️ `caixa-postal-prefeitura-sp.js` (PURO) separa **três situações com ações
+  OPOSTAS**: **não se aplica** (não é da capital — cor neutra, NÃO manda
+  preencher nada, e a frase diz por onde a NFS-e dela chega: ADN ou o próprio
+  município), **falta o CCM** (é da capital e o campo está vazio — aí a frase
+  antiga era VERDADEIRA e continua) e **pronto**.
+  ⚠️ **E ele não reescreve nenhuma das duas réguas que já têm dono**: o
+  município sai de `caminhoNfseRecomendado` e o CCM de `ccmSpDaEmpresa` — que lê
+  as DUAS formas e trata a sequência de zeros como vazio. Em 29/08 de manhã o
+  CCM tinha QUATRO cópias, e uma delas se declarava cópia no próprio comentário.
+  ⚠️ **AUSÊNCIA NÃO É PROVA**: sem município cadastrado, quem decide é o CCM —
+  tratar como "não se aplica" apagaria o canal justamente de quem ele serve.
+  📌 **E O DOC VIAJA DO LAÇO, sem leitura por empresa**: `sincronizarTodasEmpresas`
+  já tem o documento e o passa adiante (leitura por empresa ali seriam ~400 idas
+  ao Firestore — o HTTP 429 de 27/08); só o caminho de UMA empresa lê.
+  📌 **REGRA QUE FICA: argumento que ninguém passa não quebra nada — ele faz a
+  função responder sobre o caso VAZIO, todo dia, com confiança.** É a família do
+  `saldoCredorIpiAnterior` (19/08), que o gerador lia e nenhum orquestrador
+  passava, e do `obrigacoesStPorUf`, que fez o E250 nunca sair. A trava é por
+  **VARREDURA do caminho** (o doc tem de sair do laço e chegar ao canal), não
+  por lista — e ela nasceu LARGA, acusando a DECLARAÇÃO do provider mock, que é
+  código certo; estreitada para casar só a CHAMADA.
+  🚩 **O QUE ISTO NÃO PROMETE**: o WS legado do portal responde **1102** desde
+  sempre (a razão de o trilho de captura ser o CSV). Empresa da capital COM CCM
+  passa a consultar de verdade — e se vier erro, ele vai INTEIRO na linha do
+  canal. Trocar uma frase FALSA sobre o cadastro por um erro VERDADEIRO do órgão
+  é a correção; fazer o canal entregar depende do 1102, que é outra pendência.
+
 - **🏭 O BLOCO K NASCEU — e é o PRIMEIRO deste projeto a estrear com a
   prevalidação NO MESMO PR do gerador** (29/08, Paulo: *"pode fazer o bloco
   k"*; era o último 🔴 do de-para).

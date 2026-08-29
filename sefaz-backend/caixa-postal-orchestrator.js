@@ -45,7 +45,7 @@ function fa() {
  * Sincroniza a caixa postal de uma empresa: chama TODOS os canais via
  * listarTodasMensagens, persiste novos, preserva o estado de leitura local.
  */
-export async function sincronizarEmpresa(empresaId, empresaCnpj) {
+export async function sincronizarEmpresa(empresaId, empresaCnpj, empresa = null) {
     const db = fa().firestore();
     const provider = getCaixaPostalProvider();
     const mode = getProviderMode();
@@ -71,12 +71,31 @@ export async function sincronizarEmpresa(empresaId, empresaCnpj) {
         }
     }
 
+    // O canal da Prefeitura de SP precisa do DOC (município + CCM). O laço da
+    // carteira já o tem e passa adiante — leitura por empresa ali seriam ~400
+    // idas ao Firestore (o HTTP 429 de 27/08). Aqui, no caminho de UMA empresa,
+    // uma leitura é o preço de o canal parar de mentir sobre o cadastro.
+    let empresaDoc = empresa;
+    if (!empresaDoc && empresaId) {
+        for (const col of ['simples_empresas', 'lucro_empresas']) {
+            try {
+                const d = await db.collection(col).doc(String(empresaId)).get();
+                if (d.exists) { empresaDoc = { id: d.id, ...d.data() }; break; }
+            } catch { /* falha na leitura não derruba a sync — o canal dirá o que sabe */ }
+        }
+    }
+
     // Chama todos os canais em paralelo via listarTodasMensagens
     let mensagensRemotas;
     let canaisStatus = {};
 
     if (typeof provider.listarTodasMensagens === 'function') {
-        const resultado = await provider.listarTodasMensagens(empresaCnpj);
+        // 🚨 O DOC DA EMPRESA VIAJA JUNTO — sem ele o canal da Prefeitura de SP
+        // caía no early return e dizia "CCM não configurado" para a carteira
+        // INTEIRA, inclusive para quem tem CCM e para quem nem é da capital
+        // (29/08). É a armadilha do argumento que ninguém passa: nada quebra,
+        // o canal só passa a mentir sobre o cadastro.
+        const resultado = await provider.listarTodasMensagens(empresaCnpj, 'SP', empresaDoc);
         mensagensRemotas = resultado.mensagens;
         canaisStatus = resultado.canais || {};
     } else {
@@ -185,7 +204,7 @@ export async function sincronizarTodasEmpresas() {
     for (const emp of empresas) {
         if (!emp.cnpj) continue;
         try {
-            const r = await sincronizarEmpresa(emp.id, emp.cnpj);
+            const r = await sincronizarEmpresa(emp.id, emp.cnpj, emp);
             stats.sucesso++;
             if (r.skipped) stats.skipped++;
             stats.detalhes.push({ empresa: emp.nome, ...r });
