@@ -5,6 +5,60 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O M200/M600 NUNCA TINHA SIDO PERGUNTADO SE FECHA CONSIGO MESMO — e é
+  dele que sai o débito da DCTF** (29/08, seguindo o cruzamento "registros que
+  o gerador EMITE × registros que a prevalidação COBRE" no EFD-Contribuições:
+  **29 registros com conteúdo, 5 sem nenhuma regra**).
+  📖 O Guia 1.35 escreve a aritmética INTEIRA do M200 por extenso — campo 05 =
+  02 − 03 − 04 · campo 06 **≤** 05 · campo 08 = 05 − 06 − 07 · campo 10 ≤ 09 ·
+  campo 12 = 09 − 10 − 11 · campo 13 = 08 + 12 — e **nada perguntava por ela**.
+  🔴 **E ESTE REGISTRO JÁ SE DESMENTIU**: em 24/08 (CF BANK) o campo 04
+  (`VL_TOT_CONT_NC_DEV`) saía **0 CRAVADO** com o campo 07 (a recolher) cheio —
+  o arquivo dizia que NADA era devido no não-cumulativo e declarava valor a
+  recolher na linha seguinte. É a classe do E110 campo 11 (02/08) e do E110 que
+  não fechava consigo mesmo (R17, 26/08): cada total, isolado, parece certo — o
+  que não fecha é a EXPRESSÃO.
+  🚨 **E A RETENÇÃO MAIOR QUE O DEVIDO É O CASO COMUM DO PRESTADOR DE SERVIÇO,
+  não hipótese** (em 28/08 a retenção da DGB cobria a contribuição quase
+  inteira). O Guia proíbe (campo 06 ≤ 05) e o excedente **NÃO some**: é crédito
+  a usar em períodos futuros, que se declara no **registro 1300** — que o app
+  **não gera**. A regra DIZ isso na ação, senão a empresa perde o crédito
+  calada. ⚠️ E o gerador **não foi mudado**: capar a retenção mexeria em VALOR
+  de arquivo fiscal sem o número na frente do dono, e o comentário dele já
+  explica a escolha. O app **denuncia**, não contorna (regra de 06/08).
+  📖 **E a segunda regra é a "Atenção" do próprio Guia**: Σ dos M205/M605
+  (campo 04) = a contribuição a recolher do M200/M600 que eles detalham —
+  **separado por NUM_CAMPO** (08 não-cumulativo · 12 cumulativo). Somar tudo
+  junto compararia o detalhamento de uma seção com o total da outra. O M205 já
+  custou **12 recusas** (DGB, 28/08) por existir com valor zero; esta é a outra
+  metade — ele existir com o valor ERRADO, que ninguém confere a olho.
+  🐛 **E A REGRA ACHOU UMA COMBINAÇÃO NÃO PROVADA ao nascer**: o M205 da
+  **receita financeira** sai com `NUM_CAMPO 08` (o do não-cumulativo, provado
+  no assinado do CF BANK) mesmo quando a apuração é CUMULATIVA — e aí o valor
+  vai para o campo 12 do M200 e o detalhamento aponta um campo ZERADO. O app
+  **não deduz** o par código+campo do outro regime (deduzir declararia o débito
+  na receita errada da DCTF), então a combinação sai **DITA** na geração.
+  📖 **E os ESTABELECIMENTOS fecharam junto**: o **0140** é o CADASTRO (DV do
+  CNPJ · COD_MUN com 7 dígitos) e **A010, C010, D010 e F010** apontam para ele
+  — a MESMA frase nos quatro: *"O estabelecimento informado neste registro deve
+  está cadastrado no Registro 0140"*. É a família do participante do 0150 e do
+  item do 0200 ÓRFÃOS, que já custou rodada de PVA nas duas pontas (19/08).
+  ⚠️ **O município NÃO é conferido contra a tabela do IBGE** — ela não está no
+  repo, e reconstruí-la de memória seria inventar tabela oficial. Confere-se o
+  que o Guia diz sem tabela nenhuma: **7 dígitos**.
+  🐛 **E A CONVENÇÃO DE ÍNDICE MORDEU DENTRO DO PRÓPRIO PROJETO**: neste módulo
+  `camposDaLinha` devolve o REG na posição **0** (campo N = índice N−1), e no
+  `sped-prevalidacao.js` o split cru deixa o REG no **1** (campo N = índice N).
+  Carimbar a convenção do vizinho lê o campo errado com toda confiança — é o
+  erro do `DT_FIN` de 22/08, agora entre dois módulos da mesma casa. Pego pelo
+  teste, na primeira execução.
+  📌 **E A PROVA QUE VALE É O BLOCO M DO GERADOR REAL, não linha escrita à
+  mão**: a primeira fixture que escrevi era inventada (`regimeApuracao` ausente)
+  e as regras acusaram — mas o defeito era da FIXTURE, não do gerador. Fixture
+  que não é o que o gerador emite é teste verde sobre defeito vivo (a lição do
+  art. 136, 22/08), e aqui ela quase virou o contrário: alarme sobre gerador
+  correto.
+
 - **🚨 O CONTABILISTA DO 0100 SAÍA INVENTADO — `'CONTADOR SP CONTABIL'` e o CRC
   `'1SP123456/O-7'`, nos DOIS geradores** (29/08, achado ao cruzar "registros
   que o gerador EMITE × registros que a prevalidação COBRE" no

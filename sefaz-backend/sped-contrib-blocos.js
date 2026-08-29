@@ -1502,6 +1502,23 @@ export function buildBlocoM(dados) {
     // financeira NÃO cai no aviso do "não-cumulativo sem código provado".
     // ⚠️ Ele vale só para ESTA apuração — reaproveitá-lo no não-cumulativo
     // comum declararia o débito na receita errada da DCTF.
+    // 🚨 O `NUM_CAMPO 08` é o do regime NÃO-cumulativo — foi assim que o
+    // assinado do CF BANK (06/2026) o trouxe, e é ele que está provado. Se a
+    // apuração sair CUMULATIVA, o valor da receita financeira vai para o campo
+    // 12 do M200 e este detalhamento apontaria um campo ZERADO: o Guia é
+    // literal (*"o somatório do campo 04 deve corresponder ao valor constante
+    // de contribuição a recolher, do Registro Pai M200"*), e a prevalidação
+    // pega isso. O app **não deduz** o par código+campo do outro regime —
+    // deduzir declararia o débito na receita errada da DCTF —, então a
+    // combinação sai DITA para alguém conferir antes do PVA.
+    if (finM && !isNaoCumulativo && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            'Bloco M: a empresa tem receita de aplicação financeira e a apuração saiu CUMULATIVA. O par '
+            + 'código de receita + NUM_CAMPO que o app conhece (08 · 457401/798701) está provado no regime '
+            + 'NÃO-cumulativo (assinado do CF BANK 06/2026) — confira o M205/M605 antes de transmitir: o '
+            + 'app não deduz o código do outro regime.',
+        );
+    }
     if (finM) {
         linhas.push(fmt.buildLine([
             'M205', CODIGOS_RECEITA_APLICACAO_FINANCEIRA.numCampo,
