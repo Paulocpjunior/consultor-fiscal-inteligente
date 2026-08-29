@@ -31,8 +31,14 @@
 // ⚠️ **REGISTRO INCERTO NÃO ENTRA.** A contagem vem de uma extração mecânica
 // de .docx, e ela erra: onde o número de um campo se perdeu na conversão a
 // contagem sai SUBESTIMADA, e acusar por ela seria alarme sobre registro
-// CERTO — o jeito conhecido de a equipe desligar a trava. Esses ficam de fora,
-// nomeados em `REGISTROS_INCERTOS_NO_GUIA_FISCAL`.
+// CERTO — o jeito conhecido de a equipe desligar a trava.
+//
+// 🚨 **E TRÊS DOS INCERTOS SÃO EMITIDOS PELO GERADOR** (9999, E210, D100), o
+// que faria a lista de "não conferidos" aparecer em produção — e o **9999 em
+// TODO arquivo**, porque a seção dele é a última do Guia e a varredura engole
+// o que vem depois. Os três foram LIDOS CAMPO A CAMPO na mesma fonte
+// (`CAMPOS_LIDOS_A_MAO_NO_GUIA_FISCAL`), e isso apareceu **medindo o arquivo
+// real**, não lendo o código.
 //
 // 📌 **E O SILÊNCIO SAI DITO** (`naoConferidos`): registro que a tabela não
 // cobre não é registro aprovado. Foi exatamente o silêncio da trava do
@@ -58,6 +64,52 @@ import {
 export const CAMPOS_PROVADOS_POR_RECIBO_FISCAL = {};
 
 /**
+ * Registros cuja tabela do Guia foi lida **CAMPO A CAMPO por uma pessoa**,
+ * porque a extração mecânica não fechou neles.
+ *
+ * ⚠️ Entram ACIMA da extração e ABAIXO do recibo: é leitura da MESMA fonte
+ * oficial, feita à mão porque a máquina falhou — não é prova de arquivo aceito.
+ * Cada entrada nomeia os campos lidos, para a conferência ser refazível.
+ *
+ * 🚨 **E OS TRÊS SÃO EMITIDOS PELO GERADOR** — sem eles a lista de "não
+ * conferidos" apareceria em produção, e o **9999 sairia em TODO arquivo**.
+ * Alarme que nasce em toda geração é o jeito conhecido de a equipe desligar a
+ * trava; foi medindo o arquivo real que isso apareceu, não lendo o código.
+ */
+export const CAMPOS_LIDOS_A_MAO_NO_GUIA_FISCAL = {
+    // A seção do 9999 é a ÚLTIMA do Guia, então a varredura vai até o fim do
+    // documento e engole a "Seção 5 – Obrigatoriedade dos Registros" inteira:
+    // a extração devolvia **67** campos com dezenas de buracos.
+    9999: {
+        campos: 2,
+        fonte: 'Guia Prático do EFD ICMS/IPI 3.2.3, tabela do registro 9999, lida campo a campo: '
+            + 'REG · QTD_LIN. (A extração lê 67 porque a seção é a última do documento.)',
+    },
+    // 📌 Buraco no MEIO não subestima o total — o que subestima é o buraco no
+    // FIM. Nos dois abaixo o ÚLTIMO número está legível, e é ele que dá a
+    // contagem; o que se perdeu foi o NOME de um campo do meio.
+    E210: {
+        campos: 15,
+        fonte: 'Guia Prático do EFD ICMS/IPI 3.2.3, tabela do registro E210, lida campo a campo: '
+            + 'REG · IND_MOV_ST · VL_SLD_CRED_ANT_ST · VL_DEVOL_ST · VL_RESSARC_ST · VL_OUT_CRED_ST · '
+            + 'VL_AJ_CREDITOS_ST · VL_RETENÇAO_ST · VL_OUT_DEB_ST · VL_AJ_DEBITOS_ST · '
+            + 'VL_SLD_DEV_ANT_ST · VL_DEDUÇÕES_ST · VL_ICMS_RECOL_ST · (campo 14, nome perdido na '
+            + 'conversão) · DEB_ESP_ST.',
+    },
+    // ⚠️ E ele tem **25** campos aqui contra **23** no EFD-Contribuições — a
+    // prova, de novo, de que leiaute é por FAMÍLIA (o 0500 e o 1010 já tinham
+    // custado recibo por essa mesma confusão).
+    D100: {
+        campos: 25,
+        fonte: 'Guia Prático do EFD ICMS/IPI 3.2.3, tabela do registro D100, lida campo a campo: '
+            + 'REG · IND_OPER · IND_EMIT · COD_PART · COD_MOD · COD_SIT · SER · SUB · NUM_DOC · '
+            + 'CHV_CTE · DT_DOC · DT_A_P · (campo 13, nome perdido na conversão) · CHV_CTE_REF · '
+            + 'VL_DOC · VL_DESC · IND_FRT · VL_SERV · VL_BC_ICMS · VL_ICMS · VL_NT · COD_INF · '
+            + 'COD_CTA · COD_MUN_ORIG · COD_MUN_DEST.',
+    },
+};
+
+/**
  * A tabela que a trava usa: **recibo VENCE, e o Guia cobre o resto**.
  *
  * Hoje são **250 registros** lidos por inteiro do Guia 3.2.3 — e os 45 que o
@@ -72,12 +124,17 @@ export const CAMPOS_POR_REGISTRO_FISCAL = (() => {
                 + `${reg} (extraída por scripts/extrair-leiaute-fiscal.mjs).`,
         };
     }
+    // A leitura humana do MESMO Guia entra por cima da extração que falhou…
+    for (const [reg, d] of Object.entries(CAMPOS_LIDOS_A_MAO_NO_GUIA_FISCAL)) tabela[reg] = d;
+    // …e o provado por recibo/arquivo aceito entra POR CIMA de tudo.
     for (const [reg, d] of Object.entries(CAMPOS_PROVADOS_POR_RECIBO_FISCAL)) tabela[reg] = d;
     return tabela;
 })();
 
 /** Registros que a tabela não cobre — a trava continua MUDA neles. */
-export const REGISTROS_SEM_CONTAGEM_FISCAL = REGISTROS_INCERTOS_NO_GUIA_FISCAL;
+export const REGISTROS_SEM_CONTAGEM_FISCAL = Object.freeze(
+    REGISTROS_INCERTOS_NO_GUIA_FISCAL.filter((r) => !CAMPOS_LIDOS_A_MAO_NO_GUIA_FISCAL[r]),
+);
 
 /** `|C100|0|1|…|` → ['C100','0','1',…] (o REG na posição 0, como o PVA conta). */
 function camposDaLinha(linha) {
