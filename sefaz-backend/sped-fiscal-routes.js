@@ -349,6 +349,27 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         });
         for (const linha of resumoPrevalidacao(prevalidacao)) dados.warnings.push(linha);
 
+        // 🚨 O QUE A TRAVA DE CONTAGEM NÃO CONFERIU VAI NOS **WARNINGS**, não só
+        // num header.
+        //
+        // A tela lê `X-SPED-Warnings` e `X-SPED-Auditoria` — e **não lê** o
+        // `X-SPED-Prevalidacao`. Pôr a lista só no header seria repetir, um
+        // nível acima, a classe que ela existe para fechar: flag que ninguém lê
+        // (o `coberturaIncompleta`, o E510 "pronto"). Ela sai nos dois.
+        //
+        // ⚠️ E ela NASCE MUDA: hoje os 45 registros que o gerador emite estão
+        // cobertos, então nenhum arquivo ganha linha nova. Ela fala no dia em
+        // que um registro NOVO entrar sem tabela — que é exatamente quando
+        // importa, e é o dia em que o 0500 saiu com o leiaute do vizinho.
+        const semContagem = conferirContagemDeCamposFiscal(linhasDoArquivo).naoConferidos;
+        if (semContagem.length) {
+            dados.warnings.push(
+                `⚠️ A contagem de campos NÃO conferiu ${semContagem.length} registro(s): `
+                + `${semContagem.join(', ')}. Silêncio aqui não é aprovação — o leiaute deles não `
+                + 'está no Guia extraído, então nada garante que saíram com o número certo de campos.',
+            );
+        }
+
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
 
@@ -396,7 +417,7 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
             // que só cobria os onze registros provados por recibo, que deixou o
             // 0500 sair com o leiaute do arquivo VIZINHO por meses (24/08). O
             // header do outro arquivo já leva esta lista; este não levava.
-            naoConferidos: conferirContagemDeCamposFiscal(linhasDoArquivo).naoConferidos,
+            naoConferidos: semContagem,
         })));
         return res.send(buffer);
     } catch (e) {

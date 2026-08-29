@@ -187,6 +187,22 @@ describe('📌 o `naoConferidos` chega na resposta da geração', () => {
         const header = fonte.slice(fonte.indexOf("X-SPED-Prevalidacao"));
         expect(header.slice(0, 900)).toMatch(/naoConferidos/);
     });
+
+    // 🚨 E O HEADER SOZINHO NÃO BASTA — a tela lê `X-SPED-Warnings` e
+    // `X-SPED-Auditoria`, e **não lê** o `X-SPED-Prevalidacao`. Deixar a lista
+    // só no header seria repetir, um nível acima, a classe que ela existe para
+    // fechar. Ela entra nos WARNINGS, que é o caminho que chega.
+    it('e entra nos WARNINGS, que é o que a tela lê', () => {
+        expect(fonte).toMatch(/warnings\.push\([\s\S]{0,400}NÃO conferiu/);
+        // ⚠️ Uma conferência só: duas chamadas divergiriam entre o aviso e o
+        // header no primeiro registro novo.
+        expect(fonte.match(/conferirContagemDeCamposFiscal\(linhasDoArquivo\)/g) || [])
+            .toHaveLength(1);
+    });
+
+    it('⚠️ e ela NASCE MUDA — arquivo coberto não ganha linha nova', () => {
+        expect(conferirContagemDeCamposFiscal(arquivoReal()).naoConferidos).toEqual([]);
+    });
 });
 
 describe('⚠️ o que a trava NÃO faz', () => {

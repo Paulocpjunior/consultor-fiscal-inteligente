@@ -17,6 +17,8 @@ export interface ErroContagemFiscal {
 
 export const CAMPOS_POR_REGISTRO_FISCAL: Record<string, ContagemFiscal | undefined>;
 export const CAMPOS_PROVADOS_POR_RECIBO_FISCAL: Record<string, ContagemFiscal>;
+/** Lido campo a campo do MESMO Guia, onde a extração mecânica não fechou. */
+export const CAMPOS_LIDOS_A_MAO_NO_GUIA_FISCAL: Record<string, ContagemFiscal>;
 /** Registros cuja leitura do Guia ficou incompleta — a trava é MUDA neles. */
 export const REGISTROS_SEM_CONTAGEM_FISCAL: readonly string[];
 
