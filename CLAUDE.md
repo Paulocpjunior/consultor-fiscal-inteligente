@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O LINK DENTRO DO CARD-FILTRO NÃO FUNCIONAVA — e ficou SEIS DIAS assim**
+  (29/08, Paulo, no 📋 Status de Captura por Empresa: *"o card não está
+  clicável, o link não está clicável"*).
+  🔴 A causa é de COMPOSIÇÃO, não de código: o card **inteiro** é um botão
+  (`cardFiltro('bloqueadas')`, com `onClick` no `<div>`), e os dois links de
+  "sem entrega" vivem DENTRO dele. Sem `stopPropagation` o clique **borbulha**
+  — o link aplica o filtro dele, o CARD aplica `bloqueadas` logo depois, e o
+  último vence. Para quem usa, isso é **indistinguível de "o link não faz
+  nada"**, e a única saída que sobra é repetir o clique (a família do "Já
+  importado" sem estado, 14/08).
+  🐛 **E O DEFEITO ERA MEU, DUAS VEZES.** O ⚠ A3 sem entrega nasceu assim em
+  23/08 e ninguém viu; em 29/08 eu escrevi o do NFS-e SP **copiando o padrão
+  quebrado**. Os dois `onClick` estão certos EM SI — é a composição com o card
+  que falha, e por isso nenhuma leitura de código pegaria.
+  📌 **REGRA QUE FICA: link/botão dentro de área clicável se prova por RENDER,
+  clicando** — a lição de 20/08 (o campo do cérebro do CFOP que a varredura
+  dizia estar certo e o dedo do Paulo não achava). O teste clica no link e lê a
+  LISTA: com o borbilhamento aparece a empresa BLOQUEADA no lugar da que o link
+  prometia. Provado revertendo os dois.
+  ⚠️ **E O RENDER NÃO BASTA SOZINHO**: ele cobre os links que EXISTEM, e o
+  defeito nasceu de cópia. Entrou também a varredura da CLASSE (todo `<button>`
+  dentro de `cardFiltro` precisa de `stopPropagation`) — as duas são
+  necessárias e nenhuma substitui a outra.
+  🐛 **A VARREDURA NASCEU ERRADA DE DUAS FORMAS, as duas MEDIDAS antes de
+  subir**: (1) `<button[^>]*>` para no primeiro `>` — e o **`=>` da arrow
+  function TEM um**, então ela lia meia tag e nunca chegava no
+  `stopPropagation`, acusando os dois botões recém-corrigidos; (2) a janela ia
+  do card até o PRÓXIMO card, e o ÚLTIMO da lista não tem próximo — a janela
+  dele engolia a tela inteira (barra de ferramentas, tabela, ações da linha) e
+  acusava seis botões que não estão em card nenhum. **Alarme falso sobre código
+  certo é o que faz a equipe desligar a trava**: a seta sai antes do recorte, e
+  a janela fecha no `</div>` DO CARD, contando profundidade.
+  ⚠️ **E o link limpa a BUSCA junto**, como o card faz: sem isso, clicar com uma
+  busca aberta devolveria a interseção — e o número do cabeçalho desmentiria a
+  lista logo abaixo (a régua de 27/08: filtro por causa VENCE o que estava
+  aberto).
+
 - **🚨 O CCM COM OITO ZEROS ATRAVESSOU O BACKEND INTEIRO COMO SE FOSSE
   INSCRIÇÃO — e a régua existia desde 21/08, no lugar errado** (29/08, LAV
   COMERCIO DE AUTOPECAS, relato do colaborador via Paulo: *"foi detectado que
