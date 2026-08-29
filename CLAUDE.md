@@ -5,6 +5,50 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 PAI × FILHO SE PAREIA PELA SEQUÊNCIA, NUNCA PELO PRIMEIRO — e a 1ª
+  versão da regra acusaria um arquivo CERTO em todo cliente com dois CT-e**
+  (29/08, fechando o cruzamento do EFD ICMS/IPI com o **E100** e o par
+  **D100 × D190**).
+  📖 **A FONTE DAS DUAS ESTÁ NO GUIA 3.2.3, literal**: no E100 campo 02,
+  *"o valor informado no campo deve ser menor ou igual ao valor no campo DT_FIN
+  do registro 0000 e maior ou igual ao valor no campo DT_INI do registro
+  0000"*, mais a Validação do Registro (*"Não podem ser informados dois ou mais
+  registros com a mesma combinação de valores dos campos 02 (DT_INI), 03
+  (DT_FIN)"*); e no D190, *"o valor informado deve ser igual ao valor do campo
+  VL_BC_ICMS do registro D100, **pai deste registro D190**"*.
+  🚨 **O D100 × D190 É A CLASSE QUE CUSTOU UM DIA DA PWR** (20/08, no par
+  C100 × C190) e que em 26/08 rendeu cinco regras novas: o **PAI lê os totais do
+  documento** e o **FILHO agrega os itens** — duas fontes, dois passos do
+  gerador. E aqui **o PVA não recusa**: ele só imprime um total menor, que é o
+  erro que sai do escritório e só aparece na fiscalização.
+  🐛 **E A REGRA NASCEU ERRADA DE DUAS FORMAS, as duas MEDIDAS antes de subir.**
+  (1) **Eu carreguei as posições do C100 para o D100.** O C100 tem **29** campos
+  e o D100 tem **23**: o par `VL_BC_ICMS`/`VL_ICMS` fica em **19/20**, não em
+  21/22. É o erro do `DT_FIN` de 22/08 e o do `COD_ITEM` dentro do bloco K —
+  **a posição é PARÂMETRO por registro, nunca dedução do vizinho**, e é
+  exatamente por isso que o A100 e o D100 ficam de fora das regras comuns do
+  C100 (26/08). Quem respondeu foi rodar o `buildBlocoD` REAL e ler a linha;
+  o teste passou a sair do gerador, nunca de linha escrita à mão.
+  (2) **Ela comparava `d100s[0]` contra a soma de TODOS os D190 do arquivo.**
+  Isso fecha no arquivo de UM conhecimento — que é o do teste — e mente em todos
+  os outros: empresa com dois CT-e teria a base do PRIMEIRO comparada com a soma
+  dos dois, e a prevalidação acusaria um arquivo **CERTO**, apontando o
+  documento **ERRADO**. Alarme sobre código certo é o jeito conhecido de a
+  equipe desligar a trava. O pareamento passou a ser o MESMO do C100 × C190
+  (R21): o filho pertence ao pai que o **antecede**, e `D990`/`E001` fecham.
+  ⚠️ **E A ORDEM MORDEU O TESTE JUNTO**: a versão que jogava os dois D190 no
+  FIM do array os deixava depois do `D990` — órfãos —, e o teste passava porque
+  o pai ficou **sem filho nenhum**. Passar pelo motivo errado é teste verde
+  sobre defeito vivo; as linhas entram no LUGAR da original.
+  ⚠️ **E O E100 QUINZENAL NÃO ACUSA, de propósito**: dois períodos DISTINTOS
+  dentro do mês são apuração legítima — o que o Guia proíbe é a mesma
+  combinação repetida. Cancelado (`COD_SIT` 02/03) também fica de fora do par
+  D100 × D190: ele sai com os campos de valor VAZIOS e sem filhos.
+  📌 **REGRA QUE FICA: regra de PAI × FILHO se prova com DOIS pais.** Com um só,
+  a soma global e o pareamento dão a mesma resposta — e é essa coincidência que
+  faz a versão errada passar no teste. O caso de dois documentos é o COMUM em
+  produção, e era justamente o que não estava coberto.
+
 - **🚨 O BLOCO 9 É A ARITMÉTICA QUE O PVA CONFERE PRIMEIRO — e ninguém a
   conferia** (29/08, fechando o cruzamento no EFD **ICMS/IPI**: dos 35 registros
   com conteúdo que o gerador emite, **13 não tinham regra**, e 9900/9990/9999
