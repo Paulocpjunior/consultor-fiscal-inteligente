@@ -5,6 +5,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 EU ACABEI DE CRIAR A FLAG QUE NINGUÉM LÊ — e o 9999 gritaria em TODO
+  arquivo** (29/08, dois achados sobre o meu PRÓPRIO trabalho, os dois
+  MEDIDOS).
+  🔴 **(1)** Pus o `naoConferidos` no header `X-SPED-Prevalidacao`… e **a tela
+  não lê esse header** (ela lê `X-SPED-Warnings` e `X-SPED-Auditoria`). Ou
+  seja, eu repeti um nível acima exatamente a classe que a lista existe para
+  fechar — a flag que ninguém consome (o `coberturaIncompleta`, o E510
+  "pronto"). Ela passou a sair também nos **WARNINGS**, que é o caminho que
+  chega, com **UMA** conferência só: duas chamadas divergiriam entre o aviso e
+  o header no primeiro registro novo.
+  🔴 **(2) E MEDIR O ARQUIVO REAL ACHOU O PIOR**: o **9999** caía em
+  `naoConferidos`, então a trava acenderia em **TODA geração** — o alarme
+  permanente que faz a equipe desligar a trava. A causa: a seção do 9999 é a
+  **ÚLTIMA** do Guia, então a varredura vai até o fim do documento e engole a
+  "Seção 5" inteira; a extração devolvia **67** campos.
+  ✂️ Os três incertos que o gerador EMITE foram lidos campo a campo na mesma
+  fonte: **9999 = 2** (REG · QTD_LIN), **E210 = 15** e **D100 = 25**.
+  ⚠️ **E o D100 tem 25 aqui contra 23 no EFD-Contribuições** — a prova, de
+  novo, de que **leiaute é por FAMÍLIA**. O 0500 e o 1010 já custaram recibo
+  por essa mesma confusão.
+  📌 **REGRA QUE FICA: buraco no MEIO da tabela não subestima a contagem; o
+  que subestima é o buraco no FIM.** No E210 e no D100 o ÚLTIMO número está
+  legível — e é ele que dá o total; o que se perdeu foi o *nome* de um campo do
+  meio. A régua `incerto = tem buraco` é conservadora demais, e por isso esses
+  entram por leitura à mão, com os campos nomeados para a conferência ser
+  refazível.
+  📌 **E A SEGUNDA REGRA É SOBRE MIM: aviso novo se mede sobre o ARQUIVO REAL
+  antes de subir.** Ler o código dizia que a lista nasceria vazia; rodar o
+  gerador mostrou o 9999 dentro dela. É a mesma disciplina do dia inteiro —
+  quem responde é o gerador, não a leitura.
+
 - **✅ A PENDÊNCIA QUE EU NOMEEI FECHOU NO MESMO DIA — e o que a autorizou foi
   o GABARITO, não a simetria** (29/08, logo depois da trava de contagem do EFD
   ICMS/IPI).
