@@ -84,6 +84,23 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [filtro, setFiltro] = useState<FiltroTipo>('bloqueadas');
     // '' = todos os colaboradores; nome exato = só empresas daquele responsável.
     const [filtroColaborador, setFiltroColaborador] = useState('');
+    // 🚨 O CLIQUE NO CARD PRECISA LEVAR OS OLHOS ATÉ O RESULTADO. Os cards
+    // ficam no TOPO; o select do filtro, o contador "N de M" e a TABELA ficam
+    // abaixo do bloco "Importar códigos" — fora da tela. Clicar no KPI mudava
+    // tudo isso sem NADA visível se mexer, e Paulo leu como *"é clicável mas
+    // não está funcional"* (29/08).
+    //
+    // ⚠️ Hook fica AQUI, no topo: a 1ª versão nasceu junto do `cardFiltro`, que
+    // vem DEPOIS dos early returns de loading/erro — hook condicional, e o
+    // React derruba a tela inteira com "Rendered more hooks than during the
+    // previous render".
+    const listaRef = useRef<HTMLDivElement | null>(null);
+    // Só rola quando o filtro vem de CARD/LINK (que estão no alto). O
+    // `<select>` NÃO rola: quem já está nele veria a página pular embaixo do
+    // dedo, o que é pior que não rolar.
+    const irParaLista = () => {
+        listaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
     const [busca, setBusca] = useState('');
     // Cadastro do cliente (pendências + responsável) — abre pela própria linha,
     // sem mandar o colaborador pra Carteira de Clientes em outra aba.
@@ -464,9 +481,9 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         role: 'button' as const,
         tabIndex: 0,
         title: 'Filtrar a tabela por esta pendência',
-        onClick: () => { setBusca(''); setFiltro(f); },
+        onClick: () => { setBusca(''); setFiltro(f); irParaLista(); },
         onKeyDown: (ev: React.KeyboardEvent) => {
-            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setBusca(''); setFiltro(f); }
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setBusca(''); setFiltro(f); irParaLista(); }
         },
     });
 
@@ -497,7 +514,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     {!!r.a3SemEntrega && (
                         <button
                             type="button"
-                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('a3-sem-entrega'); }}
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('a3-sem-entrega'); irParaLista(); }}
                             className="text-xs text-amber-700 underline text-left"
                             title="Empresas A3 cujo agente local cfi-a3 nunca entregou documento. Não prova que ele não rodou — rodada sem movimento não deixa registro."
                         >
@@ -510,7 +527,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     {!!(r.nfseSpSemEntrega || r.nfseSpComErro) && (
                         <button
                             type="button"
-                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsesp-sem-entrega'); }}
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsesp-sem-entrega'); irParaLista(); }}
                             className="text-xs text-amber-700 underline text-left"
                             title="Empresas do portal da capital cujo trilho nunca baixou nota, ou cujo último download falhou. O laço do portal cruza o dropdown de prestadores com o nosso cadastro pelo CCM — quem não casa é pulada sem gerar erro."
                         >
@@ -602,7 +619,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             )}
 
             {/* Filtros */}
-            <div className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+            <div ref={listaRef} className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg scroll-mt-4">
                 <select value={filtro} onChange={e => setFiltro(e.target.value as FiltroTipo)} className="px-3 py-1.5 text-sm border rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-slate-600">
                     <option value="bloqueadas">🚨 Bloqueadas (qualquer motivo)</option>
                     <option value="sem-uf">Sem UF cadastrada (dadosFiscais.uf)</option>
@@ -612,6 +629,17 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <option value="sem-ccmsp">Sem autorização NFSe SP</option>
                     <option value="nfse-nac-inativa">NFSe Nacional desativada</option>
                     <option value="sem-responsavel">👤 Sem responsável na carteira</option>
+                    {/* 🚨 ESTES DOIS FALTAVAM — e a falta fazia a tela MENTIR.
+                        O `<select>` é o único lugar que mostra QUAL filtro está
+                        aplicado; sem a opção, ele exibia "Bloqueadas" enquanto a
+                        tabela mostrava outra coisa. Para quem clicou no link do
+                        KPI isso é indistinguível de "não funcionou" — foi a
+                        segunda queixa do Paulo no mesmo dia (*"é clicável mas
+                        não está funcional"*), depois do borbulhamento.
+                        📌 Filtro que a tela não sabe NOMEAR é filtro que ninguém
+                        confia. */}
+                    <option value="a3-sem-entrega">⚠ A3 sem entrega do agente</option>
+                    <option value="nfsesp-sem-entrega">⚠ NFS-e SP sem entrega</option>
                     <option value="ok-tudo">✅ Captura sem bloqueio</option>
                     <option value="todas">Todas</option>
                 </select>

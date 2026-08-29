@@ -41,6 +41,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   busca aberta devolveria a interseção — e o número do cabeçalho desmentiria a
   lista logo abaixo (a régua de 27/08: filtro por causa VENCE o que estava
   aberto).
+  🚨 **E CORRIGIR O CLIQUE NÃO BASTOU — ele voltou no mesmo dia: *"é clicável
+  mas não está funcional"*.** Com o `stopPropagation` o filtro passava a ser
+  APLICADO, e a tela continuava sem DIZER isso, por duas razões somadas:
+  · o **`<select>` é o único lugar que mostra QUAL filtro está valendo — e ele
+  não tinha `<option>` para os dois novos**. Select controlado com um `value`
+  que não existe devolve `''`: ele exibia *"🚨 Bloqueadas"* enquanto a tabela
+  mostrava outra coisa. **A tela afirmava um filtro e aplicava outro.**
+  · e o RESULTADO ficava **fora do campo de visão**: os cards estão no topo, e
+  o select, o contador `N de M` e a tabela ficam abaixo do bloco "Importar
+  códigos". O clique mudava tudo isso sem nada visível se mexer.
+  ✂️ As duas `<option>` entraram, e card/link passaram a **rolar até a lista**.
+  ⚠️ O `<select>` NÃO rola: quem já está nele veria a página pular embaixo do
+  dedo, que é pior que não rolar.
+  📌 **REGRA QUE FICA: filtro que a tela não sabe NOMEAR é filtro que ninguém
+  confia — e clique cujo efeito acontece fora do campo de visão se lê como
+  clique que não fez nada.** Aplicar não basta: tem de DIZER e tem de MOSTRAR.
+  🐛 **E o `useRef` do scroll nasceu DEPOIS dos early returns** de loading/erro
+  — hook condicional, e o React derruba a tela inteira com *"Rendered more
+  hooks than during the previous render"*. Pego pelo teste, não pela tela.
 
 - **🚨 O CCM COM OITO ZEROS ATRAVESSOU O BACKEND INTEIRO COMO SE FOSSE
   INSCRIÇÃO — e a régua existia desde 21/08, no lugar errado** (29/08, LAV
