@@ -134,6 +134,43 @@ describe('🔒 nenhum leitor do backend pergunta o CCM sozinho', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// 🚨 CCM NÃO SE CONSULTA POR IGUALDADE — ele tem DUAS formas no cadastro.
+//
+// É a MESMA classe do CNPJ (07/08, regra que já está escrita dentro do
+// `empresa-por-cnpj.js`): `where('ccmSp','==',…)` casa com a forma legada do
+// topo e IGNORA `dadosFiscais.ccmSp`, que é o que o modal grava. A importação
+// do CSV do portal seguia sem `empresaId`/`empresaNome` e com a direção caindo
+// no palpite pelo nome do arquivo — na tela que o colaborador usa justamente
+// para trazer o movimento de serviço à mão.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🔒 nenhuma consulta por igualdade de CCM', () => {
+    const CONSULTA_POR_IGUALDADE = /where\(\s*'ccmSp'\s*,\s*'(==|in)'/;
+
+    // ⚠️ Lê CÓDIGO, nunca PROSA (a lição do catálogo de coleções, 26/08): o
+    // comentário que EXPLICA a correção cita o padrão antigo, e sem isto ele
+    // reprovaria a própria correção — foi o que aconteceu na 1ª execução.
+    const semComentarioAqui = (src: string) => src
+        .split('\n')
+        .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+        .join('\n');
+
+    it.each([
+        'sefaz-backend/nfse-sp-routes.js',
+        'sefaz-backend/nfse-sp-orchestrator.js',
+        'sefaz-backend/nfse-sp-portal-orchestrator.js',
+    ])('%s varre e normaliza, nunca compara no Firestore', (arquivo) => {
+        expect(semComentarioAqui(ler(arquivo))).not.toMatch(CONSULTA_POR_IGUALDADE);
+    });
+
+    // ⚠️ E a varredura pula o que já saiu do app: lápide de exclusão e
+    // perdedor de merge não podem responder pelo CCM (regra de 24/07).
+    it('a busca por CCM do CSV respeita a lápide', () => {
+        const src = ler('sefaz-backend/nfse-sp-routes.js');
+        expect(src).toMatch(/_merged_into \|\| d\._deleted/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // 🚨 O ARQUIVO FISCAL ERA O MAIS CARO: o 0000 declarava `00000000` no campo
 // Inscrição Municipal. Campo em branco é AUSÊNCIA; oito zeros é uma AFIRMAÇÃO
 // falsa de inscrição, e a diferença é a que esta casa paga caro.
