@@ -192,6 +192,60 @@ describe('montarLinhasStBlocoE', () => {
         expect(r.apuracoes.find((a) => a.uf === 'SP')?.icmsRecolher).toBe(700);
     });
 
+    // 🚨 29/08 — OS AJUSTES ESTAVAM NA CASA DO VIZINHO, e é a classe que esta
+    // casa mais paga: o SALDO fecha e o campo mente.
+    //
+    // 📖 O Guia 3.2.3 nomeia os quatro campos sem margem:
+    //  · 06 VL_OUT_CRED_ST    — "Ajustes 'Outros créditos ST' e 'Estorno de
+    //    débitos ST'", Σ dos E220 com 3º = '1' e 4º = '2' ou '3';
+    //  · 07 VL_AJ_CREDITOS_ST — "provenientes de ajustes do DOCUMENTO FISCAL",
+    //    ou seja dos C197;
+    //  · 09 VL_OUT_DEB_ST     — "Outros débitos ST e Estorno de créditos ST",
+    //    Σ dos E220 com 3º = '1' e 4º = '0' ou '1';
+    //  · 10 VL_AJ_DEBITOS_ST  — do C197, como o 07.
+    //
+    // O gerador punha os ajustes do E220 nos campos 07 e 10, deixando 06 e 09
+    // zerados com os E220 logo abaixo. É o E110 campo 11 (02/08) e o IPI em
+    // E200/E210 (04/08) de novo — e nenhum teste pegava porque nenhum olhava
+    // essas quatro casas.
+    it('🚨 o ajuste do E220 vai no campo 06/09, NUNCA no 07/10 (que são do C197)', () => {
+        const r = montarLinhasStBlocoE({
+            ...base,
+            ajustes: [
+                { codigo: 'SP100001', descricao: 'Outros débitos ST', valor: 100 },
+                { codigo: 'SP120002', descricao: 'Outros créditos ST', valor: 30 },
+            ],
+        });
+        // A base tem DUAS UFs (MG e SP) e o ajuste vale só na da EMPRESA — é
+        // a linha de SP que carrega a retenção de 1000,00.
+        const e210 = r.linhas.find((c: string[]) => c[0] === 'E210' && c.includes('1000,00'))!;
+        expect(e210).toBeDefined();
+        // ⚠️ DUAS CONVENÇÕES DE ÍNDICE CONVIVEM NESTE REPO, e eu tropecei nas
+        // duas hoje: aqui a linha é um ARRAY de campos com o REG na posição 0,
+        // então **campo N = índice N−1**; na prevalidação a linha é texto e o
+        // `split('|')` põe '' no 0 e o REG no 1, então **campo N = índice N**.
+        // Ler a posição pela convenção do vizinho é o erro do DT_FIN (22/08) e
+        // o do D100 com as casas do C100 — e foi o gerador REAL que respondeu.
+        expect(e210[5]).toBe('30,00');   // 06 VL_OUT_CRED_ST  ← E220 tipo 2
+        expect(e210[6]).toBe('0,00');    // 07 VL_AJ_CREDITOS_ST (C197 — não gerado)
+        expect(e210[8]).toBe('100,00');  // 09 VL_OUT_DEB_ST   ← E220 tipo 0
+        expect(e210[9]).toBe('0,00');    // 10 VL_AJ_DEBITOS_ST  (C197 — não gerado)
+    });
+
+    // ⚠️ E o SALDO não muda com a correção — ele já estava certo, e é isso que
+    // torna este defeito silencioso: mover o número de casa não mexe na conta.
+    it('e o saldo devedor apurado não muda com a correção', () => {
+        const r = montarLinhasStBlocoE({
+            ...base,
+            ajustes: [
+                { codigo: 'SP100001', descricao: 'Outros débitos ST', valor: 100 },
+                { codigo: 'SP120002', descricao: 'Outros créditos ST', valor: 30 },
+            ],
+        });
+        // retenção 1000 + débito 100 − crédito 30 = 1070
+        expect(r.apuracoes.find((a) => a.uf === 'SP')?.saldoDevedorApurado).toBe(1070);
+    });
+
     it('ajuste de ICMS PRÓPRIO não entra no E220 (é do E111) e não vira erro', () => {
         const r = montarLinhasStBlocoE({
             ...base,

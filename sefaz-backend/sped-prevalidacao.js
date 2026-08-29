@@ -1308,6 +1308,86 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+    // ── R39. Os ajustes do E210 (ST) batem com os E220 filhos ───────────────
+    //
+    // 📖 FONTE — Guia 3.2.3, E210, que nomeia os quatro campos sem margem:
+    //  · 06 `VL_OUT_CRED_ST`    — *"Ajustes 'Outros créditos ST' e 'Estorno de
+    //    débitos ST'"*, Σ dos **E220** com 3º = '1' e 4º = '2' ou '3';
+    //  · 07 `VL_AJ_CREDITOS_ST` — *"provenientes de ajustes do DOCUMENTO
+    //    FISCAL"*, ou seja dos **C197**;
+    //  · 09 `VL_OUT_DEB_ST`     — *"Outros débitos ST e Estorno de créditos
+    //    ST"*, Σ dos **E220** com 3º = '1' e 4º = '0' ou '1';
+    //  · 10 `VL_AJ_DEBITOS_ST`  — do **C197**, como o 07.
+    //
+    // 🚨 Até 29/08 o gerador punha os ajustes do E220 nos campos 07 e 10 — os
+    // do DOCUMENTO —, deixando 06 e 09 zerados com os E220 logo abaixo. O
+    // SALDO fechava; o campo é que mentia. É o E110 campo 11 (02/08) e o IPI
+    // em E200/E210 (04/08) de novo.
+    //
+    // ⚠️ O PAREAMENTO É PELA SEQUÊNCIA: a apuração de ST é **POR UF** e o
+    // arquivo tem um E200/E210 por estado. Somar todos os E220 contra o
+    // primeiro E210 acusaria arquivo CERTO — é a lição do D100 × D190, no
+    // mesmo dia.
+    (() => {
+        // ⚠️ O campo 06 é um PISO, não um total: o Guia soma ao E220 o
+        // `VL_ICMS_ST` de C190 de entrada. Comparar por igualdade acusaria
+        // arquivo correto em quem tem devolução de ST — a mesma decisão do
+        // `VL_REC_BRT` (25/08).
+        let atual = null;
+        let somas = null;
+        const fecha = () => {
+            if (!atual || !somas) return;
+            const e = campos(atual);
+            const deb = num(e[9]);
+            if (Math.abs(centavos(deb) - centavos(somas.debito)) > 1) {
+                add(erros, {
+                    regra: 'e210-x-e220', registro: 'E210', campo: '9 - VL_OUT_DEB_ST', linha: atual,
+                    valor: deb.toFixed(2), esperado: somas.debito.toFixed(2),
+                    mensagem: `O E210 declara "outros débitos ST" ${deb.toFixed(2)} e os E220 de débito/`
+                        + `estorno de crédito somam ${somas.debito.toFixed(2)}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. Os campos 07 e 10 são do C197 (ajuste '
+                        + 'do DOCUMENTO); os do E220 são o 06 e o 09. Cada UF aqui é uma GNRE.',
+                    fonte: 'Guia Prático 3.2.3, E210 campo 09: "o valor informado deve corresponder ao '
+                        + 'somatório do campo VL_AJ_APUR do registro E220, quando o terceiro caractere for '
+                        + "igual a '1' e o quarto for igual a '0' ou '1'\".",
+                });
+            }
+            const cred = num(e[6]);
+            if (centavos(cred) < centavos(somas.credito) - 1) {
+                add(erros, {
+                    regra: 'e210-x-e220', registro: 'E210', campo: '6 - VL_OUT_CRED_ST', linha: atual,
+                    valor: cred.toFixed(2), esperado: `≥ ${somas.credito.toFixed(2)}`,
+                    mensagem: `O E210 declara "outros créditos ST" ${cred.toFixed(2)}, menos que os E220 de `
+                        + `crédito/estorno de débito, que somam ${somas.credito.toFixed(2)}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. Este campo é um PISO: o Guia soma ao '
+                        + 'E220 o ICMS-ST dos C190 de entrada, então ele pode ser MAIOR — nunca menor.',
+                    fonte: 'Guia Prático 3.2.3, E210 campo 06: "o valor informado deve corresponder ao '
+                        + 'somatório do campo VL_AJ_APUR dos registros E220 quando o terceiro caractere for '
+                        + "igual a '1' e o quarto caractere do campo COD_AJ_APUR for igual a '2' ou '3' "
+                        + 'mais a soma do campo VL_ICMS_ST do registro C190".',
+                });
+            }
+        };
+        for (const l of lista) {
+            const reg = registroDe(l);
+            if (reg === 'E210') {
+                fecha();
+                atual = l;
+                somas = { debito: 0, credito: 0 };
+            } else if (reg === 'E220' && atual) {
+                const cod = String(campos(l)[2] || '').trim();
+                if (cod.length < 4 || cod[2] !== '1') continue;
+                const v = num(campos(l)[4]);
+                if (['0', '1'].includes(cod[3])) somas.debito += v;
+                else if (['2', '3'].includes(cod[3])) somas.credito += v;
+            } else if (reg === 'E200' || reg === 'E500' || reg === 'E990') {
+                fecha();
+                atual = null;
+            }
+        }
+        fecha();
+    })();
+
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────
     //
     // 📖 FONTE — Guia 3.2.3, G125 campo 02: *"o código informado neste campo

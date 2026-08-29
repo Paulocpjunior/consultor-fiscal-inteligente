@@ -756,3 +756,83 @@ describe('📖 os campos 03/07 do E110 vêm dos C197', () => {
         expect(so197(prevalidarSpedFiscal([REG0000, e110()]))).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R39 — os ajustes do E210 (ST) batem com os E220 filhos.
+//
+// 🚨 Até 29/08 o gerador punha os ajustes do E220 nos campos 07 e 10 — os do
+// DOCUMENTO FISCAL (C197) —, deixando 06 e 09 zerados com os E220 logo abaixo.
+// O SALDO fechava; o campo é que mentia. É o E110 campo 11 (02/08) e o IPI em
+// E200/E210 (04/08) de novo.
+//
+// ⚠️ O PAREAMENTO É PELA SEQUÊNCIA: a apuração de ST é POR UF e o arquivo tem
+// um E200/E210 por estado — cada UF aqui é uma GNRE. Somar todos os E220
+// contra o primeiro E210 acusaria arquivo CERTO (a lição do D100 × D190).
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 os ajustes do E210 (ST) batem com os E220', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { buildBlocoE } = require('../sefaz-backend/sped-fiscal-blocoE.js');
+    const REG0000 = L('0000', '020', '0', '01072026', '31072026', 'EMPRESA X', '11111111000191');
+    type ErroSt = { regra: string; campo?: string; mensagem?: string };
+    const so220 = (r: { erros: ErroSt[] }): ErroSt[] => r.erros.filter((e) => e.regra === 'e210-x-e220');
+
+    // Duas UFs: SP (a da empresa, que recebe os ajustes) e MG (só retenção).
+    const blocoE = () => buildBlocoE({
+        competenciaInicio: '2026-07', competenciaFim: '2026-07',
+        empresa: { cnpj: '11111111000191', _regime: 'lucro', dadosFiscais: { uf: 'SP' } },
+        notas: [
+            { direcao: 'saida', status: 'autorizado', ufDest: 'SP', totais: { vST: 1000 } },
+            { direcao: 'saida', status: 'autorizado', ufDest: 'MG', totais: { vST: 500 } },
+        ],
+        ajustesApuracao: [
+            { codigo: 'SP100001', descricao: 'outros débitos ST', valor: 100 },
+            { codigo: 'SP120002', descricao: 'outros créditos ST', valor: 30 },
+        ],
+        warnings: [] as string[],
+    }).map(sq);
+
+    it('nasce VERDE sobre o bloco E do gerador REAL, com ST em duas UFs', () => {
+        const linhas = blocoE();
+        // guardas: sem E210/E220 o teste passaria por vazio
+        expect(linhas.filter((l: string) => l.startsWith('|E210|'))).toHaveLength(2);
+        expect(linhas.filter((l: string) => l.startsWith('|E220|'))).toHaveLength(2);
+        expect(so220(prevalidarSpedFiscal([REG0000, ...linhas]))).toEqual([]);
+    });
+
+    // 🔴 É EXATAMENTE o que o app fazia antes: o ajuste no campo do C197 e o
+    // campo do E220 zerado.
+    it('acusa o "outros débitos ST" zerado com E220 de débito no arquivo', () => {
+        const linhas = blocoE().map((l: string) => (l.startsWith('|E210|') && l.includes('|1000,00|')
+            ? l.replace('|1000,00|100,00|0,00|', '|1000,00|0,00|100,00|') : l));
+        const e = so220(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e).toHaveLength(1);
+        expect(String(e[0].campo)).toContain('VL_OUT_DEB_ST');
+    });
+
+    // ⚠️ O campo 06 é um PISO — o Guia soma ao E220 o ICMS-ST dos C190 de
+    // entrada —, então MAIOR não acusa; só MENOR.
+    it('o campo 06 é PISO: maior que os E220 não acusa, menor acusa', () => {
+        const maior = blocoE().map((l: string) => (l.startsWith('|E210|') && l.includes('|1000,00|')
+            ? l.replace('|30,00|', '|80,00|') : l));
+        expect(so220(prevalidarSpedFiscal([REG0000, ...maior]))).toEqual([]);
+        const menor = blocoE().map((l: string) => (l.startsWith('|E210|') && l.includes('|1000,00|')
+            ? l.replace('|30,00|', '|10,00|') : l));
+        const e = so220(prevalidarSpedFiscal([REG0000, ...menor]));
+        expect(e.some((x) => String(x.campo).includes('VL_OUT_CRED_ST'))).toBe(true);
+    });
+
+    // 🚨 A UF de MG não tem ajuste nenhum — somar os E220 de SP contra ela
+    // acusaria um E210 CERTO. É a lição do D100 × D190, no mesmo dia.
+    it('o E210 da outra UF não herda os E220 de SP', () => {
+        const linhas = blocoE();
+        const mg = linhas.filter((l: string) => l.startsWith('|E210|') && l.includes('|500,00|'));
+        expect(mg).toHaveLength(1);
+        expect(so220(prevalidarSpedFiscal([REG0000, ...linhas]))).toEqual([]);
+    });
+
+    it('arquivo sem ST fica MUDO', () => {
+        expect(so220(prevalidarSpedFiscal([REG0000]))).toEqual([]);
+    });
+});
