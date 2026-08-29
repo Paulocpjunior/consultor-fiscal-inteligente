@@ -31,7 +31,7 @@ const BEM_VAZIO: BemCiap = {
     codigo: '', descricao: '', tipo: 'bem', codigoBemPrincipal: '',
     dataMovimentacao: new Date().toISOString().slice(0, 10), tipoMovimentacao: 'SI',
     creditoIcmsProprio: 0, creditoIcmsSt: 0, creditoIcmsFrete: 0, creditoIcmsDifal: 0,
-    numeroParcela: 1, funcao: '', contaContabil: '',
+    numeroParcela: 1, funcao: '', contaContabil: '', contaContabilNivel: '', contaContabilNome: '',
 };
 
 const CiapBlocoG: React.FC<Props> = ({ empresas, onShowToast }) => {
@@ -192,12 +192,37 @@ const CiapBlocoG: React.FC<Props> = ({ empresas, onShowToast }) => {
                                       DIZ que o PVA vai cobrar — em vez de inventar uma conta,
                                       que é a família do 'PARTSEM'.
                                     */}
-                                    <label style={lbl} title="Conta analítica de contabilização do bem (0500). Vai no COD_CTA do registro 0300, que o G125 referencia. Sem ela o campo sai vazio e o PVA cobra.">
+                                    <label style={lbl} title="Conta analítica de contabilização do bem. Vai no COD_CTA do 0300 e vira o registro 0500. Os TRÊS campos são necessários: sem nível e nome o 0500 não sai, e o código sozinho seria um órfão.">
                                         Conta contábil <span style={{ color: 'var(--text-muted)' }}>(0300)</span>
                                         <input
                                             value={bem.contaContabil || ''}
                                             placeholder="—"
                                             onChange={e => mudarBem(i, 'contaContabil', e.target.value)}
+                                            style={inputStyle}
+                                        />
+                                    </label>
+                                    {/*
+                                      🚨 COERÊNCIA É TUDO OU NADA: o COD_CTA do 0300 aponta para o
+                                      registro 0500, que exige NÍVEL e NOME da conta. Os três vêm do
+                                      plano de contas da empresa e o app não os deduz — sem os três, o
+                                      código também não sai (emitir a referência sem a declaração é
+                                      justamente a recusa).
+                                    */}
+                                    <label style={lbl} title="NÍVEL da conta no plano de contas (campo 05 do 0500).">
+                                        Nível da conta <span style={{ color: 'var(--text-muted)' }}>(0500)</span>
+                                        <input
+                                            value={bem.contaContabilNivel || ''}
+                                            placeholder="—"
+                                            onChange={e => mudarBem(i, 'contaContabilNivel', e.target.value)}
+                                            style={inputStyle}
+                                        />
+                                    </label>
+                                    <label style={lbl} title="NOME da conta no plano de contas (campo 07 do 0500).">
+                                        Nome da conta <span style={{ color: 'var(--text-muted)' }}>(0500)</span>
+                                        <input
+                                            value={bem.contaContabilNome || ''}
+                                            placeholder="—"
+                                            onChange={e => mudarBem(i, 'contaContabilNome', e.target.value)}
                                             style={inputStyle}
                                         />
                                     </label>

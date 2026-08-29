@@ -587,9 +587,11 @@ describe('🔒 o bloco 0 emite o 0300 quando a empresa tem CIAP', () => {
         participantes: [], unidades: [], itens: [], warnings: [] as string[], ...extra,
     });
 
+    const CONTA = { contaContabil: '1231001', contaContabilNome: 'MAQUINAS', contaContabilNivel: '5' };
+
     it('com CIAP, o 0300 do bem sai no bloco 0', () => {
         const dados = base({
-            ciap: { bens: [{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', contaContabil: '1231001' }] },
+            ciap: { bens: [{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', ...CONTA }] },
         });
         const linhas = buildBloco0(dados).map(sq);
         expect(linhas.filter((l: string) => l.startsWith('|0300|'))).toEqual([
@@ -597,11 +599,33 @@ describe('🔒 o bloco 0 emite o 0300 quando a empresa tem CIAP', () => {
         ]);
     });
 
+    // 🚨 O ÓRFÃO QUE O PRÓPRIO APP CRIOU ao passar a emitir o 0300: o COD_CTA
+    // aponta para o 0500, e o EFD ICMS/IPI não emitia 0500 NENHUM (ele só
+    // existia no EFD-Contribuições). Achado no mesmo dia, medindo de novo.
+    it('e o 0500 da conta sai junto — senão o COD_CTA é órfão', () => {
+        const linhas = buildBloco0(base({
+            ciap: { bens: [{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', ...CONTA }] },
+        })).map(sq);
+        expect(linhas.filter((l: string) => l.startsWith('|0500|'))).toEqual([
+            '|0500|01012026|01|A|5|1231001|MAQUINAS|',
+        ]);
+    });
+
+    // ⚠️ COERÊNCIA É TUDO OU NADA: sem NÍVEL e NOME não há 0500, e sem 0500 o
+    // COD_CTA também não sai.
+    it('conta incompleta: nem 0500, nem COD_CTA', () => {
+        const linhas = buildBloco0(base({
+            ciap: { bens: [{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', contaContabil: '1231001' }] },
+        })).map(sq);
+        expect(linhas.filter((l: string) => l.startsWith('|0500|'))).toEqual([]);
+        expect(linhas.find((l: string) => l.startsWith('|0300|'))).toBe('|0300|FRESA|1|FRESA|||48|');
+    });
+
     // ⚠️ O 0990 conta as linhas do bloco INCLUSIVE ele mesmo — acrescentar o
     // 0300 mexe nesse contador, e é a lição da AFFITTARE (24/08).
     it('e o 0990 continua contando as linhas certas', () => {
         const linhas = buildBloco0(base({
-            ciap: { bens: [{ codigo: 'A', descricao: 'A', tipo: 'bem' }] },
+            ciap: { bens: [{ codigo: 'A', descricao: 'A', tipo: 'bem', ...CONTA }] },
         })).map(sq);
         expect(linhas[linhas.length - 1]).toBe(`|0990|${linhas.length}|`);
     });
@@ -919,5 +943,62 @@ describe('🔒 a ordem dos blocos no arquivo continua a oficial', () => {
     it('e o bloco C é EXECUTADO antes do 0, que é o que o 0460 exige', () => {
         expect(src.indexOf('const linhasBlocoC = buildBlocoC(dados)'))
             .toBeLessThan(src.indexOf('const linhasBloco0 = buildBloco0(dados)'));
+    });
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R41 — o COD_CTA do 0300 está declarado no 0500.
+//
+// 🚨 É o órfão que o PRÓPRIO app criou ao passar a emitir o 0300 (29/08) — e
+// foi achado no MESMO dia, medindo de novo. O EFD ICMS/IPI não emitia 0500
+// nenhum (ele só existia no EFD-Contribuições), então todo COD_CTA apontava
+// para o nada. O Guia é literal: o 0500 existe *"relativas às contas
+// referenciadas no registro 0300"*.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 o COD_CTA do 0300 está declarado no 0500', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarRegistros0300 } = require('../sefaz-backend/sped-bloco-g.js');
+    const REG0000 = L('0000', '020', '0', '01072026', '31072026', 'EMPRESA X', '11111111000191');
+    const soCta = (r: { erros: Array<{ regra: string; mensagem?: string }> }) =>
+        r.erros.filter((e) => e.regra === '0300-conta-orfa');
+    const BEM = {
+        codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem',
+        contaContabil: '1231001', contaContabilNome: 'MAQUINAS', contaContabilNivel: '5',
+    };
+
+    it('nasce VERDE com o 0500 que o bloco 0 passou a emitir', () => {
+        const r = montarRegistros0300([BEM], '01072026');
+        expect(r.linhas0500).toHaveLength(1);
+        expect(soCta(prevalidarSpedFiscal([
+            REG0000, ...r.linhas.map(sq), ...r.linhas0500.map(sq),
+        ]))).toEqual([]);
+    });
+
+    // 🔴 O estado de antes: 0300 com COD_CTA e nenhum 0500 no arquivo.
+    it('acusa o COD_CTA sem 0500 — o órfão que o app criou', () => {
+        const r = montarRegistros0300([BEM], '01072026');
+        const e = soCta(prevalidarSpedFiscal([REG0000, ...r.linhas.map(sq)]));
+        expect(e).toHaveLength(1);
+        expect(String(e[0].mensagem)).toMatch(/1231001/);
+    });
+
+    it('acusa quando o 0500 é de OUTRA conta', () => {
+        const r = montarRegistros0300([BEM], '01072026');
+        const outra = L('0500', '01012026', '01', 'A', '5', '9999999', 'OUTRA');
+        expect(soCta(prevalidarSpedFiscal([REG0000, ...r.linhas.map(sq), outra]))).toHaveLength(1);
+    });
+
+    // ⚠️ 0300 sem COD_CTA não acusa — a falta já vai DITA na geração, e dois
+    // alarmes para um defeito é o caminho para a equipe ignorar os dois.
+    it('0300 sem COD_CTA fica MUDO nesta regra', () => {
+        const r = montarRegistros0300([{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem' }], '01072026');
+        expect(soCta(prevalidarSpedFiscal([REG0000, ...r.linhas.map(sq)]))).toEqual([]);
+    });
+
+    it('arquivo sem 0300 fica MUDO', () => {
+        expect(soCta(prevalidarSpedFiscal([REG0000]))).toEqual([]);
     });
 });

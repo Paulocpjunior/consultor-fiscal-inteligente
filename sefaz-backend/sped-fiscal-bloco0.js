@@ -138,9 +138,22 @@ function buildBloco0(dados) {
     // Só sai quando a empresa tem CIAP cadastrado — a maioria não tem, e o
     // bloco G dela sai vazio. Sem isto o G125 referenciaria um cadastro que o
     // arquivo não declara.
-    const r0300 = montarRegistros0300(dados.ciap?.bens);
+    const r0300 = montarRegistros0300(
+        dados.ciap?.bens,
+        fmt.formatCompetenciaInicio(dados.competenciaInicio),
+    );
     for (const l of r0300.linhas) linhas.push(l);
     if (Array.isArray(dados.warnings)) for (const a of r0300.avisos) dados.warnings.push(a);
+
+    // ── 0500 — Plano de contas das contas do 0300 ───────────────────────
+    // 🚨 O `COD_CTA` do 0300 aponta para AQUI: o Guia diz que o 0500 existe
+    // *"para identificar as contas contábeis (…) relativas às contas
+    // referenciadas no registro 0300"*. Emitir o COD_CTA sem esta declaração é
+    // o ÓRFÃO — a mesma classe do item do 0200 e do bem do G125 sem 0300 —, e
+    // é por isso que a conta só entra no 0300 quando ela está COMPLETA
+    // (código + nível + nome). Coerência é tudo ou nada (a régua do F100,
+    // 24/08).
+    for (const l of r0300.linhas0500) linhas.push(l);
 
     // ── 0460 — Tabela de Observações do Lançamento Fiscal ───────────────
     // Só sai quando o bloco C de fato emitiu um C195 (`dados.difalTemC195`, que
