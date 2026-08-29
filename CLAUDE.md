@@ -56,6 +56,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   painéis e o `xmlFiscalService`. É a diferença entre trava por VARREDURA e
   trava por LISTA (13/08) medida na hora: a lista que eu escrevi de cabeça tinha
   onze arquivos e faltavam três.
+  🔴 **E A VARREDURA SEGUINTE ACHOU O NONO LEITOR — uma CONSULTA POR IGUALDADE,
+  na tela que eu tinha acabado de recomendar.** A importação do CSV do portal
+  (o caminho para trazer o movimento de serviço à mão) procurava a empresa com
+  `where('ccmSp','==', ccmDoCsv)` — a forma LEGADA do topo. Para toda empresa
+  cadastrada pelo modal (`dadosFiscais.ccmSp`) a consulta voltava **VAZIA**, e a
+  importação seguia sem `empresaId`/`empresaNome`, com a direção caindo no
+  palpite pelo nome do arquivo. É a MESMA classe do CNPJ em duas formas (07/08),
+  cuja regra já está escrita dentro do `empresa-por-cnpj.js`: **nunca consultar
+  o Firestore por igualdade de um campo que tem duas formas.** Agora varre e
+  normaliza pelo dono — pulando lápide e perdedor de merge (regra de 24/07).
   📌 **REGRA QUE FICA: régua nasce na casa de quem MAIS lê, não na de quem
   primeiro precisou.** Esta nasceu no frontend porque o sintoma de 21/08 era de
   tela, e o custo real estava em nove leitores do backend — inclusive dois

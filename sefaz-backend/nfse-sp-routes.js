@@ -255,14 +255,28 @@ router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async
         // Se empresaCnpj não veio, usa o do CCM do CSV (procura por CCM no Firestore)
         if (!ctx.empresaCnpj && parsed.ccmExportado) {
             try {
+                // 🚨 NUNCA por IGUALDADE: o CCM tem DUAS formas no cadastro
+                // (`dadosFiscais.ccmSp`, que é o que o modal grava, e o
+                // `ccmSp` legado no topo), então `where('ccmSp','==',…)`
+                // achava ZERO para toda empresa cadastrada pelo modal — e a
+                // importação seguia sem `empresaId`/`empresaNome`, com a
+                // direção caindo no palpite pelo nome do arquivo. É a MESMA
+                // classe do CNPJ em duas formas (07/08), na tela que o
+                // colaborador usa para trazer o movimento de serviço à mão.
                 const db = admin.firestore();
+                const alvo = String(parsed.ccmExportado).replace(/\D/g, '');
                 for (const col of ['simples_empresas', 'lucro_empresas']) {
-                    const snap = await db.collection(col).where('ccmSp', '==', parsed.ccmExportado).limit(1).get();
-                    if (!snap.empty) {
-                        const d = snap.docs[0];
-                        ctx.empresaId = d.id;
-                        ctx.empresaCnpj = (d.data().cnpj || '').replace(/\D/g, '');
-                        ctx.empresaNome = d.data().razaoSocial || d.data().nome;
+                    const snap = await db.collection(col).get();
+                    const achado = snap.docs.find((doc) => {
+                        const d = doc.data() || {};
+                        if (d._merged_into || d._deleted) return false;   // perdedor de merge / lápide
+                        return ccmSpDaEmpresa(d) === alvo && alvo !== '';
+                    });
+                    if (achado) {
+                        const d = achado.data();
+                        ctx.empresaId = achado.id;
+                        ctx.empresaCnpj = (d.cnpj || '').replace(/\D/g, '');
+                        ctx.empresaNome = d.razaoSocial || d.nome;
                         break;
                     }
                 }
