@@ -208,17 +208,38 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
         }
 
         linhas.push(['E200', g.uf, dtIni, dtFin]);
+        // 🚨 29/08 — OS AJUSTES ESTAVAM NA CASA DO VIZINHO, e é a classe que
+        // esta casa mais paga: o SALDO fecha e o campo mente.
+        //
+        // 📖 O Guia 3.2.3 nomeia os quatro campos sem margem:
+        //  · 06 `VL_OUT_CRED_ST`   — *"Ajustes 'Outros créditos ST' e 'Estorno
+        //    de débitos ST'"*, Σ dos **E220** com 3º = '1' e 4º = '2' ou '3';
+        //  · 07 `VL_AJ_CREDITOS_ST` — *"provenientes de ajustes do DOCUMENTO
+        //    FISCAL"*, Σ dos **C197**;
+        //  · 09 `VL_OUT_DEB_ST`    — *"Outros débitos ST e Estorno de créditos
+        //    ST"*, Σ dos **E220** com 3º = '1' e 4º = '0' ou '1';
+        //  · 10 `VL_AJ_DEBITOS_ST` — do **C197**, como o 07.
+        //
+        // O gerador punha os ajustes do E220 nos campos 07 e 10 — os do
+        // documento fiscal —, deixando 06 e 09 zerados com os E220 logo
+        // abaixo. Medido: `|E210|1|…|0,00|30,00|380,79|0,00|100,00|450,79|…`,
+        // com o saldo (450,79) CERTO. É o E110 campo 11 (02/08) e o IPI em
+        // E200/E210 (04/08) de novo: cada número certo, na casa errada.
+        //
+        // ⚠️ 07 e 10 saem ZERO porque o app **não gera C197 de ST** — e aqui o
+        // zero É a resposta ("não há ajuste de documento"), não o default de
+        // quem não achou o dado (a régua de 06/08).
         linhas.push([
             'E210',
             '1',                              // IND_MOV_ST: 1 = com operações de ST
             dec(ap.saldoCredorAnterior),      // VL_SLD_CRED_ANT_ST
             dec(ap.devolucoes),               // VL_DEVOL_ST
             dec(ap.ressarcimentos),           // VL_RESSARC_ST
-            dec(ap.outrosCreditos),           // VL_OUT_CRED_ST
-            dec(ap.ajCreditos),               // VL_AJ_CREDITOS_ST
+            dec(ap.outrosCreditos + ap.ajCreditos),  // VL_OUT_CRED_ST  (E220 tipos 2 e 3)
+            dec(0),                           // VL_AJ_CREDITOS_ST (C197 — não gerado)
             dec(ap.retencao),                 // VL_RETENCAO_ST
-            dec(ap.outrosDebitos),            // VL_OUT_DEB_ST
-            dec(ap.ajDebitos),                // VL_AJ_DEBITOS_ST
+            dec(ap.outrosDebitos + ap.ajDebitos),    // VL_OUT_DEB_ST   (E220 tipos 0 e 1)
+            dec(0),                           // VL_AJ_DEBITOS_ST  (C197 — não gerado)
             dec(ap.saldoDevedorApurado),      // VL_SLD_DEV_ANT_ST — saldo devedor ANTES das deduções
             dec(ap.deducoes),                 // VL_DEDUCOES_ST
             dec(ap.icmsRecolher),             // VL_ICMS_RECOL_ST

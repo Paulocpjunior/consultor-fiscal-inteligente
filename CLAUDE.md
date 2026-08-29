@@ -5,6 +5,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 OS AJUSTES DE ST ESTAVAM NA CASA DO VIZINHO — o saldo fechava e o campo
+  mentia** (29/08, indo escrever a última regra do cruzamento do EFD ICMS/IPI).
+  📖 **O Guia 3.2.3 nomeia os quatro campos do E210 sem margem**: **06
+  `VL_OUT_CRED_ST`** é *"Ajustes 'Outros créditos ST' e 'Estorno de débitos
+  ST'"*, Σ dos **E220** (3º = '1', 4º = '2' ou '3'); **07 `VL_AJ_CREDITOS_ST`**
+  é *"provenientes de ajustes do **DOCUMENTO FISCAL**"*, ou seja dos **C197**;
+  **09 `VL_OUT_DEB_ST`** é a Σ dos E220 (4º = '0' ou '1'); e **10
+  `VL_AJ_DEBITOS_ST`** é do C197, como o 07.
+  🔴 O gerador punha os ajustes do E220 nos campos **07 e 10** — os do documento
+  —, deixando **06 e 09 zerados com os E220 logo abaixo**. Medido:
+  `|E210|1|…|0,00|30,00|380,79|0,00|100,00|450,79|…`, com o **saldo (450,79)
+  CERTO**. O arquivo declarava "ajuste de documento fiscal" (que exige um C197
+  que o app não gera) e ZERO no campo dos E220 que ele mesmo emitiu — duas
+  recusas por E210, em cada UF.
+  📌 **É O E110 CAMPO 11 (02/08) E O IPI EM E200/E210 (04/08) PELA TERCEIRA
+  VEZ**: cada número certo, na casa errada. **E é a mais silenciosa das três**,
+  porque mover o valor de campo **não mexe na conta** — nenhum total denuncia,
+  nenhum teste de aritmética pega. Só o PVA, ou ler o Guia.
+  ✅ **E foi ler o Guia que pegou** — não uma recusa. É a doutrina de 29/08:
+  *validação OFICIAL entra ANTES de a recusa acontecer*.
+  🚦 **A R39 entrou no MESMO PR**, e o pareamento é **pela SEQUÊNCIA**: a
+  apuração de ST é **POR UF** e o arquivo tem um E200/E210 por estado — **cada
+  UF aqui é uma GNRE**. Somar todos os E220 contra o primeiro E210 acusaria
+  arquivo CERTO; é a lição do D100 × D190, do mesmo dia.
+  ⚠️ **E o campo 06 é PISO, não total** — o Guia soma ao E220 o ICMS-ST dos C190
+  de entrada, então MAIOR não acusa, só MENOR. Comparar por igualdade acusaria
+  arquivo correto em quem tem devolução de ST (a decisão do `VL_REC_BRT`,
+  25/08).
+  ⚠️ **07 e 10 saem ZERO porque o app não gera C197 de ST** — e aqui o zero **É
+  a resposta** ("não há ajuste de documento"), não o default de quem não achou o
+  dado (a régua de 06/08).
+  🐛 **E ESTE PR ME PEGOU ERRANDO POSIÇÃO TRÊS VEZES — duas convenções convivem
+  no repo e eu tropecei nas duas.** Na LINHA (texto), o `split('|')` põe `''` no
+  0 e o REG no 1, então **campo N = índice N**; no ARRAY de campos, o REG ocupa
+  o 0, então **campo N = índice N−1**. Some-se a isso o `COD_AJ_APUR`, em que o
+  *"4º caractere"* é o **2º dígito** depois da UF. Nas três vezes quem respondeu
+  foi **rodar o gerador e ler a linha** — e nas três a régua estava certa e a
+  FIXTURE errada. **Posição se lê contando, nunca de olho.**
+
 - **🔒 A CLASSE FECHOU POR VARREDURA — "toda linha de SPED passa pelo
   `buildLine`"** (29/08, depois de a MESMA doença aparecer DUAS vezes no mesmo
   dia: bloco G e C195/C197).
