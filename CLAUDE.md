@@ -5,6 +5,53 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O TERCEIRO TRILHO TAMBÉM AFIRMAVA CAPTURA PELO CADASTRO — e era ELE o
+  caso da LAV** (29/08, Paulo mandando a LINHA dela: *"a empresa em questão
+  está com o cadastro ok"* — e estava mesmo).
+  📖 A linha, literal: `A1 vence 22/01/2027 · ✓ marcada · **— ADN** · ✓ ativa ·
+  ✓ NFe · ✓ NFSe SP · ✓ NFSe Nac · ✓ Captura OK`, com **0 NFS-e tomada** no
+  relatório da mesma competência.
+  🔴 **O `— ADN` era a resposta, e ela derruba a MINHA hipótese.** Eu tinha
+  passado o dia atrás do CCM com oito zeros; a LAV **não é de SP capital**, não
+  tem nem precisa de CCM, e o trilho do portal **não se aplica** a ela. A NFS-e
+  dela vem pelo **Padrão Nacional (ADN)** — e `classificarCapturaNfseNacionalAdn`
+  pergunta só *"a flag está ativa e existe certificado?"*. **Nada olhava se o
+  ADN alguma vez entregou documento desta empresa.**
+  📌 É a primeira regra permanente deste projeto invertida pela **TERCEIRA**
+  vez, sempre no trilho que ainda não tinha entrado: `temA3Proprio` (23/08),
+  `capturaNfseSpOk` (29/08 de manhã), agora o ADN. **Corrigir dois de três
+  trilhos deixa o defeito vivo justamente onde ninguém olhou** — e o que sobrou
+  era o da MAIORIA da carteira, porque quem não é da capital cai no ADN.
+  ✂️ `captura-nfse-nacional-cobertura.js` (PURO, irmão dos outros dois) lê
+  `nfse_nacional_dfe_state` e distingue **QUATRO** fatos, dois deles com ações
+  opostas: **nunca rodou** (âmbar — a primeira parada é nossa), **rodou e o ADN
+  não tem nada** (`NSU 0/0`), **o ADN TEM e nosso cursor não leu** (`NSU 0/42` —
+  âmbar, pendência nossa) e **entregou**.
+  🚨 **"SEM MOVIMENTO" É EXPLICAÇÃO, NÃO ALARME — e é essa a decisão que faz o
+  módulo servir.** O ADN RESPONDEU e disse que não tem documento; a causa mais
+  provável é o **município não transcrever ao Padrão Nacional** (em 22/08 a
+  medição mostrou **272 dos 394 municípios com sistema próprio** e o trilho com
+  histórico total ZERO). Pintar isso de âmbar acenderia centenas de empresas com
+  um alarme que ninguém consegue apagar — a lição do aluguel na Rotina (27/08).
+  A cor fica **neutra**, o fato vai DITO na linha, e o número é contado **à
+  parte** do de pendência.
+  ⚠️ **E O FATO NÃO VIRA VEREDITO SOBRE O MUNICÍPIO**: `maxNSU = 0` prova que o
+  ADN não tem nada para AQUELE CNPJ — não prova que a empresa não teve nota, nem
+  afirma qual sistema a prefeitura usa. A frase diz a causa como POSSIBILIDADE e
+  nomeia a saída (importar pelo município).
+  ⚠️ **O NSU COMPARA COMO NÚMERO**: ele chega com zeros à esquerda
+  (`'000000000000009'`), e comparar como TEXTO faria `'9' > '15'` — a empresa
+  que leu 9 de 15 apareceria como se tivesse lido tudo.
+  ⚠️ **E o `title` do pill JUNTA os dois fatos**: o `A3` diz de ONDE vem a
+  captura, a cobertura diz se ela ENTREGOU. Trocar um pelo outro apagaria metade
+  da resposta — e a primeira versão fez exatamente isso (dois `title` na mesma
+  tag, pego pelo `tsc`).
+  📌 **REGRA QUE FICA: quando uma régua de RESULTADO nasce, ela nasce para
+  TODOS os trilhos daquela pergunta — não para o que apareceu no print.** Foram
+  três correções em seis dias, sempre a mesma classe, sempre no trilho que tinha
+  ficado de fora. E o custo do que sobra é o pior: o cliente que ninguém checou
+  fica verde afirmando captura que nunca aconteceu.
+
 - **🚨 O LINK DENTRO DO CARD-FILTRO NÃO FUNCIONAVA — e ficou SEIS DIAS assim**
   (29/08, Paulo, no 📋 Status de Captura por Empresa: *"o card não está
   clicável, o link não está clicável"*).

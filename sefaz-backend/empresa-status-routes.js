@@ -33,6 +33,7 @@ import { validarRegimeParaGravacao } from './regime-tributario.js';
 import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
 import { ccmSpDaEmpresa, ccmSpParaGravar } from './ccm-sp.js';
 import { coberturaNfseSpPortal } from './captura-nfse-sp-cobertura.js';
+import { coberturaNfseNacional } from './captura-nfse-nacional-cobertura.js';
 
 const router = express.Router();
 
@@ -220,6 +221,31 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             console.warn('[empresa-status] nfsesp_portal_state indisponível:', e.message);
         }
 
+        // 3d. Estado do trilho NFS-e Nacional (ADN), por CNPJ.
+        //
+        // 🚨 O TERCEIRO trilho decidia por CADASTRO igual aos outros dois — e é
+        // ele que responde pela maioria da carteira (quem não é de SP capital).
+        // Foi o caso da LAV (29/08): cadastro impecável, `— ADN` na coluna do
+        // portal, `✓ NFSe Nac` verde, e ZERO NFS-e tomada no relatório.
+        //
+        // ⚠️ UMA query para a carteira inteira — leitura por card foi o HTTP
+        // 429 de 27/08.
+        const nfseNacStateMap = new Map();
+        try {
+            const nacSnap = await db.collection('nfse_nacional_dfe_state').get();
+            nacSnap.forEach(doc => {
+                const d = doc.data() || {};
+                nfseNacStateMap.set(limparCnpj(doc.id), {
+                    ultimaSyncMs: d.ultimaSync?.toMillis?.() ?? null,
+                    ultNSU: d.ultNSU ?? null,
+                    maxNSU: d.maxNSU ?? null,
+                });
+            });
+        } catch (e) {
+            // Falha de leitura não derruba o painel nem vira "nunca entregou".
+            console.warn('[empresa-status] nfse_nacional_dfe_state indisponível:', e.message);
+        }
+
         // 3b. Responsáveis (vínculos da Carteira de Clientes) por CNPJ.
         // Permite admin/colaborador ver de cara quem cuida de cada empresa
         // direto no painel de Status (antes precisava abrir Carteira de Clientes
@@ -254,6 +280,12 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             nfseSpSemEntrega: 0,
             nfseSpComErro: 0,
             nfseSpEntregue: 0,
+            // ADN: sem visita e não-lido são PENDÊNCIA; sem movimento é
+            // EXPLICAÇÃO (o município não transcreve) e vai contado à parte.
+            nfseNacSemVisita: 0,
+            nfseNacNaoLido: 0,
+            nfseNacSemMovimento: 0,
+            nfseNacEntregue: 0,
             usandoCertEscritorio: 0,
             semCertNenhum: 0,
             certExpirado: 0,
@@ -471,9 +503,26 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 certUploaded,
                 certValido,
             });
-            const capturaNfseNacionalOk = nfseNacStatus.ok;
             const capturaNfseNacionalVia = nfseNacStatus.via;
             if (nfseNacStatus.motivo) motivosBloqueio.push(nfseNacStatus.motivo);
+
+            // 🚨 O CADASTRO responde *"existe caminho?"*; a última rodada do ADN
+            // responde *"ENTREGOU?"*. São perguntas diferentes, e o pill mostra
+            // as duas — verde ao lado de "nunca rodou" seria a contradição na
+            // mesma tela que esta casa mais paga.
+            const coberturaNfseNac = coberturaNfseNacional({
+                aplicavel: nfseNacStatus.ok,
+                state: nfseNacStateMap.get(emp.cnpj) || null,
+            });
+            // ⚠️ `adn-sem-movimento` NÃO derruba o ok: o ADN respondeu e não tem
+            // nada — é explicação, não pendência. Acusar toda empresa de
+            // município que não usa o Padrão Nacional seria o alarme que
+            // ninguém consegue apagar.
+            const capturaNfseNacionalOk = nfseNacStatus.ok
+                && !['adn-sem-visita', 'adn-nao-lido'].includes(coberturaNfseNac.situacao);
+            if (coberturaNfseNac.cor === 'atencao' && coberturaNfseNac.acao) {
+                motivosBloqueio.push(`NFS-e Nacional: ${coberturaNfseNac.texto} ${coberturaNfseNac.acao}`);
+            }
 
             const item = {
                 id: emp.id,
@@ -494,6 +543,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 procuracaoEcacFlagBruta: emp.procuracaoEcacAtiva,
                 ccmSp: emp.ccmSp,
                 coberturaNfseSp,
+                coberturaNfseNac,
                 dadosFiscais: emp.dadosFiscais || {},
                 nfseSpAutorizado: !!emp.nfseSpAutorizadoEm,
                 // Trilho SP-capital se aplica a esta empresa? (município do
@@ -542,6 +592,10 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (coberturaNfseSp.situacao === 'nfsesp-sem-entrega') resumo.nfseSpSemEntrega++;
             else if (coberturaNfseSp.situacao === 'nfsesp-com-erro') resumo.nfseSpComErro++;
             else if (coberturaNfseSp.situacao === 'nfsesp-entregue') resumo.nfseSpEntregue++;
+            if (coberturaNfseNac.situacao === 'adn-sem-visita') resumo.nfseNacSemVisita++;
+            else if (coberturaNfseNac.situacao === 'adn-nao-lido') resumo.nfseNacNaoLido++;
+            else if (coberturaNfseNac.situacao === 'adn-sem-movimento') resumo.nfseNacSemMovimento++;
+            else if (coberturaNfseNac.situacao === 'adn-entregue') resumo.nfseNacEntregue++;
             if (emp.nfseNacionalDfeAtivo) resumo.nfseNacionalAtivo++;
             if (capturaNfeOk) resumo.capturaNfeOk++;
             else resumo.capturaNfeBloqueada++;

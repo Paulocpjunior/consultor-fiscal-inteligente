@@ -41,7 +41,7 @@ interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega' | 'nfsesp-sem-entrega';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega' | 'nfsesp-sem-entrega' | 'nfsenac-sem-entrega' | 'nfsenac-sem-movimento';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -398,9 +398,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 // olhar essas empresas.
                 case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk
                     && e.coberturaA3?.situacao !== 'a3-sem-entrega'
-                    && e.coberturaNfseSp?.entregou !== false;
+                    && e.coberturaNfseSp?.entregou !== false
+                    && e.coberturaNfseNac?.cor !== 'atencao';
                 case 'a3-sem-entrega': return e.coberturaA3?.situacao === 'a3-sem-entrega';
                 case 'nfsesp-sem-entrega': return e.coberturaNfseSp?.entregou === false;
+                case 'nfsenac-sem-entrega':
+                    return e.coberturaNfseNac?.situacao === 'adn-sem-visita'
+                        || e.coberturaNfseNac?.situacao === 'adn-nao-lido';
+                case 'nfsenac-sem-movimento': return e.coberturaNfseNac?.situacao === 'adn-sem-movimento';
                 case 'todas':
                 default: return true;
             }
@@ -534,6 +539,30 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                             ⚠ {(r.nfseSpSemEntrega || 0) + (r.nfseSpComErro || 0)} NFS-e SP sem entrega ›
                         </button>
                     )}
+                    {!!(r.nfseNacSemVisita || r.nfseNacNaoLido) && (
+                        <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsenac-sem-entrega'); irParaLista(); }}
+                            className="text-xs text-amber-700 underline text-left"
+                            title="Empresas do Padrão Nacional (ADN) cujo cron nunca rodou, ou cujo cursor não leu documento que o ADN TEM disponível."
+                        >
+                            ⚠ {(r.nfseNacSemVisita || 0) + (r.nfseNacNaoLido || 0)} NFS-e Nacional sem entrega ›
+                        </button>
+                    )}
+                    {/* ℹ️ NÃO é pendência: o ADN respondeu e não tem documento
+                        deste CNPJ. Fica em cinza, contado à parte — acusar
+                        centenas de empresas cujo município não usa o Padrão
+                        Nacional seria o alarme que ninguém consegue apagar. */}
+                    {!!r.nfseNacSemMovimento && (
+                        <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsenac-sem-movimento'); irParaLista(); }}
+                            className="text-xs text-slate-500 underline text-left"
+                            title="O ADN respondeu e não tem documento destas empresas (NSU 0/0). Não é falha da captura — a causa mais comum é o município não transcrever ao Padrão Nacional. Para ter a nota, importe pelo município."
+                        >
+                            ℹ️ {r.nfseNacSemMovimento} sem movimento no ADN ›
+                        </button>
+                    )}
                 </div>
                 <div {...cardFiltro('cert-vencendo', 'bg-yellow-50 border border-yellow-300 rounded-lg p-3')}>
                     <div className="text-xs text-yellow-700 font-semibold">Cert vencendo &lt;30d / Expirado ›</div>
@@ -640,6 +669,8 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         confia. */}
                     <option value="a3-sem-entrega">⚠ A3 sem entrega do agente</option>
                     <option value="nfsesp-sem-entrega">⚠ NFS-e SP sem entrega</option>
+                    <option value="nfsenac-sem-entrega">⚠ NFS-e Nacional sem entrega</option>
+                    <option value="nfsenac-sem-movimento">ℹ️ ADN sem movimento (município não transcreve)</option>
                     <option value="ok-tudo">✅ Captura sem bloqueio</option>
                     <option value="todas">Todas</option>
                 </select>
@@ -868,12 +899,25 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     : (e.coberturaNfseSp?.texto || undefined)}
                                                 label="NFSe SP"
                                             />
+                                            {/* 🚨 Terceiro estado também aqui. E o
+                                                `adn-sem-movimento` NÃO vira alerta: o ADN
+                                                respondeu e não tem nada — é explicação (o
+                                                município não transcreve), e vai no title. */}
                                             <Pill
                                                 ok={e.capturaNfseNacionalOk}
+                                                alerta={e.coberturaNfseNac?.cor === 'atencao'}
                                                 label={e.capturaNfseNacionalVia === 'a3-local' ? 'NFSe Nac A3' : 'NFSe Nac'}
-                                                title={e.capturaNfseNacionalVia === 'a3-local'
-                                                    ? 'Coberta por certificado A3. Captura depende do agente local cfi-a3, fora do cron em nuvem.'
-                                                    : undefined}
+                                                // ⚠️ Os DOIS fatos convivem: o A3 diz de onde
+                                                // vem a captura, a cobertura diz se ela
+                                                // ENTREGOU. Trocar um pelo outro apagaria
+                                                // metade da resposta.
+                                                title={[
+                                                    e.capturaNfseNacionalVia === 'a3-local'
+                                                        ? 'Coberta por certificado A3. Captura depende do agente local cfi-a3, fora do cron em nuvem.'
+                                                        : null,
+                                                    e.coberturaNfseNac?.texto,
+                                                    e.coberturaNfseNac?.acao,
+                                                ].filter(Boolean).join(' ') || undefined}
                                             />
                                         </div>
                                     </td>

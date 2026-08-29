@@ -39,6 +39,19 @@ export interface EmpresaStatusCaptura {
     capturarSefaz: boolean;
     capturaNfeOk: boolean;
     capturaNfseSpOk: boolean;
+    /** O trilho do Padrão Nacional (ADN) já ENTREGOU? (RESULTADO.) */
+    coberturaNfseNac?: {
+        situacao: 'nao-se-aplica' | 'adn-sem-visita' | 'adn-nao-lido' | 'adn-sem-movimento' | 'adn-entregue';
+        cor: 'neutro' | 'atencao' | 'ok';
+        aplicavel: boolean;
+        entregou: boolean | null;
+        texto: string | null;
+        acao: string | null;
+        entregueEm: number | null;
+        diasDesdeEntrega: number | null;
+        ultNSU?: number;
+        maxNSU?: number;
+    } | null;
     /** O trilho do portal de SP já ENTREGOU? (RESULTADO, não cadastro.) */
     coberturaNfseSp?: {
         situacao: 'nao-se-aplica' | 'nfsesp-sem-entrega' | 'nfsesp-com-erro' | 'nfsesp-entregue';
@@ -91,6 +104,10 @@ export interface EmpresaStatusResumo {
     nfseSpSemEntrega: number;
     nfseSpComErro: number;
     nfseSpEntregue: number;
+    nfseNacSemVisita: number;
+    nfseNacNaoLido: number;
+    nfseNacSemMovimento: number;
+    nfseNacEntregue: number;
     capturaNfseNacionalOk: number;
 }
 
@@ -330,7 +347,12 @@ export function exportarEmpresasCsv(empresas: EmpresaStatusCaptura[]): string {
         // que o trilho nunca visitou é a mesma mentira do pill verde.
         e.coberturaNfseSp?.entregou === false ? 'NÃO ENTREGOU'
             : e.capturaNfseSpOk ? 'sim' : 'NÃO',
-        e.capturaNfseNacionalOk ? 'sim' : 'NÃO',
+        // ⚠️ Exportar não pode perder a ressalva — nem confundir as duas: o ADN
+        // "sem movimento" respondeu e não tem nada (explicação); "sem entrega"
+        // é pendência nossa.
+        e.coberturaNfseNac?.situacao === 'adn-sem-movimento' ? 'sem movimento no ADN'
+            : e.coberturaNfseNac?.cor === 'atencao' ? 'NÃO ENTREGOU'
+                : e.capturaNfseNacionalOk ? 'sim' : 'NÃO',
         e.coberturaA3?.situacao === 'a3-entregue'
             ? `sim (${new Date(e.coberturaA3.entregueEm as number).toLocaleDateString('pt-BR')})`
             : e.coberturaA3?.situacao === 'a3-sem-entrega' ? 'NUNCA' : 'n/a',
