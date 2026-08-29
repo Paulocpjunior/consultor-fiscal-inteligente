@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📏 A MEDIÇÃO DE COBERTURA É PROXY, NÃO VEREDITO — e ela me deu 12 alarmes
+  falsos no mesmo dia em que me deu 1 achado real** (29/08).
+  📌 O cruzamento *"registros que o gerador EMITE × registros que a prevalidação
+  COBRE"* é o método que rendeu o dia inteiro — e ele é feito por **regex sobre
+  o fonte**, então ele só enxerga as formas que eu escrevi na varredura. Rodado
+  no EFD ICMS/IPI, devolveu dois descobertos e **um era real** (o C195 sem
+  0460). Rodado no EFD-**Contribuições**, devolveu **DOZE** — `0110`, `0150`,
+  `0500`, `A010`, `A170`, `C010`, `D010`, `F010`, `F100`, `M205`, `M500`,
+  `M605` — e **os doze estavam cobertos**: as regras os referenciam por
+  `linhasDoRegistro('A170')`, `startsWith('|M205|')` e `CAMPOS_POR_REGISTRO`,
+  formas que a minha varredura não casa.
+  🚨 **Se eu tivesse "corrigido" os doze, teria escrito doze regras
+  DUPLICADAS** — e regra duplicada é a segunda cópia que esta casa mais paga.
+  📌 **REGRA QUE FICA: alarme de varredura se TRIA antes de virar correção.**
+  Foi a segunda vez no mesmo dia (a primeira foi a tabela de tamanhos do bloco
+  0, com 3 de 4 alarmes falsos), e as duas triagens custaram um `grep`. A
+  varredura APONTA onde olhar; quem responde é o código.
+
 - **🚨 O 0460 NÃO EXISTIA — e esta validação corta nos DOIS SENTIDOS** (29/08,
   fechando o cruzamento do EFD ICMS/IPI **medindo**, não afirmando).
   📌 **O que fechou a conta foi rodar a medição de novo**: eu tinha escrito no
