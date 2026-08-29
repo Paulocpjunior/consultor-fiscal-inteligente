@@ -5,6 +5,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 EU CRIEI UM ÓRFÃO NOVO CORRIGINDO O ÓRFÃO ANTIGO — e o que o achou foi
+  perguntar "e para onde ESTE campo aponta?"** (29/08, horas depois de o 0300
+  entrar).
+  🔴 O `0300` passou a sair com `COD_CTA` preenchido — e o **EFD ICMS/IPI não
+  emitia `0500` NENHUM** (ele só existia no EFD-**Contribuições**). Ou seja: eu
+  fechei o bem órfão do G125 e **abri a conta órfã do 0300**, no mesmo dia.
+  📖 O Guia é literal: o 0500 existe *"para identificar as contas contábeis (…)
+  **relativas às contas referenciadas no registro 0300**"*, e o campo 06 do
+  0300 diz *"campo 06 do Registro 0500"*.
+  📌 **REGRA QUE FICA: registro novo que carrega um CÓDIGO se fecha perguntando
+  para onde esse código APONTA.** O de-para de órfãos desta casa já tem cinco
+  pares (C170→0200, C100→0150, 0200→0190, G125→0300, C195→0460) e eu tratei o
+  0300 como FOLHA — ele não é: ele é o meio da cadeia.
+  ✂️ **E a correção é a régua do F100/0500 (24/08), palavra por palavra:
+  coerência é TUDO OU NADA.** O 0500 exige `NIVEL` e `NOME_CTA`, que são do
+  plano de contas e o app não deduz — então o cadastro do bem passou a ter os
+  **TRÊS** campos, e **sem os três o `COD_CTA` também não sai**. Emitir a
+  referência sem a declaração é justamente a recusa.
+  ✅ **O que a régua DERIVA, com o motivo**: `COD_NAT_CC` = **01 (Contas de
+  ativo)**, porque o bem do CIAP É ativo imobilizado; `IND_CTA` = **A**, porque
+  o próprio 0300 chama o campo de *"conta ANALÍTICA"*; e `DT_ALT` = 1º de
+  janeiro, como o 0500 do EFD assinado do CF BANK.
+  ⚠️ **E o 0500 é DEDUPLICADO por conta**: o Guia proíbe dois registros com a
+  mesma combinação `DT_ALT + COD_CTA`, e dez bens na mesma conta são UM 0500.
+  ⚠️ **O leiaute é por FAMÍLIA**: o 0500 do EFD ICMS/IPI tem **7** campos e o
+  do EFD-Contribuições tem **9** (com `COD_CTA_REF`/`NOME_CTA_REF`). É o erro
+  do 0500 de 24/08 ao contrário — lá eu copiei o do ICMS/IPI para o
+  Contribuições; aqui eu poderia ter copiado o do Contribuições para cá.
+
 - **📏 A MEDIÇÃO DE COBERTURA É PROXY, NÃO VEREDITO — e ela me deu 12 alarmes
   falsos no mesmo dia em que me deu 1 achado real** (29/08).
   📌 O cruzamento *"registros que o gerador EMITE × registros que a prevalidação

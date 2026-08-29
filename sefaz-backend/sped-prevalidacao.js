@@ -1388,6 +1388,42 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         fecha();
     })();
 
+    // ── R41. O COD_CTA do 0300 tem de estar declarado no 0500 ───────────────
+    //
+    // 📖 FONTE — Guia 3.2.3, 0300 campo 06: *"Código da conta analítica de
+    // contabilização do bem ou componente (**campo 06 do Registro 0500**)"*; e o
+    // 0500 abre dizendo que existe *"para identificar as contas contábeis (…)
+    // **relativas às contas referenciadas no registro 0300**"*.
+    //
+    // 🚨 É o órfão que o PRÓPRIO app criou ao passar a emitir o 0300 (29/08) —
+    // achado no mesmo dia, medindo de novo. O EFD ICMS/IPI não emitia 0500
+    // nenhum (ele só existia no EFD-Contribuições), então todo COD_CTA
+    // apontava para o nada. É a família do item do 0200, do bem do G125 e da
+    // observação do C195.
+    (() => {
+        const r0300 = doReg('0300');
+        if (!r0300.length) return;
+        const declaradas = new Set(doReg('0500').map((l) => String(campos(l)[6] || '').trim()));
+        const usadas = [...new Set(r0300
+            .map((l) => String(campos(l)[6] || '').trim())
+            .filter(Boolean))];
+        const orfas = usadas.filter((c) => !declaradas.has(c));
+        if (orfas.length) {
+            add(erros, {
+                regra: '0300-conta-orfa', registro: '0300', campo: '6 - COD_CTA', linha: r0300[0],
+                valor: orfas.slice(0, 5).join(', '), esperado: 'um 0500 por conta',
+                mensagem: `${orfas.length} conta(s) do CIAP são referenciadas no 0300 e não têm registro `
+                    + `0500 (${orfas.slice(0, 5).join(', ')}${orfas.length > 5 ? '…' : ''}).`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O 0500 é o plano de contas das contas do '
+                    + '0300; sem ele o COD_CTA aponta para quem o arquivo não declara. Coerência é tudo ou '
+                    + 'nada: preencha código, NÍVEL e NOME em SPED Fiscal → aba 🏭 CIAP, ou deixe os três '
+                    + 'em branco.',
+                fonte: 'Guia Prático 3.2.3, 0500: "identificar as contas contábeis (…) relativas às contas '
+                    + 'referenciadas no registro 0300"; e 0300 campo 06: "campo 06 do Registro 0500".',
+            });
+        }
+    })();
+
     // ── R40. O COD_OBS do C195 e o 0460 se referenciam nos DOIS sentidos ────
     //
     // 📖 FONTE — Guia 3.2.3, C195 campo 02: *"o código informado deve constar

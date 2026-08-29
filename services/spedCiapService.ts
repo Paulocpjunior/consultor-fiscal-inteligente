@@ -25,10 +25,18 @@ export interface BemCiap {
     /**
      * Conta analítica de contabilização do bem (campo 06 do 0500) — é o
      * `COD_CTA` do registro **0300**, que o G125 referencia. O app NÃO a
-     * deduz: ela é do plano de contas da empresa, e sem ela o campo sai VAZIO
-     * com a falta NOMEADA na geração.
+     * deduz: ela é do plano de contas da empresa.
+     *
+     * 🚨 COERÊNCIA É TUDO OU NADA (a régua do F100/0500, 24/08): o COD_CTA
+     * aponta para o **0500**, e o Guia diz que ele existe *"relativas às contas
+     * referenciadas no registro 0300"*. O 0500 exige NÍVEL e NOME, então sem os
+     * TRÊS o COD_CTA também não sai — código sem a declaração é o órfão.
      */
     contaContabil?: string;
+    /** NIVEL do 0500 (campo 05) — do plano de contas, não se deduz. */
+    contaContabilNivel?: string;
+    /** NOME_CTA do 0500 (campo 07) — do plano de contas, não se deduz. */
+    contaContabilNome?: string;
 }
 
 export interface CiapDoc {
@@ -87,6 +95,8 @@ export async function salvarCiap(p: CiapDoc): Promise<void> {
             // #382): campo fora do sanitize é DESCARTADO EM SILÊNCIO — a tela
             // diz "salvo" e nada persiste.
             contaContabil: String(b.contaContabil || '').trim(),
+            contaContabilNivel: String(b.contaContabilNivel || '').trim(),
+            contaContabilNome: String(b.contaContabilNome || '').trim(),
         })),
         saldoInicial: n2(p.saldoInicial),
         outrosCreditos: n2(p.outrosCreditos),

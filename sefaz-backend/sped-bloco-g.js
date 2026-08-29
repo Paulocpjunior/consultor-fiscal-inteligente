@@ -232,23 +232,51 @@ function dataSped(valor) {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
+ * A conta contábil do bem está COMPLETA para virar 0500?
+ *
+ * 🚨 COERÊNCIA É TUDO OU NADA — a régua do F100/0500 (24/08). O `COD_CTA` do
+ * 0300 aponta para o **0500**, e o Guia é literal: o 0500 existe *"para
+ * identificar as contas contábeis (…) **relativas às contas referenciadas no
+ * registro 0300**"*. Então o COD_CTA sem o 0500 é ÓRFÃO — e o 0500 precisa de
+ * `NIVEL` e `NOME_CTA`, que são do PLANO DE CONTAS da empresa e o app não
+ * deduz. Sem os três, o COD_CTA também não sai.
+ */
+export function contaContabilCompleta(bem) {
+    return Boolean(
+        String(bem?.contaContabil || '').trim()
+        && String(bem?.contaContabilNome || '').trim()
+        && String(bem?.contaContabilNivel || '').trim(),
+    );
+}
+
+/**
  * 0300 — Cadastro de bens ou componentes do ativo imobilizado.
  * Um por bem do CIAP, montado do MESMO cadastro que alimenta o G125.
  *
- * Devolve `{ linhas, avisos }` — a falta do COD_CTA sai DITA, nunca calada.
+ * Devolve `{ linhas, linhas0500, avisos }` — a falta da conta sai DITA, nunca
+ * calada, e o COD_CTA só entra quando o 0500 correspondente também sai.
  */
-export function montarRegistros0300(bens) {
+export function montarRegistros0300(bens, dtIni) {
     const lista = Array.isArray(bens) ? bens : [];
     const linhas = [];
     const avisos = [];
     const semConta = [];
+    /** COD_CTA → {nivel, nome} — dedup: o Guia proíbe dois 0500 com o mesmo par. */
+    const contas = new Map();
     for (const bem of lista) {
         const codigo = String(bem?.codigo || '').trim();
         // Bem sem código já é acusado por `apurarCiap` — aqui ele não vira um
         // 0300 anônimo, que seria cadastro fabricado.
         if (!codigo) continue;
-        const conta = String(bem?.contaContabil || '').trim();
-        if (!conta) semConta.push(codigo);
+        const completa = contaContabilCompleta(bem);
+        const conta = completa ? String(bem.contaContabil).trim() : '';
+        if (!completa) semConta.push(codigo);
+        else if (!contas.has(conta)) {
+            contas.set(conta, {
+                nivel: String(bem.contaContabilNivel).trim(),
+                nome: String(bem.contaContabilNome).trim(),
+            });
+        }
         linhas.push(fmt.buildLine([
             '0300',
             fmt.sanitizeString(codigo, 60),
@@ -259,15 +287,31 @@ export function montarRegistros0300(bens) {
             String(PARCELAS_CIAP),
         ]));
     }
+    // 0500 — REG|DT_ALT|COD_NAT_CC|IND_CTA|NIVEL|COD_CTA|NOME_CTA (7 campos;
+    // o do EFD-Contribuições tem 9 — leiaute por FAMÍLIA, nunca deduzido).
+    //
+    // ✅ O que a régua DERIVA, com o motivo: `COD_NAT_CC` = **01 (Contas de
+    // ativo)**, porque o bem do CIAP É ativo imobilizado; `IND_CTA` = **A**,
+    // porque o próprio 0300 chama o campo de *"conta ANALÍTICA"*; e `DT_ALT` =
+    // 1º de janeiro do ano, como o 0500 do EFD assinado do CF BANK.
+    const dt = String(dtIni || '').replace(/\D/g, '');
+    const dtAlt = dt.length === 8 ? `0101${dt.slice(4)}` : dt;
+    const linhas0500 = [...contas.entries()].map(([cod, c]) => fmt.buildLine([
+        '0500', dtAlt, '01', 'A',
+        fmt.sanitizeString(c.nivel, 5),
+        fmt.sanitizeString(cod, 60),
+        fmt.sanitizeString(c.nome, 60),
+    ]));
     if (semConta.length) {
         avisos.push(
-            `0300 (CIAP): ${semConta.length} bem(ns) sem a CONTA CONTÁBIL — o campo COD_CTA sai VAZIO e o `
-            + `PVA o cobra (${semConta.slice(0, 5).join(', ')}${semConta.length > 5 ? '…' : ''}). `
-            + 'A conta analítica é do plano de contas da empresa e o app não a deduz: preencha em '
-            + 'SPED Fiscal → aba 🏭 CIAP (Bloco G), no campo "Conta contábil" de cada bem.',
+            `0300 (CIAP): ${semConta.length} bem(ns) sem a CONTA CONTÁBIL COMPLETA — o campo COD_CTA sai `
+            + `VAZIO e o PVA o cobra (${semConta.slice(0, 5).join(', ')}${semConta.length > 5 ? '…' : ''}). `
+            + 'O COD_CTA aponta para o registro 0500, que exige também o NÍVEL e o NOME da conta: são do '
+            + 'plano de contas da empresa e o app não os deduz — emitir o código sem a declaração é '
+            + 'justamente a recusa. Preencha os TRÊS em SPED Fiscal → aba 🏭 CIAP (Bloco G).',
         );
     }
-    return { linhas, avisos };
+    return { linhas, linhas0500, avisos };
 }
 
 /**
