@@ -383,3 +383,138 @@ describe('📖 o D100 bate com os D190', () => {
         expect(soD(prevalidarSpedFiscal([REG0000]))).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R34 — o G110 (CIAP) fecha consigo mesmo.
+//
+// O Guia 3.2.3 escreve as três contas POR EXTENSO no próprio registro, e o
+// número que sai dele **vira ajuste de apuração**: um G110 que não fecha
+// credita ICMS a mais ou a menos, e o PVA aceita.
+//
+// 🚨 E o caminho até aqui achou um DEFEITO VIVO no gerador: o bloco G montava
+// as linhas à mão (`[...].join('|')`), sem o `|` inicial e sem o `\r\n` — e o
+// orquestrador junta os blocos com `join('')`, então G001, G110, G125 e G990
+// saíam **grudados numa linha só**, colados na cauda do bloco E. É o caso
+// REALITY de 21/08 vivo no bloco G, e ele nunca tinha aparecido porque a ÚNICA
+// empresa com CIAP (EXPERTE) está bloqueada na captura.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 o G110 do CIAP fecha consigo mesmo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarLinhasBlocoG, apurarCiap } = require('../sefaz-backend/sped-bloco-g.js');
+    const REG0000 = L('0000', '020', '0', '01062026', '30062026', 'EMPRESA X', '11111111000191');
+    type ErroG = { regra: string; campo?: string; mensagem?: string };
+    const soG = (r: { erros: ErroG[] }): ErroG[] => r.erros.filter((e) => e.regra === 'g110-nao-fecha');
+
+    // Os números REAIS do relatório do PVA da EXPERTE (06/2026): Σ parcelas
+    // 527,53 × índice 0,86032111 = 453,85.
+    const BEM = (codigo: string, credito: number, parcela: number) => ({
+        codigo, descricao: codigo, tipo: 'bem', dataMovimentacao: '2026-06-01',
+        tipoMovimentacao: 'SI', creditoIcmsProprio: credito, creditoIcmsSt: 0,
+        creditoIcmsFrete: 0, creditoIcmsDifal: 0, numeroParcela: parcela,
+    });
+    const blocoG = () => montarLinhasBlocoG({
+        apuracao: apurarCiap({
+            bens: [BEM('CHAPAS', 955.50, 12), BEM('FRESA', 7778.06, 12),
+                BEM('RETIFICADORA', 13200.30, 35), BEM('ROLAMENTOS', 3387.47, 10)],
+            saldoInicial: 25321.33, saidasTributadas: 425472.59, saidasTotais: 494550.91,
+        }),
+        dtIni: '2026-06-01', dtFin: '2026-06-30',
+    }).map(sq);
+
+    it('nasce VERDE sobre o bloco G do gerador REAL (números do PVA da EXPERTE)', () => {
+        const linhas = blocoG();
+        // guarda: sem G110/G125 o teste passaria por vazio
+        expect(linhas.some((l: string) => l.startsWith('|G110|'))).toBe(true);
+        expect(linhas.filter((l: string) => l.startsWith('|G125|'))).toHaveLength(4);
+        expect(soG(prevalidarSpedFiscal([REG0000, ...linhas]))).toEqual([]);
+    });
+
+    it('acusa Σ das parcelas que não bate com os G125', () => {
+        const linhas = blocoG().map((l: string) => (l.startsWith('|G110|')
+            ? l.replace('|527,53|425472,59|', '|600,00|425472,59|') : l));
+        const e = soG(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e.some((x) => String(x.campo).includes('SOM_PARC'))).toBe(true);
+    });
+
+    it('acusa saída tributada MAIOR que o total', () => {
+        const linhas = blocoG().map((l: string) => (l.startsWith('|G110|')
+            ? l.replace('|425472,59|494550,91|', '|500000,00|494550,91|') : l));
+        const e = soG(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e.some((x) => String(x.campo).includes('VL_TRIB_EXP'))).toBe(true);
+    });
+
+    it('acusa índice que não é a divisão declarada', () => {
+        const linhas = blocoG().map((l: string) => (l.startsWith('|G110|')
+            ? l.replace('|0,86032111|', '|0,50000000|') : l));
+        const e = soG(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e.some((x) => String(x.campo).includes('IND_PER_SAI'))).toBe(true);
+    });
+
+    // 🚨 O campo mais caro: é ele que vira crédito na apuração.
+    it('acusa crédito apropriado que não é Σ parcelas × índice', () => {
+        const linhas = blocoG().map((l: string) => (l.startsWith('|G110|')
+            ? l.replace('|453,85|', '|527,53|') : l));
+        const e = soG(prevalidarSpedFiscal([REG0000, ...linhas]));
+        expect(e.some((x) => String(x.campo).includes('ICMS_APROP'))).toBe(true);
+    });
+
+    // ⚠️ Mês SEM saída não acusa índice: total zero é fato (a empresa não
+    // vendeu), e dividir ali seria o app inventando a conta.
+    it('mês sem saída nenhuma NÃO acusa o índice', () => {
+        const vazio = montarLinhasBlocoG({
+            apuracao: apurarCiap({
+                bens: [BEM('CHAPAS', 955.50, 12)],
+                saldoInicial: 0, saidasTributadas: 0, saidasTotais: 0,
+            }),
+            dtIni: '2026-06-01', dtFin: '2026-06-30',
+        }).map(sq);
+        expect(soG(prevalidarSpedFiscal([REG0000, ...vazio]))).toEqual([]);
+    });
+
+    it('arquivo sem bloco G fica MUDO', () => {
+        expect(soG(prevalidarSpedFiscal([REG0000]))).toEqual([]);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R35 — bloco K com dados exige o K010.
+//
+// O K010 declara o LEIAUTE escolhido (Ajuste SINIEF 02/09), e é ele que diz ao
+// PVA quais registros cobrar. ⚠️ O gerador de hoje NÃO produz esta recusa: sem
+// o leiaute cadastrado o bloco sai `K001|1` (SEM DADOS) e GRITA. A regra nasce
+// VERDE — ela existe para o dia em que alguém montar o K001|0 por outro
+// caminho.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 o bloco K com dados traz o K010', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarBlocoK } = require('../sefaz-backend/sped-bloco-k.js');
+    const REG0000 = L('0000', '020', '0', '01072026', '31072026', 'EMPRESA X', '11111111000191');
+    const soK = (r: { erros: Array<{ regra: string }> }) =>
+        r.erros.filter((e) => e.regra === 'k010-ausente');
+
+    it('nasce VERDE: sem apontamento o gerador sai K001|1, não K001|0 sem K010', () => {
+        const campos = montarBlocoK({ empresa: {}, apontamento: null, dtFin: '31072026' });
+        const linhas = (campos.linhas || campos).map((c: string[]) => L(...c));
+        expect(linhas[0]).toBe('|K001|1|');
+        expect(soK(prevalidarSpedFiscal([REG0000, ...linhas]))).toEqual([]);
+    });
+
+    it('acusa K001 com dados e sem K010', () => {
+        const e = soK(prevalidarSpedFiscal([REG0000, L('K001', '0'), L('K100', '01072026', '31072026')]));
+        expect(e).toHaveLength(1);
+    });
+
+    it('com K010 não acusa', () => {
+        expect(soK(prevalidarSpedFiscal([
+            REG0000, L('K001', '0'), L('K010', '1'), L('K100', '01072026', '31072026'),
+        ]))).toEqual([]);
+    });
+
+    it('bloco K SEM DADOS fica MUDO', () => {
+        expect(soK(prevalidarSpedFiscal([REG0000, L('K001', '1')]))).toEqual([]);
+    });
+});
