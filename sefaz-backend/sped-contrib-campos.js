@@ -38,6 +38,7 @@
  * dos `TOTAIS_VIGIADOS`/`DETALHES_VIGIADOS` da auditoria de saída.
  */
 
+import { validarCnpj } from './documento-dv.js';
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirContador0100, POS_DT_FIN_CONTRIBUICOES,
     conferirPeriodoDoArquivo as periodoDoArquivoComum,
@@ -1078,6 +1079,243 @@ export function conferirAjustesDoM210(linhas) {
     return { erros };
 }
 
+/**
+ * O M200/M600 fecha consigo mesmo — a aritmética que o Guia escreve por extenso.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35, registro M200:
+ *  · campo 05: *"correspondendo a VL_TOT_CONT_NC_PER - VL_TOT_CRED_DESC -
+ *    VL_TOT_CRED_DESC_ANT"*;
+ *  · campo 06: *"O valor a ser informado no Campo 06 deve ser igual ou menor
+ *    que o valor constante no campo 05"*;
+ *  · campo 08: *"correspondendo a VL_TOT_CONT_NC_DEV - VL_RET_NC -
+ *    VL_OUT_DED_NC"*;
+ *  · campo 10: *"deve ser igual ou menor que o valor constante no campo 09"*;
+ *  · campo 12: *"correspondendo a VL_TOT_CONT_CUM_PER - VL_RET_CUM -
+ *    VL_OUT_DED_CUM"*;
+ *  · campo 13: *"correspondendo a VL_CONT_NC_REC + VL_CONT_CUM_REC"*.
+ *
+ * 🚨 **POR QUE ELA IMPORTA**: este registro **já se desmentiu** — em 24/08 o
+ * campo 04 saía `0` CRAVADO enquanto o campo 07 vinha cheio, ou seja o arquivo
+ * dizia que NADA era devido no não-cumulativo e declarava valor a recolher na
+ * linha seguinte. É a classe do E110 campo 11 (02/08) e do E110 que não fechava
+ * consigo mesmo (R17, 26/08): cada total, isolado, parece certo — o que não
+ * fecha é a EXPRESSÃO, e nada perguntava por ela.
+ *
+ * ⚠️ **UM CENTAVO DE TOLERÂNCIA**: os campos saem de multiplicações que
+ * arredondam a cada passo. Alarme sobre arredondamento é o que ensina a equipe
+ * a ignorar a prevalidação — e campo trocado de casa erra por ORDEM DE
+ * GRANDEZA, nunca por um centavo.
+ */
+export function conferirFechamentoDoM200(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        // ⚠️ A CONVENÇÃO DE ÍNDICE DESTE MÓDULO É OUTRA. Aqui `camposDaLinha`
+        // devolve o REG na posição **0**, então o campo N do leiaute é o índice
+        // N-1 — no `sped-prevalidacao.js` o split cru deixa o REG no 1 e o campo
+        // N cai no índice N. Carimbar a convenção do vizinho leria o campo
+        // errado com toda confiança: é o erro do `DT_FIN` de 22/08, agora entre
+        // dois módulos do mesmo projeto.
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg !== 'M200' && reg !== 'M600') continue;
+        const v = (n) => num(c[n - 1]);
+        const cent = (x) => Math.round(x * 100);
+        const trib = reg === 'M200' ? 'PIS' : 'COFINS';
+
+        const conta = (campo, esperado, nome, formula) => {
+            if (Math.abs(cent(v(campo)) - cent(esperado)) <= 1) return;
+            erros.push({
+                regra: 'm200-fechamento', registro: reg, campo: `${campo} - ${nome}`, linha: l,
+                valor: v(campo).toFixed(2), esperado: esperado.toFixed(2),
+                mensagem: `O ${reg} (${trib}) não fecha consigo mesmo: o campo ${campo} (${nome}) diz `
+                    + `${v(campo).toFixed(2)} e a conta do Guia dá ${esperado.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O registro se desmentindo por dentro é a '
+                    + 'classe do campo trocado de casa.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo ${campo}: "${formula}".`,
+            });
+        };
+
+        conta(5, v(2) - v(3) - v(4), 'VL_TOT_CONT_NC_DEV',
+            'correspondendo a VL_TOT_CONT_NC_PER - VL_TOT_CRED_DESC - VL_TOT_CRED_DESC_ANT');
+        conta(8, v(5) - v(6) - v(7), 'VL_CONT_NC_REC',
+            'correspondendo a VL_TOT_CONT_NC_DEV - VL_RET_NC - VL_OUT_DED_NC');
+        conta(12, v(9) - v(10) - v(11), 'VL_CONT_CUM_REC',
+            'correspondendo a VL_TOT_CONT_CUM_PER - VL_RET_CUM - VL_OUT_DED_CUM');
+        conta(13, v(8) + v(12), 'VL_TOT_CONT_REC',
+            'correspondendo a "VL_CONT_NC_REC" + "VL_CONT_CUM_REC"');
+
+        // 🚨 A RETENÇÃO NÃO PODE SER MAIOR QUE O DEVIDO — e este é o caso comum
+        // do prestador de serviço, não uma hipótese: em 28/08 (DGB) a retenção
+        // cobria a contribuição quase inteira. O excedente NÃO some: ele é
+        // crédito de retenção a usar em períodos futuros, que o Guia manda
+        // declarar no registro **1300** — e o app não gera o 1300.
+        for (const [campo, teto, nome] of [[6, 5, 'VL_RET_NC'], [10, 9, 'VL_RET_CUM']]) {
+            if (cent(v(campo)) - cent(v(teto)) > 1) {
+                erros.push({
+                    regra: 'm200-retencao-maior', registro: reg, campo: `${campo} - ${nome}`, linha: l,
+                    valor: v(campo).toFixed(2), esperado: `≤ ${v(teto).toFixed(2)}`,
+                    mensagem: `O ${reg} (${trib}) declara retenção de ${v(campo).toFixed(2)} sobre `
+                        + `contribuição devida de ${v(teto).toFixed(2)} — o leiaute não admite.`,
+                    acao: 'A retenção que sobra é crédito a usar em períodos futuros e se declara no registro '
+                        + '1300, que o app NÃO gera. Confira a apuração e leve o excedente à mão, senão a '
+                        + 'empresa perde o crédito.',
+                    fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo ${campo}: "O valor a ser `
+                        + `informado no Campo ${campo} deve ser igual ou menor que o valor constante no campo ${teto}".`,
+                });
+            }
+        }
+    }
+    return { erros };
+}
+
+/**
+ * Σ dos M205/M605 bate com o "a recolher" do M200/M600 que eles detalham.
+ *
+ * 📖 FONTE — Guia 1.35, registro M205, Atenção: *"O somatório dos valores
+ * informados no campo 04 (VL_DEBITO) informado neste registro, deve
+ * corresponder ao valor constante de contribuição a recolher, do Registro Pai
+ * M200"*. E o campo 02 (NUM_CAMPO) diz QUAL campo do M200 está sendo
+ * detalhado: **08** (não cumulativo) ou **12** (cumulativo).
+ *
+ * 🚨 O M205 já custou **12 recusas** (DGB, 28/08) por existir com valor zero.
+ * Esta regra é a outra metade: ele existir com o valor ERRADO — que o PVA
+ * cobra e que ninguém confere a olho, porque são dois números plausíveis em
+ * linhas diferentes.
+ */
+export function conferirSomaDosM205(linhas) {
+    const erros = [];
+    const lista = linhas || [];
+    const pares = [['M200', 'M205', 'PIS'], ['M600', 'M605', 'COFINS']];
+    for (const [pai, filho, trib] of pares) {
+        const regDe = (l) => String(camposDaLinha(l)[0] || '').trim();
+        const linhaPai = lista.find((l) => regDe(l) === pai);
+        if (!linhaPai) continue;
+        const filhos = lista.filter((l) => regDe(l) === filho);
+        if (!filhos.length) continue;
+        // O NUM_CAMPO separa as duas seções: somar tudo junto compararia o
+        // detalhamento do cumulativo com o total do não-cumulativo.
+        for (const [numCampo, campoPai] of [['08', 8], ['12', 12]]) {
+            // NUM_CAMPO é o campo 02 (índice 1) e VL_DEBITO o 04 (índice 3).
+            const doGrupo = filhos.filter((l) => String(camposDaLinha(l)[1] || '').trim().padStart(2, '0') === numCampo);
+            if (!doGrupo.length) continue;
+            const soma = doGrupo.reduce((a, l) => a + num(camposDaLinha(l)[3]), 0);
+            const total = num(camposDaLinha(linhaPai)[campoPai - 1]);
+            if (Math.abs(Math.round(soma * 100) - Math.round(total * 100)) > 1) {
+                erros.push({
+                    regra: 'm205-soma', registro: filho, campo: '4 - VL_DEBITO', linha: doGrupo[0],
+                    valor: soma.toFixed(2), esperado: total.toFixed(2),
+                    mensagem: `Os ${doGrupo.length} ${filho} (${trib}) somam ${soma.toFixed(2)} e o campo `
+                        + `${campoPai} do ${pai} diz ${total.toFixed(2)}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. É por este detalhamento que o débito '
+                        + 'chega à DCTF: divergir aqui declara o imposto no código de receita errado.',
+                    fonte: `Guia Prático da EFD-Contribuições 1.35, ${filho}: "O somatório dos valores `
+                        + 'informados no campo 04 (VL_DEBITO) informado neste registro, deve corresponder ao '
+                        + `valor constante de contribuição a recolher, do Registro Pai ${pai}".`,
+                });
+            }
+        }
+    }
+    return { erros };
+}
+
+/**
+ * Os estabelecimentos: o 0140 é o CADASTRO, e A010/C010/D010/F010 apontam
+ * para ele.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35. No **0140**: campo 04
+ * (CNPJ) *"Validação: será conferido o dígito verificador (DV) do CNPJ
+ * informado"* e campo 07 (COD_MUN) *"o valor informado no campo deve existir na
+ * Tabela de Municípios do IBGE, possuindo 7 dígitos"*. E em **A010, C010, D010
+ * e F010**, a MESMA frase: *"é conferido o dígito verificador (DV) do CNPJ
+ * informado. O estabelecimento informado neste registro deve está cadastrado no
+ * Registro 0140"*.
+ *
+ * 🚨 É a família do participante do 0150 e do item do 0200 ÓRFÃOS — registro
+ * que referencia um cadastro que o arquivo não traz —, e as duas já custaram
+ * rodada de PVA (MANTOAN e PWR, 19/08).
+ *
+ * ⚠️ **O município NÃO é conferido contra a tabela do IBGE**: ela não está
+ * neste repo, e reconstruí-la de memória seria inventar tabela oficial (a
+ * família do `1405`). O que se confere é o que o Guia diz sem tabela nenhuma —
+ * **7 dígitos**.
+ */
+export function conferirEstabelecimentosContrib(linhas) {
+    const erros = [];
+    const lista = linhas || [];
+    const regDe = (l) => String(camposDaLinha(l)[0] || '').trim();
+    const digitos = (v) => String(v ?? '').replace(/\D/g, '');
+
+    const cadastrados = new Set();
+    for (const l of lista) {
+        if (regDe(l) !== '0140') continue;
+        const c = camposDaLinha(l);
+        const cnpj = digitos(c[3]);          // campo 04
+        const codMun = digitos(c[6]);        // campo 07
+        if (cnpj) cadastrados.add(cnpj);
+        if (cnpj && !validarCnpj(cnpj)) {
+            erros.push({
+                regra: '0140-estabelecimento', registro: '0140', campo: '4 - CNPJ', linha: l,
+                valor: cnpj, esperado: 'CNPJ com DV válido',
+                mensagem: `O CNPJ do estabelecimento (${cnpj}) não passa no dígito verificador.`,
+                acao: 'Confira o CNPJ da empresa em Empresas → Dados Fiscais.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, 0140 campo 04, Validação: "será conferido o '
+                    + 'dígito verificador (DV) do CNPJ informado".',
+            });
+        }
+        if (codMun.length !== 7) {
+            erros.push({
+                regra: '0140-estabelecimento', registro: '0140', campo: '7 - COD_MUN', linha: l,
+                valor: codMun || '', esperado: '7 dígitos',
+                mensagem: `O código do município do estabelecimento tem ${codMun.length} dígito(s), e o `
+                    + 'leiaute exige 7.',
+                acao: 'Preencha o código IBGE do município em Empresas → Dados Fiscais.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, 0140 campo 07, Validação: "o valor informado '
+                    + 'no campo deve existir na Tabela de Municípios do IBGE, possuindo 7 dígitos".',
+            });
+        }
+    }
+
+    // A010/C010/D010/F010 — o CNPJ é o campo 02 em todos.
+    for (const l of lista) {
+        const reg = regDe(l);
+        if (!['A010', 'C010', 'D010', 'F010'].includes(reg)) continue;
+        const cnpj = digitos(camposDaLinha(l)[1]);
+        if (!cnpj) {
+            erros.push({
+                regra: 'estabelecimento-orfao', registro: reg, campo: '2 - CNPJ', linha: l,
+                valor: '', esperado: 'CNPJ do estabelecimento',
+                mensagem: `O ${reg} abriu o bloco sem CNPJ do estabelecimento.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02: campo obrigatório.`,
+            });
+            continue;
+        }
+        if (!validarCnpj(cnpj)) {
+            erros.push({
+                regra: 'estabelecimento-orfao', registro: reg, campo: '2 - CNPJ', linha: l,
+                valor: cnpj, esperado: 'CNPJ com DV válido',
+                mensagem: `O CNPJ do ${reg} (${cnpj}) não passa no dígito verificador.`,
+                acao: 'Confira o CNPJ da empresa em Empresas → Dados Fiscais.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02, Validação: "é conferido o `
+                    + 'dígito verificador (DV) do CNPJ informado".',
+            });
+            continue;
+        }
+        if (cadastrados.size && !cadastrados.has(cnpj)) {
+            erros.push({
+                regra: 'estabelecimento-orfao', registro: reg, campo: '2 - CNPJ', linha: l,
+                valor: cnpj, esperado: 'estabelecimento declarado no 0140',
+                mensagem: `O ${reg} aponta o estabelecimento ${cnpj}, que o 0140 não declara.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recusa bloco que abre em '
+                    + 'estabelecimento que a Tabela de Cadastro não conhece.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02: "O estabelecimento `
+                    + 'informado neste registro deve está cadastrado no Registro 0140".',
+            });
+        }
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
@@ -1110,6 +1348,15 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // 'CONTADOR SP CONTABIL' e '1SP123456/O-7'. Apagado o default, o campo
         // sai VAZIO, e vazio o PVA acusa: esta regra o pega antes.
         ...conferirContador0100(linhas),
+        // 🚨 O M200 já se desmentiu por dentro (campo 04 zerado com o 07 cheio,
+        // 24/08) e o M205 já custou 12 recusas (28/08) — e nenhuma das duas
+        // aritméticas que o Guia escreve por extenso era conferida.
+        ...conferirFechamentoDoM200(linhas).erros,
+        ...conferirSomaDosM205(linhas).erros,
+        // 📖 O 0140 é o CADASTRO de estabelecimento e A010/C010/D010/F010
+        // apontam para ele — a família do 0150/0200 órfãos, que já custou
+        // rodada de PVA nas duas pontas (MANTOAN e PWR, 19/08).
+        ...conferirEstabelecimentosContrib(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.
