@@ -205,6 +205,71 @@ function dataSped(valor) {
     return `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O 0300 — O CADASTRO QUE O G125 REFERENCIA E O ARQUIVO NÃO TRAZIA
+//
+// 29/08. O Guia 3.2.3 é literal no G125 campo 02: *"o código informado neste
+// campo deve constar de um registro 0300"*, e o próprio 0300 abre dizendo que
+// ele existe *"para identificar e caracterizar TODOS os bens ou componentes
+// arrolados no registro G125 do Bloco G"*.
+//
+// 🔴 O app emitia o G125 e **nenhum 0300**: cada `COD_IND_BEM` apontava para um
+// cadastro que o arquivo não declara. É EXATAMENTE a família do item órfão do
+// 0200 (PWR, 19/08) e do participante órfão do 0150 — o registro referencia
+// quem não está lá, e o PVA recusa.
+//
+// 📌 E o cadastro JÁ TEM o que o 0300 pede: código, descrição, bem × componente
+// e o bem principal são os MESMOS campos que o G125 lê. Por isso o dono é este
+// módulo — o bloco 0 IMPORTA daqui. Duas leituras do mesmo cadastro fariam o
+// 0300 e o G125 discordarem sobre o mesmo bem dentro do mesmo arquivo.
+//
+// ⚠️ **O `COD_CTA` NÃO SE INVENTA.** Ele é a conta analítica do plano de contas
+// da empresa (campo 06 do 0500) e o app não a deduz — é a mesma disciplina do
+// F100 (24/08) e do 0002. Sem ela cadastrada o campo sai **VAZIO** e a falta vai
+// NOMEADA, com o lugar de preencher. Emitir o 0300 com a conta em branco é
+// melhor que não emitir: sem ele o G125 é órfão GARANTIDO, e o PVA nomeia o
+// campo que falta em vez de recusar o bloco inteiro.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 0300 — Cadastro de bens ou componentes do ativo imobilizado.
+ * Um por bem do CIAP, montado do MESMO cadastro que alimenta o G125.
+ *
+ * Devolve `{ linhas, avisos }` — a falta do COD_CTA sai DITA, nunca calada.
+ */
+export function montarRegistros0300(bens) {
+    const lista = Array.isArray(bens) ? bens : [];
+    const linhas = [];
+    const avisos = [];
+    const semConta = [];
+    for (const bem of lista) {
+        const codigo = String(bem?.codigo || '').trim();
+        // Bem sem código já é acusado por `apurarCiap` — aqui ele não vira um
+        // 0300 anônimo, que seria cadastro fabricado.
+        if (!codigo) continue;
+        const conta = String(bem?.contaContabil || '').trim();
+        if (!conta) semConta.push(codigo);
+        linhas.push(fmt.buildLine([
+            '0300',
+            fmt.sanitizeString(codigo, 60),
+            bem?.tipo === 'componente' ? '2' : '1',
+            fmt.sanitizeString(String(bem?.descricao || codigo), 255),
+            fmt.sanitizeString(String(bem?.codigoBemPrincipal || ''), 60),
+            fmt.sanitizeString(conta, 60),
+            String(PARCELAS_CIAP),
+        ]));
+    }
+    if (semConta.length) {
+        avisos.push(
+            `0300 (CIAP): ${semConta.length} bem(ns) sem a CONTA CONTÁBIL — o campo COD_CTA sai VAZIO e o `
+            + `PVA o cobra (${semConta.slice(0, 5).join(', ')}${semConta.length > 5 ? '…' : ''}). `
+            + 'A conta analítica é do plano de contas da empresa e o app não a deduz: preencha em '
+            + 'SPED Fiscal → aba 🏭 CIAP (Bloco G), no campo "Conta contábil" de cada bem.',
+        );
+    }
+    return { linhas, avisos };
+}
+
 /**
  * Monta as linhas do Bloco G. Sem bens no CIAP devolve o bloco VAZIO
  * (G001 com IND_MOV=1), que é o que a maioria das empresas entrega.

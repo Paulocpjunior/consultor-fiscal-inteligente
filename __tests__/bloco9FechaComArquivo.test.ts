@@ -518,3 +518,103 @@ describe('📖 o bloco K com dados traz o K010', () => {
         expect(soK(prevalidarSpedFiscal([REG0000, L('K001', '1')]))).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📖 R36 — o bem do G125 está cadastrado no 0300.
+//
+// 🚨 Até 29/08 o app emitia o G125 e NENHUM 0300: TODO bem do CIAP saía órfão.
+// É a família do item órfão do 0200 (PWR, 19/08) e do participante órfão do
+// 0150 — o registro referencia um cadastro que o arquivo não declara.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📖 o bem do G125 está cadastrado no 0300', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { prevalidarSpedFiscal } = require('../sefaz-backend/sped-prevalidacao.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarLinhasBlocoG, montarRegistros0300, apurarCiap } = require('../sefaz-backend/sped-bloco-g.js');
+    const REG0000 = L('0000', '020', '0', '01062026', '30062026', 'EMPRESA X', '11111111000191');
+    const soO = (r: { erros: Array<{ regra: string; mensagem?: string }> }) =>
+        r.erros.filter((e) => e.regra === 'g125-bem-orfao');
+
+    const BENS = [
+        { codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', contaContabil: '1231001',
+            dataMovimentacao: '2026-06-01', tipoMovimentacao: 'SI', numeroParcela: 12,
+            creditoIcmsProprio: 7778.06, creditoIcmsSt: 0, creditoIcmsFrete: 0, creditoIcmsDifal: 0 },
+    ];
+    const blocoG = () => montarLinhasBlocoG({
+        apuracao: apurarCiap({ bens: BENS, saldoInicial: 0, saidasTributadas: 100, saidasTotais: 100 }),
+        dtIni: '2026-06-01', dtFin: '2026-06-30',
+    }).map(sq);
+
+    // 🚨 A PROVA QUE VALE: o 0300 do dono + o G125 do dono, juntos, sem órfão.
+    it('nasce VERDE com o 0300 que o bloco 0 passou a emitir', () => {
+        const cadastro = montarRegistros0300(BENS).linhas.map(sq);
+        const g = blocoG();
+        expect(cadastro).toHaveLength(1);
+        expect(g.some((l: string) => l.startsWith('|G125|'))).toBe(true);
+        expect(soO(prevalidarSpedFiscal([REG0000, ...cadastro, ...g]))).toEqual([]);
+    });
+
+    // 🔴 É EXATAMENTE o que o app fazia antes: G125 sem nenhum 0300.
+    it('acusa o bem do G125 sem 0300 — o estado de antes de 29/08', () => {
+        const e = soO(prevalidarSpedFiscal([REG0000, ...blocoG()]));
+        expect(e).toHaveLength(1);
+        expect(String(e[0].mensagem)).toMatch(/FRESA/);
+    });
+
+    it('acusa quando o 0300 é de OUTRO bem', () => {
+        const outro = montarRegistros0300([{ codigo: 'TORNO', descricao: 'TORNO', tipo: 'bem' }]).linhas.map(sq);
+        expect(soO(prevalidarSpedFiscal([REG0000, ...outro, ...blocoG()]))).toHaveLength(1);
+    });
+
+    it('arquivo sem bloco G fica MUDO', () => {
+        expect(soO(prevalidarSpedFiscal([REG0000]))).toEqual([]);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔒 A LIGAÇÃO SE PROVA PELA POSITIVA — o bloco 0 emite o 0300 do CIAP.
+//
+// Um teste que pedisse "o bloco 0 não acusa nada" passaria com a chamada
+// DESPLUGADA. É a lição do `conferirBloco9`: ausência de alarme não pode ser
+// indistinguível de "está ligado".
+// ════════════════════════════════════════════════════════════════════════════
+describe('🔒 o bloco 0 emite o 0300 quando a empresa tem CIAP', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { buildBloco0 } = require('../sefaz-backend/sped-fiscal-bloco0.js');
+    const base = (extra: Record<string, unknown> = {}) => ({
+        empresa: { cnpj: '11111111000191', razaoSocial: 'EMPRESA X', dadosFiscais: { uf: 'SP' } },
+        competenciaInicio: '2026-06', competenciaFim: '2026-06',
+        participantes: [], unidades: [], itens: [], warnings: [] as string[], ...extra,
+    });
+
+    it('com CIAP, o 0300 do bem sai no bloco 0', () => {
+        const dados = base({
+            ciap: { bens: [{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', contaContabil: '1231001' }] },
+        });
+        const linhas = buildBloco0(dados).map(sq);
+        expect(linhas.filter((l: string) => l.startsWith('|0300|'))).toEqual([
+            '|0300|FRESA|1|FRESA||1231001|48|',
+        ]);
+    });
+
+    // ⚠️ O 0990 conta as linhas do bloco INCLUSIVE ele mesmo — acrescentar o
+    // 0300 mexe nesse contador, e é a lição da AFFITTARE (24/08).
+    it('e o 0990 continua contando as linhas certas', () => {
+        const linhas = buildBloco0(base({
+            ciap: { bens: [{ codigo: 'A', descricao: 'A', tipo: 'bem' }] },
+        })).map(sq);
+        expect(linhas[linhas.length - 1]).toBe(`|0990|${linhas.length}|`);
+    });
+
+    it('sem CIAP (o caso da maioria) não sai 0300 nenhum', () => {
+        const linhas = buildBloco0(base()).map(sq);
+        expect(linhas.filter((l: string) => l.startsWith('|0300|'))).toEqual([]);
+    });
+
+    // 🚨 A falta da conta contábil vai DITA na geração — o app não a inventa.
+    it('a falta da conta contábil entra nos warnings da geração', () => {
+        const dados = base({ ciap: { bens: [{ codigo: 'A', descricao: 'A', tipo: 'bem' }] } });
+        buildBloco0(dados);
+        expect((dados.warnings as string[]).join(' ')).toMatch(/COD_CTA sai VAZIO/);
+    });
+});

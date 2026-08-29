@@ -226,3 +226,61 @@ describe('🚨 índice do CIAP — o valor sai da régua, nas duas formas', () =
         expect(r.tributadasEExportacao).toBe(1000);   // antes: 1000/1000 = índice 1,0
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O 0300 — O CADASTRO QUE O G125 REFERENCIA E O ARQUIVO NÃO TRAZIA
+//
+// 📖 Guia 3.2.3, G125 campo 02: *"o código informado neste campo deve constar
+// de um registro 0300"*; e o 0300 abre dizendo que existe *"para identificar e
+// caracterizar TODOS os bens ou componentes arrolados no registro G125"*.
+//
+// 🔴 O app emitia o G125 e NENHUM 0300: todo bem do CIAP saía órfão. É a
+// família do item órfão do 0200 (PWR, 19/08) e do participante órfão do 0150.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 o 0300 cadastra o bem que o G125 referencia', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarRegistros0300 } = require('../sefaz-backend/sped-bloco-g.js');
+
+    it('um 0300 por bem, com o código que o G125 usa', () => {
+        const r = montarRegistros0300([
+            { codigo: 'FRESA', descricao: 'FRESA FERRAMENTEIRA', tipo: 'bem', contaContabil: '1231001' },
+            {
+                codigo: 'ROLAMENTOS', descricao: 'ROLAMENTOS', tipo: 'componente',
+                codigoBemPrincipal: 'FRESA', contaContabil: '1231001',
+            },
+        ]);
+        expect(r.linhas).toHaveLength(2);
+        expect(r.linhas[0]).toBe('|0300|FRESA|1|FRESA FERRAMENTEIRA||1231001|48|\r\n');
+        // IDENT_MERC: 1 = bem · 2 = componente; e o componente leva o COD_PRNC.
+        expect(r.linhas[1]).toBe('|0300|ROLAMENTOS|2|ROLAMENTOS|FRESA|1231001|48|\r\n');
+        expect(r.avisos).toEqual([]);
+    });
+
+    // 🚨 O COD_CTA NÃO SE INVENTA — é a conta analítica do plano de contas da
+    // empresa, e o app não a deduz (a mesma disciplina do F100 e do 0002).
+    // Sai VAZIO e a falta vai DITA, com o lugar de preencher.
+    it('sem conta contábil o campo sai VAZIO e a falta é NOMEADA', () => {
+        const r = montarRegistros0300([{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem' }]);
+        expect(r.linhas[0]).toBe('|0300|FRESA|1|FRESA|||48|\r\n');
+        expect(r.avisos).toHaveLength(1);
+        expect(r.avisos[0]).toContain('FRESA');
+        expect(r.avisos[0]).toContain('CIAP (Bloco G)');
+    });
+
+    // ⚠️ Bem sem código não vira um 0300 anônimo — seria cadastro fabricado, e
+    // `apurarCiap` já acusa a falta do COD_IND_BEM.
+    it('bem sem código não gera 0300', () => {
+        expect(montarRegistros0300([{ codigo: '', descricao: 'X' }]).linhas).toEqual([]);
+    });
+
+    it('sem bens (o caso da maioria) não sai 0300 nenhum', () => {
+        expect(montarRegistros0300([]).linhas).toEqual([]);
+        expect(montarRegistros0300(null).linhas).toEqual([]);
+    });
+
+    // 🔒 A mesma trava de forma do bloco G: nenhuma linha escapa do buildLine.
+    it('🔒 toda linha do 0300 passa pelo buildLine', () => {
+        const r = montarRegistros0300([{ codigo: 'A', descricao: 'A', tipo: 'bem' }]);
+        for (const l of r.linhas) expect(l).toMatch(/^\|0300\|.*\|\r\n$/);
+    });
+});

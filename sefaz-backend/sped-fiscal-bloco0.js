@@ -10,6 +10,7 @@
 //   0150 — Tabela de Cadastro do Participante (clientes/fornecedores)
 //   0190 — Identificacao das Unidades de Medida (UN, KG, L, etc)
 //   0200 — Tabela de Identificacao do Item (produtos e servicos)
+//   0300 — Cadastro de bens/componentes do ativo imobilizado (CIAP, quando ha)
 //   0990 — Encerramento do Bloco 0
 //
 // Layout: Guia Pratico 3.2.2, Leiaute 020 (vigente 01/01/2026).
@@ -17,6 +18,13 @@
 
 import * as fmt from './sped-fiscal-format.js';
 import { ccmSpDaEmpresa } from './ccm-sp.js';
+// 🚨 O 0300 é o CADASTRO que o G125 referencia (Guia 3.2.3, G125 campo 02:
+// "o código informado neste campo deve constar de um registro 0300"), e o
+// arquivo não o trazia — cada bem do CIAP saía ÓRFÃO, a família do item órfão
+// do 0200 e do participante órfão do 0150. O dono é o módulo do CIAP: ele já lê
+// esse cadastro para o G125, e duas leituras fariam os dois registros
+// discordarem sobre o mesmo bem dentro do mesmo arquivo.
+import { montarRegistros0300 } from './sped-bloco-g.js';
 // TIPO_ITEM/NCM do item de serviço — a MESMA régua do bloco 0 do
 // EFD-Contribuições; duas cópias declarariam tipos diferentes para o mesmo item
 // em dois arquivos do mesmo mês.
@@ -106,6 +114,14 @@ function buildBloco0(dados) {
     for (const item of dados.itens || []) {
         linhas.push(build0200(item));
     }
+
+    // ── 0300 — Bens/componentes do CIAP ─────────────────────────────────
+    // Só sai quando a empresa tem CIAP cadastrado — a maioria não tem, e o
+    // bloco G dela sai vazio. Sem isto o G125 referenciaria um cadastro que o
+    // arquivo não declara.
+    const r0300 = montarRegistros0300(dados.ciap?.bens);
+    for (const l of r0300.linhas) linhas.push(l);
+    if (Array.isArray(dados.warnings)) for (const a of r0300.avisos) dados.warnings.push(a);
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
     // Total de linhas do bloco INCLUINDO o proprio 0990
