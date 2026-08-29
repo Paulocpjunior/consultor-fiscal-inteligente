@@ -5,6 +5,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✅ A PENDÊNCIA QUE EU NOMEEI FECHOU NO MESMO DIA — e o que a autorizou foi
+  o GABARITO, não a simetria** (29/08, logo depois da trava de contagem do EFD
+  ICMS/IPI).
+  📌 Ao escrever o extrator fiscal eu deixei escrito que a leitura tolerante
+  **também acertaria o 0500 do Contribuições em 9** (o valor provado pelo
+  assinado do CF BANK, que a leitura estrita erra em 8) — e me recusei a mudar
+  ali *"de carona"*, porque aquilo mexe em **15 registros de uma trava VIVA**.
+  ✅ **A medição que autorizou é a única honesta que existe: os 11 registros
+  PROVADOS por recibo do PVA / arquivo assinado.** Contra eles, a leitura
+  estrita acerta **10** e a tolerante acerta **11** — e o que ela conserta é
+  justamente o 0500. A cobertura sobe de **184 para 199** registros, e a
+  `divergenciasGuiaXRecibo()` continua VAZIA (o 0500 passou a concordar).
+  📌 **E dos 15 que mudam, só TRÊS são emitidos pelo gerador**: 0100 (14 nos
+  dois, só sai de incerto), A100 (21 nos dois, idem) e o 0500, que MELHORA. Os
+  outros nove o app não emite — a mudança neles não altera comportamento hoje.
+  Isso se MEDE cruzando a tabela com a lista de emitidos, nunca se supõe.
+  🚨 **E A PROVA CRUZADA QUE JÁ EXISTIA LÁ ACUSOU NA HORA — fazendo o trabalho
+  dela.** Os dois testes que caíram descreviam o mundo ANTIGO: um cravava
+  `semCobertura === ['0100']` (o 0100 era o ÚLTIMO descoberto, e passou a ser
+  coberto **com 14, que é o valor certo**) e o outro usava o 0100 como
+  **exemplo** de registro não provado. É a terceira troca da mesma fixture pelo
+  mesmo motivo — o C100 em 20/08, o 0150 em 25/08, agora o 0100 —, e as três
+  foram **melhora de cobertura**, nunca régua afrouxada.
+  📌 **REGRA QUE FICA: mudança em trava viva se autoriza contra o GABARITO da
+  própria trava.** Aqui o gabarito eram os registros provados por recibo, e ele
+  respondeu 11×10 em uma execução. Sem ele, a mesma mudança seria "parece
+  melhor" — que é como se afrouxa uma trava sem perceber.
+  ✅ **Hoje a cobertura do EFD-Contribuições é TOTAL** (201 registros; os dois
+  incertos, C100 e D100, estão provados por recibo) — não existe mais registro
+  real descoberto, e o teste passou a dizer isso.
+
 - **🚨 A TRAVA DE CONTAGEM DE CAMPOS EXISTIA SÓ NUMA FAMÍLIA — o EFD ICMS/IPI
   não tinha NENHUMA** (29/08, na sequência do contador de bloco).
   🔴 `conferirContagemDeCampos` roda em todo arquivo do EFD-**Contribuições**

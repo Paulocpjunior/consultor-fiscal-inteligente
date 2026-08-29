@@ -92,8 +92,12 @@ describe('🚨 os registros que o gerador EMITE estão cobertos', () => {
             if (esperado == null) { semCobertura.push(reg); continue; }
             expect([reg, esperado]).toEqual([reg, n]);
         }
-        // Só o 0100 fica descoberto — e ele sai NOMEADO, não em silêncio.
-        expect(semCobertura).toEqual(['0100']);
+        // ✅ 29/08: com a leitura tolerante do Guia (medida contra o gabarito
+        // de recibo, onde ela acerta 11/11 e a estrita acertava 10), o **0100
+        // saiu da lista** — e com ele o último descoberto. Os 34 registros que
+        // o gerador emite estão TODOS cobertos, e cada contagem bate com a que
+        // os arquivos reais da PWR e da HYPE mostram.
+        expect(semCobertura).toEqual([]);
     });
 
     // 🚨 A PROVA QUE VALE: os arquivos REAIS dos dois clientes passam limpos.

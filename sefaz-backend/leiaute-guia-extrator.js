@@ -18,24 +18,47 @@
 //   · EFD ICMS/IPI 3.2.3     : `REGISTRO 0500:` e o nº de campo às vezes SEM
 //     o `|` (a conversão quebra a célula em `\n\n14\n | COD_MU N`)
 //
-// ⚠️ **E O DIALETO NÃO SE UNIFICA "de lambuja"**: relaxar o regex do
-// Contribuições para aceitar o número sem `|` MUDA a tabela dele em **15
-// registros** — 13 saem de INCERTO para conferido e o **D505 muda de 7 para
-// 8 campos**, numa trava que já roda em produção. Mexer nisso junto com outra
-// coisa é trocar alarme por alarme sem ninguém medir. Fica NOMEADO: a leitura
-// tolerante também acerta o **0500 em 9**, que é o valor PROVADO pelo assinado
-// do CF BANK e que a leitura estrita erra em 8. Vale rever — com medição
-// própria, não de carona.
+// ⚠️ **E O DIALETO NÃO SE UNIFICOU "de lambuja"**: relaxar a leitura do
+// Contribuições MUDA a tabela dele em **15 registros**, numa trava que já roda
+// em produção — mexer nisso junto com outra coisa é trocar alarme por alarme
+// sem ninguém medir.
+//
+// ✅ **A revisão veio DEPOIS, com medição própria, e o gabarito autorizou**:
+// contra os **11 registros provados por recibo do PVA / arquivo assinado**, a
+// leitura estrita acertava **10** e a tolerante acerta **11** — o que ela
+// conserta é justamente o **0500**, que a estrita lia em 8 e o assinado do CF
+// BANK prova em **9**. A cobertura subiu de 184 para **199** registros e a
+// `divergenciasGuiaXRecibo()` continua vazia.
+//
+// 📌 **REGRA QUE FICA: mudança em trava viva se autoriza contra o GABARITO da
+// própria trava.** Sem ele, isto seria "parece melhor" — que é como se afrouxa
+// uma trava sem perceber.
 // ============================================================================
 
-/** Dialeto do Guia da EFD-Contribuições 1.35. */
+/**
+ * Dialeto do Guia da EFD-Contribuições 1.35.
+ *
+ * ✅ **A leitura tolerante entrou aqui MEDIDA contra o gabarito**, não por
+ * simetria com a outra família: contra os **11 registros provados por recibo
+ * do PVA / arquivo assinado**, a leitura estrita acertava **10** e a tolerante
+ * acerta **11** — o que ela conserta é justamente o **0500**, que a estrita
+ * lia em 8 e o assinado do CF BANK prova em **9**. A cobertura sobe de 184
+ * para 199 registros.
+ *
+ * ⚠️ E dos 15 registros cuja leitura muda, só **três** são emitidos pelo
+ * gerador — 0100 (14 nos dois, só sai de incerto), A100 (21 nos dois, idem) e
+ * o 0500, que MELHORA. Os outros (D505, C181, C185, D300, D501, F500, I299,
+ * 1100, A110) o app não emite: a mudança neles não altera comportamento hoje.
+ */
 const CONTRIB = {
     // Início de cada seção — o índice tem o nº da página no fim.
     cabecalho: /^Registro ([0-9A-Z]{4,5}):/,
-    soNumero: /^\|\s*(\d{2})\s*$/,
+    soNumero: /^\|?\s*(\d{2})\s*$/,
     // ⚠️ O nome do campo QUEBRA no meio na extração do Word ("VL_BC_COFIN S",
-    // "COD_ NAT_CC"), então o espaço interno é aceito e removido depois.
-    soNome: /^\|\s*([A-Z][A-Z0-9_ ]{1,25})\s*$/,
+    // "COD_ NAT_CC"), então o espaço interno é aceito e removido depois — e
+    // pode vir ACENTUADO (o campo 05 do 0500 é "NÍVEL").
+    soNome: /^\|?\s*([A-ZÀ-Ú][A-ZÀ-Ú0-9_ ]{1,25})\s*$/,
+    vaziasEntre: 2,
 };
 
 /** Dialeto do Guia Prático do EFD ICMS/IPI 3.2.3. */

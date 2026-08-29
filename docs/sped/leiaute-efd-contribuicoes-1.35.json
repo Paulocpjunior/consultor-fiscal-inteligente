@@ -97,16 +97,14 @@
   },
   "1100": {
    "campos": 18,
-   "incerto": true,
-   "buracos": [
-    5
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "PER_APU_CRED",
     "ORIG_CRED",
     "CNPJ_SUC",
-    "?",
+    "COD_CRED",
     "VL_CRED_APU",
     "VL_CRED_EXT_APU",
     "VL_TOT_CRED_APU",
@@ -326,6 +324,18 @@
     "DESC_COMPL"
    ]
   },
+  "1620": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "PER_APU_CRED",
+    "ORIG_CRED",
+    "COD_CRED",
+    "VL_CRED"
+   ]
+  },
   "1700": {
    "campos": 8,
    "incerto": false,
@@ -476,16 +486,14 @@
   },
   "0100": {
    "campos": 14,
-   "incerto": true,
-   "buracos": [
-    5
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "NOME",
     "CPF",
     "CRC",
-    "?",
+    "CNPJ",
     "CEP",
     "END",
     "NUM",
@@ -511,14 +519,12 @@
   },
   "0111": {
    "campos": 6,
-   "incerto": true,
-   "buracos": [
-    3
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "REC_BRU_NCUM_TRIB",
-    "?",
+    "REC_BRU_NCUM_NT_MI",
     "REC_BRU_NCUM_EXP",
     "REC_BRU_CUM",
     "REC_BRU_TOTAL"
@@ -665,20 +671,19 @@
    ]
   },
   "0500": {
-   "campos": 8,
-   "incerto": true,
-   "buracos": [
-    5
-   ],
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "DT_ALT",
     "COD_NAT_CC",
     "IND_CTA",
-    "?",
+    "NÍVEL",
     "COD_CTA",
     "NOME_CTA",
-    "COD_CTA_REF"
+    "COD_CTA_REF",
+    "CNPJ_EST"
    ]
   },
   "0600": {
@@ -693,7 +698,7 @@
    ]
   },
   "0900": {
-   "campos": 14,
+   "campos": 15,
    "incerto": false,
    "buracos": [],
    "nomes": [
@@ -710,7 +715,8 @@
     "REC_NRB_BLOCO_I",
     "REC_TOTAL_BLOCO_1",
     "REC_NRB_BLOCO_1",
-    "REC_TOTAL_PERIODO"
+    "REC_TOTAL_PERIODO",
+    "REC_TOTAL_NRB_PERÍODO"
    ]
   },
   "0990": {
@@ -742,10 +748,8 @@
   },
   "A100": {
    "campos": 21,
-   "incerto": true,
-   "buracos": [
-    18
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "IND_OPER",
@@ -764,7 +768,7 @@
     "VL_BC_PIS",
     "VL_PIS",
     "VL_BC_COFINS",
-    "?",
+    "VL_COFINS",
     "VL_PIS_RET",
     "VL_COFINS_RET",
     "VL_ISS"
@@ -772,13 +776,11 @@
   },
   "A110": {
    "campos": 3,
-   "incerto": true,
-   "buracos": [
-    2
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
-    "?",
+    "COD_INF",
     "TXT_COMPL"
    ]
   },
@@ -1018,10 +1020,8 @@
   },
   "C181": {
    "campos": 11,
-   "incerto": true,
-   "buracos": [
-    8
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "CST_PIS",
@@ -1030,7 +1030,7 @@
     "VL_DESC",
     "VL_BC_PIS",
     "ALIQ_PIS",
-    "?",
+    "QUANT_BC_PIS",
     "ALIQ_PIS_QUANT",
     "VL_PIS",
     "COD_CTA"
@@ -1038,10 +1038,8 @@
   },
   "C185": {
    "campos": 11,
-   "incerto": true,
-   "buracos": [
-    9
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "CST_COFINS",
@@ -1051,7 +1049,7 @@
     "VL_BC_COFINS",
     "ALIQ_COFINS",
     "QUANT_BC_COFINS",
-    "?",
+    "ALIQ_COFINS_QUANT",
     "VL_COFINS",
     "COD_CTA"
    ]
@@ -1780,10 +1778,8 @@
   },
   "D300": {
    "campos": 19,
-   "incerto": true,
-   "buracos": [
-    18
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "COD_MOD",
@@ -1802,7 +1798,7 @@
     "CST_COFINS",
     "VL_BC_COFINS",
     "ALIQ_COFINS",
-    "?",
+    "VL_COFINS",
     "COD_CTA"
    ]
   },
@@ -1887,15 +1883,13 @@
   },
   "D501": {
    "campos": 8,
-   "incerto": true,
-   "buracos": [
-    4
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "CST_PIS",
     "VL_ITEM",
-    "?",
+    "NAT_BC_CRED",
     "VL_BC_PIS",
     "ALIQ_PIS",
     "VL_PIS",
@@ -1903,7 +1897,7 @@
    ]
   },
   "D505": {
-   "campos": 7,
+   "campos": 8,
    "incerto": false,
    "buracos": [],
    "nomes": [
@@ -1913,7 +1907,8 @@
     "NAT_BC_CRED",
     "VL_BC_COFINS",
     "ALIQ_COFINS",
-    "VL_COFINS"
+    "VL_COFINS",
+    "COD_CTA"
    ]
   },
   "D509": {
@@ -2215,10 +2210,8 @@
   },
   "F500": {
    "campos": 16,
-   "incerto": true,
-   "buracos": [
-    10
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "VL_REC_CAIXA",
@@ -2229,7 +2222,7 @@
     "VL_PIS",
     "CST_COFINS",
     "VL_DESC_COFINS",
-    "?",
+    "VL_BC_COFINS",
     "ALIQ_COFINS",
     "VL_COFINS",
     "COD_MOD",
@@ -2487,13 +2480,11 @@
   },
   "I299": {
    "campos": 3,
-   "incerto": true,
-   "buracos": [
-    2
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
-    "?",
+    "NUM_PROC",
     "IND_PROC"
    ]
   },
@@ -2788,14 +2779,12 @@
   },
   "M500": {
    "campos": 15,
-   "incerto": true,
-   "buracos": [
-    3
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "COD_CRED",
-    "?",
+    "IND_CRED_ORI",
     "VL_BC_COFINS",
     "ALIQ_COFINS",
     "QUANT_BC_COFINS",
@@ -3072,15 +3061,13 @@
   },
   "P110": {
    "campos": 5,
-   "incerto": true,
-   "buracos": [
-    4
-   ],
+   "incerto": false,
+   "buracos": [],
    "nomes": [
     "REG",
     "NUM_CAMPO",
     "COD_DET",
-    "?",
+    "DET_VALOR",
     "INF_COMPL"
    ]
   },
