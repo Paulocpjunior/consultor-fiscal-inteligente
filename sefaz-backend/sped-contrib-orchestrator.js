@@ -14,7 +14,7 @@ import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
 // função — sem o e-mail padrão e sem o `codMunIBGE` sequer existir —, e por
 // isso o EFD-Contribuições da PWR saiu com o 0100 vazio depois do CRC, que é
 // a MESMA recusa que o PVA já tinha dado no EFD ICMS/IPI dela (19/08).
-import { getContadorPadrao } from './contador-escrituracao.js';
+import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
 import {
     buildBlocoA, buildBlocoC_Contrib, buildBlocoD_Contrib,
     buildBlocoF, buildBlocoM, buildBloco1_Contrib, buildBloco9_Contrib,
@@ -382,9 +382,20 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         warnings.push('Empresas do Simples Nacional geralmente NAO entregam EFD Contribuicoes. Verifique a obrigatoriedade.');
     }
 
+    // O contabilista é conferido ANTES de virar linha: campo obrigatório do
+    // 0100 que sai vazio é recusa do PVA, e campo INVENTADO é pior — ele passa.
+    const contadorDoArquivo = getContadorPadrao();
+    const conf = conferirContador(contadorDoArquivo);
+    if (conf.aviso) warnings.push(conf.aviso);
+
     return {
         empresa,
-        contador: getContadorPadrao(),
+        // 🚨 O contabilista do 0100 não recebe mais default INVENTADO: NOME e
+        // CRC saíam 'CONTADOR SP CONTABIL' / '1SP123456/O-7' quando a env
+        // faltava (29/08). Faltando, o campo sai VAZIO e a falta vai DITA —
+        // some calado seria o arquivo declarando um profissional que não
+        // existe, num campo que a fiscalização lê.
+        contador: contadorDoArquivo,
         competencia,
         competenciaInicio: competencia,
         competenciaFim: competencia,

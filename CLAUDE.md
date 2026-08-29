@@ -5,6 +5,44 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CONTABILISTA DO 0100 SAÍA INVENTADO — `'CONTADOR SP CONTABIL'` e o CRC
+  `'1SP123456/O-7'`, nos DOIS geradores** (29/08, achado ao cruzar "registros
+  que o gerador EMITE × registros que a prevalidação COBRE" no
+  EFD-**Contribuições**: cinco ficaram descobertos, e o 0100 era um deles).
+  📖 **O Guia 1.35 entregou algo maior que a regra que eu ia escrever**: no
+  registro 0100 os campos **02 NOME**, **03 CPF** e **04 CRC** são **Obrig.
+  `S`**, e o campo 03 traz *"Validação: será conferido o dígito verificador (DV)
+  do CPF informado"*.
+  🔴 **Sem a env, o arquivo declarava ao fisco um contabilista que NÃO EXISTE,
+  com um CRC que não é de ninguém — e o PVA ACEITA**, porque a forma está certa.
+  É a família do `1405`, do `PARTSEM` e do `5352`: o erro que só aparece na
+  fiscalização. **Campo vazio é o lado CERTO do erro** — vazio o PVA acusa.
+  ⚠️ **E O GUIA ME IMPEDIU DE PORTAR A REGRA ERRADA.** A hipótese era a "meia
+  trava" de sempre: a **R13** (EMAIL/COD_MUN obrigatórios, recusa da PWR 19/08)
+  existe só no EFD ICMS/IPI, e o 0100 é **byte a byte IDÊNTICO** nas duas
+  famílias — mesmo leiaute, mesmo dono, mesmos 14 campos. Só que **no
+  EFD-Contribuições esses dois campos são Obrig. `N`**, literal no Guia. Portar
+  teria produzido **alarme falso sobre arquivo CORRETO**, que é o jeito
+  conhecido de a equipe desligar a prevalidação.
+  📌 **REGRA QUE FICA: registro idêntico nas duas famílias NÃO significa
+  obrigatoriedade idêntica.** A "meia trava" (22/08) manda portar a regra
+  quando o registro é o mesmo; esta é a EXCEÇÃO, e ela se descobre lendo a
+  coluna *Obrig.* do Guia da família de destino — nunca deduzindo do vizinho.
+  É o 1010 (17/08) e o 0500 (24/08) na direção da REGRA, e não do leiaute.
+  ✂️ `conferirContador` (no dono, `contador-escrituracao.js`) faz a falta sair
+  DITA na geração, nomeando a **env** que resolve; `conferirContador0100` (no
+  módulo COMUM) é a rede da prevalidação e roda nas DUAS famílias — os três
+  campos e o DV. ⚠️ O DV vem de `documento-dv.js`: conferir o dígito ali seria
+  a segunda cópia.
+  ⚠️ **Campo faltando VENCE o DV**: dizer *"CPF inválido"* sobre um campo vazio
+  manda procurar erro de digitação num campo que ninguém preencheu.
+  ✅ **E ISTO É PREVENÇÃO, NÃO DEFEITO VIVO — medido, não deduzido**: o 0100
+  REAL da PWR (citado no mata-burro de 20/08) traz nome, CPF e CRC de verdade,
+  e o CPF **passa no DV**. Ou seja, as envs estão preenchidas hoje e o default
+  inventado não está produzindo arquivo torto. A regra **nasce VERDE sobre a
+  linha real**, que é como trava deve nascer. Carimbar "234 arquivos errados"
+  aqui seria o oposto da lição do ADN (22/08).
+
 - **🚨 O CANAL "PREFEITURA SP" DIZIA "CCM NÃO CONFIGURADO" PARA A CARTEIRA
   INTEIRA — inclusive para quem tem CCM e para quem nem é de SP** (29/08, na
   sequência do caso LAV).

@@ -33,6 +33,8 @@
 // jeito mais rápido de a equipe desligar a prevalidação.
 // ============================================================================
 
+import { validarCpf } from './documento-dv.js';
+
 const campos = (linha) => String(linha || '').split('|');
 const registroDe = (linha) => campos(linha)[1] || '';
 
@@ -194,6 +196,67 @@ export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000) {
             `O DT_FIN é ${fim.txt} e o último dia deste mês é ${ultimo}. Fechando ANTES, o movimento dos `
             + 'dias que sobram fica fora da escrituração; DEPOIS, o arquivo declara um dia que o mês não '
             + 'tem. Nos dois casos o PVA recusa — é contra este campo que ele confere o DT_DOC.');
+    }
+    return erros;
+}
+
+/**
+ * O 0100 (contabilista) tem NOME, CPF e CRC — e o CPF passa no DV.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35, registro 0100: os campos
+ * **02 NOME**, **03 CPF** e **04 CRC** são **Obrig. `S`**, e o campo 03 traz a
+ * validação literal *"será conferido o dígito verificador (DV) do CPF
+ * informado"*.
+ *
+ * 🚨 **POR QUE ELA NASCEU (29/08)**: os dois geradores tinham DEFAULT
+ * INVENTADO — `'CONTADOR SP CONTABIL'` e `'1SP123456/O-7'`. Sem a env, o
+ * arquivo declarava um contabilista que não existe com um CRC que não é de
+ * ninguém, e o **PVA aceita**, porque a forma está certa. É a família do
+ * `1405`, do `PARTSEM` e do `5352`: erro que só aparece na fiscalização.
+ * Apagado o default, o campo passa a sair VAZIO — e vazio o PVA acusa, que é
+ * o lado certo do erro.
+ *
+ * ⚠️ **EMAIL e COD_MUN ficam de FORA, de propósito.** No EFD-Contribuições
+ * eles são **Obrig. `N`** (o Guia é explícito), e no EFD ICMS/IPI o PVA os
+ * recusou como obrigatórios (PWR 19/08) — lá quem cobra é a R13, que é da
+ * família certa. Cobrá-los aqui acusaria arquivo CORRETO do
+ * EFD-Contribuições, que é o jeito conhecido de a equipe desligar a trava.
+ *
+ * ⚠️ E o **DV é FATO sobre o número**: um CPF que não fecha está errado em
+ * qualquer família, então essa metade roda nas duas.
+ */
+export function conferirContador0100(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        if (registroDe(l) !== '0100') continue;
+        const f = campos(l);
+        const faltando = [];
+        if (!String(f[2] || '').trim()) faltando.push('2 - NOME');
+        if (!String(f[3] || '').trim()) faltando.push('3 - CPF');
+        if (!String(f[4] || '').trim()) faltando.push('4 - CRC');
+        if (faltando.length) {
+            erros.push({
+                regra: '0100-contabilista', registro: '0100', campo: faltando.join(', '),
+                valor: '', esperado: 'preenchido', linha: l,
+                mensagem: `O registro do contabilista está sem ${faltando.join(' e ')}.`,
+                acao: 'São campos OBRIGATÓRIOS do 0100. O app não os inventa: preencha as variáveis '
+                    + 'CONTADOR_NOME / CONTADOR_CPF / CONTADOR_CRC no Cloud Run.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, registro 0100: campos 02 (NOME), 03 (CPF) '
+                    + 'e 04 (CRC) são Obrigatórios (S).',
+            });
+            continue;
+        }
+        const cpf = String(f[3]);
+        if (!validarCpf(cpf)) {
+            erros.push({
+                regra: '0100-contabilista', registro: '0100', campo: '3 - CPF', linha: l,
+                valor: cpf, esperado: 'CPF com DV válido',
+                mensagem: `O CPF do contabilista (${cpf}) não passa no dígito verificador.`,
+                acao: 'Confira a variável CONTADOR_CPF no Cloud Run — o PVA confere o DV.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, 0100 campo 03, Validação: "será conferido '
+                    + 'o dígito verificador (DV) do CPF informado".',
+            });
+        }
     }
     return erros;
 }

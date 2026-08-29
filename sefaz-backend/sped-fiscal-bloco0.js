@@ -253,9 +253,16 @@ function build0100(dados) {
     const c = dados.contador || {};
     return fmt.buildLine([
         '0100',
-        fmt.sanitizeString(c.nome || 'CONTADOR SP CONTABIL', 100),
+        // 🚨 SEM DEFAULT INVENTADO. Isto saía 'CONTADOR SP CONTABIL' e o CRC
+        // '1SP123456/O-7' — dado FABRICADO num campo que a fiscalização lê, a
+        // família do '1405', do 'PARTSEM' e do '5352'. Pior que o campo vazio:
+        // vazio o PVA ACUSA; contabilista inventado ele ACEITA, e o arquivo
+        // passa a declarar um profissional que não existe, com um CRC que não é
+        // de ninguém. Faltando, o campo sai VAZIO e a geração AVISA qual env
+        // preencher (`conferirContador`).
+        fmt.sanitizeString(c.nome || '', 100),
         fmt.sanitizeCnpjCpf(c.cpf || ''),
-        fmt.sanitizeString(c.crc || '1SP123456/O-7', 15),
+        fmt.sanitizeString(c.crc || '', 15),
         fmt.sanitizeCnpjCpf(c.cnpj || ''),
         fmt.sanitizeCep(c.cep || ''),
         fmt.sanitizeString(c.logradouro || '', 60),
