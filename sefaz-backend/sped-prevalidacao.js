@@ -998,6 +998,148 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+
+    // ── R32. O período do E100 tem de caber no período do arquivo ───────────
+    //
+    // 📖 FONTE — Guia 3.2.3, E100 campo 02 (DT_INI), Validação: *"o valor
+    // informado no campo deve ser menor ou igual ao valor no campo DT_FIN do
+    // registro 0000 e maior ou igual ao valor no campo DT_INI do registro
+    // 0000. A data informada no campo deve ser menor ou igual à data informada
+    // no campo DT_FIN do registro E100"*. E a Validação do Registro: *"Não
+    // podem ser informados dois ou mais registros com a mesma combinação de
+    // valores dos campos 02 (DT_INI), 03 (DT_FIN)"*.
+    //
+    // 🚨 É a classe mais cara do arquivo — a do PERÍODO: o E100 é o PAI do
+    // E110, e uma apuração declarada com data fora do arquivo põe o imposto no
+    // mês errado. Não é recusa que se lê num campo: ninguém confere data de
+    // apuração a olho (a lição do período do 0000, 26/08).
+    const e100s = doReg('E100');
+    if (e100s.length) {
+        const l0000 = doReg('0000')[0] || '';
+        const dtIniArq = soDigitos(campos(l0000)[4]);
+        const dtFimArq = soDigitos(campos(l0000)[5]);
+        // A data vem DDMMAAAA; para comparar, vira AAAAMMDD.
+        const ord = (d) => (d.length === 8 ? `${d.slice(4)}${d.slice(2, 4)}${d.slice(0, 2)}` : '');
+        const vistos = new Set();
+        for (const l of e100s) {
+            const ini = soDigitos(campos(l)[2]);
+            const fim = soDigitos(campos(l)[3]);
+            const chave = `${ini}-${fim}`;
+            if (vistos.has(chave)) {
+                add(erros, {
+                    regra: 'e100-periodo', registro: 'E100', campo: '2 - DT_INI, 3 - DT_FIN', linha: l,
+                    valor: chave, esperado: 'períodos distintos',
+                    mensagem: `Há dois registros E100 com o mesmo período (${ini} a ${fim}).`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                    fonte: 'Guia Prático 3.2.3, E100, Validação do Registro: "Não podem ser informados dois '
+                        + 'ou mais registros com a mesma combinação de valores dos campos 02 (DT_INI), 03 (DT_FIN)".',
+                });
+            }
+            vistos.add(chave);
+            if (ord(ini) && ord(fim) && ord(ini) > ord(fim)) {
+                add(erros, {
+                    regra: 'e100-periodo', registro: 'E100', campo: '2 - DT_INI', linha: l,
+                    valor: ini, esperado: `≤ ${fim}`,
+                    mensagem: `O E100 abre a apuração em ${ini} e a encerra antes, em ${fim}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                    fonte: 'Guia Prático 3.2.3, E100 campo 02: "A data informada no campo deve ser menor ou '
+                        + 'igual à data informada no campo DT_FIN do registro E100".',
+                });
+            }
+            if (!dtIniArq || !dtFimArq) continue;
+            const fora = (ord(ini) && (ord(ini) < ord(dtIniArq) || ord(ini) > ord(dtFimArq)))
+                || (ord(fim) && (ord(fim) < ord(dtIniArq) || ord(fim) > ord(dtFimArq)));
+            if (fora) {
+                add(erros, {
+                    regra: 'e100-periodo', registro: 'E100', campo: '2 - DT_INI, 3 - DT_FIN', linha: l,
+                    valor: `${ini} a ${fim}`, esperado: `dentro de ${dtIniArq} a ${dtFimArq}`,
+                    mensagem: `A apuração do ICMS (E100) vai de ${ini} a ${fim}, fora do período do arquivo `
+                        + `(${dtIniArq} a ${dtFimArq}).`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. É o E100 que diz A QUE MÊS a apuração '
+                        + 'se refere: fora do período, o imposto é declarado no mês errado.',
+                    fonte: 'Guia Prático 3.2.3, E100 campo 02: "deve ser menor ou igual ao valor no campo '
+                        + 'DT_FIN do registro 0000 e maior ou igual ao valor no campo DT_INI do registro 0000".',
+                });
+            }
+        }
+    }
+
+    // ── R33. O D100 tem de bater com os D190 filhos ─────────────────────────
+    //
+    // 📖 FONTE — Guia 3.2.3, D190 campos 06 e 07, Validação: *"o valor
+    // informado deve ser igual ao valor do campo VL_BC_ICMS do registro D100,
+    // pai deste registro D190"* e o mesmo para o `VL_ICMS`.
+    //
+    // 🚨 É EXATAMENTE a classe que custou um dia da PWR (20/08) no par
+    // C100 × C190, e que em 26/08 rendeu cinco regras novas: o registro PAI lê
+    // os totais do documento e o FILHO agrega os itens — duas fontes, dois
+    // passos do gerador. E aqui o PVA **não recusa**: ele só imprime um total
+    // menor, que é o erro que só aparece na fiscalização.
+    //
+    // ⚠️ A comparação é com a SOMA dos filhos: o Guia escreve "o valor
+    // informado" porque um D100 costuma ter um D190, mas o registro agrega por
+    // CST/CFOP/alíquota e pode ter vários — a leitura por soma vale nos dois
+    // casos, e é a mesma que o C190 usa com todas as letras.
+    //
+    // 🚨 E O PAREAMENTO É PELA SEQUÊNCIA, NUNCA PELO PRIMEIRO D100 — a 1ª
+    // versão desta regra comparava `d100s[0]` contra a soma de TODOS os D190
+    // do arquivo. Isso funciona no arquivo de UM conhecimento e mente em todos
+    // os outros: empresa com dez CT-e teria a base do primeiro comparada com a
+    // soma dos dez, acusando um arquivo CERTO. Aqui vale o mesmo desenho do
+    // C100 × C190 (R21): o filho pertence ao PAI que o antecede.
+    (() => {
+        // ⚠️ A POSIÇÃO É PARÂMETRO, NUNCA DEDUÇÃO DO VIZINHO — e eu escrevi a
+        // do C100 aqui na primeira versão. O D100 tem **23** campos (não os 29
+        // do C100) e o par fica em **19 (VL_BC_ICMS)** e **20 (VL_ICMS)**,
+        // lidos do que o gerador REAL emite. É a mesma razão pela qual o A100 e
+        // o D100 ficam de fora das regras comuns do C100 (26/08).
+        const SOMAS = [
+            [19, 6, 'VL_BC_ICMS', 'base do ICMS do frete'],
+            [20, 7, 'VL_ICMS', 'ICMS do frete — é ele que vira crédito no E110'],
+        ];
+        let atual = null;
+        let somas = null;
+        let filhos = 0;
+        const fecha = () => {
+            if (!atual || !filhos) return;
+            const f = campos(atual);
+            for (const [posD100, posD190, nome, oQueE] of SOMAS) {
+                const declarado = num(f[posD100]);
+                const somado = somas[posD190];
+                if (Math.abs(centavos(declarado) - centavos(somado)) <= 1) continue;
+                add(erros, {
+                    regra: 'd100-x-d190', registro: 'D100', campo: `${posD100} - ${nome}`, linha: atual,
+                    valor: declarado.toFixed(2), esperado: somado.toFixed(2),
+                    mensagem: `O CT-e nº ${f[9] || '?'} declara ${nome} ${declarado.toFixed(2)} e os `
+                        + `${filhos} D190 dele somam ${somado.toFixed(2)}.`,
+                    acao: `O PVA não recusa isto: ele só imprime um total menor, e é o D190 que a apuração `
+                        + `soma. É o ${oQueE}. Defeito de GERAÇÃO — reporte com o print.`,
+                    fonte: `Guia Prático 3.2.3, D190: "o valor informado deve ser igual ao valor do campo `
+                        + `${nome} do registro D100, pai deste registro D190".`,
+                });
+            }
+        };
+        for (const l of lista) {
+            const reg = registroDe(l);
+            if (reg === 'D100') {
+                fecha();
+                // Cancelado sai com os campos de valor VAZIOS e sem filhos —
+                // comparar ali acusaria documento correto.
+                atual = ['02', '03'].includes(campos(l)[6] || '') ? null : l;
+                somas = { 6: 0, 7: 0 };
+                filhos = 0;
+            } else if (reg === 'D190' && atual) {
+                const c = campos(l);
+                for (const pos of [6, 7]) somas[pos] += num(c[pos]);
+                filhos += 1;
+            } else if (reg === 'D990' || reg === 'E001') {
+                fecha();
+                atual = null;
+            }
+        }
+        fecha();
+    })();
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';
