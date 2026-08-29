@@ -1,26 +1,77 @@
 // ============================================================================
 // sefaz-backend/leiaute-guia-extrator.js  (PURO — testável)
 //
-// Lê a tabela de leiaute de cada registro no Guia Prático da EFD-Contribuições
-// e devolve a CONTAGEM DE CAMPOS. Mora aqui, e não no script, porque script
-// `.mjs` não carrega no jest — e régua sem prova é o vício que esta casa já
-// pagou (o E116, o E250, a varredura de campo órfão que virou script e sumiu).
+// Lê a tabela de leiaute de cada registro nos Guias Práticos do SPED e devolve
+// a CONTAGEM DE CAMPOS. Mora aqui, e não no script, porque script `.mjs` não
+// carrega no jest — e régua sem prova é o vício que esta casa já pagou (o
+// E116, o E250, a varredura de campo órfão que virou script e sumiu).
 //
-// Quem chama: `scripts/extrair-leiaute-contrib.mjs`, que só faz o I/O.
+// Quem chama: `scripts/extrair-leiaute-contrib.mjs` e
+// `scripts/extrair-leiaute-fiscal.mjs`, que só fazem o I/O.
+//
+// ═══ UM ALGORITMO, DOIS DIALETOS ════════════════════════════════════════════
+//
+// A PERGUNTA é a mesma nos dois Guias ("quantos campos tem este registro?") —
+// o que muda é como o .docx foi convertido para texto:
+//
+//   · EFD-Contribuições 1.35 : `Registro 0500:` e o nº de campo SEMPRE com `|`
+//   · EFD ICMS/IPI 3.2.3     : `REGISTRO 0500:` e o nº de campo às vezes SEM
+//     o `|` (a conversão quebra a célula em `\n\n14\n | COD_MU N`)
+//
+// ⚠️ **E O DIALETO NÃO SE UNIFICA "de lambuja"**: relaxar o regex do
+// Contribuições para aceitar o número sem `|` MUDA a tabela dele em **15
+// registros** — 13 saem de INCERTO para conferido e o **D505 muda de 7 para
+// 8 campos**, numa trava que já roda em produção. Mexer nisso junto com outra
+// coisa é trocar alarme por alarme sem ninguém medir. Fica NOMEADO: a leitura
+// tolerante também acerta o **0500 em 9**, que é o valor PROVADO pelo assinado
+// do CF BANK e que a leitura estrita erra em 8. Vale rever — com medição
+// própria, não de carona.
 // ============================================================================
 
-/** Início de cada seção de registro — o índice tem o nº da página no fim. */
-const CABECALHO = /^Registro ([0-9A-Z]{4,5}):/;
-const SO_NUMERO = /^\|\s*(\d{2})\s*$/;
-// ⚠️ O nome do campo QUEBRA no meio na extração do Word ("VL_BC_COFIN S",
-// "COD_ NAT_CC"), então o espaço interno é aceito e removido depois.
-const SO_NOME = /^\|\s*([A-Z][A-Z0-9_ ]{1,25})\s*$/;
+/** Dialeto do Guia da EFD-Contribuições 1.35. */
+const CONTRIB = {
+    // Início de cada seção — o índice tem o nº da página no fim.
+    cabecalho: /^Registro ([0-9A-Z]{4,5}):/,
+    soNumero: /^\|\s*(\d{2})\s*$/,
+    // ⚠️ O nome do campo QUEBRA no meio na extração do Word ("VL_BC_COFIN S",
+    // "COD_ NAT_CC"), então o espaço interno é aceito e removido depois.
+    soNome: /^\|\s*([A-Z][A-Z0-9_ ]{1,25})\s*$/,
+};
 
-export function extrairLeiaute(texto) {
+/** Dialeto do Guia Prático do EFD ICMS/IPI 3.2.3. */
+const FISCAL = {
+    // ⚠️ Aqui o cabeçalho aparece NO MEIO da linha — a conversão gruda o
+    // título do bloco no do registro (`BLOCO C: … REGISTRO C001: ABERTURA…`),
+    // e foi só por isso que o **C001 não tinha tabela nenhuma**. Acontece em 8
+    // registros (0002, B001, C001, C160, D510, D750, E310, 1800).
+    // A guarda é a ASPA: no histórico de alterações o Guia CITA títulos
+    // (`o título do registro C195 passa para: “REGISTRO C195: …”`), e casar ali
+    // criaria uma seção falsa que corta a seção verdadeira ao meio.
+    cabecalho: /(?:^|[^“"])REGISTRO ([0-9A-Z]{4,5}):/,
+    // 🚨 O `|` é OPCIONAL aqui, e não é preciosismo: foi exatamente ele que
+    // fez a leitura do **0100 parar no campo 13** — a conversão soltou o `14`
+    // numa linha sem pipe. E o pior é que a sequência 01..13 ficava CONTÍGUA,
+    // então o registro saía marcado como *conferido* com um campo a menos: a
+    // trava acusaria o 0100 de TODA empresa, num registro CERTO.
+    soNumero: /^\|?\s*(\d{2})\s*$/,
+    // ⚠️ E o nome de campo pode vir ACENTUADO: o campo 05 do 0500 é **NÍVEL**,
+    // e era só isso que deixava o registro marcado como incerto — o buraco não
+    // estava na conversão, estava no meu regex. Corrigir a CLASSE (aceitar o
+    // acento) em vez da instância (ler o 0500 à mão) é a régua da casa.
+    soNome: /^\|?\s*([A-ZÀ-Ú][A-ZÀ-Ú0-9_ ]{1,25})\s*$/,
+    // 🚨 E aqui a conversão separa o número do nome com uma linha VAZIA ou só
+    // com o `|` — foi assim que o **G001** saiu com 1 campo em vez de 2 (REG +
+    // IND_MOV), de novo com a sequência contígua e marcado como conferido.
+    // Duas linhas de folga bastam para os casos do Guia e não alcançam o campo
+    // seguinte, que é o risco de pular demais.
+    vaziasEntre: 2,
+};
+
+function lerTabelas(texto, dialeto) {
     const linhas = String(texto || '').split('\n');
     const secoes = [];
     linhas.forEach((l, i) => {
-        const m = CABECALHO.exec(l.trim());
+        const m = dialeto.cabecalho.exec(l);
         if (m && !/\t\d+\s*$/.test(l)) secoes.push({ i, reg: m[1] });
     });
 
@@ -28,10 +79,16 @@ export function extrairLeiaute(texto) {
     secoes.forEach(({ i: ini, reg }, k) => {
         const fim = k + 1 < secoes.length ? secoes[k + 1].i : linhas.length;
         const campos = new Map();
+        const folga = dialeto.vaziasEntre || 0;
         for (let j = ini; j < fim - 1; j += 1) {
-            const num = SO_NUMERO.exec(linhas[j].trim());
-            const nome = num && SO_NOME.exec(linhas[j + 1].trim());
-            if (!num || !nome) continue;
+            const num = dialeto.soNumero.exec(linhas[j].trim());
+            if (!num) continue;
+            // A linha do NOME vem logo abaixo; onde o dialeto permite, pula as
+            // linhas vazias (ou só com `|`) que a conversão intercalou.
+            let p = j + 1;
+            for (let g = 0; g < folga && p < fim && /^\|?\s*$/.test(linhas[p].trim()); g += 1) p += 1;
+            const nome = p < fim && dialeto.soNome.exec(linhas[p].trim());
+            if (!nome) continue;
             const n = Number(num[1]);
             if (!campos.has(n)) campos.set(n, nome[1].replace(/\s+/g, ''));
         }
@@ -52,4 +109,14 @@ export function extrairLeiaute(texto) {
         };
     });
     return registros;
+}
+
+/** Guia Prático da EFD-Contribuições 1.35. */
+export function extrairLeiaute(texto) {
+    return lerTabelas(texto, CONTRIB);
+}
+
+/** Guia Prático do EFD ICMS/IPI 3.2.3. */
+export function extrairLeiauteFiscal(texto) {
+    return lerTabelas(texto, FISCAL);
 }
