@@ -1,0 +1,4223 @@
+{
+ "fonte": "Guia Prático da Escrituração Fiscal Digital ICMS/IPI, versão 3.2.3 — docs/sped/",
+ "gerado_por": "scripts/extrair-leiaute-fiscal.mjs",
+ "registros": {
+  "1001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "1010": {
+   "campos": 14,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_EXP",
+    "IND_CCRF",
+    "IND_COMB",
+    "IND_USINA",
+    "IND_VA",
+    "IND_EE",
+    "IND_CART",
+    "IND_FORM",
+    "IND_AER",
+    "IND_GIAF1",
+    "IND_GIAF3",
+    "IND_GIAF4",
+    "IND_REST_RESSARC"
+   ]
+  },
+  "1100": {
+   "campos": 12,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_DOC",
+    "NRO_DE",
+    "DT_DE",
+    "NAT_EXP",
+    "NRO_RE",
+    "DT_RE",
+    "CHC_EMB",
+    "DT_CHC",
+    "DT_AVB",
+    "TP_CHC",
+    "PAIS"
+   ]
+  },
+  "1105": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SERIE",
+    "NUM_DOC",
+    "CHV_NFE",
+    "DT_DOC",
+    "COD_ITEM"
+   ]
+  },
+  "1110": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "NUM_DOC",
+    "DT_DOC",
+    "CHV_NFE",
+    "NR_MEMO",
+    "QTD",
+    "UNID"
+   ]
+  },
+  "1200": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ_APUR",
+    "SLD_CRED",
+    "CRED_APR",
+    "CRED_RECEB",
+    "CRED_UTIL",
+    "SLD_CRED_FIM"
+   ]
+  },
+  "1210": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "TIPO_UTIL",
+    "NR_DOC",
+    "VL_CRED_UTIL"
+   ]
+  },
+  "1250": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_CREDITO_ICMS_OP",
+    "VL_ICMS_ST_REST",
+    "VL_FCP_ST_REST",
+    "VL_ICMS_ST_COMPL",
+    "VL_FCP_ST_COMPL"
+   ]
+  },
+  "1255": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "VL_CREDITO_ICMS_OP_MOT",
+    "VL_ICMS_ST_REST_MOT",
+    "VL_FCP_ST_REST_MOT",
+    "VL_ICMS_ST_COMPL_MOT",
+    "VL_FCP_ST_COMPL_MOT"
+   ]
+  },
+  "1300": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "DT_FECH",
+    "ESTQ_ABERT",
+    "VOL_ENTR",
+    "VOL_DISP",
+    "VOL_SAIDAS",
+    "ESTQ_ESCR",
+    "VAL_AJ_PERDA",
+    "VAL_AJ_GANHO",
+    "FECH_FISICO"
+   ]
+  },
+  "1310": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_TANQUE",
+    "ESTQ_ABERT",
+    "VOL_ENTR",
+    "VOL_DISP",
+    "VOL_SAIDAS",
+    "ESTQ_ESCR",
+    "VAL_AJ_PERDA",
+    "VAL_AJ_GANHO",
+    "FECH_FISICO",
+    "CAP_TANQUE"
+   ]
+  },
+  "1320": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_BICO",
+    "NR_INTERV",
+    "MOT_INTERV",
+    "NOM_INTERV",
+    "CNPJ_INTERV",
+    "CPF_INTERV",
+    "VAL_FECHA",
+    "VAL_ABERT",
+    "VOL_AFERI",
+    "VOL_VENDAS"
+   ]
+  },
+  "1350": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "SERIE",
+    "FABRICANTE",
+    "MODELO",
+    "TIPO_MEDICAO"
+   ]
+  },
+  "1360": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_LACRE",
+    "DT_APLICACAO"
+   ]
+  },
+  "1370": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_BICO",
+    "COD_ITEM",
+    "NUM_TANQUE"
+   ]
+  },
+  "1390": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PROD"
+   ]
+  },
+  "1391": {
+   "campos": 23,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_REGISTRO",
+    "QTD_MOID",
+    "ESTQ_INI",
+    "QTD_PRODUZ",
+    "ENT_ANID_HID",
+    "OUTR_ENTR",
+    "PERDA",
+    "CONS",
+    "SAI_ANI_HID",
+    "SAÍDAS",
+    "ESTQ_FIN",
+    "ESTQ_INI_MEL",
+    "PROD_DIA_MEL",
+    "UTIL_MEL",
+    "PROD_ALC_MEL",
+    "OBS",
+    "COD_ITEM",
+    "TP_RESIDUO",
+    "QTD_RESIDUO",
+    "QTD_RESIDUO_DDG",
+    "QTD_RESIDUO_WDG",
+    "QTD_RESIDUO_CANA"
+   ]
+  },
+  "1400": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM_IPM",
+    "MUN",
+    "VALOR"
+   ]
+  },
+  "1500": {
+   "campos": 27,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "SUB",
+    "COD_CONS",
+    "NUM_DOC",
+    "DT_DOC",
+    "DT_E_S",
+    "VL_DOC",
+    "VL_DESC",
+    "VL_FORN",
+    "VL_SERV_NT",
+    "VL_TERC",
+    "VL_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "COD_INF",
+    "VL_PIS",
+    "VL_COFINS",
+    "TP_LIGACAO",
+    "COD_GRUPO_TENSAO"
+   ]
+  },
+  "1510": {
+   "campos": 21,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "COD_CLASS",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "CST_ICMS",
+    "CFOP",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "ALIQ_ST",
+    "VL_ICMS_ST",
+    "IND_REC",
+    "COD_PART",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "1600": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "TOT_CREDITO",
+    "TOT_DEBITO"
+   ]
+  },
+  "1601": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART_IP",
+    "COD_PART_IT",
+    "TOT_VS",
+    "TOT_ISS",
+    "TOT_OUTROS"
+   ]
+  },
+  "1700": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_DISP",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC_INI",
+    "NUM_DOC_FIN",
+    "NUM_AUT"
+   ]
+  },
+  "1710": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DOC_INI",
+    "NUM_DOC_FIN"
+   ]
+  },
+  "1800": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_CARGA",
+    "VL_PASS",
+    "VL_FAT",
+    "IND_RAT",
+    "VL_ICMS_ANT",
+    "VL_BC_ICMS",
+    "VL_ICMS_APUR",
+    "VL_BC_ICMS_APUR",
+    "VL_DIF"
+   ]
+  },
+  "1900": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_APUR_ICMS",
+    "DESCR_COMPL_OUT_APUR"
+   ]
+  },
+  "1910": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI",
+    "DT_FIN"
+   ]
+  },
+  "1920": {
+   "campos": 13,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_TOT_TRANSF_DEBITOS_OA",
+    "VL_TOT_AJ_DEBITOS_OA",
+    "VL_ESTORNOS_CRED_OA",
+    "VL_TOT_TRANSF_CREDITOS_OA",
+    "VL_TOT_AJ_CREDITOS_OA",
+    "VL_ESTORNOS_DEB_OA",
+    "VL_SLD_CREDOR_ANT_OA",
+    "VL_SLD_APURADO_OA",
+    "VL_TOT_DED",
+    "VL_ICMS_RECOLHER_OA",
+    "VL_SLD_CREDOR_TRANSP_OA",
+    "DEB_ESP_OA"
+   ]
+  },
+  "1921": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ_APUR",
+    "DESCR_COMPL_AJ",
+    "VL_AJ_APUR"
+   ]
+  },
+  "1922": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DA",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "1923": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "COD_ITEM",
+    "VL_AJ_ITEM"
+   ]
+  },
+  "1925": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_INF_ADIC",
+    "VL_INF_ADIC",
+    "DESCR_COMPL_AJ"
+   ]
+  },
+  "1926": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OR",
+    "VL_OR",
+    "DT_VCTO",
+    "COD_REC",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "1960": {
+   "campos": 13,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_AP",
+    "G1_01",
+    "G1_02",
+    "G1_03",
+    "G1_04",
+    "G1_05",
+    "G1_06",
+    "G1_07",
+    "G1_08",
+    "G1_09",
+    "G1_10",
+    "G1_11"
+   ]
+  },
+  "1970": {
+   "campos": 12,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_AP",
+    "G3_01",
+    "G3_02",
+    "G3_03",
+    "G3_04",
+    "G3_05",
+    "G3_06",
+    "G3_07",
+    "G3_T",
+    "G3_08",
+    "G3_09"
+   ]
+  },
+  "1975": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "ALIQ_IMP_BASE",
+    "G3_10",
+    "G3_11",
+    "G3_12"
+   ]
+  },
+  "1980": {
+   "campos": 14,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_AP",
+    "G4_01",
+    "G4_02",
+    "G4_03",
+    "G4_04",
+    "G4_05",
+    "G4_06",
+    "G4_07",
+    "G4_08",
+    "G4_09",
+    "G4_10",
+    "G4_11",
+    "G4_12"
+   ]
+  },
+  "1990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_1"
+   ]
+  },
+  "9001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "9900": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "REG_BLC",
+    "QTD_REG_BLC"
+   ]
+  },
+  "9990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_9"
+   ]
+  },
+  "9999": {
+   "campos": 67,
+   "incerto": true,
+   "buracos": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    12,
+    17,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    56,
+    58,
+    59,
+    61,
+    64
+   ],
+   "nomes": [
+    "REG",
+    "QTD_LIN",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "D100",
+    "D100",
+    "?",
+    "D300",
+    "D300",
+    "D300",
+    "D300",
+    "?",
+    "D400",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "D100",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "C100",
+    "?",
+    "D100",
+    "?",
+    "?",
+    "C400",
+    "?",
+    "D700",
+    "D100",
+    "?",
+    "C100",
+    "C500",
+    "D100"
+   ]
+  },
+  "0000": {
+   "campos": 15,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_VER",
+    "COD_FIN",
+    "DT_INI",
+    "DT_FIN",
+    "NOME",
+    "CNPJ",
+    "CPF",
+    "UF",
+    "IE",
+    "COD_MUN",
+    "IM",
+    "SUFRAMA",
+    "IND_PERFIL",
+    "IND_ATIV"
+   ]
+  },
+  "0001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "0002": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CLAS_ESTAB_IND"
+   ]
+  },
+  "0005": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "FANTASIA",
+    "CEP",
+    "END",
+    "NUM",
+    "COMPL",
+    "BAIRRO",
+    "FONE",
+    "FAX",
+    "EMAIL"
+   ]
+  },
+  "0015": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UF_ST",
+    "IE_ST"
+   ]
+  },
+  "0100": {
+   "campos": 14,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NOME",
+    "CPF",
+    "CRC",
+    "CNPJ",
+    "CEP",
+    "END",
+    "NUM",
+    "COMPL",
+    "BAIRRO",
+    "FONE",
+    "FAX",
+    "EMAIL",
+    "COD_MUN"
+   ]
+  },
+  "0150": {
+   "campos": 13,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "NOME",
+    "COD_PAIS",
+    "CNPJ",
+    "CPF",
+    "IE",
+    "COD_MUN",
+    "SUFRAMA",
+    "END",
+    "NUM",
+    "COMPL",
+    "BAIRRO"
+   ]
+  },
+  "0175": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_ALT",
+    "NR_CAMPO",
+    "CONT_ANT"
+   ]
+  },
+  "0190": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UNID",
+    "DESCR"
+   ]
+  },
+  "0200": {
+   "campos": 13,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "DESCR_ITEM",
+    "COD_BARRA",
+    "COD_ANT_ITEM",
+    "UNID_INV",
+    "TIPO_ITEM",
+    "COD_NCM",
+    "EX_IPI",
+    "COD_GEN",
+    "COD_LST",
+    "ALIQ_ICMS",
+    "CEST"
+   ]
+  },
+  "0205": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DESCR_ANT_ITEM",
+    "DT_INI",
+    "DT_FIM",
+    "COD_ANT_ITEM"
+   ]
+  },
+  "0206": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_COMB"
+   ]
+  },
+  "0210": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM_COMP",
+    "QTD_COMP",
+    "PERDA"
+   ]
+  },
+  "0220": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UNID_CONV",
+    "FAT_CONV",
+    "COD_BARRA"
+   ]
+  },
+  "0221": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM_ATOMICO",
+    "QTD_CONTIDA"
+   ]
+  },
+  "0300": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_IND_BEM",
+    "IDENT_MERC",
+    "DESCR_ITEM",
+    "COD_PRNC",
+    "COD_CTA",
+    "NR_PARC"
+   ]
+  },
+  "0305": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_CCUS",
+    "FUNC",
+    "VIDA_UTIL"
+   ]
+  },
+  "0400": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_NAT",
+    "DESCR_NAT"
+   ]
+  },
+  "0450": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_INF",
+    "TXT"
+   ]
+  },
+  "0460": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT"
+   ]
+  },
+  "0500": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_ALT",
+    "COD_NAT_CC",
+    "IND_CTA",
+    "NÍVEL",
+    "COD_CTA",
+    "NOME_CTA"
+   ]
+  },
+  "0600": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_ALT",
+    "COD_CCUS",
+    "CCUS"
+   ]
+  },
+  "0990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_0"
+   ]
+  },
+  "B001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_DAD"
+   ]
+  },
+  "B020": {
+   "campos": 21,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "NUM_DOC",
+    "CHV_NFE",
+    "DT_DOC",
+    "COD_MUN_SERV",
+    "VL_CONT",
+    "VL_MAT_TERC",
+    "VL_SUB",
+    "VL_ISNT_ISS",
+    "VL_DED_BC",
+    "VL_BC_ISS",
+    "VL_BC_ISS_RT",
+    "VL_ISS_RT",
+    "VL_ISS",
+    "COD_INF_OBS"
+   ]
+  },
+  "B025": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_CONT_P",
+    "VL_BC_ISS_P",
+    "ALIQ_ISS",
+    "VL_ISS_P",
+    "VL_ISNT_ISS_P",
+    "COD_SERV"
+   ]
+  },
+  "B030": {
+   "campos": 12,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "NUM_DOC_INI",
+    "NUM_DOC_FIN",
+    "DT_DOC",
+    "QTD_CANC",
+    "VL_CONT",
+    "VL_ISNT_ISS",
+    "VL_BC_ISS",
+    "VL_ISS",
+    "COD_INF_OBS"
+   ]
+  },
+  "B035": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_CONT_P",
+    "VL_BC_ISS_P",
+    "ALIQ_ISS",
+    "VL_ISS_P",
+    "VL_ISNT_ISS_P",
+    "COD_SERV"
+   ]
+  },
+  "B350": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_CTD",
+    "CTA_ISS",
+    "CTA_COSIF",
+    "QTD_OCOR",
+    "COD_SERV",
+    "VL_CONT",
+    "VL_BC_ISS",
+    "ALIQ_ISS",
+    "VL_ISS",
+    "COD_INF_OBS"
+   ]
+  },
+  "B420": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_CONT",
+    "VL_BC_ISS",
+    "ALIQ_ISS",
+    "VL_ISNT_ISS",
+    "VL_ISS",
+    "COD_SERV"
+   ]
+  },
+  "B440": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "COD_PART",
+    "VL_CONT_RT",
+    "VL_BC_ISS_RT",
+    "VL_ISS_RT"
+   ]
+  },
+  "B460": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_DED",
+    "VL_DED",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "COD_INF_OBS",
+    "IND_OBR"
+   ]
+  },
+  "B470": {
+   "campos": 15,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_CONT",
+    "VL_MAT_TERC",
+    "VL_MAT_PROP",
+    "VL_SUB",
+    "VL_ISNT",
+    "VL_DED_BC",
+    "VL_BC_ISS",
+    "VL_BC_ISS_RT",
+    "VL_ISS",
+    "VL_ISS_RT",
+    "VL_DED",
+    "VL_ISS_REC",
+    "VL_ISS_ST",
+    "VL_ISS_REC_UNI"
+   ]
+  },
+  "B500": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_REC",
+    "QTD_PROF",
+    "VL_OR"
+   ]
+  },
+  "B510": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_PROF",
+    "IND_ESC",
+    "IND_SOC",
+    "CPF",
+    "NOME"
+   ]
+  },
+  "B990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_B"
+   ]
+  },
+  "C001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "C100": {
+   "campos": 29,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "NUM_DOC",
+    "CHV_NFE",
+    "DT_DOC",
+    "DT_E_S",
+    "VL_DOC",
+    "IND_PGTO",
+    "VL_DESC",
+    "VL_ABAT_NT",
+    "VL_MERC",
+    "IND_FRT",
+    "VL_FRT",
+    "VL_SEG",
+    "VL_OUT_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_IPI",
+    "VL_PIS",
+    "VL_COFINS",
+    "VL_PIS_ST",
+    "VL_COFINS_ST"
+   ]
+  },
+  "C101": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_FCP_UF_DEST",
+    "VL_ICMS_UF_DEST",
+    "VL_ICMS_UF_REM"
+   ]
+  },
+  "C105": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "OPER",
+    "UF"
+   ]
+  },
+  "C110": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_INF",
+    "TXT_COMPL"
+   ]
+  },
+  "C111": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_PROC",
+    "IND_PROC"
+   ]
+  },
+  "C112": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_DA",
+    "UF",
+    "NUM_DA",
+    "COD_AUT",
+    "VL_DA",
+    "DT_VCTO",
+    "DT_PGTO"
+   ]
+  },
+  "C113": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC"
+   ]
+  },
+  "C114": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "ECF_FAB",
+    "ECF_CX",
+    "NUM_DOC",
+    "DT_DOC"
+   ]
+  },
+  "C115": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_CARGA",
+    "CNPJ_COL",
+    "IE_COL",
+    "CPF_COL",
+    "COD_MUN_COL",
+    "CNPJ_ENTG",
+    "IE_ENTG",
+    "CPF_ENTG",
+    "COD_MUN_ENTG"
+   ]
+  },
+  "C116": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "NR_SAT",
+    "CHV_CFE",
+    "NUM_CFE",
+    "DT_DOC"
+   ]
+  },
+  "C120": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_DOC_IMP",
+    "NUM_DOC_IMP",
+    "PIS_IMP",
+    "COFINSIMP",
+    "NUM_ACDRAW"
+   ]
+  },
+  "C130": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_SERV_NT",
+    "VL_BC_ISSQN",
+    "VL_ISSQN",
+    "VL_BC_IRRF",
+    "VL_IRRF",
+    "VL_BC_PREV",
+    "VL_PREV"
+   ]
+  },
+  "C140": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_EMIT",
+    "IND_TIT",
+    "DESC_TIT",
+    "NUM_TIT",
+    "QTD_PARC",
+    "VL_TIT"
+   ]
+  },
+  "C141": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_PARC",
+    "DT_VCTO",
+    "VL_PARC"
+   ]
+  },
+  "C160": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "VEIC_ID",
+    "QTD_VOL",
+    "PESO_BRT",
+    "PESO_LIQ",
+    "UF_ID"
+   ]
+  },
+  "C165": {
+   "campos": 13,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "VEIC_ID",
+    "COD_AUT",
+    "NR_PASSE",
+    "HORA",
+    "TEMPER",
+    "QTD_VOL",
+    "PESO_BRT",
+    "PESO_LIQ",
+    "NOM_MOT",
+    "CPF",
+    "UF_ID"
+   ]
+  },
+  "C170": {
+   "campos": 38,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "DESCR_COMPL",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "IND_MOV",
+    "CST_ICMS",
+    "CFOP",
+    "COD_NAT",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "ALIQ_ST",
+    "VL_ICMS_ST",
+    "IND_APUR",
+    "CST_IPI",
+    "COD_ENQ",
+    "VL_BC_IPI",
+    "ALIQ_IPI",
+    "VL_IPI",
+    "CST_PIS",
+    "VL_BC_PIS",
+    "ALIQ_PIS",
+    "QUANT_BC_PIS",
+    "ALIQ_PIS",
+    "VL_PIS",
+    "CST_COFINS",
+    "VL_BC_COFINS",
+    "ALIQ_COFINS",
+    "QUANT_BC_COFINS",
+    "ALIQ_COFINS",
+    "VL_COFINS",
+    "COD_CTA",
+    "VL_ABAT_NT"
+   ]
+  },
+  "C171": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_TANQUE",
+    "QTDE"
+   ]
+  },
+  "C172": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_BC_ISSQN",
+    "ALIQ_ISSQN",
+    "VL_ISSQN"
+   ]
+  },
+  "C173": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "LOTE_MED",
+    "QTD_ITEM",
+    "DT_FAB",
+    "DT_VAL",
+    "IND_MED",
+    "TP_PROD",
+    "VL_TAB_MAX"
+   ]
+  },
+  "C174": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_ARM",
+    "NUM_ARM",
+    "DESCR_COMPL"
+   ]
+  },
+  "C175": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_VEIC_OPER",
+    "CNPJ",
+    "UF",
+    "CHASSI_VEIC"
+   ]
+  },
+  "C176": {
+   "campos": 27,
+   "incerto": true,
+   "buracos": [
+    14
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOD_ULT_E",
+    "NUM_DOC_ULT_E",
+    "SER_ULT_E",
+    "DT_ULT_E",
+    "COD_PART_ULT_E",
+    "QUANT_ULT_E",
+    "VL_UNIT_ULT_E",
+    "VL_UNIT_BC_ST",
+    "CHAVE_NFE_ULT_E",
+    "NUM_ITEM_ULT_E",
+    "VL_UNIT_BC_ICMS_ULT_E",
+    "ALIQ_ICMS_ULT_E",
+    "?",
+    "VL_UNIT_ICMS_ULT_E",
+    "ALIQ_ST_ULT_E",
+    "VL_UNIT_RES",
+    "COD_RESP_RET",
+    "COD_MOT_RES",
+    "CHAVE_NFE_RET",
+    "COD_PART_NFE_RET",
+    "SER_NFE_RET",
+    "NUM_NFE_RET",
+    "ITEM_NFE_RET",
+    "COD_DA",
+    "NUM_DA",
+    "VL_UNIT_RES_FCP_ST"
+   ]
+  },
+  "C177": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_SELO_IPI",
+    "QT_SELO_IPI"
+   ]
+  },
+  "C178": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CL_ENQ",
+    "VL_UNID",
+    "QUANT_PAD"
+   ]
+  },
+  "C179": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "BC_ST_ORIG_DEST",
+    "ICMS_ST_REP",
+    "ICMS_ST_COMPL",
+    "BC_RET",
+    "ICMS_RET"
+   ]
+  },
+  "C180": {
+   "campos": 12,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_RESP_RET",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "VL_UNIT_ICMS_OP_CONV",
+    "VL_UNIT_BC_ICMS_ST",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV",
+    "COD_DA",
+    "NUM_DA",
+    "COD_PROD"
+   ]
+  },
+  "C181": {
+   "campos": 21,
+   "incerto": true,
+   "buracos": [
+    13,
+    14,
+    15,
+    16,
+    17,
+    20
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "COD_MOD_SAIDA",
+    "SERIE_SAIDA",
+    "ECF_FAB_SAIDA",
+    "NUM_DOC_SAIDA",
+    "CHV_DFE_SAIDA",
+    "DT_DOC_SAIDA",
+    "NUM_ITEM_SAIDA",
+    "VL_UNIT_CONV_SAIDA",
+    "?",
+    "?",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV_REST",
+    "VL_UNIT_FCP_ST_CONV",
+    "?",
+    "VL_UNIT_FCP_ST_CONV"
+   ]
+  },
+  "C185": {
+   "campos": 18,
+   "incerto": true,
+   "buracos": [
+    10,
+    12,
+    13,
+    14
+   ],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "CST_ICMS",
+    "CFOP",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "?",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV_REST",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV_COMPL"
+   ]
+  },
+  "C186": {
+   "campos": 17,
+   "incerto": true,
+   "buracos": [
+    16
+   ],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "CST_ICMS",
+    "CFOP",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "COD_MOD_ENTRADA",
+    "SERIE_ENTRADA",
+    "NUM_DOC_ENTRADA",
+    "CHV_DFE_ENTRADA",
+    "DT_DOC_ENTRADA",
+    "NUM_ITEM_ENTRADA",
+    "VL_UNIT_CONV_ENTRADA",
+    "?",
+    "VL_UNIT_BC_ICMS_ST"
+   ]
+  },
+  "C190": {
+   "campos": 12,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_RED_BC",
+    "VL_IPI",
+    "COD_OBS"
+   ]
+  },
+  "C195": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT_COMPL"
+   ]
+  },
+  "C197": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ",
+    "DESCR_COMPL_AJ",
+    "COD_ITEM",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_OUTROS"
+   ]
+  },
+  "C300": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC_INI",
+    "NUM_DOC_FIN",
+    "DT_DOC",
+    "VL_DOC",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "C310": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DOC_CANC"
+   ]
+  },
+  "C320": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "C321": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "C330": {
+   "campos": 14,
+   "incerto": true,
+   "buracos": [
+    8,
+    9,
+    10
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "OC",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV_REST",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV_COMPL"
+   ]
+  },
+  "C350": {
+   "campos": 12,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "SER",
+    "SUB_SER",
+    "NUM_DOC",
+    "DT_DOC",
+    "CNPJ_CPF",
+    "VL_MERC",
+    "VL_DOC",
+    "VL_DESC",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "C370": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC"
+   ]
+  },
+  "C380": {
+   "campos": 16,
+   "incerto": true,
+   "buracos": [
+    8,
+    9,
+    10,
+    13
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "OC",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV_REST",
+    "VL_UNIT_FCP_ST_CONV",
+    "?",
+    "VL_UNIT_FCP_ST_CONV",
+    "CST_ICMS",
+    "CFOP"
+   ]
+  },
+  "C390": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "C400": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "ECF_MOD",
+    "ECF_FAB",
+    "ECF_CX"
+   ]
+  },
+  "C405": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_DOC",
+    "CRO",
+    "CRZ",
+    "NUM_COO_FIN",
+    "GT_FIN",
+    "VL_BRT"
+   ]
+  },
+  "C410": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "C420": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_TOT_PAR",
+    "VLR_ACUM_TOT",
+    "NR_TOT",
+    "DESCR_NR_TOT"
+   ]
+  },
+  "C425": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "C430": {
+   "campos": 16,
+   "incerto": true,
+   "buracos": [
+    8,
+    9,
+    10,
+    13
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "OC",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV_REST",
+    "VL_UNIT_FCP_ST_CONV",
+    "?",
+    "VL_UNIT_FCP_ST_CONV",
+    "CST_ICMS",
+    "CFOP"
+   ]
+  },
+  "C460": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "COD_SIT",
+    "NUM_DOC",
+    "DT_DOC",
+    "VL_DOC",
+    "VL_PIS",
+    "VL_COFINS",
+    "CPF_CNPJ",
+    "NOM_ADQ"
+   ]
+  },
+  "C465": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CHV_CFE",
+    "NUM_CCF"
+   ]
+  },
+  "C470": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD",
+    "QTD_CANC",
+    "UNID",
+    "VL_ITEM",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "C480": {
+   "campos": 16,
+   "incerto": true,
+   "buracos": [
+    8,
+    9,
+    10
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "OC",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV_REST",
+    "VL_UNIT_ICMS_ST_CONV",
+    "VL_UNIT_FCP_ST_CONV_COMPL",
+    "CST_ICMS",
+    "CFOP"
+   ]
+  },
+  "C490": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "COD_OBS"
+   ]
+  },
+  "C495": {
+   "campos": 15,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "ALIQ_ICMS",
+    "COD_ITEM",
+    "QTD",
+    "QTD_CANC",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "VL_CANC",
+    "VL_ACMO",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_ISEN",
+    "VL_NT",
+    "VL_ICMS_ST"
+   ]
+  },
+  "C500": {
+   "campos": 40,
+   "incerto": true,
+   "buracos": [
+    28,
+    29,
+    30
+   ],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "SUB",
+    "COD_CONS",
+    "NUM_DOC",
+    "DT_DOC",
+    "DT_E_S",
+    "VL_DOC",
+    "VL_DESC",
+    "VL_FORN",
+    "VL_SERV_NT",
+    "VL_TERC",
+    "VL_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "COD_INF",
+    "VL_PIS",
+    "VL_COFINS",
+    "TPLIGACAO",
+    "COD_GRUPO_TENSAO",
+    "?",
+    "?",
+    "?",
+    "IND_DEST",
+    "COD_MUN_DEST",
+    "COD_CTA",
+    "COD_MOD_DOC_REF",
+    "HASH_DOC_REF",
+    "SER_DOC_REF",
+    "NUM_DOC_REF",
+    "MES_DOC_REF",
+    "ENER_INJET",
+    "OUTRAS_DED"
+   ]
+  },
+  "C510": {
+   "campos": 21,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "COD_CLASS",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "CST_ICMS",
+    "CFOP",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "ALIQ_ST",
+    "VL_ICMS_ST",
+    "IND_REC",
+    "COD_PART",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "C590": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "C591": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_FCP_OP",
+    "VL_FCP_ST"
+   ]
+  },
+  "C595": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT_COMPL"
+   ]
+  },
+  "C597": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ",
+    "DESCR_COMPL_AJ",
+    "COD_ITEM",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_OUTROS"
+   ]
+  },
+  "C600": {
+   "campos": 22,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "COD_MUN",
+    "SER",
+    "SUB",
+    "COD_CONS",
+    "QTD_CONS",
+    "QTD_CANC",
+    "DT_DOC",
+    "VL_DOC",
+    "VL_DESC",
+    "CONS",
+    "VL_FORN",
+    "VL_SERV_NT",
+    "VL_TERC",
+    "VL_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "C601": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DOC_CANC"
+   ]
+  },
+  "C610": {
+   "campos": 17,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_CLASS",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "C690": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "COD_OBS"
+   ]
+  },
+  "C700": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "NRO_ORD_INI",
+    "NRO_ORD_FIN",
+    "DT_DOC_INI",
+    "DT_DOC_FIN",
+    "NOM_MEST",
+    "CHV_COD_DIG"
+   ]
+  },
+  "C790": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "C791": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UF",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST"
+   ]
+  },
+  "C800": {
+   "campos": 17,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "COD_SIT",
+    "NUM_CFE",
+    "DT_DOC",
+    "VL_CFE",
+    "VL_PIS",
+    "VL_COFINS",
+    "CNPJ_CPF",
+    "NR_SAT",
+    "CHV_CFE",
+    "VL_DESC",
+    "VL_MERC",
+    "VL_OUT_DA",
+    "VL_ICMS",
+    "VL_PIS_ST",
+    "VL_COFINS_ST"
+   ]
+  },
+  "C810": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "CST_ICMS",
+    "CFOP"
+   ]
+  },
+  "C815": {
+   "campos": 14,
+   "incerto": true,
+   "buracos": [
+    8,
+    9,
+    10,
+    13
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "OC",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV_REST",
+    "VL_UNIT_FCP_ST_CONV",
+    "?",
+    "VL_UNIT_FCP_ST_CONV"
+   ]
+  },
+  "C850": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "COD_OBS"
+   ]
+  },
+  "C855": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT_COMPL"
+   ]
+  },
+  "C857": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ",
+    "DESCR_COMPL_AJ",
+    "COD_ITEM",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_OUTROS"
+   ]
+  },
+  "C860": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "NR_SAT",
+    "DT_DOC",
+    "DOC_INI",
+    "DOC_FIM"
+   ]
+  },
+  "C870": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "CST_ICMS",
+    "CFOP"
+   ]
+  },
+  "C880": {
+   "campos": 14,
+   "incerto": true,
+   "buracos": [
+    6,
+    8,
+    9,
+    10,
+    13
+   ],
+   "nomes": [
+    "REG",
+    "COD_MOT_REST_COMPL",
+    "QUANT_CONV",
+    "UNID",
+    "VL_UNIT_CONV",
+    "?",
+    "VL_UNIT_ICMS_OP_CONV",
+    "?",
+    "?",
+    "?",
+    "VL_UNIT_ICMS_ST_CONV_REST",
+    "VL_UNIT_FCP_ST_CONV",
+    "?",
+    "VL_UNIT_FCP_ST_CONV"
+   ]
+  },
+  "C890": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "COD_OBS"
+   ]
+  },
+  "C895": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT_COMPL"
+   ]
+  },
+  "C897": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ",
+    "DESCR_COMPL_AJ",
+    "COD_ITEM",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_OUTROS"
+   ]
+  },
+  "C990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_C"
+   ]
+  },
+  "D001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "D100": {
+   "campos": 25,
+   "incerto": true,
+   "buracos": [
+    13
+   ],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "CHV_CTE",
+    "DT_DOC",
+    "DT_A_P",
+    "?",
+    "CHV_CTE_REF",
+    "VL_DOC",
+    "VL_DESC",
+    "IND_FRT",
+    "VL_SERV",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_NT",
+    "COD_INF",
+    "COD_CTA",
+    "COD_MUN_ORIG",
+    "COD_MUN_DEST"
+   ]
+  },
+  "D101": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_FCP_UF_DEST",
+    "VL_ICMS_UF_DEST",
+    "VL_ICMS_UF_REM"
+   ]
+  },
+  "D110": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "VL_SERV",
+    "VL_OUT"
+   ]
+  },
+  "D120": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MUN_ORIG",
+    "COD_MUN_DEST",
+    "VEIC_ID",
+    "UF_ID"
+   ]
+  },
+  "D130": {
+   "campos": 14,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART_CONSG",
+    "COD_PART_RED",
+    "IND_FRT_RED",
+    "COD_MUN_ORIG",
+    "COD_MUN_DEST",
+    "VEIC_ID",
+    "VL_LIQ_FRT",
+    "VL_SEC_CAT",
+    "VL_DESP",
+    "VL_PEDG",
+    "VL_OUT",
+    "VL_FRT",
+    "UF_ID"
+   ]
+  },
+  "D140": {
+   "campos": 14,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART_CONSG",
+    "COD_MUN_ORIG",
+    "COD_MUN_DEST",
+    "IND_VEIC",
+    "VEIC_ID",
+    "IND_NAV",
+    "VIAGEM",
+    "VL_FRT_LIQ",
+    "VL_DESP_PORT",
+    "VL_DESP_CAR_DESC",
+    "VL_OUT",
+    "VL_FRT_BRT",
+    "VL_FRT_MM"
+   ]
+  },
+  "D150": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MUN_ORIG",
+    "COD_MUN_DEST",
+    "VEIC_ID",
+    "VIAGEM",
+    "IND_TFA",
+    "VL_PESO_TX",
+    "VL_TX_TERR",
+    "VL_TX_RED",
+    "VL_OUT",
+    "VL_TX_ADV"
+   ]
+  },
+  "D160": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DESPACHO",
+    "CNPJ_CPF_REM",
+    "IE_REM",
+    "COD_MUN_ORI",
+    "CNPJ_CPF_DEST",
+    "IE_DEST",
+    "COD_MUN_DEST"
+   ]
+  },
+  "D161": {
+   "campos": 8,
+   "incerto": true,
+   "buracos": [
+    2
+   ],
+   "nomes": [
+    "REG",
+    "?",
+    "CNPJ_CPF_COL",
+    "IE_COL",
+    "COD_MUN_COL",
+    "CNPJ_CPF_ENTG",
+    "IE_ENTG",
+    "COD_MUN_ENTG"
+   ]
+  },
+  "D162": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "NUM_DOC",
+    "DT_DOC",
+    "VL_DOC",
+    "VL_MERC",
+    "QTD_VOL",
+    "PESO_BRT",
+    "PESO_LIQ"
+   ]
+  },
+  "D170": {
+   "campos": 14,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART_CONSG",
+    "COD_PART_RED",
+    "COD_MUN_ORIG",
+    "COD_MUN_DEST",
+    "OTM",
+    "IND_NAT_FRT",
+    "VL_LIQ_FRT",
+    "VL_GRIS",
+    "VL_PDG",
+    "VL_OUT",
+    "VL_FRT",
+    "VEIC_ID",
+    "UF_ID"
+   ]
+  },
+  "D180": {
+   "campos": 17,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_SEQ",
+    "IND_EMIT",
+    "CNPJ_CPF_EMIT",
+    "UF_EMIT",
+    "IE_EMIT",
+    "COD_MUN_ORIG",
+    "CNPJ_CPF_TOM",
+    "UF_TOM",
+    "IE_TOM",
+    "COD_MUN_DEST",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "VL_DOC"
+   ]
+  },
+  "D190": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "D195": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT_COMPL"
+   ]
+  },
+  "D197": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ",
+    "DESCR_COMPL_AJ",
+    "COD_ITEM",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_OUTROS",
+    "IND_BENEFICIO"
+   ]
+  },
+  "D300": {
+   "campos": 20,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC_INI",
+    "NUM_DOC_FIN",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "DT_DOC",
+    "VL_OPR",
+    "VL_DESC",
+    "VL_SERV",
+    "VL_SEG",
+    "VL_OUTDESP",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "COD_OBS",
+    "COD_CTA"
+   ]
+  },
+  "D301": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DOC_CANC"
+   ]
+  },
+  "D310": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MUN_ORIG",
+    "VL_SERV",
+    "VL_BC_ICMS",
+    "VL_ICMS"
+   ]
+  },
+  "D350": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "ECF_MOD",
+    "ECF_FAB",
+    "ECF_CX"
+   ]
+  },
+  "D355": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_DOC",
+    "CRO",
+    "CRZ",
+    "NUM_COO_FIN",
+    "GT_FIN",
+    "VL_BRT"
+   ]
+  },
+  "D360": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "D365": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_TOT_PAR",
+    "VLR_ACUM_TOT",
+    "NR_TOT",
+    "DESCR_NR_TOT"
+   ]
+  },
+  "D370": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MUN_ORIG",
+    "VL_SERV",
+    "QTD_BILH",
+    "VL_BC_ICMS",
+    "VL_ICMS"
+   ]
+  },
+  "D390": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ISSQN",
+    "ALIQ_ISSQN",
+    "VL_ISSQN",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "COD_OBS"
+   ]
+  },
+  "D400": {
+   "campos": 16,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "VL_DOC",
+    "VL_DESC",
+    "VL_SERV",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "D410": {
+   "campos": 15,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC_INI",
+    "NUM_DOC_FIN",
+    "DT_DOC",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_DESC",
+    "VL_SERV",
+    "VL_BC_ICMS",
+    "VL_ICMS"
+   ]
+  },
+  "D411": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DOC_CANC"
+   ]
+  },
+  "D420": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MUN_ORIG",
+    "VL_SERV",
+    "VL_BC_ICMS",
+    "VL_ICMS"
+   ]
+  },
+  "D500": {
+   "campos": 24,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_OPER",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "COD_SIT",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "DT_A_P",
+    "VL_DOC",
+    "VL_DESC",
+    "VL_SERV",
+    "VL_SERV_NT",
+    "VL_TERC",
+    "VL_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "COD_INF",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA",
+    "TP_ASSINANTE"
+   ]
+  },
+  "D510": {
+   "campos": 20,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "COD_CLASS",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "CST_ICMS",
+    "CFOP",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_UF",
+    "VL_ICMS_UF",
+    "IND_REC",
+    "COD_PART",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "D530": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_SERV",
+    "DT_INI_SERV",
+    "DT_FIN_SERV",
+    "PER_FISCAL",
+    "COD_AREA",
+    "TERMINAL"
+   ]
+  },
+  "D590": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_UF",
+    "VL_ICMS_UF",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "D600": {
+   "campos": 18,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "COD_MUN",
+    "SER",
+    "SUB",
+    "COD_CONS",
+    "QTD_CONS",
+    "DT_DOC",
+    "VL_DOC",
+    "VL_DESC",
+    "VL_SERV",
+    "VL_SERV_NT",
+    "VL_TERC",
+    "VL_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_PIS",
+    "VL_COFINS"
+   ]
+  },
+  "D610": {
+   "campos": 18,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_CLASS",
+    "COD_ITEM",
+    "QTD",
+    "UNID",
+    "VL_ITEM",
+    "VL_DESC",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_UF",
+    "VL_ICMS_UF",
+    "VL_RED_BC",
+    "VL_PIS",
+    "VL_COFINS",
+    "COD_CTA"
+   ]
+  },
+  "D690": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_UF",
+    "VL_ICMS_UF",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "D695": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "NRO_ORD_INI",
+    "NRO_ORD_FIN",
+    "DT_DOC_INI",
+    "DT_DOC_FIN",
+    "NOM_MEST",
+    "CHV_COD_DIG"
+   ]
+  },
+  "D696": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_BC_ICMS_UF",
+    "VL_ICMS_UF",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "D697": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UF",
+    "VL_BC_ICMS",
+    "VL_ICMS"
+   ]
+  },
+  "D730": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "D731": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_FCP_OP"
+   ]
+  },
+  "D735": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OBS",
+    "TXT_COMPL"
+   ]
+  },
+  "D737": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ",
+    "DESCR_COMPL_AJ",
+    "COD_ITEM",
+    "VL_BC_ICMS",
+    "ALIQ_ICMS",
+    "VL_ICMS",
+    "VL_OUTROS"
+   ]
+  },
+  "D750": {
+   "campos": 17,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_MOD",
+    "SER",
+    "DT_DOC",
+    "QTD_CONS",
+    "IND_PREPAGO",
+    "VL_DOC",
+    "VL_SERV",
+    "VL_SERV_NT",
+    "VL_TERC",
+    "VL_DESC",
+    "VL_DA",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_PIS",
+    "VL_COFINS",
+    "DED"
+   ]
+  },
+  "D760": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "CFOP",
+    "ALIQ_ICMS",
+    "VL_OPR",
+    "VL_BC_ICMS",
+    "VL_ICMS",
+    "VL_RED_BC",
+    "COD_OBS"
+   ]
+  },
+  "D761": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_FCP_OP"
+   ]
+  },
+  "D990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_D"
+   ]
+  },
+  "E001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "E100": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI",
+    "DT_FIN"
+   ]
+  },
+  "E110": {
+   "campos": 15,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_TOT_DEBITOS",
+    "VL_AJ_DEBITOS",
+    "VL_TOT_AJ_DEBITOS",
+    "VL_ESTORNOS_CRED",
+    "VL_TOT_CREDITOS",
+    "VL_AJ_CREDITOS",
+    "VL_TOT_AJ_CREDITOS",
+    "VL_ESTORNOS_DEB",
+    "VL_SLD_CREDOR_ANT",
+    "VL_SLD_APURADO",
+    "VL_TOT_DED",
+    "VL_ICMS_RECOLHER",
+    "VL_SLD_CREDOR_TRANSPORTAR",
+    "DEB_ESP"
+   ]
+  },
+  "E111": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ_APUR",
+    "DESCR_COMPL_AJ",
+    "VL_AJ_APUR"
+   ]
+  },
+  "E112": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DA",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "E113": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "COD_ITEM",
+    "VL_AJ_ITEM"
+   ]
+  },
+  "E115": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_INF_ADIC",
+    "VL_INF_ADIC",
+    "DESCR_COMPL_AJ"
+   ]
+  },
+  "E116": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OR",
+    "VL_OR",
+    "DT_VCTO",
+    "COD_REC",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "E200": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UF",
+    "DT_INI",
+    "DT_FIN"
+   ]
+  },
+  "E210": {
+   "campos": 15,
+   "incerto": true,
+   "buracos": [
+    14
+   ],
+   "nomes": [
+    "REG",
+    "IND_MOV_ST",
+    "VL_SLD_CRED_ANT_ST",
+    "VL_DEVOL_ST",
+    "VL_RESSARC_ST",
+    "VL_OUT_CRED_ST",
+    "VL_AJ_CREDITOS_ST",
+    "VL_RETENÇAO_ST",
+    "VL_OUT_DEB_ST",
+    "VL_AJ_DEBITOS_ST",
+    "VL_SLD_DEV_ANT_ST",
+    "VL_DEDUÇÕES_ST",
+    "VL_ICMS_RECOL_ST",
+    "?",
+    "DEB_ESP_ST"
+   ]
+  },
+  "E220": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ_APUR",
+    "DESCR_COMPL_AJ",
+    "VL_AJ_APUR"
+   ]
+  },
+  "E230": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DA",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "E240": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "COD_ITEM",
+    "VL_AJ_ITEM"
+   ]
+  },
+  "E250": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OR",
+    "VL_OR",
+    "DT_VCTO",
+    "COD_REC",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "E300": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "UF",
+    "DT_INI",
+    "DT_FIN"
+   ]
+  },
+  "E310": {
+   "campos": 22,
+   "incerto": true,
+   "buracos": [
+    11,
+    21
+   ],
+   "nomes": [
+    "REG",
+    "IND_MOV_FCP_DIFAL",
+    "VL_SLD_CRED_ANT_DIFAL",
+    "VL_TOT_DEBITOS_DIFAL",
+    "VL_OUT_DEB_DIFAL",
+    "VL_TOT_CREDITOS_DIFAL",
+    "VL_OUT_CRED_DIFAL",
+    "VL_SLD_DEV_ANT_DIFAL",
+    "VL_DEDUÇÕES_DIFAL",
+    "VL_RECOL_DIFAL",
+    "?",
+    "DEB_ESP_DIFAL",
+    "VL_SLD_CRED_ANT_FCP",
+    "VL_TOT_DEB_FCP",
+    "VL_OUT_DEB_FCP",
+    "VL_TOT_CRED_FCP",
+    "VL_OUT_CRED_FCP",
+    "VL_SLD_DEV_ANT_FCP",
+    "VL_DEDUÇÕES_FCP",
+    "VL_RECOL_FCP",
+    "?",
+    "DEB_ESP_FCP"
+   ]
+  },
+  "E311": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_AJ_APUR",
+    "DESCR_COMPL_AJ",
+    "VL_AJ_APUR"
+   ]
+  },
+  "E312": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_DA",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "E313": {
+   "campos": 10,
+   "incerto": true,
+   "buracos": [
+    7
+   ],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "?",
+    "DT_DOC",
+    "COD_ITEM",
+    "VL_AJ_ITEM"
+   ]
+  },
+  "E316": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OR",
+    "VL_OR",
+    "DT_VCTO",
+    "COD_REC",
+    "NUM_PROC",
+    "IND_PROC",
+    "PROC",
+    "TXT_COMPL"
+   ]
+  },
+  "E500": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_APUR",
+    "DT_INI",
+    "DT_FIN"
+   ]
+  },
+  "E510": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CFOP",
+    "CST_IPI",
+    "VL_CONT_IPI",
+    "VL_BC_IPI",
+    "VL_IPI"
+   ]
+  },
+  "E520": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_SD_ANT_IPI",
+    "VL_DEB_IPI",
+    "VL_CRED_IPI",
+    "VL_OD_IPI",
+    "VL_OC_IPI",
+    "VL_SC_IPI",
+    "VL_SD_IPI"
+   ]
+  },
+  "E530": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_AJ",
+    "VL_AJ",
+    "COD_AJ",
+    "IND_DOC",
+    "NUM_DOC",
+    "DESCR_AJ"
+   ]
+  },
+  "E531": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_PART",
+    "COD_MOD",
+    "SER",
+    "SUB",
+    "NUM_DOC",
+    "DT_DOC",
+    "COD_ITEM",
+    "VL_AJ_ITEM",
+    "CHV_NFE"
+   ]
+  },
+  "E990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_E"
+   ]
+  },
+  "G001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "G110": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI",
+    "DT_FIN",
+    "SALDO_IN_ICMS",
+    "SOM_PARC",
+    "VL_TRIB_EXP",
+    "VL_TOTAL",
+    "IND_PER_SAI",
+    "ICMS_APROP",
+    "SOM_ICMS_OC"
+   ]
+  },
+  "G125": {
+   "campos": 10,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_IND_BEM",
+    "DT_MOV",
+    "TIPO_MOV",
+    "VL_IMOB_ICMS_OP",
+    "VL_IMOB_ICMS_ST",
+    "VL_IMOB_ICMS_FRT",
+    "VL_IMOB_ICMS_DIF",
+    "NUM_PARC",
+    "VL_PARC_PASS"
+   ]
+  },
+  "G126": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI",
+    "DT_FIM",
+    "NUM_PARC",
+    "VL_PARC_PASS",
+    "VL_TRIB_OC",
+    "VL_TOTAL",
+    "IND_PER_SAI",
+    "VL_PARC_APROP"
+   ]
+  },
+  "G130": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_EMIT",
+    "COD_PART",
+    "COD_MOD",
+    "SERIE",
+    "NUM_DOC",
+    "CHV_NFE_CTE",
+    "DT_DOC",
+    "NUM_DA"
+   ]
+  },
+  "G140": {
+   "campos": 9,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "NUM_ITEM",
+    "COD_ITEM",
+    "QTDE",
+    "UNID",
+    "VL_ICMS_OP_APLICADO",
+    "VL_ICMS_ST_APLICADO",
+    "VL_ICMS_FRT_APLICADO",
+    "VL_ICMS_DIF_APLICADO"
+   ]
+  },
+  "G990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_G"
+   ]
+  },
+  "H001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "H005": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INV",
+    "VL_INV",
+    "MOT_INV"
+   ]
+  },
+  "H010": {
+   "campos": 11,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "UNID",
+    "QTD",
+    "VL_UNIT",
+    "VL_ITEM",
+    "IND_PROP",
+    "COD_PART",
+    "TXT_COMPL",
+    "COD_CTA",
+    "VL_ITEM_IR"
+   ]
+  },
+  "H020": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "CST_ICMS",
+    "BC_ICMS",
+    "VL_ICMS"
+   ]
+  },
+  "H030": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "VL_ICMS_OP",
+    "VL_BC_ICMS_ST",
+    "VL_ICMS_ST",
+    "VL_FCP"
+   ]
+  },
+  "H990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_H"
+   ]
+  },
+  "K001": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_MOV"
+   ]
+  },
+  "K010": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "IND_TP_LEIAUTE"
+   ]
+  },
+  "K100": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI",
+    "DT_FIN"
+   ]
+  },
+  "K200": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_EST",
+    "COD_ITEM",
+    "QTD",
+    "IND_EST",
+    "COD_PART"
+   ]
+  },
+  "K210": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI_OS",
+    "DT_FIN_OS",
+    "COD_DOC_OS",
+    "COD_ITEM_ORI",
+    "QTD_ORI"
+   ]
+  },
+  "K215": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM_DES",
+    "QTD_DES"
+   ]
+  },
+  "K220": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_MOV",
+    "COD_ITEM_ORI",
+    "COD_ITEM_DEST",
+    "QTD_ORI",
+    "QTD_DEST"
+   ]
+  },
+  "K230": {
+   "campos": 6,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI_OP",
+    "DT_FIN_OP",
+    "COD_DOC_OP",
+    "COD_ITEM",
+    "QTD_ENC"
+   ]
+  },
+  "K235": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_SAÍDA",
+    "COD_ITEM",
+    "QTD",
+    "COD_INS_SUBST"
+   ]
+  },
+  "K250": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_PROD",
+    "COD_ITEM",
+    "QTD"
+   ]
+  },
+  "K255": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_CONS",
+    "COD_ITEM",
+    "QTD",
+    "COD_INS_SUBST"
+   ]
+  },
+  "K260": {
+   "campos": 7,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_OP_OS",
+    "COD_ITEM",
+    "DT_SAÍDA",
+    "QTD_SAÍDA",
+    "DT_RET",
+    "QTD_RET"
+   ]
+  },
+  "K265": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD_CONS",
+    "QTD_RET"
+   ]
+  },
+  "K270": {
+   "campos": 8,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI_AP",
+    "DT_FIN_AP",
+    "COD_OP_OS",
+    "COD_ITEM",
+    "QTD_COR_POS",
+    "QTD_COR_NEG",
+    "ORIGEM"
+   ]
+  },
+  "K275": {
+   "campos": 5,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD_COR_POS",
+    "QTD_COR_NEG",
+    "COD_INS_SUBST"
+   ]
+  },
+  "K280": {
+   "campos": 7,
+   "incerto": true,
+   "buracos": [
+    6
+   ],
+   "nomes": [
+    "REG",
+    "DT_EST",
+    "COD_ITEM",
+    "QTD_COR_POS",
+    "QTD_COR_NEG",
+    "?",
+    "COD_PART"
+   ]
+  },
+  "K290": {
+   "campos": 4,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_INI_OP",
+    "DT_FIN_OP",
+    "COD_DOC_OP"
+   ]
+  },
+  "K291": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD"
+   ]
+  },
+  "K292": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD"
+   ]
+  },
+  "K300": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "DT_PROD"
+   ]
+  },
+  "K301": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD"
+   ]
+  },
+  "K302": {
+   "campos": 3,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "COD_ITEM",
+    "QTD"
+   ]
+  },
+  "K990": {
+   "campos": 2,
+   "incerto": false,
+   "buracos": [],
+   "nomes": [
+    "REG",
+    "QTD_LIN_K"
+   ]
+  }
+ }
+}

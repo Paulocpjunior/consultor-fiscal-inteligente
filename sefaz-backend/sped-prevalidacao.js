@@ -40,6 +40,11 @@ import { cfopExiste } from './cfop-catalogo.js';
 // A FORMA da linha (|REG|…|) tem dono na auditoria de saída — ela roda nos DOIS
 // arquivos (ICMS/IPI e Contribuições), e o defeito que ela pega é do mecanismo.
 import { linhasMalformadas } from './sped-auditoria-saida.js';
+// 🚨 A contagem de campos por registro — a trava que existia só na outra
+// família (R42). A tabela vem do Guia 3.2.3, extraída, com o registro cuja
+// leitura ficou INCOMPLETA de fora: acusar por contagem subestimada seria
+// alarme sobre registro certo.
+import { conferirContagemDeCamposFiscal } from './sped-fiscal-campos.js';
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, POS_DT_FIN_ICMS_IPI,
@@ -1521,6 +1526,29 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
                 + '— é OPÇÃO do contribuinte, não se deduz. Escolha em Empresas → Dados Fiscais.',
             fonte: 'Guia Prático 3.2.3, K010: "registro obrigatório se o campo 02 (IND_MOV) do registro '
                 + 'K001 estiver informado com \'0 - Bloco com dados informados\'".',
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 🚨 R42 — a CONTAGEM DE CAMPOS de cada registro, contra o leiaute do Guia.
+    //
+    // A trava existia só no EFD-**Contribuições** (desde 18/08) e esta família
+    // não tinha nenhuma — a "meia trava" do COD_MUN do 0150. E a classe já
+    // custou recibo três vezes: o 1010 com 9 campos onde tem 7 (MANTOAN), o
+    // C100/C170 com 24/23 onde têm 29/37 (PWR, **157 recusas de uma vez**) e o
+    // 0500 com o leiaute do arquivo VIZINHO (CF BANK, achado a olho).
+    //
+    // ⚠️ Ela é CEGA para o TAMANHO — conta CAMPOS. O FANTASIA de 91 caracteres
+    // num campo de 60 tem a contagem certa; quem pega aquilo é a outra trava.
+    // ════════════════════════════════════════════════════════════════════════
+    for (const e of conferirContagemDeCamposFiscal(lista).erros) {
+        add(erros, {
+            regra: 'contagem-de-campos', registro: e.registro, campo: `${e.recebido} campos`,
+            linha: lista[e.linha - 1], valor: String(e.recebido), esperado: String(e.esperado),
+            mensagem: e.mensagem,
+            acao: 'É defeito de GERAÇÃO, não de cadastro: reporte com o print. '
+                + 'O PVA não importa o arquivo com o registro fora do leiaute.',
+            fonte: e.fonte,
         });
     }
 

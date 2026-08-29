@@ -5,6 +5,54 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TRAVA DE CONTAGEM DE CAMPOS EXISTIA SÓ NUMA FAMÍLIA — o EFD ICMS/IPI
+  não tinha NENHUMA** (29/08, na sequência do contador de bloco).
+  🔴 `conferirContagemDeCampos` roda em todo arquivo do EFD-**Contribuições**
+  desde 18/08. O EFD ICMS/IPI — o arquivo que a PWR fechou em 20/08, com **45
+  registros de conteúdo** — passava **sem conferência de leiaute nenhuma**. É a
+  "meia trava" do COD_MUN do 0150 (22/08) na forma mais cara: protege o cliente
+  de um arquivo e deixa o do outro descoberto.
+  🚨 **E a classe já custou recibo TRÊS vezes**: o **1010** com 9 campos onde
+  tem 7 (MANTOAN, 17/08 — mesmo número, arquivo diferente, leiaute diferente);
+  o **C100/C170** com 24 e 23 onde têm 29 e 37 (PWR, 20/08 — **157 recusas de
+  importação de uma vez**, todas consequência de UM defeito de forma); e o
+  **0500** com o leiaute do arquivo VIZINHO (CF BANK, 24/08), que quem achou
+  foi o Paulo **contando as barras na tela**.
+  📖 A fonte estava no repo desde 20/08 e nunca tinha sido extraída: o Guia
+  3.2.3 rendeu **250 registros** lidos por inteiro, e os **45 que o gerador
+  emite estão TODOS cobertos**.
+  🚨 **O MODO DE FALHA DA EXTRAÇÃO É O PIOR POSSÍVEL — subestimar a contagem E
+  PARECER COMPLETA**, e ele apareceu TRÊS vezes só ao construir isto: o
+  **0100** parou no campo 13 (o `14` saiu numa linha sem `|`) com a sequência
+  01..13 CONTÍGUA, ou seja marcada como conferida — a trava acusaria o 0100 de
+  **toda empresa**; o **G001** saiu com 1 campo (o `02`/`IND_MOV` separados por
+  uma linha só com `|`); e o **0500** ficou incerto porque o campo 05 chama-se
+  **NÍVEL**, com acento, e o regex do nome não o aceitava.
+  📌 **REGRA QUE FICA: tabela extraída de documento se prova RODANDO O GERADOR
+  e contando a linha.** Nos três casos a leitura do Guia sozinha dizia que
+  estava tudo certo; quem desempatou foi a medição contra o que o gerador
+  emite — e é ela que virou o teste, não a leitura. Tabela subestimada quebra a
+  build em vez de virar alarme falso em produção.
+  ⚠️ **E O DIALETO NÃO SE UNIFICOU "DE LAMBUJA"**: relaxar o regex do
+  EFD-Contribuições para o mesmo padrão MUDA a tabela dele em **15 registros**
+  (13 saem de incerto para conferido e o **D505 muda de 7 para 8**), numa trava
+  que **já roda em produção**. Um algoritmo, dois dialetos — e a mudança da
+  outra família fica NOMEADA, com a medição na mão: a leitura tolerante também
+  acerta o **0500 em 9**, que é o valor PROVADO pelo assinado do CF BANK e que
+  a estrita erra em 8. Vale rever, com medição própria, nunca de carona.
+  ⚠️ **Registro INCERTO não entra** (sobram 3: D100, E210, 9999) e o silêncio
+  sai DITO em `naoConferidos` — foi o silêncio da trava do Contribuições, que
+  só cobria os onze provados por recibo, que deixou o 0500 passar.
+  ⚠️ **E ela é CEGA para o TAMANHO**: conta CAMPOS. O FANTASIA de 91 caracteres
+  num campo de 60 tem a contagem CERTA — quem pega aquilo é a trava de tamanho.
+  As duas são necessárias e nenhuma substitui a outra.
+  🐛 **E A TRAVA NOVA PEGOU UMA FIXTURE QUE DESCREVIA ARQUIVO RECUSADO**: o
+  0000 do `spedPrevalidacao.test.ts` tinha **16** campos e o leiaute tem 15.
+  Trocada — ela documentava um arquivo que o PVA não importa. **Sétima vez no
+  mesmo dia que a régua está certa e a fixture errada.**
+  🐛 E a trava do `.d.ts` mordeu de novo, na mesma hora: pus `@ts-expect-error`
+  em dois imports cujo `.d.ts` já existe. O módulo novo nasceu **com** o dele.
+
 - **🚨 O BLOCO 9 FECHA O ARQUIVO E NÃO FECHA OS BLOCOS — o `X990` de cada
   bloco não era conferido por NADA** (29/08, re-medindo o cruzamento depois de
   o bloco 0 ganhar três registros).
