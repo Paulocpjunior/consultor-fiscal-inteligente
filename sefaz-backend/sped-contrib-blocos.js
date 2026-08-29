@@ -1379,21 +1379,61 @@ export function buildBlocoM(dados) {
     const retPis = ret.totalPis || 0;
     const retCofins = ret.totalCofins || 0;
 
+    // A receita financeira entra na contribuição do período, então o crédito
+    // que o M200 desconta depende dela — por isso ela é resolvida ANTES do
+    // M100. Ela é chamada PURA sobre a ficha, sem depender de nada abaixo.
+    const finM = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
+
     // M100 — Credito PIS (nao-cumulativo)
+    //
+    // 🚨 O M100/M500 SE DESMENTIA POR DENTRO — valores certos, CASAS TROCADAS.
+    //
+    // 29/08. O leiaute saía assim: o crédito aparecia no campo 08 (VL_CRED, certo),
+    // **de novo no 09** (VL_AJUS_ACRES — um ajuste de acréscimo que não existe) e
+    // **de novo no 11** (VL_CRED_DIF — crédito DIFERIDO, ou seja "não usei nada
+    // neste período"), enquanto o campo 12 (VL_CRED_DISP, o crédito DISPONÍVEL)
+    // saía **ZERO** e os campos 13 e 15 saíam VAZIOS, sendo os dois `Obrig. S`.
+    //
+    // 📖 O Guia 1.35 escreve a conta nos próprios campos:
+    //   · campo 12 VL_CRED_DISP = *"(08 + 09 – 10 – 11)"*
+    //   · campo 14 VL_CRED_DESC = *"Se IND_DESC_CRED=0, informar o valor total do
+    //     Campo 12; Se IND_DESC_CRED=1, informar o valor parcial do Campo 12"*
+    //   · campo 15 SLD_CRED = *"Saldo de créditos a utilizar em períodos futuros
+    //     (12 – 14)"*
+    //
+    // Com o que saía, 08+09−10−11 dava o crédito inteiro e o campo 12 dizia ZERO —
+    // e o campo 14 descontava um valor que o campo 12 afirmava não existir. É a
+    // família do M210 da MANTOAN (18/08): a contagem de campos está CERTA, então a
+    // trava de contagem não vê; quem vê é a conta.
+    //
+    // ⚠️ **Por que ninguém tinha visto**: o M100/M500 só sai no NÃO-CUMULATIVO com
+    // crédito de entrada, e as SEIS empresas fechadas por recibo são todas
+    // CUMULATIVAS. É a mesma sorte do IPI que foi parar em E200/E210 e do Bloco H
+    // zerado — o defeito esperando a primeira empresa do outro regime.
+    //
+    // ⚠️ **NADA AQUI É INVENTADO**: ajuste e diferimento saem ZERO porque o app não
+    // gera M110/M510 (ajuste) nem difere crédito — e aí o zero É a resposta ("não
+    // houve"), nunca o default de quem não achou o dado (regra de 06/08). O
+    // IND_DESC_CRED e o saldo saem do que o M200 de fato desconta.
     if (isNaoCumulativo && totalPisEntrada > 0) {
+        // O quanto o M200 vai de fato descontar — o mesmo número, calculado no
+        // mesmo lugar: dois cálculos fariam o M100 e o M200 discordarem sobre
+        // o crédito usado, dentro do mesmo arquivo.
+        const dispPis = totalPisEntrada;
+        const descPis = Math.min(dispPis, totalPisSaida + (finM ? finM.pis : 0));
         linhas.push(fmt.buildLine([
             'M100', '01', '0',
             fmt.formatValue(totalBcEntrada),
             fmt.formatValue(aliq.pis * 100, 4),
             '', '',
-            fmt.formatValue(totalPisEntrada),
-            fmt.formatValue(totalPisEntrada),
-            fmt.formatValue(0),
-            fmt.formatValue(totalPisEntrada),
-            fmt.formatValue(0),
-            '',
-            fmt.formatValue(totalPisEntrada),
-            '',
+            fmt.formatValue(totalPisEntrada),   // 08 VL_CRED
+            fmt.formatValue(0),                 // 09 VL_AJUS_ACRES — não há ajuste
+            fmt.formatValue(0),                 // 10 VL_AJUS_REDUC
+            fmt.formatValue(0),                 // 11 VL_CRED_DIF — não há diferimento
+            fmt.formatValue(dispPis),           // 12 VL_CRED_DISP = 08+09-10-11
+            descPis >= dispPis ? '0' : '1',     // 13 IND_DESC_CRED (0 total · 1 parcial)
+            fmt.formatValue(descPis),           // 14 VL_CRED_DESC
+            fmt.formatValue(dispPis - descPis), // 15 SLD_CRED = 12 - 14
         ]));
     }
 
@@ -1417,7 +1457,7 @@ export function buildBlocoM(dados) {
     // ZERO. Ela tem alíquota e código PRÓPRIOS, então vai numa LINHA SEPARADA
     // do M210/M610 (COD_CONT 02), não somada à apuração comum: juntar
     // declararia parte da receita sob a alíquota errada.
-    const finM = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
+    // (declarado acima, antes do M100 — o crédito descontado precisa dele)
     const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
     const vlCredDescontPis = isNaoCumulativo ? Math.min(totalPisEntrada, vlContribPis) : 0;
     // A retenção declarada é a REAL (soma dos F600); o "a recolher" é que não
@@ -1583,20 +1623,24 @@ export function buildBlocoM(dados) {
     }
 
     // M500 — Credito COFINS (nao-cumulativo)
+    // Espelho do M100 — ver o comentário lá (as casas 09/11/12 estavam
+    // trocadas, e os campos 13 e 15, obrigatórios, saíam vazios).
     if (isNaoCumulativo && totalCofinsEntrada > 0) {
+        const dispCof = totalCofinsEntrada;
+        const descCof = Math.min(dispCof, totalCofinsSaida + (finM ? finM.cofins : 0));
         linhas.push(fmt.buildLine([
             'M500', '01', '0',
             fmt.formatValue(totalBcEntrada),
             fmt.formatValue(aliq.cofins * 100, 4),
             '', '',
-            fmt.formatValue(totalCofinsEntrada),
-            fmt.formatValue(totalCofinsEntrada),
-            fmt.formatValue(0),
-            fmt.formatValue(totalCofinsEntrada),
-            fmt.formatValue(0),
-            '',
-            fmt.formatValue(totalCofinsEntrada),
-            '',
+            fmt.formatValue(totalCofinsEntrada),  // 08 VL_CRED
+            fmt.formatValue(0),                   // 09 VL_AJUS_ACRES
+            fmt.formatValue(0),                   // 10 VL_AJUS_REDUC
+            fmt.formatValue(0),                   // 11 VL_CRED_DIF
+            fmt.formatValue(dispCof),             // 12 VL_CRED_DISP = 08+09-10-11
+            descCof >= dispCof ? '0' : '1',       // 13 IND_DESC_CRED
+            fmt.formatValue(descCof),             // 14 VL_CRED_DESC
+            fmt.formatValue(dispCof - descCof),   // 15 SLD_CRED = 12 - 14
         ]));
     }
 

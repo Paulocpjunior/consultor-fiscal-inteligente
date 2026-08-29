@@ -1316,6 +1316,93 @@ export function conferirEstabelecimentosContrib(linhas) {
     return { erros };
 }
 
+/**
+ * O M100/M500 (crédito) fecha consigo mesmo.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35, registro M100:
+ *  · campo 12 **VL_CRED_DISP** = *"Valor Total do Crédito Disponível relativo
+ *    ao Período (08 + 09 – 10 – 11)"*;
+ *  · campo 14 **VL_CRED_DESC**: *"Se IND_DESC_CRED=0, informar o valor total
+ *    do Campo 12; Se IND_DESC_CRED=1, informar o valor parcial do Campo 12"*;
+ *  · campo 15 **SLD_CRED** = *"Saldo de créditos a utilizar em períodos
+ *    futuros (12 – 14)"*.
+ *
+ * 🚨 **POR QUE ELA NASCEU (29/08)**: o gerador punha o crédito no campo 08
+ * (certo), **de novo no 09** (ajuste de acréscimo que não existe) e **de novo
+ * no 11** (crédito DIFERIDO — "não usei nada neste período"), com o campo 12
+ * (disponível) em **ZERO** e os campos 13 e 15, `Obrig. S`, VAZIOS. A conta do
+ * Guia dava o crédito inteiro e o registro dizia zero — e o campo 14 descontava
+ * um valor que o 12 afirmava não existir.
+ *
+ * É a família do M210 da MANTOAN (18/08): a CONTAGEM de campos está certa, e
+ * por isso `conferirContagemDeCampos` não vê — quem vê é a conta.
+ *
+ * ⚠️ Só não apareceu ainda porque o M100/M500 sai apenas no NÃO-cumulativo com
+ * crédito de entrada, e as seis empresas fechadas por recibo são todas
+ * CUMULATIVAS — a mesma sorte do IPI em E200/E210 e do Bloco H zerado.
+ */
+export function conferirCreditoDoM100(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg !== 'M100' && reg !== 'M500') continue;
+        const v = (n) => num(c[n - 1]);
+        const cent = (x) => Math.round(x * 100);
+        const trib = reg === 'M100' ? 'PIS' : 'COFINS';
+
+        const disp = v(8) + v(9) - v(10) - v(11);
+        if (Math.abs(cent(v(12)) - cent(disp)) > 1) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '12 - VL_CRED_DISP', linha: l,
+                valor: v(12).toFixed(2), esperado: disp.toFixed(2),
+                mensagem: `O ${reg} (${trib}) declara crédito disponível de ${v(12).toFixed(2)} e a conta do `
+                    + `Guia (08+09-10-11) dá ${disp.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É deste campo que sai o crédito descontado '
+                    + 'no M200.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 12: "Valor Total do Crédito `
+                    + 'Disponível relativo ao Período (08 + 09 – 10 – 11)".',
+            });
+        }
+        const saldo = v(12) - v(14);
+        if (Math.abs(cent(v(15)) - cent(saldo)) > 1) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '15 - SLD_CRED', linha: l,
+                valor: v(15).toFixed(2), esperado: saldo.toFixed(2),
+                mensagem: `O ${reg} (${trib}) declara saldo de ${v(15).toFixed(2)} e a conta do Guia (12-14) `
+                    + `dá ${saldo.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. Este saldo é o crédito que a empresa leva '
+                    + 'para os períodos seguintes.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 15: "Saldo de créditos a `
+                    + 'utilizar em períodos futuros (12 – 14)".',
+            });
+        }
+        // 📖 Campo 13: 0 = usa o total do campo 12; 1 = usa parcial.
+        const ind = String(c[12] || '').trim();
+        if (!['0', '1'].includes(ind)) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '13 - IND_DESC_CRED', linha: l,
+                valor: ind, esperado: '0 ou 1',
+                mensagem: `O ${reg} (${trib}) não diz se usou o crédito por inteiro ou em parte.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É campo obrigatório.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 13 (Obrig. S): "0 – Utilização `
+                    + 'do valor total para desconto da contribuição apurada no período".',
+            });
+        } else if (ind === '0' && Math.abs(cent(v(14)) - cent(v(12))) > 1) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '14 - VL_CRED_DESC', linha: l,
+                valor: v(14).toFixed(2), esperado: v(12).toFixed(2),
+                mensagem: `O ${reg} (${trib}) diz que usou o crédito por INTEIRO (IND_DESC_CRED = 0) e `
+                    + `desconta ${v(14).toFixed(2)} de um disponível de ${v(12).toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 14: "Se IND_DESC_CRED=0, `
+                    + 'informar o valor total do Campo 12".',
+            });
+        }
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
@@ -1357,6 +1444,10 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // apontam para ele — a família do 0150/0200 órfãos, que já custou
         // rodada de PVA nas duas pontas (MANTOAN e PWR, 19/08).
         ...conferirEstabelecimentosContrib(linhas).erros,
+        // 🚨 O M100/M500 se desmentia por dentro: o crédito aparecia como
+        // AJUSTE e como DIFERIDO, e o disponível saía ZERO. Contagem de campos
+        // certa, casas trocadas — a família do M210 da MANTOAN (18/08).
+        ...conferirCreditoDoM100(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.
