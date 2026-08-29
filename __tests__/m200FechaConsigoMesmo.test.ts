@@ -310,3 +310,82 @@ describe('📖 estabelecimento do bloco tem de estar no 0140', () => {
         expect(r.erros).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O M100/M500 SE DESMENTIA POR DENTRO — valores certos, CASAS TROCADAS.
+//
+// O crédito saía no campo 08 (certo), **de novo no 09** (VL_AJUS_ACRES — um
+// ajuste de acréscimo que não existe) e **de novo no 11** (VL_CRED_DIF —
+// crédito DIFERIDO, ou seja "não usei nada neste período"), com o campo 12
+// (VL_CRED_DISP, o disponível) em **ZERO** e os campos 13 e 15, `Obrig. S`,
+// VAZIOS.
+//
+// 📖 O Guia escreve a conta nos próprios campos: 12 = (08+09−10−11) e
+// 15 = (12−14). Com o que saía, a conta dava o crédito inteiro e o registro
+// dizia ZERO — e o campo 14 descontava um valor que o 12 afirmava não existir.
+//
+// ⚠️ Só não apareceu ainda porque o M100/M500 sai apenas no NÃO-cumulativo com
+// crédito de entrada, e as SEIS empresas fechadas por recibo são todas
+// CUMULATIVAS — a mesma sorte do IPI em E200/E210 e do Bloco H zerado.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 o M100/M500 fecha consigo mesmo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { conferirCreditoDoM100 } = require('../sefaz-backend/sped-contrib-campos.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { buildBlocoM: build } = require('../sefaz-backend/sped-contrib-blocos.js');
+    const sq = (l: string) => l.replace(/\r?\n$/, '');
+
+    // O leiaute ANTIGO, exatamente como saía antes de 29/08.
+    const antigo = L('M100', '01', '0', '1000,00', '1,6500', '', '',
+        '16,50', '16,50', '0,00', '16,50', '0,00', '', '16,50', '');
+
+    it('pega o crédito disponível ZERADO — o defeito que estava vivo', () => {
+        const e = conferirCreditoDoM100([antigo]).erros;
+        expect(e.some((x: { campo: string }) => x.campo === '12 - VL_CRED_DISP')).toBe(true);
+        expect(String(e[0].fonte)).toMatch(/\(08 \+ 09 – 10 – 11\)/);
+    });
+
+    it('pega o IND_DESC_CRED vazio, que é campo obrigatório', () => {
+        const e = conferirCreditoDoM100([antigo]).erros;
+        expect(e.some((x: { campo: string }) => x.campo === '13 - IND_DESC_CRED')).toBe(true);
+    });
+
+    // 🚨 A PROVA: o gerador CORRIGIDO nasce verde. Empresa do não-cumulativo
+    // com crédito de entrada — o caminho que nunca tinha sido exercido.
+    it('o M100/M500 que o gerador produz HOJE não acusa nada', () => {
+        const linhas = build({
+            empresa: { cnpj: '11111111000191' }, regimeApuracao: '1',
+            competencia: '2026-06', competenciaFim: '2026-06',
+            notas: [
+                { direcao: 'saida', valorTotal: 10000, itens: [{ vProd: 10000, cfop: '5101' }] },
+                { direcao: 'entrada', valorTotal: 4000, itens: [{ vProd: 4000, cfop: '1102' }] },
+            ],
+            warnings: [] as string[],
+        }).map(sq);
+        const m100 = linhas.find((x: string) => x.startsWith('|M100|'));
+        // guarda: sem M100 o teste passaria por vazio.
+        expect(m100).toBeTruthy();
+        expect(conferirCreditoDoM100(linhas).erros).toEqual([]);
+    });
+
+    it('o crédito maior que a contribuição sai como uso PARCIAL, com saldo', () => {
+        const linhas = build({
+            empresa: { cnpj: '11111111000191' }, regimeApuracao: '1',
+            competencia: '2026-06', competenciaFim: '2026-06',
+            notas: [
+                { direcao: 'saida', valorTotal: 1000, itens: [{ vProd: 1000, cfop: '5101' }] },
+                { direcao: 'entrada', valorTotal: 9000, itens: [{ vProd: 9000, cfop: '1102' }] },
+            ],
+            warnings: [] as string[],
+        }).map(sq);
+        const m100 = linhas.find((x: string) => x.startsWith('|M100|'))!;
+        const c = m100.split('|');
+        expect(c[13]).toBe('1');                       // IND_DESC_CRED = parcial
+        expect(Number(c[15].replace(',', '.'))).toBeGreaterThan(0);  // SLD_CRED sobra
+        expect(conferirCreditoDoM100(linhas).erros).toEqual([]);
+    });
+
+    it('arquivo sem M100 fica MUDO', () => {
+        expect(conferirCreditoDoM100([L('0000', '020')]).erros).toEqual([]);
+    });
+});

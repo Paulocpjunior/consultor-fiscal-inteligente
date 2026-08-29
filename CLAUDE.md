@@ -5,6 +5,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O M100/M500 SE DESMENTIA POR DENTRO — o crédito saía como AJUSTE e como
+  DIFERIDO, e o DISPONÍVEL saía ZERO** (29/08, achado ao fechar o cruzamento do
+  EFD-Contribuições — o M100 e o M500 eram dois dos cinco registros sem regra).
+  🔴 **O que saía**: crédito no campo **08** (VL_CRED, certo), **de novo no 09**
+  (VL_AJUS_ACRES — um ajuste de acréscimo que não existe) e **de novo no 11**
+  (VL_CRED_DIF — crédito **DIFERIDO**, ou seja *"não usei nada neste
+  período"*), com o campo **12** (VL_CRED_DISP, o crédito DISPONÍVEL) em
+  **ZERO** e os campos **13** e **15**, `Obrig. S`, **VAZIOS**.
+  📖 **O Guia escreve a conta nos próprios campos**: campo 12 = *"(08 + 09 – 10
+  – 11)"* · campo 14 = *"Se IND_DESC_CRED=0, informar o valor total do Campo
+  12"* · campo 15 = *"Saldo de créditos a utilizar em períodos futuros (12 –
+  14)"*. Com o que saía, a conta dava o crédito INTEIRO e o registro dizia
+  **zero** — e o campo 14 descontava um valor que o 12 afirmava não existir.
+  🚨 **É a família do M210 da MANTOAN (18/08): a CONTAGEM de campos está CERTA,
+  então `conferirContagemDeCampos` não vê.** Quem vê é a conta — e é por isso
+  que a trava de contagem, sozinha, nunca bastou: ela pega o registro que
+  PERDEU campos, não o que manteve a contagem e trocou as casas.
+  ⚠️ **POR QUE NINGUÉM TINHA VISTO**: o M100/M500 só sai no **NÃO-cumulativo
+  com crédito de entrada**, e as SEIS empresas fechadas por recibo são todas
+  **CUMULATIVAS**. É a mesma sorte do IPI que foi parar em E200/E210 e do Bloco
+  H zerado — o defeito esperando a primeira empresa do outro regime.
+  ✂️ **E NADA FOI INVENTADO**: ajuste e diferimento saem **ZERO** porque o app
+  não gera M110/M510 nem difere crédito — e aí o zero **É a resposta** ("não
+  houve"), nunca o default de quem não achou o dado (regra de 06/08). O
+  `IND_DESC_CRED` e o saldo saem **do que o M200 de fato desconta**: crédito
+  maior que a contribuição vira uso **PARCIAL** com o saldo sobrando para os
+  períodos seguintes, que é o certo — antes ele sumia.
+  ⚠️ **E o número do crédito descontado é calculado UMA vez**: dois cálculos
+  fariam o M100 e o M200 discordarem sobre o crédito usado **dentro do mesmo
+  arquivo**. A receita financeira subiu de posição no gerador porque ela entra
+  na contribuição do período — e o crédito descontado depende dela.
+  🚦 **A regra da prevalidação nasceu junto** (`conferirCreditoDoM100`), com as
+  três contas do Guia citadas, e **nasce VERDE sobre o gerador corrigido** —
+  provada contra a linha do leiaute ANTIGO, que ela acusa.
+  ⚠️ **O QUE MUDA DE VALOR, e vai dito**: este é o único achado do dia que
+  altera NÚMERO em arquivo fiscal. Ele só alcança empresa do **não-cumulativo
+  com crédito de entrada** — **nenhuma das seis com recibo** — e o que muda é a
+  posição do crédito nas casas do registro, não o crédito em si.
+
 - **🚨 O M200/M600 NUNCA TINHA SIDO PERGUNTADO SE FECHA CONSIGO MESMO — e é
   dele que sai o débito da DCTF** (29/08, seguindo o cruzamento "registros que
   o gerador EMITE × registros que a prevalidação COBRE" no EFD-Contribuições:
