@@ -171,6 +171,24 @@ describe('🚦 a R42 acusa o registro fora do leiaute', () => {
     });
 });
 
+// 📌 A LISTA DO QUE ELA NÃO CONFERIU TEM DE CHEGAR A ALGUÉM.
+//
+// `naoConferidos` existir e ninguém ler é a classe do `coberturaIncompleta`
+// (quatro dias produzindo flag que nenhum leitor consumia) e do E510 "pronto"
+// que ninguém gerava: **trava escrita não é trava ligada**. O header do
+// EFD-Contribuições já leva esta lista desde 25/08; o do EFD ICMS/IPI não
+// levava — e foi justamente o silêncio da trava do outro arquivo que deixou o
+// 0500 sair com o leiaute do vizinho por meses.
+describe('📌 o `naoConferidos` chega na resposta da geração', () => {
+    const fonte = require('fs').readFileSync('sefaz-backend/sped-fiscal-routes.js', 'utf8');
+
+    it('a rota importa a conferência e devolve a lista no header', () => {
+        expect(fonte).toMatch(/from '\.\/sped-fiscal-campos\.js'/);
+        const header = fonte.slice(fonte.indexOf("X-SPED-Prevalidacao"));
+        expect(header.slice(0, 900)).toMatch(/naoConferidos/);
+    });
+});
+
 describe('⚠️ o que a trava NÃO faz', () => {
     it('registro fora da tabela não vira erro — vira NOMEADO', () => {
         const r = conferirContagemDeCamposFiscal(['|ZZZZ|1|2|3|']);
