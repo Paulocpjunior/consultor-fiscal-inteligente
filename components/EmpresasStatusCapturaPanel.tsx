@@ -451,6 +451,14 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
 
     // Card-filtro: clicar aplica o filtro correspondente na tabela e mostra um
     // anel de "selecionado". Ajuda o colaborador a atacar a pendência direto.
+    //
+    // 🚨 BOTÃO DENTRO DE CARD-FILTRO PRECISA DE `stopPropagation`. O card
+    // INTEIRO é clicável, então o clique no link interno borbulha: o link
+    // aplica o filtro dele e o CARD aplica o dele logo depois — o último
+    // vence, e para quem usa isso é indistinguível de "o link não funciona".
+    // Foi o que aconteceu com o ⚠ A3 sem entrega, que ficou seis dias assim
+    // (23/08 → 29/08) sem ninguém ver, até o Paulo tentar clicar: *"o card não
+    // está clicável, o link não está clicável"*.
     const cardFiltro = (f: FiltroTipo, base: string) => ({
         className: `${base} cursor-pointer transition hover:shadow-md ${filtro === f && !busca ? 'ring-2 ring-offset-1 ring-slate-500 dark:ring-slate-300' : ''}`,
         role: 'button' as const,
@@ -489,7 +497,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     {!!r.a3SemEntrega && (
                         <button
                             type="button"
-                            onClick={() => setFiltro('a3-sem-entrega')}
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('a3-sem-entrega'); }}
                             className="text-xs text-amber-700 underline text-left"
                             title="Empresas A3 cujo agente local cfi-a3 nunca entregou documento. Não prova que ele não rodou — rodada sem movimento não deixa registro."
                         >
@@ -502,7 +510,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     {!!(r.nfseSpSemEntrega || r.nfseSpComErro) && (
                         <button
                             type="button"
-                            onClick={() => setFiltro('nfsesp-sem-entrega')}
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsesp-sem-entrega'); }}
                             className="text-xs text-amber-700 underline text-left"
                             title="Empresas do portal da capital cujo trilho nunca baixou nota, ou cujo último download falhou. O laço do portal cruza o dropdown de prestadores com o nosso cadastro pelo CCM — quem não casa é pulada sem gerar erro."
                         >
