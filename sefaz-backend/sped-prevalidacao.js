@@ -1209,6 +1209,105 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+    // ── R37/R38. Os ajustes do E110 batem com os E111 e com os C197 ─────────
+    //
+    // 📖 FONTE — Guia 3.2.3, E110, quatro validações que dizem POR EXTENSO de
+    // onde cada campo vem, separando pelo **4º caractere** do `COD_AJ_APUR`
+    // (com o 3º = '0', que é o ajuste da APURAÇÃO, não do documento):
+    //   · campo 04 `VL_TOT_AJ_DEBITOS`  ← 4º = '0'
+    //   · campo 05 `VL_ESTORNOS_CRED`   ← 4º = '1'
+    //   · campo 08 `VL_TOT_AJ_CREDITOS` ← 4º = '2'
+    //   · campo 09 `VL_ESTORNOS_DEB`    ← 4º = '3'
+    // E os campos 03/07 (`VL_AJ_DEBITOS`/`VL_AJ_CREDITOS`) vêm dos **C197**,
+    // pelo 3º caractere do `COD_AJ` — 3/4/5 débito, 0/1/2 crédito.
+    //
+    // 🚨 É a MESMA classe do E110 campo 11 (02/08): cada total, isolado, está
+    // certo; o que não fecha é a EXPRESSÃO — e é a apuração que vira a GUIA.
+    // A R17 confere o E110 consigo mesmo; estas conferem contra os FILHOS, que
+    // é onde o gerador monta o número num passo diferente.
+    const e110 = doReg('E110')[0];
+    if (e110) {
+        const e = campos(e110);
+        const e111s = doReg('E111');
+        const somaPorTipo = (quarto) => e111s.reduce((a, l) => {
+            const cod = String(campos(l)[2] || '').trim();
+            // 3º caractere '0' = ajuste da APURAÇÃO (o do documento é 1..5 e
+            // vive no C197). Código curto não classifica — e classificar por
+            // dedução seria somar no campo errado.
+            if (cod.length < 4 || cod[2] !== '0' || cod[3] !== quarto) return a;
+            return a + num(campos(l)[4]);
+        }, 0);
+        for (const [pos, quarto, nome, oQueE] of [
+            [4, '0', 'VL_TOT_AJ_DEBITOS', 'ajuste a débito'],
+            [5, '1', 'VL_ESTORNOS_CRED', 'estorno de crédito'],
+            [8, '2', 'VL_TOT_AJ_CREDITOS', 'ajuste a crédito'],
+            [9, '3', 'VL_ESTORNOS_DEB', 'estorno de débito'],
+        ]) {
+            const declarado = num(e[pos]);
+            const somado = somaPorTipo(quarto);
+            if (Math.abs(centavos(declarado) - centavos(somado)) <= 1) continue;
+            add(erros, {
+                regra: 'e110-x-e111', registro: 'E110', campo: `${pos} - ${nome}`, linha: e110,
+                valor: declarado.toFixed(2), esperado: somado.toFixed(2),
+                mensagem: `O E110 declara ${nome} ${declarado.toFixed(2)} e os E111 de ${oQueE} `
+                    + `(COD_AJ_APUR com 4º caractere '${quarto}') somam ${somado.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É o E110 que vira a GUIA: um total que '
+                    + 'não bate com os próprios ajustes recolhe a mais ou a menos.',
+                fonte: `Guia Prático 3.2.3, E110 campo ${String(pos).padStart(2, '0')}: "o valor informado `
+                    + `deve corresponder ao somatório do campo VL_AJ_APUR dos registros E111, se o terceiro `
+                    + `caractere for igual a '0' e o quarto caractere do campo COD_AJ_APUR do registro E111 `
+                    + `for igual a '${quarto}'".`,
+            });
+        }
+
+        // ── R38. Os campos 03/07 vêm dos C197 ───────────────────────────────
+        //
+        // 🚨 E AQUI HÁ UMA PREMISSA DO APP QUE O GUIA CONTRARIA, e ela vai
+        // DITA em vez de "corrigida": o gerador do DIFAL escreve, no próprio
+        // aviso, *"o DÉBITO na apuração não vem do C197 — lance o ajuste
+        // correspondente na aba Ajustes E111"*, e cravou os campos 03/07 em
+        // ZERO. O Guia diz que eles são a Σ dos C197. Se a equipe cadastrar um
+        // COD_AJ de débito (3º caractere 3/4/5) E lançar o E111 do mesmo
+        // valor, o arquivo declara o DIFAL **duas vezes**; se lançar só o
+        // E111, o campo 03 sai zerado com um C197 de débito no arquivo.
+        //
+        // ⚠️ O app NÃO escolhe qual das duas: o COD_AJ é ESTADUAL e é ele que
+        // decide. A regra nomeia a divergência e diz as DUAS saídas.
+        const c197s = doReg('C197');
+        if (c197s.length) {
+            const somaC197 = (terceiros) => c197s.reduce((a, l) => {
+                const cod = String(campos(l)[2] || '').trim();
+                if (cod.length < 4 || !terceiros.includes(cod[2])) return a;
+                // 4º caractere restrito pelo Guia: '0' ou '3'..'8'.
+                if (!['0', '3', '4', '5', '6', '7', '8'].includes(cod[3])) return a;
+                return a + num(campos(l)[7]);
+            }, 0);
+            for (const [pos, terceiros, nome, lado] of [
+                [3, ['3', '4', '5'], 'VL_AJ_DEBITOS', 'débito'],
+                [7, ['0', '1', '2'], 'VL_AJ_CREDITOS', 'crédito'],
+            ]) {
+                const declarado = num(e[pos]);
+                const somado = somaC197(terceiros);
+                if (Math.abs(centavos(declarado) - centavos(somado)) <= 1) continue;
+                add(erros, {
+                    regra: 'e110-x-c197', registro: 'E110', campo: `${pos} - ${nome}`, linha: e110,
+                    valor: declarado.toFixed(2), esperado: somado.toFixed(2),
+                    mensagem: `O E110 declara ${nome} ${declarado.toFixed(2)} e os C197 de ${lado} somam `
+                        + `${somado.toFixed(2)}.`,
+                    acao: `O app crava este campo em ZERO porque trata o C197 como ORIGEM DOCUMENTAL e faz `
+                        + `o ${lado} entrar pelo E111 — e o Guia manda somar os C197 aqui. Confira o COD_AJ `
+                        + `cadastrado (tabela 5.3 do seu estado): se ele é de ${lado}, ou o ajuste do E111 `
+                        + `sobra (o valor seria declarado DUAS vezes), ou este campo tem de trazer a soma. `
+                        + `Não deduza — o código é estadual e é ele que decide.`,
+                    fonte: `Guia Prático 3.2.3, E110 campo ${String(pos).padStart(2, '0')}: "o valor `
+                        + `informado deve corresponder ao somatório do campo VL_ICMS dos registros C197, `
+                        + `C597, C857, C897, D197 e D737 se o terceiro caractere do campo COD_AJ (…) for `
+                        + `igual a '${terceiros.join("', '")}'".`,
+                });
+            }
+        }
+    }
+
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────
     //
     // 📖 FONTE — Guia 3.2.3, G125 campo 02: *"o código informado neste campo
