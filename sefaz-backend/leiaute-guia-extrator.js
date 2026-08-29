@@ -18,14 +18,21 @@
 //   · EFD ICMS/IPI 3.2.3     : `REGISTRO 0500:` e o nº de campo às vezes SEM
 //     o `|` (a conversão quebra a célula em `\n\n14\n | COD_MU N`)
 //
-// ⚠️ **E O DIALETO NÃO SE UNIFICA "de lambuja"**: relaxar o regex do
-// Contribuições para aceitar o número sem `|` MUDA a tabela dele em **15
-// registros** — 13 saem de INCERTO para conferido e o **D505 muda de 7 para
-// 8 campos**, numa trava que já roda em produção. Mexer nisso junto com outra
-// coisa é trocar alarme por alarme sem ninguém medir. Fica NOMEADO: a leitura
-// tolerante também acerta o **0500 em 9**, que é o valor PROVADO pelo assinado
-// do CF BANK e que a leitura estrita erra em 8. Vale rever — com medição
-// própria, não de carona.
+// ⚠️ **E O DIALETO NÃO SE UNIFICOU "de lambuja"**: relaxar a leitura do
+// Contribuições MUDA a tabela dele em **15 registros**, numa trava que já roda
+// em produção — mexer nisso junto com outra coisa é trocar alarme por alarme
+// sem ninguém medir.
+//
+// ✅ **A revisão veio DEPOIS, com medição própria, e o gabarito autorizou**:
+// contra os **11 registros provados por recibo do PVA / arquivo assinado**, a
+// leitura estrita acertava **10** e a tolerante acerta **11** — o que ela
+// conserta é justamente o **0500**, que a estrita lia em 8 e o assinado do CF
+// BANK prova em **9**. A cobertura subiu de 184 para **199** registros e a
+// `divergenciasGuiaXRecibo()` continua vazia.
+//
+// 📌 **REGRA QUE FICA: mudança em trava viva se autoriza contra o GABARITO da
+// própria trava.** Sem ele, isto seria "parece melhor" — que é como se afrouxa
+// uma trava sem perceber.
 // ============================================================================
 
 /**
