@@ -23,8 +23,18 @@
 // visualizador imprime na mesma sequência). G125 segue o layout do Guia
 // Prático (OP, ST, FRT, DIF) — a validação final é no PVA, como todo o resto
 // do arquivo.
+//
+// 🚨 29/08 — O BLOCO INTEIRO SAÍA GRUDADO NUMA LINHA SÓ, e é o caso REALITY
+// (21/08) vivo aqui. Este módulo montava a linha à mão (`[...].join('|')`),
+// sem o `|` inicial e sem o `\r\n`; o orquestrador junta os blocos com
+// `join('')`, então G001, G110, G125 e G990 saíam colados na cauda do bloco E.
+// A lição de 21/08 estava escrita — *"módulo novo que bypassar o buildLine cai
+// na R15"* — e o bloco G nunca tinha passado por ela porque a ÚNICA empresa
+// com CIAP (EXPERTE) está bloqueada na captura: é a mesma sorte do IPI em
+// E200/E210 e do Bloco H zerado. Agora as quatro saem pelo `fmt.buildLine`.
 // ============================================================================
 
+import * as fmt from './sped-fiscal-format.js';
 // Régua única do cancelamento (status + cStat + evento 110111) e da direção
 // efetiva (a nota própria de entrada fica gravada como 'saida').
 import { docCancelado, direcaoEfetivaDoc, valorDoDocumento } from './xml-metadata-helper.js';
@@ -202,13 +212,13 @@ function dataSped(valor) {
 export function montarLinhasBlocoG({ apuracao, dtIni, dtFin }) {
     const bens = apuracao?.bens || [];
     if (bens.length === 0) {
-        return ['G001|1|', 'G990|2|'];
+        return [fmt.buildLine(['G001', '1']), fmt.buildLine(['G990', '2'])];
     }
 
-    const linhas = ['G001|0|'];
+    const linhas = [fmt.buildLine(['G001', '0'])];
 
     // G110 — ordem conferida contra o relatório do PVA da EXPERTE.
-    linhas.push([
+    linhas.push(fmt.buildLine([
         'G110',
         dataSped(dtIni),
         dataSped(dtFin),
@@ -219,12 +229,11 @@ export function montarLinhasBlocoG({ apuracao, dtIni, dtFin }) {
         dec(apuracao.indice, 8),
         dec(apuracao.creditoApropriado),
         dec(apuracao.outrosCreditos),
-        '',
-    ].join('|'));
+    ]));
 
     for (const bem of bens) {
         // G125 — layout do Guia Prático: OP, ST, FRT, DIF (nessa ordem).
-        linhas.push([
+        linhas.push(fmt.buildLine([
             'G125',
             String(bem.codigo || ''),
             dataSped(bem.dataMovimentacao),
@@ -235,10 +244,9 @@ export function montarLinhasBlocoG({ apuracao, dtIni, dtFin }) {
             dec(bem.creditoIcmsDifal),
             String(bem.numeroParcela ?? ''),
             dec(bem.valorParcela),
-            '',
-        ].join('|'));
+        ]));
     }
 
-    linhas.push(`G990|${linhas.length + 1}|`);
+    linhas.push(fmt.buildLine(['G990', String(linhas.length + 1)]));
     return linhas;
 }

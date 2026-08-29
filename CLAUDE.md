@@ -5,6 +5,42 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O BLOCO G SAÍA GRUDADO NUMA LINHA SÓ — o caso REALITY (21/08) vivo, e a
+  lição daquele dia estava escrita no próprio arquivo que o previa** (29/08,
+  achado ao ir escrever a regra do G110).
+  🔴 `montarLinhasBlocoG` montava a linha **à mão** (`[...].join('|')`), sem o
+  `|` inicial e sem o `\r\n`; o orquestrador junta os blocos com **`join('')`**,
+  então **G001, G110, G125 e G990 saíam colados** na cauda do bloco E, tudo numa
+  linha. Medido rodando o gerador:
+  `"G001|0|G110|01072026|…|G125|BEM1|…|G990|4|"`.
+  📌 **E A REGRA JÁ EXISTIA, escrita em 21/08 justamente para isso**: *"R15 da
+  prevalidação fecha a CLASSE — módulo novo que bypassar o buildLine cai
+  nela"*. Ela pega o arquivo; o que faltou foi o bloco G **passar** por ela — e
+  ele nunca passou porque a **ÚNICA empresa com CIAP (EXPERTE) está bloqueada
+  na captura**. É a mesma sorte do IPI em E200/E210, do Bloco H zerado e do
+  M100/M500: o defeito não aparece porque ninguém gerou, não porque não existe.
+  📌 **E A FIXTURE TRAVAVA A LINHA ERRADA** — `expect(linhas[0]).toBe('G001|0|')`.
+  Ela **documentava o defeito** em vez de pegá-lo, como a do E250 sem `MES_REF`
+  e a do M210 com os ajustes vazios. Trocada, e no lugar entrou a trava da
+  CLASSE: **toda** linha do bloco casa `^\|[0-9A-Z]{4}\|.*\|\r\n$`.
+  📌 **REGRA QUE FICA: trava que roda sobre o ARQUIVO só protege o bloco que
+  alguém GEROU.** A R15 é a rede certa e estava ligada; o que ela não faz é
+  alcançar um bloco que nenhum cliente produz. Bloco com um cliente só — CIAP,
+  inventário, bloco K — precisa da trava DENTRO do módulo, sobre o que o gerador
+  emite, senão ele envelhece protegido no papel e quebrado na primeira geração.
+  ✅ **E a regra que eu vinha escrever entrou junto (R34): o G110 fecha consigo
+  mesmo**, com as três contas que o Guia escreve por extenso — `SOM_PARC` = Σ
+  `VL_PARC_PASS` dos G125 · `VL_TRIB_EXP` ≤ `VL_TOTAL` · `IND_PER_SAI` = 06÷07 ·
+  `ICMS_APROP` = 05 × 08 —, **nascendo VERDE sobre os números REAIS do relatório
+  do PVA da EXPERTE** (Σ 527,53 × 0,86032111 = 453,85). É a classe do E110 e do
+  M200, e aqui o número **vira ajuste de apuração**: um G110 que não fecha
+  credita ICMS a mais ou a menos, e o PVA aceita.
+  ⚠️ **Mês SEM saída não acusa o índice**: total zero é FATO (a empresa não
+  vendeu), e dividir ali seria o app inventando a conta.
+  ⚠️ **E o índice tem OITO casas** — comparar o crédito em centavos é o certo
+  (é o arredondamento do próprio campo), mas comparar o ÍNDICE assim apagaria
+  justamente as casas que ele carrega.
+
 - **🚨 PAI × FILHO SE PAREIA PELA SEQUÊNCIA, NUNCA PELO PRIMEIRO — e a 1ª
   versão da regra acusaria um arquivo CERTO em todo cliente com dois CT-e**
   (29/08, fechando o cruzamento do EFD ICMS/IPI com o **E100** e o par

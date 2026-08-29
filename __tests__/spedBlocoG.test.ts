@@ -75,20 +75,47 @@ describe('CIAP — caso real EXPERTE 06/2026', () => {
         })).toBe(117.5);
     });
 
+    // 🚨 ESTA FIXTURE FOI TROCADA EM 29/08, e o motivo é o de sempre: ela
+    // DOCUMENTAVA o defeito em vez de pegá-lo.
+    //
+    // As linhas eram travadas SEM o `|` inicial e SEM o `\r\n` — e o
+    // orquestrador junta os blocos com `join('')`, então o bloco G inteiro saía
+    // **grudado numa linha só**, colado na cauda do bloco E. É o caso REALITY
+    // de 21/08 (E200/E210/E220/E250) vivo aqui, e a lição daquele dia estava
+    // escrita: *"módulo novo que bypassar o buildLine cai na R15"*. O bloco G
+    // nunca tinha passado por ela porque a ÚNICA empresa com CIAP (EXPERTE)
+    // está bloqueada na captura — a mesma sorte do IPI em E200/E210.
+    //
+    // Trocar a fixture é o certo; trocar a régua para o teste passar seria
+    // manter o arquivo que o PVA não importa.
     it('gera G110 com os valores do relatório e um G125 por bem', () => {
         const linhas = montarLinhasBlocoG({
             apuracao: apurarCiap(APURACAO_EXPERTE),
             dtIni: '2026-06-01', dtFin: '2026-06-30',
         });
 
-        expect(linhas[0]).toBe('G001|0|');
+        expect(linhas[0]).toBe('|G001|0|\r\n');
         expect(linhas[1]).toBe(
-            'G110|01062026|30062026|25321,33|527,53|425472,59|494550,91|0,86032111|453,85|0,00|',
+            '|G110|01062026|30062026|25321,33|527,53|425472,59|494550,91|0,86032111|453,85|0,00|\r\n',
         );
-        expect(linhas.filter((l: string) => l.startsWith('G125'))).toHaveLength(4);
-        expect(linhas[2]).toBe('G125|CHAPAS|01062026|SI|955,50|0,00|0,00|0,00|12|19,91|');
+        expect(linhas.filter((l: string) => l.startsWith('|G125|'))).toHaveLength(4);
+        expect(linhas[2]).toBe('|G125|CHAPAS|01062026|SI|955,50|0,00|0,00|0,00|12|19,91|\r\n');
         // G990 conta TODAS as linhas do bloco, inclusive ele mesmo.
-        expect(linhas[linhas.length - 1]).toBe(`G990|${linhas.length}|`);
+        expect(linhas[linhas.length - 1]).toBe(`|G990|${linhas.length}|\r\n`);
+    });
+
+    // 🔒 A TRAVA DA CLASSE, não da linha: TODA linha do bloco G abre com `|` e
+    // fecha com `|\r\n`. É a mesma pergunta que a R15 (`linhasMalformadas`) faz
+    // sobre o arquivo inteiro — aqui ela nasce dentro do módulo, para o próximo
+    // registro do bloco não repetir o atalho do `join('|')`.
+    it('🔒 nenhuma linha do bloco G escapa do buildLine', () => {
+        for (const bens of [APURACAO_EXPERTE, { ...APURACAO_EXPERTE, bens: [] }]) {
+            const linhas = montarLinhasBlocoG({
+                apuracao: apurarCiap(bens), dtIni: '2026-06-01', dtFin: '2026-06-30',
+            });
+            expect(linhas.length).toBeGreaterThan(0);
+            for (const l of linhas) expect(l).toMatch(/^\|[0-9A-Z]{4}\|.*\|\r\n$/);
+        }
     });
 });
 
@@ -132,7 +159,9 @@ describe('CIAP — regras que protegem o crédito', () => {
             apuracao: apurarCiap({ bens: [], saldoInicial: 0, saidasTributadas: 0, saidasTotais: 0 }),
             dtIni: '2026-06-01', dtFin: '2026-06-30',
         });
-        expect(linhas).toEqual(['G001|1|', 'G990|2|']);
+        // Trocada junto com a fixture acima, pelo MESMO motivo: o bloco vazio
+        // também saía sem o `|` inicial e sem o `\r\n`.
+        expect(linhas).toEqual(['|G001|1|\r\n', '|G990|2|\r\n']);
     });
 });
 

@@ -1140,6 +1140,103 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         fecha();
     })();
 
+    // ── R34. O G110 (CIAP) fecha consigo mesmo ──────────────────────────────
+    //
+    // 📖 FONTE — Guia 3.2.3, G110, que escreve as três contas POR EXTENSO:
+    // campo 05 (SOM_PARC), *"O valor preenchido corresponde ao somatório de
+    // todos os valores informados no campo 10 (VL_PARC_PASS) dos registros
+    // G125"*; campo 06 (VL_TRIB_EXP), *"o valor informado deve ser menor ou
+    // igual ao valor informado no campo VL_TOTAL deste registro"*; campo 08
+    // (IND_PER_SAI), *"o resultado da divisão do campo VL_TRIB_EXP pelo campo
+    // VL_TOTAL"*; e campo 09 (ICMS_APROP), *"correspondente à multiplicação do
+    // campo 05 pelo campo 08"*.
+    //
+    // 🚨 É a MESMA classe do E110 e do M200 — o registro que se desmente por
+    // dentro —, e aqui o número que sai dele **vira ajuste de apuração**: um
+    // G110 que não fecha credita ICMS a mais ou a menos, e o PVA aceita.
+    //
+    // ⚠️ E o índice tem OITO casas: comparar o crédito com tolerância de um
+    // centavo é o certo (é o arredondamento do próprio campo), mas comparar o
+    // ÍNDICE em centavos apagaria justamente as casas que ele carrega.
+    const g110s = doReg('G110');
+    if (g110s.length) {
+        const g = campos(g110s[0]);
+        const somParc = num(g[5]);
+        const vlTribExp = num(g[6]);
+        const vlTotal = num(g[7]);
+        const indice = num(g[8]);
+        const icmsAprop = num(g[9]);
+        const somaG125 = doReg('G125').reduce((a, l) => a + num(campos(l)[10]), 0);
+        const acusa = (campo, valor, esperado, mensagem, fonte) => add(erros, {
+            regra: 'g110-nao-fecha', registro: 'G110', campo, linha: g110s[0], valor, esperado, mensagem,
+            acao: 'Defeito de GERAÇÃO — reporte com o print. O número do G110 vira ajuste na apuração do '
+                + 'ICMS: um registro que não fecha credita a mais ou a menos, e o PVA aceita.',
+            fonte,
+        });
+        if (Math.abs(centavos(somParc) - centavos(somaG125)) > 1) {
+            acusa('5 - SOM_PARC', somParc.toFixed(2), somaG125.toFixed(2),
+                `O G110 declara Σ das parcelas ${somParc.toFixed(2)} e os G125 somam ${somaG125.toFixed(2)}.`,
+                'Guia Prático 3.2.3, G110 campo 05: "O valor preenchido corresponde ao somatório de todos '
+                + 'os valores informados no campo 10 (VL_PARC_PASS) dos registros G125".');
+        }
+        if (centavos(vlTribExp) > centavos(vlTotal)) {
+            acusa('6 - VL_TRIB_EXP', vlTribExp.toFixed(2), `≤ ${vlTotal.toFixed(2)}`,
+                `As saídas tributadas/exportação (${vlTribExp.toFixed(2)}) superam o TOTAL das saídas `
+                + `(${vlTotal.toFixed(2)}).`,
+                'Guia Prático 3.2.3, G110 campo 06: "o valor informado deve ser menor ou igual ao valor '
+                + 'informado no campo VL_TOTAL deste registro".');
+        }
+        // ⚠️ Total ZERO não é erro do índice — é mês sem saída, e dividir ali
+        // seria o app inventando a conta. Acusar produziria alarme sobre
+        // arquivo correto.
+        if (vlTotal > 0) {
+            const esperado = vlTribExp / vlTotal;
+            if (Math.abs(indice - esperado) > 0.00000002) {
+                acusa('8 - IND_PER_SAI', indice.toFixed(8), esperado.toFixed(8),
+                    `O índice declarado (${indice.toFixed(8)}) não é ${vlTribExp.toFixed(2)} ÷ `
+                    + `${vlTotal.toFixed(2)} = ${esperado.toFixed(8)}.`,
+                    'Guia Prático 3.2.3, G110 campo 08: "o resultado da divisão do campo VL_TRIB_EXP pelo '
+                    + 'campo VL_TOTAL".');
+            }
+        }
+        const aprop = somParc * indice;
+        if (Math.abs(centavos(icmsAprop) - centavos(aprop)) > 1) {
+            acusa('9 - ICMS_APROP', icmsAprop.toFixed(2), aprop.toFixed(2),
+                `O crédito apropriado (${icmsAprop.toFixed(2)}) não é ${somParc.toFixed(2)} × `
+                + `${indice.toFixed(8)} = ${aprop.toFixed(2)}.`,
+                'Guia Prático 3.2.3, G110 campo 09: "correspondente à multiplicação do campo 05 pelo '
+                + 'campo 08".');
+        }
+    }
+
+    // ── R35. Bloco K com dados exige o K010 ─────────────────────────────────
+    //
+    // 📖 FONTE — Guia 3.2.3, K010: *"registro obrigatório se o campo 02
+    // (IND_MOV) do registro K001 estiver informado com '0 - Bloco com dados
+    // informados'"*.
+    //
+    // 🚨 O K010 é quem declara o LEIAUTE escolhido (Ajuste SINIEF 02/09: 0
+    // simplificado · 1 completo · 2 restrito aos saldos), e é ele que diz ao
+    // PVA quais registros cobrar. Sem ele o bloco promete conteúdo e não diz de
+    // que tipo — é a família da recusa *"o registro não deve ser informado para
+    // esse perfil"* da AFFITTARE.
+    //
+    // ⚠️ E o gerador de hoje NÃO produz esta recusa: sem o leiaute cadastrado o
+    // bloco sai `K001|1` (SEM DADOS) e GRITA. A regra nasce VERDE — ela existe
+    // para o dia em que alguém montar o K001|0 por outro caminho.
+    const k001 = doReg('K001')[0];
+    if (k001 && soDigitos(campos(k001)[2]) === '0' && !doReg('K010').length) {
+        add(erros, {
+            regra: 'k010-ausente', registro: 'K001', campo: '2 - IND_MOV', linha: k001,
+            valor: '0', esperado: 'um registro K010',
+            mensagem: 'O bloco K promete conteúdo (IND_MOV = 0) e não traz o K010.',
+            acao: 'O K010 declara o LEIAUTE do bloco (0 simplificado · 1 completo · 2 restrito aos saldos) '
+                + '— é OPÇÃO do contribuinte, não se deduz. Escolha em Empresas → Dados Fiscais.',
+            fonte: 'Guia Prático 3.2.3, K010: "registro obrigatório se o campo 02 (IND_MOV) do registro '
+                + 'K001 estiver informado com \'0 - Bloco com dados informados\'".',
+        });
+    }
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';
