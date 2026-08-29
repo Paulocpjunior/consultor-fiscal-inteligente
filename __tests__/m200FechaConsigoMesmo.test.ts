@@ -389,3 +389,33 @@ describe('🚨 o M100/M500 fecha consigo mesmo', () => {
         expect(conferirCreditoDoM100([L('0000', '020')]).erros).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔒 A CONTRIBUIÇÃO DO PERÍODO É CALCULADA UMA VEZ.
+//
+// 🐛 E esta trava nasceu de um defeito MEU, nesta mesma sessão: o comentário do
+// M100 dizia *"dois cálculos fariam o M100 e o M200 discordarem sobre o crédito
+// usado, dentro do mesmo arquivo"* — e a primeira versão da correção **repetiu
+// a expressão mesmo assim**. Hoje as duas concordam por coincidência de texto;
+// a primeira correção que tocasse só uma delas as faria divergir em silêncio.
+//
+// 📌 É a régua da casa aplicada ao meu próprio código: número que decide DOIS
+// registros do mesmo arquivo tem UM dono.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🔒 a contribuição do período tem um cálculo só', () => {
+    const src: string = require('fs').readFileSync(
+        require('path').join(__dirname, '..', 'sefaz-backend/sped-contrib-blocos.js'), 'utf8',
+    ).split('\n').filter((l: string) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+    it('a expressão da contribuição aparece UMA vez para cada tributo', () => {
+        const pis = src.match(/totalPisSaida \+ \(finM \? finM\.pis : 0\)/g) || [];
+        const cofins = src.match(/totalCofinsSaida \+ \(finM \? finM\.cofins : 0\)/g) || [];
+        expect(pis).toHaveLength(1);
+        expect(cofins).toHaveLength(1);
+    });
+
+    it('o M100/M500 lê o dono, não refaz a conta', () => {
+        expect(src).toMatch(/Math\.min\(dispPis, vlContribPis\)/);
+        expect(src).toMatch(/Math\.min\(dispCof, vlContribCofins\)/);
+    });
+});
