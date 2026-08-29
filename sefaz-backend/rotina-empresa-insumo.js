@@ -33,6 +33,8 @@
 // prova (a lição do E116, do E250 e da varredura que virou script e sumiu).
 // ============================================================================
 
+import { ccmSpDaEmpresa } from './ccm-sp.js';
+
 /** As duas coleções de empresa monitorada, na ordem em que se varre. */
 export const COLECOES_DA_ROTINA = Object.freeze([
     ['simples_empresas', 'simples'],
@@ -73,7 +75,9 @@ export function empresaDaRotina(id, colecao, d) {
         // ISS de SP capital: município, CCM e SUP decidem se há guia do
         // município no mês (e se a captura da NFS-e sequer roda).
         codMunIBGE: String(df.codMunIBGE || dados.codMunIBGE || '').trim(),
-        ccmSp: soDigitos(df.ccmSp || dados.ccmSp),
+        // Pelo dono: com os só-zeros o ISS respondia como se houvesse CCM, e a
+        // etapa de CAPTURA deixava de acusar `sem-ccm`.
+        ccmSp: ccmSpDaEmpresa(dados),
         issFixoSup: (dados.issPadraoConfig?.tipo || df.issConfig?.tipo) === 'sup_fixo',
         // As TRÊS fontes de prova da apuração da competência.
         fichaFinanceira: dados.fichaFinanceira || null,

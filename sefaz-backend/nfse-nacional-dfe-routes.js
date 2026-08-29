@@ -20,6 +20,7 @@ import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 import { acharEmpresaCadastrada, acharEmpresasCadastradas } from './empresa-cadastro-lookup.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 
 const router = express.Router();
 
@@ -378,7 +379,7 @@ router.get('/municipios', requireAuth, async (req, res) => {
                         uf: (df.uf || d.uf || '').toString().trim().toUpperCase(),
                         municipio: (df.municipioNome || df.municipio || d.municipio || '').toString().trim(),
                         codMunIBGE: (df.codMunIBGE || '').toString().trim(),
-                        ccm: (df.ccmSp || d.ccmSp || '').toString().trim(),
+                        ccm: ccmSpDaEmpresa(d),   // dono: duas formas + só-zeros como vazio
                         ie: (df.inscricaoEstadual || '').toString().trim(),
                         adnAtivo: d.nfseNacionalDfeAtivo === true,
                     });

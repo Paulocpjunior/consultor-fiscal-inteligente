@@ -27,6 +27,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { consultarNfseEmitidas, baixarWsdl, sondar1102 } from './nfse-sp-client.js';
 import { interpretarSonda } from './nfse-sp-sonda-leitura.js';
 import { extrairContratoWsdl, conferirContrato, parametrosDoEnvelope } from './nfse-sp-wsdl.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 
 /** SP capital — única praça coberta pelo ISS do CFI (Paulo, 05/08). */
 const COD_MUN_SP_CAPITAL = '3550308';
@@ -61,8 +62,7 @@ router.post('/nfsesp-consultar-uma', requireAdmin, json(), async (req, res) => {
         if (!snap.exists) return res.status(404).json({ erro: 'empresa não encontrada' });
 
         const d = snap.data();
-        // Cadastro unico dadosFiscais.ccmSp (fallback top-level legado), so digitos
-        const ccmSp = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
+        const ccmSp = ccmSpDaEmpresa(d);   // dono: duas formas + só-zeros como vazio
         const autorizado = d.nfseSpAutorizadoEm;
         if (!ccmSp || !autorizado) {
             return res.status(400).json({ erro: 'empresa não elegível: precisa ccmSp e nfseSpAutorizadoEm preenchidos' });
@@ -530,7 +530,7 @@ router.get('/iss-carteira', authUser, async (req, res) => {
                     // se já vai dentro do DAS (LC 123 art. 13).
                     regime,
                     // CCM canônico em dadosFiscais, fallback top-level legado (#311).
-                    ccm: String(df.ccmSp || d.ccmSp || '').replace(/\D/g, ''),
+                    ccm: ccmSpDaEmpresa({ dadosFiscais: df, ccmSp: d.ccmSp }),
                     issFixoSup: (d.issPadraoConfig?.tipo || df.issConfig?.tipo) === 'sup_fixo',
                 };
                 empresas.push(linha);

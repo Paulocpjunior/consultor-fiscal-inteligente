@@ -31,6 +31,8 @@ import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.j
 import { normalizarCodCliente } from './cod-cliente.js';
 import { validarRegimeParaGravacao } from './regime-tributario.js';
 import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
+import { ccmSpDaEmpresa, ccmSpParaGravar } from './ccm-sp.js';
+import { coberturaNfseSpPortal } from './captura-nfse-sp-cobertura.js';
 
 const router = express.Router();
 
@@ -122,9 +124,14 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     fonte: col,
                     capturarSefaz: d.capturarSefaz !== false, // default true
                     uf: d.dadosFiscais?.uf || d.uf || '',
-                    // Cadastro UNICO: ccmSp em dadosFiscais.ccmSp (canonico, igual
-                    // uf/IE). Fallback ao top-level d.ccmSp so pra dado legado.
-                    ccmSp: (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, ''),
+                    // 🚨 CCM pelo DONO (`ccm-sp.js`): duas formas E os SÓ-ZEROS
+                    // como vazio. Com a leitura crua, `'00000000'` é truthy —
+                    // então `nfseSpAplicavel` DECIDIA que o trilho da capital
+                    // vale, `capturaNfseSpOk` saía true e a tela pintava
+                    // `✓ NFSe SP` **engolindo o bloqueio** *"falta Inscrição
+                    // Municipal (CCM)"*, que é a frase que resolveria o caso
+                    // (LAV, 29/08).
+                    ccmSp: ccmSpDaEmpresa(d),
                     codMunIBGE: String(d.dadosFiscais?.codMunIBGE || d.codMunIBGE || '').replace(/\D/g, ''),
                     nfseSpAutorizadoEm: toMillis(d.nfseSpAutorizadoEm),
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
@@ -180,6 +187,39 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             });
         });
 
+        // 3c. Estado do trilho NFS-e SP (portal da capital), por CNPJ.
+        //
+        // 🚨 É ele que faz o pill responder por RESULTADO. Até 29/08 o
+        // `capturaNfseSpOk` saía de DOIS campos de cadastro (CCM preenchido +
+        // data de autorização marcada) — status, não resultado —, e a linha da
+        // LAV dizia `✓ NFSe SP` sobre uma empresa cujas NFS-e tomadas nunca
+        // foram baixadas. É a primeira regra permanente deste projeto
+        // invertida, e a mesma família do `temA3Proprio` de 23/08.
+        //
+        // ⚠️ UMA query para a carteira inteira — leitura por card foi o HTTP
+        // 429 de 27/08.
+        const nfseSpStateMap = new Map();
+        try {
+            const nfseSpSnap = await db.collection('nfsesp_portal_state').get();
+            nfseSpSnap.forEach(doc => {
+                const d = doc.data() || {};
+                nfseSpStateMap.set(limparCnpj(doc.id), {
+                    ultimaSyncMs: d.ultimaSync?.toMillis?.() ?? null,
+                    ultimoPeriodo: d.ultimoPeriodo || null,
+                    prestadasUlt: d.prestadasUlt ?? null,
+                    tomadasUlt: d.tomadasUlt ?? null,
+                    erroPrestadas: d.erroPrestadas || null,
+                    erroTomadas: d.erroTomadas || null,
+                });
+            });
+        } catch (e) {
+            // Falha de leitura NÃO derruba o painel da carteira inteira nem
+            // vira "nunca entregou": sem o mapa, a cobertura fica indefinida e
+            // o pill volta ao que era. Afirmar ausência por rede que piscou
+            // mandaria a equipe conferir cadastro que está certo.
+            console.warn('[empresa-status] nfsesp_portal_state indisponível:', e.message);
+        }
+
         // 3b. Responsáveis (vínculos da Carteira de Clientes) por CNPJ.
         // Permite admin/colaborador ver de cara quem cuida de cada empresa
         // direto no painel de Status (antes precisava abrir Carteira de Clientes
@@ -209,6 +249,11 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // conta certificado e não conta captura.
             a3SemEntrega: 0,
             a3ComEntrega: 0,
+            // Das que usam o portal da capital, quantas o trilho NUNCA baixou.
+            // É o número que o "✓ NFSe SP" escondia.
+            nfseSpSemEntrega: 0,
+            nfseSpComErro: 0,
+            nfseSpEntregue: 0,
             usandoCertEscritorio: 0,
             semCertNenhum: 0,
             certExpirado: 0,
@@ -381,10 +426,22 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 ? recNfse.caminho === CAMINHO_NFSE.SP_PORTAL
                 : !!emp.ccmSp;
             let capturaNfseSpOk;
+            // 🚨 O CADASTRO responde *"existe caminho?"*; quem responde
+            // *"ENTREGOU?"* é a última rodada REAL do portal. São perguntas
+            // DIFERENTES, e o pill mostra as duas — o alerta VENCE o ok, senão
+            // a linha diria `✓ NFSe SP` ao lado de "nunca baixou nota desta
+            // empresa", que é a contradição na mesma tela que esta casa mais
+            // paga (a lição do `capturaNfeOk` em 23/08).
+            const coberturaNfseSp = coberturaNfseSpPortal({
+                aplicavel: nfseSpAplicavel && !!emp.ccmSp && !!emp.nfseSpAutorizadoEm,
+                state: nfseSpStateMap.get(emp.cnpj) || null,
+            });
             if (nfseSpAplicavel) {
-                capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
+                capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm
+                    && coberturaNfseSp.entregou !== false;
                 if (!emp.ccmSp) motivosBloqueio.push('NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.');
                 else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.');
+                else if (coberturaNfseSp.acao) motivosBloqueio.push(`NFS-e SP: ${coberturaNfseSp.texto} ${coberturaNfseSp.acao}`);
             } else {
                 // Trilho da capital não se aplica — não bloqueia nem pede CCM.
                 capturaNfseSpOk = true;
@@ -436,6 +493,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 procuracaoEcacAtiva: procuracaoInferida,
                 procuracaoEcacFlagBruta: emp.procuracaoEcacAtiva,
                 ccmSp: emp.ccmSp,
+                coberturaNfseSp,
                 dadosFiscais: emp.dadosFiscais || {},
                 nfseSpAutorizado: !!emp.nfseSpAutorizadoEm,
                 // Trilho SP-capital se aplica a esta empresa? (município do
@@ -481,6 +539,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (procuracaoInferida) resumo.comProcuracaoEcac++;
             else resumo.semProcuracaoEcac++;
             if (nfseSpAplicavel && capturaNfseSpOk) resumo.ccmSpAutorizado++;
+            if (coberturaNfseSp.situacao === 'nfsesp-sem-entrega') resumo.nfseSpSemEntrega++;
+            else if (coberturaNfseSp.situacao === 'nfsesp-com-erro') resumo.nfseSpComErro++;
+            else if (coberturaNfseSp.situacao === 'nfsesp-entregue') resumo.nfseSpEntregue++;
             if (emp.nfseNacionalDfeAtivo) resumo.nfseNacionalAtivo++;
             if (capturaNfeOk) resumo.capturaNfeOk++;
             else resumo.capturaNfeBloqueada++;
@@ -673,9 +734,9 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
         if ('ccmSp' in dadosFiscais && String(dadosFiscais.ccmSp || '').trim() !== '') {
             const ccmDigits = String(dadosFiscais.ccmSp).replace(/\D/g, '');
             // Só zeros = "não tenho CCM" digitado num campo que parecia
-            // obrigatório (26/07: vários cadastros com 000000000) — trata como
-            // vazio (apaga) em vez de validar/gravar um CCM fantasma.
-            if (/^0*$/.test(ccmDigits)) {
+            // obrigatório (26/07: vários cadastros com 000000000) — vira vazio
+            // (apaga) em vez de gravar um CCM fantasma. Quem decide é o DONO.
+            if (ccmSpParaGravar(dadosFiscais.ccmSp) === '') {
                 dadosFiscais.ccmSp = '';
             } else if (ccmDigits.length < 6 || ccmDigits.length > 11) {
                 return res.status(400).json({

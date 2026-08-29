@@ -19,6 +19,7 @@
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
 import { salvarNfseSpRecebida } from './nfse-sp-importer.js';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 
 // Remetente = escritório (SP Assessoria 44388152000189). Hardcoded como
 // fallback porque o env não foi configurado em produção e a NFSe SP precisa
@@ -39,7 +40,7 @@ export async function listarEmpresasElegiveis(db) {
         for (const doc of snap.docs) {
             const d = doc.data();
             if (d._merged_into || d._deleted) continue; // perdedor de merge / excluida
-            const ccmSp = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
+            const ccmSp = ccmSpDaEmpresa(d);   // dono: duas formas + só-zeros como vazio
             const autorizado = d.nfseSpAutorizadoEm;
             if (!ccmSp || !autorizado) continue;
             // O trilho do portal é da CAPITAL: empresa com codMunIBGE de OUTRO
