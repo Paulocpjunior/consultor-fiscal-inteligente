@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 A CLASSE FECHOU POR VARREDURA — "toda linha de SPED passa pelo
+  `buildLine`"** (29/08, depois de a MESMA doença aparecer DUAS vezes no mesmo
+  dia: bloco G e C195/C197).
+  📌 **O que me incomodou não foram os dois defeitos — foi COMO os achei**: um
+  módulo por vez, por acaso, indo escrever outra coisa. Isso é achar INSTÂNCIA;
+  a régua da casa é fechar a CLASSE (12/08), e por VARREDURA, nunca por lista
+  (13/08). `linhaSpedPassaPeloBuildLine.test.ts` varre o `sefaz-backend/` inteiro
+  atrás de array de campos com `.join('|')` cujo 1º elemento é um código de
+  registro, e de string literal que já começa em `REG|`.
+  ✅ **Ela NASCE VERDE** — as duas correções já estão de pé — e foi **provada
+  revertendo as duas**: acusa cada uma pelo nome do registro (`G990`, `C195`).
+  ⚠️ **É ESTREITA de propósito**: módulo que devolve **ARRAYS DE CAMPOS** (o
+  desenho certo — `sped-bloco-e-st.js` e `sped-bloco-k.js`, com a casca
+  formatando) **não casa**. Alarme sobre código certo é o que faz a equipe
+  desligar a trava, e essa lição já custou duas varreduras minhas neste projeto.
+  ⚠️ **E ela tem GUARDA CONTRA O SILÊNCIO FALSO**: um teste exige que a
+  varredura tenha ≥50 arquivos para ler — se o glob quebrar, ela passaria verde
+  sem ler nada, que é o defeito que esta casa persegue desde 22/08.
+  📌 **A trava de saída ficou ao lado da de forma**: a varredura pega o CÓDIGO,
+  e dois casos pegam o que os módulos EMITEM. As duas são necessárias e nenhuma
+  substitui a outra — é a régua do link dentro do card (29/08).
+
 - **🚨 O C195/C197 TAMBÉM SAÍA GRUDADO — a SEGUNDA instância viva do caso
   REALITY achada no MESMO dia, e o método que achou as duas foi o mesmo** (29/08,
   ao escrever a regra dos ajustes do E110).
