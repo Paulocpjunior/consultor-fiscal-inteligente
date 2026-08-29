@@ -1209,6 +1209,37 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+    // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────
+    //
+    // 📖 FONTE — Guia 3.2.3, G125 campo 02: *"o código informado neste campo
+    // deve constar de um registro 0300"*; e o próprio 0300 abre dizendo que
+    // existe *"para identificar e caracterizar TODOS os bens ou componentes
+    // arrolados no registro G125 do Bloco G"*.
+    //
+    // 🚨 É a família do item ÓRFÃO do 0200 (PWR, 19/08) e do participante
+    // órfão do 0150 — o registro referencia um cadastro que o arquivo não
+    // declara. Até 29/08 o app emitia o G125 e **nenhum 0300**: TODO bem do
+    // CIAP saía órfão.
+    const g125s = doReg('G125');
+    if (g125s.length) {
+        const cadastrados = new Set(doReg('0300').map((l) => String(campos(l)[2] || '').trim()));
+        const orfaos = [...new Set(g125s
+            .map((l) => String(campos(l)[2] || '').trim())
+            .filter((c) => c && !cadastrados.has(c)))];
+        if (orfaos.length) {
+            add(erros, {
+                regra: 'g125-bem-orfao', registro: 'G125', campo: '2 - COD_IND_BEM',
+                linha: g125s[0], valor: orfaos.slice(0, 5).join(', '), esperado: 'um 0300 por bem',
+                mensagem: `${orfaos.length} bem(ns) do CIAP são referenciados no G125 e não têm registro 0300 `
+                    + `(${orfaos.slice(0, 5).join(', ')}${orfaos.length > 5 ? '…' : ''}).`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O 0300 é o CADASTRO do bem; sem ele o G125 '
+                    + 'aponta para quem o arquivo não declara, e o PVA recusa.',
+                fonte: 'Guia Prático 3.2.3, G125 campo 02: "o código informado neste campo deve constar de '
+                    + 'um registro 0300".',
+            });
+        }
+    }
+
     // ── R35. Bloco K com dados exige o K010 ─────────────────────────────────
     //
     // 📖 FONTE — Guia 3.2.3, K010: *"registro obrigatório se o campo 02

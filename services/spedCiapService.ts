@@ -22,6 +22,13 @@ export interface BemCiap {
     creditoIcmsDifal: number;
     numeroParcela: number;         // 1..48
     funcao?: string;
+    /**
+     * Conta analítica de contabilização do bem (campo 06 do 0500) — é o
+     * `COD_CTA` do registro **0300**, que o G125 referencia. O app NÃO a
+     * deduz: ela é do plano de contas da empresa, e sem ela o campo sai VAZIO
+     * com a falta NOMEADA na geração.
+     */
+    contaContabil?: string;
 }
 
 export interface CiapDoc {
@@ -76,6 +83,10 @@ export async function salvarCiap(p: CiapDoc): Promise<void> {
             creditoIcmsDifal: n2(b.creditoIcmsDifal),
             numeroParcela: Math.trunc(Number(b.numeroParcela) || 0),
             funcao: String(b.funcao || '').trim(),
+            // Campo novo entra na gravação E na tela no MESMO PR (regra do
+            // #382): campo fora do sanitize é DESCARTADO EM SILÊNCIO — a tela
+            // diz "salvo" e nada persiste.
+            contaContabil: String(b.contaContabil || '').trim(),
         })),
         saldoInicial: n2(p.saldoInicial),
         outrosCreditos: n2(p.outrosCreditos),

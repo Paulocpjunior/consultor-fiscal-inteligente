@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O 0300 NUNCA EXISTIU — todo bem do CIAP saía ÓRFÃO no G125** (29/08, na
+  sequência da correção do bloco G).
+  📖 **O Guia 3.2.3 é literal nos DOIS lados**: no G125 campo 02, *"o código
+  informado neste campo deve constar de um registro 0300"*; e o 0300 abre
+  dizendo que existe *"para identificar e caracterizar TODOS os bens ou
+  componentes arrolados no registro G125 do Bloco G"*.
+  🔴 O app emitia o G125 e **nenhum 0300**: cada `COD_IND_BEM` apontava para um
+  cadastro que o arquivo não declara. É a família do **item órfão do 0200**
+  (PWR, 19/08) e do **participante órfão do 0150** — e as duas já custaram
+  rodada de PVA.
+  📌 **E O CADASTRO JÁ TINHA O QUE O 0300 PEDE**: código, descrição, bem ×
+  componente e o bem principal são os MESMOS campos que o G125 lê. Por isso o
+  dono é o módulo do CIAP (`montarRegistros0300`, em `sped-bloco-g.js`) e o
+  **bloco 0 IMPORTA dele** — duas leituras do mesmo cadastro fariam o 0300 e o
+  G125 discordarem sobre o mesmo bem **dentro do mesmo arquivo**.
+  🚨 **O `COD_CTA` NÃO SE INVENTA, e essa é a decisão que sustenta o resto**:
+  ele é a conta analítica do plano de contas (campo 06 do 0500), o app não a
+  deduz, e ela virou **cadastro por bem** (`contaContabil` — no sanitize **E** na
+  tela 🏭 CIAP no MESMO PR, regra do #382). Sem ela o campo sai **VAZIO** e a
+  geração DIZ que o PVA vai cobrar.
+  ⚠️ **E emitir o 0300 com a conta em branco é MELHOR que não emitir** — a
+  diferença com o F100 de 24/08 (*"emitir a referência sem a declaração é
+  justamente a recusa"*) é a DIREÇÃO: lá faltava a declaração e a referência ia
+  sozinha; aqui a referência **já existe** (o G125) e o que faltava era a
+  declaração. Sem o 0300 o órfão é GARANTIDO; com ele, o PVA nomeia um campo.
+  ⚠️ **Bem sem código não vira um 0300 anônimo** — seria cadastro fabricado, e
+  `apurarCiap` já acusa a falta do `COD_IND_BEM`.
+  📌 **E A LIGAÇÃO SE PROVOU PELA POSITIVA**, revertendo: o teste pede que o
+  bloco 0 EMITA a linha, não que ele "não acuse nada" — teste de ausência passa
+  com a chamada desplugada (a lição do `conferirBloco9`, no mesmo dia).
+  ⚠️ **E o 0990 conta as linhas do bloco INCLUSIVE ele mesmo**: acrescentar o
+  0300 mexe nesse contador, que é a lição da AFFITTARE (24/08) — *"acrescentar
+  UMA linha mexe em QUATRO contadores"*.
+  🚦 **A recusa virou regra no MESMO PR (R36)**: G125 cujo `COD_IND_BEM` não tem
+  0300. Ela **acusaria o arquivo de ontem** — é a prova de que o defeito era
+  real — e nasce VERDE sobre o gerador de hoje.
+
 - **🚨 O BLOCO G SAÍA GRUDADO NUMA LINHA SÓ — o caso REALITY (21/08) vivo, e a
   lição daquele dia estava escrita no próprio arquivo que o previa** (29/08,
   achado ao ir escrever a regra do G110).

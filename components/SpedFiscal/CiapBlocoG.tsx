@@ -31,7 +31,7 @@ const BEM_VAZIO: BemCiap = {
     codigo: '', descricao: '', tipo: 'bem', codigoBemPrincipal: '',
     dataMovimentacao: new Date().toISOString().slice(0, 10), tipoMovimentacao: 'SI',
     creditoIcmsProprio: 0, creditoIcmsSt: 0, creditoIcmsFrete: 0, creditoIcmsDifal: 0,
-    numeroParcela: 1, funcao: '',
+    numeroParcela: 1, funcao: '', contaContabil: '',
 };
 
 const CiapBlocoG: React.FC<Props> = ({ empresas, onShowToast }) => {
@@ -185,6 +185,22 @@ const CiapBlocoG: React.FC<Props> = ({ empresas, onShowToast }) => {
                                             <input value={bem.codigoBemPrincipal || ''} onChange={e => mudarBem(i, 'codigoBemPrincipal', e.target.value)} style={inputStyle} />
                                         </label>
                                     )}
+                                    {/*
+                                      🚨 COD_CTA do registro 0300 — o cadastro que o G125
+                                      referencia. O app NÃO deduz a conta: ela é do plano de
+                                      contas da empresa. Sem ela o campo sai VAZIO e a geração
+                                      DIZ que o PVA vai cobrar — em vez de inventar uma conta,
+                                      que é a família do 'PARTSEM'.
+                                    */}
+                                    <label style={lbl} title="Conta analítica de contabilização do bem (0500). Vai no COD_CTA do registro 0300, que o G125 referencia. Sem ela o campo sai vazio e o PVA cobra.">
+                                        Conta contábil <span style={{ color: 'var(--text-muted)' }}>(0300)</span>
+                                        <input
+                                            value={bem.contaContabil || ''}
+                                            placeholder="—"
+                                            onChange={e => mudarBem(i, 'contaContabil', e.target.value)}
+                                            style={inputStyle}
+                                        />
+                                    </label>
                                     <label style={lbl}>Movimentação
                                         <select value={bem.tipoMovimentacao} onChange={e => mudarBem(i, 'tipoMovimentacao', e.target.value)} style={inputStyle}>
                                             {Object.entries(TIPOS_MOVIMENTACAO as Record<string, string>).map(([k, v]) => (
