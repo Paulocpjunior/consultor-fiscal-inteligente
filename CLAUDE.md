@@ -5,6 +5,57 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏭 O BLOCO K NASCEU — e é o PRIMEIRO deste projeto a estrear com a
+  prevalidação NO MESMO PR do gerador** (29/08, Paulo: *"pode fazer o bloco
+  k"*; era o último 🔴 do de-para).
+  🚨 **A REGRA QUE MANDA É A DO BLOCO H (06/08), e ela vale ainda mais aqui**:
+  quantidade de produção e saldo de estoque **NÃO SAEM DAS NOTAS** — vêm do
+  controle de produção do cliente, e o app não tem nenhum. Um gerador "esperto"
+  montaria K200 para todos os itens com zero, e o arquivo sairia
+  **estruturalmente válido, aceito pelo PVA**, declarando ao Fisco que a empresa
+  **não produziu e não tem estoque**. Por isso: sem apontamento o bloco sai
+  `K001|1` (SEM DADOS) e o gerador **GRITA**. **Bloco vazio é "não declarei";
+  bloco zerado é "declarei que não tenho", e a segunda é mentira.**
+  📖 E o Guia diz isso com todas as letras, na seção do H005: *"Atribuir valor
+  Zero ao inventário significa escriturar sem estoque"*.
+  ⚠️ **O APP NÃO DEDUZ DUAS COISAS, e as duas vêm do CADASTRO**: (1) **quem é
+  industrial** — a 🚦 Migração detecta produção pelos CFOPs desde 06/08, mas
+  detectar movimento é **SINAL, não ENQUADRAMENTO**; deduzir faria comércio
+  equiparado (que destaca IPI sem industrializar) entregar um bloco que a lei
+  não pede dele, e o contrário, pior, faria indústria não entregar. (2) **o
+  LEIAUTE do K010** (Ajuste SINIEF 02/09: 0 simplificado · 1 completo · 2
+  restrito aos saldos) — é **opção do contribuinte**, e escolher por ele faria o
+  arquivo prometer detalhamento que o PVA cobra (a família da recusa *"o registro
+  não deve ser informado para esse perfil"* da AFFITTARE). Sem escolha, o bloco
+  não sai e a falta vai NOMEADA com o lugar de preencher.
+  📖 **E a DISPENSA do Simples é literal no Guia** — *"os contribuintes optantes
+  pelo Simples Nacional estão dispensados de apresentarem este bloco, em virtude
+  da Resolução Comitê Gestor do Simples Nacional nº 94"* — e ela vem ANTES do
+  cadastro: nem marcado o bloco sai. ⚠️ **E não gera aviso**: alarme todo mês
+  sobre um livro que a lei dispensa é o alarme que ninguém consegue apagar.
+  🚩 **O QUE ELE NÃO FAZ VAI DITO, nunca calado**: K210/K215 (desmontagem), K220
+  (movimentação interna), K250/K255 (industrialização por terceiros), K260/K265
+  (reprocessamento), K270/K275/K280 (correção de apontamento) e K290–K302
+  (produção conjunta) **não são gerados**. Preferi a **espinha COMPLETA e provada**
+  (K001 · K010 · K100 · K200 · K230 · K235 · K990) a doze registros pela metade —
+  no bloco K, registro montado por dedução é a mesma família do inventário zerado.
+  📌 **E A DOUTRINA AVANÇOU: as regras da prevalidação nasceram JUNTO** (R27–R29,
+  com a validação do Guia citada em cada uma: DT_EST = DT_FIN do K100 · item do
+  K200/K230/K235 que o 0200 não declara · IND_EST 1/2 sem COD_PART no 0150).
+  Era *"recusa aprendida entra no MESMO PR"*; as quatro pendências que a auditoria
+  de 29/08 achou (H005, H010, ST, E510) existiam pelo **contrário** — código
+  escrito primeiro, regra depois —, e "depois" custa uma volta de PVA por cliente.
+  ⚠️ **A posição do COD_ITEM MUDA entre os registros do MESMO bloco**: campo 05 no
+  K230, campo 03 no K200 e no K235. Ler a posição do vizinho acusaria linha
+  correta — é o erro do `DT_FIN` de 22/08, dentro de um bloco só.
+  🗑️ **E o `buildBlocoK = () => buildBlocoVazio('K')` foi DELETADO**: código morto
+  é a isca para alguém reativar a régua velha, e aqui a régua velha declara, todo
+  mês, um bloco sem dados em quem entrega o controle de produção.
+  ⚠️ **O QUE ISTO NÃO MOVE, e vai dito**: o bloco K vale para **3 empresas** da
+  carteira (a contagem da 🚦 Migração) e elas estão na **onda FINAL**. Fecha o
+  último 🔴 do de-para e **não muda o % da migração**, que segue travado no agente
+  `cfi-a3` e no piloto que ninguém rodou.
+
 - **🚦 VALIDAÇÃO OFICIAL ENTRA ANTES DA RECUSA — a doutrina do "PVA de bolso"
   avançou um passo** (29/08, Paulo: *"feche as pendências de PVA que dependem
   de você"*).

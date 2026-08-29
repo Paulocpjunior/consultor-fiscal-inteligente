@@ -20,6 +20,7 @@ import { prevalidarSpedFiscal, resumoPrevalidacao } from './sped-prevalidacao.js
 import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { competenciaParaGerarArquivo } from './competencia.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
+import { IND_EST_VALIDOS, quantidadeInformada } from './sped-bloco-k.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 
 // Valor do documento em TODAS as formas (o import pelo navegador grava só
@@ -158,6 +159,84 @@ router.post('/inventario', requireAuth, express.json({ limit: '4mb' }), async (r
         return res.json({ ok: true, gravados: limpos.length, recebidos: (itens || []).length });
     } catch (e) {
         console.error('[sped/inventario POST]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 🏭 Bloco K — o APONTAMENTO de produção e estoque.
+//
+// Mesma natureza do inventário: não sai das notas, não se estima do histórico,
+// não se deduz. É o controle de produção do cliente. Sem ele o bloco K sai
+// VAZIO de propósito — nunca zerado, que declararia ao Fisco que a empresa não
+// produziu e não tem estoque.
+//
+// 1 doc por EMPRESA × COMPETÊNCIA: o K200 é a foto do último dia do período.
+// ────────────────────────────────────────────────────────────────────────────
+const idBlocoK = (empresaId, competencia) => `${empresaId}_${String(competencia || '').replace(/\D/g, '')}`;
+
+router.get('/bloco-k', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, competencia } = req.query || {};
+        if (!empresaId || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a empresa e a competência (AAAA-MM).' });
+        }
+        const snap = await fa().firestore().collection('sped_bloco_k').doc(idBlocoK(empresaId, competencia)).get();
+        return res.json({
+            ok: true, existe: snap.exists,
+            ...(snap.exists ? snap.data() : { estoques: [], producao: [] }),
+        });
+    } catch (e) {
+        console.error('[sped/bloco-k GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+    try {
+        const { empresaId, competencia, estoques, producao } = req.body || {};
+        if (!empresaId || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a empresa e a competência (AAAA-MM).' });
+        }
+        // 🚨 Só grava o que foi APONTADO. Linha sem quantidade não vira zero
+        // aqui — ela não entra, e o gerador dirá quantas ficaram de fora.
+        const est = (Array.isArray(estoques) ? estoques : [])
+            .filter((e) => e && e.codItem && quantidadeInformada(e.qtd))
+            .map((e) => ({
+                codItem: String(e.codItem).slice(0, 60),
+                qtd: Number(e.qtd),
+                indEst: IND_EST_VALIDOS.includes(String(e.indEst)) ? String(e.indEst) : '0',
+                codPart: String(e.codPart || '').slice(0, 60),
+            }));
+        const prod = (Array.isArray(producao) ? producao : [])
+            .filter((p) => p && p.codItem && quantidadeInformada(p.qtdEnc))
+            .map((p) => ({
+                dtIniOp: String(p.dtIniOp || '').slice(0, 10),
+                dtFinOp: String(p.dtFinOp || '').slice(0, 10),
+                codDocOp: String(p.codDocOp || '').slice(0, 30),
+                codItem: String(p.codItem).slice(0, 60),
+                qtdEnc: Number(p.qtdEnc),
+                insumos: (Array.isArray(p.insumos) ? p.insumos : [])
+                    .filter((i) => i && i.codItem && quantidadeInformada(i.qtd))
+                    .map((i) => ({
+                        dtSaida: String(i.dtSaida || '').slice(0, 10),
+                        codItem: String(i.codItem).slice(0, 60),
+                        qtd: Number(i.qtd),
+                        codInsSubst: String(i.codInsSubst || '').slice(0, 60),
+                    })),
+            }));
+        await fa().firestore().collection('sped_bloco_k').doc(idBlocoK(empresaId, competencia)).set({
+            empresaId, competencia: String(competencia), estoques: est, producao: prod,
+            atualizadoEm: new Date().toISOString(),
+            atualizadoPor: req.user?.email || null,
+        }, { merge: true });
+        return res.json({
+            ok: true,
+            estoquesGravados: est.length, estoquesRecebidos: (estoques || []).length,
+            producaoGravada: prod.length, producaoRecebida: (producao || []).length,
+        });
+    } catch (e) {
+        console.error('[sped/bloco-k POST]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

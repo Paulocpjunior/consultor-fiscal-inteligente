@@ -13,7 +13,7 @@ import { buildBlocoC } from './sped-fiscal-blocoC.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 import {
     buildBlocoB,
-    buildBlocoG, buildBlocoK, buildBloco1,
+    buildBlocoG, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped-fiscal-blocoE.js';
@@ -22,6 +22,7 @@ import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped
 import { resolverSaldoAnterior, competenciasEntre } from './saldo-abertura.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
 import { dataInventario } from './sped-bloco-h.js';
+import { buildBlocoK } from './sped-fiscal-blocoK.js';
 import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bloco-g.js';
 import * as fmtSped from './sped-fiscal-format.js';
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
@@ -339,6 +340,24 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         warnings.push(`Não consegui ler a contagem do inventário (${e.message}) — o bloco H pode sair incompleto.`);
     }
 
+    // ─── 6c. Apontamento de produção e estoque (Bloco K) ──────────────────
+    // Mesma natureza do inventário: NÃO sai das notas. É o controle de
+    // produção do cliente, gravado na aba 🏭 Bloco K. Sem ele o bloco sai
+    // VAZIO — nunca zerado, que declararia "não produzi e não tenho estoque".
+    let blocoK = null;
+    try {
+        const kSnap = await admin.firestore().collection('sped_bloco_k')
+            .doc(`${empresaId}_${String(periodoFim).replace(/\D/g, '')}`).get();
+        if (kSnap.exists) {
+            const k = kSnap.data() || {};
+            blocoK = { estoques: k.estoques || [], producao: k.producao || [] };
+        }
+    } catch (e) {
+        // Falhar em LER não pode virar "não tem apontamento": o bloco sairia
+        // vazio parecendo decisão, quando foi a rede que piscou.
+        warnings.push(`Não consegui ler o apontamento do bloco K (${e.message}) — o bloco pode sair incompleto.`);
+    }
+
     // ─── 7. Saldos credores que vêm de trás (E110 c.10 e E520 VL_SD_ANT) ────
     //
     // 🚨 A FICHA NÃO MORA EM COLEÇÃO NENHUMA — ela é EMBUTIDA no documento da
@@ -577,6 +596,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
 
     return {
         empresa,
+        // O regime decide a DISPENSA do bloco K (Resolução CGSN 94) — ele já
+        // foi resolvido acima; relê-lo no gerador seria a segunda leitura.
+        regime,
         contador: getContadorPadrao(),
         competenciaInicio: periodoInicio,
         competenciaFim: periodoFim,
@@ -585,6 +607,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         // MOT_INV vem do doc do inventário (a pessoa escolhe ao contar); o
         // cadastro da empresa fica de reserva pra quem já usava.
         inventarioMotInv,
+        blocoK,
         participantes,
         unidades,
         saldoCredorIcmsAnterior,
@@ -625,7 +648,9 @@ export async function montarBlocos({ dados }) {
         })
         : buildBlocoG();
     const linhasBlocoH = buildBlocoH(dados);   // inventario (Bloco H real)
-    const linhasBlocoK = buildBlocoK();   // vazio
+    // Bloco K — produção e estoque. Como o H, a quantidade NÃO sai das notas:
+    // vem do apontamento da empresa. Sem ele o bloco sai vazio, nunca zerado.
+    const linhasBlocoK = buildBlocoK(dados);
     // Bloco 1 traz o Registro 1400 (DIPAM por município) quando houver compra
     // de produtor rural paulista — e só aí o 1010 liga o IND_VA.
     const linhasBloco1 = buildBloco1(dados.dipam?.dipam?.registro1400 || []);
