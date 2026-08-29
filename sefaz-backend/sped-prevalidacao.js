@@ -947,6 +947,57 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     }
 
+
+    // ── R31. O 1010 tem de concordar com o que o arquivo traz (IND_VA × 1400) ─
+    //
+    // 📖 FONTE — Guia 3.2.3, 1010 campo 06 (IND_VA): *"Reg 1400 - Sendo o
+    // registro obrigatório em sua Unidade de Federação, existem informações a
+    // serem prestadas neste registro: S – Sim; N - Não"*. Ou seja o indicador
+    // e a existência do 1400 são o MESMO fato dito duas vezes, e o comentário
+    // do próprio gerador registra que **o PVA rejeita as duas combinações
+    // erradas** — 'S' sem 1400 e 'N' com 1400.
+    //
+    // 🚨 O 1400 é a DIPAM por município (compra de produtor rural paulista), e
+    // ele é gerado por dados que vêm de OUTRO trilho (a aba 🌾). Um mês em que
+    // a DIPAM some — ou aparece — sem o indicador acompanhar é justamente onde
+    // este par se desencontra.
+    //
+    // ⚠️ **ESTA REGRA NÃO PODE IR PARA O MÓDULO COMUM.** O `1010` do
+    // EFD-**Contribuições** é OUTRO registro — *Processo Referenciado (ação
+    // judicial)* —, e foi exatamente confundi-los que fez o gerador declarar
+    // um processo judicial com os campos preenchidos com 'N' (MANTOAN, 17/08).
+    // Mesmo número, arquivo diferente, leiaute diferente.
+    //
+    // ⚠️ E só o IND_VA é conferido: os outros indicadores do 1010 apontam
+    // registros que este app **não gera**, então 'N' é sempre a resposta certa
+    // e cobrar coerência ali seria alarme sobre arquivo correto.
+    const l1010 = doReg('1010');
+    if (l1010.length) {
+        const indVa = String(campos(l1010[0])[6] || '').trim().toUpperCase();
+        const qtd1400 = doReg('1400').length;
+        if (indVa === 'S' && qtd1400 === 0) {
+            add(erros, {
+                regra: '1010-x-1400', registro: '1010', campo: '6 - IND_VA', linha: l1010[0],
+                valor: 'S', esperado: 'N',
+                mensagem: 'O 1010 diz que há informações de Valor Adicionado (IND_VA = S) e o arquivo não '
+                    + 'traz nenhum registro 1400.',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recusa as duas combinações erradas.',
+                fonte: 'Guia Prático 3.2.3, 1010 campo 06: "Reg 1400 - … existem informações a serem '
+                    + 'prestadas neste registro: S – Sim; N - Não".',
+            });
+        } else if (indVa === 'N' && qtd1400 > 0) {
+            add(erros, {
+                regra: '1010-x-1400', registro: '1010', campo: '6 - IND_VA', linha: l1010[0],
+                valor: 'N', esperado: 'S',
+                mensagem: `O arquivo traz ${qtd1400} registro(s) 1400 (DIPAM por município) e o 1010 diz que `
+                    + 'NÃO há informações de Valor Adicionado (IND_VA = N).',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recusa as duas combinações erradas.',
+                fonte: 'Guia Prático 3.2.3, 1010 campo 06: "Reg 1400 - … existem informações a serem '
+                    + 'prestadas neste registro: S – Sim; N - Não".',
+            });
+        }
+    }
+
     const resumo = erros.length
         ? `${erros.length} recusa(s) do PVA previstas neste arquivo — conserte antes de validar.`
         : 'Nenhuma das recusas que o PVA já nos deu aparece neste arquivo.';
