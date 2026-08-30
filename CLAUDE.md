@@ -5,6 +5,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O COMENTÁRIO DIZIA QUE O LEIAUTE SIMPLIFICADO FECHAVA O BURACO DO BLOCO
+  K — a TABELA OFICIAL diz que não** (29/08, fechando a pendência dos 12
+  registros).
+  📌 Estava escrito no `sped-bloco-k.js`: *"o simplificado desobriga justamente
+  os registros de consumo por item (K210/K215/K235/K255/K260/K265)"*. Quem
+  lesse concluiria que escolher o simplificado resolve o que o app não monta.
+  📖 **A tabela do Guia 3.2.3 (seção do K010) desmente**: no SIMPLIFICADO
+  continuam **obrigatórios** o **K220** (outras movimentações internas), o
+  **K250** (industrialização por terceiros), o **K270/K280** (correção de
+  apontamento) e o **K290/K291/K300/K301** (produção conjunta). Medido: o
+  buraco do simplificado tem **8 registros** e o do completo tem **16**.
+  📌 **É a lição de 28/08 na forma mais cara — comentário que AFIRMA uma regra
+  e está errado**, porque a próxima pessoa cita ele de volta. Lá era o do M210
+  citando "regra de 06/08" e afirmando o oposto dela; aqui é uma tabela oficial
+  resumida errado.
+  ⚠️ **E a tabela virou DADO EXTRAÍDO, nunca digitada** — tabela oficial copiada
+  à mão é a segunda cópia que esta casa mais paga, e no mesmo dia ela já tinha
+  produzido três erros na tabela de tamanhos.
+  ✂️ **O aviso mudou de OBJETO, e é isso que o torna verdadeiro**: o comentário
+  prometia *"quem cadastrar apontamento de um tipo que este módulo não monta
+  recebe aviso nomeando o registro"* — e **não existe onde cadastrar** esses
+  tipos, então aviso nenhum existia. Agora o aviso é sobre a **COBERTURA**:
+  sempre que o bloco sai COM dados, ele DIZ quais registros o leiaute escolhido
+  exige e o app não monta, com a ação (lançar no PVA).
+  ⚠️ **Fica MUDO no leiaute 2** (restrito aos saldos): ali só o K200 é admitido,
+  então a espinha JÁ É o bloco inteiro — avisar seria alarme sobre arquivo
+  completo. E **bloco SEM dados não ganha o aviso**: ele já tem o dele (o do
+  bloco H), e dois alarmes na mesma geração é o caminho para ignorar os dois.
+  🚨 **O CUSTO QUE ISSO NOMEIA: o PVA ACEITA o arquivo sem esses registros** —
+  o livro é que declara MENOS MOVIMENTO do que houve. É o inventário zerado um
+  nível acima: não é recusa que se conserta e reenvia, é erro que sai do
+  escritório e só aparece na fiscalização.
+
 - **🚨 O `TIPO_ITEM` DIZIA "MERCADORIA PARA REVENDA" EM TODA INDÚSTRIA — e o
   Guia dá ONZE valores** (29/08, fechando a pendência nomeada em 21/08).
   📖 O Guia 3.2.3, 0200 campo 07, lista: **00** revenda · **01** matéria-prima ·

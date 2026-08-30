@@ -65,3 +65,22 @@ export function montarBlocoK(p?: {
     avisos: string[];
     indMov: '0' | '1';
 };
+
+/**
+ * Obrigatoriedade de cada registro por leiaute — tabela EXTRAÍDA do Guia 3.2.3
+ * (seção do K010). ⚠️ O simplificado NÃO desobriga tudo: K220, K250, K270,
+ * K280, K290/K291 e K300/K301 continuam obrigatórios nele.
+ */
+export declare const OBRIGATORIEDADE_POR_LEIAUTE: Record<
+    string,
+    { completo: boolean; simplificado: boolean }
+>;
+
+/** Os registros que este módulo monta — a espinha. */
+export declare const REGISTROS_GERADOS: string[];
+
+/**
+ * O que o leiaute escolhido exige e este módulo não monta. Lista VAZIA no
+ * leiaute 2 (restrito aos saldos), onde a espinha já é o bloco inteiro.
+ */
+export function registrosExigidosQueFaltam(leiaute: string | null | undefined): string[];

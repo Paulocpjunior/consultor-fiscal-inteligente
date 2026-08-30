@@ -39,10 +39,15 @@
 // ═══ O LEIAUTE É ESCOLHA DO CONTRIBUINTE (K010, desde 2023) ═════════════════
 //
 // 📖 Ajuste SINIEF 02/09: **0 = simplificado · 1 = completo · 2 = restrito aos
-// saldos de estoque**. O simplificado **desobriga** justamente os registros de
-// consumo por item (K210/K215/K235/K255/K260/K265) — e o K235 é o único que
-// exigiria o apontamento insumo a insumo, que é o dado mais difícil de o
-// cliente ter.
+// saldos de estoque**. O simplificado desobriga os registros de consumo por
+// item (K210/K215/K235/K255/K260/K265/K275/K292/K302) — e o K235 é o que
+// exigiria o apontamento insumo a insumo, o dado mais difícil de o cliente ter.
+//
+// 🚨 **MAS ELE NÃO DESOBRIGA TUDO — e este comentário afirmava que sim.** A
+// tabela oficial (`OBRIGATORIEDADE_POR_LEIAUTE`, extraída do Guia mais abaixo)
+// mantém no simplificado o **K220**, o **K250**, o **K270/K280** e o
+// **K290/K291/K300/K301**. Escolher o leiaute simplificado NÃO fecha o buraco
+// dos registros que este módulo não monta.
 //
 // ⚠️ O leiaute **não se deduz**: é opção do contribuinte, e escolher por ele
 // faria o arquivo prometer detalhamento que o PVA vai cobrar (a família da
@@ -55,8 +60,14 @@
 // registros de desmontagem (K210/K215), movimentação interna (K220),
 // industrialização por terceiros (K250/K255), reprocessamento (K260/K265),
 // correção de apontamento (K270/K275/K280) e produção conjunta (K290-K302)
-// **não são gerados** — e não saem calados: quem cadastrar apontamento de um
-// tipo que este módulo não monta recebe aviso nomeando o registro.
+// **não são gerados**.
+//
+// ⚠️ **E o cadastro não tem onde expressá-los** — então nada é descartado em
+// silêncio por aqui; o que falta é o REGISTRO. Por isso o aviso não é sobre o
+// apontamento e sim sobre a COBERTURA: sempre que o bloco sai com dados, ele
+// DIZ quais registros o leiaute escolhido exige e este módulo não monta
+// (`registrosExigidosQueFaltam`). Sem isso o arquivo promete uma cobertura que
+// não tem, e o PVA aceita — o livro é que declara menos movimento do que houve.
 //
 // Preferi a espinha COMPLETA e provada a doze registros pela metade: no bloco
 // K, registro montado por dedução é a mesma família do inventário zerado.
@@ -71,6 +82,83 @@ export const LEIAUTES_BLOCO_K = {
 
 /** IND_EST do K200 — Valores Válidos: [0, 1, 2] (Guia, K200 campo 05). */
 export const IND_EST_VALIDOS = ['0', '1', '2'];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 A TABELA DE OBRIGATORIEDADE POR LEIAUTE — E ELA DESMENTE O COMENTÁRIO QUE
+// ESTAVA AQUI (29/08).
+//
+// O topo deste arquivo afirmava que *"o simplificado desobriga justamente os
+// registros de consumo por item (K210/K215/K235/K255/K260/K265)"*. **A tabela
+// oficial do Guia 3.2.3 diz outra coisa**: no simplificado continuam
+// OBRIGATÓRIOS o **K220** (outras movimentações internas), o **K250**
+// (industrialização por terceiros — itens produzidos), o **K270/K280**
+// (correção de apontamento) e o **K290/K291/K300/K301** (produção conjunta).
+//
+// Ou seja: escolher o simplificado **não fecha o buraco** dos registros que
+// este módulo não monta — e quem lesse aquele comentário concluiria que sim.
+// É a lição de 28/08 (o comentário do M210 que citava uma regra da casa e
+// afirmava o oposto dela): **comentário que afirma uma regra tem de estar
+// certo**, porque a próxima pessoa cita ele de volta.
+//
+// ⚠️ A tabela foi EXTRAÍDA do Guia, nunca digitada — tabela oficial copiada à
+// mão é a segunda cópia que esta casa mais paga (os três erros da tabela de
+// tamanhos, no mesmo dia).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Guia Prático EFD ICMS/IPI 3.2.3, seção do K010: *"A tabela a seguir indica a
+ * obrigatoriedade de informação dos registros de acordo com o leiaute adotado,
+ * completo ou simplificado."*
+ *
+ * `true` = obrigatório naquele leiaute.
+ */
+export const OBRIGATORIEDADE_POR_LEIAUTE = {
+    K100: { completo: true, simplificado: true },
+    K200: { completo: true, simplificado: true },
+    K210: { completo: true, simplificado: false },
+    K215: { completo: true, simplificado: false },
+    K220: { completo: true, simplificado: true },
+    K230: { completo: true, simplificado: true },
+    K235: { completo: true, simplificado: false },
+    K250: { completo: true, simplificado: true },
+    K255: { completo: true, simplificado: false },
+    K260: { completo: true, simplificado: false },
+    K265: { completo: true, simplificado: false },
+    K270: { completo: true, simplificado: true },
+    K275: { completo: true, simplificado: false },
+    K280: { completo: true, simplificado: true },
+    K290: { completo: true, simplificado: true },
+    K291: { completo: true, simplificado: true },
+    K292: { completo: true, simplificado: false },
+    K300: { completo: true, simplificado: true },
+    K301: { completo: true, simplificado: true },
+    K302: { completo: true, simplificado: false },
+};
+
+/** Os registros que ESTE módulo monta — a espinha. */
+export const REGISTROS_GERADOS = ['K100', 'K200', 'K230', 'K235'];
+
+/**
+ * O que o leiaute escolhido EXIGE e este módulo não monta.
+ *
+ * 🚩 Existe para o arquivo não sair prometendo cobertura que ele não tem. O
+ * bloco K sai com a espinha; se a empresa teve desmontagem, movimentação
+ * interna, industrialização por terceiros, correção de apontamento ou produção
+ * conjunta, **esses registros faltam** — e o PVA pode aceitar assim mesmo, com
+ * o livro declarando menos movimento do que houve (a família do inventário
+ * zerado, um nível acima).
+ *
+ * ⚠️ **Leiaute 2 (restrito aos saldos) devolve LISTA VAZIA**, e é o ponto: ali
+ * só o K200 é admitido, então a espinha JÁ É o bloco inteiro — avisar seria
+ * alarme sobre arquivo completo.
+ */
+export function registrosExigidosQueFaltam(leiaute) {
+    const col = leiaute === '1' ? 'completo' : leiaute === '0' ? 'simplificado' : null;
+    if (!col) return [];
+    return Object.entries(OBRIGATORIEDADE_POR_LEIAUTE)
+        .filter(([reg, o]) => o[col] && !REGISTROS_GERADOS.includes(reg))
+        .map(([reg]) => reg);
+}
 
 /**
  * TIPO_ITEM que o K200 aceita.
@@ -312,6 +400,24 @@ export function montarBlocoK({
         for (const i of p.insumos) {
             linhas.push(['K235', i.dtSaida || p.dtFinOp || dtFin, i.codItem, i.qtd, i.codInsSubst]);
         }
+    }
+
+    // 🚩 A COBERTURA VAI DITA — sempre que o bloco sai COM dados. O arquivo
+    // carrega a espinha; se a empresa teve desmontagem, movimentação interna,
+    // industrialização por terceiros, correção de apontamento ou produção
+    // conjunta, esses registros FALTAM e o PVA pode aceitar assim mesmo.
+    // ⚠️ Fica MUDO no leiaute 2 (restrito aos saldos): ali só o K200 é
+    // admitido, então a espinha já é o bloco inteiro.
+    const faltam = registrosExigidosQueFaltam(exigencia.leiaute);
+    if (faltam.length) {
+        avisos.push(
+            `Bloco K: o arquivo saiu com a ESPINHA (K100 · K200 · K230 · K235). O leiaute escolhido `
+            + `(K010 = ${exigencia.leiaute} · ${LEIAUTES_BLOCO_K[exigencia.leiaute]}) também exige `
+            + `${faltam.join(', ')}, que este app NÃO gera. Se a empresa teve desmontagem, movimentação `
+            + 'interna entre mercadorias, industrialização por terceiros, correção de apontamento ou '
+            + 'produção conjunta no período, esses registros precisam ser lançados no PVA — o arquivo é '
+            + 'aceito sem eles, e aí o livro declara menos movimento do que houve.',
+        );
     }
 
     linhas.push(['K990', linhas.length + 1]);
