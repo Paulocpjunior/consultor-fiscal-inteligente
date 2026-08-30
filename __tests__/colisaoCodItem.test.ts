@@ -21,7 +21,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-    codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem,
+    codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
 } from '../sefaz-backend/sped-selecao-documentos.js';
 
 describe('🚨 colisão de COD_ITEM: dois produtos, um cadastro', () => {
@@ -145,5 +145,62 @@ describe('🔒 todo trilho que cria item preenche o nItem', () => {
                 );
             }
         }
+    });
+});
+
+// ============================================================================
+// 🚨 O TIPO_ITEM "00" É AFIRMADO EM TODA MERCADORIA — e o Guia dá ONZE valores.
+//
+// 00 revenda · 01 matéria-prima · 02 embalagem · 03 produto em processo ·
+// 04 produto acabado · 05 subproduto · 06 produto intermediário · 07 uso e
+// consumo · 08 ativo imobilizado · 09 serviços · 10 outros insumos · 99 outras.
+//
+// ⚠️ **NO COMÉRCIO O 00 É A RESPOSTA CERTA** — acender ali seria alarme sobre
+// arquivo correto na carteira inteira. Quem acende é a INDÚSTRIA, e por prova
+// do CADASTRO, nunca por dedução do ramo: a destinação não está no XML (o
+// fornecedor não sabe o que a mercadoria vira aqui — o caso KALUNGA do CFOP).
+// ============================================================================
+describe('🚨 o TIPO_ITEM presumido sai DITO na indústria', () => {
+    const mercadorias = [{ tipo: '00' }, { tipo: '00' }, { tipo: '09' }];
+
+    it('contribuinte de IPI com mercadoria "00" -> aviso com a contagem', () => {
+        const a = avisoDeTipoItemPresumido(mercadorias, { contribuinteIpi: 'sim' });
+        expect(a).toMatch(/2 item\(ns\)/);          // o de serviço fica de fora
+        expect(a).toMatch(/matéria-prima/);
+        expect(a).toMatch(/Bloco K/);                // onde o campo é cruzado
+        expect(a).toMatch(/PVA ACEITA/);             // não é recusa, é livro errado
+    });
+
+    // ⚠️ O CASO COMUM NASCE MUDO — é o que faz o aviso servir.
+    it('comércio (não marcado) fica MUDO', () => {
+        expect(avisoDeTipoItemPresumido(mercadorias, { contribuinteIpi: '' })).toBe('');
+        expect(avisoDeTipoItemPresumido(mercadorias, { contribuinteIpi: 'nao' })).toBe('');
+        expect(avisoDeTipoItemPresumido(mercadorias, null)).toBe('');
+    });
+
+    it('indústria SÓ com serviço fica MUDA — não há mercadoria a conferir', () => {
+        expect(avisoDeTipoItemPresumido([{ tipo: '09' }], { contribuinteIpi: 'sim' })).toBe('');
+        expect(avisoDeTipoItemPresumido([], { contribuinteIpi: 'sim' })).toBe('');
+        expect(avisoDeTipoItemPresumido(null, { contribuinteIpi: 'sim' })).toBe('');
+    });
+
+    // ⚠️ E ele NÃO ESCOLHE o tipo certo: dizer "01" por dedução seria o 1405
+    // num campo que o Bloco K cruza. O aviso pede conferência, não afirma.
+    it('não sugere um valor específico — pede conferência', () => {
+        const a = avisoDeTipoItemPresumido(mercadorias, { contribuinteIpi: 'SIM' });
+        expect(a).toMatch(/não a deduz/);
+        expect(a).toMatch(/Confira/);
+    });
+});
+
+describe('🔒 os DOIS orquestradores dizem o TIPO_ITEM presumido', () => {
+    const raiz2 = path.join(__dirname, '..');
+    it.each([
+        'sefaz-backend/sped-fiscal-orchestrator.js',
+        'sefaz-backend/sped-contrib-orchestrator.js',
+    ])('%s empurra o aviso', (arq) => {
+        const src = fs.readFileSync(path.join(raiz2, arq), 'utf8');
+        expect(src).toMatch(/avisoDeTipoItemPresumido\(/);
+        expect(src).toMatch(/warnings\.push\(avisoTipoItem\)/);
     });
 });

@@ -125,3 +125,12 @@ export function unidadeDoItem(item: unknown): string;
  * conhecia 'CM', a do Contribuições não). Unidade fora dela repete o código.
  */
 export function descreverUnidade(codigo: unknown): string;
+
+/**
+ * O `00` do TIPO_ITEM está sendo afirmado numa INDÚSTRIA — diga isso.
+ * '' num comércio (onde 00 é a resposta certa) e '' sem item de mercadoria.
+ */
+export function avisoDeTipoItemPresumido(
+    itens: Array<{ tipo?: string }> | null | undefined,
+    ctx?: { contribuinteIpi?: string } | null,
+): string;

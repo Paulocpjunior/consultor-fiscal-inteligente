@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O `TIPO_ITEM` DIZIA "MERCADORIA PARA REVENDA" EM TODA INDÚSTRIA — e o
+  Guia dá ONZE valores** (29/08, fechando a pendência nomeada em 21/08).
+  📖 O Guia 3.2.3, 0200 campo 07, lista: **00** revenda · **01** matéria-prima ·
+  **02** embalagem · **03** produto em processo · **04** produto acabado · 05
+  subproduto · 06 produto intermediário · **07** uso e consumo · 08 ativo
+  imobilizado · 09 serviços · 10 outros insumos · 99 outras. O app declara
+  **00 em toda mercadoria**, nas DUAS famílias (o campo é o 07 nos dois).
+  ⚠️ **E ISSO É CERTO NO CASO COMUM** — num COMÉRCIO, "mercadoria para revenda"
+  é exatamente o que o item é. Acender ali seria alarme sobre arquivo correto na
+  carteira inteira, que é o jeito conhecido de a equipe desligar o aviso. É a
+  lição das 236 empresas em ALTO por um campo fantasma (26/08).
+  🚨 **QUEM ACENDE É A INDÚSTRIA, e por prova do CADASTRO** (`contribuinteIpi` =
+  sim), nunca por dedução do ramo — a mesma régua que decide o E500/E520.
+  ⚠️ **E O APP CONTINUA NÃO ESCOLHENDO O VALOR**: a destinação **não está no
+  XML** (o fornecedor não sabe o que a mercadoria vira aqui — é o caso KALUNGA
+  do CFOP, um campo adiante), e deduzir produziria o `1405` num campo que o
+  **Bloco K cruza**. O aviso pede CONFERÊNCIA e diz que o **PVA ACEITA** o 00 —
+  o erro não é recusa, é livro errado, a família do `VL_OPR` sem o IPI.
+  📌 **A decisão de virar CADASTRO POR ITEM é do dono, e fica nomeada em vez de
+  construída**: seriam milhares de linhas para digitar, e a casa já recusou esse
+  desenho uma vez (*"eu não vou fazer nada manual"*, o calendário municipal,
+  16/08). O aviso é o que o app pode afirmar sozinho; a fila de digitação, não.
+
 - **🚨 A PENDÊNCIA ESTAVA MAL NOMEADA — e re-medi-la achou uma colisão PIOR e
   CALADA** (29/08, fechando o `ITEM-?` do 0200).
   📌 Estava escrito no código que *"item sem `nItem` cai em `ITEM-?`, e dois

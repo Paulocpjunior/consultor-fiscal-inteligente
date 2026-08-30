@@ -33,7 +33,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
-    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem,
+    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
     unidadeDoItem, descreverUnidade,
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
@@ -300,6 +300,13 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
     // erro é quem lê o livro, e é por isso que ela tem de sair DITA.
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
+    // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
+    // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
+    // destinação: ela não está no XML.
+    const avisoTipoItem = avisoDeTipoItemPresumido(itens, {
+        contribuinteIpi: empresa?.dadosFiscais?.contribuinteIpi,
+    });
+    if (avisoTipoItem) warnings.push(avisoTipoItem);
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
     }

@@ -39,7 +39,7 @@ import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
-    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, unidadeDoItem, descreverUnidade,
+    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido, unidadeDoItem, descreverUnidade,
     levaC170NoContribuicoes, ehNfce,
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
@@ -327,6 +327,13 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const warnings = [];
     warnings.push(...avisosDoFechamento);
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
+    // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
+    // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
+    // destinação: ela não está no XML.
+    const avisoTipoItem = avisoDeTipoItemPresumido(itens, {
+        contribuinteIpi: empresa?.dadosFiscais?.contribuinteIpi,
+    });
+    if (avisoTipoItem) warnings.push(avisoTipoItem);
 
     // ⚠️ AQUI, e não antes: `warnings` só nasce nesta linha, e empilhar aviso
     // acima dela seria `ReferenceError` — a classe que derrubou a geração do

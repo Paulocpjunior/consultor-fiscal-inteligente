@@ -319,6 +319,45 @@ export function ehItemDeServico(item) {
 }
 
 /**
+ * O `00` está sendo AFIRMADO em quem provavelmente não revende — diga isso.
+ *
+ * 🚨 A PENDÊNCIA ACIMA ERA REAL E ESTAVA **CALADA** (fechado em 29/08). O Guia
+ * dá ONZE valores ao TIPO_ITEM (00 revenda · 01 matéria-prima · 02 embalagem ·
+ * 03 produto em processo · 04 produto acabado · 05 subproduto · 06 produto
+ * intermediário · 07 uso e consumo · 08 ativo imobilizado · 09 serviços · 10
+ * outros insumos · 99 outras), e o app declara **00 em toda mercadoria**.
+ *
+ * ⚠️ **E ISSO É CERTO NO CASO COMUM**: num COMÉRCIO, "mercadoria para revenda"
+ * é exatamente o que o item é. Acender ali seria alarme sobre arquivo correto
+ * na carteira inteira — o jeito conhecido de a equipe desligar o aviso.
+ *
+ * 🚨 **QUEM ACENDE É A INDÚSTRIA**, e por prova do CADASTRO (`contribuinteIpi`
+ * = sim), nunca por dedução do ramo: numa indústria a matéria-prima é 01 e o
+ * produto acabado é 04, e **isso não está no XML** — o fornecedor não declara a
+ * destinação que a mercadoria terá aqui (o caso KALUNGA do CFOP, um campo
+ * adiante). Deduzir produziria o `1405` num campo que o **Bloco K cruza**.
+ *
+ * 📌 Por isso o app **não escolhe**: ele DIZ quantos itens saíram com o `00`
+ * afirmado e o que isso significa. A decisão de criar cadastro por item (com o
+ * custo de digitação que isso tem) é do dono — a mesma fronteira do calendário
+ * municipal.
+ */
+export function avisoDeTipoItemPresumido(itens, ctx) {
+    const marcado = String(ctx?.contribuinteIpi || '').toLowerCase();
+    if (marcado !== 'sim') return '';
+    const mercadorias = (Array.isArray(itens) ? itens : [])
+        .filter((i) => String(i?.tipo || '') === TIPO_ITEM_MERCADORIA_REVENDA);
+    if (!mercadorias.length) return '';
+    return `0200: ${mercadorias.length} item(ns) saíram com TIPO_ITEM "00 — Mercadoria para Revenda", `
+        + 'que é o padrão do app, numa empresa marcada como CONTRIBUINTE DE IPI. Numa indústria o item '
+        + 'costuma ser 01 (matéria-prima), 03 (produto em processo), 04 (produto acabado) ou 07 '
+        + '(uso e consumo) — e a destinação NÃO vem no XML, então o app não a deduz: o fornecedor não '
+        + 'sabe o que a mercadoria vira aqui. O PVA ACEITA o 00; quem cruza este campo é o Bloco K. '
+        + 'Confira os itens antes de transmitir e, se o TIPO_ITEM precisar ser outro, avise para virar '
+        + 'cadastro por item.';
+}
+
+/**
  * SER — a série do documento, com as TRÊS posições que o PVA cobra.
  *
  * 🚨 O bloco D escrevia `nota.serie || '1'`: série **1 INVENTADA** em todo CT-e
