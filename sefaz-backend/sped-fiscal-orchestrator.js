@@ -33,7 +33,7 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
-    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem,
+    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem,
     unidadeDoItem, descreverUnidade,
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
@@ -235,10 +235,29 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // itens dela no 0200 sem nenhum C170 apontando para eles.
     const itensMap = new Map();
     const unidadesMap = new Map();
+    // 🚨 O 0200 é a tabela do ARQUIVO e o `ITEM-n` é numerado por DOCUMENTO —
+    // dois produtos sem `cProd` colidem, e o `if (!map.has())` abaixo faz o
+    // segundo desaparecer dentro do primeiro, CALADO. A chave não muda aqui
+    // (mexer nela produz item órfão); o que muda é a colisão passar a ser DITA.
+    const colisoesDeItem = [];
     for (const nota of notas) {
         if (ehEmissaoPropriaDoc(nota, empresa.cnpj)) continue;
         for (const item of (nota.itens || [])) {
             const codItem = codItemDoItem(item);
+            const jaCadastrado = itensMap.get(codItem);
+            if (jaCadastrado) {
+                const campo = conferirColisaoDeItem(jaCadastrado, {
+                    descricao: item.xProd || item.descricao || '',
+                    ncm: item.NCM || item.ncm || '',
+                });
+                if (campo) {
+                    colisoesDeItem.push({
+                        codItem,
+                        de: jaCadastrado[campo],
+                        para: campo === 'ncm' ? (item.NCM || item.ncm) : (item.xProd || item.descricao),
+                    });
+                }
+            }
             if (!itensMap.has(codItem)) {
                 itensMap.set(codItem, {
                     codItem,
@@ -278,6 +297,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
+    // erro é quem lê o livro, e é por isso que ela tem de sair DITA.
+    if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
     }

@@ -5,6 +5,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A PENDÊNCIA ESTAVA MAL NOMEADA — e re-medi-la achou uma colisão PIOR e
+  CALADA** (29/08, fechando o `ITEM-?` do 0200).
+  📌 Estava escrito no código que *"item sem `nItem` cai em `ITEM-?`, e dois
+  produtos distintos colapsam num cadastro só"*. **Medir os QUATRO trilhos que
+  criam item derrubou a premissa**: todos preenchem o `nItem`, com o índice do
+  laço como reserva (`xml-importer.js:102`, `xmlParserService.ts:269` e `:671`,
+  `notaDigitada.ts:258`). **O `?` é INALCANÇÁVEL.**
+  🚨 **O QUE É REAL É OUTRA COISA, e é pior**: o `ITEM-n` é numerado **POR
+  DOCUMENTO** e o 0200 é a tabela do **ARQUIVO INTEIRO**. Dois produtos sem
+  `cProd`, cada um o item 1 do SEU documento, viram os dois `ITEM-1` — e o
+  coletor faz `if (!map.has(cod))`, ou seja **o primeiro vence e o segundo
+  desaparece dentro dele**. O arquivo declara UM item onde havia dois, e os
+  C170 dos dois apontam para a descrição de um só.
+  ⚠️ **E O PVA ACEITA** — há uma linha só no 0200, a contagem e o tamanho estão
+  certos. Quem vê o erro é quem lê o LIVRO, que é a família do `VL_OPR` sem o
+  IPI: erro que o validador não recusa e só aparece na fiscalização.
+  ⚠️ **A CHAVE NÃO MUDOU, e o motivo é medido, não preguiça**: ela é o que o
+  C170/A170 REFERENCIA. Trocá-la sem um caso real produz **item ÓRFÃO** em todo
+  cliente cujo XML não traz `cProd` — a recusa que a PWR já pagou (19/08).
+  Trocar uma colisão silenciosa por uma recusa garantida não é correção.
+  ✂️ **O que a casa faz com o que não sabe decidir é DENUNCIAR**:
+  `conferirColisaoDeItem` compara **descrição e NCM** e a colisão sai DITA, com
+  os dois nomes e a causa (`cProd` ausente na origem). ⚠️ Campo VAZIO de um lado
+  **não acusa** — ausência é captura incompleta, que tem trilho próprio (o ♻️);
+  e o mesmo produto repetido em vinte documentos fica MUDO, senão o alarme
+  nasce em todo arquivo correto.
+  📌 **Entrou nas DUAS famílias no mesmo PR** — deixar numa só é a "meia trava"
+  do COD_MUN do 0150 —, e a **ligação é cobrada nas duas metades**: conferir sem
+  AVISAR seria a flag que ninguém lê (o defeito que eu mesmo criei horas antes).
+  Provada revertendo cada uma.
+  🐛 **E A VARREDURA NASCEU ACUSANDO CÓDIGO CERTO — a quarta vez do mesmo
+  vício.** Ela exigia o `||` na LINHA do `nItem:`, e o `xml-importer` garante em
+  DUAS etapas (`const nItem = … || String(i+1)` e depois o shorthand `nItem,`).
+  Alarme falso sobre código correto é o que faz a equipe desligar a trava: a
+  assinatura passou a casar as duas formas de ATRIBUIR.
+  📌 **REGRA QUE FICA: pendência antiga se RE-MEDE antes de virar trabalho.**
+  Esta estava escrita com a causa errada, e ir corrigir o que ela dizia teria
+  mexido numa chave de cadastro por um caso que não existe — enquanto o caso que
+  EXISTE seguiria calado.
+
 - **🚨 O CST TEM LADO — a separação estava no COMENTÁRIO e nunca virou regra, e o
   GÊMEO do defeito da PWR estava VIVO no A170** (29/08, fechando a pendência que
   eu mesmo tinha nomeado).

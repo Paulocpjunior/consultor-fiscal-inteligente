@@ -39,7 +39,7 @@ import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
-    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, unidadeDoItem, descreverUnidade,
+    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, unidadeDoItem, descreverUnidade,
     levaC170NoContribuicoes, ehNfce,
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
@@ -241,6 +241,9 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const itensMap = new Map();
     const unidadesMap = new Map();
     let itensSoEmNfce = 0;
+    // Mesma colisão do EFD ICMS/IPI, e ela entra nas DUAS famílias no mesmo PR:
+    // deixar numa só é a "meia trava" do COD_MUN do 0150 (22/08).
+    const colisoesDeItem = [];
     for (const nota of notas) {
         if (!levaC170NoContribuicoes(nota)) {
             itensSoEmNfce += (nota.itens || []).length;
@@ -248,6 +251,20 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         }
         for (const item of (nota.itens || [])) {
             const codItem = codItemDoItem(item);
+            const jaCadastrado = itensMap.get(codItem);
+            if (jaCadastrado) {
+                const campo = conferirColisaoDeItem(jaCadastrado, {
+                    descricao: item.xProd || item.descricao || '',
+                    ncm: item.NCM || item.ncm || '',
+                });
+                if (campo) {
+                    colisoesDeItem.push({
+                        codItem,
+                        de: jaCadastrado[campo],
+                        para: campo === 'ncm' ? (item.NCM || item.ncm) : (item.xProd || item.descricao),
+                    });
+                }
+            }
             if (!itensMap.has(codItem)) {
                 itensMap.set(codItem, {
                     codItem,
@@ -309,6 +326,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
 
     // ⚠️ AQUI, e não antes: `warnings` só nasce nesta linha, e empilhar aviso
     // acima dela seria `ReferenceError` — a classe que derrubou a geração do

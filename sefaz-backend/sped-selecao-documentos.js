@@ -368,16 +368,76 @@ export function serieDoDocumento(nota) {
  * Quem manda é o 0200, porque ele é o CADASTRO: quem aponta se ajusta a quem é
  * apontado. Nunca devolve vazio — campo obrigatório sem valor é recusa certa.
  *
- * ⚠️ **Pendência NOMEADA, não corrigida**: item sem `nItem` cai em `ITEM-?`, e
- * dois produtos distintos nessa situação colapsam num cadastro só. É o
- * comportamento que o 0200 já tinha; mudá-lo sem um caso real seria trocar uma
- * chave de cadastro no escuro, que é pior que a colisão.
+ * ⚠️ **A PENDÊNCIA FOI RE-MEDIDA EM 29/08, E ELA ESTAVA MAL NOMEADA.** Ficou
+ * escrito aqui que *"item sem `nItem` cai em `ITEM-?`"* — e medir os QUATRO
+ * trilhos que criam item mostrou que **todos preenchem o `nItem`**, com o
+ * índice do laço como reserva (`xml-importer.js:102`, `xmlParserService.ts:269`
+ * e `:671`, `notaDigitada.ts:258`). O `?` é **inalcançável**, e a trava por
+ * varredura ao lado impede que um trilho novo o alcance.
+ *
+ * 🚨 **O QUE É REAL É OUTRA COISA, e é pior porque acontece calada**: o
+ * `ITEM-n` é numerado **POR DOCUMENTO** e o 0200 é a tabela do **ARQUIVO
+ * INTEIRO**. Dois produtos SEM `cProd`, cada um o item 1 do seu documento,
+ * viram os dois `ITEM-1` — e o coletor do 0200 faz `if (!map.has(cod))`, ou
+ * seja **o primeiro vence e o segundo desaparece dentro dele**. O arquivo
+ * declara um item onde havia dois, e os C170 dos dois apontam para a descrição
+ * de um só.
+ *
+ * ⚠️ **E A CHAVE NÃO MUDA AQUI, de propósito.** Ela é o que o C170/A170
+ * REFERENCIA: mexer nela sem um caso real medido troca uma colisão silenciosa
+ * por um item ÓRFÃO em todo cliente cujo XML não traz `cProd` — a recusa que a
+ * PWR já pagou (19/08). O que a casa faz com o que não sabe decidir é
+ * **DENUNCIAR**: `conferirColisaoDeItem` abaixo acusa a fusão, com os dois
+ * nomes, para quem gera decidir.
  */
 export function codItemDoItem(item) {
     const i = item || {};
     const direto = i.cProd || i.codigo || i.cFiscal;
     if (direto) return String(direto);
     return `ITEM-${i.nItem || '?'}`;
+}
+
+/**
+ * Dois itens caíram no MESMO `COD_ITEM` — eles são o mesmo produto?
+ *
+ * Devolve o nome do campo que DIVERGE (ou `null` quando são o mesmo item). O
+ * caso normal — o mesmo produto aparecendo em vinte documentos com o mesmo
+ * `cProd` — responde `null` e não gera ruído; alarme sobre arquivo correto é o
+ * jeito conhecido de a equipe desligar a trava.
+ *
+ * ⚠️ Compara **descrição e NCM**, que é o que o 0200 declara e o que muda de
+ * verdade entre dois produtos. Campo VAZIO de um dos lados não acusa: ausência
+ * não é divergência (é captura incompleta, e tem trilho próprio).
+ */
+export function conferirColisaoDeItem(existente, novo) {
+    const a = existente || {};
+    const b = novo || {};
+    for (const campo of ['descricao', 'ncm']) {
+        const x = String(a[campo] ?? '').trim().toUpperCase();
+        const y = String(b[campo] ?? '').trim().toUpperCase();
+        if (x && y && x !== y) return campo;
+    }
+    return null;
+}
+
+/**
+ * A frase da colisão — UMA só, para as duas famílias.
+ *
+ * Duas mensagens fariam o mesmo defeito ser descrito de dois jeitos, e quem lê
+ * o aviso do EFD ICMS/IPI e o do Contribuições no mesmo dia concluiria que são
+ * problemas diferentes.
+ */
+export function avisoDeColisaoDeItem(colisoes) {
+    if (!Array.isArray(colisoes) || !colisoes.length) return '';
+    const amostra = colisoes.slice(0, 5)
+        .map((c) => `${c.codItem} ("${c.de}" × "${c.para}")`)
+        .join('; ');
+    return `0200: ${colisoes.length} item(ns) DIFERENTE(s) caíram no mesmo COD_ITEM e o arquivo `
+        + `declara só o primeiro — ${amostra}${colisoes.length > 5 ? ` e mais ${colisoes.length - 5}` : ''}. `
+        + 'Acontece quando o XML não traz o código do produto (cProd): o item passa a ser numerado '
+        + 'por documento (ITEM-1, ITEM-2…) e dois produtos de documentos diferentes colidem. '
+        + 'O PVA ACEITA — o livro é que sai com a descrição errada. Corrija o cadastro do produto '
+        + 'na origem ou lance o item pelo ✏️ para ele ganhar código próprio.';
 }
 
 /**
