@@ -5,6 +5,57 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CST TEM LADO — a separação estava no COMENTÁRIO e nunca virou regra, e o
+  GÊMEO do defeito da PWR estava VIVO no A170** (29/08, fechando a pendência que
+  eu mesmo tinha nomeado).
+  📌 O comentário do `sped-contrib-regras-tributarias.js` já dizia, em quatro
+  linhas: *"Saida tributada: 01, 02, 03, 49 … Entrada com credito: 50 … 75"*. E
+  **nada conferia isso** — é o vício de 13/08 (*regra escrita não é regra
+  travada*) a três linhas de distância, com precedente CARO: em 20/08 a **PWR
+  saiu com CST `01` numa ENTRADA**, código que nem existe na Tabela 4.3.7.
+  🔴 **E MEDIR ACHOU O GÊMEO: o A170 continuava copiando o CST do XML** — que é
+  o do **FORNECEDOR**. O C170 foi corrigido em 20/08 e o bloco A ficou para
+  trás, três funções ao lado. Pior que o código errado: quando ele caía no 70
+  (*aquisição SEM direito a crédito*), **declarava crédito na casa seguinte**.
+  Medido no gerador real:
+  `|A170|1|SERV-GENERICO|…|1000,00|||0|`**`70`**`|1000,00|0,6500|`**`6,50`**`|…`
+  🚨 É a família do **M100/M500 que se desmentia por dentro** (29/08): a
+  CONTAGEM de campos está certa, então nenhuma trava de forma vê — e o PVA
+  aceita. Só a leitura do registro contra si mesmo pega.
+  ✂️ `pisCofinsDaAquisicao` virou **dono único** (o C170 já decidia assim) e o
+  A170 passou a chamá-lo: **na entrada quem decide é o REGIME de quem
+  escritura**, nunca o CST do XML.
+  ⚠️ **O zero aqui É A RESPOSTA** ("não há crédito a apropriar"), não o default
+  de quem não achou o dado — e ele só alcança o **CUMULATIVO**, onde crédito não
+  existe por lei. No não-cumulativo nada muda: **nenhum crédito foi tirado de
+  ninguém**, e isso está travado por teste.
+  🚦 **A regra entrou no MESMO PR (`CST_DA_DIRECAO_ERRADA`), cobrindo C170 E
+  A170** — corrigir só o gerador fecha a INSTÂNCIA e deixa a classe aberta, que
+  foi exatamente o que aconteceu em 20/08.
+  📌 **E O MOTIVO DE DEIXAR O A170 DE FORA CADUCOU — isso se RE-MEDE, não se
+  herda.** Em 22/08 ficou escrito que ele ficava fora porque *"a contagem dele
+  não está em CAMPOS_POR_REGISTRO, e conferir posição deduzida é alarme falso"*.
+  Verdade naquele dia; **falsa desde a extração do Guia 1.35**, que dá o A170
+  com **18 campos, sem buraco e com os NOMES** (CST_PIS no 09) e o A100 com 21
+  (IND_OPER no 02). Exclusão antiga carrega a data do motivo, não a do hoje.
+  ⚠️ **E o A170 NÃO TEM CFOP**: a direção vem do **A100 PAI**, pelo mesmo
+  pareamento do C100 × C190 e do D100 × D190 — e foi **provada com DOIS pais**,
+  porque com um só *"o primeiro do arquivo"* e *"o que antecede"* dão a MESMA
+  resposta, que é a coincidência que faz a versão errada passar.
+  ⚠️ **98 e 99 valem nos DOIS lados** (é o que a tabela diz — acusá-los seria
+  alarme sobre código legítimo) e **código INVÁLIDO não vira "lado errado"**:
+  dizer a falha errada manda procurar no lugar errado.
+  📌 **E UMA FIXTURE FOI TROCADA, pelo motivo certo**: ela fazia uma empresa
+  **CUMULATIVA** declarar `NAT_BC_CRED` numa aquisição, plantando `cstPis: '50'`
+  no item — ou seja, ela **descrevia o mundo em que o CST do fornecedor
+  atravessava**. A intenção dela (havendo crédito, o campo sai) continua de pé
+  pelo NÃO-cumulativo, que é o único caminho em que o crédito existe.
+  ⚠️ **O QUE ISTO NÃO FECHA, e vai dito**: a **Tabela 4.3.7 não está no repo** —
+  o Guia só a REFERENCIA (*"disponibilizada no Portal do SPED"*). A regra
+  confere o **LADO**, nunca se o código específico é o certo para aquela
+  aquisição; reconstruí-la de memória seria inventar tabela oficial, que é o
+  1405 com outra roupa.
+
 - **🚨 A TRAVA DE TAMANHO COBRIA UM BLOCO SÓ — e medir os outros achou DOIS
   defeitos vivos** (30/08, Paulo: *"pode fazer a trava de tamanho"*).
   📌 Em 29/08 ela nasceu no bloco 0 e pegou o FANTASIA de 91 caracteres num
