@@ -9,6 +9,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "1010": {
@@ -30,6 +34,22 @@
     "IND_GIAF3",
     "IND_GIAF4",
     "IND_REST_RESSARC"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
    ]
   },
   "1100": {
@@ -49,6 +69,20 @@
     "DT_AVB",
     "TP_CHC",
     "PAIS"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    14,
+    8,
+    1,
+    12,
+    8,
+    18,
+    8,
+    8,
+    2,
+    3
    ]
   },
   "1105": {
@@ -63,6 +97,15 @@
     "CHV_NFE",
     "DT_DOC",
     "COD_ITEM"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    3,
+    9,
+    44,
+    8,
+    60
    ]
   },
   "1110": {
@@ -80,6 +123,18 @@
     "NR_MEMO",
     "QTD",
     "UNID"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    4,
+    9,
+    8,
+    44,
+    null,
+    null,
+    6
    ]
   },
   "1200": {
@@ -94,6 +149,15 @@
     "CRED_RECEB",
     "CRED_UTIL",
     "SLD_CRED_FIM"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1210": {
@@ -105,6 +169,12 @@
     "TIPO_UTIL",
     "NR_DOC",
     "VL_CRED_UTIL"
+   ],
+   "tamanhos": [
+    4,
+    4,
+    null,
+    null
    ]
   },
   "1250": {
@@ -118,6 +188,14 @@
     "VL_FCP_ST_REST",
     "VL_ICMS_ST_COMPL",
     "VL_FCP_ST_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1255": {
@@ -132,6 +210,15 @@
     "VL_FCP_ST_REST_MOT",
     "VL_ICMS_ST_COMPL_MOT",
     "VL_FCP_ST_COMPL_MOT"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1300": {
@@ -150,6 +237,19 @@
     "VAL_AJ_PERDA",
     "VAL_AJ_GANHO",
     "FECH_FISICO"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1310": {
@@ -168,6 +268,19 @@
     "VAL_AJ_GANHO",
     "FECH_FISICO",
     "CAP_TANQUE"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "1320": {
@@ -186,6 +299,19 @@
     "VAL_ABERT",
     "VOL_AFERI",
     "VOL_VENDAS"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    50,
+    30,
+    14,
+    11,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1350": {
@@ -198,6 +324,13 @@
     "FABRICANTE",
     "MODELO",
     "TIPO_MEDICAO"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    60,
+    null,
+    1
    ]
   },
   "1360": {
@@ -208,6 +341,11 @@
     "REG",
     "NUM_LACRE",
     "DT_APLICACAO"
+   ],
+   "tamanhos": [
+    4,
+    20,
+    8
    ]
   },
   "1370": {
@@ -219,6 +357,12 @@
     "NUM_BICO",
     "COD_ITEM",
     "NUM_TANQUE"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    3
    ]
   },
   "1390": {
@@ -228,6 +372,10 @@
    "nomes": [
     "REG",
     "COD_PROD"
+   ],
+   "tamanhos": [
+    4,
+    2
    ]
   },
   "1391": {
@@ -258,6 +406,31 @@
     "QTD_RESIDUO_DDG",
     "QTD_RESIDUO_WDG",
     "QTD_RESIDUO_CANA"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    60,
+    2,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1400": {
@@ -269,6 +442,12 @@
     "COD_ITEM_IPM",
     "MUN",
     "VALOR"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    7,
+    null
    ]
   },
   "1500": {
@@ -303,6 +482,35 @@
     "VL_COFINS",
     "TP_LIGACAO",
     "COD_GRUPO_TENSAO"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    2,
+    4,
+    3,
+    2,
+    9,
+    8,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6,
+    null,
+    null,
+    1,
+    2
    ]
   },
   "1510": {
@@ -331,6 +539,29 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    4,
+    null,
+    6,
+    null,
+    null,
+    3,
+    4,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    1,
+    60,
+    null,
+    null,
+    null
    ]
   },
   "1600": {
@@ -342,6 +573,12 @@
     "COD_PART",
     "TOT_CREDITO",
     "TOT_DEBITO"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    null
    ]
   },
   "1601": {
@@ -355,6 +592,14 @@
     "TOT_VS",
     "TOT_ISS",
     "TOT_OUTROS"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    60,
+    null,
+    null,
+    null
    ]
   },
   "1700": {
@@ -370,6 +615,16 @@
     "NUM_DOC_INI",
     "NUM_DOC_FIN",
     "NUM_AUT"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    2,
+    4,
+    3,
+    12,
+    12,
+    60
    ]
   },
   "1710": {
@@ -380,6 +635,11 @@
     "REG",
     "NUM_DOC_INI",
     "NUM_DOC_FIN"
+   ],
+   "tamanhos": [
+    4,
+    12,
+    12
    ]
   },
   "1800": {
@@ -397,6 +657,18 @@
     "VL_ICMS_APUR",
     "VL_BC_ICMS_APUR",
     "VL_DIF"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1900": {
@@ -407,6 +679,11 @@
     "REG",
     "IND_APUR_ICMS",
     "DESCR_COMPL_OUT_APUR"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    null
    ]
   },
   "1910": {
@@ -417,6 +694,11 @@
     "REG",
     "DT_INI",
     "DT_FIN"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8
    ]
   },
   "1920": {
@@ -437,6 +719,21 @@
     "VL_ICMS_RECOLHER_OA",
     "VL_SLD_CREDOR_TRANSP_OA",
     "DEB_ESP_OA"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1921": {
@@ -448,6 +745,12 @@
     "COD_AJ_APUR",
     "DESCR_COMPL_AJ",
     "VL_AJ_APUR"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null
    ]
   },
   "1922": {
@@ -461,6 +764,14 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "1923": {
@@ -477,6 +788,17 @@
     "DT_DOC",
     "COD_ITEM",
     "VL_AJ_ITEM"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    4,
+    3,
+    9,
+    8,
+    60,
+    null
    ]
   },
   "1925": {
@@ -488,6 +810,12 @@
     "COD_INF_ADIC",
     "VL_INF_ADIC",
     "DESCR_COMPL_AJ"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null
    ]
   },
   "1926": {
@@ -504,6 +832,17 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null,
+    8,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "1960": {
@@ -524,6 +863,21 @@
     "G1_09",
     "G1_10",
     "G1_11"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1970": {
@@ -543,6 +897,20 @@
     "G3_T",
     "G3_08",
     "G3_09"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1975": {
@@ -555,6 +923,13 @@
     "G3_10",
     "G3_11",
     "G3_12"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1980": {
@@ -576,6 +951,22 @@
     "G4_10",
     "G4_11",
     "G4_12"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "1990": {
@@ -585,6 +976,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_1"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "9001": {
@@ -594,6 +989,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "9900": {
@@ -604,6 +1003,11 @@
     "REG",
     "REG_BLC",
     "QTD_REG_BLC"
+   ],
+   "tamanhos": [
+    4,
+    4,
+    null
    ]
   },
   "9990": {
@@ -613,6 +1017,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_9"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "9999": {
@@ -737,6 +1145,75 @@
     "C100",
     "C500",
     "D100"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "0000": {
@@ -759,6 +1236,23 @@
     "SUFRAMA",
     "IND_PERFIL",
     "IND_ATIV"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    1,
+    8,
+    8,
+    100,
+    14,
+    11,
+    2,
+    14,
+    7,
+    null,
+    9,
+    1,
+    1
    ]
   },
   "0001": {
@@ -768,6 +1262,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "0002": {
@@ -777,6 +1275,10 @@
    "nomes": [
     "REG",
     "CLAS_ESTAB_IND"
+   ],
+   "tamanhos": [
+    4,
+    2
    ]
   },
   "0005": {
@@ -794,6 +1296,18 @@
     "FONE",
     "FAX",
     "EMAIL"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    8,
+    60,
+    10,
+    60,
+    60,
+    11,
+    11,
+    null
    ]
   },
   "0015": {
@@ -804,6 +1318,11 @@
     "REG",
     "UF_ST",
     "IE_ST"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    14
    ]
   },
   "0100": {
@@ -825,6 +1344,22 @@
     "FAX",
     "EMAIL",
     "COD_MUN"
+   ],
+   "tamanhos": [
+    4,
+    100,
+    11,
+    15,
+    14,
+    8,
+    60,
+    10,
+    60,
+    60,
+    11,
+    11,
+    null,
+    7
    ]
   },
   "0150": {
@@ -845,6 +1380,21 @@
     "NUM",
     "COMPL",
     "BAIRRO"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    100,
+    5,
+    14,
+    11,
+    14,
+    7,
+    9,
+    60,
+    10,
+    60,
+    60
    ]
   },
   "0175": {
@@ -856,6 +1406,12 @@
     "DT_ALT",
     "NR_CAMPO",
     "CONT_ANT"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    2,
+    100
    ]
   },
   "0190": {
@@ -866,6 +1422,11 @@
     "REG",
     "UNID",
     "DESCR"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "0200": {
@@ -886,6 +1447,21 @@
     "COD_LST",
     "ALIQ_ICMS",
     "CEST"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    null,
+    60,
+    6,
+    2,
+    8,
+    3,
+    2,
+    5,
+    6,
+    7
    ]
   },
   "0205": {
@@ -898,6 +1474,13 @@
     "DT_INI",
     "DT_FIM",
     "COD_ANT_ITEM"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    8,
+    8,
+    60
    ]
   },
   "0206": {
@@ -907,6 +1490,10 @@
    "nomes": [
     "REG",
     "COD_COMB"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "0210": {
@@ -918,6 +1505,12 @@
     "COD_ITEM_COMP",
     "QTD_COMP",
     "PERDA"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    null
    ]
   },
   "0220": {
@@ -929,6 +1522,12 @@
     "UNID_CONV",
     "FAT_CONV",
     "COD_BARRA"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null,
+    null
    ]
   },
   "0221": {
@@ -939,6 +1538,11 @@
     "REG",
     "COD_ITEM_ATOMICO",
     "QTD_CONTIDA"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null
    ]
   },
   "0300": {
@@ -953,6 +1557,15 @@
     "COD_PRNC",
     "COD_CTA",
     "NR_PARC"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    1,
+    null,
+    60,
+    60,
+    3
    ]
   },
   "0305": {
@@ -964,6 +1577,12 @@
     "COD_CCUS",
     "FUNC",
     "VIDA_UTIL"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    3
    ]
   },
   "0400": {
@@ -974,6 +1593,11 @@
     "REG",
     "COD_NAT",
     "DESCR_NAT"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null
    ]
   },
   "0450": {
@@ -984,6 +1608,11 @@
     "REG",
     "COD_INF",
     "TXT"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "0460": {
@@ -994,6 +1623,11 @@
     "REG",
     "COD_OBS",
     "TXT"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "0500": {
@@ -1008,6 +1642,15 @@
     "NÍVEL",
     "COD_CTA",
     "NOME_CTA"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    2,
+    1,
+    5,
+    60,
+    60
    ]
   },
   "0600": {
@@ -1019,6 +1662,12 @@
     "DT_ALT",
     "COD_CCUS",
     "CCUS"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    60
    ]
   },
   "0990": {
@@ -1028,6 +1677,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_0"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "B001": {
@@ -1037,6 +1690,10 @@
    "nomes": [
     "REG",
     "IND_DAD"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "B020": {
@@ -1065,6 +1722,29 @@
     "VL_ISS_RT",
     "VL_ISS",
     "COD_INF_OBS"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    2,
+    3,
+    9,
+    44,
+    8,
+    7,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    60
    ]
   },
   "B025": {
@@ -1079,6 +1759,15 @@
     "VL_ISS_P",
     "VL_ISNT_ISS_P",
     "COD_SERV"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    4
    ]
   },
   "B030": {
@@ -1098,6 +1787,20 @@
     "VL_BC_ISS",
     "VL_ISS",
     "COD_INF_OBS"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    3,
+    9,
+    9,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    60
    ]
   },
   "B035": {
@@ -1112,6 +1815,15 @@
     "VL_ISS_P",
     "VL_ISNT_ISS_P",
     "COD_SERV"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    4
    ]
   },
   "B350": {
@@ -1130,6 +1842,19 @@
     "ALIQ_ISS",
     "VL_ISS",
     "COD_INF_OBS"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    8,
+    null,
+    4,
+    null,
+    null,
+    null,
+    null,
+    60
    ]
   },
   "B420": {
@@ -1144,6 +1869,15 @@
     "VL_ISNT_ISS",
     "VL_ISS",
     "COD_SERV"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "B440": {
@@ -1157,6 +1891,14 @@
     "VL_CONT_RT",
     "VL_BC_ISS_RT",
     "VL_ISS_RT"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "B460": {
@@ -1172,6 +1914,16 @@
     "PROC",
     "COD_INF_OBS",
     "IND_OBR"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    null,
+    null,
+    1,
+    null,
+    60,
+    1
    ]
   },
   "B470": {
@@ -1194,6 +1946,23 @@
     "VL_ISS_REC",
     "VL_ISS_ST",
     "VL_ISS_REC_UNI"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "B500": {
@@ -1205,6 +1974,12 @@
     "VL_REC",
     "QTD_PROF",
     "VL_OR"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null
    ]
   },
   "B510": {
@@ -1218,6 +1993,14 @@
     "IND_SOC",
     "CPF",
     "NOME"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    1,
+    11,
+    100
    ]
   },
   "B990": {
@@ -1227,6 +2010,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_B"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "C001": {
@@ -1236,6 +2023,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "C100": {
@@ -1272,6 +2063,37 @@
     "VL_COFINS",
     "VL_PIS_ST",
     "VL_COFINS_ST"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    2,
+    3,
+    9,
+    44,
+    8,
+    8,
+    null,
+    1,
+    null,
+    null,
+    null,
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C101": {
@@ -1283,6 +2105,12 @@
     "VL_FCP_UF_DEST",
     "VL_ICMS_UF_DEST",
     "VL_ICMS_UF_REM"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null
    ]
   },
   "C105": {
@@ -1293,6 +2121,11 @@
     "REG",
     "OPER",
     "UF"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    2
    ]
   },
   "C110": {
@@ -1303,6 +2136,11 @@
     "REG",
     "COD_INF",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "C111": {
@@ -1313,6 +2151,11 @@
     "REG",
     "NUM_PROC",
     "IND_PROC"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    1
    ]
   },
   "C112": {
@@ -1328,6 +2171,16 @@
     "VL_DA",
     "DT_VCTO",
     "DT_PGTO"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    2,
+    null,
+    null,
+    null,
+    8,
+    8
    ]
   },
   "C113": {
@@ -1344,6 +2197,17 @@
     "SUB",
     "NUM_DOC",
     "DT_DOC"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    4,
+    3,
+    9,
+    8
    ]
   },
   "C114": {
@@ -1357,6 +2221,14 @@
     "ECF_CX",
     "NUM_DOC",
     "DT_DOC"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    21,
+    3,
+    9,
+    8
    ]
   },
   "C115": {
@@ -1374,6 +2246,18 @@
     "IE_ENTG",
     "CPF_ENTG",
     "COD_MUN_ENTG"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    14,
+    14,
+    11,
+    7,
+    14,
+    14,
+    11,
+    7
    ]
   },
   "C116": {
@@ -1387,6 +2271,14 @@
     "CHV_CFE",
     "NUM_CFE",
     "DT_DOC"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    9,
+    44,
+    6,
+    8
    ]
   },
   "C120": {
@@ -1400,6 +2292,14 @@
     "PIS_IMP",
     "COFINSIMP",
     "NUM_ACDRAW"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    15,
+    null,
+    2,
+    20
    ]
   },
   "C130": {
@@ -1415,6 +2315,16 @@
     "VL_IRRF",
     "VL_BC_PREV",
     "VL_PREV"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C140": {
@@ -1429,6 +2339,15 @@
     "NUM_TIT",
     "QTD_PARC",
     "VL_TIT"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    2,
+    null,
+    null,
+    2,
+    null
    ]
   },
   "C141": {
@@ -1440,6 +2359,12 @@
     "NUM_PARC",
     "DT_VCTO",
     "VL_PARC"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    8,
+    null
    ]
   },
   "C160": {
@@ -1454,6 +2379,15 @@
     "PESO_BRT",
     "PESO_LIQ",
     "UF_ID"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    7,
+    null,
+    null,
+    null,
+    2
    ]
   },
   "C165": {
@@ -1474,6 +2408,21 @@
     "NOM_MOT",
     "CPF",
     "UF_ID"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    7,
+    null,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    60,
+    11,
+    2
    ]
   },
   "C170": {
@@ -1519,6 +2468,46 @@
     "VL_COFINS",
     "COD_CTA",
     "VL_ABAT_NT"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    null,
+    null,
+    6,
+    null,
+    null,
+    1,
+    3,
+    4,
+    10,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    1,
+    2,
+    3,
+    null,
+    6,
+    null,
+    2,
+    null,
+    8,
+    null,
+    null,
+    null,
+    2,
+    null,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C171": {
@@ -1529,6 +2518,11 @@
     "REG",
     "NUM_TANQUE",
     "QTDE"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null
    ]
   },
   "C172": {
@@ -1540,6 +2534,12 @@
     "VL_BC_ISSQN",
     "ALIQ_ISSQN",
     "VL_ISSQN"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    6,
+    null
    ]
   },
   "C173": {
@@ -1555,6 +2555,16 @@
     "IND_MED",
     "TP_PROD",
     "VL_TAB_MAX"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    8,
+    8,
+    1,
+    1,
+    null
    ]
   },
   "C174": {
@@ -1566,6 +2576,12 @@
     "IND_ARM",
     "NUM_ARM",
     "DESCR_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    null,
+    null
    ]
   },
   "C175": {
@@ -1578,6 +2594,13 @@
     "CNPJ",
     "UF",
     "CHASSI_VEIC"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    14,
+    2,
+    17
    ]
   },
   "C176": {
@@ -1614,6 +2637,35 @@
     "COD_DA",
     "NUM_DA",
     "VL_UNIT_RES_FCP_ST"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    9,
+    3,
+    8,
+    60,
+    null,
+    null,
+    null,
+    44,
+    3,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    1,
+    1,
+    44,
+    60,
+    3,
+    9,
+    3,
+    1,
+    null,
+    null
    ]
   },
   "C177": {
@@ -1624,6 +2676,11 @@
     "REG",
     "COD_SELO_IPI",
     "QT_SELO_IPI"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    12
    ]
   },
   "C178": {
@@ -1635,6 +2692,12 @@
     "CL_ENQ",
     "VL_UNID",
     "QUANT_PAD"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    null
    ]
   },
   "C179": {
@@ -1648,6 +2711,14 @@
     "ICMS_ST_COMPL",
     "BC_RET",
     "ICMS_RET"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C180": {
@@ -1667,6 +2738,20 @@
     "COD_DA",
     "NUM_DA",
     "COD_PROD"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    1,
+    null,
+    60
    ]
   },
   "C181": {
@@ -1702,6 +2787,29 @@
     "VL_UNIT_FCP_ST_CONV",
     "?",
     "VL_UNIT_FCP_ST_CONV"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    2,
+    3,
+    21,
+    9,
+    44,
+    8,
+    3,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C185": {
@@ -1732,6 +2840,26 @@
     "VL_UNIT_FCP_ST_CONV_REST",
     "VL_UNIT_ICMS_ST_CONV",
     "VL_UNIT_FCP_ST_CONV_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    3,
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C186": {
@@ -1758,6 +2886,25 @@
     "VL_UNIT_CONV_ENTRADA",
     "?",
     "VL_UNIT_BC_ICMS_ST"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    3,
+    4,
+    5,
+    null,
+    6,
+    2,
+    3,
+    9,
+    44,
+    8,
+    3,
+    null,
+    null,
+    null
    ]
   },
   "C190": {
@@ -1777,6 +2924,20 @@
     "VL_RED_BC",
     "VL_IPI",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C195": {
@@ -1787,6 +2948,11 @@
     "REG",
     "COD_OBS",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "C197": {
@@ -1802,6 +2968,16 @@
     "ALIQ_ICMS",
     "VL_ICMS",
     "VL_OUTROS"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null,
+    60,
+    null,
+    6,
+    null,
+    null
    ]
   },
   "C300": {
@@ -1820,6 +2996,19 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    4,
+    3,
+    6,
+    6,
+    8,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C310": {
@@ -1829,6 +3018,10 @@
    "nomes": [
     "REG",
     "NUM_DOC_CANC"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "C320": {
@@ -1845,6 +3038,17 @@
     "VL_ICMS",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C321": {
@@ -1862,6 +3066,18 @@
     "VL_ICMS",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C330": {
@@ -1887,6 +3103,22 @@
     "VL_UNIT_FCP_ST_CONV_REST",
     "VL_UNIT_ICMS_ST_CONV",
     "VL_UNIT_FCP_ST_CONV_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C350": {
@@ -1906,6 +3138,20 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    3,
+    6,
+    8,
+    14,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C370": {
@@ -1920,6 +3166,15 @@
     "UNID",
     "VL_ITEM",
     "VL_DESC"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    null,
+    6,
+    null,
+    null
    ]
   },
   "C380": {
@@ -1948,6 +3203,24 @@
     "VL_UNIT_FCP_ST_CONV",
     "CST_ICMS",
     "CFOP"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    3,
+    4
    ]
   },
   "C390": {
@@ -1964,6 +3237,17 @@
     "VL_ICMS",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C400": {
@@ -1976,6 +3260,13 @@
     "ECF_MOD",
     "ECF_FAB",
     "ECF_CX"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    20,
+    21,
+    3
    ]
   },
   "C405": {
@@ -1990,6 +3281,15 @@
     "NUM_COO_FIN",
     "GT_FIN",
     "VL_BRT"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    3,
+    6,
+    9,
+    null,
+    null
    ]
   },
   "C410": {
@@ -2000,6 +3300,11 @@
     "REG",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null
    ]
   },
   "C420": {
@@ -2012,6 +3317,13 @@
     "VLR_ACUM_TOT",
     "NR_TOT",
     "DESCR_NR_TOT"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    null,
+    2,
+    null
    ]
   },
   "C425": {
@@ -2026,6 +3338,15 @@
     "VL_ITEM",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    6,
+    null,
+    null,
+    null
    ]
   },
   "C430": {
@@ -2054,6 +3375,24 @@
     "VL_UNIT_FCP_ST_CONV",
     "CST_ICMS",
     "CFOP"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    3,
+    4
    ]
   },
   "C460": {
@@ -2071,6 +3410,18 @@
     "VL_COFINS",
     "CPF_CNPJ",
     "NOM_ADQ"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    2,
+    9,
+    8,
+    null,
+    null,
+    null,
+    14,
+    60
    ]
   },
   "C465": {
@@ -2081,6 +3432,11 @@
     "REG",
     "CHV_CFE",
     "NUM_CCF"
+   ],
+   "tamanhos": [
+    4,
+    44,
+    9
    ]
   },
   "C470": {
@@ -2099,6 +3455,19 @@
     "ALIQ_ICMS",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    null,
+    6,
+    null,
+    3,
+    4,
+    6,
+    null,
+    null
    ]
   },
   "C480": {
@@ -2126,6 +3495,24 @@
     "VL_UNIT_FCP_ST_CONV_COMPL",
     "CST_ICMS",
     "CFOP"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    3,
+    4
    ]
   },
   "C490": {
@@ -2141,6 +3528,16 @@
     "VL_BC_ICMS",
     "VL_ICMS",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C495": {
@@ -2163,6 +3560,23 @@
     "VL_ISEN",
     "VL_NT",
     "VL_ICMS_ST"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    60,
+    null,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C500": {
@@ -2214,6 +3628,48 @@
     "MES_DOC_REF",
     "ENER_INJET",
     "OUTRAS_DED"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    2,
+    4,
+    3,
+    2,
+    9,
+    8,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6,
+    null,
+    null,
+    1,
+    2,
+    null,
+    null,
+    null,
+    1,
+    7,
+    null,
+    2,
+    32,
+    4,
+    9,
+    6,
+    null,
+    null
    ]
   },
   "C510": {
@@ -2242,6 +3698,29 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    4,
+    null,
+    6,
+    null,
+    null,
+    3,
+    4,
+    null,
+    6,
+    null,
+    null,
+    6,
+    null,
+    1,
+    60,
+    null,
+    null,
+    null
    ]
   },
   "C590": {
@@ -2260,6 +3739,19 @@
     "VL_ICMS_ST",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C591": {
@@ -2270,6 +3762,11 @@
     "REG",
     "VL_FCP_OP",
     "VL_FCP_ST"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null
    ]
   },
   "C595": {
@@ -2280,6 +3777,11 @@
     "REG",
     "COD_OBS",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "C597": {
@@ -2295,6 +3797,16 @@
     "ALIQ_ICMS",
     "VL_ICMS",
     "VL_OUTROS"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null,
+    60,
+    null,
+    6,
+    null,
+    null
    ]
   },
   "C600": {
@@ -2324,6 +3836,30 @@
     "VL_ICMS_ST",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    7,
+    4,
+    3,
+    2,
+    null,
+    null,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C601": {
@@ -2333,6 +3869,10 @@
    "nomes": [
     "REG",
     "NUM_DOC_CANC"
+   ],
+   "tamanhos": [
+    4,
+    9
    ]
   },
   "C610": {
@@ -2357,6 +3897,25 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    4,
+    60,
+    null,
+    6,
+    null,
+    null,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C690": {
@@ -2375,6 +3934,19 @@
     "VL_BC_ICMS_ST",
     "VL_ICMS_ST",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C700": {
@@ -2391,6 +3963,17 @@
     "DT_DOC_FIN",
     "NOM_MEST",
     "CHV_COD_DIG"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    4,
+    9,
+    9,
+    8,
+    8,
+    33,
+    32
    ]
   },
   "C790": {
@@ -2409,6 +3992,19 @@
     "VL_ICMS_ST",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C791": {
@@ -2420,6 +4016,12 @@
     "UF",
     "VL_BC_ICMS_ST",
     "VL_ICMS_ST"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    null,
+    null
    ]
   },
   "C800": {
@@ -2444,6 +4046,25 @@
     "VL_ICMS",
     "VL_PIS_ST",
     "VL_COFINS_ST"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    2,
+    6,
+    8,
+    null,
+    null,
+    null,
+    14,
+    9,
+    44,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C810": {
@@ -2459,6 +4080,16 @@
     "VL_ITEM",
     "CST_ICMS",
     "CFOP"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    null,
+    6,
+    2,
+    3,
+    4
    ]
   },
   "C815": {
@@ -2485,6 +4116,22 @@
     "VL_UNIT_FCP_ST_CONV",
     "?",
     "VL_UNIT_FCP_ST_CONV"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C850": {
@@ -2500,6 +4147,16 @@
     "VL_BC_ICMS",
     "VL_ICMS",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C855": {
@@ -2510,6 +4167,11 @@
     "REG",
     "COD_OBS",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "C857": {
@@ -2525,6 +4187,16 @@
     "ALIQ_ICMS",
     "VL_ICMS",
     "VL_OUTROS"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null,
+    60,
+    null,
+    6,
+    null,
+    null
    ]
   },
   "C860": {
@@ -2538,6 +4210,14 @@
     "DT_DOC",
     "DOC_INI",
     "DOC_FIM"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    9,
+    8,
+    6,
+    6
    ]
   },
   "C870": {
@@ -2551,6 +4231,14 @@
     "UNID",
     "CST_ICMS",
     "CFOP"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    6,
+    3,
+    4
    ]
   },
   "C880": {
@@ -2578,6 +4266,22 @@
     "VL_UNIT_FCP_ST_CONV",
     "?",
     "VL_UNIT_FCP_ST_CONV"
+   ],
+   "tamanhos": [
+    4,
+    5,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "C890": {
@@ -2593,6 +4297,16 @@
     "VL_BC_ICMS",
     "VL_ICMS",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "C895": {
@@ -2603,6 +4317,11 @@
     "REG",
     "COD_OBS",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "C897": {
@@ -2618,6 +4337,16 @@
     "ALIQ_ICMS",
     "VL_ICMS",
     "VL_OUTROS"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null,
+    60,
+    null,
+    6,
+    null,
+    null
    ]
   },
   "C990": {
@@ -2627,6 +4356,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_C"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "D001": {
@@ -2636,6 +4369,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "D100": {
@@ -2670,6 +4407,33 @@
     "COD_CTA",
     "COD_MUN_ORIG",
     "COD_MUN_DEST"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    2,
+    4,
+    3,
+    9,
+    44,
+    8,
+    8,
+    null,
+    44,
+    null,
+    null,
+    1,
+    null,
+    null,
+    null,
+    null,
+    6,
+    null,
+    7,
+    7
    ]
   },
   "D101": {
@@ -2681,6 +4445,12 @@
     "VL_FCP_UF_DEST",
     "VL_ICMS_UF_DEST",
     "VL_ICMS_UF_REM"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null
    ]
   },
   "D110": {
@@ -2693,6 +4463,13 @@
     "COD_ITEM",
     "VL_SERV",
     "VL_OUT"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    null,
+    null
    ]
   },
   "D120": {
@@ -2705,6 +4482,13 @@
     "COD_MUN_DEST",
     "VEIC_ID",
     "UF_ID"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    7,
+    7,
+    2
    ]
   },
   "D130": {
@@ -2726,6 +4510,22 @@
     "VL_OUT",
     "VL_FRT",
     "UF_ID"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    60,
+    1,
+    7,
+    7,
+    7,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    2
    ]
   },
   "D140": {
@@ -2747,6 +4547,22 @@
     "VL_OUT",
     "VL_FRT_BRT",
     "VL_FRT_MM"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    7,
+    7,
+    1,
+    null,
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D150": {
@@ -2765,6 +4581,19 @@
     "VL_TX_RED",
     "VL_OUT",
     "VL_TX_ADV"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    7,
+    null,
+    null,
+    1,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D160": {
@@ -2780,6 +4609,16 @@
     "CNPJ_CPF_DEST",
     "IE_DEST",
     "COD_MUN_DEST"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    14,
+    14,
+    7,
+    14,
+    14,
+    7
    ]
   },
   "D161": {
@@ -2797,6 +4636,16 @@
     "CNPJ_CPF_ENTG",
     "IE_ENTG",
     "COD_MUN_ENTG"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    14,
+    14,
+    7,
+    14,
+    14,
+    7
    ]
   },
   "D162": {
@@ -2814,6 +4663,18 @@
     "QTD_VOL",
     "PESO_BRT",
     "PESO_LIQ"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    4,
+    9,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D170": {
@@ -2835,6 +4696,22 @@
     "VL_FRT",
     "VEIC_ID",
     "UF_ID"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    60,
+    7,
+    7,
+    null,
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    7,
+    2
    ]
   },
   "D180": {
@@ -2859,6 +4736,25 @@
     "NUM_DOC",
     "DT_DOC",
     "VL_DOC"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    1,
+    14,
+    2,
+    14,
+    7,
+    14,
+    2,
+    14,
+    7,
+    2,
+    4,
+    3,
+    9,
+    8,
+    null
    ]
   },
   "D190": {
@@ -2875,6 +4771,17 @@
     "VL_ICMS",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D195": {
@@ -2885,6 +4792,11 @@
     "REG",
     "COD_OBS",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "D197": {
@@ -2901,6 +4813,17 @@
     "VL_ICMS",
     "VL_OUTROS",
     "IND_BENEFICIO"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null,
+    60,
+    null,
+    6,
+    null,
+    null,
+    1
    ]
   },
   "D300": {
@@ -2928,6 +4851,28 @@
     "VL_RED_BC",
     "COD_OBS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    4,
+    4,
+    6,
+    null,
+    3,
+    4,
+    6,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6,
+    null
    ]
   },
   "D301": {
@@ -2937,6 +4882,10 @@
    "nomes": [
     "REG",
     "NUM_DOC_CANC"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "D310": {
@@ -2949,6 +4898,13 @@
     "VL_SERV",
     "VL_BC_ICMS",
     "VL_ICMS"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    null,
+    null,
+    null
    ]
   },
   "D350": {
@@ -2961,6 +4917,13 @@
     "ECF_MOD",
     "ECF_FAB",
     "ECF_CX"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    20,
+    21,
+    3
    ]
   },
   "D355": {
@@ -2975,6 +4938,15 @@
     "NUM_COO_FIN",
     "GT_FIN",
     "VL_BRT"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    3,
+    6,
+    9,
+    null,
+    null
    ]
   },
   "D360": {
@@ -2985,6 +4957,11 @@
     "REG",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null
    ]
   },
   "D365": {
@@ -2997,6 +4974,13 @@
     "VLR_ACUM_TOT",
     "NR_TOT",
     "DESCR_NR_TOT"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    null,
+    2,
+    null
    ]
   },
   "D370": {
@@ -3010,6 +4994,14 @@
     "QTD_BILH",
     "VL_BC_ICMS",
     "VL_ICMS"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D390": {
@@ -3028,6 +5020,19 @@
     "VL_BC_ICMS",
     "VL_ICMS",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    6,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D400": {
@@ -3051,6 +5056,24 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    2,
+    4,
+    3,
+    6,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D410": {
@@ -3073,6 +5096,23 @@
     "VL_SERV",
     "VL_BC_ICMS",
     "VL_ICMS"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    4,
+    3,
+    6,
+    null,
+    8,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D411": {
@@ -3082,6 +5122,10 @@
    "nomes": [
     "REG",
     "NUM_DOC_CANC"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "D420": {
@@ -3094,6 +5138,13 @@
     "VL_SERV",
     "VL_BC_ICMS",
     "VL_ICMS"
+   ],
+   "tamanhos": [
+    4,
+    7,
+    null,
+    null,
+    null
    ]
   },
   "D500": {
@@ -3125,6 +5176,32 @@
     "VL_COFINS",
     "COD_CTA",
     "TP_ASSINANTE"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    1,
+    60,
+    2,
+    2,
+    4,
+    3,
+    9,
+    8,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6,
+    null,
+    null,
+    null,
+    1
    ]
   },
   "D510": {
@@ -3152,6 +5229,28 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    4,
+    null,
+    6,
+    null,
+    null,
+    3,
+    4,
+    null,
+    6,
+    null,
+    null,
+    null,
+    1,
+    60,
+    null,
+    null,
+    null
    ]
   },
   "D530": {
@@ -3166,6 +5265,15 @@
     "PER_FISCAL",
     "COD_AREA",
     "TERMINAL"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    8,
+    8,
+    6,
+    null,
+    null
    ]
   },
   "D590": {
@@ -3184,6 +5292,19 @@
     "VL_ICMS_UF",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D600": {
@@ -3209,6 +5330,26 @@
     "VL_ICMS",
     "VL_PIS",
     "VL_COFINS"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    7,
+    4,
+    3,
+    2,
+    null,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D610": {
@@ -3234,6 +5375,26 @@
     "VL_PIS",
     "VL_COFINS",
     "COD_CTA"
+   ],
+   "tamanhos": [
+    4,
+    4,
+    60,
+    null,
+    6,
+    null,
+    null,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D690": {
@@ -3252,6 +5413,19 @@
     "VL_ICMS_UF",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D695": {
@@ -3268,6 +5442,17 @@
     "DT_DOC_FIN",
     "NOM_MEST",
     "CHV_COD_DIG"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    4,
+    9,
+    9,
+    8,
+    8,
+    33,
+    32
    ]
   },
   "D696": {
@@ -3286,6 +5471,19 @@
     "VL_ICMS_UF",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D697": {
@@ -3297,6 +5495,12 @@
     "UF",
     "VL_BC_ICMS",
     "VL_ICMS"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    null,
+    null
    ]
   },
   "D730": {
@@ -3313,6 +5517,17 @@
     "VL_ICMS",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D731": {
@@ -3322,6 +5537,10 @@
    "nomes": [
     "REG",
     "VL_FCP_OP"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "D735": {
@@ -3332,6 +5551,11 @@
     "REG",
     "COD_OBS",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    6,
+    null
    ]
   },
   "D737": {
@@ -3347,6 +5571,16 @@
     "ALIQ_ICMS",
     "VL_ICMS",
     "VL_OUTROS"
+   ],
+   "tamanhos": [
+    4,
+    10,
+    null,
+    60,
+    null,
+    6,
+    null,
+    null
    ]
   },
   "D750": {
@@ -3371,6 +5605,25 @@
     "VL_PIS",
     "VL_COFINS",
     "DED"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    3,
+    8,
+    null,
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "D760": {
@@ -3387,6 +5640,17 @@
     "VL_ICMS",
     "VL_RED_BC",
     "COD_OBS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    4,
+    6,
+    null,
+    null,
+    null,
+    null,
+    6
    ]
   },
   "D761": {
@@ -3396,6 +5660,10 @@
    "nomes": [
     "REG",
     "VL_FCP_OP"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "D990": {
@@ -3405,6 +5673,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_D"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "E001": {
@@ -3414,6 +5686,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "E100": {
@@ -3424,6 +5700,11 @@
     "REG",
     "DT_INI",
     "DT_FIN"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8
    ]
   },
   "E110": {
@@ -3446,6 +5727,23 @@
     "VL_ICMS_RECOLHER",
     "VL_SLD_CREDOR_TRANSPORTAR",
     "DEB_ESP"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "E111": {
@@ -3457,6 +5755,12 @@
     "COD_AJ_APUR",
     "DESCR_COMPL_AJ",
     "VL_AJ_APUR"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null
    ]
   },
   "E112": {
@@ -3470,6 +5774,14 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "E113": {
@@ -3486,6 +5798,17 @@
     "DT_DOC",
     "COD_ITEM",
     "VL_AJ_ITEM"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    4,
+    3,
+    9,
+    8,
+    60,
+    null
    ]
   },
   "E115": {
@@ -3497,6 +5820,12 @@
     "COD_INF_ADIC",
     "VL_INF_ADIC",
     "DESCR_COMPL_AJ"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null
    ]
   },
   "E116": {
@@ -3513,6 +5842,17 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null,
+    8,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "E200": {
@@ -3524,6 +5864,12 @@
     "UF",
     "DT_INI",
     "DT_FIN"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    8,
+    8
    ]
   },
   "E210": {
@@ -3548,6 +5894,23 @@
     "VL_ICMS_RECOL_ST",
     "?",
     "DEB_ESP_ST"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "E220": {
@@ -3559,6 +5922,12 @@
     "COD_AJ_APUR",
     "DESCR_COMPL_AJ",
     "VL_AJ_APUR"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null
    ]
   },
   "E230": {
@@ -3572,6 +5941,14 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "E240": {
@@ -3588,6 +5965,17 @@
     "DT_DOC",
     "COD_ITEM",
     "VL_AJ_ITEM"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    4,
+    3,
+    9,
+    8,
+    60,
+    null
    ]
   },
   "E250": {
@@ -3604,6 +5992,17 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null,
+    8,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "E300": {
@@ -3615,6 +6014,12 @@
     "UF",
     "DT_INI",
     "DT_FIN"
+   ],
+   "tamanhos": [
+    4,
+    2,
+    8,
+    8
    ]
   },
   "E310": {
@@ -3647,6 +6052,30 @@
     "VL_RECOL_FCP",
     "?",
     "DEB_ESP_FCP"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "E311": {
@@ -3658,6 +6087,12 @@
     "COD_AJ_APUR",
     "DESCR_COMPL_AJ",
     "VL_AJ_APUR"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    null
    ]
   },
   "E312": {
@@ -3671,6 +6106,14 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "E313": {
@@ -3690,6 +6133,18 @@
     "DT_DOC",
     "COD_ITEM",
     "VL_AJ_ITEM"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    4,
+    3,
+    9,
+    null,
+    8,
+    60,
+    null
    ]
   },
   "E316": {
@@ -3706,6 +6161,17 @@
     "IND_PROC",
     "PROC",
     "TXT_COMPL"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null,
+    8,
+    null,
+    60,
+    1,
+    null,
+    null
    ]
   },
   "E500": {
@@ -3717,6 +6183,12 @@
     "IND_APUR",
     "DT_INI",
     "DT_FIN"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    8,
+    8
    ]
   },
   "E510": {
@@ -3730,6 +6202,14 @@
     "VL_CONT_IPI",
     "VL_BC_IPI",
     "VL_IPI"
+   ],
+   "tamanhos": [
+    4,
+    4,
+    2,
+    null,
+    null,
+    null
    ]
   },
   "E520": {
@@ -3745,6 +6225,16 @@
     "VL_OC_IPI",
     "VL_SC_IPI",
     "VL_SD_IPI"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "E530": {
@@ -3759,6 +6249,15 @@
     "IND_DOC",
     "NUM_DOC",
     "DESCR_AJ"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    null,
+    3,
+    1,
+    null,
+    null
    ]
   },
   "E531": {
@@ -3776,6 +6275,18 @@
     "COD_ITEM",
     "VL_AJ_ITEM",
     "CHV_NFE"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    2,
+    4,
+    3,
+    9,
+    8,
+    60,
+    null,
+    44
    ]
   },
   "E990": {
@@ -3785,6 +6296,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_E"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "G001": {
@@ -3794,6 +6309,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "G110": {
@@ -3811,6 +6330,18 @@
     "IND_PER_SAI",
     "ICMS_APROP",
     "SOM_ICMS_OC"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "G125": {
@@ -3828,6 +6359,18 @@
     "VL_IMOB_ICMS_DIF",
     "NUM_PARC",
     "VL_PARC_PASS"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    8,
+    2,
+    null,
+    null,
+    null,
+    null,
+    3,
+    null
    ]
   },
   "G126": {
@@ -3844,6 +6387,17 @@
     "VL_TOTAL",
     "IND_PER_SAI",
     "VL_PARC_APROP"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8,
+    3,
+    null,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "G130": {
@@ -3860,6 +6414,17 @@
     "CHV_NFE_CTE",
     "DT_DOC",
     "NUM_DA"
+   ],
+   "tamanhos": [
+    4,
+    1,
+    60,
+    2,
+    3,
+    9,
+    44,
+    8,
+    null
    ]
   },
   "G140": {
@@ -3876,6 +6441,17 @@
     "VL_ICMS_ST_APLICADO",
     "VL_ICMS_FRT_APLICADO",
     "VL_ICMS_DIF_APLICADO"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    60,
+    null,
+    6,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "G990": {
@@ -3885,6 +6461,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_G"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "H001": {
@@ -3894,6 +6474,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "H005": {
@@ -3905,6 +6489,12 @@
     "DT_INV",
     "VL_INV",
     "MOT_INV"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    null,
+    2
    ]
   },
   "H010": {
@@ -3923,6 +6513,19 @@
     "TXT_COMPL",
     "COD_CTA",
     "VL_ITEM_IR"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    6,
+    null,
+    null,
+    null,
+    1,
+    60,
+    null,
+    null,
+    null
    ]
   },
   "H020": {
@@ -3934,6 +6537,12 @@
     "CST_ICMS",
     "BC_ICMS",
     "VL_ICMS"
+   ],
+   "tamanhos": [
+    4,
+    3,
+    null,
+    2
    ]
   },
   "H030": {
@@ -3946,6 +6555,13 @@
     "VL_BC_ICMS_ST",
     "VL_ICMS_ST",
     "VL_FCP"
+   ],
+   "tamanhos": [
+    4,
+    null,
+    null,
+    null,
+    null
    ]
   },
   "H990": {
@@ -3955,6 +6571,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_H"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   },
   "K001": {
@@ -3964,6 +6584,10 @@
    "nomes": [
     "REG",
     "IND_MOV"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "K010": {
@@ -3973,6 +6597,10 @@
    "nomes": [
     "REG",
     "IND_TP_LEIAUTE"
+   ],
+   "tamanhos": [
+    4,
+    1
    ]
   },
   "K100": {
@@ -3983,6 +6611,11 @@
     "REG",
     "DT_INI",
     "DT_FIN"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8
    ]
   },
   "K200": {
@@ -3996,6 +6629,14 @@
     "QTD",
     "IND_EST",
     "COD_PART"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    null,
+    1,
+    60
    ]
   },
   "K210": {
@@ -4009,6 +6650,14 @@
     "COD_DOC_OS",
     "COD_ITEM_ORI",
     "QTD_ORI"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8,
+    30,
+    60,
+    null
    ]
   },
   "K215": {
@@ -4019,6 +6668,11 @@
     "REG",
     "COD_ITEM_DES",
     "QTD_DES"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null
    ]
   },
   "K220": {
@@ -4032,6 +6686,14 @@
     "COD_ITEM_DEST",
     "QTD_ORI",
     "QTD_DEST"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    60,
+    null,
+    null
    ]
   },
   "K230": {
@@ -4045,6 +6707,14 @@
     "COD_DOC_OP",
     "COD_ITEM",
     "QTD_ENC"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8,
+    30,
+    60,
+    null
    ]
   },
   "K235": {
@@ -4057,6 +6727,13 @@
     "COD_ITEM",
     "QTD",
     "COD_INS_SUBST"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    null,
+    60
    ]
   },
   "K250": {
@@ -4068,6 +6745,12 @@
     "DT_PROD",
     "COD_ITEM",
     "QTD"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    null
    ]
   },
   "K255": {
@@ -4080,6 +6763,13 @@
     "COD_ITEM",
     "QTD",
     "COD_INS_SUBST"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    null,
+    60
    ]
   },
   "K260": {
@@ -4094,6 +6784,15 @@
     "QTD_SAÍDA",
     "DT_RET",
     "QTD_RET"
+   ],
+   "tamanhos": [
+    4,
+    30,
+    60,
+    8,
+    null,
+    8,
+    null
    ]
   },
   "K265": {
@@ -4105,6 +6804,12 @@
     "COD_ITEM",
     "QTD_CONS",
     "QTD_RET"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    null
    ]
   },
   "K270": {
@@ -4120,6 +6825,16 @@
     "QTD_COR_POS",
     "QTD_COR_NEG",
     "ORIGEM"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8,
+    30,
+    60,
+    null,
+    null,
+    1
    ]
   },
   "K275": {
@@ -4132,6 +6847,13 @@
     "QTD_COR_POS",
     "QTD_COR_NEG",
     "COD_INS_SUBST"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null,
+    null,
+    60
    ]
   },
   "K280": {
@@ -4148,6 +6870,15 @@
     "QTD_COR_NEG",
     "?",
     "COD_PART"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    60,
+    null,
+    null,
+    null,
+    60
    ]
   },
   "K290": {
@@ -4159,6 +6890,12 @@
     "DT_INI_OP",
     "DT_FIN_OP",
     "COD_DOC_OP"
+   ],
+   "tamanhos": [
+    4,
+    8,
+    8,
+    30
    ]
   },
   "K291": {
@@ -4169,6 +6906,11 @@
     "REG",
     "COD_ITEM",
     "QTD"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null
    ]
   },
   "K292": {
@@ -4179,6 +6921,11 @@
     "REG",
     "COD_ITEM",
     "QTD"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null
    ]
   },
   "K300": {
@@ -4188,6 +6935,10 @@
    "nomes": [
     "REG",
     "DT_PROD"
+   ],
+   "tamanhos": [
+    4,
+    8
    ]
   },
   "K301": {
@@ -4198,6 +6949,11 @@
     "REG",
     "COD_ITEM",
     "QTD"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null
    ]
   },
   "K302": {
@@ -4208,6 +6964,11 @@
     "REG",
     "COD_ITEM",
     "QTD"
+   ],
+   "tamanhos": [
+    4,
+    60,
+    null
    ]
   },
   "K990": {
@@ -4217,6 +6978,10 @@
    "nomes": [
     "REG",
     "QTD_LIN_K"
+   ],
+   "tamanhos": [
+    4,
+    null
    ]
   }
  }

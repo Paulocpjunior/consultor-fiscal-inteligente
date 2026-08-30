@@ -48,6 +48,7 @@
 import {
     CAMPOS_DO_GUIA_FISCAL,
     REGISTROS_INCERTOS_NO_GUIA_FISCAL,
+    TAMANHOS_DO_GUIA_FISCAL,
 } from './leiaute-fiscal-guia.js';
 
 /**
@@ -188,4 +189,62 @@ export function conferirContagemDeCamposFiscal(linhas) {
 /** Avisos prontos para entrar na lista que a geração já devolve. */
 export function avisosDeContagemDeCamposFiscal(linhas) {
     return conferirContagemDeCamposFiscal(linhas).erros.map((e) => `🚨 ${e.mensagem}`);
+}
+
+/**
+ * 🚨 O TAMANHO DE CADA CAMPO — a trava que a de CONTAGEM não faz.
+ *
+ * `conferirContagemDeCamposFiscal` conta CAMPOS. O FANTASIA do 0005 saindo com
+ * 91 caracteres num campo de 60 (29/08) tem a contagem CERTA — quem pega
+ * aquilo é esta. As duas são necessárias e nenhuma substitui a outra; é a
+ * mesma cegueira que deixou o M210 da MANTOAN passar com as casas trocadas.
+ *
+ * ═══ POR QUE ELA MEDE A SAÍDA, E NÃO O CÓDIGO ═══════════════════════════════
+ *
+ * Varredura de `sanitizeString(x, N)` no fonte provaria que a constante está
+ * certa; esta prova que o **ARQUIVO** está — e é o arquivo que o PVA lê (a
+ * lição do C100 com modelo 55 e chave 65, que passou meses porque a
+ * conferência auditava a INTENÇÃO).
+ *
+ * 🚨 **E foi medindo que ela achou dois defeitos vivos** (30/08), os dois da
+ * mesma classe — campo que escapou do corte enquanto os vizinhos cortavam:
+ *
+ *   · **H010 campo 08 (COD_PART)** — saía CRU com os três vizinhos cortando;
+ *   · **K200 campos 03 e 06 (COD_ITEM, COD_PART)** — o bloco K devolve ARRAYS
+ *     DE CAMPOS e a casca formata, mas o `buildLine` formata NÚMERO, não corta
+ *     TEXTO. Ninguém cortava.
+ *
+ * ⚠️ **CAMPO DE TAMANHO LIVRE NÃO É CONFERIDO** (`null` na tabela): todo campo
+ * de valor é livre no Guia, e cravar limite ali seria inventar regra.
+ */
+export function conferirTamanhoDeCamposFiscal(linhas) {
+    const erros = [];
+
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const t = String(linha || '').replace(/\r?\n$/, '');
+        if (!t.startsWith('|') || !t.endsWith('|')) return;
+        const campos = t.slice(1, -1).split('|');
+        const reg = String(campos[0] || '').trim();
+        const tabela = TAMANHOS_DO_GUIA_FISCAL[reg];
+        if (!tabela) return;
+
+        campos.forEach((valor, pos) => {
+            if (pos === 0) return;                    // o REG é o campo 01
+            const max = tabela[pos];                  // tabela[0] = campo 01
+            if (max == null) return;                  // livre ou não lido
+            if (String(valor).length <= max) return;
+            erros.push({
+                registro: reg,
+                linha: i + 1,
+                campo: pos + 1,
+                tamanho: String(valor).length,
+                maximo: max,
+                mensagem: `${reg} campo ${String(pos + 1).padStart(2, '0')}: saiu com `
+                    + `${String(valor).length} caracteres e o leiaute dá ${max}. `
+                    + 'O PVA recusa com "Tamanho do campo inválido".',
+            });
+        });
+    });
+
+    return { erros, ok: erros.length === 0 };
 }

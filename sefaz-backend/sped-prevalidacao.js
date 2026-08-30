@@ -44,7 +44,7 @@ import { linhasMalformadas } from './sped-auditoria-saida.js';
 // família (R42). A tabela vem do Guia 3.2.3, extraída, com o registro cuja
 // leitura ficou INCOMPLETA de fora: acusar por contagem subestimada seria
 // alarme sobre registro certo.
-import { conferirContagemDeCamposFiscal } from './sped-fiscal-campos.js';
+import { conferirContagemDeCamposFiscal, conferirTamanhoDeCamposFiscal } from './sped-fiscal-campos.js';
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, POS_DT_FIN_ICMS_IPI,
@@ -1549,6 +1549,29 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
             acao: 'É defeito de GERAÇÃO, não de cadastro: reporte com o print. '
                 + 'O PVA não importa o arquivo com o registro fora do leiaute.',
             fonte: e.fonte,
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 🚨 R43 — o TAMANHO de cada campo, que a contagem (R42) não vê.
+    //
+    // A R42 conta CAMPOS; o FANTASIA do 0005 com 91 caracteres num campo de 60
+    // (29/08) tem a contagem CERTA. As duas são necessárias.
+    //
+    // 🚨 Medindo a SAÍDA com valores longos ela achou dois defeitos vivos: o
+    // **H010 campo 08** e o **K200 campos 03 e 06** saíam sem corte nenhum.
+    // ════════════════════════════════════════════════════════════════════════
+    for (const e of conferirTamanhoDeCamposFiscal(lista).erros) {
+        add(erros, {
+            regra: 'tamanho-de-campo', registro: e.registro,
+            campo: `${String(e.campo).padStart(2, '0')}`,
+            linha: lista[e.linha - 1], valor: `${e.tamanho} caracteres`,
+            esperado: `no máximo ${e.maximo}`,
+            mensagem: e.mensagem,
+            acao: 'É defeito de GERAÇÃO, não de cadastro — o campo precisa ser cortado no '
+                + 'gerador. Reporte com o print; nome longo no cadastro é legítimo.',
+            fonte: 'Guia Prático do EFD ICMS/IPI 3.2.3, coluna "Tam" da tabela do registro '
+                + `${e.registro} (extraída por scripts/extrair-leiaute-fiscal.mjs).`,
         });
     }
 

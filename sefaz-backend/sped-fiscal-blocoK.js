@@ -37,16 +37,34 @@ export function buildBlocoK(dados) {
         leiauteBlocoK: df.leiauteBlocoK ?? dados?.empresa?.leiauteBlocoK,
     });
 
+    // 🚨 O CORTE ACONTECE AQUI, E NOS DOIS LADOS JUNTOS (29/08).
+    //
+    // O módulo do bloco K devolve ARRAYS DE CAMPOS e a casca formata — só que
+    // o `buildLine` formata NÚMERO, não corta TEXTO. Resultado medido: o K200
+    // saía com `COD_ITEM` e `COD_PART` de 160 caracteres em campos de **060**,
+    // que é a recusa "Tamanho do campo inválido" (a família do FANTASIA do
+    // 0005 e do COD_ENQ da PWR).
+    //
+    // ⚠️ E cortar SÓ o que sai não bastaria: o `itensDo0200` é o outro lado da
+    // conferência de item órfão, e o 0200 do arquivo já corta em 60. Cortando
+    // um lado só, o K200 apontaria para um código que o 0200 declara com outro
+    // tamanho — trocaria a recusa de TAMANHO pela de item ÓRFÃO. Os dois lados
+    // passam pelo mesmo corte, com o mesmo limite do 0200.
+    const cod = (v) => fmt.sanitizeString(v, 60);
     const { linhas, avisos } = montarBlocoK({
         exigencia,
-        estoques: dados?.blocoK?.estoques || [],
-        producao: dados?.blocoK?.producao || [],
+        estoques: (dados?.blocoK?.estoques || []).map((e) => ({
+            ...e, codItem: cod(e.codItem), codPart: cod(e.codPart),
+        })),
+        producao: (dados?.blocoK?.producao || []).map((p) => ({
+            ...p, codItem: cod(p.codItem), codPart: cod(p.codPart),
+        })),
         dtIni: fmt.formatCompetenciaInicio(dados?.competenciaInicio),
         dtFin: fmt.formatCompetenciaFim(dados?.competenciaFim),
         // O item do K200 tem de existir no 0200 do arquivo — item órfão é
         // recusa do PVA (a família do 0150/0200 sem referência).
-        itensDo0200: (dados?.itens || []).map((i) => String(i.codItem)),
-        tipoPorItem: Object.fromEntries((dados?.itens || []).map((i) => [String(i.codItem), i.tipo])),
+        itensDo0200: (dados?.itens || []).map((i) => cod(i.codItem)),
+        tipoPorItem: Object.fromEntries((dados?.itens || []).map((i) => [cod(i.codItem), i.tipo])),
     });
 
     // Os avisos precisam CHEGAR a quem gera: apontamento faltando é coisa para
