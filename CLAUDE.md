@@ -376,6 +376,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Foi a segunda vez no mesmo dia (a primeira foi a tabela de tamanhos do bloco
   0, com 3 de 4 alarmes falsos), e as duas triagens custaram um `grep`. A
   varredura APONTA onde olhar; quem responde é o código.
+  ✅ **RE-MEDIDO EM 30/08, depois de os geradores mudarem: a cobertura está
+  COMPLETA nas duas famílias** — 55 registros emitidos no EFD ICMS/IPI e 41 no
+  EFD-Contribuições, **zero buraco real**. O cruzamento devolveu 15
+  "descobertos" e **os 15 são cegueira do proxy**, agora com a causa medida e
+  nomeada para ninguém re-triar: os **`X990`** são cobertos por
+  `conferirContadoresDeBloco`, que casa por **VARREDURA** (`^[0-9A-Z]990$`) e
+  portanto nunca cita o registro pelo nome; e os **`X001`** caem na regra
+  genérica `bloco-vazio-declarado-cheio`. Provado RODANDO os dois checadores
+  sobre linha quebrada (H990 e F990 acusam; H001 com bloco vazio acusa), nunca
+  lendo o fonte.
+  📌 **E a composição foi conferida sobre arquivo REAL**: blocos 0/H/K gerados
+  juntos, auditoria MUDA e prevalidação com **0 erros** no arquivo correto —
+  ou seja nenhuma das travas de 29-30/08 nasceu acusando geração legítima. É a
+  lição de 13/08 (*"cinto e suspensório é um cheiro"*) do lado bom: o que
+  ninguém testa é a COMPOSIÇÃO, e ela é o que roda em produção.
 
 - **🚨 O 0460 NÃO EXISTIA — e esta validação corta nos DOIS SENTIDOS** (29/08,
   fechando o cruzamento do EFD ICMS/IPI **medindo**, não afirmando).
