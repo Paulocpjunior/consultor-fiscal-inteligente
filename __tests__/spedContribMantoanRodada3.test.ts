@@ -88,16 +88,44 @@ describe('🚨 A170 — IND_ORIG_CRED é da DIREÇÃO, não do CST', () => {
         expect(a170[7]).toBe('');
     });
 
-    it('entrada COM crédito (CST 50) continua com NAT_BC_CRED preenchido', () => {
+    // 📌 FIXTURE TROCADA EM 29/08, e o motivo é a régua, não o teste.
+    //
+    // Ela chegava ao CST 50 plantando `cstPis: '50'` no ITEM — ou seja pelo CST
+    // do XML, que é o do **FORNECEDOR** — numa empresa CUMULATIVA (a MANTOAN,
+    // `regimeApuracao: '2'`), onde crédito de PIS/COFINS não existe. O arquivo
+    // saía declarando NAT_BC_CRED numa aquisição sem crédito nenhum.
+    //
+    // É a lição de 20/08, que o C170 já honrava e o A170 não: **na entrada quem
+    // decide é o REGIME de quem escritura**. A intenção do teste continua de pé
+    // — havendo crédito, o NAT_BC_CRED sai —, só que o caminho até ele é o
+    // não-cumulativo, que é o único em que o crédito existe.
+    it('entrada COM crédito (não-cumulativo, CST 50) leva NAT_BC_CRED preenchido', () => {
         const dados = dadosBase([{
             numero: '111', tipo: 'NFSe', direcao: 'entrada', valorTotal: 500,
+            dataEmissao: '2026-07-28', cnpjEmit: '05059447000150',
+            itens: [{ nItem: '1', cProd: 'X', xProd: 'X', vProd: 500 }],
+        }]);
+        (dados as any).regimeApuracao = '1';  // não-cumulativo → aquisição COM crédito
+        const linhas: string[] = buildBlocoA(dados);
+        const a170 = camposDaLinha(linhas.find(l => l.startsWith('|A170|'))!);
+        expect(a170[8]).toBe('50');  // CST_PIS — vem do regime, não do XML
+        expect(a170[6]).toBe('01');  // NAT_BC_CRED
+        expect(a170[7]).toBe('0');   // IND_ORIG_CRED
+    });
+
+    // 🚨 E O CONTRÁRIO, que é o defeito que a troca acima expôs: o CST do XML
+    // NÃO pode atravessar para o arquivo numa empresa cumulativa.
+    it('cumulativo ignora o CST 50 do FORNECEDOR — sai 70, sem crédito', () => {
+        const dados = dadosBase([{
+            numero: '112', tipo: 'NFSe', direcao: 'entrada', valorTotal: 500,
             dataEmissao: '2026-07-28', cnpjEmit: '05059447000150',
             itens: [{ nItem: '1', cProd: 'X', xProd: 'X', vProd: 500, cstPis: '50', cstCofins: '50' }],
         }]);
         const linhas: string[] = buildBlocoA(dados);
         const a170 = camposDaLinha(linhas.find(l => l.startsWith('|A170|'))!);
-        expect(a170[6]).toBe('01');  // NAT_BC_CRED
-        expect(a170[7]).toBe('0');   // IND_ORIG_CRED
+        expect(a170[8]).toBe('70');
+        expect(a170[6]).toBe('');    // NAT_BC_CRED — não há crédito a apropriar
+        expect(a170[7]).toBe('0');   // IND_ORIG_CRED continua, é da DIREÇÃO
     });
 });
 

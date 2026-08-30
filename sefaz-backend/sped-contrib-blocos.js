@@ -202,6 +202,28 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem)
             vlCofins: base * (aliqCofins / 100),
         };
     }
+    return pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq);
+}
+
+/**
+ * PIS/COFINS de um item de ENTRADA — a régua é só o REGIME de quem escritura.
+ *
+ * 🚨 DONO ÚNICO, e ele nasceu de um defeito VIVO (29/08). O C170 já decidia
+ * assim desde 20/08; o **A170 ficou para trás** e emitia, na entrada, o CST do
+ * XML — que é o do FORNECEDOR — e, quando caía no 70, declarava crédito ao
+ * lado dele. Medido:
+ *
+ *   |A170|1|SERV-GENERICO|...|1000,00|||0|**70**|1000,00|0,6500|**6,50**|...
+ *
+ * ou seja o registro diz *"aquisição SEM direito a crédito"* e declara 6,50 de
+ * crédito na casa seguinte — a família do M100/M500 que se desmentia por
+ * dentro. A contagem de campos está CERTA, então nenhuma trava de forma vê.
+ *
+ * ⚠️ **Zero aqui É A RESPOSTA** ("não há crédito a apropriar"), nunca o default
+ * de quem não achou o dado (a régua de 06/08) — e ele só alcança o regime
+ * CUMULATIVO, em que crédito não existe por lei. No não-cumulativo nada muda.
+ */
+function pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq) {
     const naoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
     const cst = naoCumulativo ? '50' : '70';
     if (!naoCumulativo) {
@@ -430,8 +452,16 @@ export function buildBlocoA(dados) {
             }];
 
         for (const it of itensDoDoc) {
-            const cstPis = getCstPis(it.item, regimeApuracao, direcao);
-            const cstCofins = getCstCofins(it.item, regimeApuracao, direcao);
+            // 🚨 NA ENTRADA QUEM DECIDE É O REGIME, NUNCA O CST DO XML — ele é
+            // o do FORNECEDOR (a lição de 20/08, que o C170 já honrava e este
+            // laço não). `pisCofinsDaAquisicao` é o dono único; duas decisões
+            // fariam o C170 e o A170 do MESMO arquivo discordarem sobre a
+            // mesma aquisição.
+            const aq = direcao !== 'saida'
+                ? pisCofinsDaAquisicao(it.valor, regimeApuracao, aliq)
+                : null;
+            const cstPis = aq ? aq.cstPis : getCstPis(it.item, regimeApuracao, direcao);
+            const cstCofins = aq ? aq.cstCofins : getCstCofins(it.item, regimeApuracao, direcao);
             // ⚠️ NAT_BC_CRED só existe quando HÁ crédito (CST de aquisição
             // 50-56) — campo fiscal não recebe default.
             const comCredito = CSTS_COM_CREDITO.has(cstPis);
@@ -454,13 +484,13 @@ export function buildBlocoA(dados) {
                 comCredito ? '01' : '',               // NAT_BC_CRED
                 indOrigemCredito,                     // IND_ORIG_CRED
                 cstPis,
-                fmt.formatValue(it.valor),
-                fmt.formatValue(aliq.pis * 100, 4),
-                fmt.formatValue(it.valor * aliq.pis),
+                fmt.formatValue(aq ? aq.basePis : it.valor),
+                fmt.formatValue(aq ? aq.aliqPis : aliq.pis * 100, 4),
+                fmt.formatValue(aq ? aq.vlPis : it.valor * aliq.pis),
                 cstCofins,
-                fmt.formatValue(it.valor),
-                fmt.formatValue(aliq.cofins * 100, 4),
-                fmt.formatValue(it.valor * aliq.cofins),
+                fmt.formatValue(aq ? aq.baseCofins : it.valor),
+                fmt.formatValue(aq ? aq.aliqCofins : aliq.cofins * 100, 4),
+                fmt.formatValue(aq ? aq.vlCofins : it.valor * aliq.cofins),
                 '', '',                               // COD_CTA, COD_CCUS
             ]));
         }
