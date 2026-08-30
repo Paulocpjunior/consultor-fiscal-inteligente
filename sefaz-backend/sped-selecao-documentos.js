@@ -338,9 +338,18 @@ export function ehItemDeServico(item) {
  * adiante). Deduzir produziria o `1405` num campo que o **Bloco K cruza**.
  *
  * 📌 Por isso o app **não escolhe**: ele DIZ quantos itens saíram com o `00`
- * afirmado e o que isso significa. A decisão de criar cadastro por item (com o
- * custo de digitação que isso tem) é do dono — a mesma fronteira do calendário
- * municipal.
+ * afirmado e o que isso significa.
+ *
+ * ✅ **DECISÃO DO PAULO (30/08): o aviso mensal fica, e o CADASTRO POR ITEM
+ * NÃO se constrói** — perguntado se preferia aceitar o aviso todo mês ou mandar
+ * fazer o cadastro, respondeu *"1 aceito"*. É a mesma fronteira do calendário
+ * municipal (*"eu não vou fazer nada manual"*, 16/08): seriam milhares de
+ * linhas para digitar.
+ *
+ * 🚩 **NÃO RESSUSCITAR COMO PENDÊNCIA.** Isto não é lacuna esperando conserto —
+ * é desenho escolhido pelo dono. Construir o cadastro "para silenciar o aviso"
+ * seria extensão minha por cima de uma decisão dele, que é o vício do FGTS
+ * (18/08). Só volta a ser questão se ELE pedir.
  */
 export function avisoDeTipoItemPresumido(itens, ctx) {
     const marcado = String(ctx?.contribuinteIpi || '').toLowerCase();
