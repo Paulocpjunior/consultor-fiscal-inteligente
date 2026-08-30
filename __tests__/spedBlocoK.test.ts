@@ -14,6 +14,7 @@ import {
     LEIAUTES_BLOCO_K, IND_EST_VALIDOS, TIPOS_ITEM_ESTOQUE,
     quantidadeInformada, exigenciaBlocoK, exigeInsumos, exigeProducao,
     planejarBlocoK, montarBlocoK,
+    OBRIGATORIEDADE_POR_LEIAUTE, REGISTROS_GERADOS, registrosExigidosQueFaltam,
 } from '../sefaz-backend/sped-bloco-k.js';
 
 const DT_INI = '01072026';
@@ -451,5 +452,89 @@ describe('🔒 o gerador chama o dono', () => {
     it('os avisos do bloco chegam a quem gera (warnings), não só ao log', () => {
         const src = semComentario(ler('sefaz-backend/sped-fiscal-blocoK.js'));
         expect(src).toMatch(/warnings.*push/s);
+    });
+});
+
+// ============================================================================
+// 🚨 O SIMPLIFICADO NÃO DESOBRIGA TUDO — e o comentário do módulo dizia que sim.
+//
+// Ele afirmava que *"o simplificado desobriga justamente os registros de
+// consumo por item (K210/K215/K235/K255/K260/K265)"*. A **tabela oficial** do
+// Guia 3.2.3 (seção do K010, *"a obrigatoriedade de informação dos registros
+// de acordo com o leiaute adotado"*) diz outra coisa: no simplificado seguem
+// OBRIGATÓRIOS o K220, o K250, o K270/K280 e o K290/K291/K300/K301.
+//
+// 📌 É a lição de 28/08 — o comentário do M210 que citava uma regra da casa e
+// afirmava o OPOSTO dela. **Comentário que afirma uma regra tem de estar
+// certo**, porque a próxima pessoa cita ele de volta: quem lesse aquele
+// concluiria que escolher o simplificado fecha o buraco. Não fecha.
+// ============================================================================
+describe('🚨 a obrigatoriedade por leiaute vem da tabela do Guia', () => {
+    it('o simplificado MANTÉM K220, K250, K270, K280 e a produção conjunta', () => {
+        for (const reg of ['K220', 'K250', 'K270', 'K280', 'K290', 'K291', 'K300', 'K301']) {
+            expect(OBRIGATORIEDADE_POR_LEIAUTE[reg].simplificado).toBe(true);
+        }
+    });
+
+    it('e desobriga os de consumo por item', () => {
+        for (const reg of ['K210', 'K215', 'K235', 'K255', 'K260', 'K265', 'K275', 'K292', 'K302']) {
+            expect(OBRIGATORIEDADE_POR_LEIAUTE[reg].simplificado).toBe(false);
+        }
+    });
+
+    it('no COMPLETO tudo é obrigatório', () => {
+        for (const o of Object.values(OBRIGATORIEDADE_POR_LEIAUTE)) {
+            expect((o as { completo: boolean }).completo).toBe(true);
+        }
+    });
+
+    it('a espinha que o módulo monta é K100 · K200 · K230 · K235', () => {
+        expect(REGISTROS_GERADOS).toEqual(['K100', 'K200', 'K230', 'K235']);
+    });
+
+    it('o buraco do simplificado tem OITO registros — escolhê-lo não o fecha', () => {
+        expect(registrosExigidosQueFaltam('0'))
+            .toEqual(['K220', 'K250', 'K270', 'K280', 'K290', 'K291', 'K300', 'K301']);
+    });
+
+    it('e o do completo tem dezesseis', () => {
+        expect(registrosExigidosQueFaltam('1')).toHaveLength(16);
+        expect(registrosExigidosQueFaltam('1')).toContain('K210');
+    });
+
+    // ⚠️ NO LEIAUTE 2 A ESPINHA JÁ É O BLOCO INTEIRO — avisar ali seria alarme
+    // sobre arquivo completo, que é como se ensina a equipe a ignorar o aviso.
+    it('leiaute 2 (restrito aos saldos) não tem buraco', () => {
+        expect(registrosExigidosQueFaltam('2')).toEqual([]);
+        expect(registrosExigidosQueFaltam('')).toEqual([]);
+    });
+});
+
+describe('🚩 a COBERTURA sai dita no arquivo com dados', () => {
+    const comDados = (leiaute: string) => montarBlocoK({
+        exigencia: exigOk(leiaute),
+        estoques: [estoque()],
+        dtIni: DT_INI, dtFin: DT_FIN,
+        itensDo0200: ['P1'], tipoPorItem: { P1: '00' },
+    });
+
+    it('o aviso nomeia os registros que faltam e diz que o PVA aceita sem eles', () => {
+        const a = comDados('0').avisos.find((x: string) => x.includes('ESPINHA'));
+        expect(a).toBeTruthy();
+        expect(a).toMatch(/K220/);
+        expect(a).toMatch(/K250/);
+        expect(a).toMatch(/lançados no PVA/);
+        expect(a).toMatch(/menos movimento do que houve/);
+    });
+
+    it('e ele NÃO nasce no leiaute 2 — ali não falta nada', () => {
+        expect(comDados('2').avisos.find((x: string) => x.includes('ESPINHA'))).toBeUndefined();
+    });
+
+    // ⚠️ Bloco SEM dados já tem o aviso dele (o do bloco H); dois alarmes para
+    // a mesma geração é o caminho conhecido para a equipe ignorar os dois.
+    it('bloco SEM dados não ganha o aviso de cobertura', () => {
+        const r = montarBlocoK({ exigencia: exigOk('1'), dtIni: DT_INI, dtFin: DT_FIN });
+        expect(r.avisos.find((x: string) => x.includes('ESPINHA'))).toBeUndefined();
     });
 });
