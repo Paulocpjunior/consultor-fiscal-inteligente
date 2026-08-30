@@ -30,3 +30,23 @@ export function conferirContagemDeCamposFiscal(linhas: string[] | null | undefin
 };
 
 export function avisosDeContagemDeCamposFiscal(linhas: string[] | null | undefined): string[];
+
+export interface ErroTamanhoFiscal {
+    registro: string;
+    linha: number;
+    /** Número do campo no leiaute (o REG é o 01). */
+    campo: number;
+    tamanho: number;
+    maximo: number;
+    mensagem: string;
+}
+
+/**
+ * O TAMANHO de cada campo, contra a coluna *Tam* do Guia — a trava que a de
+ * CONTAGEM não faz (ela conta campos; o FANTASIA de 91 num campo de 60 tem a
+ * contagem certa). Campo de tamanho LIVRE no Guia não é conferido.
+ */
+export function conferirTamanhoDeCamposFiscal(linhas: string[] | null | undefined): {
+    erros: ErroTamanhoFiscal[];
+    ok: boolean;
+};

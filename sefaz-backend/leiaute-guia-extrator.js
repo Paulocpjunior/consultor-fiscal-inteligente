@@ -90,6 +90,37 @@ const FISCAL = {
     vaziasEntre: 2,
 };
 
+/**
+ * O TAMANHO do campo — a coluna *Tam* da tabela.
+ *
+ * 🚨 **A POSIÇÃO NÃO É FIXA**: a coluna *Descrição* ocupa quantas linhas quiser
+ * e o cabeçalho varia (uns registros têm `Obrig`, o C100 tem `Entr` e `Saída`
+ * separados). A âncora é a sequência **TIPO (`C`/`N`) → TAM**, que é curta e
+ * sempre nessa ordem.
+ *
+ * ⚠️ Campo de tamanho LIVRE (`-` na tabela, como todo campo de valor) devolve
+ * `null` — conferir tamanho ali seria inventar limite.
+ */
+const SO_TIPO = /^\|?\s*([CN])\s*$/;
+const SO_TAMANHO = /^\|?\s*(\d{1,4})\*?\s*$/;
+const TAMANHO_LIVRE = /^\|?\s*-\s*$/;
+const SO_VAZIA = /^\|?\s*$/;
+
+function tamanhoDoCampo(linhas, inicio, fim) {
+    for (let q = inicio; q < Math.min(inicio + 40, fim); q += 1) {
+        const t = linhas[q].trim();
+        if (SO_VAZIA.test(t)) continue;
+        if (!SO_TIPO.test(t)) continue;
+        let r = q + 1;
+        while (r < fim && SO_VAZIA.test(linhas[r].trim())) r += 1;
+        const s = (linhas[r] || '').trim();
+        if (SO_TAMANHO.test(s)) return Number(SO_TAMANHO.exec(s)[1]);
+        if (TAMANHO_LIVRE.test(s)) return null;
+        return null;
+    }
+    return null;
+}
+
 function lerTabelas(texto, dialeto) {
     const linhas = String(texto || '').split('\n');
     const secoes = [];
@@ -102,6 +133,7 @@ function lerTabelas(texto, dialeto) {
     secoes.forEach(({ i: ini, reg }, k) => {
         const fim = k + 1 < secoes.length ? secoes[k + 1].i : linhas.length;
         const campos = new Map();
+        const tamanhos = new Map();
         const folga = dialeto.vaziasEntre || 0;
         for (let j = ini; j < fim - 1; j += 1) {
             const num = dialeto.soNumero.exec(linhas[j].trim());
@@ -113,7 +145,10 @@ function lerTabelas(texto, dialeto) {
             const nome = p < fim && dialeto.soNome.exec(linhas[p].trim());
             if (!nome) continue;
             const n = Number(num[1]);
-            if (!campos.has(n)) campos.set(n, nome[1].replace(/\s+/g, ''));
+            if (!campos.has(n)) {
+                campos.set(n, nome[1].replace(/\s+/g, ''));
+                tamanhos.set(n, tamanhoDoCampo(linhas, p + 1, fim));
+            }
         }
         if (campos.get(1) !== 'REG') return;
         const ultimo = Math.max(...campos.keys());
@@ -129,6 +164,9 @@ function lerTabelas(texto, dialeto) {
             incerto: buracos.length > 0,
             buracos,
             nomes: Array.from({ length: ultimo }, (_, x) => campos.get(x + 1) || '?'),
+            // Tamanho por POSIÇÃO do campo; `null` = livre (campo de valor) ou
+            // não lido. Quem consome trata `null` como "não confere".
+            tamanhos: Array.from({ length: ultimo }, (_, x) => tamanhos.get(x + 1) ?? null),
         };
     });
     return registros;

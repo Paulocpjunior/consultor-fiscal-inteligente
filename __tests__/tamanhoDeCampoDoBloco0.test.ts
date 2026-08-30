@@ -28,80 +28,23 @@
 // ============================================================================
 // @ts-expect-error — módulo backend .js sem .d.ts
 import { buildBloco0 } from '../sefaz-backend/sped-fiscal-bloco0.js';
+import { conferirTamanhoDeCamposFiscal } from '../sefaz-backend/sped-fiscal-campos.js';
 
 /**
- * Tamanho máximo por campo, do Guia Prático 3.2.3.
- * Chave: `REG.POSIÇÃO` (a posição do leiaute, com o REG sendo 01).
- * Campo de tamanho livre ("-" na tabela) fica de fora.
+ * ⚠️ **A TABELA À MÃO SAIU DAQUI (30/08), e o motivo é que ela tinha ERROS.**
+ *
+ * Quando a coluna *Tam* do Guia passou a ser extraída, a prova cruzada contra
+ * a leitura à mão deu **49 de 52** — e os TRÊS que divergiam eram da minha
+ * leitura, confirmados campo a campo na fonte:
+ *
+ *   · `0150.02 COD_PART`     — eu li 100, o Guia dá **060**
+ *   · `0200.05 COD_ANT_ITEM` — eu li 6,   o Guia dá **060**
+ *   · `0200.11 COD_LST`      — eu li 6,   o Guia dá **005**
+ *
+ * Os dois primeiros deixariam passar (ou acusariam) campo CERTO; o terceiro
+ * deixaria passar um COD_LST que o PVA recusa. Tabela copiada à mão é a
+ * segunda cópia que esta casa mais paga — quem responde agora é o Guia.
  */
-const TAMANHO_DO_GUIA: Record<string, number> = {
-    // 0000 — Abertura
-    // 🐛 A 1ª versão desta tabela pulou o **UF** (campo 09) e deslocou IE,
-    // COD_MUN e SUFRAMA em uma casa — a MESMA armadilha que o teste existe
-    // para pegar, agora na minha própria leitura. Quem respondeu foi rodar o
-    // gerador e contar a linha que sai.
-    '0000.06': 100,  // NOME
-    '0000.09': 2,    // UF
-    '0000.10': 14,   // IE
-    '0000.11': 7,    // COD_MUN
-    '0000.13': 9,    // SUFRAMA
-    // 0005 — Dados complementares  ⚠️ FANTASIA é 060, NÃO os 100 do 0000
-    '0005.02': 60,   // FANTASIA
-    '0005.03': 8,    // CEP
-    '0005.04': 60,   // END
-    '0005.05': 10,   // NUM
-    '0005.06': 60,   // COMPL
-    '0005.07': 60,   // BAIRRO
-    '0005.08': 11,   // FONE
-    '0005.09': 11,   // FAX
-    // 0100 — Contabilista
-    '0100.02': 100,  // NOME
-    '0100.03': 11,   // CPF
-    '0100.04': 15,   // CRC
-    '0100.05': 14,   // CNPJ
-    '0100.06': 8,    // CEP
-    '0100.07': 60,   // END
-    '0100.08': 10,   // NUM
-    '0100.09': 60,   // COMPL
-    '0100.10': 60,   // BAIRRO
-    '0100.11': 11,   // FONE
-    '0100.12': 11,   // FAX
-    '0100.14': 7,    // COD_MUN
-    // 0150 — Participantes
-    '0150.02': 100,  // COD_PART
-    '0150.03': 100,  // NOME
-    '0150.04': 5,    // COD_PAIS
-    '0150.05': 14,   // CNPJ
-    '0150.06': 11,   // CPF
-    '0150.07': 14,   // IE
-    '0150.08': 7,    // COD_MUN
-    '0150.09': 9,    // SUFRAMA
-    '0150.10': 60,   // END
-    '0150.11': 10,   // NUM
-    '0150.12': 60,   // COMPL
-    '0150.13': 60,   // BAIRRO
-    // 0190 — Unidades
-    '0190.02': 6,    // UNID
-    // 0200 — Itens
-    // 🐛 E aqui a mesma coisa: faltavam o **UNID_INV** (06) e o **ALIQ_ICMS**
-    // (12), o que jogava TIPO_ITEM, COD_NCM e EX_IPI para a casa do vizinho.
-    '0200.02': 60,   // COD_ITEM
-    '0200.05': 6,    // COD_ANT_ITEM
-    '0200.06': 6,    // UNID_INV
-    '0200.07': 2,    // TIPO_ITEM
-    '0200.08': 8,    // COD_NCM
-    '0200.09': 3,    // EX_IPI
-    '0200.10': 2,    // COD_GEN
-    '0200.11': 6,    // COD_LST
-    '0200.13': 7,    // CEST
-    // 0300 — Bens do CIAP
-    '0300.02': 60,   // COD_IND_BEM
-    '0300.03': 1,    // IDENT_MERC
-    '0300.05': 60,   // COD_PRNC
-    '0300.06': 60,   // COD_CTA
-    '0300.07': 3,    // NR_PARC
-};
-
 /** Texto longo o bastante para estourar qualquer campo do bloco 0. */
 const LONGO = 'A'.repeat(140);
 const LONGO_NUM = '9'.repeat(30);
@@ -152,30 +95,15 @@ describe('🚨 nenhum campo do bloco 0 passa do tamanho do leiaute', () => {
     });
 
     it('todo campo cabe no tamanho que o Guia dá', () => {
-        const estouros: string[] = [];
-        for (const linha of linhas) {
-            const c = linha.split('|');
-            const reg = c[1];
-            c.forEach((valor, i) => {
-                // c[0] é '' (o pipe inicial) e c[1] é o REG (campo 01).
-                if (i < 2) return;
-                const max = TAMANHO_DO_GUIA[`${reg}.${String(i).padStart(2, '0')}`];
-                if (!max) return;
-                if (valor.length > max) {
-                    estouros.push(`${reg} campo ${String(i).padStart(2, '0')}: `
-                        + `${valor.length} caracteres onde o leiaute dá ${max}`);
-                }
-            });
-        }
-        if (estouros.length) {
+        const r = conferirTamanhoDeCamposFiscal(linhas);
+        if (!r.ok) {
             throw new Error(
                 '\n\n🚧 CAMPO MAIOR QUE O LEIAUTE\n\n'
-                + estouros.map((x) => `  · ${x}`).join('\n')
-                + '\n\nO PVA recusa com "Tamanho do campo inválido". A trava de CONTAGEM não vê isto —\n'
-                + 'ela conta CAMPOS, e aqui a contagem está certa: o que estoura é o TAMANHO.\n\n'
+                + r.erros.map((e: { mensagem: string }) => `  · ${e.mensagem}`).join('\n')
+                + '\n\nA trava de CONTAGEM não vê isto — ela conta CAMPOS, e aqui a contagem está\n'
+                + 'certa: o que estoura é o TAMANHO.\n\n'
                 + 'Caso real: o FANTASIA do 0005 cortava em 100 e o leiaute dá 060 — o 0000 é que\n'
-                + 'tem NOME de 100. Campos diferentes, registros diferentes: o tamanho se copia da\n'
-                + 'tabela do PRÓPRIO registro, nunca do vizinho.\n',
+                + 'tem NOME de 100. Campos diferentes, registros diferentes.\n',
             );
         }
     });

@@ -76,6 +76,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         `    ${incertosNomes.map((k) => `'${k}'`).join(', ')},`,
         ']);',
         '',
+        '/**',
+        ' * TAMANHO máximo por POSIÇÃO de campo (índice 0 = campo 01, o REG).',
+        ' *',
+        ' * ⚠️ `null` = campo de tamanho LIVRE no Guia (todo campo de valor) ou não',
+        ' * lido — quem consome NÃO confere nesses. Conferir ali seria inventar limite.',
+        ' *',
+        ' * 📌 O tamanho é indexado pelo NÚMERO do campo, não pela ordem de leitura,',
+        ' * então um campo perdido na conversão não desloca os vizinhos: ele só vira',
+        ' * `null`.',
+        ' */',
+        'export const TAMANHOS_DO_GUIA_FISCAL = Object.freeze({',
+        ...Object.entries(registros)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .filter(([, r]) => (r.tamanhos || []).some((t) => t != null))
+            .map(([k, r]) => `    '${k}': [${(r.tamanhos || []).map((t) => (t == null ? 'null' : t)).join(', ')}],`),
+        '});',
+        '',
     ].join('\n'));
     console.log(`✓ ${total} registros → ${path.relative(process.cwd(), DESTINO)}`);
     console.log(`  ${certos.length} completos → ${path.relative(process.cwd(), MODULO)}`);

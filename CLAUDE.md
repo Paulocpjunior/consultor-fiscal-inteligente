@@ -5,6 +5,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TRAVA DE TAMANHO COBRIA UM BLOCO SÓ — e medir os outros achou DOIS
+  defeitos vivos** (30/08, Paulo: *"pode fazer a trava de tamanho"*).
+  📌 Em 29/08 ela nasceu no bloco 0 e pegou o FANTASIA de 91 caracteres num
+  campo de 60. Os blocos C, D, E, G, H e K seguiam **sem conferência de
+  tamanho nenhuma** — a "meia trava" do COD_MUN do 0150, de novo.
+  🔴 **H010 campo 08 (COD_PART) saía CRU**, com os TRÊS vizinhos
+  (`COD_ITEM`, `TXT_COMPL`, `COD_CTA`) já cortando: ele ficou sozinho na lista.
+  🔴 **K200 campos 03 e 06 (COD_ITEM, COD_PART) saíam CRUS** — o bloco K
+  devolve **arrays de campos** e a casca formata, mas o `buildLine` formata
+  **NÚMERO, não corta TEXTO**. Ninguém cortava. Medido: 160 caracteres em
+  campos de 60, que é a recusa *"Tamanho do campo inválido"* (a família do
+  COD_ENQ da PWR).
+  📌 **OS DOIS SÓ APARECERAM MEDINDO A SAÍDA.** Ler o código diria que está
+  certo — o H010 tem `sanitizeString` em três campos e o K tem uma casca que
+  "formata". Quem respondeu foi **gerar com valores LONGOS e contar o
+  caractere**, que é a mesma disciplina do dia inteiro.
+  ⚠️ **E O CORTE DO K PASSA PELOS DOIS LADOS**: o K200 aponta para um item do
+  0200, e o 0200 já corta em 60. Cortar um lado só trocaria a recusa de
+  TAMANHO pela de item **ÓRFÃO** — o `itensDo0200` passa pelo mesmo corte.
+  🐛 **E A TABELA À MÃO DE ONTEM TINHA TRÊS ERROS — achados pela extração.**
+  Com a coluna *Tam* extraída do Guia, a prova cruzada contra a minha leitura
+  deu **49 de 52**, e os três divergentes eram MEUS: `0150.02 COD_PART` (li
+  100, é **060**), `0200.05 COD_ANT_ITEM` (li 6, é **060**) e `0200.11
+  COD_LST` (li 6, é **005**). Dois deixariam passar campo que o PVA recusa e um
+  acusaria campo CERTO. **Tabela copiada à mão é a segunda cópia que esta casa
+  mais paga** — a tabela do teste saiu e quem responde é o Guia.
+  ⚠️ **Campo de tamanho LIVRE não é conferido** (`-` na coluna Tam — todo campo
+  de valor): cravar limite ali seria inventar regra que a fonte não tem.
+  ⚠️ **E ela é CEGA para a CONTAGEM**, como a de contagem é cega para o
+  tamanho. As duas são necessárias e nenhuma substitui a outra.
+
 - **🚨 EU ACABEI DE CRIAR A FLAG QUE NINGUÉM LÊ — e o 9999 gritaria em TODO
   arquivo** (29/08, dois achados sobre o meu PRÓPRIO trabalho, os dois
   MEDIDOS).
