@@ -56,10 +56,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   do CFOP, um campo adiante), e deduzir produziria o `1405` num campo que o
   **Bloco K cruza**. O aviso pede CONFERÊNCIA e diz que o **PVA ACEITA** o 00 —
   o erro não é recusa, é livro errado, a família do `VL_OPR` sem o IPI.
-  📌 **A decisão de virar CADASTRO POR ITEM é do dono, e fica nomeada em vez de
-  construída**: seriam milhares de linhas para digitar, e a casa já recusou esse
-  desenho uma vez (*"eu não vou fazer nada manual"*, o calendário municipal,
-  16/08). O aviso é o que o app pode afirmar sozinho; a fila de digitação, não.
+  ✅ **DECIDIDO PELO PAULO EM 30/08 — o aviso mensal FICA e o cadastro por item
+  NÃO se constrói.** Perguntado se preferia aceitar o aviso toda geração (nas 3
+  empresas do bloco K) ou mandar fazer o cadastro, respondeu **"1 aceito"**. É a
+  mesma fronteira do calendário municipal (*"eu não vou fazer nada manual"*,
+  16/08): seriam milhares de linhas para digitar, e o aviso é o que o app pode
+  afirmar sozinho.
+  🚩 **NÃO RESSUSCITAR COMO PENDÊNCIA**: não é lacuna esperando conserto, é
+  desenho escolhido pelo dono. Construir o cadastro "para silenciar o aviso"
+  seria extensão minha por cima de uma decisão dele — o vício do FGTS (18/08),
+  em que eu estendi a lista e ele teve de me corrigir. Só volta se ELE pedir.
 
 - **🚨 A PENDÊNCIA ESTAVA MAL NOMEADA — e re-medi-la achou uma colisão PIOR e
   CALADA** (29/08, fechando o `ITEM-?` do 0200).
