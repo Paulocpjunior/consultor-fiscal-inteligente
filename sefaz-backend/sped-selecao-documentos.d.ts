@@ -97,6 +97,18 @@ export function serieDoDocumento(nota: unknown): string;
  * item ÓRFÃO declarado e não referenciado (PWR). Nunca devolve vazio.
  */
 export function codItemDoItem(item: unknown): string;
+/**
+ * Dois itens no MESMO COD_ITEM: devolve o campo que DIVERGE, ou null quando
+ * são o mesmo produto (o caso normal — o mesmo item em vinte documentos).
+ */
+export function conferirColisaoDeItem(
+    existente: unknown,
+    novo: unknown,
+): 'descricao' | 'ncm' | null;
+/** A frase da colisão — uma só, para as duas famílias. '' quando não há. */
+export function avisoDeColisaoDeItem(
+    colisoes: Array<{ codItem: string; de: unknown; para: unknown }> | null | undefined,
+): string;
 
 /**
  * UNID na forma canônica do 0190 (maiúscula, sem espaço nas pontas, 6 chars).
@@ -113,3 +125,12 @@ export function unidadeDoItem(item: unknown): string;
  * conhecia 'CM', a do Contribuições não). Unidade fora dela repete o código.
  */
 export function descreverUnidade(codigo: unknown): string;
+
+/**
+ * O `00` do TIPO_ITEM está sendo afirmado numa INDÚSTRIA — diga isso.
+ * '' num comércio (onde 00 é a resposta certa) e '' sem item de mercadoria.
+ */
+export function avisoDeTipoItemPresumido(
+    itens: Array<{ tipo?: string }> | null | undefined,
+    ctx?: { contribuinteIpi?: string } | null,
+): string;
