@@ -107,6 +107,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   mexido numa chave de cadastro por um caso que não existe — enquanto o caso que
   EXISTE seguiria calado.
 
+- **🚨 "AGORA NÃO SEI SE FOI DELA" — o painel dizia "1 falha(s)" e não dizia DE
+  QUEM** (30/08, colaborador via Paulo: rodou a captura com A3 da empresa 93,
+  SILVIO FREIRE, e viu a Saúde dos crons em FALHA com o cStat 656).
+  🔴 **E OS DOIS DADOS ESTAVAM NO LOG O TEMPO TODO.** O cron grava
+  `errosResumo[].nome` e `.cnpj` desde o #28 — o comentário lá diz, literal,
+  que existe porque *"painel só dizia '17 falhas' sem nenhuma pista de QUAIS
+  empresas"* — e `extrairMotivoTop` lia **só o `motivo`**, jogando o nome fora.
+  O mesmo com a **`fonte`** (o job do Scheduler × `admin-manual`/`admin-dirigida`),
+  que o heartbeat grava desde sempre e o painel **descartava em
+  `normalizarEntradaLog`**.
+  📌 **É a classe "o dado existe e ninguém lê", a TERCEIRA da semana** — o
+  `naoConferidos` que eu pus num header que a tela não lê (29/08) e a flag
+  `coberturaIncompleta` (22/08). Aqui ela chegou como PERGUNTA de quem usa, que
+  é o jeito mais caro de descobrir.
+  ✂️ O card passou a nomear a empresa (*"SILVIO FREIRE: SEFAZ retornou cStat
+  656"*) e a dizer **quem disparou** (*"rodada automática"* × *"rodada manual
+  (alguém clicou)"*) — que é exatamente a pergunta que ele fez.
+  ⚠️ **Com MAIS DE UMA falha não finge que é uma só**: sai *"EMPRESA A e mais
+  2"*. Nomear só a primeira faria a pessoa conferir uma empresa e concluir que
+  o resto está certo.
+  ⚠️ **E ausência não vira rótulo inventado**: log antigo não tem `fonte`, e
+  fonte desconhecida sai CRUA — traduzir para "cron" por dedução mandaria
+  procurar no lugar errado.
+  📌 **A tela se provou por RENDER** (a lição de 20/08), e as duas metades foram
+  provadas revertendo cada uma.
+  🚨 **E A LIÇÃO DE DIAGNÓSTICO QUE FICA: `cStat 656` é RATE LIMIT da SEFAZ,
+  não problema de certificado.** Quem falha por A3 volta com erro de
+  certificado; o 656 é *Consumo Indevido* — consulta demais na mesma raiz, e a
+  cura é ESPERAR (~1h) e sincronizar incremental. Ou seja, a pergunta *"foi da
+  empresa que eu acabei de capturar com A3?"* tinha resposta pelo próprio
+  código do erro, e o painel não ajudava a chegar nela.
+
 - **🚨 O CST TEM LADO — a separação estava no COMENTÁRIO e nunca virou regra, e o
   GÊMEO do defeito da PWR estava VIVO no A170** (29/08, fechando a pendência que
   eu mesmo tinha nomeado).
