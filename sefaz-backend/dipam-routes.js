@@ -373,6 +373,34 @@ router.get('/produtores', requireAuth, async (req, res) => {
 router.post('/produtor', requireAdmin, async (req, res) => {
     try {
         const { doc, ...dados } = req.body || {};
+        // 🚨 A DECISÃO DE UMA NOTA É INCREMENTAL, E O BACKEND É QUEM SOMA.
+        //
+        // Se o front mandasse a lista inteira, dois cliques seguidos se
+        // sobrescreveriam: o segundo gravaria a lista que ele leu ANTES do
+        // primeiro, e a nota tirada voltaria ao total sozinha — que é
+        // exatamente o tipo de "total que muda sozinho" que esta tela existe
+        // para não ter. Quem lê o estado atual e soma/remove é aqui.
+        if (dados.tirarNota || dados.voltarNota) {
+            // Reusa o leitor que já existe (dono único) em vez de uma consulta
+            // nova — duas leituras do mesmo cadastro divergiriam no primeiro
+            // campo novo.
+            const mapa = await carregarProdutoresRurais([doc]);
+            const atual = mapa[String(doc || '').replace(/\D/g, '')];
+            const lista = new Set(
+                Array.isArray(atual?.notasForaDoFunrural) ? atual.notasForaDoFunrural : [],
+            );
+            if (dados.tirarNota) lista.add(String(dados.tirarNota).trim());
+            // `voltarNota` aceita UMA chave ou VÁRIAS: o ↩ da linha desfaz o
+            // grupo inteiro daquele produtor, que é exatamente o que a linha
+            // mostra ("2 nota(s)"). Devolver só uma faria o número da tela
+            // desmentir o efeito do clique.
+            for (const c of [].concat(dados.voltarNota || [])) {
+                if (c) lista.delete(String(c).trim());
+            }
+            dados.notasForaDoFunrural = [...lista].filter(Boolean);
+            delete dados.tirarNota;
+            delete dados.voltarNota;
+        }
         const registro = await salvarProdutorRural(doc, dados, req.user);
         return res.json({ ok: true, produtor: registro });
     } catch (e) {

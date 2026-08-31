@@ -382,13 +382,25 @@ const DetalheEmpresa: React.FC<{
     // POR QUE aquele fornecedor estava lá. É decisão humana, gravada no
     // cadastro com quem confirmou — e reversível na mesma tela.
     const [tirando, setTirando] = useState<string | null>(null);
-    const tirarDoFunrural = async (doc: string, nome: string) => {
+    // 🚨 O BOTÃO ESTÁ NA LINHA DA NOTA — então ele age na NOTA (30/08).
+    //
+    // Paulo: *"Quando eu tiro do Funrural ele apaga todas desse Cosme"* — e
+    // apagava mesmo: mandava só o CPF/CNPJ e o backend gravava
+    // `funrural: 'nao_aplica'` no PRODUTOR, levando junto a nota própria de
+    // entrada (art. 136) que TEM de ficar. Botão na linha de uma nota que
+    // apaga todas é a promessa que a tela não cumpre.
+    const tirarDoFunrural = async (doc: string, nome: string, chave: string, numero: string) => {
         const d = String(doc || '').replace(/\D/g, '');
         if (!d) return;
+        if (!chave) {
+            alert('Esta nota não tem chave legível, então não dá para tirar só ela do FUNRURAL '
+                + '— sem chave a decisão não sabe a qual nota se aplica. Reimporte o XML completo (♻️).');
+            return;
+        }
         if (!window.confirm(
-            `Tirar ${nome} da sub-rogação do FUNRURAL?\n\n`
-            + 'As notas dele saem do total desta e das próximas competências, e a decisão fica gravada no '
-            + 'cadastro do produtor com o seu nome.\n\n'
+            `Tirar a nota nº ${numero} de ${nome} do FUNRURAL?\n\n`
+            + 'Sai do total desta e das próximas competências APENAS ESTA NOTA — as outras notas do '
+            + 'mesmo produtor continuam contando. A decisão fica gravada com o seu nome.\n\n'
             // A frase antiga dizia "dá pra reverter no cadastro" e o caminho
             // NÃO existia na tela: o produtor sumia da lista junto com o botão.
             // Promessa que a tela não cumpre é pior que não prometer.
@@ -399,7 +411,7 @@ const DetalheEmpresa: React.FC<{
         )) return;
         setTirando(d);
         try {
-            const r: any = await salvarProdutorRural({ doc: d, nome, funrural: 'nao_aplica' } as any);
+            const r: any = await salvarProdutorRural({ doc: d, nome, tirarNota: chave } as any);
             if (r?.ok === false) { alert(`Falha: ${r.error}`); return; }
             await onRecarregar();
         } catch (e: any) {
@@ -417,18 +429,28 @@ const DetalheEmpresa: React.FC<{
      * O valor que volta ao total vai no aviso: reverter imposto sem o número do
      * lado é decidir no escuro.
      */
-    const voltarAoFunrural = async (doc: string, nome: string, volta: number) => {
+    // O ↩ desfaz a MESMA decisão que a linha mostra: se ela é de notas tiradas
+    // uma a uma, devolve essas notas; se é do produtor inteiro, limpa o regime.
+    // Misturar as duas faria o clique fazer mais (ou menos) do que a linha diz.
+    const voltarAoFunrural = async (doc: string, nome: string, volta: number, chaves?: string[]) => {
         const d = String(doc || '').replace(/\D/g, '');
         if (!d) return;
+        const porNota = Array.isArray(chaves) && chaves.length > 0;
         if (!window.confirm(
-            `Voltar ${nome} para a sub-rogação do FUNRURAL?\n\n`
-            + `As notas dele voltam a somar — cerca de ${fmtBRL(volta)} nesta competência — e nas próximas.\n\n`
-            + 'O cadastro volta à régua automática: quem decide passa a ser a natureza do fornecedor e o '
-            + 'tipo da compra, não uma marcação manual.',
+            porNota
+                ? `Voltar ${chaves!.length} nota(s) de ${nome} para o FUNRURAL?\n\n`
+                    + `Elas voltam a somar — cerca de ${fmtBRL(volta)} nesta competência — e nas próximas.\n\n`
+                    + 'As demais notas deste produtor não mudam: elas nunca saíram.'
+                : `Voltar ${nome} para a sub-rogação do FUNRURAL?\n\n`
+                    + `As notas dele voltam a somar — cerca de ${fmtBRL(volta)} nesta competência — e nas próximas.\n\n`
+                    + 'O cadastro volta à régua automática: quem decide passa a ser a natureza do fornecedor e o '
+                    + 'tipo da compra, não uma marcação manual.',
         )) return;
         setTirando(d);
         try {
-            const r: any = await salvarProdutorRural({ doc: d, nome, funrural: '' } as any);
+            const r: any = await salvarProdutorRural(
+                porNota ? { doc: d, nome, voltarNota: chaves } as any : { doc: d, nome, funrural: '' } as any,
+            );
             if (r?.ok === false) { alert(`Falha: ${r.error}`); return; }
             await onRecarregar();
         } catch (e: any) {
@@ -588,9 +610,9 @@ const DetalheEmpresa: React.FC<{
                                                     )}
                                                     {isAdmin && (
                                                         <button
-                                                            onClick={() => tirarDoFunrural(n.doc, n.fornecedor)}
+                                                            onClick={() => tirarDoFunrural(n.doc, n.fornecedor, n.chave, n.numero)}
                                                             disabled={tirando === String(n.doc || '').replace(/\D/g, '')}
-                                                            title="Grava no cadastro do produtor que não há sub-rogação — vale para esta e para as próximas competências, e é reversível."
+                                                            title="Tira ESTA nota do FUNRURAL — as outras notas do mesmo produtor continuam contando. Vale para esta e para as próximas competências, e é reversível."
                                                             className="btn-press mt-0.5 text-[10px] px-1.5 py-0.5 rounded border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 whitespace-nowrap"
                                                         >
                                                             {tirando === String(n.doc || '').replace(/\D/g, '') ? '⏳…' : '✕ tirar do FUNRURAL'}
@@ -689,7 +711,7 @@ const DetalheEmpresa: React.FC<{
                                     </div>
                                     {isAdmin && t.reversivelNaLinha && (
                                         <button
-                                            onClick={() => voltarAoFunrural(t.doc || '', t.fornecedor || '', t.funruralPotencial)}
+                                            onClick={() => voltarAoFunrural(t.doc || '', t.fornecedor || '', t.funruralPotencial, t.chaves)}
                                             disabled={tirando === String(t.doc || '')}
                                             className="btn-press text-[10px] px-2 py-1 rounded border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 whitespace-nowrap disabled:opacity-50"
                                             title="Desfaz o ✕ — as notas dele voltam a somar no FUNRURAL desta e das próximas competências.">
