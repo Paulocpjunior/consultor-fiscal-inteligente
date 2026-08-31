@@ -829,6 +829,35 @@ function avaliarDipam({ base, cfopPrincipal, cfops, doc, empresa, ehDevolucaoSai
     };
 }
 
+/**
+ * Esta NOTA foi tirada do FUNRURAL por decisão gravada?
+ *
+ * 🚨 30/08, Paulo: *"Ao excluir as notas de produtor emitidas pelo fornecedor, o
+ * sistema apaga TODAS as notas vinculadas a esse produtor, incluindo a nota de
+ * entrada própria da Nova Era, que deveria ser mantida. Como consequência, não
+ * consigo conferir nem conciliar"*.
+ *
+ * Caso COSME QUEIROZ DE SANTANA: a **nota própria de entrada** (art. 136, CFOP
+ * 2102, R$ 49.500) tem de FICAR, e as **NF-e do produtor** (CFOP 6101) tinham de
+ * sair. O ✕ tirava as três — porque o botão está na linha da NOTA e gravava
+ * `funrural: 'nao_aplica'` no **PRODUTOR**. É a promessa que a tela não cumpre,
+ * a família do ✕ de 14/08.
+ *
+ * 📌 São DUAS decisões diferentes, e só existia uma: *"este fornecedor não gera
+ * sub-rogação"* (natureza/folha — segue em `cadastro.funrural`, e vale para
+ * todas as notas dele) e *"esta nota não entra"*, que é esta.
+ *
+ * ⚠️ **Sem chave não afirma nada**: documento sem chave legível não pode ser
+ * casado com decisão nenhuma, e dizer "foi tirada" ali tiraria nota que ninguém
+ * tirou — do total de um imposto.
+ */
+export function notaForaDoFunruralPorDecisao(cadastro, chave) {
+    const c = String(chave || '').trim();
+    if (!c) return false;
+    const lista = cadastro?.notasForaDoFunrural;
+    return Array.isArray(lista) && lista.some((x) => String(x || '').trim() === c);
+}
+
 function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevolucaoSaida, cfopPrincipal }) {
     const pendencias = [];
     const fora = (motivo, decisao = null) => ({ aplica: false, motivo, decisao, pendencias });
@@ -936,6 +965,14 @@ function avaliarFunrural({ base, doc, cadastro, empresa, tabelaFunrural, ehDevol
         return fora(
             'Produtor optou por recolher sobre a folha de salários — sem sub-rogação (registrado no cadastro).',
             'folha',
+        );
+    }
+    // 🚨 DECISÃO DE UMA NOTA SÓ — e ela vem ANTES da do produtor de propósito:
+    // é a mais específica, e o mesmo produtor tem nota que fica e nota que sai.
+    if (notaForaDoFunruralPorDecisao(cadastro, doc?.chave || doc?.id)) {
+        return fora(
+            'Esta NOTA foi tirada da sub-rogação por decisão gravada — as demais notas deste produtor continuam contando.',
+            'nota-nao-aplica',
         );
     }
     if (cadastro?.funrural === 'nao_aplica') {
@@ -1059,14 +1096,22 @@ export function dedupNotaProdutorComEntrada(notas) {
 const ROTULO_DECISAO = {
     nao_aplica: 'Tirado do FUNRURAL por decisão gravada no cadastro do produtor.',
     folha: 'Produtor optou por recolher sobre a FOLHA de salários (Lei 13.606/2018) — não há sub-rogação.',
+    // 🚨 A decisão de UMA nota (30/08, caso COSME): as demais notas do mesmo
+    // produtor continuam contando, e é isso que o rótulo precisa dizer — senão
+    // quem lê acha que o produtor inteiro saiu, que era o defeito.
+    'nota-nao-aplica': 'Nota(s) tirada(s) do FUNRURAL uma a uma — as demais notas deste produtor continuam contando.',
 };
 
 /**
  * Os produtores tirados da sub-rogação por DECISÃO, com o que voltaria ao total.
  *
- * Agrupa por produtor porque é nele que a decisão foi gravada — desfazer nota a
- * nota não existe, e oferecer isso na tela prometeria um controle que o cadastro
- * não tem.
+ * Agrupa por produtor porque é nele que a decisão foi gravada.
+ *
+ * 📌 ESTE COMENTÁRIO DIZIA *"desfazer nota a nota não existe, e oferecer isso na
+ * tela prometeria um controle que o cadastro não tem"* — verdade até 30/08, e
+ * FALSO desde que a decisão por NOTA passou a existir (caso COSME). Por isso o
+ * grupo carrega as CHAVES: sem elas o ↩ não teria o que devolver, e a tela
+ * voltaria a prometer o que não cumpre — só que na direção contrária.
  */
 export function agruparTiradosPorDecisao(notas, competencia, tabelaFunrural = ALIQUOTAS_FUNRURAL_PF) {
     const porProdutor = new Map();
@@ -1081,11 +1126,15 @@ export function agruparTiradosPorDecisao(notas, competencia, tabelaFunrural = AL
             // Só o ✕ se desfaz por aqui. A opção pela FOLHA é declaração do
             // produtor, não engano de clique: reverter fica no cadastro dele,
             // onde a decisão foi tomada.
-            reversivelNaLinha: n.funrural.decisao === 'nao_aplica',
+            reversivelNaLinha: n.funrural.decisao === 'nao_aplica'
+                || n.funrural.decisao === 'nota-nao-aplica',
             notas: 0,
             valor: 0,
+            // As chaves das notas tiradas UMA A UMA — é o que o ↩ devolve.
+            chaves: [],
         };
         g.notas += 1;
+        if (n.funrural.decisao === 'nota-nao-aplica' && n.chave) g.chaves.push(n.chave);
         g.valor = round2(g.valor + (Number(n.valor) || 0));
         porProdutor.set(chaveGrupo, g);
     }

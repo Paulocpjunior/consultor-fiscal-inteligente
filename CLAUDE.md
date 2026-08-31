@@ -107,6 +107,42 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   mexido numa chave de cadastro por um caso que não existe — enquanto o caso que
   EXISTE seguiria calado.
 
+- **🚨 "QUANDO EU TIRO DO FUNRURAL ELE APAGA TODAS DESSE COSME" — o botão
+  estava na linha da NOTA e agia sobre o PRODUTOR** (30/08, Paulo: *"Ao excluir
+  as notas de produtor emitidas pelo fornecedor, o sistema apaga TODAS as notas
+  vinculadas a esse produtor, incluindo a nota de entrada própria da Nova Era,
+  que deveria ser mantida. Como consequência, **não consigo conferir nem
+  conciliar**"*).
+  📖 O caso, com os números do print — COSME QUEIROZ DE SANTANA (013.099.925-33):
+  a **nota própria de entrada** (art. 136, CFOP 2102, **R$ 49.500,00**) tem de
+  FICAR, e as duas **NF-e do produtor** (CFOP 6101 — 15.750 e 60.500) tinham de
+  sair. O ✕ tirava as TRÊS.
+  🔴 A causa: o botão manda o **CPF/CNPJ** e o backend grava
+  `funrural: 'nao_aplica'` no **CADASTRO DO PRODUTOR** — e o `title` do botão
+  até dizia isso. **É a promessa que a tela não cumpre**, a família do ✕ de
+  14/08: botão na linha de UMA nota que apaga todas.
+  ✂️ **São DUAS decisões e só existia uma**: *"este fornecedor não gera
+  sub-rogação"* (natureza/folha — vale para todas as notas dele, continua em
+  `cadastro.funrural`) e *"esta nota não entra"*, que é a que faltava
+  (`notasForaDoFunrural`, lida por `notaForaDoFunruralPorDecisao`).
+  ⚠️ **A decisão da NOTA vem ANTES da do produtor** — a mais específica vence.
+  ⚠️ **E a soma é INCREMENTAL NO BACKEND**: se o front mandasse a lista inteira,
+  dois cliques seguidos se sobrescreveriam e a nota tirada **voltaria ao total
+  sozinha** — exatamente o "total que muda sozinho" que esta tela existe para
+  não ter. Quem lê o estado e soma/remove é a rota.
+  ⚠️ **Sem chave não se tira nada**: documento sem chave legível não pode ser
+  casado com decisão nenhuma, e afirmar ali tiraria do total de um imposto uma
+  nota que ninguém tirou. A tela DIZ isso e manda reimportar o XML (♻️).
+  ⚠️ **E o ↩ veio junto**, com o número na frente (a régua de 14/08): a nota
+  tirada aparece em `tiradosPorDecisao` com as CHAVES e o quanto volta ao total.
+  📌 **UM COMENTÁRIO CADUCOU NO MESMO PR, e isso é a lição do dia repetida**:
+  o `agruparTiradosPorDecisao` dizia *"desfazer nota a nota não existe, e
+  oferecer isso na tela prometeria um controle que o cadastro não tem"* —
+  verdade até aquele minuto, e FALSA assim que o controle passou a existir.
+  **Motivo escrito carrega a data dele, não a de hoje.**
+  ✅ Medido ponta a ponta com os números do print: 2 notas = R$ 1.242,87 · tira
+  uma = R$ 986,15, com a outra intacta e o ↩ oferecendo R$ 256,72 de volta.
+
 - **🚨 "AGORA NÃO SEI SE FOI DELA" — o painel dizia "1 falha(s)" e não dizia DE
   QUEM** (30/08, colaborador via Paulo: rodou a captura com A3 da empresa 93,
   SILVIO FREIRE, e viu a Saúde dos crons em FALHA com o cStat 656).
