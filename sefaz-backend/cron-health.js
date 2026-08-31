@@ -53,15 +53,36 @@ export function extrairResumoLog(data) {
 
 // Extrai o motivo dominante da execução (quando o log traz agregado de erros).
 // É o que transforma "0 ok · 500 falhas" de número mudo em causa acionável.
+//
+// 🚨 E ELE PASSOU A DIZER DE QUEM FOI A FALHA (30/08). O colaborador rodou uma
+// captura e viu "1 falha(s)" com o motivo — e perguntou, com razão: *"agora não
+// sei se foi dela"*. O painel não tinha como responder, e **o dado estava no
+// log o tempo todo**: o cron grava `errosResumo[].nome` e `.cnpj` desde o #28,
+// justamente porque *"painel só dizia '17 falhas' sem nenhuma pista de QUAIS
+// empresas"* — e esta função lia só o `motivo`, jogando o nome fora.
+//
+// É a classe "o dado existe e ninguém lê" pela terceira vez na mesma semana
+// (o `naoConferidos` no header que a tela não lê, a flag do `coberturaIncompleta`).
+//
+// ⚠️ Com MAIS DE UMA falha ele não finge que é uma só: diz o primeiro nome e
+// "e mais N". Nomear só o primeiro faria a pessoa conferir uma empresa e
+// concluir que o resto está certo.
 export function extrairMotivoTop(d) {
     // Run interrompido carrega o próprio motivo (auto-cura) — vem primeiro pra
     // o card explicar o vermelho/âmbar em vez de só dizer "Travado".
     if (d?.motivoInterrupcao) return String(d.motivoInterrupcao).slice(0, 200);
-    const m = d?.motivosResumo?.[0] || d?.errosResumo?.[0] || null;
+    const lista = d?.motivosResumo || d?.errosResumo || null;
+    const m = Array.isArray(lista) ? lista[0] : null;
     if (m) {
         const txt = typeof m === 'string' ? m
             : `${m.quantidade ? m.quantidade + '× ' : ''}${m.motivo || m.codigo || ''}`;
-        return String(txt).slice(0, 160) || null;
+        const base = String(txt).slice(0, 160);
+        if (!base) return null;
+        // ⚠️ Nome VAZIO não vira rótulo inventado — sem ele, a frase é a de antes.
+        const nome = typeof m === 'string' ? '' : String(m.nome || '').trim();
+        if (!nome) return base;
+        const outras = Array.isArray(lista) && lista.length > 1 ? ` e mais ${lista.length - 1}` : '';
+        return `${nome}${outras}: ${base}`.slice(0, 220);
     }
     if (d?.erroFatal) return String(d.erroFatal).slice(0, 160);
     if (d?.erro) return String(d.erro).slice(0, 160);
@@ -89,6 +110,14 @@ export function normalizarEntradaLog(reg, data) {
         duracaoMs,
         resumo: extrairResumoLog(d),
         motivoTop: extrairMotivoTop(d),
+        // 🚨 A FONTE responde "foi o cron ou fui EU?" (30/08). O heartbeat grava
+        // `fonte` desde sempre — o nome do job do Scheduler no automático,
+        // 'admin-manual'/'admin-dirigida' no clique — e o painel a descartava.
+        // Sem ela, quem acabou de rodar uma captura não tem como saber se a
+        // falha do card é a dele ou a da madrugada.
+        // ⚠️ Ausente devolve null, nunca um rótulo inventado: log antigo não
+        // tem o campo, e afirmar "cron" ali mandaria procurar no lugar errado.
+        fonte: d.fonte ? String(d.fonte).slice(0, 60) : null,
     };
 }
 

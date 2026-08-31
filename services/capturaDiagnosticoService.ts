@@ -169,8 +169,18 @@ export interface CronSaudeLinha {
     duracaoMs?: number | null;
     status?: string;
     resumo?: Record<string, number>;
-    /** Motivo dominante das falhas da última execução (motivosResumo/errosResumo). */
+    /**
+     * Motivo dominante das falhas da última execução (motivosResumo/errosResumo),
+     * já NOMEANDO a empresa quando o log a traz.
+     */
     motivoTop?: string | null;
+    /**
+     * Quem disparou a rodada: o job do Scheduler (`sefaz-cron-noturno`…) ou o
+     * clique de um admin (`admin-manual` / `admin-dirigida`). É o que responde
+     * *"essa falha foi minha ou do cron?"* — a pergunta que o painel não sabia
+     * responder. `null` em log antigo, que não gravava o campo.
+     */
+    fonte?: string | null;
     erro?: string;
 }
 
