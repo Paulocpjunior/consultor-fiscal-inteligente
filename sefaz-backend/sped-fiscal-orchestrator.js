@@ -379,7 +379,14 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             .doc(`${empresaId}_${String(periodoFim).replace(/\D/g, '')}`).get();
         if (kSnap.exists) {
             const k = kSnap.data() || {};
-            blocoK = { estoques: k.estoques || [], producao: k.producao || [] };
+            // ⚠️ `movimentacoes` (K220) entra aqui no MESMO PR em que a rota
+            // passa a gravá-la — dado gravado que o orquestrador descarta é a
+            // classe 'o dado existe e ninguém lê', três vezes nesta semana.
+            blocoK = {
+                estoques: k.estoques || [],
+                producao: k.producao || [],
+                movimentacoes: k.movimentacoes || [],
+            };
         }
     } catch (e) {
         // Falhar em LER não pode virar "não tem apontamento": o bloco sairia

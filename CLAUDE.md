@@ -5,6 +5,52 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📉 "BAIXA DE ESTOQUE NO BLOCO K" — o K220 entrou, e o buraco do
+  simplificado caiu de 8 para 7** (30/08, Paulo, esclarecendo o *"ajuste para
+  devidas baixas"* do print anterior).
+  📌 **O K200 é o SALDO; a baixa que não passa por ordem de produção é o
+  K220** — reclassificação de código, fracionamento, troca de embalagem. O
+  Guia 3.2.3 dá seis campos: `REG|DT_MOV|COD_ITEM_ORI|COD_ITEM_DEST|QTD_ORI|
+  QTD_DEST`, e ele é um **PAR** — dá saída num item e entrada em OUTRO.
+  ✂️ As **cinco validações do Guia viraram régua**, cada uma com a citação:
+  destino **≠** origem (campo 04 — item saindo e entrando nele mesmo não é
+  movimentação), as **DUAS** quantidades > 0 (campos 05 e 06), a **DATA**
+  (campo 02, que o Guia amarra ao período do K100), os **dois** códigos no
+  0200 e TIPO_ITEM de estoque.
+  🚨 **E aqui o zero NÃO é a resposta** — ao contrário do M100/M500, onde
+  zero significa *"não houve ajuste"*. Baixa de quantidade zero é apontamento
+  que ninguém fez, e emiti-la declararia uma movimentação que não existiu: é
+  a regra fundadora do bloco K (06/08) na ponta da baixa.
+  ⚠️ **NO LEIAUTE RESTRITO (2) ELA NÃO SAI** — ali só o K200 é admitido, e
+  emitir o K220 seria a recusa *"o registro não deve ser informado para esse
+  perfil"* que a AFFITTARE já pagou. **E o apontamento barrado não SOME
+  calado**: ele é contado e o aviso diz que foi o LEIAUTE, com a ação PRÓPRIA
+  — trocar o leiaute no cadastro, nunca *"complete o apontamento"*, que
+  mandaria procurar o que não existe numa linha que está completa.
+  📌 **A TELA ENTROU NO MESMO PR, e é isso que faz o registro existir**:
+  registro que o gerador monta e a tela não sabe apontar é a **flag que
+  ninguém lê** — o dado nunca chega e o K220 sairia de todo arquivo VAZIO, em
+  silêncio. Foi a classe que eu mesmo fechei três vezes esta semana.
+  ⚠️ **E ela SEPARA do vizinho**: *"consumo de insumo em produção é o K235,
+  ali embaixo"*. Sem essa frase a mesma baixa é apontada nos dois lugares e o
+  livro conta o consumo em DOBRO.
+  ⚠️ **A régua da tela é a MESMA do backend e do gerador, campo a campo** — e
+  a **DATA passou a ser exigida também na GRAVAÇÃO**, porque o gerador a
+  exige: gravar sem ela diria *"gravada"* na tela sobre uma linha que o
+  arquivo nunca emite (a réplica de CFOP no modal, 12/08).
+  🐛 **E O TESTE DE RENDER NASCEU PASSANDO PELO MOTIVO ERRADO**: o parágrafo
+  que EXPLICA a regra repete as palavras do alarme e está SEMPRE na tela — o
+  positivo casava com a prosa e o negativo falhava sobre tela correta. A
+  âncora virou a **CITAÇÃO do Guia**, que só existe no alarme. É a mordida do
+  ISS (22/08) do lado do teste: **varredura e asserção leem CÓDIGO/ALARME,
+  nunca a prosa que os explica.**
+  📌 **TRÊS FIXTURES TROCADAS, e pelo motivo certo**: elas cravavam o buraco
+  em 8 e 16 e listavam o K220 entre os que FALTAM — descreviam o mundo em que
+  a baixa não era montada. Os números novos são **MEDIDOS** contra a tabela
+  do Guia (7 e 15), nunca afrouxados; e a prosa do aviso de cobertura saiu
+  junto, senão ela mandaria lançar no PVA o que o arquivo já traz — e
+  lançamento em dobro é a família da cobrança dobrada.
+
 - **🚨 O COMENTÁRIO DIZIA QUE O LEIAUTE SIMPLIFICADO FECHAVA O BURACO DO BLOCO
   K — a TABELA OFICIAL diz que não** (29/08, fechando a pendência dos 12
   registros).

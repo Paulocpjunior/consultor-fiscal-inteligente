@@ -12,7 +12,7 @@
 // ============================================================================
 import {
     LEIAUTES_BLOCO_K, IND_EST_VALIDOS, TIPOS_ITEM_ESTOQUE,
-    quantidadeInformada, exigenciaBlocoK, exigeInsumos, exigeProducao,
+    quantidadeInformada, exigenciaBlocoK, exigeInsumos, exigeProducao, exigeMovimentacao,
     planejarBlocoK, montarBlocoK,
     OBRIGATORIEDADE_POR_LEIAUTE, REGISTROS_GERADOS, registrosExigidosQueFaltam,
 } from '../sefaz-backend/sped-bloco-k.js';
@@ -184,6 +184,158 @@ describe('📖 K200 — estoque escriturado', () => {
         });
         expect(p.estoqueOk).toHaveLength(0);
         expect(p.avisos.join(' ')).toMatch(/TIPO_ITEM que o K200 não admite/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 K220 — A BAIXA DE ESTOQUE (30/08, Paulo: *"baixa de estoque no bloco k"*)
+//
+// 📖 Guia 3.2.3: *"REGISTRO K220: OUTRAS MOVIMENTAÇÕES INTERNAS ENTRE
+// MERCADORIAS"* — REG|DT_MOV|COD_ITEM_ORI|COD_ITEM_DEST|QTD_ORI|QTD_DEST.
+//
+// Ele é um PAR: dá saída num item e entrada em OUTRO. É a baixa que não passa
+// por ordem de produção — reclassificação, fracionamento, troca de embalagem.
+// ════════════════════════════════════════════════════════════════════════════
+const baixa = (over = {}) => ({
+    dtMov: '15072026', codItemOri: 'PA-1', codItemDest: 'SUB-1', qtdOri: 30, qtdDest: 30, ...over,
+});
+
+describe('🚨 K220 — a baixa de estoque', () => {
+    const r = montarBlocoK({
+        exigencia: exigOk('1'),
+        estoques: [estoque({ codItem: 'PA-1', qtd: 100 })],
+        movimentacoes: [baixa()],
+        dtIni: DT_INI, dtFin: DT_FIN,
+    });
+
+    it('sai com os SEIS campos do leiaute, na ordem do Guia', () => {
+        expect(r.linhas.find((l) => l[0] === 'K220'))
+            .toEqual(['K220', '15072026', 'PA-1', 'SUB-1', 30, 30]);
+    });
+
+    // ⚠️ A ORDEM DENTRO DO BLOCO É A DO LEIAUTE: o K220 vem depois do K200 e
+    // antes do K230. O PVA lê a ordem — bloco fora de sequência não importa.
+    it('entra entre o K200 e o K230', () => {
+        const r2 = montarBlocoK({
+            exigencia: exigOk('1'),
+            estoques: [estoque({ codItem: 'PA-1' })],
+            movimentacoes: [baixa()],
+            producao: [apontamento({ codItem: 'PA-1' })],
+            dtIni: DT_INI, dtFin: DT_FIN,
+        });
+        const regs = r2.linhas.map((l) => l[0]);
+        expect(regs.indexOf('K220')).toBeGreaterThan(regs.indexOf('K200'));
+        expect(regs.indexOf('K220')).toBeLessThan(regs.indexOf('K230'));
+    });
+
+    it('e ela conta no K990, como toda linha do bloco', () => {
+        // K001 K010 K100 K200 K220 K990 = 6
+        expect(r.linhas).toHaveLength(6);
+        expect(r.linhas.at(-1)).toEqual(['K990', 6]);
+    });
+
+    // 📖 Campo 04, Validação: *"o valor informado deve ser diferente do
+    // COD_ITEM_ORI"*. Item saindo e entrando nele mesmo não é movimentação.
+    it('origem igual ao destino NÃO sai — e a causa vai dita', () => {
+        const p = planejarBlocoK({ movimentacoes: [baixa({ codItemDest: 'PA-1' })], leiaute: '1' });
+        expect(p.movimentacaoOk).toHaveLength(0);
+        expect(p.avisos.join(' ')).toMatch(/origem igual ao destino/);
+    });
+
+    // 📖 Campos 05 e 06: *"este campo deve ser maior que zero"* — nos DOIS.
+    // 🚨 E aqui o zero NÃO é a resposta: baixa de quantidade zero é apontamento
+    // que ninguém fez, e emiti-la declararia uma movimentação inexistente.
+    it('quantidade ausente, zero ou negativa nas DUAS pontas fica fora', () => {
+        for (const over of [{ qtdOri: 0 }, { qtdDest: 0 }, { qtdOri: -1 }, { qtdOri: '' }, { qtdDest: null }]) {
+            const p = planejarBlocoK({ movimentacoes: [baixa(over)], leiaute: '1' });
+            expect(p.movimentacaoOk).toHaveLength(0);
+        }
+        const p = planejarBlocoK({ movimentacoes: [baixa({ qtdOri: 0 })], leiaute: '1' });
+        expect(p.avisos.join(' ')).toMatch(/as duas pontas têm de ser > 0/);
+    });
+
+    // 📖 Campo 02: *"a data deve estar compreendida no período do K100"*. Sem
+    // data não dá para afirmar isso — e datar por conta seria inventar QUANDO
+    // a baixa aconteceu, que é o 1405 num campo que a fiscalização lê.
+    it('sem data não sai, e a data NUNCA é inventada', () => {
+        const p = planejarBlocoK({ movimentacoes: [baixa({ dtMov: '' })], leiaute: '1' });
+        expect(p.movimentacaoOk).toHaveLength(0);
+        expect(p.avisos.join(' ')).toMatch(/sem data da movimentação/);
+    });
+
+    // 📖 As duas pontas apontam para o 0200 — item órfão é recusa do PVA, e
+    // aqui são DOIS códigos, então bastam um estar fora.
+    it('item que o 0200 não declara — em QUALQUER das duas pontas — fica fora', () => {
+        for (const over of [{ codItemOri: 'XX' }, { codItemDest: 'XX' }]) {
+            const p = planejarBlocoK({
+                movimentacoes: [baixa(over)], leiaute: '1', itensDo0200: ['PA-1', 'SUB-1'],
+            });
+            expect(p.movimentacaoOk).toHaveLength(0);
+            expect(p.avisos.join(' ')).toMatch(/o 0200 não declara/);
+        }
+    });
+
+    it('TIPO_ITEM de serviço não entra na baixa de estoque', () => {
+        const p = planejarBlocoK({
+            movimentacoes: [baixa({ codItemDest: 'SERV-GENERICO' })],
+            leiaute: '1', tipoPorItem: { 'SERV-GENERICO': '09' },
+        });
+        expect(p.movimentacaoOk).toHaveLength(0);
+        expect(p.avisos.join(' ')).toMatch(/TIPO_ITEM que o K220 não admite/);
+    });
+
+    it('sem item de origem ou de destino fica fora, nomeado', () => {
+        const p = planejarBlocoK({ movimentacoes: [baixa({ codItemOri: '' })], leiaute: '1' });
+        expect(p.movimentacaoOk).toHaveLength(0);
+        expect(p.avisos.join(' ')).toMatch(/sem item de origem ou de destino/);
+    });
+
+    // ⚠️ A baixa SOZINHA já é bloco COM dados: empresa que só reclassificou no
+    // mês não pode sair declarando bloco sem dados.
+    it('baixa sozinha já abre o bloco COM dados', () => {
+        const so = montarBlocoK({
+            exigencia: exigOk('1'), movimentacoes: [baixa()], dtIni: DT_INI, dtFin: DT_FIN,
+        });
+        expect(so.indMov).toBe('0');
+        expect(so.linhas.some((l) => l[0] === 'K220')).toBe(true);
+    });
+});
+
+// ⚠️ O LEIAUTE MANDA — e no restrito (2) a baixa não vai ao arquivo, mas ela
+// não SOME calada: o aviso diz que foi o leiaute que a barrou, porque a ação
+// ali é outra (trocar o leiaute, não completar a linha).
+describe('⚠️ K220 e o leiaute escolhido', () => {
+    it('sai no simplificado (0) e no completo (1)', () => {
+        expect(exigeMovimentacao('0')).toBe(true);
+        expect(exigeMovimentacao('1')).toBe(true);
+        for (const leiaute of ['0', '1']) {
+            const r = montarBlocoK({
+                exigencia: exigOk(leiaute), movimentacoes: [baixa()], dtIni: DT_INI, dtFin: DT_FIN,
+            });
+            expect(r.linhas.some((l) => l[0] === 'K220')).toBe(true);
+        }
+    });
+
+    it('NÃO sai no restrito aos saldos (2) — ali só o K200 é admitido', () => {
+        expect(exigeMovimentacao('2')).toBe(false);
+        const r = montarBlocoK({
+            exigencia: exigOk('2'),
+            estoques: [estoque()], movimentacoes: [baixa()],
+            dtIni: DT_INI, dtFin: DT_FIN,
+        });
+        expect(r.linhas.some((l) => l[0] === 'K220')).toBe(false);
+    });
+
+    it('e o apontamento barrado pelo leiaute vai DITO, com a ação certa', () => {
+        const r = montarBlocoK({
+            exigencia: exigOk('2'), movimentacoes: [baixa(), baixa()], dtIni: DT_INI, dtFin: DT_FIN,
+        });
+        const a = r.avisos.find((x: string) => x.includes('baixa'));
+        expect(a).toMatch(/2 baixa/);
+        expect(a).toMatch(/admite SÓ o saldo de estoque/);
+        expect(a).toMatch(/Dados Fiscais/);
+        // ⚠️ E ele NÃO manda "complete o apontamento": a linha está completa.
+        expect(a).not.toMatch(/Complete em SPED Fiscal/);
     });
 });
 
@@ -488,18 +640,23 @@ describe('🚨 a obrigatoriedade por leiaute vem da tabela do Guia', () => {
         }
     });
 
-    it('a espinha que o módulo monta é K100 · K200 · K230 · K235', () => {
-        expect(REGISTROS_GERADOS).toEqual(['K100', 'K200', 'K230', 'K235']);
+    // ⚠️ FIXTURES TROCADAS em 30/08, e pelo motivo certo: a BAIXA (K220) passou
+    // a ser montada, então o buraco ENCOLHEU. Os números são MEDIDOS contra a
+    // tabela do Guia — 8 → 7 no simplificado e 16 → 15 no completo —, nunca
+    // afrouxados para o teste passar.
+    it('a espinha que o módulo monta é K100 · K200 · K220 · K230 · K235', () => {
+        expect(REGISTROS_GERADOS).toEqual(['K100', 'K200', 'K220', 'K230', 'K235']);
     });
 
-    it('o buraco do simplificado tem OITO registros — escolhê-lo não o fecha', () => {
+    it('o buraco do simplificado tem SETE registros — escolhê-lo não o fecha', () => {
         expect(registrosExigidosQueFaltam('0'))
-            .toEqual(['K220', 'K250', 'K270', 'K280', 'K290', 'K291', 'K300', 'K301']);
+            .toEqual(['K250', 'K270', 'K280', 'K290', 'K291', 'K300', 'K301']);
     });
 
-    it('e o do completo tem dezesseis', () => {
-        expect(registrosExigidosQueFaltam('1')).toHaveLength(16);
+    it('e o do completo tem quinze', () => {
+        expect(registrosExigidosQueFaltam('1')).toHaveLength(15);
         expect(registrosExigidosQueFaltam('1')).toContain('K210');
+        expect(registrosExigidosQueFaltam('1')).not.toContain('K220');
     });
 
     // ⚠️ NO LEIAUTE 2 A ESPINHA JÁ É O BLOCO INTEIRO — avisar ali seria alarme
@@ -521,8 +678,16 @@ describe('🚩 a COBERTURA sai dita no arquivo com dados', () => {
     it('o aviso nomeia os registros que faltam e diz que o PVA aceita sem eles', () => {
         const a = comDados('0').avisos.find((x: string) => x.includes('ESPINHA'));
         expect(a).toBeTruthy();
-        expect(a).toMatch(/K220/);
         expect(a).toMatch(/K250/);
+        expect(a).toMatch(/K270/);
+        // ⚠️ FIXTURE TROCADA em 30/08: até aqui ela exigia o K220 na lista do
+        // que FALTA, e descrevia o mundo em que a BAIXA não era montada. Agora
+        // ele é — e o K220 aparece só na ESPINHA. Manter a asserção antiga
+        // mandaria lançar no PVA o que o arquivo já traz.
+        const buraco = (a || '').split('também exige')[1] || '';
+        expect(buraco).not.toMatch(/K220/);
+        expect(buraco).toMatch(/K250/);
+        expect(a).toMatch(/ESPINHA \(K100 · K200 · K220 · K230 · K235\)/);
         expect(a).toMatch(/lançados no PVA/);
         expect(a).toMatch(/menos movimento do que houve/);
     });

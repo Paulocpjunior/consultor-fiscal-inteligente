@@ -185,7 +185,7 @@ router.get('/bloco-k', requireAuth, async (req, res) => {
         const snap = await fa().firestore().collection('sped_bloco_k').doc(idBlocoK(empresaId, competencia)).get();
         return res.json({
             ok: true, existe: snap.exists,
-            ...(snap.exists ? snap.data() : { estoques: [], producao: [] }),
+            ...(snap.exists ? snap.data() : { estoques: [], producao: [], movimentacoes: [] }),
         });
     } catch (e) {
         console.error('[sped/bloco-k GET]', e);
@@ -195,7 +195,7 @@ router.get('/bloco-k', requireAuth, async (req, res) => {
 
 router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
     try {
-        const { empresaId, competencia, estoques, producao } = req.body || {};
+        const { empresaId, competencia, estoques, producao, movimentacoes } = req.body || {};
         if (!empresaId || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) {
             return res.status(400).json({ ok: false, error: 'Informe a empresa e a competência (AAAA-MM).' });
         }
@@ -226,8 +226,27 @@ router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req,
                         codInsSubst: String(i.codInsSubst || '').slice(0, 60),
                     })),
             }));
+        // 🚨 K220 — a BAIXA de estoque (30/08). Mesma régua das outras duas:
+        // só grava o que foi APONTADO, e as DUAS quantidades têm de ser > 0
+        // (Guia, campos 05 e 06). Origem igual a destino não é movimentação.
+        // ⚠️ A DATA é exigida aqui porque o GERADOR a exige (DT_MOV tem de cair
+        // dentro do período do K100): gravar sem ela diria "gravada" na tela
+        // sobre uma linha que o arquivo nunca emite — a divergência entre o que
+        // a tela afirma e o que sai, que é a que esta casa mais paga.
+        const mov = (Array.isArray(movimentacoes) ? movimentacoes : [])
+            .filter((m) => m && m.codItemOri && m.codItemDest && String(m.dtMov || '').trim()
+                && String(m.codItemOri).trim() !== String(m.codItemDest).trim()
+                && quantidadeInformada(m.qtdOri) && Number(m.qtdOri) > 0
+                && quantidadeInformada(m.qtdDest) && Number(m.qtdDest) > 0)
+            .map((m) => ({
+                dtMov: String(m.dtMov || '').slice(0, 10),
+                codItemOri: String(m.codItemOri).slice(0, 60),
+                codItemDest: String(m.codItemDest).slice(0, 60),
+                qtdOri: Number(m.qtdOri),
+                qtdDest: Number(m.qtdDest),
+            }));
         await fa().firestore().collection('sped_bloco_k').doc(idBlocoK(empresaId, competencia)).set({
-            empresaId, competencia: String(competencia), estoques: est, producao: prod,
+            empresaId, competencia: String(competencia), estoques: est, producao: prod, movimentacoes: mov,
             atualizadoEm: new Date().toISOString(),
             atualizadoPor: req.user?.email || null,
         }, { merge: true });
@@ -235,6 +254,7 @@ router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req,
             ok: true,
             estoquesGravados: est.length, estoquesRecebidos: (estoques || []).length,
             producaoGravada: prod.length, producaoRecebida: (producao || []).length,
+            movimentacoesGravadas: mov.length, movimentacoesRecebidas: (movimentacoes || []).length,
         });
     } catch (e) {
         console.error('[sped/bloco-k POST]', e);
