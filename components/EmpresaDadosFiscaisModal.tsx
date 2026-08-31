@@ -435,9 +435,20 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                     <option value="1">1 — completo</option>
                                     <option value="2">2 — restrito aos saldos de estoque</option>
                                 </select>
+                                {/* 🚨 ESTE TEXTO AFIRMAVA O QUE A TABELA OFICIAL DESMENTE (30/08).
+                                    Ele dizia só que "o simplificado desobriga o consumo por item" —
+                                    e a tabela do Guia 3.2.3 (seção do K010) MANTÉM no simplificado o
+                                    K220, o K250, o K270/K280 e o K290/K291/K300/K301. Corrigi o
+                                    comentário do `sped-bloco-k.js` e deixei a TELA repetindo a
+                                    afirmação errada — que é pior, porque é aqui que a pessoa lê
+                                    ANTES de escolher o leiaute. Meia correção. */}
                                 <p className="text-[11px] mt-1 text-slate-400 dark:text-slate-500">
                                     É <b>opção do contribuinte</b> (Ajuste SINIEF 02/09). O simplificado
-                                    desobriga o consumo por item (K235); o restrito leva só o saldo (K200).
+                                    desobriga o consumo por item (K235, K210/K215, K255, K260/K265) —
+                                    mas <b>continua exigindo</b> K220 (movimentação interna), K250
+                                    (industrialização por terceiros), K270/K280 e a produção conjunta,
+                                    que o app <b>não gera</b>: se houver, lance no PVA. O restrito leva
+                                    só o saldo (K200) — e aí o app cobre o bloco inteiro.
                                 </p>
                             </div>
                             {/* 🚨 EFD-Contribuições: havendo F550 (receita de

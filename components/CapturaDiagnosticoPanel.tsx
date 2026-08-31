@@ -32,6 +32,8 @@ import {
     type ElegivelManifestacao,
 } from '../services/manifestoService';
 import { instrucoesMigracaoCofre } from '../services/cofreInstrucoes';
+// 🚨 De quem é a falha — do serviço ou do cadastro de cada empresa (30/08).
+import { deQuemEhAFalha } from '../services/falhaDeQuem';
 
 interface Props {
     currentUser: User;
@@ -213,6 +215,25 @@ const CardCaptura: React.FC<{
                     o card dizia "0/121" e ninguém sabia a causa. */}
                 {status.topFalhas?.top && status.topFalhas.top.length > 0 && (
                     <div className="bg-red-50 border border-red-200 rounded p-2 text-xs space-y-1 overflow-hidden">
+                        {/* 🚨 DE QUEM É A FALHA — a ação que faltava (30/08, ADN 0/42
+                            com E999). Com 42 empresas em vermelho, a reação natural é
+                            conferir cadastro das 42 à toa; quando TODAS erram igual, o
+                            problema é do serviço, e dizer isso economiza o dia. */}
+                        {(() => {
+                            const v = deQuemEhAFalha({
+                                sucessos: log?.sucessos ?? null,
+                                falhas: log?.falhas ?? null,
+                                motivos: status.topFalhas?.top,
+                                canal: titulo,
+                            });
+                            if (v.origem !== 'servico') return null;
+                            return (
+                                <div className="bg-white/70 border border-red-300 rounded p-1.5 mb-1">
+                                    <div className="font-bold text-red-900">{v.frase}</div>
+                                    {v.acao && <div className="text-red-800 mt-0.5">{v.acao}</div>}
+                                </div>
+                            );
+                        })()}
                         <div className="font-bold text-red-800">Principais motivos de falha:</div>
                         {status.topFalhas.top.map((f, i) => (
                             // break-all: motivo com JSON/token gigante estourava pra
