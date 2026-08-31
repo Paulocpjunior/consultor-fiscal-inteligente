@@ -2,7 +2,7 @@
 // sefaz-backend/sped-fiscal-blocoK.js
 // Bloco K do EFD ICMS/IPI — Controle da Produção e do Estoque.
 //
-// Registros gerados: K001 · K010 · K100 · K200 · K230 · K235 · K990.
+// Registros gerados: K001 · K010 · K100 · K200 · K220 · K230 · K235 · K990.
 //
 // A DECISÃO (entrega? qual leiaute? o que dá para escriturar?) mora em
 // `sped-bloco-k.js`, que é PURO e testado. Aqui só vira LINHA — a mesma
@@ -58,6 +58,13 @@ export function buildBlocoK(dados) {
         })),
         producao: (dados?.blocoK?.producao || []).map((p) => ({
             ...p, codItem: cod(p.codItem), codPart: cod(p.codPart),
+        })),
+        // 🚨 K220 — a BAIXA de estoque (30/08, Paulo: *"baixa de estoque no
+        // bloco k"*). Os DOIS códigos passam pelo mesmo corte de 60 do 0200,
+        // pelo mesmo motivo do K200: cortar um lado só trocaria a recusa de
+        // TAMANHO pela de item ÓRFÃO.
+        movimentacoes: (dados?.blocoK?.movimentacoes || []).map((m) => ({
+            ...m, codItemOri: cod(m.codItemOri), codItemDest: cod(m.codItemDest),
         })),
         dtIni: fmt.formatCompetenciaInicio(dados?.competenciaInicio),
         dtFin: fmt.formatCompetenciaFim(dados?.competenciaFim),

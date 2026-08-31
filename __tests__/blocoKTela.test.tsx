@@ -96,13 +96,77 @@ describe('🏭 a entrada de produção (K230/K235) funciona clicando', () => {
     });
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 A BAIXA DE ESTOQUE (K220) — 30/08, Paulo: *"baixa de estoque no bloco k"*.
+//
+// 📌 A regra que mandou construir ISTO e não só a régua: registro que o gerador
+// monta e a tela não sabe apontar é a "flag que ninguém lê" — o dado nunca
+// chega, e o K220 sairia de todo arquivo VAZIO, calado.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 a baixa de estoque (K220) funciona clicando', () => {
+    it('a tela DIZ o que é a baixa e o que ela não é', () => {
+        montar();
+        const txt = document.body.textContent || '';
+        expect(txt).toMatch(/baixa de estoque/i);
+        // As duas pontas: o que saiu e o que entrou no lugar.
+        expect(txt).toMatch(/duas pontas/i);
+        // ⚠️ E separa do vizinho: consumo de insumo é K235, não K220 — sem
+        // isso a pessoa aponta a mesma baixa nos dois e o livro conta em dobro.
+        expect(txt).toMatch(/consumo de insumo em produção é o K235/i);
+    });
+
+    it('adiciona a linha com as DUAS pontas', () => {
+        montar();
+        fireEvent.click(screen.getByText('+ Baixa de estoque'));
+        expect(document.body.textContent || '').toMatch(/Item que SAIU/);
+        expect(document.body.textContent || '').toMatch(/Item que ENTROU/);
+        expect(document.body.textContent || '').toMatch(/0<\/strong> de 1 linha|0 de 1 linha/);
+    });
+
+    // 📖 Guia 3.2.3, K220 campo 04: o destino tem de ser DIFERENTE da origem.
+    // A tela cobra ANTES de gravar — senão a recusa só aparece no PVA.
+    //
+    // ⚠️ A ÂNCORA É A CITAÇÃO, nunca a frase: o parágrafo que EXPLICA a regra
+    // repete as mesmas palavras e está SEMPRE na tela — casar com ele faria os
+    // dois testes passarem sem provar nada (a mordida do ISS, 22/08).
+    const ALARME = /Guia 3\.2\.3,\s*K220\s*campo 04/;
+    const alterarCodigos = (ori: string, dest: string) => {
+        const codigos = screen.getAllByPlaceholderText('cód. do 0200');
+        fireEvent.change(codigos[0], { target: { value: ori } });
+        fireEvent.change(codigos[1], { target: { value: dest } });
+    };
+
+    it('origem igual ao destino acende na tela, com a citação', () => {
+        montar();
+        fireEvent.click(screen.getByText('+ Baixa de estoque'));
+        alterarCodigos('PA-1', 'PA-1');
+        expect(document.body.textContent || '').toMatch(ALARME);
+    });
+
+    it('com itens diferentes, o alarme não nasce', () => {
+        montar();
+        fireEvent.click(screen.getByText('+ Baixa de estoque'));
+        alterarCodigos('PA-1', 'SUB-1');
+        expect(document.body.textContent || '').not.toMatch(ALARME);
+    });
+});
+
 describe('🚨 o aviso do que ficará de fora aparece assim que a linha nasce', () => {
-    it('linha sem quantidade acende o aviso, com o número', () => {
+    it('linha incompleta acende o aviso, com o número', () => {
         montar();
         fireEvent.click(screen.getByText('+ Linha de estoque'));
         fireEvent.click(screen.getByText('+ Ordem de produção'));
         const txt = document.body.textContent || '';
-        expect(txt).toMatch(/2 linha\(s\) sem quantidade/);
+        expect(txt).toMatch(/2 linha\(s\) incompleta\(s\)/);
         expect(txt).toMatch(/não serão gravadas/);
+    });
+
+    // ⚠️ A BAIXA ENTRA NA MESMA CONTA: deixá-la fora do número faria a pessoa
+    // ler "2" e concluir que a baixa apontada vai ao arquivo.
+    it('a baixa incompleta entra na conta junto', () => {
+        montar();
+        fireEvent.click(screen.getByText('+ Linha de estoque'));
+        fireEvent.click(screen.getByText('+ Baixa de estoque'));
+        expect(document.body.textContent || '').toMatch(/2 linha\(s\) incompleta\(s\)/);
     });
 });

@@ -56,11 +56,14 @@
 //
 // ═══ O QUE ESTE MÓDULO AINDA NÃO FAZ, e vai DITO ════════════════════════════
 //
-// 🚩 Ele monta a ESPINHA — K001, K010, K100, K200, K230, K235 e K990. Os
-// registros de desmontagem (K210/K215), movimentação interna (K220),
-// industrialização por terceiros (K250/K255), reprocessamento (K260/K265),
-// correção de apontamento (K270/K275/K280) e produção conjunta (K290-K302)
-// **não são gerados**.
+// 🚩 Ele monta a ESPINHA — K001, K010, K100, K200, K220, K230, K235 e K990. Os
+// registros de desmontagem (K210/K215), industrialização por terceiros
+// (K250/K255), reprocessamento (K260/K265), correção de apontamento
+// (K270/K275/K280) e produção conjunta (K290-K302) **não são gerados**.
+//
+// ✅ O **K220** (a BAIXA de estoque) entrou em 30/08, a pedido do Paulo
+// (*"baixa de estoque no bloco k"*) — e com ele o buraco do simplificado caiu
+// de OITO para SETE registros, e o do completo de dezesseis para quinze.
 //
 // ⚠️ **E o cadastro não tem onde expressá-los** — então nada é descartado em
 // silêncio por aqui; o que falta é o REGISTRO. Por isso o aviso não é sobre o
@@ -136,7 +139,7 @@ export const OBRIGATORIEDADE_POR_LEIAUTE = {
 };
 
 /** Os registros que ESTE módulo monta — a espinha. */
-export const REGISTROS_GERADOS = ['K100', 'K200', 'K230', 'K235'];
+export const REGISTROS_GERADOS = ['K100', 'K200', 'K220', 'K230', 'K235'];
 
 /**
  * O que o leiaute escolhido EXIGE e este módulo não monta.
@@ -230,6 +233,19 @@ export function exigeProducao(leiaute) {
 }
 
 /**
+ * O K220 entra no completo (1) E no simplificado (0) — a tabela do Guia é
+ * literal nisso, e foi ela que desmentiu o comentário que dizia o contrário.
+ *
+ * ⚠️ **No RESTRITO (2) ele NÃO sai**: ali *só o K200 é admitido*, e emitir a
+ * baixa faria o arquivo declarar um registro que o leiaute escolhido não
+ * comporta — a família da recusa *"o registro não deve ser informado para esse
+ * perfil"* que a AFFITTARE já pagou.
+ */
+export function exigeMovimentacao(leiaute) {
+    return ['0', '1'].includes(String(leiaute));
+}
+
+/**
  * Separa o que dá para escriturar do que falta — SEM inventar quantidade.
  *
  * @param {object} p
@@ -240,7 +256,7 @@ export function exigeProducao(leiaute) {
  * @param {object} [p.tipoPorItem] COD_ITEM → TIPO_ITEM (para a régua do K200)
  */
 export function planejarBlocoK({
-    estoques = [], producao = [], leiaute, itensDo0200 = [], tipoPorItem = {},
+    estoques = [], producao = [], movimentacoes = [], leiaute, itensDo0200 = [], tipoPorItem = {},
 } = {}) {
     const cadastrados = itensDo0200 instanceof Set ? itensDo0200 : new Set(itensDo0200);
     const avisos = [];
@@ -263,6 +279,64 @@ export function planejarBlocoK({
         // 📖 Guia K200 campo 05: IND_EST 1 ou 2 ⇒ COD_PART obrigatório.
         if (['1', '2'].includes(indEst) && !codPart) { estoqueForaCount.semParticipante++; continue; }
         estoqueOk.push({ codItem: cod, qtd: Number(e.qtd), indEst, codPart });
+    }
+
+    // ═══ K220 — BAIXA / MOVIMENTAÇÃO INTERNA DE ESTOQUE ═════════════════════
+    //
+    // 30/08, Paulo: *"baixa de estoque no bloco k"*. O K200 é o SALDO; a baixa
+    // sem venda — reclassificação de código, produto que vira subproduto pelo
+    // controle de qualidade — é o **K220**, e ele é obrigatório nos DOIS
+    // leiautes (a tabela do Guia que corrigi hoje: no simplificado ele FICA).
+    //
+    // 📖 Guia 3.2.3, K220: *"informar a movimentação interna entre mercadorias
+    // (…) que não se enquadre nas movimentações internas já informadas nos
+    // demais tipos de registros"*. Ele é um PAR: dá saída no item de origem e
+    // entrada no de destino.
+    //
+    // ⚠️ O app NÃO deduz a movimentação de nota nenhuma — ela não está no
+    // documento, vem do controle de estoque do cliente. É a regra fundadora do
+    // bloco K (06/08): quantidade que ninguém informou não vira zero.
+    const movimentacaoOk = [];
+    const movForaCount = {
+        semQtd: 0, semItem: 0, foraDo0200: 0, mesmoItem: 0, tipoInvalido: 0, semData: 0, foraDoLeiaute: 0,
+    };
+    // ⚠️ No leiaute RESTRITO a baixa apontada não some calada: ela é CONTADA e
+    // o aviso diz que foi o leiaute escolhido que a barrou — some em silêncio
+    // seria o apontamento que a pessoa fez desaparecendo do arquivo sem nada
+    // dizer, que é o defeito com outra roupa.
+    if (!exigeMovimentacao(leiaute)) movForaCount.foraDoLeiaute = movimentacoes.length;
+    for (const m of (exigeMovimentacao(leiaute) ? movimentacoes : [])) {
+        const ori = String(m?.codItemOri || '').trim();
+        const dest = String(m?.codItemDest || '').trim();
+        if (!ori || !dest) { movForaCount.semItem++; continue; }
+        // 📖 Campo 04, Validação: "o valor informado deve ser diferente do
+        // COD_ITEM_ORI". Movimentação de um item para ele mesmo não é
+        // movimentação — e o PVA recusa.
+        if (ori === dest) { movForaCount.mesmoItem++; continue; }
+        // 📖 Campos 05 e 06: "este campo deve ser maior que zero" — nos DOIS.
+        if (!quantidadeInformada(m?.qtdOri) || Number(m.qtdOri) <= 0
+            || !quantidadeInformada(m?.qtdDest) || Number(m.qtdDest) <= 0) {
+            movForaCount.semQtd++; continue;
+        }
+        // 📖 Campo 02: "a data deve estar compreendida no período do K100".
+        // Sem data não dá para afirmar isso — e datar por conta própria seria
+        // inventar quando a baixa aconteceu.
+        if (!String(m?.dtMov || '').trim()) { movForaCount.semData++; continue; }
+        if (cadastrados.size && (!cadastrados.has(ori) || !cadastrados.has(dest))) {
+            movForaCount.foraDo0200++; continue;
+        }
+        // 📖 O K220 vale para os mesmos tipos do K200 (00, 01, 02, 03, 04, 05, 10).
+        const tipos = [tipoPorItem[ori], tipoPorItem[dest]];
+        if (tipos.some((t) => t != null && !TIPOS_ITEM_ESTOQUE.includes(String(t)))) {
+            movForaCount.tipoInvalido++; continue;
+        }
+        movimentacaoOk.push({
+            dtMov: String(m.dtMov).trim(),
+            codItemOri: ori,
+            codItemDest: dest,
+            qtdOri: Number(m.qtdOri),
+            qtdDest: Number(m.qtdDest),
+        });
     }
 
     const producaoOk = [];
@@ -338,7 +412,40 @@ export function planejarBlocoK({
         );
     }
 
-    return { estoqueOk, producaoOk, avisos, comDados: estoqueOk.length > 0 || producaoOk.length > 0 };
+    // ⚠️ A baixa barrada pelo LEIAUTE tem aviso PRÓPRIO: a ação dela é outra
+    // (trocar o leiaute no cadastro, não completar a linha), e mandar
+    // "complete o apontamento" sobre linha completa é mandar procurar o que
+    // não existe.
+    if (movForaCount.foraDoLeiaute) {
+        avisos.push(
+            `Bloco K: ${movForaCount.foraDoLeiaute} baixa(s)/movimentação(ões) apontada(s), mas o leiaute `
+            + `escolhido (K010 = ${leiaute} · ${LEIAUTES_BLOCO_K[leiaute]}) admite SÓ o saldo de estoque `
+            + '(K200) — o K220 não vai ao arquivo. Se a empresa precisa declará-las, o leiaute é o '
+            + 'simplificado (0) ou o completo (1), em Empresas → Dados Fiscais.',
+        );
+    }
+
+    // O que ficou de fora da BAIXA vai dito, com a causa — some calado é o
+    // defeito com outra roupa.
+    const foraMov = Object.values(movForaCount).reduce((a, b) => a + b, 0) - movForaCount.foraDoLeiaute;
+    if (foraMov) {
+        const partes = [];
+        if (movForaCount.semQtd) partes.push(`${movForaCount.semQtd} sem quantidade (as duas pontas têm de ser > 0)`);
+        if (movForaCount.semItem) partes.push(`${movForaCount.semItem} sem item de origem ou de destino`);
+        if (movForaCount.mesmoItem) partes.push(`${movForaCount.mesmoItem} com origem igual ao destino`);
+        if (movForaCount.foraDo0200) partes.push(`${movForaCount.foraDo0200} com item que o 0200 não declara`);
+        if (movForaCount.tipoInvalido) partes.push(`${movForaCount.tipoInvalido} com TIPO_ITEM que o K220 não admite`);
+        if (movForaCount.semData) partes.push(`${movForaCount.semData} sem data da movimentação`);
+        avisos.push(
+            `Bloco K: ${foraMov} baixa(s)/movimentação(ões) de estoque ficaram fora do arquivo `
+            + `(${partes.join(' · ')}). Complete em SPED Fiscal → 🏭 Bloco K.`,
+        );
+    }
+
+    return {
+        estoqueOk, producaoOk, movimentacaoOk, avisos,
+        comDados: estoqueOk.length > 0 || producaoOk.length > 0 || movimentacaoOk.length > 0,
+    };
 }
 
 /**
@@ -347,7 +454,7 @@ export function planejarBlocoK({
  * @returns {{linhas: any[][], avisos: string[], indMov: '0'|'1'}}
  */
 export function montarBlocoK({
-    exigencia, estoques = [], producao = [], dtIni, dtFin,
+    exigencia, estoques = [], producao = [], movimentacoes = [], dtIni, dtFin,
     itensDo0200 = [], tipoPorItem = {},
 } = {}) {
     const avisos = [];
@@ -365,7 +472,7 @@ export function montarBlocoK({
     }
 
     const plano = planejarBlocoK({
-        estoques, producao, leiaute: exigencia.leiaute, itensDo0200, tipoPorItem,
+        estoques, producao, movimentacoes, leiaute: exigencia.leiaute, itensDo0200, tipoPorItem,
     });
     avisos.push(...plano.avisos);
 
@@ -395,6 +502,12 @@ export function montarBlocoK({
         linhas.push(['K200', dtFin, e.codItem, e.qtd, e.indEst, e.codPart]);
     }
 
+    // 📖 K220 — a ordem do bloco é a do leiaute: K200, K220, depois K230.
+    // Nível 3, como o K200: os dois pendem do K100.
+    for (const m of plano.movimentacaoOk) {
+        linhas.push(['K220', m.dtMov, m.codItemOri, m.codItemDest, m.qtdOri, m.qtdDest]);
+    }
+
     for (const p of plano.producaoOk) {
         linhas.push(['K230', p.dtIniOp, p.dtFinOp, p.codDocOp, p.codItem, p.qtdEnc]);
         for (const i of p.insumos) {
@@ -411,10 +524,14 @@ export function montarBlocoK({
     const faltam = registrosExigidosQueFaltam(exigencia.leiaute);
     if (faltam.length) {
         avisos.push(
-            `Bloco K: o arquivo saiu com a ESPINHA (K100 · K200 · K230 · K235). O leiaute escolhido `
+            `Bloco K: o arquivo saiu com a ESPINHA (${REGISTROS_GERADOS.join(' · ')}). O leiaute escolhido `
             + `(K010 = ${exigencia.leiaute} · ${LEIAUTES_BLOCO_K[exigencia.leiaute]}) também exige `
-            + `${faltam.join(', ')}, que este app NÃO gera. Se a empresa teve desmontagem, movimentação `
-            + 'interna entre mercadorias, industrialização por terceiros, correção de apontamento ou '
+            // ⚠️ A PROSA SEGUE OS REGISTROS: em 30/08 a BAIXA (K220) passou a
+            // ser montada e saiu daqui. Listar "movimentação interna" numa
+            // frase sobre o que FALTA mandaria lançar no PVA o que o arquivo
+            // já traz — e lançamento em dobro é a família da cobrança dobrada.
+            + `${faltam.join(', ')}, que este app NÃO gera. Se a empresa teve desmontagem, `
+            + 'industrialização por terceiros, reprocessamento, correção de apontamento ou '
             + 'produção conjunta no período, esses registros precisam ser lançados no PVA — o arquivo é '
             + 'aceito sem eles, e aí o livro declara menos movimento do que houve.',
         );

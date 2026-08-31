@@ -18,6 +18,8 @@ export function exigenciaBlocoK(p?: {
 
 export function exigeInsumos(leiaute: unknown): boolean;
 export function exigeProducao(leiaute: unknown): boolean;
+/** K220 sai no simplificado (0) e no completo (1); no restrito (2), NÃO. */
+export function exigeMovimentacao(leiaute: unknown): boolean;
 
 export interface EstoqueBlocoK {
     codItem: string;
@@ -39,15 +41,29 @@ export interface ProducaoBlocoK {
     qtdEnc: number;
     insumos: InsumoBlocoK[];
 }
+/**
+ * K220 — a BAIXA de estoque: o item que SAIU e o que ENTROU no lugar dele.
+ * As duas quantidades são maiores que zero e o destino difere da origem
+ * (Guia 3.2.3, K220, campos 04, 05 e 06).
+ */
+export interface MovimentacaoBlocoK {
+    dtMov: string;
+    codItemOri: string;
+    codItemDest: string;
+    qtdOri: number;
+    qtdDest: number;
+}
 export function planejarBlocoK(p?: {
     estoques?: unknown[];
     producao?: unknown[];
+    movimentacoes?: unknown[];
     leiaute?: unknown;
     itensDo0200?: Set<string> | string[];
     tipoPorItem?: Record<string, unknown>;
 }): {
     estoqueOk: EstoqueBlocoK[];
     producaoOk: ProducaoBlocoK[];
+    movimentacaoOk: MovimentacaoBlocoK[];
     avisos: string[];
     comDados: boolean;
 };
@@ -56,6 +72,7 @@ export function montarBlocoK(p?: {
     exigencia?: ExigenciaBlocoK | null;
     estoques?: unknown[];
     producao?: unknown[];
+    movimentacoes?: unknown[];
     dtIni?: string;
     dtFin?: string;
     itensDo0200?: Set<string> | string[];

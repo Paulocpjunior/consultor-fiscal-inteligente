@@ -45,6 +45,17 @@ interface LinhaProducao {
     qtdEnc: number | '';
     insumos: LinhaInsumo[];
 }
+// 📖 K220 — OUTRAS MOVIMENTAÇÕES INTERNAS ENTRE MERCADORIAS (a BAIXA de
+// estoque, 30/08). O Guia 3.2.3 dá 6 campos: REG · DT_MOV · COD_ITEM_ORI ·
+// COD_ITEM_DEST · QTD_ORI · QTD_DEST — e exige que o destino SEJA DIFERENTE da
+// origem e que as duas quantidades sejam maiores que zero.
+interface LinhaMovimentacao {
+    dtMov: string;
+    codItemOri: string;
+    codItemDest: string;
+    qtdOri: number | '';
+    qtdDest: number | '';
+}
 
 // 📖 Guia 3.2.3, K200 campo 05 — Valores Válidos [0, 1, 2].
 const IND_EST: Array<[string, string]> = [
@@ -66,6 +77,7 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [estoques, setEstoques] = useState<LinhaEstoque[]>([]);
     const [producao, setProducao] = useState<LinhaProducao[]>([]);
+    const [movimentacoes, setMovimentacoes] = useState<LinhaMovimentacao[]>([]);
     const [carregando, setCarregando] = useState(false);
     const [salvando, setSalvando] = useState(false);
     const [existe, setExiste] = useState(false);
@@ -97,6 +109,11 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
                     qtd: (i.qtd as number) ?? '', codInsSubst: String(i.codInsSubst || ''),
                 })),
             })));
+            setMovimentacoes((j.movimentacoes || []).map((m: Record<string, unknown>) => ({
+                dtMov: String(m.dtMov || ''),
+                codItemOri: String(m.codItemOri || ''), codItemDest: String(m.codItemDest || ''),
+                qtdOri: (m.qtdOri as number) ?? '', qtdDest: (m.qtdDest as number) ?? '',
+            })));
         } catch (e) {
             onShowToast?.(`Falha ao carregar: ${(e as Error)?.message || e}`);
         } finally {
@@ -104,7 +121,9 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
         }
     };
 
-    useEffect(() => { setExiste(false); setEstoques([]); setProducao([]); }, [empresaId, competencia]);
+    useEffect(() => {
+        setExiste(false); setEstoques([]); setProducao([]); setMovimentacoes([]);
+    }, [empresaId, competencia]);
 
     const salvar = async () => {
         if (!empresaId) { onShowToast?.('Escolha a empresa.'); return; }
@@ -114,16 +133,21 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
             const r = await fetch('/api/admin/sped-fiscal/bloco-k', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ empresaId, competencia, estoques, producao }),
+                body: JSON.stringify({ empresaId, competencia, estoques, producao, movimentacoes }),
             });
             const j = await r.json();
             if (!j.ok) { onShowToast?.(j.error || 'Falha ao gravar.'); return; }
             setExiste(true);
             // Farol honesto: o que NÃO foi apontado não entra — e a frase diz.
-            const fora = (j.estoquesRecebidos - j.estoquesGravados) + (j.producaoRecebida - j.producaoGravada);
+            // ⚠️ A baixa (K220) entra na MESMA conta: deixá-la de fora do número
+            // faria a pessoa ler "2 gravadas" e concluir que a baixa passou.
+            const fora = (j.estoquesRecebidos - j.estoquesGravados)
+                + (j.producaoRecebida - j.producaoGravada)
+                + ((j.movimentacoesRecebidas || 0) - (j.movimentacoesGravadas || 0));
             onShowToast?.(
-                `Bloco K gravado: ${j.estoquesGravados} linha(s) de estoque e ${j.producaoGravada} de produção.`
-                + (fora > 0 ? ` ${fora} linha(s) sem quantidade ficaram de FORA — não viram zero.` : ''),
+                `Bloco K gravado: ${j.estoquesGravados} linha(s) de estoque, ${j.producaoGravada} de produção`
+                + ` e ${j.movimentacoesGravadas || 0} de baixa/movimentação.`
+                + (fora > 0 ? ` ${fora} linha(s) incompleta(s) ficaram de FORA — não viram zero.` : ''),
             );
         } catch (e) {
             onShowToast?.(`Falha ao gravar: ${(e as Error)?.message || e}`);
@@ -134,11 +158,20 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
 
     const estOk = useMemo(() => estoques.filter((e) => e.codItem && e.qtd !== '').length, [estoques]);
     const prodOk = useMemo(() => producao.filter((p) => p.codItem && p.qtdEnc !== '').length, [producao]);
+    // ⚠️ A MESMA régua do backend e do gerador, campo a campo — se a tela
+    // contar por um critério e o arquivo por outro, ela promete linha que não
+    // sai (a réplica de CFOP no modal, 12/08).
+    const movCompleta = (m: LinhaMovimentacao) => !!m.dtMov && !!m.codItemOri && !!m.codItemDest
+        && m.codItemOri.trim() !== m.codItemDest.trim()
+        && m.qtdOri !== '' && Number(m.qtdOri) > 0 && m.qtdDest !== '' && Number(m.qtdDest) > 0;
+    const movOk = useMemo(() => movimentacoes.filter(movCompleta).length, [movimentacoes]);
 
     const alterarEstoque = (i: number, campo: keyof LinhaEstoque, valor: unknown) =>
         setEstoques((prev) => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
     const alterarProducao = (i: number, campo: keyof LinhaProducao, valor: unknown) =>
         setProducao((prev) => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
+    const alterarMovimentacao = (i: number, campo: keyof LinhaMovimentacao, valor: unknown) =>
+        setMovimentacoes((prev) => prev.map((l, idx) => (idx === i ? { ...l, [campo]: valor } : l)));
     const alterarInsumo = (p: number, i: number, campo: keyof LinhaInsumo, valor: unknown) =>
         setProducao((prev) => prev.map((l, idx) => (idx === p
             ? { ...l, insumos: l.insumos.map((s, si) => (si === i ? { ...s, [campo]: valor } : s)) }
@@ -182,7 +215,7 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
                     </button>
                 </div>
 
-                {empresaId && !carregando && !existe && !estoques.length && !producao.length && (
+                {empresaId && !carregando && !existe && !estoques.length && !producao.length && !movimentacoes.length && (
                     <p className="text-[11px] mt-3 text-amber-700 dark:text-amber-400">
                         ⚠ Nenhum apontamento gravado nesta competência. Enquanto ele não existir, o
                         <strong> bloco K sai vazio</strong> na geração do SPED — e isso é de propósito.
@@ -253,6 +286,85 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
                     <p className="text-[11px] text-red-700 dark:text-red-400">
                         🚨 Estoque de/em poder de terceiro exige o participante (COD_PART, e ele precisa estar no
                         0150) — preencha ou volte a propriedade para &quot;do informante&quot;.
+                    </p>
+                )}
+            </div>
+
+            {/* ── K220 — baixa / movimentação interna de estoque ──────────── */}
+            <div className="p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+                <div className="flex flex-wrap gap-3 items-center justify-between text-xs">
+                    <span style={{ color: 'var(--text-muted)' }}>
+                        <strong>K220</strong> — baixa de estoque (movimentação interna entre mercadorias) ·{' '}
+                        <strong>{movOk}</strong> de {movimentacoes.length} linha(s) completa(s)
+                    </span>
+                    <button onClick={() => setMovimentacoes((p) => [...p, {
+                        dtMov: '', codItemOri: '', codItemDest: '', qtdOri: '', qtdDest: '',
+                    }])}
+                        className="px-3 py-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-600">
+                        + Baixa de estoque
+                    </button>
+                </div>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    É a baixa que <strong>não passa por ordem de produção</strong>: um item sai do estoque e outro
+                    entra no lugar (reclassificação, fracionamento, troca de embalagem). Por isso ela tem as
+                    <strong> duas pontas</strong> — o que saiu e o que entrou —, e o item de destino precisa ser
+                    <strong> diferente</strong> do de origem. Consumo de insumo em produção é o K235, ali embaixo;
+                    perda e quebra não entram aqui.
+                </p>
+                {movimentacoes.length > 0 && (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-left text-[10px] uppercase" style={{ color: 'var(--text-muted)' }}>
+                                    <th className="py-1">Data</th>
+                                    <th>Item que SAIU (origem)</th><th className="text-right">Qtd. saída</th>
+                                    <th>Item que ENTROU (destino)</th><th className="text-right">Qtd. entrada</th><th />
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {movimentacoes.map((m, i) => {
+                                    const mesmoItem = !!m.codItemOri && m.codItemOri.trim() === m.codItemDest.trim();
+                                    const qtdRuim = (v: number | '') => v === '' || Number(v) <= 0;
+                                    return (
+                                        <tr key={i} className="border-t border-slate-100 dark:border-slate-700/50">
+                                            <td className="py-1 pr-1">
+                                                <input type="date" value={m.dtMov}
+                                                    onChange={(e) => alterarMovimentacao(i, 'dtMov', e.target.value)}
+                                                    className={`p-1 rounded bg-white dark:bg-slate-700 border ${m.dtMov ? 'border-slate-200 dark:border-slate-600' : 'border-amber-400'}`} />
+                                            </td>
+                                            <td className="pr-1">
+                                                <input value={m.codItemOri} onChange={(e) => alterarMovimentacao(i, 'codItemOri', e.target.value)}
+                                                    placeholder="cód. do 0200" className={`w-40 font-mono p-1 rounded bg-white dark:bg-slate-700 border ${mesmoItem ? 'border-red-400' : 'border-slate-200 dark:border-slate-600'}`} />
+                                            </td>
+                                            <td className="pr-1">
+                                                <input type="number" step="0.001" value={m.qtdOri}
+                                                    onChange={(e) => alterarMovimentacao(i, 'qtdOri', e.target.value === '' ? '' : Number(e.target.value))}
+                                                    className={`w-24 text-right p-1 rounded bg-white dark:bg-slate-700 border ${qtdRuim(m.qtdOri) ? 'border-amber-400' : 'border-slate-200 dark:border-slate-600'}`} />
+                                            </td>
+                                            <td className="pr-1">
+                                                <input value={m.codItemDest} onChange={(e) => alterarMovimentacao(i, 'codItemDest', e.target.value)}
+                                                    placeholder="cód. do 0200" className={`w-40 font-mono p-1 rounded bg-white dark:bg-slate-700 border ${mesmoItem ? 'border-red-400' : 'border-slate-200 dark:border-slate-600'}`} />
+                                            </td>
+                                            <td className="pr-1">
+                                                <input type="number" step="0.001" value={m.qtdDest}
+                                                    onChange={(e) => alterarMovimentacao(i, 'qtdDest', e.target.value === '' ? '' : Number(e.target.value))}
+                                                    className={`w-24 text-right p-1 rounded bg-white dark:bg-slate-700 border ${qtdRuim(m.qtdDest) ? 'border-amber-400' : 'border-slate-200 dark:border-slate-600'}`} />
+                                            </td>
+                                            <td>
+                                                <button onClick={() => setMovimentacoes((p) => p.filter((_, idx) => idx !== i))}
+                                                    className="px-2 text-red-600 dark:text-red-400" title="Remover linha">✕</button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                {movimentacoes.some((m) => !!m.codItemOri && m.codItemOri.trim() === m.codItemDest.trim()) && (
+                    <p className="text-[11px] text-red-700 dark:text-red-400">
+                        🚨 O item de destino tem de ser <strong>diferente</strong> do de origem (Guia 3.2.3, K220
+                        campo 04) — item saindo e entrando nele mesmo não é movimentação, e o PVA recusa.
                     </p>
                 )}
             </div>
@@ -329,11 +441,11 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
                 ))}
             </div>
 
-            {(estOk < estoques.length || prodOk < producao.length) && (
+            {(estOk < estoques.length || prodOk < producao.length || movOk < movimentacoes.length) && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                    ⚠ {(estoques.length - estOk) + (producao.length - prodOk)} linha(s) sem quantidade{' '}
-                    <strong>não serão gravadas</strong> e ficarão de fora do arquivo. Isso é de propósito:
-                    apontamento que ninguém fez não vira zero.
+                    ⚠ {(estoques.length - estOk) + (producao.length - prodOk) + (movimentacoes.length - movOk)}{' '}
+                    linha(s) incompleta(s) <strong>não serão gravadas</strong> e ficarão de fora do arquivo.
+                    Isso é de propósito: apontamento que ninguém fez não vira zero.
                 </p>
             )}
         </div>
