@@ -57,7 +57,35 @@ export function extrairDadosXml(xml: string): DadosXml {
     // o transportador e o pagador do frete têm a ver com o cliente). Para
     // NF-e a tag `<rem>` não existe, então isto nunca muda nada nela.
     const dest = bloco('rem') || bloco('dest');
-    return { emit, dest, chave };
+    // 🚨 NFS-e NÃO TEM <emit>/<dest> — e por isso o lote de Santo André saiu
+    // como "1 sem CNPJ legível · 0 desta empresa", com a tela GRITANDO
+    // *"Arquivo não é desta empresa"* sobre um arquivo que é dela (31/08,
+    // MARCOS ANTONIO ZAMBOLIN INFORMATICA).
+    //
+    // O padrão ABRASF põe as partes em <PrestadorServico>/<TomadorServico> (ou
+    // <Prestador>/<Tomador>), com o documento dentro de <IdentificacaoX> e, na
+    // v2, embrulhado mais uma vez em <CpfCnpj>. O `xmlParserService` — o
+    // backend que de fato importa — já lê todas essas formas desde sempre;
+    // esta era a SEGUNDA leitura do mesmo XML, sem elas. É exatamente o que
+    // aconteceu com o CT-e em 19/08, um bloco acima.
+    //
+    // ⚠️ A busca é pelo bloco INTEIRO e pega o primeiro CNPJ/CPF que ele
+    // contiver: as três gerações do leiaute aninham diferente, e casar a
+    // estrutura exata faria a próxima prefeitura cair no mesmo silêncio.
+    const blocoServico = (tags: string[]): string | null => {
+        for (const tag of tags) {
+            const m = txt.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
+            if (!m) continue;
+            const doc = m[1].match(/<(Cnpj|Cpf|CNPJ|CPF)>\s*([\d.\-/]+)\s*<\/\1>/i);
+            if (doc) return soDigitos(doc[2]);
+        }
+        return null;
+    };
+    // No serviço, quem "emite" é o PRESTADOR e quem "recebe" é o TOMADOR — o
+    // mesmo par que o importador usa para decidir a direção.
+    const emitFinal = emit || blocoServico(['PrestadorServico', 'Prestador', 'IdentificacaoPrestador']);
+    const destFinal = dest || blocoServico(['TomadorServico', 'Tomador', 'IdentificacaoTomador']);
+    return { emit: emitFinal, dest: destFinal, chave };
 }
 
 export interface ResumoLote {
@@ -117,6 +145,13 @@ export interface ValidacaoLote {
     donosProvaveis: DonoProvavel[];
     /** Nenhum arquivo bate: importar aqui é erro certo. */
     bloquear: boolean;
+    /**
+     * 🚨 NENHUM XML pôde ser LIDO — e isso NÃO é "não é desta empresa".
+     * Sem este campo o modal cairia no verde "✓ Confirmar importação" sobre uma
+     * conferência que não aconteceu: ausência de alarme não pode ser
+     * indistinguível de "está tudo certo" (22/08).
+     */
+    naoConferido: boolean;
     /** Frase pronta pra tela — sempre com a AÇÃO. */
     mensagem: string;
 }
@@ -166,11 +201,27 @@ export function validarLoteParaEmpresa(
         .slice(0, 5);
 
     const incompativeis = Math.max(0, resumo.total - compativeis - resumo.semIdentificacao);
-    const bloquear = resumo.total > 0 && compativeis === 0;
+    // 🚨 "NÃO É DESTA EMPRESA" ≠ "NÃO CONSEGUI LER" — e a tela afirmava o
+    // primeiro sobre o segundo (31/08, NFS-e de Santo André). Quem lê o alarme
+    // vai conferir o CADASTRO DO CLIENTE, que está certo, e o arquivo, que
+    // também está: a primeira parada errada, sobre um arquivo legítimo.
+    //
+    // ⚠️ Ilegível não bloqueia porque a tela NÃO É a autoridade — quem decide a
+    // posse é o backend (`documento-posse`, que tem até o caso
+    // `posse-indeterminada`). Bloquear aqui é a tela recusando o que o servidor
+    // aceita, que é literalmente o defeito do CT-e da A CASTELLANO (19/08).
+    const tudoIlegivel = resumo.total > 0 && resumo.semIdentificacao === resumo.total;
+    const bloquear = resumo.total > 0 && compativeis === 0 && !tudoIlegivel;
 
     let mensagem: string;
     if (resumo.total === 0) {
         mensagem = 'Nenhum XML encontrado nos arquivos.';
+    } else if (tudoIlegivel) {
+        mensagem = `Não consegui LER o CNPJ ${resumo.total > 1 ? `de nenhum dos ${resumo.total} XMLs` : 'deste XML'} `
+            + '— o que NÃO quer dizer que o arquivo seja de outra empresa. Pode ser um leiaute de NFS-e que '
+            + 'esta pré-conferência ainda não conhece (cada prefeitura tem o seu). '
+            + 'Quem decide de quem é o documento é o servidor, na importação: pode importar, e se ele for '
+            + 'mesmo de outro CNPJ a importação recusa NOMEANDO o dono.';
     } else if (bloquear) {
         const dono = donosProvaveis[0];
         const deQuem = dono
@@ -203,6 +254,7 @@ export function validarLoteParaEmpresa(
         semIdentificacao: resumo.semIdentificacao,
         donosProvaveis,
         bloquear,
+        naoConferido: tudoIlegivel,
         mensagem,
     };
 }
