@@ -5,6 +5,7 @@
 import type { User, DasEmitido, DasResumo, DasStatusPagamento, DasPrevisaoResponse, DasPrevisaoIaResponse, DasEnvioCliente } from '../types';
 
 import { getAuth } from 'firebase/auth';
+import { mensagemDeCredencialRecusada } from '../sefaz-backend/sharepoint-erro-credencial.js';
 
 const BASE = '/api/admin/das';
 
@@ -383,7 +384,12 @@ export async function enviarDasCliente(user: User | null, req: EnviarDasClienteR
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `enviarDasCliente: ${res.status}`);
+        const cru = err.error || `enviarDasCliente: ${res.status}`;
+        // 🚨 A recusa da Microsoft chegava CRUA no toast (01/09, DAS da
+        // ZAMBOLIN): `AADSTS7000215…` não diz o que fazer, e o e-mail não sai.
+        // Quem traduz é o DONO — e ele nomeia QUAL das duas credenciais do CFI
+        // foi recusada, porque gravar na errada não resolve.
+        throw new Error(mensagemDeCredencialRecusada(cru) || cru);
     }
     return res.json();
 }

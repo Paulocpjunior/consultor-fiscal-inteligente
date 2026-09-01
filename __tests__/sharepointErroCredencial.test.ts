@@ -13,12 +13,19 @@
 // ============================================================================
 import {
     ehFalhaDeCredencial, pendenciaDeGravacaoSharePoint, ACAO_CREDENCIAL_ENVIO,
-    causaDaFalhaDeCredencial, instrucaoDaCredencial,
+    causaDaFalhaDeCredencial, instrucaoDaCredencial, appDaCredencial, mensagemDeCredencialRecusada,
 } from '../sefaz-backend/sharepoint-erro-credencial.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { pendenciaSharePoint } from '../sefaz-backend/envio-imposto-painel.js';
 
+// 📌 A MENSAGEM REAL, do print de 01/09 — ela NOMEIA o app, e a fixture antiga
+// estava truncada antes disso ("..."). Fixture que não é o que a produção
+// produz é teste verde sobre defeito vivo (a lição do art. 136, 22/08).
 const ERRO_REAL = 'Azure AD token error (401): {"error":"invalid_client","error_description":'
-    + '"AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request..."}';
+    + '"AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the '
+    + "client secret value, not the client secret ID, for a secret added to app "
+    + "'a876887f-a126-424f-8d8a-fc011519855e'. Trace ID: 967e9ff3-abb6-47b5-bd0f-1bfe07911300\"}";
 
 describe('🚨 credencial e pasta pedem ações OPOSTAS', () => {
     it('o erro REAL do print é de credencial', () => {
@@ -64,6 +71,15 @@ describe('🚨 a ação da credencial diz as três coisas que ninguém deduziria
     it('e onde a credencial vive, sem afirmar a causa errada', () => {
         expect(ACAO_CREDENCIAL_ENVIO).not.toMatch(/EXPIRA/);
         expect(p.acao).toMatch(/graph-client-secret/);
+    });
+
+    // 🐛 O CORTE DE 220 CARACTERES DECAPITAVA O NOME DO APP: ele vem depois
+    // disso na resposta, então a instrução dizia "não nomeou o aplicativo"
+    // sobre uma mensagem que nomeava — e mandava a pessoa ao Azure sem saber
+    // qual das duas credenciais procurar.
+    it('o app é lido da mensagem INTEIRA, não do trecho cortado', () => {
+        expect(p.acao).toMatch(/proxy do SharePoint/);
+        expect(p.acao).not.toMatch(/não nomeou o aplicativo/);
     });
 
     // ⚠️ Erro de PASTA mantém a ação DELE — mandar mexer no proxy por causa
@@ -127,6 +143,96 @@ describe('🚨 a causa sai da RESPOSTA, e o app não deduz o resto', () => {
         expect(acao).not.toMatch(/venceu|ID do segredo/);
         // continua sendo credencial: o balde não mudou
         expect(ehFalhaDeCredencial(m)).toBe(true);
+    });
+});
+
+// ============================================================================
+// 🚨 SÃO DOIS APPS DO AZURE, E A FRASE FALAVA COMO SE FOSSE UM SÓ
+//
+// 01/09, no mesmo dia em que o card aprendeu ID×Valor: mandando o DAS da
+// ZAMBOLIN, o mesmo `AADSTS7000215` voltou nomeando OUTRO aplicativo. São
+// credenciais diferentes, guardadas em lugares diferentes — e a frase mandava,
+// nos dois casos, gravar no `graph-client-secret` e subir revisão do PROXY.
+// ============================================================================
+const ERRO_EMAIL = 'Falha ao obter token Graph (401): {"error":"invalid_client","error_description":'
+    + '"AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the '
+    + "client secret value, not the client secret ID, for a secret added to app "
+    + "'59fd4ec9-37bd-472c-9fa7-373461dffd50'. Trace ID: 24e2ddef-30b9-464c-b585-45467cae\"}";
+
+const ERRO_SHAREPOINT = 'Azure AD token error (401): {"error":"invalid_client","error_description":'
+    + "\"AADSTS7000215: Invalid client secret provided. … for a secret added to app "
+    + "'a876887f-a126-424f-8d8a-fc011519855e'. Trace ID: d4aee685\"}";
+
+describe('🚨 a resposta nomeia QUAL app — e cada um se grava num lugar', () => {
+    it('o app do e-mail é outro, e a instrução manda no lugar DELE', () => {
+        expect(appDaCredencial(ERRO_EMAIL).id).toBe('59fd4ec9-37bd-472c-9fa7-373461dffd50');
+        const acao = instrucaoDaCredencial(ERRO_EMAIL);
+        expect(acao).toMatch(/envio de e-mail/);
+        expect(acao).toMatch(/GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente/);
+        // ⚠️ E não manda subir revisão do proxy, que é a credencial do OUTRO app.
+        expect(acao).not.toMatch(/Deploy SharePoint Proxy/);
+    });
+
+    it('o app do SharePoint continua com a instrução dele', () => {
+        expect(appDaCredencial(ERRO_SHAREPOINT).id).toBe('a876887f-a126-424f-8d8a-fc011519855e');
+        const acao = instrucaoDaCredencial(ERRO_SHAREPOINT);
+        expect(acao).toMatch(/proxy do SharePoint/);
+        expect(acao).toMatch(/graph-client-secret/);
+        expect(acao).not.toMatch(/GRAPH_CLIENT_SECRET do serviço/);
+    });
+
+    // 🚨 App que este app NÃO conhece devolve o id CRU e nenhum lugar
+    // inventado — dizer onde gravar um segredo que talvez não seja esse é
+    // exatamente o que custou o dia.
+    it('app não mapeado não ganha lugar inventado', () => {
+        const outro = ERRO_SHAREPOINT.replace('a876887f-a126-424f-8d8a-fc011519855e',
+            '11111111-2222-3333-4444-555555555555');
+        const app = appDaCredencial(outro);
+        expect(app.id).toBe('11111111-2222-3333-4444-555555555555');
+        expect(app.onde).toBeNull();
+        const acao = instrucaoDaCredencial(outro);
+        expect(acao).toMatch(/11111111-2222-3333-4444-555555555555/);
+        expect(acao).toMatch(/DUAS/);
+        expect(acao).not.toMatch(/graph-client-secret/);
+    });
+
+    it('resposta sem app nomeado diz que são duas e não escolhe', () => {
+        const acao = instrucaoDaCredencial('AADSTS7000215: Invalid client secret provided.');
+        expect(acao).toMatch(/não nomeou o aplicativo/);
+        expect(acao).toMatch(/DUAS credenciais/);
+    });
+});
+
+describe('🚨 a recusa no ENVIO da guia parou de chegar crua', () => {
+    it('diz que o e-mail NÃO saiu, o que fazer e a saída de hoje', () => {
+        const m = mensagemDeCredencialRecusada(ERRO_EMAIL)!;
+        expect(m).toMatch(/e-mail NÃO foi enviado/);
+        expect(m).toMatch(/GRAPH_CLIENT_SECRET do serviço/);
+        expect(m).toMatch(/Outlook Web/);
+        // ⚠️ A saída de hoje vai com as DUAS diferenças ditas — descobrir
+        // depois que o PDF não foi é pior que anexar à mão.
+        expect(m).toMatch(/ANEXADO POR VOCÊ/);
+        expect(m).toMatch(/cópia visível/);
+        // A resposta do órgão vai junto: é ela que a pessoa leva ao Azure.
+        expect(m).toMatch(/AADSTS7000215/);
+    });
+
+    // ⚠️ O que NÃO é credencial segue inteiro — traduzir o que não se
+    // reconhece é dizer a falha errada.
+    it('falha de outra natureza não é traduzida', () => {
+        for (const m of ['HTTP 500', 'E-mail do cliente ausente', '']) {
+            expect(mensagemDeCredencialRecusada(m)).toBeNull();
+        }
+    });
+
+    // 🔒 A LIGAÇÃO: as quatro telas de envio (DAS, DARF, DARE, ISS) passam
+    // pelos dois serviços abaixo — traduzir num só deixaria metade das telas
+    // com a mensagem crua.
+    it('os dois caminhos de envio usam o dono', () => {
+        for (const arquivo of ['dasService.ts', 'envioImpostoService.ts']) {
+            const fonte = readFileSync(join(__dirname, '..', 'services', arquivo), 'utf8');
+            expect({ arquivo, usa: /mensagemDeCredencialRecusada\(/.test(fonte) }).toEqual({ arquivo, usa: true });
+        }
     });
 });
 

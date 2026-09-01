@@ -58,6 +58,49 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   mesmo PDF; o documento antigo fica como duplicata invisível no filtro de mês,
   e sai pela busca por número.
 
+- **🚨 SÃO DOIS APPS DO AZURE, E A FRASE FALAVA COMO SE FOSSE UM SÓ** (01/09,
+  horas depois do card aprender ID×Valor: indo mandar o DAS da ZAMBOLIN, o
+  MESMO `AADSTS7000215` voltou nomeando **outro aplicativo**).
+  📖 A própria resposta carrega o id: o card do SharePoint fala do app
+  **`a876887f-…`** e o envio de e-mail fala do **`59fd4ec9-…`**. São
+  credenciais DIFERENTES, guardadas em lugares DIFERENTES — **renovar uma não
+  conserta a outra** —, e a frase mandava, nos dois casos, gravar em
+  `graph-client-secret` e subir revisão do **PROXY**. Para quem estava sem
+  enviar e-mail, isso é a primeira parada errada **de novo, um dia depois**.
+  ✂️ `appDaCredencial` lê o id da resposta e `ondeGravar` diz onde AQUELE
+  segredo mora. ⚠️ **App não mapeado devolve o id CRU e nenhum lugar
+  inventado** — mandar gravar num lugar que talvez não seja o certo é o que
+  este módulo existe para não fazer.
+  ⚠️ **E ONDE CADA UM MORA FOI MEDIDO**: `grep GRAPH_` nos workflows acha o do
+  proxy CRAVADO no `deploy-proxy.yml` e **nenhum** escrevendo o
+  `GRAPH_CLIENT_SECRET` do serviço do CFI — ou seja, o do e-mail vive na
+  configuração do serviço, e ali a edição no console **PERSISTE** (o deploy
+  passa só a imagem e `--update-*`, que mescla). Ler o workflow evitou repetir
+  ao contrário o erro de 28/08. ⚠️ Mas **gravado não é em vigor**: o tráfego
+  deste serviço é PINADO, então a revisão nova nasce a 0%.
+  🚨 **E A RECUSA CHEGAVA CRUA NO ENVIO DA GUIA** — `Falha ao obter token Graph
+  (401): {"error":"invalid_client"…}` num toast. Mensagem de órgão despejada na
+  tela não é informação: não diz o que fazer, e o e-mail do cliente não sai.
+  `mensagemDeCredencialRecusada` traduz **no dono**, e os DOIS caminhos de
+  envio a usam (`dasService` e `envioImpostoService`) — as quatro telas (DAS,
+  DARF, DARE, ISS) passam por eles, e traduzir num só deixaria metade com a
+  mensagem crua. ⚠️ **Falha que não é de credencial NÃO é traduzida**: o erro
+  original segue inteiro, porque traduzir o que não se reconhece é dizer a
+  falha errada.
+  ✅ **E A FRASE DIZ A SAÍDA DE HOJE, com as duas ressalvas**: o "Abrir no
+  Outlook Web" não passa por essa credencial — mas ali **o PDF vai anexado por
+  quem envia** e o gestor entra em **cópia visível**. Descobrir isso depois é
+  pior que anexar à mão.
+  🐛 **E O CORTE DE 220 CARACTERES DECAPITAVA JUSTAMENTE O NOME DO APP**: o
+  `pendenciaDeGravacaoSharePoint` truncava a mensagem ANTES de lê-la, e o
+  `for a secret added to app '…'` vem depois disso — a instrução dizia *"a
+  resposta não nomeou o aplicativo"* sobre uma resposta que nomeava. Quem lê é
+  a mensagem INTEIRA; o corte vale só para o eco na tela.
+  📌 **E UMA FIXTURE FOI TROCADA, pelo motivo certo**: o `ERRO_REAL` do teste
+  estava truncado num `"..."` bem antes do nome do app — ela descrevia uma
+  mensagem que a produção não produz, e por isso o defeito do corte passou. A
+  fixture passou a ser a mensagem REAL do print.
+
 - **🚨 EU AFIRMEI QUE O SEGREDO TINHA EXPIRADO — a validade estava na MESMA
   TELA dizendo 2028, e a Microsoft dizia a causa por extenso** (01/09, card
   Conexão SharePoint, `AADSTS7000215`).
