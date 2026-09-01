@@ -27,6 +27,11 @@
  * ⚠️ `sem-pdf` continua sendo desfecho LEGÍTIMO, não lacuna: há envio sem
  * anexo (aviso de guia já paga), e não há o que arquivar.
  */
+// A separação credencial (da casa) × pasta (do cliente) tem dono único — o
+// mesmo que o card "Conexão SharePoint" usa. Segunda cópia divergiria no
+// primeiro código de erro novo, que é exatamente o que aconteceu em 31/08.
+import { pendenciaDeGravacaoSharePoint } from './sharepoint-erro-credencial.js';
+
 const semRegistroSharePoint = (e) => !e?.sharePoint?.status;
 const semRegistroBaixa = (e) => !e?.baixa?.status;
 
@@ -44,10 +49,16 @@ export function pendenciaSharePoint(e) {
             acao: 'Preencha grupo + pasta em Central de XMLs → Integrações → SharePoint. Sem isso nenhum imposto é arquivado.',
         };
     }
-    return {
-        causa: 'Falha ao gravar no SharePoint',
-        acao: `Reenvie o arquivo depois de conferir o acesso à pasta. Motivo: ${String(e?.sharePoint?.motivo || 'não informado').slice(0, 160)}`,
-    };
+    // 🚨 31/08 (CLINICA MANTOAN 08/2026): a frase mandava "conferir o acesso à
+    // pasta" sobre um `AADSTS7000215: Invalid client secret` — que é a
+    // credencial da CASA, não a pasta do cliente, e trava a etapa 5 da carteira
+    // INTEIRA. Pior: a ação seguinte que ela sugere é reenviar a guia, o que
+    // DUPLICA a cobrança no cliente e não resolve nada.
+    //
+    // Quem separa credencial de pasta é o dono (`sharepoint-erro-credencial`),
+    // o MESMO que o card "Conexão SharePoint" usa desde 28/08 — o card já sabia
+    // e este painel não sabia, que é a meia correção daquele dia.
+    return pendenciaDeGravacaoSharePoint(e?.sharePoint?.motivo);
 }
 
 /** Motivo + ação pra baixa da obrigação. */

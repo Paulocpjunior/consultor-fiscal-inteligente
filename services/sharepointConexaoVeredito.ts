@@ -87,7 +87,13 @@ export interface UltimoSync {
  * app revogado e permissão retirada — todos do mesmo balde "o proxy não
  * consegue falar com a Microsoft".
  */
-const ASSINATURA_CREDENCIAL = /AADSTS|token error|invalid_client|invalid_request|unauthorized|401|403/i;
+// ⚠️ A assinatura mora no BACKEND (`sharepoint-erro-credencial.js`), que é
+// quem MAIS lê — o painel de envios e a Rotina precisam dela. Em 31/08 esta
+// cópia conhecia o `AADSTS90002` e o painel não conhecia nenhum código: a
+// segunda cópia divergiu no primeiro erro novo, exatamente como sempre.
+import { ASSINATURA_CREDENCIAL } from '../sefaz-backend/sharepoint-erro-credencial.js';
+
+export { ASSINATURA_CREDENCIAL };
 
 /** A primeira mensagem de erro que a rodada guardou, seja de onde for. */
 export function primeiroMotivoDoSync(lastSync?: UltimoSync | null): string | null {

@@ -28,6 +28,32 @@ service firebase.storage {
                     );
     }
 
+    // 🚨 PDFs da importação de NFS-e (NfsePdfImportacao).
+    //
+    // 31/08, Paulo, importando uma NFS-e da Prefeitura de Santo André:
+    //   "Firebase Storage: User does not have permission to access
+    //    'nfse_pdfs/…' (storage/unauthorized)"
+    //
+    // A tela existe desde sempre e a regra NUNCA foi escrita — o caminho caía
+    // no default deny abaixo, então **nenhum PDF de NFS-e jamais foi gravado**.
+    // É a "rota sem botão" (13/08) do lado do Storage: o caminho existe no
+    // código, a permissão não existe, e a falha só aparece no clique.
+    //
+    // Mesmo desenho de /xmls: leitura para quem está logado, escrita limitada
+    // ao tipo e ao tamanho, e exclusão só de admin — apagar documento fiscal
+    // não é ação de quem só importa.
+    match /nfse_pdfs/{empresaId}/{file} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 20 * 1024 * 1024
+                   && request.resource.contentType == 'application/pdf';
+      allow delete: if request.auth != null
+                    && (
+                      request.auth.token.email == 'junior@spassessoriacontabil.com.br'
+                      || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                    );
+    }
+
     // Default deny — nenhum outro caminho é acessível.
     match /{allPaths=**} {
       allow read, write: if false;

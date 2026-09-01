@@ -187,3 +187,117 @@ describe('lote de ENTRADAS não trata fornecedor como dono alheio', () => {
         expect(saida.mensagem).toMatch(/saída/);
     });
 });
+
+// ============================================================================
+// 🚨 NFS-e NÃO TEM <emit>/<dest> — e a tela GRITAVA "não é desta empresa"
+//
+// 31/08, Paulo, importando uma NFS-e da Prefeitura de Santo André para MARCOS
+// ANTONIO ZAMBOLIN INFORMATICA (07.901.372/0001-38):
+//
+//   ⛔ Arquivo não é desta empresa
+//   1 XML(s) · 0 desta empresa · 1 sem CNPJ legível
+//
+// O "1 sem CNPJ legível" era a resposta: o leitor da TELA conhecia só
+// <emit>/<dest> (NF-e) e <rem> (CT-e). O arquivo era dela.
+//
+// 📌 Duas correções, e a segunda vale mais: (1) a leitura aprende o padrão
+// ABRASF; (2) "não consegui LER" deixa de ser dito como "não é desta empresa"
+// — dizer a falha errada manda procurar no lugar errado, e ele ia conferir o
+// cadastro do cliente, que está certo.
+// ============================================================================
+const CNPJ_ZAMBOLIN = '07901372000138';
+const CNPJ_TOMADOR_NFSE = '11222333000181';
+
+/** ABRASF v2 — o documento vem embrulhado em <CpfCnpj>. */
+const nfseAbrasfV2 = (prestador: string, tomador: string) => `<?xml version="1.0"?>
+<CompNfse><Nfse><InfNfse><Numero>206</Numero>
+  <PrestadorServico><IdentificacaoPrestador><CpfCnpj><Cnpj>${prestador}</Cnpj></CpfCnpj>
+    <InscricaoMunicipal>12345</InscricaoMunicipal></IdentificacaoPrestador>
+    <RazaoSocial>MARCOS ANTONIO ZAMBOLIN INFORMATICA</RazaoSocial></PrestadorServico>
+  <TomadorServico><IdentificacaoTomador><CpfCnpj><Cnpj>${tomador}</Cnpj></CpfCnpj>
+    </IdentificacaoTomador></TomadorServico>
+</InfNfse></Nfse></CompNfse>`;
+
+/** ABRASF v1 — o documento fica direto no <IdentificacaoX>. */
+const nfseAbrasfV1 = (prestador: string, tomador: string) => `<?xml version="1.0"?>
+<Nfse><InfNfse>
+  <Prestador><Cnpj>${prestador}</Cnpj><InscricaoMunicipal>9</InscricaoMunicipal></Prestador>
+  <Tomador><IdentificacaoTomador><Cnpj>${tomador}</Cnpj></IdentificacaoTomador></Tomador>
+</InfNfse></Nfse>`;
+
+describe('🚨 a NFS-e é lida — prestador e tomador', () => {
+    it('ABRASF v2 (<CpfCnpj>) devolve as duas pontas', () => {
+        const d = extrairDadosXml(nfseAbrasfV2(CNPJ_ZAMBOLIN, CNPJ_TOMADOR_NFSE));
+        expect(d.emit).toBe(CNPJ_ZAMBOLIN);
+        expect(d.dest).toBe(CNPJ_TOMADOR_NFSE);
+    });
+
+    it('ABRASF v1 (documento direto) também', () => {
+        const d = extrairDadosXml(nfseAbrasfV1(CNPJ_ZAMBOLIN, CNPJ_TOMADOR_NFSE));
+        expect(d.emit).toBe(CNPJ_ZAMBOLIN);
+        expect(d.dest).toBe(CNPJ_TOMADOR_NFSE);
+    });
+
+    // ⚠️ A NF-e não pode regredir: ela não tem <PrestadorServico>, então nada
+    // muda nela — é a mesma garantia que o <rem> do CT-e recebeu em 19/08.
+    it('a NF-e continua lida pelo <emit>/<dest>', () => {
+        const d = extrairDadosXml(nfe(CNPJ_GUARANI, CNPJ_OUTRO));
+        expect(d.emit).toBe(CNPJ_GUARANI);
+        expect(d.dest).toBe(CNPJ_OUTRO);
+    });
+
+    it('e o lote da NFS-e passa a reconhecer a empresa', () => {
+        const empresasNfse = [{ id: 'z', nome: 'MARCOS ANTONIO ZAMBOLIN INFORMATICA', cnpj: CNPJ_ZAMBOLIN }];
+        const v = validarLoteParaEmpresa(
+            resumirLoteXmls([nfseAbrasfV2(CNPJ_ZAMBOLIN, CNPJ_TOMADOR_NFSE)]), CNPJ_ZAMBOLIN, empresasNfse,
+        );
+        expect(v.compativeis).toBe(1);
+        expect(v.bloquear).toBe(false);
+        expect(v.naoConferido).toBe(false);
+        expect(v.mensagem).toMatch(/saída/);
+    });
+});
+
+// ============================================================================
+// 🚨 "NÃO É DESTA EMPRESA" ≠ "NÃO CONSEGUI LER" — a segunda metade.
+//
+// A leitura acima cobre o ABRASF; a próxima prefeitura com leiaute próprio cai
+// de novo no ilegível. O que NÃO pode voltar é o app AFIRMAR de quem é.
+// ============================================================================
+describe('🚨 arquivo ilegível não vira acusação', () => {
+    const ilegivel = '<?xml version="1.0"?><NotaFiscal><Numero>206</Numero></NotaFiscal>';
+    const v = validarLoteParaEmpresa(resumirLoteXmls([ilegivel]), CNPJ_GUARANI, empresas);
+
+    it('NÃO bloqueia — quem decide a posse é o servidor', () => {
+        expect(v.bloquear).toBe(false);
+        expect(v.naoConferido).toBe(true);
+    });
+
+    it('e a frase diz o que aconteceu de verdade, com a ação', () => {
+        expect(v.mensagem).toMatch(/Não consegui LER/);
+        expect(v.mensagem).toMatch(/NÃO quer dizer que o arquivo seja de outra empresa/);
+        expect(v.mensagem).toMatch(/pode importar/);
+        // 🔴 A afirmação que ele leu no print, e que era FALSA.
+        expect(v.mensagem).not.toMatch(/não é desta empresa/i);
+    });
+
+    // ⚠️ E o bloqueio de VERDADE continua: XML de OUTRO CNPJ legível bloqueia,
+    // que é o caso que esta tela existe para pegar.
+    it('XML de outra empresa continua bloqueado, nomeando o dono', () => {
+        const outro = validarLoteParaEmpresa(
+            resumirLoteXmls([nfe(CNPJ_OUTRO, '99999999000199')]), CNPJ_GUARANI, empresas,
+        );
+        expect(outro.bloquear).toBe(true);
+        expect(outro.naoConferido).toBe(false);
+    });
+
+    // ⚠️ Um legível + um ilegível NÃO é "não conferido": houve conferência.
+    it('lote misto conta o ilegível à parte, sem apagar a conferência', () => {
+        const misto = validarLoteParaEmpresa(
+            resumirLoteXmls([nfe(CNPJ_GUARANI, CNPJ_OUTRO), ilegivel]), CNPJ_GUARANI, empresas,
+        );
+        expect(misto.naoConferido).toBe(false);
+        expect(misto.compativeis).toBe(1);
+        expect(misto.semIdentificacao).toBe(1);
+    });
+});

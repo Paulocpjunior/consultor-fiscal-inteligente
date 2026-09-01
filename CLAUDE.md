@@ -5,6 +5,78 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 TRÊS DEFEITOS DE UM DIA DE FIM DE MÊS — e os três diziam a coisa ERRADA
+  para quem lia** (31/08, três prints do Paulo).
+  🔴 **(1) `nfse_pdfs/` NUNCA TEVE REGRA NO STORAGE.** Importando uma NFS-e em
+  PDF da Prefeitura de Santo André: *"Firebase Storage: User does not have
+  permission to access 'nfse_pdfs/…' (storage/unauthorized)"*. O
+  `storage.rules` só conhecia `/xmls/{empresaId}/{file}`, e o caminho caía no
+  **default deny** — ou seja, **nenhum PDF de NFS-e jamais foi gravado**. A
+  tela existe, o código está certo, e o que faltava é a linha que ninguém
+  lembra de escrever: é a **"rota sem botão" (13/08) do lado do Storage**, e
+  ela só falha no CLIQUE.
+  ✂️ **Virou trava por VARREDURA** (`storageCaminhoTemRegra.test.ts`): todo
+  prefixo de caminho que o código usa tem de ter `match` nas rules. Lista
+  envelheceria no primeiro caminho novo — e envelheceria em SILÊNCIO, que é
+  exatamente como este viveu. Provada renomeando o `match` de propósito.
+  🔴 **(2) "ARQUIVO NÃO É DESTA EMPRESA" SOBRE UM ARQUIVO QUE ERA DELA.** O
+  mesmo caso, jogando o XML: *"1 XML(s) · **0 desta empresa** · 1 sem CNPJ
+  legível"*. **O "sem CNPJ legível" era a resposta**: `extrairDadosXml` — a
+  leitura da TELA — conhecia `<emit>`/`<dest>` (NF-e) e `<rem>` (CT-e), e
+  **NFS-e não tem nenhum dos três**: o ABRASF põe as partes em
+  `<PrestadorServico>`/`<TomadorServico>`, com o documento dentro de
+  `<IdentificacaoX>` e, na v2, embrulhado em `<CpfCnpj>`.
+  📌 **É a SEGUNDA leitura do mesmo XML divergindo da que importa** — o
+  `xmlParserService` lê todas essas formas desde sempre. Idêntico ao CT-e da A
+  CASTELLANO (19/08), um bloco de código acima, com o comentário daquele dia
+  ao lado.
+  🚨 **E A SEGUNDA METADE VALE MAIS QUE A PRIMEIRA: "não consegui LER" deixou
+  de ser dito como "não é desta empresa".** A tela **afirmava a posse** de um
+  arquivo que ela não conseguiu abrir — e quem lê vai conferir o **cadastro do
+  cliente**, que está certo, e o arquivo, que também está. **Dizer a falha
+  errada manda procurar no lugar errado.**
+  ⚠️ **Ilegível NÃO BLOQUEIA**, e isso é decisão: a tela não é a autoridade —
+  quem decide a posse é o backend (`documento-posse`, que tem até o
+  `posse-indeterminada`). Bloquear ali é a tela recusando o que o servidor
+  aceita, o defeito de 19/08 na íntegra. Vira `naoConferido`, âmbar, com a
+  frase dizendo que o servidor confere na importação. ⚠️ E o cabeçalho **não
+  cai no verde**: "0 desta empresa" em cor de acerto seria a conferência que
+  não aconteceu passando por sucesso (a régua de 22/08).
+  🔴 **(3) "REENVIE O ARQUIVO DEPOIS DE CONFERIR O ACESSO À PASTA" — sobre a
+  credencial da CASA, com a ação que DUPLICA a cobrança.** A etapa 5 da Rotina
+  da CLINICA MANTOAN travava com `AADSTS7000215: Invalid client secret`, e
+  mandava conferir a **pasta do cliente**. A pasta está certa: o que expirou é
+  o **client secret do Azure AD**, e enquanto ele não for renovado **NENHUM
+  cliente arquiva** — a etapa 5 trava a carteira inteira.
+  🚨 **E a ação seguinte que a frase sugere é a mais cara de todas**: reenviar
+  a guia **duplica a cobrança no cliente** e não resolve nada.
+  📌 **É a MEIA CORREÇÃO de 28/08**: naquele dia o **card** "Conexão
+  SharePoint" aprendeu a separar CREDENCIAL de PASTA, e o **painel de ENVIOS**
+  — que é onde o colaborador está quando o mês trava — ficou com a frase
+  antiga. A régua virou dono único no BACKEND (`sharepoint-erro-credencial.js`,
+  que é quem MAIS lê) e o `.ts` do card IMPORTA: a cópia do card conhecia o
+  `AADSTS90002` e o painel não conhecia **nenhum** código — a segunda cópia
+  divergiu no primeiro erro novo, como sempre.
+  ⚠️ **Erro de PASTA mantém a ação DELE** (conferir o caminho): mandar mexer no
+  proxy por causa dele seria o alarme com a primeira parada errada, na direção
+  contrária.
+  ✅ **E O ENVIO DO ISS EXISTE — o botão é que não dizia o que falta** (mesmo
+  dia: *"A função de enviar o ISS via sistema não está disponível, igual aos
+  outros impostos, certo?"*). O rito é o MESMO do DAS/DARF/DARE (servidor,
+  gestor em cópia, SharePoint, baixa). O botão estava apagado por falta do
+  **PDF da guia**, e o `title` mostrava a frase do caso FELIZ. **Botão apagado
+  sem motivo se lê como função inexistente** — a classe de 20/08 (*"parece
+  desabilitado" e "está desabilitado" são a mesma coisa para quem usa*).
+  ⚠️ **E a razão do PDF é do IMPOSTO, não do app**: a guia do ISS é emitida no
+  portal da Prefeitura — o CFI não cria o número dela —, então sem o anexo não
+  há o que mandar nem o que arquivar. A frase diz isso, senão a exigência
+  parece capricho. As **duas causas ficam separadas** (falta o PDF × apuração
+  com pendência), porque as ações são diferentes.
+  📌 **E a régua saiu do COMPONENTE para `services/`** — dentro do `.tsx` ela
+  era inexercitável por teste (o jest não carrega o painel), que é a mesma
+  lição do `rotina-empresa-insumo` e do E116: **régua dentro de tela é régua
+  sem prova.**
+
 - **🚨 O APP DENUNCIAVA A RETENÇÃO ERRADA E NÃO ENTREGAVA A CERTA — 315,73 no
   lugar de 158,72** (31/08, Paulo, no R-4020: *"preciso ter a opção de ajustar
   as retenções para entregar com o valor correto, com o novo layout estão

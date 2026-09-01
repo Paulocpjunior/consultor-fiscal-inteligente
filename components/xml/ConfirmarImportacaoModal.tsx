@@ -29,7 +29,9 @@ const ConfirmarImportacaoModal: React.FC<Props> = ({
     if (!aberto || !validacao) return null;
 
     const donoSugerido = validacao.donosProvaveis.find((d) => d.empresa)?.empresa || null;
-    const alerta = validacao.bloquear || validacao.incompativeis > 0;
+    // ⚠️ "não consegui LER" entra no alerta junto com o resto: verde aqui
+    // afirmaria uma conferência que não aconteceu (31/08, NFS-e de Santo André).
+    const alerta = validacao.bloquear || validacao.incompativeis > 0 || validacao.naoConferido;
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-start justify-center p-4 z-[80] overflow-y-auto" onClick={onCancelar}>
@@ -38,7 +40,9 @@ const ConfirmarImportacaoModal: React.FC<Props> = ({
                     ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
                     : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'}`}>
                     <h3 className="font-bold text-slate-800 dark:text-slate-100">
-                        {validacao.bloquear ? '⛔ Arquivo não é desta empresa' : alerta ? '⚠️ Confira antes de importar' : '✓ Confirmar importação'}
+                        {validacao.bloquear ? '⛔ Arquivo não é desta empresa'
+                            : validacao.naoConferido ? '⚠️ Não consegui conferir de quem é'
+                                : alerta ? '⚠️ Confira antes de importar' : '✓ Confirmar importação'}
                     </h3>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{validacao.mensagem}</p>
                 </div>
@@ -53,7 +57,15 @@ const ConfirmarImportacaoModal: React.FC<Props> = ({
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-1">
                         <p className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">O que veio nos arquivos</p>
                         <p className="text-slate-700 dark:text-slate-200">
-                            {validacao.total} XML(s) · <span className="text-emerald-600 dark:text-emerald-400 font-bold">{validacao.compativeis} desta empresa</span>
+                            {validacao.total} XML(s) ·{' '}
+                            {/* ⚠️ Com tudo ilegível, "0 desta empresa" em VERDE é a
+                                afirmação errada em cor de acerto: o app não contou
+                                zero, ele não conseguiu contar. */}
+                            <span className={validacao.naoConferido
+                                ? 'text-slate-500 font-bold'
+                                : 'text-emerald-600 dark:text-emerald-400 font-bold'}>
+                                {validacao.naoConferido ? 'nenhum pôde ser lido' : `${validacao.compativeis} desta empresa`}
+                            </span>
                             {validacao.incompativeis > 0 && <span className="text-red-600 dark:text-red-400 font-bold"> · {validacao.incompativeis} de outro CNPJ</span>}
                             {validacao.semIdentificacao > 0 && <span className="text-slate-500"> · {validacao.semIdentificacao} sem CNPJ legível</span>}
                         </p>

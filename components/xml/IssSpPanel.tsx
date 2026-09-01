@@ -18,6 +18,7 @@ import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type Em
 import { apurarIssSp, empresaEhSpCapital, type ApuracaoIssSp } from '../../services/issSpApuracao';
 import { enviarGuiaPeloServidor, mensagemEnvioServidor } from '../../services/envioImpostoService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+import { motivoDoBotaoDesligado } from '../../services/issEnvioBotao';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 
 interface SaudeCaptura {
@@ -718,13 +719,26 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                             <input type="file" accept="application/pdf" onChange={anexarPdf} className="hidden" />
                         </label>
                         <button onClick={enviarAoCliente} disabled={enviando || !pdfGuia || !apuracao.apta}
-                            title={!apuracao.apta
-                                ? 'A apuração tem pendência (veja os avisos) — resolva antes de mandar guia ao cliente.'
-                                : 'Envia pelo servidor, com o PDF anexado, gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.'}
+                            title={motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta)
+                                || 'Envia pelo servidor, com o PDF anexado, gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.'}
                             className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
                             {enviando ? 'Enviando…' : '📤 Enviar guia ao cliente'}
                         </button>
                     </div>
+
+                    {/* 🚨 BOTÃO DESLIGADO DIZ O QUE FALTA — 31/08, Paulo:
+                        *"A função de enviar o ISS via sistema não está
+                        disponível, igual aos outros impostos, certo?"*. Ela
+                        ESTÁ: o rito é o mesmo (servidor, gestor em cópia,
+                        SharePoint, baixa). O botão estava apagado por falta do
+                        PDF e **não dizia isso** — e botão apagado sem motivo
+                        se lê como "não existe". É a lição de 20/08 (o campo do
+                        cérebro do CFOP que "parecia desabilitado"). */}
+                    {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta) && (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            ⚠ {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta)}
+                        </p>
+                    )}
 
                     {apuracao.notas.length > 0 && (
                         <div className="overflow-x-auto">
