@@ -7,6 +7,7 @@ import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
+import { recorteDaNfsePdf, idDaNfsePdf } from '../../services/nfsePdfRecorte';
 import type { NfsePdfParsed } from '../../services/nfsePdfParserService';
 import type { User } from '../../types';
 
@@ -112,7 +113,19 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
         setError(null);
         try {
             const uid = auth.currentUser.uid;
-            const docId = parsed.chaveAcesso || `${empresaSelecionada.id}_${parsed.numero}_${parsed.serie}_${Date.now()}`;
+            // 🚨 A COMPETÊNCIA E A DATA SAEM DO DONO, nunca do texto do PDF.
+            // O papel escreve `08/2026` ou `18/08/2026`; o banco é `AAAA-MM`, e
+            // a consulta é por IGUALDADE — gravar a forma do papel põe a nota
+            // no banco e fora de todo recorte de mês (caso 0257, 01/09).
+            const recorte = recorteDaNfsePdf(parsed);
+            if (recorte.impedimento) { setError(recorte.impedimento); setSaving(false); return; }
+
+            const docId = idDaNfsePdf({
+                chaveAcesso: parsed.chaveAcesso,
+                empresaId: empresaSelecionada.id,
+                numero: parsed.numero,
+                serie: parsed.serie,
+            });
             const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
             const path = `nfse_pdfs/${empresaSelecionada.id}/${docId}_${safeFileName}`;
 
@@ -149,7 +162,12 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 direcao,
                 modelo: '',
                 status: 'autorizado',
-                dhEmi: parsed.dataEmissao || new Date().toISOString(),
+                // ⚠️ Sem `|| new Date()`: data de HOJE num documento de outro mês
+                // é a nota escriturada na competência errada, e na virada do mês
+                // o PVA recusa (a régua de 22/08 — campo de data não recebe
+                // default). Aqui ela nunca falta: o recorte já recusou o PDF em
+                // que nem a data nem a competência são legíveis.
+                dhEmi: recorte.dhEmi,
                 emitente: emitenteCompat,
                 destinatario: destinatarioCompat,
                 totais: totaisCompat,
@@ -157,7 +175,8 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 numero: parsed.numero,
                 serie: parsed.serie,
                 chave: parsed.chaveAcesso,
-                competencia: parsed.competencia,
+                competencia: recorte.competencia,
+                competenciaOrigem: recorte.competenciaOrigem,
                 dataEmissao: parsed.dataEmissao,
                 codigoVerificacao: parsed.codigoVerificacao,
                 municipioPrestacao: parsed.municipioPrestacao,
@@ -208,7 +227,13 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 : payload;
             await setDoc(docRef, payloadFinal, { merge: true });
 
-            onShowToast?.(`NFSe ${parsed.numero}/${parsed.serie} importada com sucesso.`);
+            // 📌 A COMPETÊNCIA VAI NA FRASE porque é ela que decide ONDE a nota
+            // aparece. "Importada com sucesso" sobre uma nota que não entra em
+            // recorte nenhum foi exatamente o relato de 01/09 — o app afirmava
+            // a gravação e a lista negava a nota.
+            const mes = String(recorte.competencia || '').split('-').reverse().join('/');
+            onShowToast?.(`NFSe ${parsed.numero}/${parsed.serie} importada em ${mes}`
+                + ` — procure em XMLs (Entrada/Saída) com a competência ${mes}.`);
             setParsed(null);
             setFile(null);
             onImported?.();

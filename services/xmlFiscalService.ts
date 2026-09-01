@@ -45,6 +45,7 @@ const direcaoDoDocumento = (d: any): string => (direcaoEfetivaDoc(d) as string) 
 import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
+import { formasDaCompetencia } from '../sefaz-backend/competencia.js';
 import {
     podeVerDocumentoPorCarteira,
     podeVerEmpresaPorCarteira,
@@ -682,10 +683,23 @@ export async function listDocumentos(
     else if (filters.empresaIds && filters.empresaIds.length > 0) {
         constraints.push(where('empresaId', 'in', filters.empresaIds.slice(0, 30)));
     }
-    // Competência exata vai ao SERVIDOR: corta a busca de dezenas de milhares
-    // de docs para o mês pedido (igualdade simples — não exige índice composto;
-    // range competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
-    if (filters.competencia) constraints.push(where('competencia', '==', filters.competencia));
+    // Competência vai ao SERVIDOR: corta a busca de dezenas de milhares de docs
+    // para o mês pedido (igualdade — não exige índice composto; o range
+    // competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
+    //
+    // 🚨 E ELA PERGUNTA PELAS FORMAS, não por uma só. A competência é gravada
+    // em `AAAA-MM` pela captura, e trilhos que leem PAPEL trazem o que o papel
+    // escreve (`08/2026`). Perguntando só pela normalizada, a nota FICA no
+    // banco e some de todo recorte — foi o relato de 01/09 (0257, importação de
+    // PDF de NFS-e: "diz que importou e não tem nenhuma nota"). É a irmã da
+    // regra do CNPJ: **nunca consultar por igualdade de um campo que tem duas
+    // formas**.
+    if (filters.competencia) {
+        const formas = formasDaCompetencia(filters.competencia);
+        constraints.push(formas.length > 1
+            ? where('competencia', 'in', formas.slice(0, 30))
+            : where('competencia', '==', filters.competencia));
+    }
     // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
     // Ordenação fica em memória com fallbacks (ver abaixo).
     // Paginação via cursor (fetchAllDocs) substitui o antigo fbLimit(500) que
@@ -710,7 +724,15 @@ export async function listDocumentos(
         const cnpjFiltro = String(filters.empresaCnpj || '').replace(/\D/g, '');
         if (cnpjFiltro.length === 14 && (filters.empresaId || filters.empresaIds?.length)) {
             const porCnpj: QueryConstraint[] = [where('empresaCnpj', '==', cnpjFiltro)];
-            if (filters.competencia) porCnpj.push(where('competencia', '==', filters.competencia));
+            if (filters.competencia) {
+                // ⚠️ As MESMAS formas da consulta acima — uma metade tolerante e
+                // a outra estrita faria o documento aparecer ou sumir conforme o
+                // caminho que o achou.
+                const formas = formasDaCompetencia(filters.competencia);
+                porCnpj.push(formas.length > 1
+                    ? where('competencia', 'in', formas.slice(0, 30))
+                    : where('competencia', '==', filters.competencia));
+            }
             const metaCnpj = { truncated: false, count: 0, maxDocs: 0 };
             const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, meta: metaCnpj });
             if (meta && metaCnpj.truncated) meta.truncado = true;
