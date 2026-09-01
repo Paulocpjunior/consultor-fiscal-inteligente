@@ -5,6 +5,19 @@ rules_version = '2';
 //
 // Cobre o caminho /xmls/{empresaId}/{file} usado pelo xmlStorageService.
 // Bloqueia o restante do bucket por padrão.
+//
+// 🚨 ESTE ARQUIVO SÓ VALE DEPOIS DE PUBLICADO — e por muito tempo ele NÃO era.
+//
+// Em 31/08 a regra de `/nfse_pdfs/` foi escrita para destravar a importação de
+// NFS-e em PDF, o teste passou verde, e em 01/09 o colaborador levou
+// EXATAMENTE o mesmo `storage/unauthorized`: o `deploy-firestore.yml` subia
+// `--only firestore:rules,firestore:indexes` e nem escutava `storage.rules` no
+// `paths:`. A correção existia e nunca chegou à produção — *"regra escrita não
+// é regra IMPLANTADA"*.
+//
+// ⚠️ QUEM PUBLICA É O `.github/workflows/deploy-firestore.yml`, e ele dispara
+// por MUDANÇA NESTE ARQUIVO. Editar a regra e não ver o workflow rodar é a
+// mesma coisa que não ter editado.
 // =============================================================================
 
 service firebase.storage {
