@@ -39,6 +39,7 @@ import { validarAjusteRetencao } from './retencao-pj-ajuste.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
+import { montarMovimentoFiscalContabil } from './movimento-fiscal-contabil.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 import { conferirTotalizadorR2099, CODIGOS_RECEITA_FUNRURAL } from './reinf-aquisicao-rural.js';
@@ -365,6 +366,49 @@ router.get('/servicos-tomados', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-servicos-tomados]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GET /api/admin/reinf/movimento-fiscal?cnpj=&competencia=&movimento=
+//
+// Fonte direta para o modal fiscal do CCI. E uma consulta pura: o CFI
+// normaliza portal/XML/ADN e o CCI continua responsavel pela previa e pela
+// gravacao contábil. Lista vazia vem acompanhada de documentosLidos para nao
+// ser confundida com prova de ausencia de movimento.
+router.get('/movimento-fiscal', autorizar, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        const cnpj = soDigitos(req.query.cnpj);
+        const movimento = String(req.query.movimento || '').trim();
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competencia no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ da empresa com 14 digitos.' });
+        }
+        if (!['servicos_prestados', 'servicos_tomados'].includes(movimento)) {
+            return res.status(400).json({ ok: false, error: 'Selecione servicos_prestados ou servicos_tomados.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} nao foi encontrado no cadastro do CFI. Sem cadastro nao ha captura, e lista vazia nao prova ausencia de movimento.`,
+            });
+        }
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const payload = montarMovimentoFiscalContabil({ cnpjEmpresa: cnpj, competencia, movimento, documentos });
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
+            documentosLidos: documentos.length,
+            ...payload,
+        });
+    } catch (e) {
+        console.error('[reinf-movimento-fiscal]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
