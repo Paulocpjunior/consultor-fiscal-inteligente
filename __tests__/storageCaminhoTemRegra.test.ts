@@ -105,3 +105,46 @@ describe('🚨 todo caminho do Storage tem regra', () => {
         expect(comRegra).toContain('nfse_pdfs');
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 REGRA ESCRITA NÃO É REGRA IMPLANTADA — a metade que faltava.
+//
+// 31/08 a regra do `nfse_pdfs/` foi escrita e o teste acima passou VERDE.
+// 01/09 o colaborador levou EXATAMENTE o mesmo `storage/unauthorized`: o
+// `firebase.json` declarava `"storage": {"rules": "storage.rules"}` e
+// **nenhum workflow publicava o arquivo** — o `deploy-firestore.yml` sobe
+// `--only firestore:rules,firestore:indexes` e nem escutava `storage.rules`
+// no `paths:`.
+//
+// 📌 É a mesma classe da trava das Novidades, no mesmo dia: a trava existe,
+// roda, passa — e cobre a metade errada. Provar que o CAMINHO tem regra não
+// prova nada se a regra não sai daqui.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 a regra do Storage é IMPLANTADA, não só escrita', () => {
+    const workflow = () => readFileSync(join(RAIZ, '.github/workflows/deploy-firestore.yml'), 'utf8');
+
+    it('o firebase.json aponta o arquivo de regras do Storage', () => {
+        const cfg = JSON.parse(readFileSync(join(RAIZ, 'firebase.json'), 'utf8'));
+        expect(cfg?.storage?.rules).toBe('storage.rules');
+    });
+
+    it('o deploy publica as regras do Storage', () => {
+        const yml = workflow();
+        const cmd = yml.match(/--only[\s\\]+([a-zA-Z:,]+)/)?.[1] || '';
+        if (!/(^|,)storage(:rules)?(,|$)/.test(cmd)) {
+            throw new Error(
+                '\n\n🚧 REGRA DO STORAGE NÃO É PUBLICADA\n\n'
+                + `  · o deploy roda com --only ${cmd || '(não encontrado)'}\n\n`
+                + 'Sem `storage` nessa lista, o `storage.rules` fica no repositório e a\n'
+                + 'produção continua no DEFAULT DENY — foi assim que a importação de NFS-e\n'
+                + 'em PDF levou o mesmo `storage/unauthorized` no dia seguinte à correção.\n',
+            );
+        }
+    });
+
+    it('mudar o storage.rules dispara o deploy', () => {
+        // Sem isto, a regra só sairia quando alguém tocasse um arquivo do
+        // Firestore por acaso — publicação por coincidência não é publicação.
+        expect(workflow()).toMatch(/paths:[\s\S]*?- storage\.rules/);
+    });
+});

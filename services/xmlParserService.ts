@@ -7,7 +7,17 @@
  *
  * NFSe: parse de XML ABRASF (v1.0, 2.0, 2.04) com tags
  * <CompNfse>, <Nfse>, <InfNfse>, <Servico>, <PrestadorServico>, <TomadorServico>.
+ *
+ * ⚠️ NFS-e do padrão NACIONAL (ADN) é OUTRO leiaute — `<infNFSe>`, `<emit>`,
+ * `<toma>`, `<vServ>` — e quem responde por ele é `nfse-nacional-leitura.js`,
+ * o dono único que o backend da captura também lê. Duas leituras do mesmo
+ * arquivo foi exatamente o defeito de 01/09.
  */
+
+// 🚨 O front importa o dono do BACKEND de propósito: quem mais lê NFS-e
+// nacional é a captura do ADN, e uma segunda leitura aqui divergiria dela no
+// primeiro campo novo (a lição do CCM, 29/08).
+import { ehNfseNacional, lerNfseNacional } from '../sefaz-backend/nfse-nacional-leitura.js';
 
 import type {
     DocumentoFiscal,
@@ -143,6 +153,17 @@ export function parseNFeXml(xmlText: string): ParsedXml {
 
     if (doc.querySelector('parsererror')) {
         throw new XmlParseError('Arquivo XML inválido ou corrompido.');
+    }
+
+    // 🚨 NFS-e do padrão NACIONAL (ADN) vem ANTES do ABRASF — são DOIS
+    // leiautes com o mesmo nome, e o nacional usa `<infNFSe>` (NFSe em
+    // MAIÚSCULAS), que `getElementsByTagName` NÃO casa com `infNfse`. Sem esta
+    // linha o arquivo caía lá embaixo e era recusado como "não é nota fiscal"
+    // — enquanto a tela de confirmação, que lê o `<emit>` do próprio leiaute
+    // nacional, já tinha dito "1 desta empresa" e oferecido o botão Importar
+    // (01/09, 4BZ CONSULTORIA — municípios de fora de SP caem todos aqui).
+    if (ehNfseNacional(xmlText)) {
+        return parseNFSeNacional(xmlText);
     }
 
     // NFSe (ABRASF): redireciona para parser específico
@@ -755,6 +776,138 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     } as ParsedXml & { _nfseValores?: any };
 }
 
+// ─── Parser NFSe NACIONAL (ADN) ─────────────────────────────────────────────
+
+/**
+ * Traduz a leitura do dono (`nfse-nacional-leitura.js`) para o `ParsedXml` que
+ * o resto do app consome.
+ *
+ * ⚠️ AQUI NÃO SE LÊ TAG NENHUMA — quem conhece a forma do leiaute nacional é o
+ * dono. Este bloco só ENCAIXA a resposta dele no formato comum, exatamente
+ * como o bloco A do SPED faz com as réguas de documento.
+ */
+function parseNFSeNacional(xmlText: string): ParsedXml {
+    const lida = lerNfseNacional(xmlText);
+
+    // 🚨 VALOR AUSENTE **RECUSA**, nunca importa zero.
+    //
+    // Este é o único campo cuja ausência não pode virar documento: `vNF` = 0
+    // entra no Livro, no Resumo por CFOP e na apuração como se a nota não
+    // valesse nada — e ninguém confere valor a olho (é a família do `VL_OPR`
+    // sem o IPI: o erro que nenhum validador recusa e só aparece na
+    // fiscalização). A recusa NOMEIA a tag procurada, para quem lê o arquivo
+    // conseguir conferir em vez de "tentar de novo".
+    if (lida.valores.servico === null) {
+        throw new XmlParseError(
+            'NFS-e do padrão nacional sem valor de serviço legível: a tag <vServ> '
+            + '(dentro de <valores><vServPrest>) não foi encontrada. Importar assim '
+            + 'gravaria a nota valendo R$ 0,00 no livro. Confira o arquivo ou mande-o '
+            + 'ao time — o leiaute pode ser de uma versão que o app ainda não lê.',
+        );
+    }
+
+    const emitente: DocumentoFiscalParticipante = {
+        cnpjCpf: lida.prestador?.cnpjCpf || '',
+        nome: lida.prestador?.nome || '',
+        ie: lida.prestador?.im || undefined,
+        uf: lida.prestador?.uf || undefined,
+        codMunIBGE: lida.prestador?.codMunIBGE || undefined,
+        logradouro: lida.prestador?.logradouro || undefined,
+        numero: lida.prestador?.numero || undefined,
+        bairro: lida.prestador?.bairro || undefined,
+        cep: lida.prestador?.cep || undefined,
+    };
+
+    const destinatario: DocumentoFiscalParticipante = {
+        cnpjCpf: lida.tomador?.cnpjCpf || '',
+        nome: lida.tomador?.nome || '',
+        ie: lida.tomador?.im || undefined,
+        uf: lida.tomador?.uf || undefined,
+        codMunIBGE: lida.tomador?.codMunIBGE || undefined,
+        logradouro: lida.tomador?.logradouro || undefined,
+        numero: lida.tomador?.numero || undefined,
+        bairro: lida.tomador?.bairro || undefined,
+        cep: lida.tomador?.cep || undefined,
+    };
+
+    const valorServicos = lida.valores.servico;
+    const baseCalculo = lida.valores.baseCalculo ?? valorServicos;
+
+    const itens: DocumentoFiscalItem[] = [{
+        nItem: '1',
+        // ⚠️ O código de serviço nacional (`cTribNac`) NÃO é o item da LC 116 e
+        // NÃO é o código municipal — são três coisas, e carimbar uma no campo
+        // da outra é o de-para inventado que o R-4020 já pagou. Fica com a
+        // descrição, que é o que o documento afirma sem tradução.
+        cProd: '',
+        xProd: 'Serviço',
+        ncm: '',
+        cfop: '',
+        uCom: 'SV',
+        qCom: 1,
+        vUnCom: valorServicos,
+        vProd: valorServicos,
+        vICMS: 0,
+        vIPI: 0,
+        vPIS: 0,
+        vCOFINS: 0,
+        cst: '',
+        orig: '',
+    }];
+
+    const totais: DocumentoFiscalTotais = {
+        vBC: baseCalculo,
+        vICMS: 0,
+        vICMSDeson: 0,
+        vFCP: 0,
+        vBCST: 0,
+        vST: 0,
+        vFCPST: 0,
+        vProd: valorServicos,
+        vFrete: 0,
+        vSeg: 0,
+        vDesc: 0,
+        vII: 0,
+        vIPI: 0,
+        vIPIDevol: 0,
+        vPIS: 0,
+        vCOFINS: 0,
+        vOutro: 0,
+        vNF: valorServicos,
+    };
+
+    return {
+        // A chave nacional tem 50 caracteres (não são os 44 da NF-e); sem ela
+        // a identidade cai no par número+prestador, como no ABRASF.
+        chave: lida.chave || `NFSE-${lida.numero}-${emitente.cnpjCpf}`,
+        tipo: 'NFSe',
+        modelo: '99',
+        serie: '',
+        numero: lida.numero,
+        natOp: 'Prestação de serviço',
+        dhEmi: lida.dhEmi,
+        status: 'autorizado',
+        emitente,
+        destinatario,
+        itens,
+        totais,
+        _nfseValores: {
+            liquido: lida.valores.liquido ?? valorServicos,
+            iss: lida.valores.iss ?? 0,
+            issRetido: lida.valores.issRetido === true,
+            baseCalculo,
+            aliquotaIss: lida.valores.aliquotaIss ?? 0,
+            // 🚩 As retenções federais NÃO são lidas (o `<tribFed>` não está
+            // provado neste repo) — e por isso elas NÃO viajam como zero: o
+            // documento sai sem os campos, que é o que faz o Relatório de
+            // Retenções imprimir "?" em vez de "0,00". Zero ali seria a
+            // afirmação de que não houve retenção (regra de 01/08).
+            retencoesLidas: false,
+            lacunas: lida.lacunas,
+        },
+    } as ParsedXml & { _nfseValores?: any };
+}
+
 // ─── Validação de empresa & direção ─────────────────────────────────────────
 
 export interface CompanyMatchResult {
@@ -854,19 +1007,29 @@ export function buildDocumentoFiscal(input: {
         ...(isNFSe && nfseValores ? {
             valores: {
                 liquido: nfseValores.liquido,
-                pis: nfseValores.pis,
-                cofins: nfseValores.cofins,
                 iss: nfseValores.iss,
                 baseCalculo: nfseValores.baseCalculo,
                 deducoes: nfseValores.deducoes,
-                // Retenções federais + ISS retido: o parser sempre extraiu,
-                // mas eram descartados aqui — o relatório de Retenções (01/08)
-                // precisa deles gravados.
-                ir: nfseValores.ir,
-                inss: nfseValores.inss,
-                csll: nfseValores.csll,
                 issRetido: nfseValores.issRetido,
                 valorIssRetido: nfseValores.valorIssRetido,
+                // 🚨 OS CAMPOS FEDERAIS SÓ EXISTEM QUANDO FORAM LIDOS — e a
+                // diferença entre AUSENTE e ZERO é o produto aqui.
+                //
+                // `retencoesFederaisGravadas` (relatoriosAgregacoes) responde
+                // `fed.ir !== undefined`, e a gravação faz
+                // `undefined → null`: emitir a chave com valor ausente a
+                // transformaria em **null**, que passa nesse teste — ou seja, a
+                // NFS-e do padrão nacional (cujo <tribFed> este app ainda não
+                // lê) apareceria no Relatório de Retenções como "0,00", que é
+                // a AFIRMAÇÃO de que não houve retenção. Com a chave fora, ela
+                // imprime "?" — que é a verdade: ninguém conferiu.
+                ...(nfseValores.retencoesLidas === false ? {} : {
+                    pis: nfseValores.pis,
+                    cofins: nfseValores.cofins,
+                    ir: nfseValores.ir,
+                    inss: nfseValores.inss,
+                    csll: nfseValores.csll,
+                }),
             },
         } : {}),
         itens: parsed.itens,

@@ -5,6 +5,92 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A NFS-e DO PADRÃO NACIONAL NÃO IMPORTAVA — e a TELA dizia que ia**
+  (01/09, Paulo, 4BZ CONSULTORIA · arquivo `27_LIFECHEMM_16.xml`: *"as notas de
+  serviços que puxamos pelo portal nacional vêm em arquivo XML que temos a
+  possibilidade de importar para o consultor, o mesmo reconhece o arquivo como
+  da empresa, mas não tá importando. Essa particularidade acontece
+  principalmente nas empresas que são do município de fora de SP."*).
+  🔴 **SÃO DOIS LEIAUTES COM O MESMO NOME, e o que os separa é a CAIXA DAS
+  LETRAS.** O ABRASF (prefeituras próprias) escreve **`<InfNfse>`**; o padrão
+  NACIONAL (ADN) escreve **`<infNFSe>`** — e `getElementsByTagName` é
+  CASE-SENSITIVE. O arquivo caía no `else` do `xmlParserService` e voltava
+  *"XML não é uma NFe/NFCe/CTe/NFSe válida"* sobre uma NFS-e que É válida.
+  🚨 **E A TELA PROMETIA O CONTRÁRIO — este é o custo real.** O leiaute
+  nacional traz `<emit>` (o prestador é o emitente), que é justamente o bloco
+  que `extrairDadosXml` lê para NF-e: a confirmação dizia *"1 XML(s) · 1 desta
+  empresa · 1 de saída (ela emitiu)"* e **oferecia o botão Importar**. A tela
+  afirmava a importação e o importador recusava — a promessa que a tela não
+  cumpre (família do ✕ de 14/08), agora entre duas leituras do MESMO arquivo.
+  📌 **É A TERCEIRA LEITURA DO MESMO XML DIVERGINDO EM DOIS DIAS**: 31/08 foi a
+  TELA que não conhecia o ABRASF (Santo André); hoje é o IMPORTADOR que não
+  conhece o nacional. Por isso a régua nasceu como **DONO ÚNICO**
+  (`nfse-nacional-leitura.js`, PURO): a captura do ADN e a importação manual
+  leem daqui, nunca cada uma do seu jeito.
+  ⚠️ **E O LEIAUTE NÃO FOI DEDUZIDO DE MEMÓRIA** — sai do que este repo já
+  PROVA: o `nfse-nacional-dps-builder.js`, que **emite** DPS do padrão nacional
+  (`infDPS`, `emit`, `toma`, `serv`, `valores > vServPrest > vServ`, `trib >
+  tribMun > pAliq/vBC/vISSQN/tpRetISSQN`, `dhEmi`, `dCompet`), e o
+  `nfse-nacional-dfe-importer.js`. Inventar nome de tag aqui é o `1405` com
+  outra roupa — produz nota com valor errado, e valor errado o app não denuncia.
+  🔴 **E A VARREDURA ACHOU UM DEFEITO VIVO NA CAPTURA DO ADN**: o regex do
+  tomador era `<tomad[\s\S]*?<CNPJ>` e a tag do leiaute é **`<toma>`** —
+  *"tomad" NUNCA casa com "toma"*, então o tomador saía VAZIO em toda NFS-e
+  nacional. Só não doeu porque o histórico do trilho é **ZERO documento**
+  (medição de 23/08): era o defeito esperando a primeira nota chegar.
+  🚨 **VALOR AUSENTE RECUSA A IMPORTAÇÃO, nunca entra como R$ 0,00** — e a
+  recusa NOMEIA a tag procurada. Nota valendo zero entra no Livro, no Resumo
+  por CFOP e na apuração sem nenhum validador denunciar (a família do `VL_OPR`
+  sem o IPI). O resto do que falta sai em `lacunas`.
+  🚩 **AS RETENÇÕES FEDERAIS FICAM DE FORA, DECLARADAS**: o `<tribFed>` não é
+  emitido pelo builder deste repo, então não há prova das tags dele. E o
+  cuidado é maior que parece — `retencoesFederaisGravadas` responde
+  `fed.ir !== undefined`, e a gravação faz **`undefined → null`**: emitir a
+  chave vazia a transformaria em `null`, que PASSA nesse teste, e a nota
+  apareceria no Relatório de Retenções como **0,00**, que é a AFIRMAÇÃO de que
+  não houve retenção. As chaves ficam FORA, e a tela imprime **"?"**.
+  🐛 **E A RÉGUA NASCEU ERRADA DE DUAS FORMAS, as duas pegas pelo teste**:
+  (1) `<vServ[^>]*>` casava a abertura de **`<vServPrest>`** e devolvia
+  `"<vReceb>0.00</vReceb><vServ>5000.00"` — texto que vira `null`, ou seja
+  **nota recusada por "sem valor" com o valor escrito no arquivo**; o nome
+  passou a exigir FRONTEIRA (a disciplina do `'3.7'` × `'3.70'`, 15/08).
+  (2) a detecção usava a flag `i` e **engoliu o ABRASF inteiro**, mandando toda
+  NFS-e de prefeitura própria para o parser errado — o teste do *"nada
+  regrediu"* caiu na hora. **Aqui o case-sensitive não é detalhe: é a régua.**
+
+- **🚨 REGRA ESCRITA NÃO É REGRA IMPLANTADA — o `storage.rules` nunca foi
+  publicado por workflow nenhum** (01/09, o MESMO `storage/unauthorized` do dia
+  anterior, na mesma tela, com a regra já no repositório).
+  🔴 Em 31/08 a regra de `/nfse_pdfs/{empresaId}/{file}` foi escrita, o teste
+  `storageCaminhoTemRegra` passou VERDE, o `firebase.json` já declarava
+  `"storage": {"rules": "storage.rules"}` — e o `deploy-firestore.yml` sobe
+  `--only firestore:rules,firestore:indexes` e **nem escutava `storage.rules`
+  no `paths:`**. A correção existia e nunca chegou à produção.
+  📌 **É A LIÇÃO DE 13/08 UM NÍVEL ACIMA**: *"regra escrita não é regra
+  LIGADA"* virou **"regra escrita não é regra IMPLANTADA"**. E o próprio
+  cabeçalho daquele workflow diz que ele existe porque correções de regra
+  *"podiam ficar no repositório sem nunca chegar à produção"* — ele fechou essa
+  lacuna no Firestore e **deixou o Storage aberto**.
+  ⚠️ **E A TRAVA DE ONTEM COBRIA A METADE ERRADA, exatamente como a das
+  Novidades no mesmo dia**: provar que o CAMINHO tem regra não prova nada se a
+  regra não sai do repositório. A trava passou a exigir as duas metades — o
+  `--only` incluindo `storage` e o `paths:` escutando `storage.rules`. Sem a
+  segunda, a regra só sairia quando alguém tocasse um arquivo do Firestore por
+  acaso, e **publicação por coincidência não é publicação**.
+
+- **🚨 O RESUMO DO R-4020 ESCONDIA DOIS TRIBUTOS — no CONTÁBIL** (01/09, Paulo,
+  CONDOMINIO EDIFICIO MONTE CARLO 08/2026: *"puxou as retenções certas agora,
+  mas está como se fosse subir para a REINF apenas a CSLL"*).
+  🔴 A linha dizia `IRRF R$ 0,00 · CSLL R$ 34,13` com **PIS 22,19 e COFINS
+  102,40 na tabela logo abaixo**. Duas leituras do mesmo fato na mesma tela, e
+  a de cima é o **VEREDITO** — a que decide se dá para transmitir.
+  📌 **Os números JÁ VINHAM do núcleo** (`totalPis`/`totalCofins` existem em
+  `retencao-pj-apuracao.js` desde sempre): é a **"flag que ninguém lê"**, a
+  mesma classe do `naoConferidos` (29/08) e do `errosResumo[].nome` (30/08).
+  **Terceira vez em uma semana, e as três chegaram como pergunta de quem usa.**
+  ✂️ Corrigido no repo do Contábil (PR #94) com trava por VARREDURA: ela lê do
+  NÚCLEO quais `total*` existem e exige que a tela nomeie cada um.
+
 - **📣 DEZ DIAS DE ENTREGA SEM UMA LINHA DE NOVIDADE — e a trava que existia
   cobria a metade ERRADA** (01/09, Paulo: *"nós não temos um campo de novidades
   onde deve conter todas as atualizações feitas?"*).
