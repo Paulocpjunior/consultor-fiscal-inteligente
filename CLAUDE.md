@@ -5,6 +5,70 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O APP DENUNCIAVA A RETENÇÃO ERRADA E NÃO ENTREGAVA A CERTA — 315,73 no
+  lugar de 158,72** (31/08, Paulo, no R-4020: *"preciso ter a opção de ajustar
+  as retenções para entregar com o valor correto, com o novo layout estão
+  emitindo errado"*).
+  📖 O caso, com os números do print — NFS-e 377235, **ELEVADORES ATLAS
+  SCHINDLER** → CONDOMINIO EDIFICIO MONTE CARLO: serviço **3.413,24** · campo
+  PIS **56,32** (1,65%) · campo COFINS **259,41** (7,60%) · **Contribuições
+  Sociais - Retidas 158,72** (4,65%), com a descrição *"3 - PIS/COFINS/CSLL
+  Retidos"* — e a própria nota avisando em Outras Informações: *"(5)
+  Informações preenchidas nos campos de PIS e COFINS são referentes aos valores
+  TOTAIS sobre a operação"*.
+  🔴 **A régua existia desde 07/08 e PARAVA na denúncia.**
+  `conferirRetencaoFederal` devolve `campos-sao-totais-da-operacao` e o app
+  dizia a frase certa — mas o evento não saía, ou sairia com **315,73**, quase
+  o DOBRO. **Denunciar sem dar saída é meia correção** (a lição da AFFITTARE,
+  24/08: *"aviso não conserta arquivo — quando o app tem como saber a resposta
+  certa, avisar não é entrega, é passar o problema adiante"*).
+  ✂️ `retencao-pj-ajuste.js` é o dono de *"quanto esta nota reteve, de
+  verdade"*, com **TRÊS origens em precedência** e a origem **CARIMBADA**:
+  **ajuste declarado** > **CSRF decomposta** > **documento**.
+  ✅ **E A DECOMPOSIÇÃO NÃO É RATEIO INVENTADO — é LEI, provada pelo próprio
+  documento**: Lei 10.833/2003 art. 30 dá 4,65% = 1% CSLL + 3% COFINS + 0,65%
+  PIS, e sobre a base da ATLAS isso é **22,19 + 102,40 + 34,13 = 158,72**,
+  exatamente o que a nota declara. **A soma fechar ao CENTAVO é o que autoriza
+  a derivação** — é a mesma régua do `origem: 'ficha-rateada'` do F600 (28/08),
+  e a sobra do arredondamento vai à **COFINS**, a MAIOR das três.
+  ⚠️ **SÓ DECOMPÕE QUANDO FECHA EM 4,65%.** Base com dedução ou retenção
+  parcial NÃO se decompõe por proporção deduzida: ali o app **não sabe**, a
+  nota vira `documento-suspeito` e **só o ajuste declarado resolve**. Decompor
+  "quase" é o rateio inventado com outra roupa.
+  🚨 **E AS DUAS SAÍDAS FÁCEIS MENTEM, por isso nenhuma foi tomada**: devolver
+  o documento declara o tributo do PRESTADOR como retido; devolver zero declara
+  que não houve retenção. O app diz que não sabe e pede o ajuste.
+  ⚠️ **A CSLL-que-é-o-total é OUTRO caso, com outra resposta**: ali PIS e
+  COFINS já vêm certos e falta só a CSLL individual (1% da base). Tratá-la como
+  a ATLAS sobrescreveria dado BOM.
+  ✍️ **O ajuste é uma DECLARAÇÃO** — autor obrigatório, motivo escrito (piso de
+  15 caracteres, o da T3 da DCTFWeb), **negativo e retenção maior que a base
+  RECUSADOS com o campo nomeado**, e **zero é resposta legítima** (o que não
+  vale é o ajuste vazio). Ele **não mexe na BASE**: a base está no documento, e
+  deixar reescrevê-la seria reescrever a nota.
+  🚨 **A CHAVE É A DA NOTA, nunca a do prestador** — é a lição do ✕ do FUNRURAL
+  de 30/08, um dia depois: decisão gravada no nível errado apaga o que ninguém
+  mandou apagar. E **a gravação é INCREMENTAL**: com o mapa vindo do front,
+  dois ajustes seguidos se sobrescreveriam e o primeiro voltaria ao valor do
+  documento SOZINHO.
+  ⚠️ **E O AJUSTE TRAZ A NOTA DE VOLTA**: sem isso, nota cujo documento não traz
+  retenção nenhuma sairia em `semRetencao` **antes** de o ajuste ser lido — e o
+  ajuste ficaria gravado sem efeito, que é a flag que ninguém lê na pior forma
+  (a retenção some).
+  📌 **O DONO É ÚNICO DE PROPÓSITO, e isso decidiu a CASA do módulo**: um
+  ajuste que valesse só para a tela do REINF faria o **SPED e o REINF
+  declararem números diferentes sobre a mesma nota**. Quem responde *"quanto
+  esta nota reteve"* é o CFI — é ele que conhece a forma do documento (a razão
+  escrita no topo do `reinf-retencoes-pj.js` desde 07/08).
+  ⚠️ **A AUTORIA SAI COM A FONTE** (`autorFonte`): pelo túnel o autor é o que o
+  app irmão AFIRMA, e este servidor não tem como verificar. Fingir que
+  verificou é o farol honesto ao contrário.
+  🚩 **O QUE ISTO NÃO FECHA, e vai dito**: o **F600** do EFD-Contribuições (a
+  retenção SOFRIDA, que é de nota de SAÍDA) continua com a régua antiga —
+  deixa a nota FORA, nomeada. São notas diferentes das do R-4020, e ligá-las ao
+  mesmo dono muda VALOR de arquivo fiscal: vale rever com medição própria,
+  nunca de carona.
+
 - **📉 "BAIXA DE ESTOQUE NO BLOCO K" — o K220 entrou, e o buraco do
   simplificado caiu de 8 para 7** (30/08, Paulo, esclarecendo o *"ajuste para
   devidas baixas"* do print anterior).
