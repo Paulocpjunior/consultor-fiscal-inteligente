@@ -5,6 +5,59 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "IMPORTADA COM SUCESSO" — E A NOTA NÃO APARECIA EM LUGAR NENHUM** (01/09,
+  Paulo, 0257 · MARCOS ANTONIO ZAMBOLIN: *"fiz a importação do PDF da NFSe, ele
+  diz que foi importado com sucesso, porém quando eu vou buscar a nota ou tiro
+  livro de serviços prestados não tem nenhuma nota"*).
+  🔴 **É A ARMADILHA DAS DUAS FORMAS NO CAMPO QUE RECORTA O MÊS.**
+  `documentos_fiscais.competencia` é gravada em **`AAAA-MM`** por todo o app, e
+  o leitor do PDF devolve **o que o PAPEL escreve** — `08/2026` no ABRASF e
+  **`18/08/2026`** na DANFSe nacional, onde o campo *"Competência da NFS-e"* é
+  uma **DATA**. A consulta é `where('competencia','==','2026-08')`: a nota
+  **ESTÁ no banco** e fica fora de TODO recorte de mês — a lista, o Livro de
+  Serviços Prestados e o SPED.
+  🚨 **O SINTOMA É O PIOR: não há erro nenhum.** A tela afirma a gravação, a
+  lista responde `XMLs Capturados (0)` — e ainda manda conferir **certificado e
+  procuração**, que é a primeira parada ERRADA. É a ausência PLAUSÍVEL: quem lê
+  conclui que a captura está quebrada e vai procurar no cadastro, que está
+  certo.
+  📌 **É a irmã da regra de 22/08 — *nunca consultar por igualdade um campo que
+  tem duas formas*** —, agora na COMPETÊNCIA e no trilho que lê PAPEL. A mesma
+  classe já liberou a segunda cobrança do caso HYPE (17/08) e fez o EFD sair
+  VAZIO dizendo que a empresa não teve movimento (22/08).
+  ✂️ **DOIS LADOS, e um só não bastava**: a GRAVAÇÃO passa pelo dono
+  (`recorteDaNfsePdf`, PURO — o importador é `.tsx` que carrega o `pdfjs`, e
+  régua dentro de tela é régua sem prova) e a LEITURA pergunta pelas **FORMAS**
+  (`formasDaCompetencia` no `in`), que é o que acha o acervo já gravado sem
+  backfill nenhum.
+  ⚠️ **A competência não se chuta, mas também não pode ficar VAZIA** — nota sem
+  competência some de todo recorte, que é este mesmo defeito com outra roupa.
+  A ordem é: campo do papel → **data de emissão** (fato do próprio documento,
+  com a origem CARIMBADA) → **RECUSA com o motivo**. E o `|| new Date()` do
+  `dhEmi` saiu: data de HOJE num documento de outro mês é a nota escriturada na
+  competência errada.
+  ⚠️ **E `new Date('11/05/2026')` É 5 DE NOVEMBRO** — o `Date` do JS lê a forma
+  brasileira como mês/dia. A data que o documento declara é a do TEXTO (a régua
+  de 22/08); o que mudou aqui é só a FORMA de gravar.
+  🐛 **E O ID LEVAVA `Date.now()`** quando a NFS-e não tem chave (prefeitura
+  própria): **reimportar o MESMO PDF criava uma segunda nota**, e ela contava
+  duas vezes no livro. Virou determinístico, então o reimport cai por cima do
+  mesmo documento — que é o que quem reimporta espera.
+  📌 **E O TOAST PASSOU A DIZER ONDE**: *"importada em 08/2026 — procure em XMLs
+  com a competência 08/2026"*. "Sucesso" sozinho foi exatamente o que fez o dia
+  ser gasto procurando.
+  🐛 **E A VARREDURA DA LIGAÇÃO NASCEU ACUSANDO CÓDIGO CERTO, nas duas pontas**:
+  ela proibia `Date.now()` no `.tsx` (e o `importadoEm: Date.now()` é o carimbo
+  CERTO de quando a nota entrou) e proibia o `where('competencia','==')` no
+  serviço (que continua sendo o **fallback do ilegível**). Estreitada para casar
+  a IDENTIDADE do documento e a linha que monta a constraint — alarme sobre
+  código certo é o que faz a equipe desligar a trava.
+  🚩 **O QUE ISTO NÃO CONSERTA, e vai dito**: nota já gravada com a competência
+  como DATA (`18/08/2026`) ou VAZIA continua fora do recorte — o `in` alcança
+  `MM/AAAA` e `AAAAMM`, e o dia não dá para adivinhar. O caminho é reimportar o
+  mesmo PDF; o documento antigo fica como duplicata invisível no filtro de mês,
+  e sai pela busca por número.
+
 - **🚨 EU AFIRMEI QUE O SEGREDO TINHA EXPIRADO — a validade estava na MESMA
   TELA dizendo 2028, e a Microsoft dizia a causa por extenso** (01/09, card
   Conexão SharePoint, `AADSTS7000215`).

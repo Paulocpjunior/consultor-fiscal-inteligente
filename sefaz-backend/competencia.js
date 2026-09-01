@@ -47,6 +47,13 @@ export function normalizarCompetencia(comp) {
     m = /^(\d{4})(\d{2})$/.exec(s);
     if (m) return mesValido(m[2]) ? `${m[1]}-${m[2]}` : null;
 
+    // DD/MM/AAAA — a DANFSe do padrão NACIONAL escreve o campo "Competência
+    // da NFS-e" como DATA (01/09, caso MARCOS ANTONIO ZAMBOLIN). Ler a data e
+    // devolver o mês dela é o que a leitura da tela já faz há tempo
+    // (`getCompetenciaDocumento`); o que faltava era o DONO conhecer a forma.
+    m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+    if (m) return mesValido(m[2]) ? `${m[3]}-${m[2]}` : null;
+
     return null;
 }
 
