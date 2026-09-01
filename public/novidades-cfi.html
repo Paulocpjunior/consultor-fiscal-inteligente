@@ -68,14 +68,212 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 22/08/2026 · leitura de 7 minutos</p>
+            <p>Departamento Fiscal · atualizado em 01/09/2026 · leitura de 12 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (22/08) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (01/09) — leia esta parte primeiro</h2>
+
+    <h3>1. 📉 Baixa de estoque no <strong>Bloco K</strong> (registro K220)</h3>
+    <p>O K200 é o <strong>saldo</strong>. A baixa que <strong>não passa por ordem de
+    produção</strong> — reclassificar um código, fracionar, trocar embalagem — é o
+    <strong>K220</strong>, e agora dá para apontar.</p>
+    <div class="onde">📍 <strong>Onde:</strong> SPED Fiscal → aba <strong>🏭 Bloco K</strong> →
+    <strong>+ Baixa de estoque</strong>.<br>
+    Ela tem <strong>duas pontas</strong>: o item que SAIU (com a quantidade) e o item que ENTROU
+    no lugar. O destino tem de ser <strong>diferente</strong> da origem, as duas quantidades
+    maiores que zero, e a data dentro da competência.</div>
+    <div class="alerta">⚠️ <strong>Consumo de insumo em produção é o K235</strong>, ali embaixo na
+    mesma tela — não é K220. Apontar a mesma baixa nos dois faz o livro contar o consumo em
+    <strong>dobro</strong>.<br>
+    ⚠️ No leiaute <strong>restrito aos saldos</strong> (K010 = 2) o K220 não sai — só o K200 é
+    admitido ali. Se você apontar mesmo assim, a geração <strong>avisa</strong> e diz que a saída
+    é trocar o leiaute em Dados Fiscais.</div>
+
+    <h3>2. ✍️ <strong>Retenção do R-4020</strong>: o app parou de mandar o valor errado</h3>
+    <p>A NFS-e de São Paulo tem campos de PIS e COFINS que <strong>muitos prestadores preenchem
+    com o tributo da operação deles</strong>, não com a retenção — e a própria nota costuma avisar
+    isso em "Outras Informações". Declarar aqueles valores <strong>infla a retenção</strong>.</p>
+    <p>Caso real: nota da ELEVADORES ATLAS SCHINDLER, serviço de R$ 3.413,24 — os campos traziam
+    PIS 56,32 e COFINS 259,41 (soma <strong>315,73</strong>), enquanto a retenção de verdade está
+    no campo <em>Contribuições Sociais - Retidas</em>: <strong>158,72</strong>. Quase o dobro.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Consultor Contábil → EFD-Reinf → <strong>Retenções
+    de PJ para o R-4020</strong> → <em>Buscar no Consultor Fiscal</em>.<br>
+    Agora ele devolve <strong>PIS 22,19 · COFINS 102,40 · CSLL 34,13</strong> — a retenção de
+    4,65% separada pelas alíquotas legais (Lei 10.833/2003), e a soma fecha ao centavo com o que
+    a nota declara.</div>
+    <div class="onde">✍️ <strong>E onde o app não consegue derivar</strong>, a linha fica marcada e
+    aparece o botão <strong>“Ajustar retenção da nota”</strong>: você digita os valores, escreve o
+    motivo (fica gravado com o seu nome) e há o <strong>↩ desfazer</strong>. O painel mostra o que
+    o documento traz ao lado dos campos, para você conferir.</div>
+    <div class="alerta">⚠️ O ajuste é <strong>da NOTA</strong>, não do prestador: duas notas do
+    mesmo fornecedor podem reter diferente.</div>
+
+    <h3>3. 📎 Importar <strong>NFS-e em PDF</strong> voltou a funcionar</h3>
+    <p>Quem tentava importar uma NFS-e em PDF levava
+    <code>storage/unauthorized</code> e nada era gravado. <strong>Nenhum PDF de NFS-e jamais foi
+    salvo</strong> — faltava a permissão do arquivo, e o erro só aparecia no clique.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → Importar → <strong>NFSe (PDF)</strong>.
+    Pode repetir as importações que falharam.</div>
+
+    <h3>4. ⛔ <strong>“Arquivo não é desta empresa”</strong> — a mensagem que era mentira</h3>
+    <p>Jogando o XML de uma NFS-e, a tela dizia <em>“0 desta empresa · 1 sem CNPJ legível”</em> e
+    gritava que o arquivo era de outro cliente. <strong>Era dela.</strong> A conferência da tela
+    conhecia NF-e e CT-e e <strong>não conhecia NFS-e</strong> (que usa prestador/tomador, não
+    emitente/destinatário).</p>
+    <div class="onde">Agora ela lê a NFS-e. E quando de fato <strong>não consegue ler</strong> o
+    arquivo, ela <strong>diz isso</strong> — em vez de afirmar que o arquivo é de outra empresa —
+    e <strong>deixa você importar</strong>: quem decide de quem é o documento é o servidor, e se
+    for mesmo de outro CNPJ a importação recusa nomeando o dono.</div>
+    <div class="alerta">⚠️ Se você conferiu cadastro de cliente por causa dessa mensagem nos
+    últimos dias, o cadastro provavelmente estava certo o tempo todo.</div>
+
+    <h3>5. 🏛️ O <strong>envio do ISS pelo sistema existe</strong> — faltava dizer o que falta</h3>
+    <p>O botão <strong>Enviar guia ao cliente</strong> do ISS ficava apagado e parecia função
+    inexistente. Ele faz o <strong>mesmo rito do DAS e do DARF</strong>: envio pelo servidor,
+    gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.</p>
+    <div class="onde">📍 O que falta é o <strong>PDF da guia</strong>. A guia do ISS é emitida
+    <strong>no portal da Prefeitura</strong> — o CFI não cria o número dela. Emita lá, clique em
+    <strong>📎 Anexar PDF da guia</strong> e o botão liga. Agora a tela escreve isso.</div>
+
+    <h3>6. 🚨 Falha do SharePoint: <strong>não é a pasta do cliente</strong></h3>
+    <p>A etapa 5 travava com <code>AADSTS7000215: Invalid client secret</code> e o app mandava
+    <em>“conferir o acesso à pasta”</em>. A pasta está certa: o que expirou é a
+    <strong>credencial do escritório</strong> — e enquanto ela não for renovada
+    <strong>nenhum cliente arquiva</strong>.</p>
+    <div class="alerta">⚠️ <strong>NÃO reenvie a guia</strong> por causa disso: o cliente já
+    recebeu, e reenviar <strong>duplica a cobrança</strong> sem resolver nada. A mensagem agora diz
+    isso, e quem resolve é a administração do sistema (renovar o segredo do Azure).</div>
+</section>
+
+<section>
+    <h2>O que mudou em 30 e 31/08</h2>
+
+    <h3>🌾 FUNRURAL: tirar <strong>uma</strong> nota tira <strong>uma</strong> nota</h3>
+    <p>O ✕ <em>“tirar do FUNRURAL”</em> ficava na linha da nota e apagava <strong>todas</strong> as
+    notas daquele produtor — inclusive a nota própria de entrada, que tem de ficar.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → aba <strong>🌾 DIPAM / Produtor
+    rural</strong>. Agora são duas decisões diferentes: <strong>“este fornecedor não gera
+    sub-rogação”</strong> (vale para todas as notas dele) e <strong>“esta nota não entra”</strong>
+    (só ela). O ↩ mostra <strong>quanto volta ao total</strong> antes do clique.</div>
+    <div class="alerta">⚠️ Se você tirou produtores do FUNRURAL nos últimos dias para limpar a
+    lista, vale conferir: pode ter saído nota que deveria ficar. O ↩ está na tela.</div>
+
+    <h3>🩺 Saúde dos crons: <strong>de qual empresa foi a falha</strong></h3>
+    <p>O card dizia <em>“1 falha(s)”</em> e não dizia de quem. Agora ele <strong>nomeia a
+    empresa</strong> e diz se a rodada foi <strong>automática</strong> ou se
+    <strong>alguém clicou</strong>.</p>
+    <div class="alerta">💡 <strong>cStat 656 não é problema de certificado</strong>: é limite de
+    consulta da SEFAZ (<em>Consumo Indevido</em>). A cura é <strong>esperar cerca de 1 hora</strong>
+    e sincronizar de novo — quem falha por certificado volta com erro de certificado.</div>
+
+    <h3>🏭 Aviso de <strong>tipo de item</strong> na indústria</h3>
+    <p>O app declara todo item como <em>“mercadoria para revenda”</em> no cadastro do SPED, que é o
+    certo no comércio. Na <strong>indústria</strong> ele passou a avisar na geração para você
+    conferir — a destinação (matéria-prima, produto acabado, uso e consumo) não está no XML e o app
+    não a deduz. <strong>O PVA aceita assim</strong>; o que muda é o livro.</p>
+</section>
+
+<section>
+    <h2>O que mudou em 29/08 — o Bloco K nasceu</h2>
+
+    <h3>🏭 Bloco K — produção e estoque</h3>
+    <div class="onde">📍 <strong>Onde:</strong> SPED Fiscal → aba <strong>🏭 Bloco K</strong>.
+    Você aponta o <strong>saldo de estoque</strong> (K200), as <strong>ordens de produção</strong>
+    (K230) e os <strong>insumos consumidos</strong> (K235).</div>
+    <div class="alerta">⚠️ <strong>Quantidade que ninguém informou NÃO vira zero.</strong> Sem
+    apontamento o bloco sai <em>sem dados</em> e a geração avisa — porque bloco zerado declara ao
+    Fisco que a empresa <strong>não produziu e não tem estoque</strong>, e isso é uma afirmação
+    falsa que o PVA aceita sem reclamar.<br>
+    ⚠️ Quem entrega o bloco e <strong>qual leiaute</strong> (K010) usa vem do cadastro: Empresas →
+    Dados Fiscais. Optante do Simples é <strong>dispensado</strong>.</div>
+
+    <h3>🔎 Captura de NFS-e: o farol passou a olhar o RESULTADO</h3>
+    <p>A tela dizia <strong>✓ NFSe SP</strong> e <strong>✓ Captura OK</strong> só porque alguém
+    tinha preenchido o cadastro — sem olhar se o trilho alguma vez entregou uma nota. Agora ela
+    responde pelo que <strong>chegou</strong>, tanto no portal de SP quanto no Padrão Nacional
+    (ADN), e diz quando <strong>nunca entregou nada</strong> daquela empresa.</p>
+    <div class="alerta">⚠️ <strong>“Sem movimento” continua sendo explicação, não alarme</strong>:
+    muitos municípios não transcrevem ao Padrão Nacional, e ali a saída é importar pelo próprio
+    município.</div>
+
+    <h3>🔢 CCM com uma sequência de zeros vale como <strong>vazio</strong></h3>
+    <p>O contorno antigo de digitar oito zeros no CCM fazia o app tratar aquilo como uma inscrição
+    de verdade — inclusive escrevendo <code>00000000</code> no campo <em>Inscrição Municipal</em>
+    dos dois SPED, e fazendo a empresa <strong>sumir da captura</strong> sem nenhum erro. Agora os
+    zeros são ignorados na leitura em todo o sistema.</p>
+    <div class="onde">📍 Não é preciso apagar nada no cadastro: o app ignora sozinho. Mas se a
+    empresa <strong>é de SP capital</strong>, o CCM de verdade precisa ser preenchido.</div>
+
+    <h3>🖱️ Os links dentro dos cards do Status de Captura funcionam</h3>
+    <p>Clicar no link de "sem entrega" dentro do card aplicava o filtro do <strong>card</strong>,
+    não o do link. Corrigido — e agora a tela <strong>rola até a lista</strong> e o seletor
+    <strong>diz qual filtro está valendo</strong>.</p>
+
+    <h3>🧾 SPED: uma leva de correções no arquivo</h3>
+    <div class="onde">Entraram, entre outras: o <strong>bloco G (CIAP)</strong> e o
+    <strong>C195/C197</strong> que saíam com todas as linhas grudadas; o cadastro
+    <strong>0300</strong> dos bens do CIAP, que não existia; o <strong>0460</strong> das
+    observações; os <strong>ajustes de ST</strong> que estavam no campo do vizinho; o contabilista
+    do <strong>0100</strong>, que saía com nome e CRC inventados quando a configuração estava
+    vazia; e a conferência de <strong>tamanho e contagem de campos</strong> passou a valer em todos
+    os blocos.</div>
+    <div class="alerta">⚠️ <strong>Não refaça arquivo já entregue e aceito por conta própria.</strong>
+    Se algum desses pontos afeta uma competência sua, fale com o Paulo antes.</div>
+</section>
+
+<section>
+    <h2>O que mudou entre 26 e 28/08</h2>
+
+    <h3>🔒 “Dar fim de mês” — o ato que fecha a competência</h3>
+    <p>Até aqui o app <strong>deduzia</strong> que o mês tinha fechado olhando documentos, ficha e
+    tarefas. Agora existe o <strong>ato</strong>: as 5 etapas da Rotina viram a
+    <strong>pré-condição</strong>, e o fechamento carimba <em>quando, por quem, com qual acervo e
+    com quais valores</em>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês, no card do cliente.<br>
+    · Quem fecha é o <strong>colaborador</strong>; quem <strong>reabre é só admin</strong>, com
+    motivo escrito — porque o número pode já ter sido importado pela contabilidade.<br>
+    · <strong>Uma empresa por vez.</strong><br>
+    · Etapa em âmbar <strong>bloqueia</strong>, e a tela nomeia qual e onde se resolve.</div>
+    <div class="alerta">⚠️ Depois de fechado, o mês <strong>para de cobrar</strong>: nota que chegar
+    atrasada não devolve o cliente ao vermelho. E o SPED gerado depois sai do
+    <strong>acervo que o carimbo congelou</strong> — o arquivo de agosto regerado em dezembro sai
+    igual.</div>
+
+    <h3>📋 Etapa 4: obrigação que o app não cobre agora se <strong>declara</strong></h3>
+    <p>A etapa "Entregar obrigações" não tinha como fechar em cliente cujo regime tem obrigação
+    fora do catálogo (o INSS Patronal, por exemplo, depende da folha). Ela travava o mês
+    <strong>para sempre</strong>. Agora a entrega dessas obrigações se declara, com autor e motivo,
+    e elas continuam nomeadas no resumo.</p>
+    <div class="onde">📍 Botão <strong>“Já entreguei estas obrigações por fora — registrar”</strong>,
+    na própria linha da Rotina.</div>
+
+    <h3>♻️ Refazer o rito de um envio</h3>
+    <p>Quando o envio falhava por causa que depois foi corrigida (pasta do SharePoint que passou a
+    existir, tarefa que passou a ser gerada), o registro continuava dizendo o erro antigo
+    <strong>para sempre</strong> — e a única saída visível era reenviar a guia, que
+    <strong>duplica a cobrança</strong>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> painel de Envios (rito), botão por causa. Ele não
+    "marca como feito": tenta de novo de verdade, e o histórico guarda o antes e o depois.</div>
+
+    <h3>📊 Regime tributário: a coluna passou a mostrar o que você cadastrou</h3>
+    <p>A lista do Lucro escrevia <strong>“Presumido”</strong> para quem estava com o campo antigo
+    vazio — inclusive para entidades <strong>imunes</strong>. Agora ela mostra o regime do cadastro,
+    com a origem, e escreve <strong>“Não definido”</strong> em âmbar quando é o caso.</p>
+    <div class="onde">📍 E entrou o campo <strong>Contribuinte de ICMS (sim/não)</strong> em Dados
+    Fiscais: ter inscrição estadual <strong>não é</strong> apurar ICMS, e empresas de serviço de
+    outros estados estavam sendo cobradas do E116 à toa.</div>
+
+    <h3>📄 Relatórios: a coluna <strong>Prestador</strong> parou de sair vazia</h3>
+    <p>Em competência capturada pelo portal a coluna vinha <em>“—”</em> e no mês importado pelo
+    navegador vinha cheia. Eram duas formas de gravar o mesmo dado; agora as duas são lidas.</p>
+</section>
+
+<section>
+    <h2>O que mudou em 22/08</h2>
 
     <h3>1. Três campos novos em <strong>Dados Fiscais</strong> — e o que acontece se ficarem em branco</h3>
     <p>O gerador do SPED já <em>lia</em> esses três campos, e não havia onde preenchê-los: ele

@@ -5,6 +5,42 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📣 DEZ DIAS DE ENTREGA SEM UMA LINHA DE NOVIDADE — e a trava que existia
+  cobria a metade ERRADA** (01/09, Paulo: *"nós não temos um campo de novidades
+  onde deve conter todas as atualizações feitas?"*).
+  🔴 Temos, e a última entrada era de **22/08**. Entre ela e hoje entraram o
+  **bloco K**, o **"dar fim de mês"**, o **ajuste de retenção do R-4020**, o
+  **FUNRURAL por nota**, a **captura por resultado**, o **K220** e os três
+  defeitos de ontem. **Nada disso a equipe soube que existia.**
+  📌 **E A LIÇÃO É SOBRE A TRAVA, não sobre o esquecimento.** Em 15/08 nasceu
+  `novidadesService.test.ts` justamente por causa disto — e ele compara
+  `NOVIDADES_VERSAO` com o *"atualizado em"* da página. Ou seja: ele garante
+  que, **SE** a página mudar, o selo vermelho acende. Ele **não** garante que a
+  página MUDE quando há entrega — então passou VERDE o tempo todo.
+  🚨 **É a classe que esta casa mais paga, agora dentro da própria trava: ela
+  existe, roda, passa — e não cobre o caso pelo qual foi criada.** A mesma
+  família do teste que afirma AUSÊNCIA (29/08) e do `coberturaIncompleta` que
+  ninguém lia.
+  ✂️ `novidadesCobremAsEntregas.test.ts` fecha o outro lado: o **CLAUDE.md é
+  atualizado em TODO PR**, então a data mais recente dele é o proxy FIEL de
+  *"houve entrega"*. Se ela for mais nova que a das Novidades, ou a página está
+  atrasada, ou aquela entrega não muda nada para quem usa — e aí isso se
+  **DECLARA com o motivo** (`DATAS_SEM_EFEITO_PARA_QUEM_USA`), nunca em
+  silêncio.
+  🐛 **E ELA NASCEU ACUSANDO CÓDIGO CERTO — o vício pela quinta vez.** A
+  primeira versão lia TODA `DD/MM` do arquivo e a maior era **`15/12`**: o
+  *"Convênio s/nº 15/12/1970"*. Junto vinham `50/99` (CST do IPI), `87/96` (a
+  LC do CIAP), `55/65` (modelos de documento) e `17/99` (portaria CAT). A
+  assinatura passou a ser a que os mata-burros de fato usam — data entre
+  PARÊNTESES e **não seguida de barra**, que seria o ano de uma norma.
+  ⚠️ **E o texto é para quem USA, não para quem programa**: o que mudou, **onde
+  fica** e o que a pessoa precisa fazer. Um segundo teste exige o *"Onde:"* na
+  seção do topo — novidade sem lugar é a mesma coisa que aviso apontando para o
+  nada (achado 18, 21/08).
+  📌 **REGRA QUE FICA: trava de comunicado se prova pelos DOIS lados** — que o
+  selo acende quando a página muda, E que a página muda quando houve entrega.
+  A primeira sozinha é o silêncio com cara de cobertura.
+
 - **🚨 TRÊS DEFEITOS DE UM DIA DE FIM DE MÊS — e os três diziam a coisa ERRADA
   para quem lia** (31/08, três prints do Paulo).
   🔴 **(1) `nfse_pdfs/` NUNCA TEVE REGRA NO STORAGE.** Importando uma NFS-e em
