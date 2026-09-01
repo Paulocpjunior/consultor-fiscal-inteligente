@@ -1,4 +1,4 @@
-name: Deploy Firestore (rules + indexes)
+name: Deploy Firestore + Storage (rules + indexes)
 
 # Publica as REGRAS e os ÍNDICES do Firestore automaticamente — antes isso só
 # saía por `firebase deploy` manual na máquina de alguém, então correções de
@@ -14,6 +14,7 @@ on:
     paths:
       - firestore.rules
       - firestore.indexes.json
+      - storage.rules
       - firebase.json
   workflow_dispatch: {}
 
@@ -43,13 +44,28 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      - name: Deploy Firestore rules + indexes
+      - name: Deploy Firestore rules + indexes + Storage rules
         # ADC: o auth@v2 exporta GOOGLE_APPLICATION_CREDENTIALS, que o
         # firebase-tools consome. --non-interactive SEM --force: publica/atualiza
         # regras e índices mas NUNCA apaga índices ausentes do arquivo (evita o
         # incidente de deleção acidental de índices via prompt "Yes").
+        #
+        # 🚨 `storage` ENTROU EM 01/09 — e ele faltava desde sempre.
+        #
+        # Em 31/08 a regra de `/nfse_pdfs/{empresaId}/{file}` foi escrita para
+        # destravar a importação de NFS-e em PDF (Prefeitura de Santo André),
+        # o `firebase.json` já declarava `"storage": {"rules": "storage.rules"}`
+        # … e **nenhum workflow publicava esse arquivo**. No dia seguinte o
+        # colaborador levou EXATAMENTE o mesmo `storage/unauthorized`: a regra
+        # estava no repositório e nunca chegou à produção.
+        #
+        # 📌 É a lição de 13/08 um nível acima — *"regra escrita não é regra
+        # LIGADA"* virou *"regra escrita não é regra IMPLANTADA"*. O comentário
+        # no topo deste workflow já dizia que ele existe porque correções de
+        # regra "podiam ficar no repositório sem nunca chegar à produção"; ele
+        # fechou essa lacuna no Firestore e deixou o Storage aberto.
         run: |
           npx -y firebase-tools@13.35.1 deploy \
-            --only firestore:rules,firestore:indexes \
+            --only firestore:rules,firestore:indexes,storage \
             --project consultorfiscalapp \
             --non-interactive

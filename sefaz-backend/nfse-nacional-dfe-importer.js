@@ -28,6 +28,9 @@ import {
     documentoDaNfseNacional, lacunasDaNfseNacional,
     eventoDaNfseNacional, eventoJaRegistrado,
 } from './nfse-nacional-gravacao.js';
+// Dono único da FORMA do leiaute nacional — lido também pela importação
+// manual (services/xmlParserService.ts). Ver o cabeçalho do módulo.
+import { ehNfseNacional, lerNfseNacional } from './nfse-nacional-leitura.js';
 
 const COLLECTION = 'documentos_fiscais';
 const STORAGE_PREFIX = 'nfse-nacional';
@@ -48,10 +51,12 @@ function pickTag(xml, tag) {
     return m ? m[1].trim() : null;
 }
 
-function pickAttr(xml, tag, attr) {
-    const m = xml.match(new RegExp(`<${tag}[^>]*\\s${attr}="([^"]+)"`, 'i'));
-    return m ? m[1] : null;
-}
+// 🗑️ `pickAttr` FOI DELETADO em 01/09: ele só servia para ler o `Id` do
+// `<infNFSe>`, e essa leitura passou para o dono (`nfse-nacional-leitura.js`).
+// Código morto no SPED costuma SER a régua velha — foi o caso do
+// `MODELOS_BLOCO_C` —, e mantê-lo aqui seria a isca para alguém voltar a ler o
+// leiaute nacional por fora do dono. A trava `spedCodigoMortoEhReguaVelha`
+// acusou na primeira execução, fazendo exatamente o que existe para fazer.
 
 function decompressIfNeeded(content, isGzipBase64) {
     if (!isGzipBase64) return content;
@@ -70,7 +75,9 @@ function decompressIfNeeded(content, isGzipBase64) {
  */
 function classificarDfe(xml) {
     if (/<eventoNFSe|<evento[^>]/i.test(xml)) return 'evento';
-    if (/<NFSe|<infNFSe/i.test(xml)) return 'nfseNacional';
+    // Quem responde "é NFS-e nacional?" é o dono — duas respostas fariam a
+    // captura aceitar um arquivo que a importação manual recusa, e vice-versa.
+    if (ehNfseNacional(xml) || /<NFSe[\s>]/i.test(xml)) return 'nfseNacional';
     return 'desconhecido';
 }
 
@@ -79,38 +86,43 @@ function classificarDfe(xml) {
  * Os nomes de tag aqui são os do padrão nacional NFS-e (leiaute oficial).
  */
 function extrairMetadadosNfse(xml) {
-    const chave = pickAttr(xml, 'infNFSe', 'Id')?.replace(/^NFSe/i, '') || pickTag(xml, 'chaveAcesso');
-    const numero = pickTag(xml, 'nNFSe') || pickTag(xml, 'numero');
-    const dataEmissao = pickTag(xml, 'dhEmi') || pickTag(xml, 'dataEmissao');
-    const codMunicipio = pickTag(xml, 'cMunIncidencia') || pickTag(xml, 'cMun') || pickTag(xml, 'codigoMunicipio');
-
-    // Prestador
-    const prestadorCnpj = (xml.match(/<CNPJEmit>([\d]+)<\/CNPJEmit>/i) || [])[1]
-        || (xml.match(/<prest[\s\S]*?<CNPJ>([\d]+)<\/CNPJ>/i) || [])[1];
-    const prestadorIM = pickTag(xml, 'IM');
-
-    // Tomador
-    const tomadorCnpj = (xml.match(/<tomad[\s\S]*?<CNPJ>([\d]+)<\/CNPJ>/i) || [])[1];
-    const tomadorCpf = (xml.match(/<tomad[\s\S]*?<CPF>([\d]+)<\/CPF>/i) || [])[1];
-
-    // Valores
-    const valorServico = parseFloat(pickTag(xml, 'vServPrest') || pickTag(xml, 'vServ') || pickTag(xml, 'valorServico') || '0');
-    const valorIss = parseFloat(pickTag(xml, 'vISSQN') || pickTag(xml, 'vISS') || pickTag(xml, 'valorIss') || '0');
-    const aliquotaIss = parseFloat(pickTag(xml, 'pAliqAplicada') || pickTag(xml, 'pAliq') || pickTag(xml, 'aliquotaIss') || '0');
+    // 🚨 A LEITURA MUDOU DE CASA — e o motivo é um defeito que estava VIVO.
+    //
+    // O regex do tomador aqui era `<tomad[\s\S]*?<CNPJ>`, e a tag do leiaute
+    // nacional é **`<toma>`**: "tomad" NUNCA casa com "toma", então o tomador
+    // saía vazio em toda NFS-e nacional capturada. Passou despercebido porque
+    // o histórico deste trilho é ZERO documento (medição de 23/08) — era o
+    // defeito esperando a primeira nota chegar.
+    //
+    // Em 01/09 o mesmo leiaute precisou ser lido pela IMPORTAÇÃO MANUAL (4BZ,
+    // município fora de SP), e duas leituras do mesmo arquivo é o defeito que
+    // esta casa mais paga. `nfse-nacional-leitura.js` virou o dono único; aqui
+    // sobra só o encaixe nos nomes que a gravação já usa.
+    const lida = lerNfseNacional(xml);
+    const prestador = lida.prestador || {};
+    const tomador = lida.tomador || {};
 
     return {
         tipoDoc: 'nfseNacional',
-        chave,
-        numero,
-        dataEmissao,
-        codMunicipio,
-        prestadorCnpj,
-        prestadorIM,
-        tomadorCnpj,
-        tomadorCpf,
-        valorServico,
-        valorIss,
-        aliquotaIss,
+        chave: lida.chave || null,
+        numero: lida.numero || null,
+        dataEmissao: lida.dhEmi || null,
+        codMunicipio: lida.codMunicipio || null,
+        prestadorCnpj: prestador.cnpjCpf || undefined,
+        prestadorIM: prestador.im || null,
+        // ⚠️ CNPJ e CPF continuam SEPARADOS: quem lê decide a natureza do
+        // tomador por qual dos dois veio, e juntá-los apagaria essa diferença.
+        tomadorCnpj: tomador.cnpjCpf && tomador.cnpjCpf.length === 14
+            ? tomador.cnpjCpf : undefined,
+        tomadorCpf: (tomador.cnpjCpf && tomador.cnpjCpf.length === 11)
+            ? tomador.cnpjCpf : undefined,
+        // ⚠️ Aqui o `?? 0` é do CONTRATO ANTIGO desta função (a gravação já
+        // trata o zero), mas a AUSÊNCIA vai DITA em `lacunas` — que é o que o
+        // `lacunasDaNfseNacional` existe para carregar.
+        valorServico: lida.valores.servico ?? 0,
+        valorIss: lida.valores.iss ?? 0,
+        aliquotaIss: lida.valores.aliquotaIss ?? 0,
+        lacunasLeitura: lida.lacunas,
     };
 }
 
