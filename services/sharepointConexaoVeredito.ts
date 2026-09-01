@@ -48,6 +48,21 @@ export const ACAO_CREDENCIAL = 'Enquanto isto durar, NENHUM arquivo é gravado n
     + 'O tenant e o client id vivem CRAVADOS em .github/workflows/deploy-proxy.yml (mudar só no Cloud Run '
     + 'é desfeito no próximo deploy do proxy) — preencher grupo/pasta do cliente não resolve isto.';
 
+/**
+ * A ação COMPLETA do card: o que está parado + a instrução da causa que a
+ * Microsoft de fato respondeu.
+ *
+ * 🚨 A parte que muda por CAUSA tem dono no backend
+ * (`instrucaoDaCredencial`), e não é preciosismo: em 01/09 a frase do app
+ * AFIRMAVA que o segredo tinha expirado enquanto a resposta da Microsoft dizia
+ * que o que fora enviado era o **ID** do segredo, não o **VALOR** — e a
+ * validade, na mesma tela do Azure, era 2028. Dizer a falha errada manda
+ * renovar o que não precisava, e deixa a causa real de pé.
+ */
+export function acaoCredencialConexao(motivo?: string | null): string {
+    return `${ACAO_CREDENCIAL} ${instrucaoDaCredencial(motivo)}`;
+}
+
 export interface VereditoConexao {
     cor: CorConexao;
     titulo: string;
@@ -91,9 +106,9 @@ export interface UltimoSync {
 // quem MAIS lê — o painel de envios e a Rotina precisam dela. Em 31/08 esta
 // cópia conhecia o `AADSTS90002` e o painel não conhecia nenhum código: a
 // segunda cópia divergiu no primeiro erro novo, exatamente como sempre.
-import { ASSINATURA_CREDENCIAL } from '../sefaz-backend/sharepoint-erro-credencial.js';
+import { ASSINATURA_CREDENCIAL, instrucaoDaCredencial } from '../sefaz-backend/sharepoint-erro-credencial.js';
 
-export { ASSINATURA_CREDENCIAL };
+export { ASSINATURA_CREDENCIAL, instrucaoDaCredencial };
 
 /** A primeira mensagem de erro que a rodada guardou, seja de onde for. */
 export function primeiroMotivoDoSync(lastSync?: UltimoSync | null): string | null {
@@ -147,7 +162,7 @@ export function vereditoConexaoSharePoint(p: {
             cor: 'erro',
             titulo: '✗ Configurado, mas o proxy NÃO consegue autenticar na Microsoft.',
             detalhe: health.tokenErro || null,
-            acao: ACAO_CREDENCIAL,
+            acao: acaoCredencialConexao(health.tokenErro),
         };
     }
 
@@ -162,7 +177,7 @@ export function vereditoConexaoSharePoint(p: {
             cor: 'erro',
             titulo: '✗ Configurado, mas o proxy NÃO consegue autenticar na Microsoft.',
             detalhe: motivo,
-            acao: ACAO_CREDENCIAL,
+            acao: acaoCredencialConexao(motivo),
         };
     }
 

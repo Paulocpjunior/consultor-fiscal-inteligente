@@ -13,6 +13,7 @@
 // ============================================================================
 import {
     ehFalhaDeCredencial, pendenciaDeGravacaoSharePoint, ACAO_CREDENCIAL_ENVIO,
+    causaDaFalhaDeCredencial, instrucaoDaCredencial,
 } from '../sefaz-backend/sharepoint-erro-credencial.js';
 import { pendenciaSharePoint } from '../sefaz-backend/envio-imposto-painel.js';
 
@@ -56,10 +57,13 @@ describe('🚨 a ação da credencial diz as três coisas que ninguém deduziria
         expect(p.acao).toMatch(/DUPLICA a cobrança/);
     });
 
-    it('e onde a credencial vive — segredo do Azure AD EXPIRA', () => {
-        expect(ACAO_CREDENCIAL_ENVIO).toMatch(/graph-client-secret/);
-        expect(ACAO_CREDENCIAL_ENVIO).toMatch(/EXPIRA/);
-        expect(ACAO_CREDENCIAL_ENVIO).toMatch(/deploy-proxy\.yml/);
+    // 🐛 ESTA ASSERÇÃO EXIGIA A FRASE ERRADA — ela pedia `/EXPIRA/`, e a frase
+    // do app AFIRMAVA expiração enquanto a Microsoft respondia outra coisa e a
+    // validade, na tela do Azure, era 2028. Ela DESCREVIA o defeito em vez de
+    // pegá-lo; trocada pelo que a resposta de fato diz.
+    it('e onde a credencial vive, sem afirmar a causa errada', () => {
+        expect(ACAO_CREDENCIAL_ENVIO).not.toMatch(/EXPIRA/);
+        expect(p.acao).toMatch(/graph-client-secret/);
     });
 
     // ⚠️ Erro de PASTA mantém a ação DELE — mandar mexer no proxy por causa
@@ -69,6 +73,60 @@ describe('🚨 a ação da credencial diz as três coisas que ninguém deduziria
         expect(q.deQuem).toBe('empresa');
         expect(q.acao).toMatch(/conferir o acesso à pasta/);
         expect(q.acao).not.toMatch(/DUPLICA/);
+    });
+});
+
+// ============================================================================
+// 🚨 "CREDENCIAL RECUSADA" NÃO É UMA CAUSA SÓ — e o app afirmava a ERRADA
+//
+// 01/09. O card dizia *"segredo do Azure AD EXPIRA, e a renovação é gerar um
+// novo"*; a tela do Azure mostrava validade até **10/05/2028** e a Microsoft
+// respondia, com todas as letras, que o que fora enviado era o **ID** do
+// segredo e não o **VALOR**. Renovar o segredo não resolveria — e a tela do
+// Azure induz exatamente esse erro: o Secret ID fica copiável para sempre, o
+// Valor aparece só no instante em que o segredo é criado.
+// ============================================================================
+describe('🚨 a causa sai da RESPOSTA, e o app não deduz o resto', () => {
+    it('o erro REAL do print é ID em vez de VALOR — a própria resposta diz', () => {
+        expect(causaDaFalhaDeCredencial(ERRO_REAL)).toBe('segredo-id-em-vez-do-valor');
+        const acao = instrucaoDaCredencial(ERRO_REAL);
+        expect(acao).toMatch(/ID do segredo, não o VALOR/);
+        // ⚠️ E ela DESMENTE a leitura de validade, que é a primeira parada errada.
+        expect(acao).toMatch(/NÃO é validade/);
+        // O :latest é lido quando o contêiner sobe — gravar a versão nova não basta.
+        expect(acao).toMatch(/REVISÃO NOVA do proxy/);
+    });
+
+    it('a frase pela SENTENÇA, sem depender do código', () => {
+        expect(causaDaFalhaDeCredencial(
+            'Ensure the secret being sent in the request is the client secret value, not the client secret ID',
+        )).toBe('segredo-id-em-vez-do-valor');
+    });
+
+    // ⚠️ Segredo VENCIDO é outro fato, com outra ação — e quem decide é a
+    // palavra "expired" na resposta, nunca um código de memória.
+    it('segredo expirado é OUTRA causa', () => {
+        const m = 'AADSTS7000222: The provided client secret keys for app ... are expired.';
+        expect(causaDaFalhaDeCredencial(m)).toBe('segredo-expirado');
+        expect(instrucaoDaCredencial(m)).toMatch(/venceu/);
+    });
+
+    it('tenant inexistente mantém a ação dele (o workflow)', () => {
+        expect(causaDaFalhaDeCredencial('AADSTS90002: Tenant not found')).toBe('tenant-inexistente');
+        expect(instrucaoDaCredencial('AADSTS90002: Tenant not found')).toMatch(/deploy-proxy\.yml/);
+    });
+
+    // 🚨 SEM ASSINATURA CONHECIDA O APP NÃO INVENTA MOTIVO: ele diz que a
+    // credencial foi recusada e manda levar a mensagem inteira. Afirmar aqui é
+    // mandar procurar no lugar errado, que foi o custo do dia.
+    it('causa desconhecida NÃO vira motivo inventado', () => {
+        const m = 'AADSTS50011: The redirect URI specified does not match';
+        expect(causaDaFalhaDeCredencial(m)).toBe('indeterminada');
+        const acao = instrucaoDaCredencial(m);
+        expect(acao).toMatch(/não diz qual é a causa/);
+        expect(acao).not.toMatch(/venceu|ID do segredo/);
+        // continua sendo credencial: o balde não mudou
+        expect(ehFalhaDeCredencial(m)).toBe(true);
     });
 });
 
