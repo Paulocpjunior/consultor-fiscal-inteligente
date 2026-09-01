@@ -73,6 +73,67 @@ export function ehFalhaDeCredencial(motivo) {
 // dele seria inventar código de tabela oficial.
 // ============================================================================
 
+// ============================================================================
+// 🚨 SÃO DOIS APPS DO AZURE, E A FRASE FALAVA COMO SE FOSSE UM SÓ
+//
+// 01/09, ainda no mesmo dia: com o card já dizendo ID×Valor, o Paulo foi
+// mandar o DAS da ZAMBOLIN e levou **o MESMO `AADSTS7000215`** — só que
+// nomeando **outro aplicativo**. A própria resposta da Microsoft carrega o id:
+//
+//   · card Conexão SharePoint → app 'a876887f-a126-424f-8d8a-fc011519855e'
+//   · envio de e-mail (Graph) → app '59fd4ec9-37bd-472c-9fa7-373461dffd50'
+//
+// 🔴 São credenciais DIFERENTES, guardadas em lugares DIFERENTES — renovar uma
+// não conserta a outra. A frase mandava, nos dois casos, gravar em
+// `graph-client-secret` e subir revisão do PROXY: para quem estava sem enviar
+// e-mail, isso é a primeira parada ERRADA de novo, um dia depois.
+//
+// 📌 QUEM DECIDE É O TEXTO DA RESPOSTA — o id do app vem escrito nela, como
+// vinha a diferença entre ID e Valor. O que o app faz é LER e dizer onde
+// aquele segredo mora.
+//
+// ⚠️ E ONDE CADA UM MORA FOI MEDIDO, não deduzido: `grep GRAPH_` nos workflows
+// deste repo acha o segredo do PROXY cravado no `deploy-proxy.yml` e **nenhum**
+// escrevendo o `GRAPH_CLIENT_SECRET` do serviço do CFI — ou seja, o do e-mail
+// vive na configuração do serviço, e ali a edição no console PERSISTE (o
+// deploy passa só a imagem e `--update-*`, que mescla). Foi ler o workflow que
+// evitou repetir, ao contrário, o erro de 28/08.
+//
+// ⚠️ App NÃO MAPEADO devolve o id CRU e nenhum lugar inventado: dizer onde
+// gravar um segredo que talvez não seja esse é o que este módulo existe para
+// não fazer.
+// ============================================================================
+
+/** Os apps que a Microsoft já nomeou numa recusa real, com onde o segredo mora. */
+export const APPS_AZURE = {
+    'a876887f-a126-424f-8d8a-fc011519855e': {
+        nome: 'proxy do SharePoint (arquivamento de XML e da guia)',
+        onde: 'Secret Manager → graph-client-secret (projeto consultorfiscalapp), e depois uma REVISÃO NOVA '
+            + 'do proxy (Actions → Deploy SharePoint Proxy → Run workflow): o :latest só é lido quando o '
+            + 'contêiner sobe.',
+    },
+    '59fd4ec9-37bd-472c-9fa7-373461dffd50': {
+        nome: 'envio de e-mail pelo Microsoft Graph (guia ao cliente)',
+        onde: 'na variável GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente (Cloud Run). '
+            + '⚠️ O tráfego deste serviço fica PINADO numa revisão: editar a variável cria uma revisão NOVA '
+            + 'a 0% de tráfego, então é preciso rotear o tráfego para ela (ou esperar o próximo deploy, que '
+            + 'carrega a variável junto).',
+    },
+};
+
+/**
+ * Qual app do Azure a Microsoft nomeou na recusa.
+ *
+ * Devolve o id CRU mesmo quando ele não está mapeado — é ele que a pessoa
+ * procura no portal do Azure.
+ */
+export function appDaCredencial(motivo) {
+    const m = /app\s+'([0-9a-f-]{36})'/i.exec(String(motivo || ''));
+    const id = m ? m[1].toLowerCase() : null;
+    const conhecido = id ? APPS_AZURE[id] : null;
+    return { id, nome: conhecido ? conhecido.nome : null, onde: conhecido ? conhecido.onde : null };
+}
+
 /**
  * Qual é a causa da recusa, quando a resposta da Microsoft permite dizer.
  *
@@ -90,6 +151,25 @@ export function causaDaFalhaDeCredencial(motivo) {
 }
 
 /**
+ * ONDE aquele segredo mora — a metade que faltava.
+ *
+ * 🚨 São DOIS apps do Azure com credenciais próprias, e a resposta da Microsoft
+ * nomeia qual deles recusou. Mandar gravar no lugar do outro é a primeira
+ * parada errada com cara de instrução precisa.
+ */
+function ondeGravar(motivo) {
+    const app = appDaCredencial(motivo);
+    if (app.onde) return ` Este é o app do ${app.nome} (${app.id}) — grave a versão nova ${app.onde}`;
+    if (app.id) {
+        return ` A Microsoft nomeou o app ${app.id}, que este app não conhece: procure esse id no portal do `
+            + 'Azure para saber de qual credencial se trata. O CFI tem DUAS — a do proxy do SharePoint e a do '
+            + 'envio de e-mail —, e gravar na errada não resolve.';
+    }
+    return ' ⚠️ A resposta não nomeou o aplicativo: leve a mensagem INTEIRA ao portal do Azure. O CFI tem '
+        + 'DUAS credenciais (proxy do SharePoint e envio de e-mail) e elas se gravam em lugares diferentes.';
+}
+
+/**
  * A instrução da causa — a parte que MUDA conforme o que a Microsoft
  * respondeu. Ela é de DONO ÚNICO porque os dois leitores (o card "Conexão
  * SharePoint" e o painel de envios) precisam dizer a mesma coisa: em 31/08 as
@@ -102,15 +182,12 @@ export function instrucaoDaCredencial(motivo) {
                 + 'No Azure (App registrations → Certificates & secrets) o Secret ID é um GUID e fica visível '
                 + 'sempre; o Valor aparece SÓ no instante em que o segredo é criado e depois vira hmB*** — '
                 + 'não há como recuperá-lo, é preciso criar um segredo NOVO e copiar a coluna Valor na hora. '
-                + '⚠️ Isto NÃO é validade: segredo dentro do prazo recusa igual se o que foi gravado foi o ID. '
-                + 'Grave a versão nova em Secret Manager → graph-client-secret (projeto consultorfiscalapp) e '
-                + 'suba uma REVISÃO NOVA do proxy: o :latest é resolvido quando o contêiner sobe, então a '
-                + 'revisão que já está no ar continua com o valor velho.';
+                + '⚠️ Isto NÃO é validade: segredo dentro do prazo recusa igual se o que foi gravado foi o ID.'
+                + ondeGravar(motivo);
         case 'segredo-expirado':
             return 'O segredo venceu. Crie um novo no Azure (App registrations → Certificates & secrets → '
-                + 'New client secret), copie a coluna Valor NA HORA (depois ela some), grave a versão nova em '
-                + 'Secret Manager → graph-client-secret e suba uma REVISÃO NOVA do proxy — o :latest só é '
-                + 'lido quando o contêiner sobe.';
+                + 'New client secret) e copie a coluna Valor NA HORA — depois ela some.'
+                + ondeGravar(motivo);
         case 'tenant-inexistente':
             return 'O tenant enviado não existe. Ele vive CRAVADO em .github/workflows/deploy-proxy.yml '
                 + '(SHAREPOINT_TENANT_ID) — confira contra o issuer que o endpoint público de descoberta da '
@@ -120,6 +197,30 @@ export function instrucaoDaCredencial(motivo) {
                 + 'INTEIRA (código AADSTS, Trace ID e Timestamp) para o portal do Azure. O app não deduz o '
                 + 'motivo: dizer a falha errada manda procurar no lugar errado.';
     }
+}
+
+/**
+ * 🚨 A MESMA RECUSA CHEGA NO ENVIO DA GUIA — e lá ela chegava CRUA.
+ *
+ * 01/09: mandando o DAS da ZAMBOLIN, o toast trouxe `Falha ao obter token
+ * Graph (401): {"error":"invalid_client","error_description":"AADSTS7000215…`.
+ * Mensagem de órgão despejada na tela não é informação: ela não diz o que
+ * fazer, e o e-mail do cliente simplesmente não sai.
+ *
+ * ⚠️ Devolve **null** quando a falha NÃO é de credencial — o erro original
+ * segue inteiro, porque traduzir o que não se reconhece é dizer a falha errada.
+ *
+ * @returns {string|null}
+ */
+export function mensagemDeCredencialRecusada(erro) {
+    const m = String(erro || '');
+    if (!m || !ehFalhaDeCredencial(m)) return null;
+    return 'A Microsoft recusou a credencial — o e-mail NÃO foi enviado ao cliente, e nenhum outro sai '
+        + 'enquanto isto durar. '
+        + `${instrucaoDaCredencial(m)} `
+        + 'Enquanto não for resolvido, use "Abrir no Outlook Web": ele manda pela SUA caixa, sem passar por '
+        + 'esta credencial — mas ali o PDF da guia vai ANEXADO POR VOCÊ e o gestor entra em cópia visível. '
+        + `Resposta da Microsoft: ${m.slice(0, 300)}`;
 }
 
 /**
@@ -151,11 +252,17 @@ export function acaoCredencialEnvio(motivo) {
  * direção contrária.
  */
 export function pendenciaDeGravacaoSharePoint(motivo) {
-    const m = String(motivo || '').slice(0, 220);
-    if (ehFalhaDeCredencial(m)) {
+    // 🐛 O CORTE DECAPITAVA JUSTAMENTE O NOME DO APP. A mensagem inteira era
+    // truncada em 220 caracteres ANTES de ser lida, e o `for a secret added to
+    // app '…'` vem depois disso — então a instrução dizia "a resposta não
+    // nomeou o aplicativo" sobre uma resposta que nomeava. Quem lê é a mensagem
+    // INTEIRA; o corte vale só para o eco do "Motivo:" na tela.
+    const inteiro = String(motivo || '');
+    const m = inteiro.slice(0, 220);
+    if (ehFalhaDeCredencial(inteiro)) {
         return {
             causa: 'Credencial do SharePoint recusada pela Microsoft (não é o cadastro desta empresa)',
-            acao: `${acaoCredencialEnvio(m)} Motivo: ${m || 'não informado'}`,
+            acao: `${acaoCredencialEnvio(inteiro)} Motivo: ${m || 'não informado'}`,
             deQuem: 'casa',
         };
     }

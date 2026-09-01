@@ -13,6 +13,7 @@
  * mailto daqui garante o 2 no fluxo "e-mail padrão do colaborador".
  */
 import { getAuth } from 'firebase/auth';
+import { mensagemDeCredencialRecusada } from '../sefaz-backend/sharepoint-erro-credencial.js';
 
 export const GESTOR_EMAIL = 'alexandre@spassessoriacontabil.com.br';
 
@@ -323,7 +324,12 @@ export async function enviarGuiaPeloServidor(input: {
         body: JSON.stringify(input),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    if (!res.ok) {
+        // DARF, DARE e ISS passam por aqui — a tradução da recusa de credencial
+        // fica no DONO, senão cada tela mostraria a mensagem crua do jeito dela.
+        const cru = data.error || `HTTP ${res.status}`;
+        return { ok: false, error: mensagemDeCredencialRecusada(cru) || cru };
+    }
     return data;
 }
 
