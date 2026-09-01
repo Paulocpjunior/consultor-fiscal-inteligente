@@ -46,6 +46,82 @@ export function ehFalhaDeCredencial(motivo) {
     return ASSINATURA_CREDENCIAL.test(String(motivo || ''));
 }
 
+// ============================================================================
+// 🚨 "CREDENCIAL RECUSADA" NÃO É UMA CAUSA SÓ — e a frase afirmava a ERRADA
+//
+// 01/09. A frase acima dizia *"segredo do Azure AD EXPIRA, e a renovação é
+// gerar um novo"* — e o segredo do escritório **vence em 10/05/2028**. O que a
+// Microsoft respondeu foi outra coisa, e ela DIZ a causa na própria resposta:
+//
+//   AADSTS7000215: Invalid client secret provided. Ensure the secret being
+//   sent in the request is the client secret VALUE, not the client secret ID.
+//
+// 🔴 **A TELA DO AZURE INDUZ EXATAMENTE ESSE ERRO**: o *Secret ID* (um GUID,
+// cheio de hifens) fica visível e copiável para sempre; o **Valor** aparece
+// **só no instante em que o segredo é criado** e depois vira `hmB***`. Quem
+// volta na tela para "pegar o segredo" copia o único campo que está lá — o ID.
+//
+// 📌 **E EU AFIRMEI EXPIRAÇÃO SEM MEDIR**: li "invalid client secret" como
+// "vencido", e a validade estava na mesma tela dizendo 2028. Dizer a falha
+// errada manda procurar no lugar errado (a família do *"arquivo não é desta
+// empresa"* de 31/08) — e aqui manda renovar um segredo que não precisava ser
+// renovado, deixando a causa real de pé.
+//
+// ⚠️ QUEM DECIDE É O TEXTO DA RESPOSTA, e o código só CORROBORA — a mesma
+// régua do `cStat 653` e do `cStat 640` da SEFAZ. Segredo VENCIDO devolve
+// outro código, com a palavra "expired" escrita; carimbar de memória o número
+// dele seria inventar código de tabela oficial.
+// ============================================================================
+
+/**
+ * Qual é a causa da recusa, quando a resposta da Microsoft permite dizer.
+ *
+ * ⚠️ `'indeterminada'` é resposta legítima: sem assinatura conhecida o app
+ * DIZ que a credencial foi recusada e **não afirma o motivo** — afirmar manda
+ * a pessoa a uma primeira parada que pode não ser a certa.
+ */
+export function causaDaFalhaDeCredencial(motivo) {
+    const m = String(motivo || '');
+    // A mais específica primeiro: a própria resposta nomeia ID × Valor.
+    if (/AADSTS7000215/i.test(m) || /secret\s+value.*not.*secret\s+id/i.test(m)) return 'segredo-id-em-vez-do-valor';
+    if (/expir/i.test(m) && /(secret|key|certificate)/i.test(m)) return 'segredo-expirado';
+    if (/AADSTS90002/i.test(m) || /tenant[^.]*not\s+found/i.test(m)) return 'tenant-inexistente';
+    return 'indeterminada';
+}
+
+/**
+ * A instrução da causa — a parte que MUDA conforme o que a Microsoft
+ * respondeu. Ela é de DONO ÚNICO porque os dois leitores (o card "Conexão
+ * SharePoint" e o painel de envios) precisam dizer a mesma coisa: em 31/08 as
+ * duas frases já divergiram uma vez, e o painel ficou meses com a antiga.
+ */
+export function instrucaoDaCredencial(motivo) {
+    switch (causaDaFalhaDeCredencial(motivo)) {
+        case 'segredo-id-em-vez-do-valor':
+            return 'A Microsoft diz QUAL é o erro: o que está gravado é o ID do segredo, não o VALOR dele. '
+                + 'No Azure (App registrations → Certificates & secrets) o Secret ID é um GUID e fica visível '
+                + 'sempre; o Valor aparece SÓ no instante em que o segredo é criado e depois vira hmB*** — '
+                + 'não há como recuperá-lo, é preciso criar um segredo NOVO e copiar a coluna Valor na hora. '
+                + '⚠️ Isto NÃO é validade: segredo dentro do prazo recusa igual se o que foi gravado foi o ID. '
+                + 'Grave a versão nova em Secret Manager → graph-client-secret (projeto consultorfiscalapp) e '
+                + 'suba uma REVISÃO NOVA do proxy: o :latest é resolvido quando o contêiner sobe, então a '
+                + 'revisão que já está no ar continua com o valor velho.';
+        case 'segredo-expirado':
+            return 'O segredo venceu. Crie um novo no Azure (App registrations → Certificates & secrets → '
+                + 'New client secret), copie a coluna Valor NA HORA (depois ela some), grave a versão nova em '
+                + 'Secret Manager → graph-client-secret e suba uma REVISÃO NOVA do proxy — o :latest só é '
+                + 'lido quando o contêiner sobe.';
+        case 'tenant-inexistente':
+            return 'O tenant enviado não existe. Ele vive CRAVADO em .github/workflows/deploy-proxy.yml '
+                + '(SHAREPOINT_TENANT_ID) — confira contra o issuer que o endpoint público de descoberta da '
+                + 'Microsoft devolve para o domínio do escritório.';
+        default:
+            return 'A Microsoft recusou a credencial e a resposta não diz qual é a causa — leve a mensagem '
+                + 'INTEIRA (código AADSTS, Trace ID e Timestamp) para o portal do Azure. O app não deduz o '
+                + 'motivo: dizer a falha errada manda procurar no lugar errado.';
+    }
+}
+
 /**
  * A ação de uma falha de credencial, dita para quem está no fim de mês.
  *
@@ -55,11 +131,17 @@ export function ehFalhaDeCredencial(motivo) {
  */
 export const ACAO_CREDENCIAL_ENVIO =
     'NÃO é desta empresa e NÃO é a pasta dela: é a credencial do proxy do SharePoint, e enquanto ela '
-    + 'não for renovada NENHUM cliente arquiva — a etapa 5 fica travada na carteira inteira. '
+    + 'não for aceita NENHUM cliente arquiva — a etapa 5 fica travada na carteira inteira. '
     + '⚠️ NÃO reenvie a guia: o cliente já recebeu, e reenviar DUPLICA a cobrança sem resolver isto. '
-    + 'O client id e o tenant vivem em .github/workflows/deploy-proxy.yml e o segredo no Secret Manager '
-    + '(graph-client-secret) — segredo do Azure AD EXPIRA, e a renovação é gerar um novo no portal do '
-    + 'Azure e gravar a versão nova. Confira o card "Conexão SharePoint" em Central de XMLs → Integrações.';
+    + 'Confira o card "Conexão SharePoint" em Central de XMLs → Integrações.';
+
+/**
+ * A ação COMPLETA para quem está no fim de mês: o que não fazer (reenviar) +
+ * a instrução da causa que a Microsoft de fato respondeu.
+ */
+export function acaoCredencialEnvio(motivo) {
+    return `${ACAO_CREDENCIAL_ENVIO} ${instrucaoDaCredencial(motivo)}`;
+}
 
 /**
  * Motivo + ação de uma falha de gravação no SharePoint.
@@ -73,7 +155,7 @@ export function pendenciaDeGravacaoSharePoint(motivo) {
     if (ehFalhaDeCredencial(m)) {
         return {
             causa: 'Credencial do SharePoint recusada pela Microsoft (não é o cadastro desta empresa)',
-            acao: `${ACAO_CREDENCIAL_ENVIO} Motivo: ${m || 'não informado'}`,
+            acao: `${acaoCredencialEnvio(m)} Motivo: ${m || 'não informado'}`,
             deQuem: 'casa',
         };
     }

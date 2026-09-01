@@ -5,6 +5,44 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 EU AFIRMEI QUE O SEGREDO TINHA EXPIRADO — a validade estava na MESMA
+  TELA dizendo 2028, e a Microsoft dizia a causa por extenso** (01/09, card
+  Conexão SharePoint, `AADSTS7000215`).
+  📖 A resposta, literal: *"Invalid client secret provided. Ensure the secret
+  being sent in the request is the client secret **VALUE**, not the client
+  secret **ID**"*. Eu li *"invalid client secret"* como *"vencido"*, mandei
+  renovar, e o print do Azure mostrava **expira em 10/05/2028**. A causa real
+  ele confirmou em uma linha: o que estava gravado *"só tem -"* — ou seja, um
+  GUID, que é o **Secret ID**.
+  🔴 **E A TELA DO AZURE INDUZ EXATAMENTE ESSE ERRO**: o *Secret ID* fica
+  visível e copiável para sempre; o **Valor** aparece **só no instante em que o
+  segredo é criado** e depois vira `hmB***`. Quem volta lá para "pegar o
+  segredo" copia o único campo que existe — o errado. Não é descuido de quem
+  operou, é o formulário oferecendo a coisa errada.
+  📌 **É A FAMÍLIA DO *"ARQUIVO NÃO É DESTA EMPRESA"* (31/08), agora comigo:
+  dizer a falha errada manda procurar no lugar errado** — e aqui mandava
+  renovar um segredo que não precisava, deixando a causa real de pé.
+  ✂️ `causaDaFalhaDeCredencial` + `instrucaoDaCredencial` (no dono,
+  `sharepoint-erro-credencial.js`, que o card `.ts` IMPORTA): a recusa deixou de
+  ser um balde só e passou a ter **quatro respostas com ações diferentes** —
+  ID×Valor, segredo expirado, tenant inexistente e **indeterminada**.
+  ⚠️ **QUEM DECIDE É O TEXTO DA RESPOSTA; o código só CORROBORA** — a régua do
+  `cStat 653`/`640` da SEFAZ. Segredo VENCIDO devolve outro código, com a
+  palavra *expired* escrita; carimbar o número dele de memória seria inventar
+  código de tabela oficial.
+  ⚠️ **E `indeterminada` É RESPOSTA LEGÍTIMA**: sem assinatura conhecida o app
+  diz que a credencial foi recusada e **não afirma o motivo**, mandando levar a
+  mensagem inteira (código, Trace ID, Timestamp). Foi afirmar no escuro que
+  custou o dia.
+  ✅ **E A INSTRUÇÃO CARREGA O PASSO QUE NINGUÉM DEDUZ**: gravar a versão nova
+  em `graph-client-secret` **não basta** — o `--update-secrets=…:latest` é
+  resolvido **quando o contêiner sobe**, então a revisão que já está no ar
+  continua com o valor velho. Sem uma REVISÃO NOVA do proxy, o card continua
+  vermelho com o segredo certo no cofre.
+  📌 **UMA ASSERÇÃO FOI TROCADA, e ela é o retrato do defeito**: o teste exigia
+  `/EXPIRA/` na frase do app — ele **descrevia** a minha afirmação errada em vez
+  de pegá-la. Hoje ele proíbe a palavra e exige o que a resposta de fato diz.
+
 - **🚨 A NFS-e DO PADRÃO NACIONAL NÃO IMPORTAVA — e a TELA dizia que ia**
   (01/09, Paulo, 4BZ CONSULTORIA · arquivo `27_LIFECHEMM_16.xml`: *"as notas de
   serviços que puxamos pelo portal nacional vêm em arquivo XML que temos a
