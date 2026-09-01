@@ -23,4 +23,6 @@ export function montarPayloadReinfPJ(p?: {
     cnpjTomador?: string;
     competencia?: string;
     documentos?: unknown[];
+    /** Chave da NOTA → ajuste declarado de retenção (31/08). */
+    ajustes?: Record<string, Record<string, unknown>>;
 }): any;

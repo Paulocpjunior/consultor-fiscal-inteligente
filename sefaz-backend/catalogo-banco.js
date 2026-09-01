@@ -24,6 +24,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'empresas_mesclagens', grupo: 'Cadastro & Acesso', funcionalidade: 'Auditoria de mesclagem de empresas duplicadas' },
     { colecao: 'reinf_gateway_lotes', grupo: 'Cadastro & Acesso', funcionalidade: 'Auditoria do gateway EFD-Reinf (fase 4 do túnel): quem transmitiu, declarante, ambiente, ids e protocolo — nunca o conteúdo do evento' },
     { colecao: 'reinf_fechamentos', grupo: 'Cadastro & Acesso', funcionalidade: 'Rito do fechamento da EFD-Reinf (R-2099): farol da competência, recibo de cada evento, conferência contra o totalizador e o que foi arquivado/avisado — nunca o conteúdo do evento' },
+    { colecao: 'reinf_retencoes_ajustadas', grupo: 'Cadastro & Acesso', funcionalidade: 'Ajuste DECLARADO da retenção de uma NOTA para o R-4020 (31/08): 1 doc por empresa × competência, mapa por chave da nota, com autor, data e motivo escrito. Existe porque a NFS-e paulistana traz nos campos de PIS/COFINS o tributo da OPERAÇÃO do prestador (1,65%+7,60%) e não a retenção — declarar aqueles valores infla a retenção (315,73 no lugar de 158,72). Vence a derivação automática; a gravação é incremental por nota' },
     { colecao: 'empresas_certificados', grupo: 'Cadastro & Acesso', funcionalidade: 'Certificados A1/A3 por empresa (metadados)' },
     { colecao: 'sefaz_certificados', grupo: 'Cadastro & Acesso', funcionalidade: 'Certificado do escritório (config)' },
     { colecao: 'sefaz_certificados_historico', grupo: 'Cadastro & Acesso', funcionalidade: 'Histórico de trocas do certificado do escritório' },

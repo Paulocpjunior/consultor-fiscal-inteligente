@@ -32,6 +32,12 @@
 // ============================================================================
 
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
+// 🚨 31/08: o app DENUNCIAVA a retenção errada e não entregava a certa. Quem
+// responde "quanto esta nota reteve, de verdade" é este dono — ajuste
+// declarado > CSRF decomposta > documento —, e ele é ÚNICO de propósito: um
+// ajuste que valesse só para o R-4020 faria o SPED e o REINF declararem
+// números diferentes sobre a mesma nota.
+import { retencaoEfetivaDaNota, chaveDoAjuste, resumirRetencoesEfetivas } from './retencao-pj-ajuste.js';
 
 const num = (v) => {
     if (v === undefined || v === null || v === '') return undefined;
@@ -129,8 +135,9 @@ const temRetencao = (n) => !!(n.ir || n.pis || n.cofins || n.csllOuTotal);
  * @param {string} p.cnpjTomador  o cliente que declara
  * @param {string} p.competencia  'AAAA-MM'
  * @param {Array}  p.documentos   NFS-e da competência (qualquer direção)
+ * @param {object} [p.ajustes]    chave da NOTA → ajuste declarado
  */
-export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = {}) {
+export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, ajustes = {} } = {}) {
     const alvo = soDigitos(cnpjTomador);
     const notas = [];
     let semRetencao = 0;
@@ -144,21 +151,34 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = 
 
         const n = normalizarNotaTomada(d);
         if (alvo && n.tomadorCnpj && n.tomadorCnpj !== alvo) continue;
-        if (!temRetencao(n)) { semRetencao += 1; continue; }
+        // ⚠️ O AJUSTE TRAZ A NOTA DE VOLTA. Sem isto, a nota cujo documento não
+        // traz retenção nenhuma sairia em `semRetencao` ANTES de alguém poder
+        // declarar que houve — e o ajuste ficaria gravado sem efeito, que é a
+        // "flag que ninguém lê" na pior forma possível (a retenção some).
+        const ajuste = ajustes?.[chaveDoAjuste(n)] || null;
+        if (!temRetencao(n) && !ajuste) { semRetencao += 1; continue; }
         // Prestador PESSOA FÍSICA é R-4010, outro evento. Não some em silêncio:
         // vira contagem, porque some da lista é o que faz alguém achar que
         // declarou tudo.
         if (n.prestadorCnpj.length !== 14) { dePessoaFisica += 1; continue; }
 
-        notas.push({ ...n, coerencia: conferirRetencaoFederal({
+        const coerencia = conferirRetencaoFederal({
             base: n.base, pis: n.pis, cofins: n.cofins, csll: n.csllOuTotal,
-        }) });
+        });
+        notas.push({
+            ...n,
+            coerencia,
+            // 🚨 O QUE SE DECLARA — com a ORIGEM carimbada. O outro lado usa
+            // ESTE bloco; os campos crus continuam ao lado, para conferência.
+            retencao: retencaoEfetivaDaNota({ nota: n, coerencia, ajuste }),
+        });
     }
 
     notas.sort((a, b) => String(a.prestadorNome).localeCompare(String(b.prestadorNome), 'pt-BR'));
 
     const comProblema = notas.filter((n) => n.coerencia.exigeAcao).length;
     const camposDaOperacao = notas.filter((n) => n.coerencia.situacao === 'campos-sao-totais-da-operacao').length;
+    const efetivas = resumirRetencoesEfetivas(notas);
     return {
         cnpjTomador: alvo || null,
         competencia: competencia || null,
@@ -172,12 +192,23 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = 
             camposDaOperacao,
             totalBase: r2(notas.reduce((t, n) => t + (n.base || 0), 0)),
             totalIr: r2(notas.reduce((t, n) => t + n.ir, 0)),
+            // 🚨 O TOTAL QUE SE DECLARA sai do bloco EFETIVO, nunca dos campos
+            // crus — senão o resumo desmente as linhas que ele resume.
+            totalRetencaoDeclarada: r2(notas.reduce(
+                (t, n) => t + n.retencao.pis + n.retencao.cofins + n.retencao.csll, 0,
+            )),
+            ...efetivas,
         },
-        ressalvas: ressalvasDoPayload({ notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao }),
+        ressalvas: ressalvasDoPayload({
+            notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao, ...efetivas,
+        }),
     };
 }
 
-function ressalvasDoPayload({ notas, dePessoaFisica, comProblema, camposDaOperacao }) {
+function ressalvasDoPayload({
+    notas, dePessoaFisica, comProblema, camposDaOperacao,
+    ajustadas = 0, csrfDecomposta = 0, csllDerivada = 0, exigemAjuste = 0,
+}) {
     const out = [
         'O campo `csllOuTotal` é o que o portal de SP entrega — e nele a CSLL individual NÃO vem: '
         + 'o valor é o TOTAL das três contribuições. Quem separa é o EFD-Reinf, e só quando as '
@@ -198,6 +229,29 @@ function ressalvasDoPayload({ notas, dePessoaFisica, comProblema, camposDaOperac
             + '(não-cumulativo 1,65% e 7,60%), não retenção — a NFS-e paulistana tem campos que muitos '
             + 'prestadores preenchem assim e avisam em "Outras Informações". Declarar esses valores como '
             + 'retidos infla a retenção; a retenção real é a CSRF de 4,65%.');
+    }
+    // 🚨 NÚMERO DERIVADO SAI DITO, sempre. O bloco `retencao` de cada linha é o
+    // que se declara, e quando ele não foi LIDO do documento quem lê precisa
+    // saber — número derivado que se apresenta como fato é o começo de uma
+    // divergência que só a fiscalização acha.
+    if (csrfDecomposta) {
+        out.push(`✅ ${csrfDecomposta} nota(s) tiveram a retenção DERIVADA da CSRF: os campos de PIS e `
+            + 'COFINS traziam o tributo da operação, e o valor retido (4,65% da base) foi decomposto '
+            + 'pelas alíquotas legais da Lei 10.833/2003 art. 30 (PIS 0,65% · COFINS 3% · CSLL 1%). '
+            + 'A soma fecha ao centavo com o que a nota declara — mas o número é DERIVADO: confira.');
+    }
+    if (csllDerivada) {
+        out.push(`${csllDerivada} nota(s) com a CSLL derivada em 1% da base — no documento aquele campo `
+            + 'era o TOTAL das três contribuições. PIS e COFINS vieram do documento.');
+    }
+    if (ajustadas) {
+        out.push(`✍️ ${ajustadas} nota(s) com a retenção AJUSTADA à mão — o valor declarado é o do ajuste, `
+            + 'não o do documento. Cada linha diz quem ajustou, quando e por quê.');
+    }
+    if (exigemAjuste) {
+        out.push(`🚨 ${exigemAjuste} nota(s) SEM valor confiável de retenção — o documento traz um número `
+            + 'que a régua desmente e o app NÃO tem como derivar o certo. Ajuste a retenção antes de '
+            + 'transmitir: declarar assim vai errado para a EFD-Reinf e para o DARF.');
     }
     const outrasIncoerencias = comProblema - camposDaOperacao;
     if (outrasIncoerencias > 0) {

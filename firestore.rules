@@ -473,6 +473,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // reinf_retencoes_ajustadas: o AJUSTE declarado da retencao de uma NOTA
+    // (31/08). O valor daqui vai para a EFD-Reinf e para o DARF, e ele vence o
+    // que o documento diz — entao escrita pelo navegador tornaria contornavel
+    // a validacao inteira (autor, motivo escrito, retencao maior que a base).
+    // So o backend, que valida e carimba a fonte da autoria.
+    match /reinf_retencoes_ajustadas/{docId} {
+      allow read, write: if false;
+    }
+
     // dare_codigos_servico: codigo de servico DARE que nao e tabela fixa —
     // hoje a antecipacao do art. 426-A (rubrica propria). So o backend le e
     // grava, e ele valida contra a lista real da SEFAZ: codigo de tributo
