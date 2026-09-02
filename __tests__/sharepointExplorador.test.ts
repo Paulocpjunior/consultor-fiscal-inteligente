@@ -123,3 +123,23 @@ describe('🚦 a lista de sites é utilizável — e o recorte vai dito', () => 
         expect(TELA).toMatch(/health\?\.sitePath/);
     });
 });
+
+// ============================================================================
+// 🐛 O EXPLORADOR FICAVA PRESO NO ÚLTIMO SITE ABERTO
+//
+// 02/09. Depois de clicar num site da lista, o botão "🔎 O que existe nesta
+// biblioteca?" continuava mostrando AQUELE site — e não havia caminho de
+// volta para o do proxy. Quem clicasse via o mesmo conteúdo achando que
+// estava olhando outra biblioteca, e concluiria o contrário do que é.
+// ============================================================================
+describe('🐛 "esta biblioteca" é a do PROXY, não a última aberta', () => {
+    it('o botão volta ao site padrão explicitamente', () => {
+        expect(TELA).toMatch(/explorar\('', ''\)/);
+    });
+
+    // ⚠️ E o cabeçalho do resultado nomeia o site — sem isso não dá para saber
+    // qual dos dois está na tela.
+    it('o resultado diz qual site está sendo mostrado', () => {
+        expect(TELA).toMatch(/\{nivel\.site\}/);
+    });
+});
