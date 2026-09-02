@@ -31,8 +31,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   página de cada fato) e os PDFs servidos pelo app em `public/docs/dere/`
   (⚙️ Config Admin → 🏦 DeRE → 📚 Documentação oficial). O que continua por
   resumo de terceiros é só o PRAZO (Ato Conjunto 4/2026 + esclarecimento de
-  26/08); o MOD 1.0.1, as Mensagens de Erro e os **XSD não vieram** — e isso
-  está DITO na tela (`DOCUMENTOS_DERE_FALTANDO`).
+  26/08); o MOD 1.0.1 e as Mensagens de Erro **não vieram** — e isso está DITO
+  na tela (`DOCUMENTOS_DERE_FALTANDO`).
+  📐 **E OS XSD CHEGARAM À NOITE** (Paulo: *"segue XSD"*, zip "06 - Arquivos
+  XSD (Nota Orientativa 2026)"): 9 schemas em `docs/dere/xsd/` e servidos em
+  `/docs/dere/xsd/` — lote (envio/retorno), D-1001, D-1011, D-1101, D-1106 e
+  os retornos D-9001/9101/9106. **O pacote é PARCIAL: D-1199 (fechamento),
+  D-2101, D-9121 e D-9199 NÃO vieram** (`XSD_DERE` + `xsdFaltando()`, e cada
+  evento carrega `xsd` ou `null`). O XSD **confirmou o módulo** em vez de
+  derrubá-lo: `{nrInsc}` é `[0-9A-Z]{8}` (raiz ALFANUMÉRICA — `raizDoCnpj`
+  passou a manter letras), o `id` casa `DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}`
+  (o teste monta um Id com o app e o passa no padrão LIDO do arquivo, não numa
+  cópia), `tpAtividade` é `[0-9]{2}[A-Z]`, recibo ≤ 31 e protocolo ≤ 28. A
+  tabela `XSD_DERE` é provada contra os arquivos (namespace e elemento-raiz
+  têm de estar NO xsd) — tabela digitada de memória é a segunda cópia.
   🚨 **LER A FONTE DERRUBOU TRÊS AFIRMAÇÕES DA MANHÃ, todas vindas do resumo**:
   (1) **D-1121 NÃO EXISTE** — o que tem 1121 no nome é o RETORNO D-9121
   (totalizador do D-2101); eu listava um "D-1121 Relação de Deduções" que a
@@ -68,7 +80,10 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   A1/A3 ICP-Brasil, e os **três pré-requisitos ADMINISTRATIVOS do dono**:
   piloto da Reforma, procuração no e-CAC ("Piloto da CBS" + "DeRE") e
   credencial em piloto-cbs.tributos.gov.br. **Continua sem gerar/transmitir**:
-  leiaute lido não é XSD na mão, o insumo é contábil e a credencial é dele.
+  o XSD do D-1001/D-1011 agora está na mão (gerar o evento de TABELA virou
+  possível tecnicamente), mas faltam os do fechamento e do D-2101, o insumo
+  dos mensais é contábil e a credencial é dele — a casa da geração é decisão
+  dele, não extensão minha.
   ✂️ **O QUE ENTROU** (`dere-regimes.js` PURO = vocabulário + régua "está na
   DeRE?" · `dere.js` PURO = eventos, cronograma, prazo, situação, triagem):
   (1) entrada `DERE` no catálogo — federal, mensal, dia 15, antecipa,
@@ -100,9 +115,9 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   regime específico (a fila da 🏦 DeRE responde quem PARECE); (b) decidir a
   casa da geração dos eventos — e, antes de qualquer código, os três
   pré-requisitos administrativos (piloto, procuração, credencial); (c) se
-  tiver o **MOD 1.0.1**, as **Mensagens de Erro** e os **XSD**, mandar em PDF/
-  ZIP como mandou estes: entram em `docs/dere/` e `public/docs/dere/` no mesmo
-  desenho.
+  tiver o **MOD 1.0.1**, as **Mensagens de Erro** e os **XSD de D-1199, D-2101,
+  D-9121 e D-9199**, mandar em PDF/ZIP como mandou estes: entram em
+  `docs/dere/` e `public/docs/dere/` no mesmo desenho.
 - **🚨 O AVISO FALAVA DO QUE A RODADA IA FAZER, NÃO DO QUE ELA FEZ — e o dono
   circulou a frase em VERMELHO** (02/09, print da MV LIDER 0639 · 08/2026,
   horas depois de a tela passar a encadear as rodadas sozinha).

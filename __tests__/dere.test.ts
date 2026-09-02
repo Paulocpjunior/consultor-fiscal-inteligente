@@ -23,6 +23,7 @@ import {
 } from '../sefaz-backend/dere-regimes';
 import {
     VIGENCIA_DERE, EVENTOS_DERE, CRONOGRAMA_DERE, INTEGRACAO_DERE, DOCUMENTOS_DERE, DOCUMENTOS_DERE_FALTANDO,
+    XSD_DERE, xsdFaltando,
     eventosDaCompetencia, prazoDere, situacaoDere, triarCarteiraDere,
     montarIdEventoDere, lerIdEventoDere, lerRecibo, lerProtocolo,
 } from '../sefaz-backend/dere';
@@ -100,6 +101,9 @@ describe('o vocabulário — a LC 214/2025 lista os regimes; o LEIAUTE 1.1.0 diz
         expect(raizDoCnpj('11222333000262')).toBe('11222333');
         expect(raizDoCnpj('123')).toBeNull();
         expect(raizDoCnpj(null)).toBeNull();
+        // O XSD define {nrInsc} como [0-9A-Z]{8}: CNPJ alfanumérico (desde 07/2026) conta as letras, em MAIÚSCULAS.
+        expect(raizDoCnpj('12.ABC.345/0001-99')).toBe('12ABC345');
+        expect(raizDoCnpj('12abc345000199')).toBe('12ABC345');
     });
 });
 
@@ -443,7 +447,48 @@ describe('🚨 o campo chega a quem monta o mês, ao cadastro e à tela', () => 
         }
         expect(existsSync(join(RAIZ, 'docs/dere/README.md'))).toBe(true);
         expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/MOD/);
-        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/XSD/);
+        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/XSD dos eventos D-1199/);
+    });
+
+    it('📐 os XSD estão no repo (texto) E servidos pelo app, ligados ao evento certo pelo elemento-raiz e pelo namespace', () => {
+        expect(XSD_DERE.length).toBe(9);
+        for (const x of XSD_DERE) {
+            const txt = join(RAIZ, 'docs/dere/xsd', x.arquivo);
+            expect({ arquivo: x.arquivo, existe: existsSync(txt) && existsSync(join(RAIZ, 'public/docs/dere/xsd', x.arquivo)) })
+                .toEqual({ arquivo: x.arquivo, existe: true });
+            const src = readFileSync(txt, 'utf8');
+            // O que a tabela AFIRMA sobre o arquivo tem de estar NO arquivo — tabela
+            // digitada de memória é a segunda cópia que esta casa mais paga.
+            expect(src).toContain(`targetNamespace="${x.namespace}"`);
+            expect(src).toContain(`<xs:element name="${x.elemento}"`);
+            expect(x.namespace.endsWith('/v' + x.versao.replace(/\./g, '_'))).toBe(true);
+        }
+        // Cada evento com `xsd` aponta um arquivo da tabela, e a tabela aponta de volta.
+        for (const e of EVENTOS_DERE) {
+            const x = XSD_DERE.find((k) => k.evento === e.codigo);
+            expect({ codigo: e.codigo, xsd: e.xsd ?? null }).toEqual({ codigo: e.codigo, xsd: x ? x.arquivo : null });
+        }
+        // O pacote é PARCIAL — e o que falta é DITO, nunca preenchido por dedução.
+        expect(xsdFaltando().sort()).toEqual(['D-1199', 'D-2101', 'D-9121', 'D-9199']);
+        expect(ler('components/DerePanel.tsx')).toMatch(/r\.xsd\.map/);
+        expect(ler('components/DerePanel.tsx')).toMatch(/r\.xsdFaltando/);
+    });
+
+    it('📐 o Id que o app monta passa no PADRÃO do próprio XSD, e a raiz passa em {nrInsc}', () => {
+        const xsd = readFileSync(join(RAIZ, 'docs/dere/xsd/evtBalancete-v1_0_0.xsd'), 'utf8');
+        const padraoId = /xs:pattern value="(DeRE[^"]+)"/.exec(xsd)![1];
+        expect(padraoId).toBe('DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}');
+        const r = montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11.222.333/0001-81', data: new Date('2026-11-10T02:30:00Z'), sequencial: 7 });
+        expect(new RegExp(`^${padraoId}$`).test(r.id!)).toBe(true);
+        // Id com sequencial e CNPJ alfanumérico também cabe no padrão do XSD.
+        const alfa = montarIdEventoDere({ codigoEvento: 'D-1001', cnpj: '12abc345000199', data: new Date('2026-10-01T15:00:00Z'), sequencial: 99999 });
+        expect(new RegExp(`^${padraoId}$`).test(alfa.id!)).toBe(true);
+        const padraoInsc = /name="nrInsc"[\s\S]*?xs:pattern value="([^"]+)"/.exec(xsd)![1];
+        expect(padraoInsc).toBe('[0-9A-Z]{8}');
+        expect(new RegExp(`^${padraoInsc}$`).test(raizDoCnpj('12abc345000199')!)).toBe(true);
+        // E os tetos do recibo (31) e do protocolo (28) que as réguas de forma assumem estão no XSD de retorno.
+        expect(readFileSync(join(RAIZ, 'docs/dere/xsd/evtRetornoTabela-v1_0_1.xsd'), 'utf8')).toMatch(/name="nrRecibo"[\s\S]*?maxLength value="31"/);
+        expect(readFileSync(join(RAIZ, 'docs/dere/xsd/retornoLoteDere-v1_0_1.xsd'), 'utf8')).toMatch(/name="protocolo"[\s\S]*?maxLength value="28"/);
     });
 
     it('nenhum gerador de evento da DeRE existe — e a tela diz isso em vez de prometer', () => {

@@ -22,11 +22,14 @@
 // Conjunto RFB/CGIBS 4/2026 + esclarecimento de 26/08) — ver `FONTES_DERE`.
 //
 // ═══ O QUE ELE NÃO FAZ, e por quê (decisão desta rodada) ═══════════════════
-//   · **não gera nem transmite evento**. Agora o leiaute está lido — mas o
-//     leiaute descreve CAMPOS, e quem os valida é o XSD, que não está no repo
-//     (o Manual diz onde baixar: Portal SPED e cgibs.gov.br). Montar XML sem o
-//     XSD é o `1405` num arquivo que a Receita processa. E o INSUMO dos eventos
-//     periódicos é CONTÁBIL (PGCC, balancete) — mora no Consultor Contábil.
+//   · **não gera nem transmite evento**. Agora o leiaute está lido e os XSD
+//     chegaram (02/09, à noite — "Arquivos XSD (Nota Orientativa 2026)"),
+//     mas o pacote é PARCIAL: cobre lote, D-1001, D-1011, D-1101, D-1106 e os
+//     retornos D-9001/9101/9106 — **D-1199 (fechamento), D-2101, D-9121 e
+//     D-9199 NÃO vieram** (`XSD_DERE` diz qual evento tem e qual não tem).
+//     Montar XML de um evento sem o XSD dele é o `1405` num arquivo que a
+//     Receita processa. E o INSUMO dos eventos periódicos é CONTÁBIL (PGCC,
+//     balancete) — mora no Consultor Contábil.
 //     Além do código há pré-requisito ADMINISTRATIVO do dono: piloto da Reforma,
 //     procuração no e-CAC e credencial no portal da produção restrita
 //     (`INTEGRACAO_DERE.preRequisitos`). Onde a geração nasce é decisão dele;
@@ -83,39 +86,43 @@ export const CRONOGRAMA_DERE = Object.freeze([
  * `codTribs` — Anexo II, "RN - Tabela de codtribs obrigatórios para eventos
  * auxiliares" (e EVENTOS_OBRIGATORIOS_PERIODO, MS1146-MS1148).
  *
+ * `xsd`: o arquivo do schema em `docs/dere/xsd/` (servido em `/docs/dere/xsd/`)
+ * quando ele VEIO no pacote "Arquivos XSD (Nota Orientativa 2026)"; `null`
+ * quando não veio — e aí NÃO se monta XML desse evento por dedução.
+ *
  * 🚨 **D-1121 NÃO EXISTE** no leiaute 1.1.0 — o resumo de terceiros que este
  * módulo usou de manhã o listava como "Relação de Deduções". O que existe com
  * 1121 no nome é o RETORNO D-9121 (totalizador do D-2101). Corrigido lendo a
  * fonte, e travado por teste.
  */
 export const EVENTOS_DERE = Object.freeze([
-    { codigo: 'D-1001', nome: 'Informações do Contribuinte', grupo: 'tabela', desde: '2026-10-01',
+    { codigo: 'D-1001', nome: 'Informações do Contribuinte', grupo: 'tabela', desde: '2026-10-01', xsd: 'evtInfoContrib-v1_0_1.xsd',
         nota: 'Regime específico PRINCIPAL ({regTribPrinc} = 1 serviços financeiros · 2 planos de saúde · 3 concursos '
             + 'de prognósticos · 9 outros) e até três secundários; atividades das Tabelas 21/31/41 do Anexo I. '
             + 'É aqui que a empresa declara em qual regime está. Por CNPJ RAIZ ({nrInsc} tem 8 posições).' },
-    { codigo: 'D-1011', nome: 'Plano Geral de Contas Comentado (PGCC)', grupo: 'tabela', desde: '2026-10-01',
+    { codigo: 'D-1011', nome: 'Plano Geral de Contas Comentado (PGCC)', grupo: 'tabela', desde: '2026-10-01', xsd: 'evtPGCC-v1_0_2.xsd',
         nota: 'Obrigatório para todo contribuinte da DeRE — plano referencial COSIF/ANS/SUSEP/SPED ({planoCtaRef} '
             + '1-4), contas com {codTrib} da Tabela 11, até 50.000 contas. Insumo CONTÁBIL: o plano de contas '
             + 'mora no Consultor Contábil.' },
-    { codigo: 'D-1101', nome: 'Balancete Mensal', grupo: 'mensal', mensalDesde: '10/2026',
+    { codigo: 'D-1101', nome: 'Balancete Mensal', grupo: 'mensal', mensalDesde: '10/2026', xsd: 'evtBalancete-v1_0_0.xsd',
         nota: 'Saldo inicial, movimentos, saldo final e {vApur} por conta analítica (até 10.000). Insumo CONTÁBIL — '
             + 'não sai deste app. É o evento que o D-1199 exige (MS1146).' },
-    { codigo: 'D-1106', nome: 'Identificação de Aplicações Financeiras', grupo: 'mensal', mensalDesde: '10/2026',
+    { codigo: 'D-1106', nome: 'Identificação de Aplicações Financeiras', grupo: 'mensal', mensalDesde: '10/2026', xsd: 'evtAplicResTec-v1_0_0.xsd',
         condicional: { codTribs: ['120130001', '120230001', '120330001', '111112701'],
             texto: 'Só de quem tem no PGCC conta com codTrib 120130001/120230001/120330001 (saúde) ou 111112701 '
                 + '(seguros) — Anexo II, RN Tabela de codtribs obrigatórios; MS1135/MS1147.' } },
-    { codigo: 'D-2101', nome: 'Débito em Operações com Títulos de Dívida com Oferta Pública', grupo: 'mensal', mensalDesde: '10/2026',
+    { codigo: 'D-2101', nome: 'Débito em Operações com Títulos de Dívida com Oferta Pública', grupo: 'mensal', mensalDesde: '10/2026', xsd: null,
         condicional: { codTribs: ['110113001', '110113002'],
             texto: 'Só de quem tem no PGCC conta com codTrib 110113001 ou 110113002 — Anexo II, RN Tabela de codtribs '
                 + 'obrigatórios; MS1135/MS1148.' } },
-    { codigo: 'D-1199', nome: 'Fechamento de Eventos Mensais', grupo: 'mensal', mensalDesde: '10/2026',
+    { codigo: 'D-1199', nome: 'Fechamento de Eventos Mensais', grupo: 'mensal', mensalDesde: '10/2026', xsd: null,
         nota: 'Fecha a competência — só admite INCLUSÃO, exige D-1101 ativo (MS1146) e os auxiliares condicionais '
             + '(MS1147/MS1148); retificar exige REABERTURA (Leiautes, seção 2.3). É o análogo do R-2099 da Reinf.' },
-    { codigo: 'D-9001', nome: 'Retorno — Eventos de Tabela', grupo: 'retorno' },
-    { codigo: 'D-9101', nome: 'Retorno Totalizador — Balancete Mensal', grupo: 'retorno' },
-    { codigo: 'D-9106', nome: 'Retorno Totalizador — Identificação de Aplicações Financeiras', grupo: 'retorno' },
-    { codigo: 'D-9121', nome: 'Retorno Totalizador — Débito em Operações com Títulos de Dívida com Oferta Pública', grupo: 'retorno' },
-    { codigo: 'D-9199', nome: 'Retorno Totalizador — Fechamento de Eventos Mensais', grupo: 'retorno',
+    { codigo: 'D-9001', nome: 'Retorno — Eventos de Tabela', grupo: 'retorno', xsd: 'evtRetornoTabela-v1_0_1.xsd' },
+    { codigo: 'D-9101', nome: 'Retorno Totalizador — Balancete Mensal', grupo: 'retorno', xsd: 'evtRetornoBalan-v1_0_0.xsd' },
+    { codigo: 'D-9106', nome: 'Retorno Totalizador — Identificação de Aplicações Financeiras', grupo: 'retorno', xsd: 'evtRetornoAplicFin-v1_0_0.xsd' },
+    { codigo: 'D-9121', nome: 'Retorno Totalizador — Débito em Operações com Títulos de Dívida com Oferta Pública', grupo: 'retorno', xsd: null },
+    { codigo: 'D-9199', nome: 'Retorno Totalizador — Fechamento de Eventos Mensais', grupo: 'retorno', xsd: null,
         nota: 'A memória de cálculo do débito de IBS, CBS e IS do mês ({totalTributosGeral}) — é contra ele que se '
             + 'confere o que foi declarado.' },
 ]);
@@ -166,11 +173,54 @@ export const DOCUMENTOS_DERE = Object.freeze([
     { titulo: 'Manual de Orientação ao Desenvolvedor v1.0.2', versao: '1.0.2', data: '18/08/2026', pdf: '/docs/dere/07-manual-do-desenvolvedor-v1.0.2.pdf', texto: 'docs/dere/07-manual-do-desenvolvedor-v1.0.2.txt' },
 ]);
 
+/**
+ * Os XSD — pacote "06 - Arquivos XSD (Nota Orientativa 2026)", entregue pelo
+ * Paulo em 02/09 à noite. Texto em `docs/dere/xsd/`, servido em
+ * `/docs/dere/xsd/`. `evento` liga o schema ao código do leiaute (pelo
+ * elemento-raiz `evt*` e pelo namespace); os dois de lote não têm evento.
+ *
+ * ⚠️ O pacote é PARCIAL, e isso vai DITO: o lote, os eventos de tabela, o
+ * balancete, as aplicações financeiras e três retornos vieram; **D-1199,
+ * D-2101, D-9121 e D-9199 não têm XSD aqui** (`xsdFaltando()`).
+ *
+ * O que o XSD já CONFIRMOU contra o módulo: `{nrInsc}` é `[0-9A-Z]{8}` (raiz,
+ * alfanumérica); o `id` do evento casa `DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}`
+ * (o mesmo 42 = 4+4+1+14+8+6+5 de `montarIdEventoDere`); `{tpAtividade}` é
+ * `[0-9]{2}[A-Z]` (a máscara NNC de `ATIVIDADES_DERE`); o recibo tem no máximo
+ * 31 e o protocolo 28 caracteres (`lerRecibo`/`lerProtocolo`).
+ */
+export const XSD_DERE = Object.freeze([
+    { arquivo: 'envioLoteDere-v1_0_1.xsd', elemento: 'loteEventos', evento: null, versao: '1.0.1',
+        namespace: 'http://www.dere.gov.br/schemas/envioLoteDere/v1_0_1', oQue: 'Envelope do lote (ideContrib.nrInsc raiz + eventos assinados)' },
+    { arquivo: 'retornoLoteDere-v1_0_1.xsd', elemento: 'retornoLoteEventos', evento: null, versao: '1.0.1',
+        namespace: 'http://www.dere.gov.br/schemas/retornoLoteDere/v1_0_1', oQue: 'Retorno do lote (situação, protocolo ≤ 28)' },
+    { arquivo: 'evtInfoContrib-v1_0_1.xsd', elemento: 'evtInfoContrib', evento: 'D-1001', versao: '1.0.1',
+        namespace: 'http://www.dere.gov.br/schemas/evtInfoContrib/v1_0_1', oQue: 'Informações do Contribuinte (regTribPrinc 1/2/3/9, tpAtividade NNC, indNatTrib)' },
+    { arquivo: 'evtPGCC-v1_0_2.xsd', elemento: 'evtPGCC', evento: 'D-1011', versao: '1.0.2',
+        namespace: 'http://www.dere.gov.br/schemas/evtPGCC/v1_0_2', oQue: 'Plano Geral de Contas Comentado (planoCtaRef 1-4, codTrib)' },
+    { arquivo: 'evtBalancete-v1_0_0.xsd', elemento: 'evtBalancete', evento: 'D-1101', versao: '1.0.0',
+        namespace: 'http://www.dere.gov.br/schemas/evtBalancete/v1_0_0', oQue: 'Balancete Mensal' },
+    { arquivo: 'evtAplicResTec-v1_0_0.xsd', elemento: 'evtAplicResTec', evento: 'D-1106', versao: '1.0.0',
+        namespace: 'http://www.dere.gov.br/schemas/evtAplicResTec/v1_0_0', oQue: 'Identificação de Aplicações Financeiras' },
+    { arquivo: 'evtRetornoTabela-v1_0_1.xsd', elemento: 'evtRetornoTabela', evento: 'D-9001', versao: '1.0.1',
+        namespace: 'http://www.dere.gov.br/schemas/evtRetornoTabela/v1_0_1', oQue: 'Retorno dos eventos de tabela (nrRecibo ≤ 31, protocoloLote)' },
+    { arquivo: 'evtRetornoBalan-v1_0_0.xsd', elemento: 'evtRetornoBalan', evento: 'D-9101', versao: '1.0.0',
+        namespace: 'http://www.dere.gov.br/schemas/evtRetornoBalan/v1_0_0', oQue: 'Retorno totalizador do balancete' },
+    { arquivo: 'evtRetornoAplicFin-v1_0_0.xsd', elemento: 'evtRetornoAplicFin', evento: 'D-9106', versao: '1.0.0',
+        namespace: 'http://www.dere.gov.br/schemas/evtRetornoAplicFin/v1_0_0', oQue: 'Retorno totalizador das aplicações financeiras' },
+]);
+
+/** Os eventos do leiaute que ainda NÃO têm XSD no repo — para ninguém montar XML deles por dedução. */
+export function xsdFaltando() {
+    return EVENTOS_DERE.filter((e) => !e.xsd).map((e) => e.codigo).sort();
+}
+
 /** O que NÃO está no repo — dito, para ninguém deduzir que o app leu. */
 export const DOCUMENTOS_DERE_FALTANDO = Object.freeze([
     'Manual de Orientação do Usuário (MOD) v1.0.1 — quem está obrigado em linguagem de negócio, prazos, penalidades.',
     'Mensagens de Erro do Sistema (documento 08, citado no Anexo II).',
-    'XSD dos eventos e do lote — o Manual do Desenvolvedor diz onde baixar (Portal SPED e cgibs.gov.br).',
+    `XSD dos eventos ${xsdFaltando().join(', ')} — o pacote "Nota Orientativa 2026" trouxe o lote, D-1001, D-1011, D-1101, `
+        + 'D-1106 e os retornos D-9001/9101/9106; os demais não vieram.',
 ]);
 
 // ═══ RÉGUAS DE FORMA DO ANEXO II ══════════════════════════════════════════════
@@ -194,6 +244,12 @@ function partesBrasilia(data) {
  * `DeRE` + NNNN (evento) + `1` (CNPJ) + CNPJ em 14 posições (alfanumérico em
  * MAIÚSCULAS, zeros à esquerda) + AAAAMMDD + HHMMSS (Brasília) + QQQQQ
  * (00001-99999). 42 caracteres.
+ *
+ * O XSD (evtBalancete/evtAplicResTec/retornos) CONFIRMA a forma:
+ * `DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}` — os 19 finais são AAAAMMDD+HHMMSS+
+ * QQQQQ. O XSD admite T = 2 no padrão; a RN do Anexo II só define 1 (CNPJ), e
+ * é a RN que este módulo segue — um Id com 2 não é "outro tipo", é um valor
+ * que a regra de negócio não descreve.
  *
  * Isto NÃO gera evento: é a régua de FORMA, para o dia em que houver gerador
  * e para conferir um Id que chegue de fora. Entrada torta é RECUSA nomeada,
@@ -282,10 +338,11 @@ function fmtData(d) {
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-const RESSALVA_ENTREGA = 'O CFI NÃO gera nem transmite os eventos da DeRE. Os leiautes e o manual do desenvolvedor '
-    + 'estão lidos e servidos no app, mas o XSD não está no repo, o insumo (PGCC, balancete) é contábil e a '
-    + 'transmissão exige credencial do piloto da Reforma. A entrega é por fora (portal/API da DeRE) e se '
-    + 'registra em Vencimentos como as demais obrigações entregues fora do app.';
+const RESSALVA_ENTREGA = 'O CFI NÃO gera nem transmite os eventos da DeRE. Os leiautes, o manual do desenvolvedor e '
+    + 'parte dos XSD estão lidos e servidos no app — mas faltam os XSD do fechamento (D-1199), do D-2101 e dos '
+    + 'retornos D-9121/D-9199, o insumo (PGCC, balancete) é contábil e a transmissão exige credencial do piloto '
+    + 'da Reforma. A entrega é por fora (portal/API da DeRE) e se registra em Vencimentos como as demais '
+    + 'obrigações entregues fora do app.';
 
 /**
  * A SITUAÇÃO de uma empresa numa competência — a linha que a tela mostra.
@@ -402,6 +459,8 @@ export function triarCarteiraDere(empresas = [], competencia) {
         fontes: FONTES_DERE,
         documentos: DOCUMENTOS_DERE,
         documentosFaltando: DOCUMENTOS_DERE_FALTANDO,
+        xsd: XSD_DERE,
+        xsdFaltando: xsdFaltando(),
         integracao: INTEGRACAO_DERE,
         obrigadas,
         declaracoes,
@@ -432,8 +491,9 @@ export function triarCarteiraDere(empresas = [], competencia) {
             'A declaração é por CNPJ RAIZ: matriz e filiais entram numa só. O número que importa é o de '
                 + 'DECLARAÇÕES, não o de estabelecimentos.',
             RESSALVA_ENTREGA,
-            'O que ainda não foi lido vai dito: o Manual do Usuário (MOD 1.0.1), as Mensagens de Erro e os XSD. O '
-                + 'prazo (dia 15, 1ª competência 10/2026) vem do Ato Conjunto RFB/CGIBS 4/2026 por resumo de terceiros.',
+            'O que ainda não foi lido vai dito: o Manual do Usuário (MOD 1.0.1), as Mensagens de Erro e os XSD de '
+                + xsdFaltando().join(', ') + '. O prazo (dia 15, 1ª competência 10/2026) vem do Ato Conjunto RFB/CGIBS '
+                + '4/2026 por resumo de terceiros.',
         ],
     };
 }
