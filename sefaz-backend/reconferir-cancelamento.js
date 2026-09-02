@@ -381,7 +381,14 @@ export function lerRespostaCancelamento(resp) {
  *
  * Contagem sem leitura é meio farol: "12 consultadas" não diz se o mês mudou.
  */
-export function resumirReconferencia({ selecao, resultados, simulado = false, modo = 'distdfe' }) {
+export function resumirReconferencia({
+    selecao, resultados, simulado = false, modo = 'distdfe',
+    // 🚨 A SEFAZ PODE TER PARADO A RODADA ANTES DE ELA CONSULTAR (cStat 656).
+    // Sem este fato, a frase abaixo AFIRMA que a rodada perguntou o que ela
+    // apenas ia perguntar — foi o que produziu, no print de 02/09, "0
+    // consultada(s)" ao lado de "Esta rodada perguntou 60 de 126 notas".
+    abortou656 = false,
+}) {
     const r = resultados || [];
     const canceladas = r.filter((x) => x.situacao === 'cancelada');
     const indeterminadas = r.filter((x) => x.situacao === 'indeterminado');
@@ -456,9 +463,20 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         // Quem lê conclui que a ferramenta já tentou e não achou nada, e para
         // ali. É a família das "duas leituras do mesmo fato discordando na
         // mesma tela", agora entre o que o app FEZ e o que ele diz ter feito.
+        // 🚨 O NÚMERO DA FRASE É O QUE A RODADA FEZ, NÃO O QUE ELA IA FAZER
+        // (02/09, print do Paulo na MV LIDER): `aConsultar.length` é a SELEÇÃO
+        // — quantas caberiam nesta rodada. Com a SEFAZ pedindo pausa no 656, a
+        // rodada consulta ZERO e a frase dizia "perguntou 60", enquanto o
+        // resumo ao lado, correto, dizia "0 consultada(s)". Duas leituras do
+        // mesmo fato na mesma tela, e a errada era a que fala em voz alta.
         const porRodada = Math.max(1, Number(selecao.aConsultar?.length) || 1);
+        const perguntadas = simulado ? 0 : r.length;
         const rodadas = Math.ceil((Number(selecao.total) || 0) / porRodada);
-        const quantas = rodadas > 1 ? ` São ${rodadas} rodadas para cobrir as ${selecao.total}.` : '';
+        // ⚠️ E o "São N rodadas para cobrir as N" SAIU da rodada REAL — foi
+        // essa frase que o dono circulou em vermelho no print de 02/09. Desde
+        // que a tela ENCADEIA sozinha, dizer o número de rodadas ali soa como
+        // tarefa dele; na PRÉVIA ela FICA, porque lá ela informa o tamanho do
+        // trabalho ANTES do clique, que é justamente o que se quer saber.
         // Quantas NUNCA foram perguntadas — é este número que mede o que falta.
         // "Rodadas" sozinho já prometeu progresso que não acontecia (MV LIDER).
         // ⚠️ E o número é o de DEPOIS da rodada (21/08, MV LIDER de novo): a
@@ -467,7 +485,7 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         // "102" com o cabeçalho da tela mostrando "82", duas leituras do mesmo
         // fato discordando na mesma tela.
         const nuncaAntes = Number(selecao.nuncaConferidas) || 0;
-        const consumidas = simulado ? 0 : Math.min(r.length, nuncaAntes);
+        const consumidas = Math.min(perguntadas, nuncaAntes);
         const faltam = Math.max(0, nuncaAntes - consumidas);
         const nunca = faltam ? ` Depois desta rodada, ${faltam} nota(s) ainda nunca foram perguntadas — são `
             + 'elas que a próxima rodada pega primeiro.' : ' Todas já foram perguntadas ao menos uma vez; a '
@@ -488,8 +506,13 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
                   + `cobrir as ${selecao.total}${rodadas > 1 ? ` (${rodadas} rodadas)` : ''} — você clica uma vez só. `
                   + 'O teto por rodada existe porque cada consulta é uma chamada com o certificado do '
                   + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).'
-                : `Esta rodada perguntou ${porRodada} de ${selecao.total} notas e a próxima começa `
-                  + `automaticamente.${quantas}${nunca} Cada consulta é uma chamada à SEFAZ com o certificado `
+                // ⚠️ Rodada interrompida pelo 656 NÃO promete a próxima: ela
+                // não vai começar sozinha, e a frase do 656 (que a rota põe
+                // acima) já diz o que fazer. Prometer aqui é a contradição de
+                // novo, um parágrafo abaixo.
+                : `Esta rodada perguntou ${perguntadas} de ${selecao.total} notas`
+                  + (abortou656 ? '.' : ' e a próxima começa automaticamente.')
+                  + `${nunca} Cada consulta é uma chamada à SEFAZ com o certificado `
                   + 'do cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
         );
     }
