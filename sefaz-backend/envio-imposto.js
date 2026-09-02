@@ -6,7 +6,8 @@
 //
 //   1. CÓPIA NO SHAREPOINT — pasta do cliente no padrão já existente do
 //      sync/arquivo, sub-pasta IMPOSTOS do período:
-//        Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/{empresaPasta}/IMPOSTOS
+//        Empresas/{código}_{nome}/Departamento Fiscal/{ano}/{Mês}/IMPOSTOS
+//      (a pasta da empresa é ACHADA pelo código — ver caminho-sharepoint.js)
 //      (empresaPasta = "CNPJ NOME" configurada em sharePointConfig; empresa
 //      sem config não bloqueia o envio — o gap aparece no resultado).
 //   2. CÓPIA AUTOMÁTICA AO GESTOR — alexandre@spassessoriacontabil.com.br em
@@ -24,6 +25,12 @@
 
 import admin from 'firebase-admin';
 import { normalizarCompetencia, competenciaTarefa } from './competencia.js';
+// 🚨 O caminho MUDOU em 02/09 (medido na árvore real): não há nível de GRUPO,
+// a empresa vem ANTES do departamento e o nome da pasta dela é HUMANO — tem de
+// ser ACHADO pelo código. A régua é única; ver caminho-sharepoint.js.
+import { caminhoImpostos } from './caminho-sharepoint.js';
+// Dono único de "qual é a pasta desta empresa?" — ver sharepoint-pastas.js.
+import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 
 export const GESTOR_EMAIL = process.env.ENVIO_IMPOSTO_GESTOR
     || 'alexandre@spassessoriacontabil.com.br';
@@ -54,15 +61,20 @@ export { competenciaTarefa };
 
 
 /**
- * Pasta IMPOSTOS do período no SharePoint — MESMA árvore do sync/arquivo de
- * XMLs (buildFolderPathArquivo), trocando a folha por IMPOSTOS.
+ * Pasta IMPOSTOS do período — MESMA árvore do sync de XMLs, trocando a folha.
+ *
+ * 🚨 A assinatura MUDOU em 02/09: ela recebia `grupo` + `empresaPasta` do
+ * cadastro e MONTAVA o caminho. A árvore real não tem grupo, e o nome da pasta
+ * da empresa é humano (`0004 – AÇOUGUE YOKOAMA`) — montar criaria uma pasta
+ * NOVA ao lado da que existe. Agora recebe a pasta REAL, já lida do SharePoint.
  */
-export function buildFolderPathImpostos(grupo, empresaPasta, competencia) {
+export function buildFolderPathImpostos(pastaEmpresa, competencia) {
     const n = normalizarCompetencia(competencia);
-    if (!grupo || !empresaPasta || !n) return null;
+    if (!pastaEmpresa || !n) return null;
     const [ano, mes] = n.split('-');
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${ano}/${mes}-${ano}/${empresaPasta}/IMPOSTOS`;
+    return caminhoImpostos({ pastaEmpresa, ano, mes });
 }
+
 
 /**
  * Tipo de imposto/guia → obrigação da coleção tarefas (a pendência que o
@@ -175,13 +187,16 @@ export async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
  * "no envio funcionou e no refazer não".
  */
 export async function arquivarGuiaNoSharePoint({ empresa, pdf, competencia, tipo, empresaCnpj, pdfFileName }) {
-    const cfg = empresa?.data?.sharePointConfig;
-    const folder = cfg ? buildFolderPathImpostos(cfg.grupo, cfg.empresaPasta, competencia) : null;
+    // 🚨 A PASTA DA EMPRESA É ACHADA, NÃO MONTADA (02/09). Cada situação tem
+    // ação PRÓPRIA — "não achei", "achei duas" e "o cadastro não tem código"
+    // pedem coisas diferentes, e um balde só faria as três parecerem a mesma.
+    const achado = await resolverPastaDaEmpresa(empresa?.data);
+    if (!achado.ok) {
+        return { status: 'sem-config', motivo: achado.motivo };
+    }
+    const folder = buildFolderPathImpostos(achado.pasta, competencia);
     if (!folder) {
-        return {
-            status: 'sem-config',
-            motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → Integrações → SharePoint.',
-        };
+        return { status: 'sem-config', motivo: 'Competência ilegível — não dá para saber em qual mês arquivar.' };
     }
     const nome = pdfFileName
         || `${String(tipo || 'imposto').toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${normalizarCompetencia(competencia) || 'competencia'}.pdf`;

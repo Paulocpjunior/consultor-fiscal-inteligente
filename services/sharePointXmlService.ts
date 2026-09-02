@@ -4,6 +4,8 @@
  * O proxy autentica via Microsoft Graph e acessa as pastas de XMLs.
  */
 import { getAuth } from 'firebase/auth';
+// Dono único do caminho — ver o comentário de buildFolderPath.
+import { caminhoFiscal } from '../sefaz-backend/caminho-sharepoint.js';
 
 const PROXY_URL = 'https://consultor-fiscal-proxy-631239634290.us-west1.run.app';
 
@@ -95,10 +97,25 @@ export async function syncSharePointFolder(folderPath: string): Promise<SharePoi
     return resp.json();
 }
 
+/**
+ * 🚨 A ASSINATURA MUDOU EM 02/09, e o motivo é a árvore REAL.
+ *
+ * Ela montava `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/
+ * {empresa}/XML {dir}` — caminho que NÃO EXISTE no SharePoint: não há nível de
+ * GRUPO, a empresa vem ANTES do departamento e o mês é por NOME.
+ *
+ * ⚠️ `pastaEmpresa` é o nome REAL da pasta (`0040_Clinica Mantoan`), lido do
+ * SharePoint pelo explorador — ele é humano e não se monta. Quem RESOLVE o
+ * nome pelo Cod.Cliente é o backend; aqui ele chega pronto.
+ *
+ * A régua mora em `sefaz-backend/caminho-sharepoint.js` (dono único): uma
+ * segunda cópia divergiria no primeiro ajuste, e a tela passaria a prometer um
+ * caminho que o backend não usa.
+ */
 export function buildFolderPath(
-    grupo: string, ano: string, mes: string, empresa: string, direcao: 'SAÍDA' | 'ENTRADA' = 'SAÍDA'
+    pastaEmpresa: string, ano: string, mes: string, direcao: 'SAÍDA' | 'ENTRADA' = 'SAÍDA'
 ): string {
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${ano}/${mes}-${ano}/${empresa}/XML ${direcao}`;
+    return caminhoFiscal({ pastaEmpresa, ano, mes, direcao }) || '';
 }
 
 export async function testSharePointConnection(folderUrl: string): Promise<{ ok: boolean; mensagem: string }> {

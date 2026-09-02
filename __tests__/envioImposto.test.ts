@@ -28,18 +28,34 @@ describe('normalizarCompetencia / competenciaTarefa', () => {
     });
 });
 
+// 🚨 FIXTURE TROCADA EM 02/09, e pelo motivo certo: ela travava o caminho
+// `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/{empresa}/IMPOSTOS`,
+// que a medição da árvore REAL mostrou NÃO EXISTIR — não há nível de grupo, a
+// empresa vem antes do departamento e o mês é por nome. Ela descrevia o mundo
+// que o app imaginava; mantê-la seria travar o defeito.
 describe('buildFolderPathImpostos', () => {
-    it('mesma árvore do arquivo de XMLs, trocando a folha por IMPOSTOS', () => {
-        const xml = buildFolderPathArquivo('GRUPO A', '44388152000189 SP ASSESSORIA', '2026-06', 'saida');
-        const imp = buildFolderPathImpostos('GRUPO A', '44388152000189 SP ASSESSORIA', '2026-06');
-        expect(xml).toBe('Empresas/GRUPO A/DEPARTAMENTO FISCAL/2026/06-2026/44388152000189 SP ASSESSORIA/XML SAÍDA');
-        expect(imp).toBe('Empresas/GRUPO A/DEPARTAMENTO FISCAL/2026/06-2026/44388152000189 SP ASSESSORIA/IMPOSTOS');
+    it('a guia vai no mesmo mês do fiscal, a partir da pasta REAL da empresa', () => {
+        expect(buildFolderPathImpostos('0040_Clinica Mantoan', '2026-06'))
+            .toBe('Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Junho/IMPOSTOS');
     });
     it('aceita competência MM/AAAA e recusa dado faltante', () => {
-        expect(buildFolderPathImpostos('G', 'P', '06/2026')).toBe('Empresas/G/DEPARTAMENTO FISCAL/2026/06-2026/P/IMPOSTOS');
-        expect(buildFolderPathImpostos('', 'P', '2026-06')).toBeNull();
-        expect(buildFolderPathImpostos('G', '', '2026-06')).toBeNull();
-        expect(buildFolderPathImpostos('G', 'P', 'ruim')).toBeNull();
+        expect(buildFolderPathImpostos('0040_Clinica Mantoan', '06/2026'))
+            .toBe('Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Junho/IMPOSTOS');
+        expect(buildFolderPathImpostos('', '2026-06')).toBeNull();
+        expect(buildFolderPathImpostos('0040_X', 'ruim')).toBeNull();
+    });
+    // ⚠️ O nome da pasta NÃO é montado: ele chega já lido do SharePoint.
+    it('não inventa o nome da pasta da empresa', () => {
+        expect(buildFolderPathImpostos('0004 – AÇOUGUE YOKOAMA', '2026-09'))
+            .toBe('Empresas/0004 – AÇOUGUE YOKOAMA/Departamento Fiscal/2026/Setembro/IMPOSTOS');
+    });
+    // 🚨 A GUIA E O XML SÃO IRMÃOS NO MESMO MÊS — e os dois trilhos montam o
+    // caminho em módulos diferentes. Se um deles divergir, a guia vai parar
+    // numa pasta que ninguém abre, e nada acusa: o upload dá 201 igual.
+    it('IMPOSTOS é irmã de XML SAÍDA — os dois trilhos concordam na árvore', () => {
+        const guia = buildFolderPathImpostos('0040_Clinica Mantoan', '2026-06');
+        const xml = buildFolderPathArquivo('0040_Clinica Mantoan', '2026-06', 'saida');
+        expect(guia.replace(/\/IMPOSTOS$/, '')).toBe(xml.replace(/\/XML SAÍDA$/, ''));
     });
 });
 

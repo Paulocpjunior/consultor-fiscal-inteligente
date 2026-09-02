@@ -44,6 +44,21 @@ export function caminhoFiscal(args: {
     direcao?: 'SAÍDA' | 'ENTRADA';
 }): string | null;
 
+/** Uma folha qualquer dentro do mês — dono ÚNICO da árvore. */
+export function caminhoDaFolha(args: {
+    pastaEmpresa?: string | null;
+    ano?: string | number | null;
+    mes?: string | number | null;
+    folha?: string | null;
+}): string | null;
+
+/** A pasta dos RECIBOS da REINF — irmã de IMPOSTOS. */
+export function caminhoRecibos(args: {
+    pastaEmpresa?: string | null;
+    ano?: string | number | null;
+    mes?: string | number | null;
+}): string | null;
+
 /** A pasta das guias do rito, no mesmo mês do fiscal. */
 export function caminhoImpostos(args: {
     pastaEmpresa?: string | null;

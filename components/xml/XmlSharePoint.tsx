@@ -121,7 +121,6 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [empresaId, setEmpresaId] = useState('');
 
-    const [grupo, setGrupo] = useState('');
     const [empresaPasta, setEmpresaPasta] = useState('');
     const [ano, setAno] = useState(String(new Date().getFullYear()));
     const [mes, setMes] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
@@ -183,12 +182,14 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
 
     const folderPath = useCustom
         ? customPath
-        : buildFolderPath(grupo, ano, mes, empresaPasta, direcao);
+        : buildFolderPath(empresaPasta, ano, mes, direcao);
 
     // Campos obrigatorios faltando (so no modo guiado) — sinaliza ao colaborador
     // o que impede a pasta de ser encontrada.
+    // 🚨 O campo GRUPO SAIU (02/09): esse nível não existe na árvore real. O
+    // que resta é a pasta REAL da empresa (`0040_Clinica Mantoan`), que se
+    // descobre no explorador acima — ela é humana e não se monta.
     const faltando = useCustom ? [] : ([
-        !grupo.trim() && 'Grupo',
         !empresaPasta.trim() && 'Empresa (pasta)',
         !ano.trim() && 'Ano',
     ].filter(Boolean) as string[]);
@@ -362,10 +363,10 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 </p>
                 <div className="text-xs font-mono p-2.5 rounded break-all"
                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                    Empresas / <b style={{ color: 'var(--accent)' }}>GRUPO</b> / DEPARTAMENTO FISCAL / <b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>MÊS</b>-<b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>EMPRESA</b> / XML <b style={{ color: 'var(--accent)' }}>SAÍDA</b>
+                    Empresas / <b style={{ color: 'var(--accent)' }}>CÓDIGO_NOME DA EMPRESA</b> / Departamento Fiscal / <b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>MÊS POR EXTENSO</b> / XML <b style={{ color: 'var(--accent)' }}>SAÍDA</b>
                 </div>
                 <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
-                    Exemplo: <code>Empresas/Grupo Flanacar/DEPARTAMENTO FISCAL/2026/07-2026/CMM/XML SAÍDA</code>
+                    Exemplo: <code>Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Setembro/XML SAÍDA</code>
                     {' '}— para notas recebidas, troque o fim por <code>XML ENTRADA</code>.
                 </p>
 
@@ -585,15 +586,13 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                             )}
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            <div>
-                                <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Grupo</label>
-                                <input value={grupo} onChange={e => setGrupo(e.target.value)} placeholder="Grupo Flanacar"
-                                    className="w-full mt-1 p-2 text-xs rounded-lg outline-none"
-                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Empresa (pasta)</label>
-                                <input value={empresaPasta} onChange={e => setEmpresaPasta(e.target.value)} placeholder="CMM"
+                            {/* 🗑️ O campo GRUPO SAIU: esse nível não existe na
+                                árvore real (medido em 02/09; o dono confirmou:
+                                "não tem grupo"). Campo que alimenta um caminho
+                                inexistente é trabalho perdido de quem preenche. */}
+                            <div className="col-span-2">
+                                <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Empresa (pasta REAL no SharePoint)</label>
+                                <input value={empresaPasta} onChange={e => setEmpresaPasta(e.target.value)} placeholder="0040_Clinica Mantoan"
                                     className="w-full mt-1 p-2 text-xs rounded-lg outline-none"
                                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
                             </div>

@@ -30,6 +30,9 @@
 // ============================================================================
 
 import { Router } from 'express';
+// Dono único do caminho (a árvore real foi medida em 02/09; não há nível de GRUPO).
+import { caminhoRecibos } from './caminho-sharepoint.js';
+import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
@@ -60,10 +63,10 @@ const PROXY_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHAR
  * ENTREGA da obrigação acessória. São artefatos diferentes, com públicos
  * diferentes — misturar faz alguém mandar recibo de entrega no lugar da guia.
  */
-export function pastaRecibosReinf(grupo, empresaPasta, competencia) {
+export function pastaRecibosReinf(pastaEmpresa, competencia) {
     const m = /^(\d{4})-(\d{2})$/.exec(String(competencia || ''));
-    if (!grupo || !empresaPasta || !m) return null;
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${m[1]}/${m[2]}-${m[1]}/${empresaPasta}/RECIBOS`;
+    if (!pastaEmpresa || !m) return null;
+    return caminhoRecibos({ pastaEmpresa, ano: m[1], mes: m[2] });
 }
 
 async function uploadRecibo(folderPath, filename, contentBase64, mimeType) {
@@ -569,7 +572,14 @@ router.get('/fechamento-competencia/preparar', requireAdmin, async (req, res) =>
             codigosFunrural: CODIGOS_RECEITA_FUNRURAL,
             // O SharePoint é a prova que fica — se não há onde arquivar, a tela
             // precisa dizer ANTES, não depois de montar o extrato.
-            temPastaSharePoint: Boolean(empresa._doc?.sharePointConfig?.grupo && empresa._doc?.sharePointConfig?.empresaPasta),
+            //
+            // 🚨 E A CAUSA VAI JUNTO (02/09). Isto lia `sharePointConfig.grupo`,
+            // que é o cadastro do caminho MORTO: a tela mandava preencher
+            // "grupo + pasta" em Integrações → SharePoint, e preencher lá não
+            // resolve mais nada — é o aviso que aponta um lugar que não
+            // resolve (achado 18, 21/08). Agora quem responde é o DONO, e o
+            // motivo dele já diz a AÇÃO de cada uma das três causas.
+            pastaSharePoint: await resolverPastaDaEmpresa(empresa._doc),
         });
     } catch (e) {
         console.error('[reinf/fechamento/preparar]', e);
@@ -646,13 +656,16 @@ router.post('/fechamento-competencia', requireAdmin, express.json({ limit: '12mb
         const arquivos = (Array.isArray(req.body?.arquivos) ? req.body.arquivos : [])
             .filter((a) => a && a.nome && a.base64);
         if (arquivos.length) {
-            const cfg = empresa._doc?.sharePointConfig;
-            const pasta = cfg ? pastaRecibosReinf(cfg.grupo, cfg.empresaPasta, competencia) : null;
+            // 🚨 A pasta da empresa é ACHADA pelo Cod.Cliente (02/09): a árvore
+            // real não tem grupo e o nome dela é humano. O motivo vem do DONO —
+            // frase nova aqui divergiria da que o auto-sync mostra no mesmo caso.
+            const achado = await resolverPastaDaEmpresa(empresa._doc);
+            const pasta = achado.ok ? pastaRecibosReinf(achado.pasta, competencia) : null;
             if (!pasta) {
                 resultado.sharePoint = {
                     status: 'sem-config',
-                    motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → '
-                        + 'Integrações → SharePoint. O extrato foi montado, mas não há onde arquivar.',
+                    motivo: `${achado.motivo || 'Competência ilegível.'} `
+                        + 'O extrato foi montado, mas não há onde arquivar.',
                 };
             } else {
                 const arquivados = [];
