@@ -41,6 +41,9 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     const [file, setFile] = useState<File | null>(null);
     const [parsed, setParsed] = useState<NfsePdfParsed | null>(null);
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
+    // ⚠️ A direção saiu da POSIÇÃO no texto, não de um campo nomeado pelo
+    // documento: ela é palpite, e a tela pede confirmação em vez de afirmar.
+    const [direcaoDerivada, setDirecaoDerivada] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -74,6 +77,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             const match = matchNfseEmpresa(result, empresaSelecionada.cnpj);
             if (!match.ok) throw new Error(match.motivo || 'CNPJ nao bate com a empresa.');
             setDirecao(match.direcao);
+            setDirecaoDerivada(Boolean(match.derivada));
             setParsed(result);
         } catch (err: any) {
             const msg = err instanceof NfsePdfParseError ? err.message : (err?.message || 'Erro ao extrair PDF.');
@@ -306,9 +310,28 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                         <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                             Validar dados extraidos - NFSe {parsed.numero}/{parsed.serie}
                         </h3>
-                        <span className={`text-xs font-bold px-2 py-1 rounded ${direcao === 'saida' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'}`}>
-                            {direcao === 'saida' ? 'SAIDA (somos prestador)' : 'ENTRADA (somos tomador)'}
-                        </span>
+                        {/* 🚨 PALPITE NÃO SE APRESENTA COMO FATO (02/09, RADIO E TV
+                            SUL AMERICANA): o PDF veio com prestador e tomador VAZIOS
+                            e o app afirmou "ENTRADA (somos tomador)" numa nota em que
+                            a empresa é a PRESTADORA. A direção decide em QUAL LIVRO a
+                            nota entra — quando ela foi DERIVADA (posição no texto, e
+                            não um campo que o documento nomeia), quem confirma é a
+                            pessoa, e o selo vira uma ESCOLHA. */}
+                        {direcaoDerivada ? (
+                            <select
+                                value={direcao}
+                                onChange={e => setDirecao(e.target.value as 'entrada' | 'saida')}
+                                className="text-xs font-bold px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-400"
+                                title="O PDF não nomeia o prestador e o tomador neste leiaute — o app deduziu pela posição no texto. Confirme antes de salvar."
+                            >
+                                <option value="saida">⚠ confirme: SAIDA (somos prestador)</option>
+                                <option value="entrada">⚠ confirme: ENTRADA (somos tomador)</option>
+                            </select>
+                        ) : (
+                            <span className={`text-xs font-bold px-2 py-1 rounded ${direcao === 'saida' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'}`}>
+                                {direcao === 'saida' ? 'SAIDA (somos prestador)' : 'ENTRADA (somos tomador)'}
+                            </span>
+                        )}
                     </div>
 
                     <div>
