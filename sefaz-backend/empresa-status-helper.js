@@ -37,8 +37,49 @@ export function classificarCapturaNfseNacionalAdn({
         return { ok: true, via: 'cloud-a1-raiz', motivo: null };
     }
 
+    // 🚨 A3 NÃO TEM AGENTE DE NFS-e — e o painel dizia que tinha (02/09, caso
+    // SILVIO FREIRE, empresa 93, ao perguntar pela NFS-e de ENTRADA dela).
+    //
+    // Isto respondia `ok: true · via: 'a3-local' · motivo: null` — ou seja,
+    // **✓ NFSe Nac** na linha, sem bloqueio nenhum —, apoiado no comentário de
+    // que "depende do agente local A3".
+    //
+    // ✅ **QUEM FECHOU A MEDIÇÃO FOI O DONO** (Paulo, 02/09): *"o agente só
+    // puxa NF-e da SEFAZ, não puxa NFS-e"*. E o código concorda: o
+    // `GET /state/:cnpj` do agente devolve `sefaz_state` — o cursor do
+    // **DistDFe** —, e não existe rota que ofereça o cursor do **ADN**.
+    //
+    // ⚠️ **ROTA QUE ACEITA ≠ TRILHO QUE TRAZ, e isso quase me enganou**: o
+    // `POST /upload-batch` DETECTA NFS-e Nacional e importa. Mas isso é REDE
+    // (para o dia em que chegar) — o agente não tem de onde buscar.
+    //
+    // 🔴 E O PRÓPRIO TRILHO JÁ RECUSAVA: `nfse-nacional-dfe-eligibility.js`
+    // devolve INELEGÍVEL para A3 (*"ADN no Cloud Run exige A1 proprio;
+    // certificado A3 precisa fluxo/agente local especifico"*) — fluxo que não
+    // existe. Duas leituras do mesmo fato discordando: a elegibilidade diz
+    // "não roda", o painel dizia "✓ ok".
+    //
+    // 📌 É o `temA3Proprio` de 23/08 repetido no trilho da NFS-e: validação por
+    // STATUS (tem cartão A3 cadastrado) lida como RESULTADO (está capturando).
+    //
+    // ⚠️ E A AÇÃO ANTIGA MANDAVA AO LUGAR QUE NÃO RESOLVE: como o ADN nunca
+    // roda, a cobertura caía em `adn-sem-visita` e dizia *"Rode a captura da
+    // NFS-e Nacional para este CNPJ"* — clique que o próprio trilho recusa.
+    // É o achado 18 (21/08) na forma mais cara. O número de alarmes NÃO muda
+    // (a empresa já acendia); o que muda é a CAUSA e a AÇÃO.
+    //
+    // ⚠️ A saída do A1 DA MATRIZ já foi testada acima (`temA1MesmaRaizValido`):
+    // chegar aqui significa que ela não existe. Por isso ela vai na frase.
     if (tipoCert === 'A3' && certUploaded) {
-        return { ok: true, via: 'a3-local', motivo: null };
+        return {
+            ok: false,
+            via: 'a3-sem-trilho-nfse',
+            motivo: 'NFS-e Nacional ADN: o certificado A3 não roda no Cloud Run e o agente local A3 '
+                + 'captura NF-e e NFC-e, NUNCA NFS-e — não existe trilho automático de NFS-e para esta '
+                + 'empresa, e rodar a captura do ADN não resolve. Saídas: cadastre um A1 próprio (ou o '
+                + 'da matriz, mesma raiz de CNPJ — o ADN aceita), ou traga a NFS-e por outro caminho '
+                + '(portal do município, cofre de e-mail, ou Importar em Central de XMLs).',
+        };
     }
 
     if (usaCertEscritorio || procuracaoEcacAtiva) {
