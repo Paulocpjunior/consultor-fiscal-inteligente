@@ -17,7 +17,7 @@
  *  - farol honesto: leitura truncada e retenções não gravadas (docs antigos)
  *    aparecem na tela E no PDF.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
@@ -36,6 +36,7 @@ import {
     contraparteDoc, docValido, lerFaltantes,
 } from '../../services/relatoriosAgregacoes';
 import { reconferirCancelamento } from '../../services/reconferirCancelamentoService';
+import { drenarReconferencia, fraseDaDrenagem } from '../../services/reconferenciaEncadeada';
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
 import { relerNotasVazias } from '../../services/ipiVarreduraService';
@@ -1328,12 +1329,48 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
     // — é a mesma família do "informar vencimento não atualizava a tarefa"
     // (16/08): ação sem efeito visível é beco, e a única saída que sobra pra
     // quem está na tela é repetir o clique achando que não funcionou.
+    // 🚨 A RECONFERÊNCIA PASSOU A DRENAR SOZINHA (02/09, Paulo na MV LIDER 0639:
+    // *"pede para eu reconferir 3 vezes de 1 em 1, isso que precisa verificar,
+    // já imaginou uma NOVA ERA da vida?"*).
+    //
+    // O teto por rodada (~60) existe e continua valendo — cada consulta é uma
+    // chamada com o certificado do cliente, e varrer centenas de uma vez
+    // arrisca o cStat 656. O que NÃO pode é o TETO virar tarefa do colaborador:
+    // 126 notas eram 3 cliques; a NOVA ERA seria dezenas, e ninguém clica
+    // dezenas de vezes — na prática a reconferência não roda, e "0 cancelada"
+    // continua sendo o que o app sabe, não o que a SEFAZ diz.
+    //
+    // ✂️ O padrão é o MESMO que a captura de NFC-e já usa desde sempre: a UI
+    // encadeia as rodadas, acumulando os totais e mostrando o progresso. Um
+    // clique drena a competência.
+    const pararRef = useRef(false);
+    const [rodada, setRodada] = useState(0);
+
     const reconferir = async (simular: boolean) => {
         setReconferindo(true);
+        setRodada(0);
+        pararRef.current = false;
         try {
-            const r = await reconferirCancelamento({ cnpj: empresa.cnpj, competencia, simular });
-            setReconf(r);
-            if (r?.ok && !simular) await onRebuscar?.();
+            if (simular) {
+                setReconf(await reconferirCancelamento({ cnpj: empresa.cnpj, competencia, simular: true }));
+                return;
+            }
+            const resultados: any[] = [];
+            const fim = await drenarReconferencia({
+                chamar: () => reconferirCancelamento({ cnpj: empresa.cnpj, competencia, simular: false }),
+                parar: () => pararRef.current,
+                onProgresso: (acc, r: any, i) => {
+                    setRodada(i);
+                    for (const x of (r.resultados || [])) resultados.push(x);
+                    // Mostra o ACUMULADO — o da última rodada faria "6
+                    // consultadas" aparecer depois de 126 perguntas.
+                    setReconf({ ...r, resultados, resumo: { ...(r.resumo || {}), ...acc } });
+                },
+            });
+            const ultima: any = fim.ultima;
+            if (!ultima?.ok) { setReconf(ultima); return; }
+            setReconf((atual: any) => ({ ...(atual || {}), drenagem: fraseDaDrenagem(fim) }));
+            if (ultima?.ok) await onRebuscar?.();
         } catch (e: any) {
             setReconf({ error: e?.message || 'Falha ao consultar a SEFAZ.' });
         } finally {
@@ -1451,11 +1488,34 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                             disabled={reconferindo}
                             className="text-[11px] px-3 py-1 rounded-md bg-sky-600 hover:bg-sky-700 text-white font-semibold disabled:opacity-50"
                         >
-                            {reconferindo ? '⏳ Perguntando à SEFAZ…' : '📡 Reconferir na SEFAZ'}
+                            {reconferindo
+                                ? `⏳ Perguntando à SEFAZ… (rodada ${rodada})`
+                                : '📡 Reconferir na SEFAZ (drena a competência)'}
                         </button>
+                        {reconferindo && (
+                            <button
+                                onClick={() => { pararRef.current = true; }}
+                                className="text-[11px] px-3 py-1 rounded-md bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold"
+                            >
+                                Parar após esta rodada
+                            </button>
+                        )}
                     </div>
+                    {reconferindo && (
+                        <p className="text-[11px] text-sky-800 dark:text-sky-300">
+                            As rodadas são encadeadas automaticamente — o teto por rodada existe para não
+                            arriscar o bloqueio por excesso da SEFAZ (cStat 656), mas você não precisa clicar
+                            de novo. Os números abaixo sobem a cada rodada.
+                        </p>
+                    )}
 
                     {reconf?.error && <p className="text-[11px] text-red-600 dark:text-red-400">{reconf.error}</p>}
+                    {/* Cada motivo de parada tem AÇÃO própria — 656 pede espera
+                        de ~1h, teto de rodadas pede outro clique, drenou não
+                        pede nada. Uma frase só para os três seria "vá procurar". */}
+                    {reconf?.drenagem && !reconferindo && (
+                        <p className="text-[11px] font-semibold text-sky-900 dark:text-sky-200">{reconf.drenagem}</p>
+                    )}
                     {reconf?.ok && (
                         <div className="text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
                             <p className="font-semibold">

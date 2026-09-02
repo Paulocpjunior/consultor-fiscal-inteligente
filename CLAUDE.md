@@ -5,6 +5,49 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O TETO DE SEGURANÇA VIROU TAREFA DO COLABORADOR — "reconferir 3 vezes de
+  1 em 1"** (02/09, Paulo na MV LIDER 0639 · 08/2026: *"tenho 3 canceladas e não
+  considerou, pede para eu reconferi 3 vezes de 1 em 1, isso que precisa
+  verificar, **já imaginou uma NOVA ERA da vida?**"*).
+  📖 A tela dizia, e ele circulou em vermelho: *"60 das 126 notas serão
+  perguntadas nesta rodada. **São 3 rodadas para cobrir as 126.**"*
+  📌 **O TETO ESTÁ CERTO E FICA**: cada consulta é uma chamada com o certificado
+  do cliente, e varrer centenas de uma vez arrisca o **cStat 656** (o bloqueio
+  por excesso da própria SEFAZ). **O que estava errado é de quem era o trabalho
+  de repetir.**
+  🚨 **E O CUSTO NÃO É O CLIQUE — É A RECONFERÊNCIA NÃO RODAR.** 126 notas eram
+  3 cliques; uma carteira grande seria dezenas, e ninguém clica dezenas de
+  vezes. Na prática ela não roda — e aí *"0 cancelada(s)"* continua sendo **o
+  que o app SABE**, não o que a SEFAZ diz, com nota cancelada somando no
+  faturamento. O teto protegia a SEFAZ e desprotegia o livro.
+  ✂️ A tela passou a **ENCADEAR as rodadas sozinha** — o padrão que a captura de
+  NFC-e já usa desde sempre (*"a UI encadeia as rodadas automaticamente"*). Um
+  clique drena a competência, com o **acumulado** subindo ao vivo e um botão
+  **"parar após esta rodada"**.
+  ⚠️ **O NÚMERO MOSTRADO É O ACUMULADO**, nunca o da última rodada — senão
+  *"6 consultadas"* apareceria depois de 126 perguntas.
+  ⚠️ **PARA NO 656**: é a SEFAZ dizendo "consulta demais"; insistir COLECIONA
+  recusa e ESTENDE o bloqueio (a régua do respiro, 27/08). A frase diz que o
+  limite é **DELA**, que a espera é de ~1h e que **o já perguntado não se
+  perde** — é o carimbo que faz a fila andar (20/08).
+  ⚠️ **E TEM TETO DE RODADAS**: um backend que parasse de progredir com
+  `cortadas > 0` viraria laço infinito no navegador do colaborador. Rodada que
+  não consulta nada também para — sem isso o teto gastaria 40 chamadas à SEFAZ
+  para não perguntar nada.
+  ✂️ **O LAÇO MORA EM MÓDULO PRÓPRIO** (`reconferenciaEncadeada.ts`), não dentro
+  do `.tsx` de 1.500 linhas: é ELE que pode errar (laço infinito, parar cedo,
+  ignorar o 656), e régua dentro de tela é régua sem prova.
+  📌 **E A FRASE DO BACKEND MUDOU JUNTO**: ela mandava *"rode de novo para
+  continuar"*, e com o encadeamento isso vira um clique inútil e a dúvida se a
+  tela fez o que disse — duas leituras do mesmo fato, agora entre o app e a
+  instrução dele. **Três asserções foram trocadas pela INTENÇÃO** (o total
+  aparece · a prévia diz quantas rodadas · a rodada real fala no passado):
+  elas prendiam o TEXTO de uma frase que mudou por decisão.
+  📌 **REGRA QUE FICA: teto de segurança contra o outro lado é do APP, nunca da
+  pessoa.** Onde existir limite por rodada — SEFAZ, SERPRO, Graph, SharePoint —
+  quem repete é o app, com o respiro e o botão de parar. Passar a repetição
+  para quem usa é entregar uma trava que, na escala real, ninguém aciona.
+
 - **🚨 "ABRIR PELO OUTLOOK WEB DÁ ERRO" — e o Outlook só dizia "Something went
   wrong"** (02/09, print da colaboradora no Teams, guia do MARCOS ANTONIO
   ZAMBOLIN; Paulo repassou: *"o que podemos fazer"*).

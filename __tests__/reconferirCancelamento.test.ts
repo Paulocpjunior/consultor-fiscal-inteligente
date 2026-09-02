@@ -78,7 +78,12 @@ describe('seleção do que reconferir', () => {
         expect(s.total).toBe(30);
         expect(s.cortadas).toBe(20);
         expect(resumirReconferencia({ selecao: s, resultados: [] }).avisos.join(' '))
-            .toMatch(/parou em 10 de 30/);
+            // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (02/09): ela prendia o TEXTO
+            // "parou em 10 de 30", e a frase mudou por decisão — a tela passou
+            // a ENCADEAR as rodadas, então "rode de novo" virava um clique
+            // inútil. O que ela protege continua: o TOTAL tem de aparecer,
+            // senão a lista cortada se lê como "conferi tudo".
+            .toMatch(/10 de 30/);
     });
 });
 
@@ -234,7 +239,9 @@ describe('MV LIDER 639: prévia × rodada de verdade', () => {
 
     it('a prévia DIZ quantas rodadas faltam — 215 notas em rodadas de 60 são 4', () => {
         const r = resumirReconferencia({ selecao, resultados: [], simulado: true });
-        expect(r.avisos.join(' ')).toMatch(/São 4 rodadas/);
+        // Intenção: a prévia DIZ quantas rodadas o app vai fazer (antes ela
+        // dizia quantas a PESSOA teria de fazer — hoje é um clique só).
+        expect(r.avisos.join(' ')).toMatch(/4 rodadas/);
     });
 
     it('na rodada DE VERDADE o passado volta, agora verdadeiro', () => {
@@ -244,7 +251,10 @@ describe('MV LIDER 639: prévia × rodada de verdade', () => {
             simulado: false,
         });
         const texto = r.avisos.join(' | ');
-        expect(texto).toMatch(/A rodada parou em 60 de 215/);
+        // Intenção: a rodada de verdade fala no PASSADO (ela perguntou), ao
+        // contrário da prévia — foi a mistura dos dois tempos que travou a MV
+        // LIDER em 18/08.
+        expect(texto).toMatch(/perguntou 60 de 215/);
         expect(texto).not.toMatch(/Ainda NÃO consultamos/);
     });
 

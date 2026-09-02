@@ -473,14 +473,24 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
             + 'elas que a próxima rodada pega primeiro.' : ' Todas já foram perguntadas ao menos uma vez; a '
             + 'rodada volta nas mais antigas, porque nota válida hoje pode ser cancelada amanhã.';
         avisos.push(
+            // 🚨 A FRASE MANDAVA CLICAR DE NOVO — e desde 02/09 a tela ENCADEIA
+            // as rodadas sozinha (Paulo, MV LIDER: *"pede para eu reconferir 3
+            // vezes de 1 em 1 … já imaginou uma NOVA ERA da vida?"*). Manter o
+            // "rode de novo" faria a pessoa clicar um quarto clique inútil e
+            // duvidar do que a tela acabou de fazer: duas leituras do mesmo
+            // fato de novo, agora entre o app e a instrução dele.
+            //
+            // ⚠️ O TETO POR RODADA CONTINUA — ele é a proteção contra o cStat
+            // 656. O que mudou é de quem é o trabalho de repetir.
             simulado
                 ? `Ainda NÃO consultamos nada — isto é só a prévia. Ao clicar em "Reconferir na SEFAZ", `
-                  + `${porRodada} das ${selecao.total} notas serão perguntadas à SEFAZ nesta rodada.${quantas} `
+                  + `o app pergunta ${porRodada} nota(s) por rodada e ENCADEIA as rodadas sozinho até `
+                  + `cobrir as ${selecao.total}${rodadas > 1 ? ` (${rodadas} rodadas)` : ''} — você clica uma vez só. `
                   + 'O teto por rodada existe porque cada consulta é uma chamada com o certificado do '
                   + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).'
-                : `A rodada parou em ${porRodada} de ${selecao.total} notas. Rode de novo para `
-                  + `continuar.${quantas}${nunca} Cada consulta é uma chamada à SEFAZ com o certificado do `
-                  + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
+                : `Esta rodada perguntou ${porRodada} de ${selecao.total} notas e a próxima começa `
+                  + `automaticamente.${quantas}${nunca} Cada consulta é uma chamada à SEFAZ com o certificado `
+                  + 'do cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
         );
     }
 
