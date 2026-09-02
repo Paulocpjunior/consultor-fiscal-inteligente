@@ -143,3 +143,27 @@ describe('🐛 "esta biblioteca" é a do PROXY, não a última aberta', () => {
         expect(TELA).toMatch(/\{nivel\.site\}/);
     });
 });
+
+// ============================================================================
+// 🚨 UM NÍVEL PODE TER CENTENAS DE PASTAS — `/Empresas` tem uma por cliente
+//
+// 02/09: a raiz de /Empresas do ClientesSP2 encheu a tela e a resposta
+// ("existe uma pasta que começa com X?") ficou escondida no meio da lista.
+// ⚠️ Filtrar é recorte, e recorte se DIZ.
+// ============================================================================
+describe('🚦 o nível aberto também filtra — e diz o recorte', () => {
+    it('filtro do nível, com contador', () => {
+        expect(TELA).toMatch(/setBuscaPasta/);
+        expect(TELA).toMatch(/Mostrando \{pastasVisiveis\.length\} de \{nivel\.pastas\.length\}/);
+    });
+
+    // ⚠️ Filtro do nível ANTERIOR esconderia tudo no nível novo, e a pessoa
+    // leria "pasta vazia" sobre uma pasta cheia.
+    it('o filtro é limpo ao navegar', () => {
+        expect(TELA).toMatch(/setBuscaPasta\(''\)/);
+    });
+
+    it('a lista renderizada é a FILTRADA, não a crua', () => {
+        expect(TELA).toMatch(/pastasVisiveis\.map/);
+    });
+});
