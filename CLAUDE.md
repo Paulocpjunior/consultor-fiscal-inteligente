@@ -20,17 +20,55 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   casa com a política da casa (antecipa ⇒ **13/11/2026**, porque 15 é domingo e
   14 é sábado). **Optante do Simples fica fora.** Eventos: D-1001 e D-1011
   (tabela, recebidos a partir de 01/10/2026 e exigidos ANTES da 1ª mensal),
-  D-1101/1106/1121/2101/1199 (mensais), D-9xxx (retorno). O nome parecido com
-  DIRF engana: ela declara **plano de contas e balancete**, não retenções.
-  🚧 **COMO A INFORMAÇÃO CHEGOU, e o que isso limita**: a rede deste ambiente
-  bloqueia gov.br, sped.rfb.gov.br e cgibs.gov.br (o mesmo bloqueio do CONFAZ e
-  do Guia do SPED). **O Manual (MOD 1.0.1) e os leiautes 1.0.0 NÃO foram
-  lidos** — o que entrou veio por RESUMO de terceiros das notícias oficiais, e
-  está carimbado assim em `FONTES_DERE`. Por isso o alcance só está
-  `dereConfirmada: true` nos três públicos que o manual nomeia; os outros
-  regimes ficam **"não confirmado"** — o app não afirma nem que entram nem que
-  saem, e manda ler o manual. **Nome de causa que afirma demais é o
-  `csllOuTotal` com outra roupa.**
+  D-1101/1106/2101/1199 (mensais), D-9001/9101/9106/9121/9199 (retorno). O
+  nome parecido com DIRF engana: ela declara **plano de contas e balancete**,
+  não retenções.
+  📚 **A FONTE CHEGOU NO MESMO DIA, EM PDF** (Paulo: *"vou te mandar o layout e
+  os manuais aqui em pdf, onde podemos visualizar no CFI"*): Leiautes v1.1.0
+  (eventos · Anexo I tabelas · Anexo II regras de validação · histórico) e o
+  Manual do Desenvolvedor v1.0.2. **Fonte oficial que chega vira ARQUIVO NO
+  REPO** (regra de 20/08): texto grep-ável em `docs/dere/` (com README e a
+  página de cada fato) e os PDFs servidos pelo app em `public/docs/dere/`
+  (⚙️ Config Admin → 🏦 DeRE → 📚 Documentação oficial). O que continua por
+  resumo de terceiros é só o PRAZO (Ato Conjunto 4/2026 + esclarecimento de
+  26/08); o MOD 1.0.1, as Mensagens de Erro e os **XSD não vieram** — e isso
+  está DITO na tela (`DOCUMENTOS_DERE_FALTANDO`).
+  🚨 **LER A FONTE DERRUBOU TRÊS AFIRMAÇÕES DA MANHÃ, todas vindas do resumo**:
+  (1) **D-1121 NÃO EXISTE** — o que tem 1121 no nome é o RETORNO D-9121
+  (totalizador do D-2101); eu listava um "D-1121 Relação de Deduções" que a
+  Receita nunca publicou, e o teste agora exige que os eventos casem com o
+  SUMÁRIO do leiaute; (2) **"não confirmado" era a frase errada**: o D-1001
+  `{regTribPrinc}` só admite **1 serviços financeiros · 2 planos de saúde · 3
+  concursos de prognósticos · 9 outros** (o 9 só para quem tem secundário
+  1-3) — imóveis, cooperativas, combustíveis, bares/hotelaria, SAF e missões
+  **não têm grupo no leiaute**, então a decisão virou `regime-fora-do-leiaute`
+  (nada a entregar, o app passa a cobrar sozinho se um leiaute futuro incluir)
+  e **saiu das pendências**: cobrar o que não tem como ser declarado é alarme
+  sem saída; (3) **a declaração é por CNPJ RAIZ** (`{nrInsc}` tem 8 posições
+  em todo evento) — a fila passou a contar DECLARAÇÕES, não estabelecimentos,
+  e raiz com regimes divergentes entre matriz e filial ACENDE em vez de
+  escolher. ⚠️ **Nome de causa que afirma demais é o `csllOuTotal` com outra
+  roupa** — e "não confirmado" afirmava DÚVIDA onde a fonte tinha resposta.
+  📖 **O QUE MAIS O LEIAUTE ENTREGOU, e entrou como DADO**: D-1106 e D-2101
+  são **condicionais** ao `codTrib` do PGCC (Anexo II: 120130001/120230001/
+  120330001 saúde, 111112701 seguros; 110113001/110113002 títulos); D-1199 só
+  admite inclusão, exige D-1101 ativo (MS1146) e retificar exige REABERTURA;
+  as Tabelas 21/31/41 (atividades do D-1001) estão em `ATIVIDADES_DERE`,
+  copiadas; e as **réguas de FORMA do Anexo II viraram função**:
+  `montarIdEventoDere`/`lerIdEventoDere` (42 chars, hora de BRASÍLIA — o
+  Cloud Run é UTC, e Id com hora errada perde a unicidade), `lerRecibo`
+  (`0000-AAAAMM-id`) e `lerProtocolo` (`T.AAAAMM.N`, T=1 produção/2
+  pré-produção) — **protocolo NÃO é recibo**: o POST devolve protocolo (lote
+  recebido) e o recibo só nasce na consulta, assíncrono. Quem transmitir por
+  fora e colar o recibo tem como saber se colou o que a Receita devolveu.
+  🔌 **E A INTEGRAÇÃO ESTÁ ESCRITA COMO REFERÊNCIA** (`INTEGRACAO_DERE`, do
+  Manual 1.0.2): OAuth 2.0 client credentials no Receita Integra (token 60
+  min), produção restrita `POST …/prr-dere/v1/recepcao/lotes` e `GET
+  …/v1/consulta/lotes/{protocolo}`, XMLDSig RSA-SHA256/C14N/EndCertOnly com
+  A1/A3 ICP-Brasil, e os **três pré-requisitos ADMINISTRATIVOS do dono**:
+  piloto da Reforma, procuração no e-CAC ("Piloto da CBS" + "DeRE") e
+  credencial em piloto-cbs.tributos.gov.br. **Continua sem gerar/transmitir**:
+  leiaute lido não é XSD na mão, o insumo é contábil e a credencial é dele.
   ✂️ **O QUE ENTROU** (`dere-regimes.js` PURO = vocabulário + régua "está na
   DeRE?" · `dere.js` PURO = eventos, cronograma, prazo, situação, triagem):
   (1) entrada `DERE` no catálogo — federal, mensal, dia 15, antecipa,
@@ -43,7 +81,8 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   — aí ela vira tarefa, Rotina, Vencimentos e Guia do mês com vencimento —, e a
   **TIRA** quando diz `NENHUM`; (3) fila da carteira em **⚙️ Config Admin →
   🏦 DeRE** (rota `/api/admin/cadastro/dere-carteira`): obrigadas com prazo,
-  candidatas, regime não confirmado, e o que ficou de fora CONTADO; (4) o campo
+  candidatas, regime fora do leiaute, e o que ficou de fora CONTADO — as
+  obrigadas também agrupadas por RAIZ, porque a declaração é uma por raiz; (4) o campo
   atravessa o túnel do cadastro central — o Contábil é quem tem o insumo dos
   eventos e precisa saber quem está.
   🚨 **O SILÊNCIO NÃO ACENDE A CARTEIRA**: empresa sem cadastro E sem sinal de
@@ -59,9 +98,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fora e se registra em Vencimentos como obrigação entregue fora do app.
   📌 **FILA DO PAULO**: (a) confirmar se algum cliente da carteira fornece sob
   regime específico (a fila da 🏦 DeRE responde quem PARECE); (b) decidir a
-  casa da geração dos eventos; (c) quando alguém tiver o MOD 1.0.1 aberto,
-  conferir a coluna `dereConfirmada` dos regimes não confirmados — muda num
-  lugar só.
+  casa da geração dos eventos — e, antes de qualquer código, os três
+  pré-requisitos administrativos (piloto, procuração, credencial); (c) se
+  tiver o **MOD 1.0.1**, as **Mensagens de Erro** e os **XSD**, mandar em PDF/
+  ZIP como mandou estes: entram em `docs/dere/` e `public/docs/dere/` no mesmo
+  desenho.
 - **🚨 O AVISO FALAVA DO QUE A RODADA IA FAZER, NÃO DO QUE ELA FEZ — e o dono
   circulou a frase em VERMELHO** (02/09, print da MV LIDER 0639 · 08/2026,
   horas depois de a tela passar a encadear as rodadas sozinha).

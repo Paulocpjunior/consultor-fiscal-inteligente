@@ -1,50 +1,79 @@
 // ============================================================================
-// 🏦 DeRE — Declaração Eletrônica de Regimes Específicos (IBS/CBS/IS)
+// 🏦 DeRE — Declaração de Regimes Específicos (IBS/CBS/IS)
 //
 // Paulo, 02/09: *"crie uma nova função capaz de atender esta obrigação chamada
-// DERE"*. O que estes testes travam: QUEM está (só o cadastro afirma; o CNAE
-// sugere), QUANDO vence (dia 15 do mês seguinte, antecipado — a 1ª competência
-// é 10/2026 e vence 13/11/2026 porque 15/11 é domingo e 14 é sábado), e que a
-// obrigação entra no MÊS do cliente pelo catálogo — sem acender a carteira
-// inteira e sem tocar em quem é do Simples.
+// DERE"* e, à tarde, *"vou te mandar o layout e os manuais aqui em pdf, onde
+// podemos visualizar no CFI"*. O que estes testes travam: QUEM está (só o
+// cadastro afirma; o CNAE sugere; o LEIAUTE decide quem cabe), QUANDO vence
+// (dia 15 do mês seguinte, antecipado — a 1ª competência é 10/2026 e vence
+// 13/11/2026 porque 15/11 é domingo e 14 é sábado), QUAIS eventos existem (os
+// do leiaute 1.1.0 — D-1121 NÃO), as réguas de FORMA do Anexo II (Id, recibo,
+// protocolo) e que a obrigação entra no MÊS do cliente pelo catálogo — sem
+// acender a carteira inteira e sem tocar em quem é do Simples.
 // ============================================================================
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import {
     CATALOGO, mesDoCliente, obrigacoesAplicaveis, obrigacoesDoCliente,
     pendenciasDeConfirmacao, compararCompetencias, OBRIGACAO_DERE,
 } from '../sefaz-backend/catalogo-obrigacoes';
 import {
-    REGIMES_ESPECIFICOS_IBS_CBS, decidirDereNoCadastro, sinalDeCnaeParaDere,
-    validarRegimeEspecificoParaGravacao,
+    REGIMES_ESPECIFICOS_IBS_CBS, ATIVIDADES_DERE, FONTES_DERE, decidirDereNoCadastro, sinalDeCnaeParaDere,
+    validarRegimeEspecificoParaGravacao, raizDoCnpj,
 } from '../sefaz-backend/dere-regimes';
 import {
-    VIGENCIA_DERE, EVENTOS_DERE, CRONOGRAMA_DERE, eventosDaCompetencia, prazoDere,
-    situacaoDere, triarCarteiraDere,
+    VIGENCIA_DERE, EVENTOS_DERE, CRONOGRAMA_DERE, INTEGRACAO_DERE, DOCUMENTOS_DERE, DOCUMENTOS_DERE_FALTANDO,
+    eventosDaCompetencia, prazoDere, situacaoDere, triarCarteiraDere,
+    montarIdEventoDere, lerIdEventoDere, lerRecibo, lerProtocolo,
 } from '../sefaz-backend/dere';
 
 const RAIZ = join(__dirname, '..');
 const presumido = (extra: any = {}) => ({ colecao: 'lucro_empresas', regimePadrao: 'Presumido', ...extra });
 const codigos = (rs: any[]) => rs.map((r) => r.obrigacao);
 
-describe('o vocabulário — a LC 214/2025 é a fonte, o alcance é marcado por regime', () => {
-    it('todo regime tem código, rótulo, base legal e a coluna dereConfirmada', () => {
+describe('o vocabulário — a LC 214/2025 lista os regimes; o LEIAUTE 1.1.0 diz quais cabem', () => {
+    it('todo regime tem código, rótulo, base legal, dereConfirmada e codigoD1001 coerentes', () => {
         for (const r of REGIMES_ESPECIFICOS_IBS_CBS) {
             expect(r.codigo).toMatch(/^[A-Z_]+$/);
             expect(r.rotulo).toBeTruthy();
             expect(r.baseLegal).toBeTruthy();
             expect(typeof r.dereConfirmada).toBe('boolean');
+            // "Confirmada" É "tem código no D-1001" — as duas colunas não podem discordar.
+            expect(r.dereConfirmada).toBe(r.codigoD1001 != null);
         }
     });
 
-    it('os TRÊS públicos do manual estão confirmados; os demais NÃO afirmam', () => {
+    it('D-1001 {regTribPrinc}: 1 serviços financeiros · 2 planos de saúde · 3 concursos de prognósticos — e mais nenhum', () => {
+        const porCodigo = Object.fromEntries(REGIMES_ESPECIFICOS_IBS_CBS.map((r) => [r.codigo, r.codigoD1001]));
+        expect(porCodigo.SERVICOS_FINANCEIROS).toBe(1);
+        expect(porCodigo.PLANOS_SAUDE).toBe(2);
+        expect(porCodigo.CONCURSOS_PROGNOSTICOS).toBe(3);
         const conf = REGIMES_ESPECIFICOS_IBS_CBS.filter((r) => r.dereConfirmada).map((r) => r.codigo).sort();
         expect(conf).toEqual(['CONCURSOS_PROGNOSTICOS', 'PLANOS_SAUDE', 'SERVICOS_FINANCEIROS']);
-        // Só regime CONFIRMADO carrega sinal de CNAE — senão a fila encheria de
-        // posto de gasolina e imobiliária por um alcance que ninguém confirmou.
+        // Só regime com código carrega sinal de CNAE — senão a fila encheria de
+        // posto de gasolina e imobiliária por um regime que a DeRE não recebe.
         for (const r of REGIMES_ESPECIFICOS_IBS_CBS) {
             if (!r.dereConfirmada) expect(r.cnaes).toHaveLength(0);
         }
+    });
+
+    it('as Tabelas 21/31/41 (atividades do D-1001) existem por regime com código, em máscara NNC', () => {
+        expect(Object.keys(ATIVIDADES_DERE).sort()).toEqual(['CONCURSOS_PROGNOSTICOS', 'PLANOS_SAUDE', 'SERVICOS_FINANCEIROS']);
+        for (const lista of Object.values(ATIVIDADES_DERE)) {
+            expect(lista.length).toBeGreaterThan(0);
+            for (const [cod, desc] of lista) { expect(cod).toMatch(/^\d{2}[A-Z]$/); expect(desc).toBeTruthy(); }
+            expect(new Set(lista.map(([c]) => c)).size).toBe(lista.length);
+        }
+        // A 1.1.0 desdobrou o leasing (06A/06B) e os arranjos de pagamento (09F/09Z).
+        const fin = ATIVIDADES_DERE.SERVICOS_FINANCEIROS.map(([c]) => c);
+        expect(fin).toEqual(expect.arrayContaining(['06A', '06B', '09F', '09Z', '17A']));
+    });
+
+    it('as fontes dizem o que foi LIDO e o que continua por resumo', () => {
+        expect(FONTES_DERE.LEIAUTES_1_1_0).toMatch(/LIDOS/);
+        expect(FONTES_DERE.MANUAL_DEV_1_0_2).toMatch(/LIDO/);
+        expect(FONTES_DERE.ATO_CONJUNTO_4).toMatch(/resumo de terceiros/);
+        expect(FONTES_DERE.MOD_1_0_1).toMatch(/NÃO RECEBIDO/);
     });
 
     it('gravação: fora do vocabulário é RECUSA com a lista; vazio limpa; NENHUM grava', () => {
@@ -65,6 +94,13 @@ describe('o vocabulário — a LC 214/2025 é a fonte, o alcance é marcado por 
         expect(sinalDeCnaeParaDere('4712-1/00')).toBeNull();
         expect(sinalDeCnaeParaDere('')).toBeNull();
     });
+
+    it('a declaração é por RAIZ: {nrInsc} tem 8 posições', () => {
+        expect(raizDoCnpj('11.222.333/0001-81')).toBe('11222333');
+        expect(raizDoCnpj('11222333000262')).toBe('11222333');
+        expect(raizDoCnpj('123')).toBeNull();
+        expect(raizDoCnpj(null)).toBeNull();
+    });
 });
 
 describe('decidirDereNoCadastro — o cadastro decide, o CNAE sugere, o silêncio não acusa', () => {
@@ -73,16 +109,23 @@ describe('decidirDereNoCadastro — o cadastro decide, o CNAE sugere, o silênci
         expect(v.decisao).toBe('dispensada-simples');
     });
 
-    it('regime confirmado no cadastro ⇒ obrigada (lê as DUAS formas)', () => {
-        expect(decidirDereNoCadastro({ regimeEspecificoIbsCbs: 'PLANOS_SAUDE' }, { regimeCatalogo: 'LUCRO_REAL' }).decisao).toBe('obrigada');
+    it('regime com código no D-1001 ⇒ obrigada, e o código viaja (lê as DUAS formas)', () => {
+        const a = decidirDereNoCadastro({ regimeEspecificoIbsCbs: 'PLANOS_SAUDE' }, { regimeCatalogo: 'LUCRO_REAL' });
+        expect(a.decisao).toBe('obrigada');
+        expect(a.codigoD1001).toBe(2);
         expect(decidirDereNoCadastro({ dadosFiscais: { regimeEspecificoIbsCbs: 'PLANOS_SAUDE' } }, { regimeCatalogo: 'LUCRO_REAL' }).decisao).toBe('obrigada');
     });
 
-    it('NENHUM ⇒ não se aplica; regime não confirmado ⇒ não afirma e manda ao manual', () => {
+    it('NENHUM ⇒ não se aplica; regime sem grupo no D-1001 ⇒ fora do leiaute, DITO, sem mandar ao manual', () => {
         expect(decidirDereNoCadastro({ regimeEspecificoIbsCbs: 'NENHUM' }, { regimeCatalogo: 'LUCRO_PRESUMIDO' }).decisao).toBe('nao-se-aplica');
         const v = decidirDereNoCadastro({ regimeEspecificoIbsCbs: 'BENS_IMOVEIS' }, { regimeCatalogo: 'LUCRO_PRESUMIDO' });
-        expect(v.decisao).toBe('regime-nao-confirmado');
-        expect(v.acao).toMatch(/Manual/);
+        expect(v.decisao).toBe('regime-fora-do-leiaute');
+        expect(v.codigoD1001).toBeNull();
+        expect(v.motivo).toMatch(/regTribPrinc/);
+        expect(v.acao).toMatch(/Nada a entregar/);
+        // "Não confirmado" era a frase de manhã, antes de ler a fonte — o leiaute
+        // fechou a pergunta, e a frase não pode voltar a afirmar dúvida.
+        expect(v.motivo).not.toMatch(/não confirmado/i);
     });
 
     it('sem cadastro: CNAE de banco vira CANDIDATA; CNAE de comércio vira sem-sinal (nunca alarme)', () => {
@@ -138,6 +181,7 @@ describe('o catálogo — a DeRE entra no mês pelo cadastro, com vencimento, a 
         expect(dere.vencimento.getDate()).toBe(13);
         expect(codigos(m.propostas)).not.toContain('DERE');
         expect(m.dere?.decisao).toBe('obrigada');
+        expect(m.dere?.codigoD1001).toBe(1);
     });
 
     it('cadastro diz NENHUM ⇒ sai das pendências e NÃO piora a cobertura por causa dela', () => {
@@ -145,6 +189,15 @@ describe('o catálogo — a DeRE entra no mês pelo cadastro, com vencimento, a 
         expect(codigos(com.obrigacoes)).not.toContain('DERE');
         expect(codigos(com.propostas)).not.toContain('DERE');
         expect(com.dere?.decisao).toBe('nao-se-aplica');
+    });
+
+    it('🚨 regime FORA do leiaute NÃO é pendência — não há o que entregar, e cobrar seria alarme sem saída', () => {
+        const m = mesDoCliente(presumido({ regimeEspecificoIbsCbs: 'BENS_IMOVEIS' }), '10/2026');
+        expect(codigos(m.obrigacoes)).not.toContain('DERE');
+        expect(codigos(m.propostas)).not.toContain('DERE');
+        expect(m.dere?.decisao).toBe('regime-fora-do-leiaute');
+        const alerta = m.alertas.find((a: any) => a.tipo === 'obrigacoes-a-confirmar');
+        expect(alerta?.texto || '').not.toMatch(/DeRE/);
     });
 
     it('🚨 sem cadastro e sem sinal de CNAE NÃO vira pendência — a carteira não acende', () => {
@@ -185,18 +238,34 @@ describe('o catálogo — a DeRE entra no mês pelo cadastro, com vencimento, a 
     });
 });
 
-describe('dere.js — cronograma, eventos, prazo e a situação de um cliente', () => {
+describe('dere.js — os eventos do LEIAUTE 1.1.0, cronograma, prazo e a situação de um cliente', () => {
     it('vigência e cronograma batem com o Ato Conjunto 4/2026', () => {
         expect(VIGENCIA_DERE).toBe('10/2026');
         expect(CRONOGRAMA_DERE.map((m) => m.dataIso)).toEqual(['2026-10-01', '2026-11-15', '2027-01-01']);
     });
 
-    it('eventos: os de tabela existem, os mensais só a partir de 10/2026, e os de retorno ninguém envia', () => {
+    it('eventos: exatamente os do sumário dos Leiautes 1.1.0 — e D-1121 NÃO existe', () => {
         expect(EVENTOS_DERE.filter((e) => e.grupo === 'tabela').map((e) => e.codigo)).toEqual(['D-1001', 'D-1011']);
-        const out = eventosDaCompetencia('10/2026');
-        expect(out.mensais.map((e) => e.codigo)).toEqual(expect.arrayContaining(['D-1101', 'D-1106', 'D-1121', 'D-2101', 'D-1199']));
+        expect(EVENTOS_DERE.filter((e) => e.grupo === 'mensal').map((e) => e.codigo).sort())
+            .toEqual(['D-1101', 'D-1106', 'D-1199', 'D-2101']);
+        expect(EVENTOS_DERE.filter((e) => e.grupo === 'retorno').map((e) => e.codigo).sort())
+            .toEqual(['D-9001', 'D-9101', 'D-9106', 'D-9121', 'D-9199']);
+        // O resumo de terceiros listava um "D-1121 Relação de Deduções"; o leiaute
+        // não o tem. Voltar a listá-lo é voltar a cobrar evento que não existe.
+        expect(EVENTOS_DERE.map((e) => e.codigo)).not.toContain('D-1121');
+        // E os nomes saem do sumário, não de memória.
+        const sumario = readFileSync(join(RAIZ, 'docs/dere/02-leiautes-eventos-v1.1.0.txt'), 'utf8').toUpperCase();
+        for (const e of EVENTOS_DERE) expect({ codigo: e.codigo, noSumario: sumario.includes(`EVENTO ${e.codigo}`) }).toEqual({ codigo: e.codigo, noSumario: true });
         expect(eventosDaCompetencia('09/2026').mensais).toHaveLength(0);
-        for (const e of EVENTOS_DERE) expect(e.codigo).toMatch(/^D-\d{4}$/);
+    });
+
+    it('D-1106 e D-2101 são CONDICIONAIS ao codTrib do PGCC — com os códigos do Anexo II', () => {
+        const porCodigo = Object.fromEntries(EVENTOS_DERE.map((e) => [e.codigo, e]));
+        expect(porCodigo['D-1106'].condicional?.codTribs).toEqual(['120130001', '120230001', '120330001', '111112701']);
+        expect(porCodigo['D-2101'].condicional?.codTribs).toEqual(['110113001', '110113002']);
+        expect(porCodigo['D-1101'].condicional).toBeUndefined();
+        expect(porCodigo['D-1199'].nota).toMatch(/INCLUSÃO/);
+        expect(porCodigo['D-1199'].nota).toMatch(/REABERTURA/);
     });
 
     it('prazoDere: null antes da vigência; 13/11/2026 para 10/2026; 15/12/2026 (terça) para 11/2026', () => {
@@ -207,35 +276,122 @@ describe('dere.js — cronograma, eventos, prazo e a situação de um cliente', 
         expect(dez.getDate()).toBe(15);
     });
 
-    it('situacaoDere: obrigada antes da vigência sai como ainda-nao-vigente, e DIZ que o app não entrega', () => {
-        const s = situacaoDere({ regimeEspecificoIbsCbs: 'SERVICOS_FINANCEIROS' }, '09/2026', { regimeCatalogo: 'LUCRO_REAL' });
+    it('situacaoDere: obrigada antes da vigência sai como ainda-nao-vigente, traz a RAIZ e DIZ que o app não entrega', () => {
+        const s = situacaoDere({ cnpj: '11222333000181', regimeEspecificoIbsCbs: 'SERVICOS_FINANCEIROS' }, '09/2026', { regimeCatalogo: 'LUCRO_REAL' });
         expect(s.situacao).toBe('ainda-nao-vigente');
         expect(s.prazo).toBeNull();
+        expect(s.raiz).toBe('11222333');
         const t = situacaoDere({ regimeEspecificoIbsCbs: 'SERVICOS_FINANCEIROS' }, '10/2026', { regimeCatalogo: 'LUCRO_REAL' });
         expect(t.situacao).toBe('obrigada');
         expect(t.prazoTexto).toBe('13/11/2026');
         expect(t.entregaPeloApp).toBe(false);
         expect(t.ressalvaEntrega).toMatch(/NÃO gera nem transmite/);
+        expect(t.ressalvaEntrega).toMatch(/XSD/);
     });
 
-    it('triarCarteiraDere separa as filas e CONTA o que ficou de fora', () => {
+    it('triarCarteiraDere separa as filas, agrupa as obrigadas por RAIZ e CONTA o que ficou de fora', () => {
         const r = triarCarteiraDere([
             { id: 'a', cnpj: '11222333000181', nome: 'BANCO X', regimeTributario: 'LUCRO_REAL', cnae: '6422100', regimeEspecificoIbsCbs: 'SERVICOS_FINANCEIROS' },
-            { id: 'b', cnpj: '11222333000262', nome: 'PLANO Y', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '6550200', regimeEspecificoIbsCbs: null },
-            { id: 'c', cnpj: '11222333000343', nome: 'IMOBILIARIA Z', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '6810201', regimeEspecificoIbsCbs: 'BENS_IMOVEIS' },
-            { id: 'd', cnpj: '11222333000424', nome: 'PADARIA', regimeTributario: 'SIMPLES', cnae: '4721102', regimeEspecificoIbsCbs: null },
-            { id: 'e', cnpj: '11222333000505', nome: 'COMERCIO', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '4712100', regimeEspecificoIbsCbs: 'NENHUM' },
-            { id: 'f', cnpj: '11222333000696', nome: 'SERVICO', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '6201500', regimeEspecificoIbsCbs: null },
+            { id: 'a2', cnpj: '11222333000262', nome: 'BANCO X FILIAL', regimeTributario: 'LUCRO_REAL', cnae: '6422100', regimeEspecificoIbsCbs: 'SERVICOS_FINANCEIROS' },
+            { id: 'b', cnpj: '22333444000199', nome: 'PLANO Y', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '6550200', regimeEspecificoIbsCbs: null },
+            { id: 'c', cnpj: '33444555000188', nome: 'IMOBILIARIA Z', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '6810201', regimeEspecificoIbsCbs: 'BENS_IMOVEIS' },
+            { id: 'd', cnpj: '44555666000177', nome: 'PADARIA', regimeTributario: 'SIMPLES', cnae: '4721102', regimeEspecificoIbsCbs: null },
+            { id: 'e', cnpj: '55666777000166', nome: 'COMERCIO', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '4712100', regimeEspecificoIbsCbs: 'NENHUM' },
+            { id: 'f', cnpj: '66777888000155', nome: 'SERVICO', regimeTributario: 'LUCRO_PRESUMIDO', cnae: '6201500', regimeEspecificoIbsCbs: null },
         ], '10/2026');
-        expect(r.obrigadas.map((l) => l.nome)).toEqual(['BANCO X']);
+        expect(r.obrigadas.map((l) => l.nome)).toEqual(['BANCO X', 'BANCO X FILIAL']);
         expect(r.obrigadas[0].prazoTexto).toBe('13/11/2026');
+        expect(r.obrigadas[0].codigoD1001).toBe(1);
+        // Duas linhas, UMA declaração: matriz e filial são a mesma raiz.
+        expect(r.declaracoes).toHaveLength(1);
+        expect(r.declaracoes[0].raiz).toBe('11222333');
+        expect(r.declaracoes[0].estabelecimentos.map((e) => e.nome)).toEqual(['BANCO X', 'BANCO X FILIAL']);
+        expect(r.declaracoes[0].regimesDivergem).toBe(false);
         expect(r.candidatas.map((l) => l.nome)).toEqual(['PLANO Y']);
-        expect(r.regimeNaoConfirmado.map((l) => l.nome)).toEqual(['IMOBILIARIA Z']);
+        expect(r.foraDoLeiaute.map((l) => l.nome)).toEqual(['IMOBILIARIA Z']);
         expect(r.naoSeAplica.map((l) => l.nome)).toEqual(['COMERCIO']);
         expect(r.resumo).toEqual({
-            total: 6, obrigadas: 1, candidatas: 1, regimeNaoConfirmado: 1, naoSeAplica: 1, dispensadasSimples: 1, semSinal: 1,
+            total: 7, obrigadas: 2, declaracoes: 1, obrigadasSemRaiz: 0, candidatas: 1, foraDoLeiaute: 1,
+            naoSeAplica: 1, dispensadasSimples: 1, semSinal: 1,
         });
-        expect(r.ressalvas.join(' ')).toMatch(/não gera nem transmite/);
+        expect(r.ressalvas.join(' ')).toMatch(/NÃO gera nem transmite/);
+        expect(r.ressalvas.join(' ')).toMatch(/CNPJ RAIZ/);
+        expect(r.documentos).toBe(DOCUMENTOS_DERE);
+        expect(r.integracao).toBe(INTEGRACAO_DERE);
+    });
+
+    it('raiz com regimes específicos DIFERENTES entre estabelecimentos ACENDE — o app não escolhe', () => {
+        const r = triarCarteiraDere([
+            { id: 'a', cnpj: '11222333000181', nome: 'M', regimeTributario: 'LUCRO_REAL', regimeEspecificoIbsCbs: 'SERVICOS_FINANCEIROS' },
+            { id: 'b', cnpj: '11222333000262', nome: 'F', regimeTributario: 'LUCRO_REAL', regimeEspecificoIbsCbs: 'PLANOS_SAUDE' },
+            { id: 'c', cnpj: 'xx', nome: 'TORTA', regimeTributario: 'LUCRO_REAL', regimeEspecificoIbsCbs: 'PLANOS_SAUDE' },
+        ], '10/2026');
+        expect(r.declaracoes).toHaveLength(1);
+        expect(r.declaracoes[0].regimesDivergem).toBe(true);
+        expect(r.obrigadasSemRaiz.map((l) => l.nome)).toEqual(['TORTA']);
+        expect(r.resumo.obrigadas).toBe(3);
+        expect(r.resumo.declaracoes).toBe(1);
+        expect(r.resumo.obrigadasSemRaiz).toBe(1);
+    });
+});
+
+describe('Anexo II — as réguas de FORMA (Id, recibo, protocolo): o app confere, não inventa', () => {
+    it('Id do evento: 42 caracteres, DeRE+NNNN+1+CNPJ(14)+AAAAMMDD+HHMMSS(Brasília)+QQQQQ', () => {
+        // 2026-11-10 02:30:00 UTC = 09/11/2026 23:30:00 em Brasília — se alguém ler
+        // o dia em UTC, o Id nasce com a data errada e a unicidade some.
+        const r = montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11.222.333/0001-81', data: new Date('2026-11-10T02:30:00Z'), sequencial: 7 });
+        expect(r.ok).toBe(true);
+        expect(r.id).toBe('DeRE11011112223330001812026110923300000007');
+        expect(r.id).toHaveLength(42);
+        const lido = lerIdEventoDere(r.id) as any;
+        expect(lido.ok).toBe(true);
+        expect(lido.evento).toBe('D-1101');
+        expect(lido.cnpj).toBe('11222333000181');
+        expect(lido.geradoEm).toBe('2026-11-09T23:30:00-03:00');
+        expect(lido.sequencial).toBe(7);
+    });
+
+    it('Id: evento inexistente, CNPJ torto, data ilegível e sequencial fora da faixa são RECUSAS nomeadas', () => {
+        const d = new Date('2026-11-10T12:00:00Z');
+        expect(montarIdEventoDere({ codigoEvento: 'D-1121', cnpj: '11222333000181', data: d }).motivo).toMatch(/não existe/);
+        expect(montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '', data: d }).motivo).toMatch(/CNPJ/);
+        expect(montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11222333000181', data: new Date('x') }).motivo).toMatch(/Data/);
+        expect(montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11222333000181', data: d, sequencial: 0 }).motivo).toMatch(/Sequencial/);
+        expect((lerIdEventoDere('DeRE11211112223330001812026110923300000007') as any).ok).toBe(false);
+        expect((lerIdEventoDere('dere1101111222333000181202611092330000000007') as any).ok).toBe(false);
+    });
+
+    it('recibo 0000-AAAAMM-id e protocolo T.AAAAMM.N — e protocolo NÃO é recibo', () => {
+        const rec = lerRecibo('1101-202610-123456') as any;
+        expect(rec.ok).toBe(true);
+        expect(rec.evento).toBe('D-1101');
+        expect(rec.periodo).toBe('10/2026');
+        expect(rec.idInterno).toBe('123456');
+        expect((lerRecibo('1121-202610-1') as any).ok).toBe(false);
+        expect((lerRecibo('1101-202613-1') as any).ok).toBe(false);
+        expect((lerRecibo('1.202610.1') as any).ok).toBe(false);
+
+        const prot = lerProtocolo('2.202610.987654321') as any;
+        expect(prot.ok).toBe(true);
+        expect(prot.ambiente).toBe('pre-producao');
+        expect(prot.recebidoEm).toBe('10/2026');
+        expect(prot.ressalva).toMatch(/PROTOCOLO/);
+        expect((lerProtocolo('1.202610.1') as any).ambiente).toBe('producao');
+        expect((lerProtocolo('3.202610.1') as any).ok).toBe(false);
+        expect((lerProtocolo('1101-202610-1') as any).ok).toBe(false);
+    });
+
+    it('a integração é REFERÊNCIA do Manual 1.0.2 — token, endpoints, assinatura, pré-requisitos, protocolo ≠ recibo', () => {
+        expect(INTEGRACAO_DERE.autenticacao.tokenUrl).toBe('https://api.receitafederal.gov.br/token');
+        expect(INTEGRACAO_DERE.autenticacao.validadeMin).toBe(60);
+        expect(INTEGRACAO_DERE.urlBase).toBe('https://api.receitafederal.gov.br/prr-dere');
+        expect(INTEGRACAO_DERE.endpoints.map((e) => `${e.metodo} ${e.caminho}`)).toEqual([
+            'POST /v1/recepcao/lotes', 'GET /v1/consulta/lotes/{protocolo}', 'DELETE /v1/recepcao/limpezaDadosContribuinte/{cnpj8}',
+        ]);
+        expect(INTEGRACAO_DERE.assinatura.padrao).toMatch(/RSA-SHA256/);
+        expect(INTEGRACAO_DERE.preRequisitos).toHaveLength(3);
+        expect(INTEGRACAO_DERE.preRequisitos.join(' ')).toMatch(/piloto-cbs\.tributos\.gov\.br/);
+        expect(INTEGRACAO_DERE.protocoloNaoEhRecibo).toMatch(/assíncrono/);
     });
 });
 
@@ -249,11 +405,13 @@ describe('🚨 o campo chega a quem monta o mês, ao cadastro e à tela', () => 
         expect(src).toMatch(/validarRegimeEspecificoParaGravacao\(/);
     });
 
-    it('o modal oferece o campo e as opções vêm do DONO (não são copiadas)', () => {
+    it('o modal oferece o campo e as opções vêm do DONO (não são copiadas) — e diz "fora do leiaute", não "não confirmado"', () => {
         const src = ler('components/EmpresaDadosFiscaisModal.tsx');
         expect(src).toMatch(/regimeEspecificoIbsCbs/);
         expect(src).toMatch(/REGIMES_ESPECIFICOS_IBS_CBS\.map/);
         expect(src).not.toMatch(/'SERVICOS_FINANCEIROS'/);
+        expect(src).toMatch(/fora do leiaute/);
+        expect(src).not.toMatch(/alcance da DeRE não confirmado/);
     });
 
     it('os três caminhos que montam o mês passam o cadastro e o CNAE', () => {
@@ -269,10 +427,29 @@ describe('🚨 o campo chega a quem monta o mês, ao cadastro e à tela', () => 
         expect(ler('components/ConfigAdminModal.tsx')).toMatch(/<DerePanel/);
     });
 
+    it('a tela lê os grupos NOVOS da triagem (fora do leiaute, declarações por raiz, documentos, integração)', () => {
+        const src = ler('components/DerePanel.tsx');
+        expect(src).toMatch(/r\.foraDoLeiaute/);
+        expect(src).toMatch(/r\.resumo\.declaracoes/);
+        expect(src).toMatch(/r\.documentos\.map/);
+        expect(src).toMatch(/r\.integracao\./);
+        expect(src).not.toMatch(/regimeNaoConfirmado/);
+    });
+
+    it('📚 a documentação oficial está no repo (texto) E servida pelo app (PDF), e o que falta está DITO', () => {
+        for (const d of DOCUMENTOS_DERE) {
+            expect({ pdf: d.pdf, existe: existsSync(join(RAIZ, 'public', d.pdf)) }).toEqual({ pdf: d.pdf, existe: true });
+            expect({ txt: d.texto, existe: existsSync(join(RAIZ, d.texto)) }).toEqual({ txt: d.texto, existe: true });
+        }
+        expect(existsSync(join(RAIZ, 'docs/dere/README.md'))).toBe(true);
+        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/MOD/);
+        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/XSD/);
+    });
+
     it('nenhum gerador de evento da DeRE existe — e a tela diz isso em vez de prometer', () => {
-        // Inventar leiaute sem o XSD é o `1405` num arquivo que a Receita
-        // processa. Se um dia o gerador nascer, este teste é trocado junto com
-        // a frase da tela — nunca só um dos dois.
+        // Inventar XML sem o XSD é o `1405` num arquivo que a Receita processa.
+        // Se um dia o gerador nascer, este teste é trocado junto com a frase da
+        // tela — nunca só um dos dois.
         expect(ler('components/DerePanel.tsx')).toMatch(/não gera nem transmite/);
         expect(ler('sefaz-backend/dere.js')).toMatch(/entregaPeloApp: false/);
     });
