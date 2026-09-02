@@ -58,6 +58,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **A ENTRADA ACEITA O QUE O DONO TEM NA MÃO**: ele trouxe o **ID do evento**,
   não a chave — e o id É a chave (`ID` + tpEvento + 44 + seq). Pedir a chave de
   volta seria devolver um recorte que o app sabe fazer.
+  🚨 **E O PRIMEIRO CLIQUE DELE DERRUBOU A MINHA PRÓPRIA TELA — no mesmo dia.**
+  O print voltou **🟢 Vigente · "nenhum evento de cancelamento. A nota vale."**
+  e, na linha de baixo, **`eventos: 1`**. As duas coisas não podem conviver: o
+  órgão MANDOU um evento e o app LIBEROU a nota.
+  🔴 **A causa é de RECORTE, e ela é fina**: o **`retEvento`** — que carrega o
+  cStat da HOMOLOGAÇÃO — é **IRMÃO** de `<evento>`, não filho. Meu recorte
+  `<evento>…</evento>` trazia o pedido ASSINADO e deixava o protocolo de fora;
+  o leitor via `tpEvento 110111` com cStat VAZIO, não casava `{135,155}` e caía
+  no fallback que diz *"nenhum evento de cancelamento"*.
+  🚨 **E O FALLBACK AFIRMAVA NA DIREÇÃO CARA** — devolver ao faturamento uma
+  nota que a SEFAZ pode ter cancelado. Nasceu a situação
+  **`cancelamento-nao-confirmado`**: não grava (não há confirmação) e **não
+  libera** (há evento), com o fato DITO. Vale para NF-e também — o defeito era
+  do dono compartilhado, não do trilho da NFC-e.
+  ⚠️ **RECUSA É RESPOSTA; AUSÊNCIA É SILÊNCIO — e a fronteira é essa.** Evento
+  **recusado** (cStat 573, duplicidade) continua deixando a nota VÁLIDA: a SEFAZ
+  disse "não registrei". Só a **falta** do cStat acende. Acender no recusado
+  seria alarme sobre resposta correta, o jeito conhecido de desligar a trava —
+  e um teste de 21/08 que exigia o contrário continuou verde, como tinha de ser.
+  📌 **CONTADOR SOZINHO NÃO DIZ NADA**: era `eventos: 1` e ninguém tinha como
+  saber QUAL. A tela passou a listar cada evento (tpEvento · cStat · xMotivo ·
+  protocolo · data) — é a régua do *"resposta de órgão que o app não soube
+  nomear vai INTEIRA"* aplicada ao meu próprio painel.
+  ⚠️ **E O RECORTE MUDOU DE CASA**: ele nasceu no `sefaz-sp-nfce-client.js`, que
+  usa `import.meta` e **não carrega no jest** — régua dentro de módulo que o
+  teste não carrega é régua sem prova. Foi para o módulo PURO, e o cliente
+  IMPORTA; a varredura deixou de exigir "cita `procEventoNFe`" e passou a exigir
+  **delegação**, proibindo recorte próprio no cliente.
   📌 **REGRA QUE FICA: dedup por EXISTÊNCIA responde "já tenho o documento",
   nunca "já sei tudo sobre ele".** Todo fato que nasce DEPOIS da captura —
   cancelamento, CC-e, denegação — é invisível para um trilho que só pergunta uma

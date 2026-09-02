@@ -74,8 +74,16 @@ export interface ReconferirNfceResultado {
     origemDaEntrada?: 'chave' | 'id-de-evento';
     cnpjEmitente?: string;
     /** A resposta do órgão, inteira — é ela que responde quando o app não sabe nomear. */
-    sefaz?: { cStat: string | null; xMotivo: string | null; temAutorizada: boolean; eventos: number };
-    situacao?: 'cancelada' | 'nao-cancelada' | 'nao-cancelada-por-recusa' | 'indeterminado';
+    sefaz?: {
+        cStat: string | null; xMotivo: string | null; temAutorizada: boolean; eventos: number;
+        /** QUAL evento veio — contador sozinho não responde nada. */
+        eventosResumo?: Array<{
+            tpEvento: string | null; cStat: string | null;
+            dhEvento: string | null; nProt: string | null; xMotivo: string | null;
+        }>;
+    };
+    situacao?: 'cancelada' | 'nao-cancelada' | 'nao-cancelada-por-recusa'
+        | 'cancelamento-nao-confirmado' | 'indeterminado';
     motivo?: string;
     documentoNaBase?: boolean;
     gravado?: boolean;

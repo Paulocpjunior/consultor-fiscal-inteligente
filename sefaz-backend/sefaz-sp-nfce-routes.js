@@ -144,6 +144,10 @@ router.post('/reconferir-chave', requireAdmin, async (req, res) => {
         xMotivo: dl.xMotivo || null,
         temAutorizada: !!dl.nfeProcXml,
         eventos: Array.isArray(dl.eventosXml) ? dl.eventosXml.length : 0,
+        // Contador sozinho não diz nada: o print de 02/09 mostrou `eventos: 1`
+        // ao lado de "nenhum evento de cancelamento", e não havia como saber
+        // QUAL evento tinha vindo.
+        eventosResumo: Array.isArray(dl.eventosResumo) ? dl.eventosResumo : [],
       },
       situacao: veredito.situacao,
       motivo: veredito.motivo,

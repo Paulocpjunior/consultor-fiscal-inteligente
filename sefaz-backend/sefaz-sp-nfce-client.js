@@ -23,6 +23,7 @@ import tls from 'node:tls';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { pfxToPem } from './pfx-to-pem.js';
+import { recortarEventos, resumirEventos } from './sae-nfce-cancelamento.js';
 
 // Bundle de CAs da ICP-Brasil que assina o SSL dos webservices SEFAZ NF-e/NFC-e
 // (AC do SERPRO SSLv1 + AC Raiz Brasileira v10). O servidor da SEFAZ-SP encadeia
@@ -200,13 +201,16 @@ function parseDownload(body) {
   // O XML autorizado vem INLINE em <nfeProc>...</nfeProc> (sem gzip/base64).
   const m = texto.match(/<nfeProc[\s>][\s\S]*?<\/nfeProc>/i);
   const nfeProcXml = m ? m[0] : null;
-  // Evento (cancelamento, CC-e) — `procEventoNFe` é o embrulho com protocolo;
-  // `evento` solto cobre a resposta que vem sem ele.
-  const eventosXml = texto.match(/<procEventoNFe[\s>][\s\S]*?<\/procEventoNFe>/gi)
-    || texto.match(/<evento[\s>][\s\S]*?<\/evento>/gi)
-    || [];
+  // Evento (cancelamento, CC-e). A ORDEM importa e ela foi medida contra o
+  // print do Paulo (02/09): `retEvento` — que carrega o cStat da HOMOLOGAÇÃO —
+  // é IRMÃO de `evento`, não filho. Um recorte `<evento>…</evento>` traz o
+  // pedido ASSINADO e deixa o protocolo de fora, e aí o leitor vê o tpEvento
+  // 110111 sem cStat nenhum. Por isso: embrulho completo > par evento+retEvento
+  // > evento solto.
+  const eventosXml = recortarEventos(texto);
+  const eventosResumo = resumirEventos(eventosXml);
   return {
-    cStat, xMotivo, nProt, nfeProcXml, eventosXml,
+    cStat, xMotivo, nProt, nfeProcXml, eventosXml, eventosResumo,
     ok: cStat === '200' && !!nfeProcXml,   // 200 = download com sucesso
   };
 }

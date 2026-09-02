@@ -246,6 +246,21 @@ export function lerRespostaCancelamento(resp) {
         };
     }
 
+    // 🚨 EVENTO DE CANCELAMENTO QUE VEIO E NÃO FOI CONFIRMADO NÃO É "A NOTA
+    // VALE" (02/09, print do Paulo na NFC-e 1194 da ARMAZEM DE BICHOS).
+    //
+    // A tela mostrou `eventos: 1` — ou seja, o órgão MANDOU um evento — e o
+    // veredito saiu **🟢 Vigente · "nenhum evento de cancelamento. A nota
+    // vale."**. As duas coisas não podem conviver: ou o evento não é 110111,
+    // ou é e o protocolo não foi lido/homologado. Nos dois casos a frase
+    // afirmava demais, e ela afirmava na direção CARA — devolver ao
+    // faturamento uma nota que a SEFAZ pode ter cancelado.
+    //
+    // A causa: o laço abaixo só concluía quando `cStat ∈ {135,155}` e, não
+    // concluindo, CAÍA no `nao-cancelada` do fim, que fala em "nenhum evento".
+    // Agora o fato de ter vindo um 110111 é GUARDADO e vence o fallback.
+    let cancelamentoSemConfirmacao = null;
+
     for (const x of xmls) {
         const xml = String(x?.xml || '');
         if (!xml) continue;
@@ -268,6 +283,17 @@ export function lerRespostaCancelamento(resp) {
                         : 'Cancelamento registrado na SEFAZ (cStat 135).',
                 };
             }
+            // ⚠️ SÓ QUANDO O PROTOCOLO NÃO VEIO — e a fronteira é a régua da
+            // casa: RECUSA é RESPOSTA (a SEFAZ disse "não registrei", e a nota
+            // continua válida — é o caso do cStat 573, coberto por teste
+            // próprio); AUSÊNCIA é SILÊNCIO, e silêncio sobre cancelamento não
+            // pode virar "a nota vale". Acender no evento recusado seria alarme
+            // sobre resposta correta, que é o jeito conhecido de a equipe
+            // desligar a trava.
+            //
+            // O caso real (`retEvento` é IRMÃO de `evento`): um recorte que
+            // pegue só o evento assinado fica sem o cStat.
+            if (!cStatEvento) cancelamentoSemConfirmacao = '';
         }
     }
 
@@ -284,6 +310,20 @@ export function lerRespostaCancelamento(resp) {
                     + '(anterior ao evento 110111).',
             };
         }
+    }
+
+    // ⚠️ VENCE O FALLBACK: dizer "nenhum evento de cancelamento" com um 110111
+    // na resposta é a afirmação errada na direção mais cara. Não grava (não há
+    // confirmação) e não libera (há evento) — é indeterminado COM o fato dito.
+    if (cancelamentoSemConfirmacao !== null) {
+        return {
+            situacao: 'cancelamento-nao-confirmado',
+            cStat,
+            motivo: 'A SEFAZ devolveu um EVENTO DE CANCELAMENTO (tpEvento 110111) para esta nota, mas o '
+                + `protocolo não confirma a homologação${cancelamentoSemConfirmacao ? ` (cStat do evento: ${cancelamentoSemConfirmacao})` : ' (o cStat do evento não veio nesta resposta)'}. `
+                + 'A nota NÃO é liberada como válida: existe pedido de cancelamento. Confira o evento no '
+                + 'portal da SEFAZ antes de contar esta nota no faturamento.',
+        };
     }
 
     return {
@@ -306,6 +346,10 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
     // cancelamento (653). Conta à parte da prova positiva — ver
     // `lerRespostaCancelamento`.
     const porRecusa = r.filter((x) => x.situacao === 'nao-cancelada-por-recusa');
+    // Evento 110111 veio e o protocolo não confirma — nem cancelada, nem
+    // liberada. Contada à PARTE porque a ação é outra (olhar o evento no
+    // portal), e somá-la a `indeterminadas` esconderia o fato de ter vindo.
+    const semConfirmacao = r.filter((x) => x.situacao === 'cancelamento-nao-confirmado');
     const valorRemovido = canceladas.reduce((t, x) => t + (Number(x.valorTotal) || 0), 0);
 
     const avisos = [];
@@ -323,6 +367,13 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
             + 'nota válida da qual o escritório não é parte, recusa a entrega por permissão (cStat 640) — '
             + 'que é resposta, não silêncio: se houvesse cancelamento, ela teria dito 653. O que este '
             + 'caminho NÃO dá é o conteúdo do documento.',
+        );
+    }
+    if (semConfirmacao.length) {
+        avisos.push(
+            `${semConfirmacao.length} nota(s) voltaram COM evento de cancelamento (110111) e SEM protocolo `
+            + 'que o confirme. Elas não foram marcadas como canceladas (não há confirmação) e também não '
+            + 'contam como válidas — confira o evento no portal da SEFAZ antes de fechar o faturamento.',
         );
     }
     if (canceladas.length) {
@@ -419,6 +470,7 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         canceladas: canceladas.length,
         naoCanceladas: r.filter((x) => x.situacao === 'nao-cancelada').length,
         naoCanceladasPorRecusa: porRecusa.length,
+        cancelamentoNaoConfirmado: semConfirmacao.length,
         indeterminadas: indeterminadas.length,
         valorRemovido: Math.round(valorRemovido * 100) / 100,
         avisos,
