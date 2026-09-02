@@ -51,6 +51,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   à mão e o gestor em cópia visível) e **nada é arquivado no SharePoint** (a
   etapa 5 do rito trava na carteira inteira — e **reenviar a guia DUPLICA a
   cobrança**, nunca é a saída).
+  🐛 **E O CORTE DECAPITAVA O NOME DO APP OUTRA VEZ, um nível acima — 1.668
+  vezes.** O Auto-Sync gravava `${...}: ${err.message}`.slice(0, 200) e a
+  Microsoft nomeia o aplicativo **depois** disso: todos os erros do log
+  terminavam em *"…is the client secre"*, e o card acusava, corretamente,
+  *"a resposta não nomeou o aplicativo"* sobre **416 respostas que
+  nomeavam**. É o MESMO defeito do `pendenciaDeGravacaoSharePoint` (01/09) —
+  lá o dado ainda existia no objeto, **aqui ele nunca chega ao banco**.
+  ⚠️ A saída não foi tirar o limite (log de 400 empresas não cresce sem teto):
+  o id é extraído da mensagem INTEIRA e **reanexado depois do corte**, dentro
+  do mesmo limite. 🐛 E o teste pegou o sufixo na forma errada: reanexar o id
+  fora do padrão `app '<id>'` o deixaria **invisível para o próprio dono** —
+  o defeito com outra roupa.
   📌 **E A LIÇÃO DE POSTURA, que é a mais cara**: eu repeti o mesmo pedido em
   quatro formas diferentes (portal, Cloud Shell, az CLI, device code) sobre um
   console que ele nem abre, mandei um link 404 e misturei os dois consoles sem

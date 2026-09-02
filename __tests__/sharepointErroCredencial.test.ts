@@ -14,6 +14,7 @@
 import {
     ehFalhaDeCredencial, pendenciaDeGravacaoSharePoint, ACAO_CREDENCIAL_ENVIO,
     causaDaFalhaDeCredencial, instrucaoDaCredencial, appDaCredencial, mensagemDeCredencialRecusada,
+    recortarPreservandoApp,
 } from '../sefaz-backend/sharepoint-erro-credencial.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -263,5 +264,38 @@ describe('🔒 o painel de envios usa o DONO, não uma cópia', () => {
     it('sem-config mantém a ação dele (cadastrar grupo + pasta)', () => {
         const r = pendenciaSharePoint({ sharePoint: { status: 'sem-config' } })!;
         expect(r.acao).toMatch(/grupo \+ pasta/);
+    });
+});
+
+// ============================================================================
+// 🚨 O CORTE DECAPITAVA O NOME DO APP — 1.668 vezes, no print de 02/09
+//
+// O Auto-Sync gravava `${...}: ${err.message}`.slice(0, 200), e a Microsoft
+// nomeia o aplicativo DEPOIS disso. Todos os 1.668 erros do log terminavam em
+// "...is the client secre" e o card acusava, corretamente, que a resposta não
+// nomeava o app — sobre 416 respostas que nomeavam.
+//
+// 📌 É o MESMO defeito do `pendenciaDeGravacaoSharePoint` (01/09), um nível
+// acima: lá o dado ainda existia no objeto; aqui ele nunca chega ao banco.
+// ============================================================================
+describe('🚨 o corte não pode engolir o nome do app', () => {
+    it('a linha do log de 200 caracteres PERDE o app — era o defeito', () => {
+        const linha = `2026-08 SAÍDA: ${ERRO_REAL}`;
+        expect(appDaCredencial(linha.slice(0, 200)).id).toBeNull();
+    });
+
+    it('e o recorte novo preserva o id, dentro do MESMO limite', () => {
+        const linha = `2026-08 SAÍDA: ${ERRO_REAL}`;
+        const cortado = recortarPreservandoApp(linha);
+        expect(cortado.length).toBeLessThanOrEqual(200);
+        expect(appDaCredencial(cortado).id).toBe('a876887f-a126-424f-8d8a-fc011519855e');
+        // E daí o card volta a dizer ONDE gravar, em vez do genérico.
+        expect(instrucaoDaCredencial(cortado)).toMatch(/proxy do SharePoint/);
+    });
+
+    it('mensagem curta não é tocada, e sem app o corte é o de sempre', () => {
+        expect(recortarPreservandoApp('erro curto')).toBe('erro curto');
+        const semApp = `x${'y'.repeat(400)}`;
+        expect(recortarPreservandoApp(semApp)).toHaveLength(200);
     });
 });

@@ -21,6 +21,10 @@ import crypto from 'crypto';
 import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
 import { competenciasAutoSync } from './sharepoint-competencia-helper.js';
 import { secretsMatch } from './cron-secret.js';
+// 🚨 O corte de 200 caracteres decapitava o nome do app do Azure, que vem
+// DEPOIS na resposta da Microsoft — o card acusava "a resposta não nomeou o
+// aplicativo" sobre 416 respostas que nomeavam.
+import { recortarPreservandoApp } from './sharepoint-erro-credencial.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -413,7 +417,7 @@ async function syncEmpresa(db, empresa, competencias) {
                 console.warn(`[auto-sync] ${empresa.nome} ${competencia} ${dir}: ${err.message}`);
                 summary.erros++;
                 if (summary.errosDetalhe.length < 6) {
-                    summary.errosDetalhe.push(`${competencia} ${dir}: ${err.message}`.slice(0, 200));
+                    summary.errosDetalhe.push(recortarPreservandoApp(`${competencia} ${dir}: ${err.message}`));
                 }
                 continue;
             }
@@ -477,7 +481,7 @@ async function syncEmpresa(db, empresa, competencias) {
                     console.warn(`[auto-sync] erro processando ${file.name}:`, err.message);
                     summary.erros++;
                     if (summary.errosDetalhe.length < 6) {
-                        summary.errosDetalhe.push(`${file.name}: ${err.message}`.slice(0, 200));
+                        summary.errosDetalhe.push(recortarPreservandoApp(`${file.name}: ${err.message}`));
                     }
                 }
             }
