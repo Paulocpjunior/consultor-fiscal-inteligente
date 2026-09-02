@@ -83,3 +83,43 @@ describe('🚦 o que a medição diz — e o que ela se recusa a esconder', () =
         expect(TELA).toMatch(/não baixa, não grava/);
     });
 });
+
+// ============================================================================
+// 🚨 A LISTA CRUA ERA INÚTIL — eu despejei tudo o que o Graph devolve
+//
+// 02/09, no primeiro uso real: centenas de linhas, com `/contentstorage/…`
+// (armazenamento PESSOAL, OneDrive) e as entradas "Designer", "Pages" e
+// "My workspace" que a Microsoft cria sozinha. Achar o site do escritório a
+// olho nessa lista é impossível — e ferramenta que não se consegue usar é
+// ferramenta que não existe.
+//
+// ⚠️ Mas FILTRAR é RECORTE, e recorte se DIZ (a régua do farol honesto,
+// 30/07): esconder calado faria a pessoa concluir que o site dela não existe.
+// ============================================================================
+describe('🚦 a lista de sites é utilizável — e o recorte vai dito', () => {
+    it('só sites de EQUIPE, com o pessoal contado à parte', () => {
+        expect(TELA).toMatch(/caminho\.startsWith\('\/sites\/'\)/);
+        expect(TELA).toMatch(/Mostrando \{sitesVisiveis\.length\} de \{sitesDeEquipe\.length\}/);
+        expect(TELA).toMatch(/ficaram de fora/);
+    });
+
+    it('tem busca — em centenas de sites, achar a olho não é opção', () => {
+        expect(TELA).toMatch(/setBuscaSite/);
+        expect(TELA).toMatch(/Filtrar por nome ou caminho/);
+    });
+
+    // 🚨 O ganho de verdade: clicar no site ABRE a árvore DELE, sem mexer na
+    // configuração do proxy. É assim que a pergunta "a árvore está em qual
+    // site?" se responde sem trocar env e esperar deploy.
+    it('cada site é clicável e explora o site DELE', () => {
+        expect(TELA).toMatch(/explorar\('', s\.caminho\)/);
+        expect(TELA).toMatch(/explorarPasta\(caminho, alvo\)/);
+    });
+
+    // ⚠️ E o site que o proxy usa HOJE fica marcado — sem isso a pessoa não
+    // sabe qual dos 500 é o que está valendo.
+    it('marca o site que o proxy usa hoje', () => {
+        expect(TELA).toMatch(/é o que o proxy usa hoje/);
+        expect(TELA).toMatch(/health\?\.sitePath/);
+    });
+});
