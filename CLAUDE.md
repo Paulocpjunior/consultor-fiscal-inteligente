@@ -43,6 +43,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   instrução dele. **Três asserções foram trocadas pela INTENÇÃO** (o total
   aparece · a prévia diz quantas rodadas · a rodada real fala no passado):
   elas prendiam o TEXTO de uma frase que mudou por decisão.
+  🚨 **E O MESMO PRINT TRAZIA UM SEGUNDO ACHADO, QUE NÃO É DEFEITO DO APP**:
+  *"se observar aí não puxou todas as NFC-E, só puxou 1"* — a tabela mostrava
+  `65 · série 1 · 347–347 · 1 autorizada` ao lado de 126 do modelo 55.
+  📌 **A CAUSA É O CERTIFICADO, e é MEDIDA**: a captura de NFC-e roda pelo
+  **SAE-NFC-e**, que é mTLS com o **A1 do PRÓPRIO contribuinte** (o
+  orquestrador carrega um `.pfx` por `loadCertEmpresa`). A MV LIDER usa **A3**
+  (registrado em 18/08, quando a reconferência dela caiu no cert do escritório
+  justamente por isso) — e com A3 a chave vive **dentro do cartão** e **não roda
+  no Cloud Run**. Quem traz é o **Agente A3**, na máquina onde o cartão está.
+  **Ninguém rodou o agente na competência; o app não perdeu nota nenhuma.**
+  ✂️ **MAS A TELA NÃO DIZIA ISSO — e buraco sem causa se lê como falha do app.**
+  A linha do modelo 65 passou a carregar a frase: quem traz, por que não roda no
+  servidor, **que não é falha de captura**, e onde se baixa o agente.
+  ⚠️ **SILENCIOSA NO CASO NORMAL**: com A1 no cofre (ou o da matriz, mesma raiz)
+  ela devolve `null` — aviso em cima de captura que funciona é o jeito conhecido
+  de a equipe parar de ler os avisos que importam.
+  ⚠️ **E ELA NÃO AFIRMA QUE FALTAM NOTAS**: diz por qual PORTA elas entrariam.
+  Empresa que simplesmente não emite NFC-e tem o mesmo "1 nota" sem nada de
+  errado — dizer "faltam notas" ali seria alarme sobre arquivo correto.
+  🔒 **O CERTIFICADO NÃO ATRAVESSA**: `empresas_certificados` é fechado ao
+  navegador de propósito (guarda `storagePath` e `passwordEnc`), então a
+  resposta vem por ROTA e leva só o METADADO — é a régua do túnel de
+  certificados (07/08): leva-se a OPERAÇÃO, nunca a chave. Um teste recorta a
+  rota e prova que nem `storagePath` nem `passwordEnc` saem dela.
+  📌 **REGRA QUE FICA: buraco de numeração sem CAUSA é alarme sem ação.** A
+  numeração é sequencial, então o buraco é FATO — mas o fato sozinho manda
+  procurar no app quando a resposta é o trilho: com A3, NFC-e depende de alguém
+  rodar o agente, e isso não se descobre olhando a tabela.
   📌 **REGRA QUE FICA: teto de segurança contra o outro lado é do APP, nunca da
   pessoa.** Onde existir limite por rodada — SEFAZ, SERPRO, Graph, SharePoint —
   quem repete é o app, com o respiro e o botão de parar. Passar a repetição

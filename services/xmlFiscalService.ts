@@ -142,6 +142,48 @@ export interface EmpresaXmlOption {
  * direta do doc (dadosFiscais); null quando indisponível — o PDF imprime
  * "não cadastrado" no lugar, nunca esconde o buraco.
  */
+export interface TrilhoSaida {
+    ok?: boolean;
+    certificado?: { tipoCert: string; certUploaded: boolean; certValido: boolean; temA1MesmaRaizValido: boolean };
+    nfce?: { via: string; rodaNaNuvem: boolean; titulo: string; motivo: string; acao: string | null };
+    /** Frase pronta da linha do modelo 65 — `null` quando a captura roda sozinha. */
+    avisoNfce?: string | null;
+    error?: string;
+}
+
+/**
+ * "Por qual trilho a NFC-e (mod 65) desta empresa chega?"
+ *
+ * 🚨 O painel de Canceladas/Faltantes mostrava o buraco da numeração do modelo
+ * 65 sem dizer POR QUE ele existe (02/09, MV LIDER: *"não puxou todas as
+ * NFC-E, só puxou 1"*) — e com certificado A3 a captura simplesmente não roda
+ * no servidor: quem traz é o Agente A3.
+ *
+ * 🔒 Vem do backend porque `empresas_certificados` é fechado ao navegador de
+ * propósito (guarda `storagePath` e `passwordEnc`). Sai só o METADADO.
+ */
+export async function getTrilhoSaida(opt: EmpresaXmlOption): Promise<TrilhoSaida | null> {
+    if (!opt?.id && !opt?.cnpj) return null;
+    try {
+        const u = auth?.currentUser;
+        if (!u) return null;
+        const token = await u.getIdToken();
+        const qs = new URLSearchParams();
+        if (opt.id) qs.set('empresaId', opt.id);
+        if (opt.cnpj) qs.set('cnpj', String(opt.cnpj).replace(/\D/g, ''));
+        const res = await fetch(`/api/admin/sefaz/trilho-saida?${qs.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        // ⚠️ Falha aqui NÃO vira "a captura está quebrada": sem a resposta o
+        // painel simplesmente não explica nada, como antes.
+        if (!res.ok) return null;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
 export async function getIdentificacaoEmpresa(opt: EmpresaXmlOption): Promise<import('../types').EmpresaDadosFiscais | null> {
     if (!isFirebaseConfigured || !db || !opt?.id) return null;
     const colecoes = opt.fonte === 'lucro'
