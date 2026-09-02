@@ -14,7 +14,9 @@ import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
-import { docCancelado, direcaoEfetivaDoc, valorDoDocumentoServico } from './xml-metadata-helper.js';
+import {
+    dataDeclaradaDoDocumento, docCancelado, direcaoEfetivaDoc, valorDoDocumentoServico,
+} from './xml-metadata-helper.js';
 // A assinatura de alíquota que separa RETENÇÃO (0,65%+3%) de tributo da
 // OPERAÇÃO (1,65%+7,60%) — a régua do R-4020, reusada pelo F600.
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
@@ -1011,7 +1013,10 @@ export function coletarRetencoesF600(notas, warnings) {
         if (cnpjFonte.length !== 14) { semCnpjFonte.push(rotulo); continue; }
 
         eventos.push({
-            data: notaCrua.dataEmissao || notaCrua.dhEmi || null,
+            // ⚠️ Normalizada AQUI, não só no `fmt.formatDate` lá embaixo: o
+            // valor intermediário que acerta porque o consumidor conserta é o
+            // acerto por acidente.
+            data: dataDeclaradaDoDocumento(notaCrua.dataEmissao || notaCrua.dhEmi) || null,
             base, pis, cofins, cnpjFonte, numero: rotulo,
         });
     }

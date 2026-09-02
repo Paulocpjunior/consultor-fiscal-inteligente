@@ -32,6 +32,9 @@
 // ============================================================================
 
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
+// 🚨 A data do fato gerador atravessa o túnel na forma que o R-4020 aceita
+// (`AAAA-MM-DD`) — quem a lê das três formas do documento é o DONO.
+import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
 // 🚨 31/08: o app DENUNCIAVA a retenção errada e não entregava a certa. Quem
 // responde "quanto esta nota reteve, de verdade" é este dono — ajuste
 // declarado > CSRF decomposta > documento —, e ele é ÚNICO de propósito: um
@@ -97,7 +100,23 @@ export function normalizarNotaTomada(d) {
     return {
         numero: texto(d?.numero) || null,
         chave: texto(d?.chave) || null,
-        dataFatoGerador: texto(d?.dataFatoGerador || d?.dhEmi) || null,
+        // 🚨 A DATA ATRAVESSAVA CRUA — e o R-4020 recusava do outro lado
+        // (02/09: *"R-4020 inválido: pagamentos[0].dtFG deve ser AAAA-MM-DD"*).
+        //
+        // O `dhEmi` chega em TRÊS formas neste app: `2026-08-14T08:35:36-03:00`
+        // (XML ABRASF), `11/05/2026 14:31:31` (portal de SP) e Timestamp do
+        // Firestore. Mandar o texto cru fazia o outro lado receber uma data que
+        // o leiaute não aceita — e o comentário no topo desta função já dizia
+        // que ler as DUAS formas do documento **é o serviço que este túnel
+        // presta**, porque é o CFI que conhece a forma do documento.
+        //
+        // ⚠️ Quem responde é o DONO (`dataDeclaradaDoDocumento`): a data é lida
+        // do TEXTO, sem conversão de fuso — `new Date('11/05/2026')` é 5 de
+        // NOVEMBRO, e um dia trocado aqui declara o fato gerador no mês errado.
+        // ⚠️ E ilegível continua **null**, nunca a data de hoje: campo de data
+        // não recebe default (a régua de 06/08), e fato gerador chutado é
+        // evento aceito declarando outra competência.
+        dataFatoGerador: dataDeclaradaDoDocumento(d?.dataFatoGerador || d?.dhEmi) || null,
         competencia: texto(d?.competencia) || null,
 
         prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.prestador?.cnpjCpf || d?.prestador?.cnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),

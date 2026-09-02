@@ -48,6 +48,11 @@
 // que a casa proíbe em campo de declaração.
 // ============================================================================
 
+// 🚨 A data do fato gerador atravessa o túnel na forma que o leiaute aceita
+// (`AAAA-MM-DD`) — o `dhEmi` chega em TRÊS formas neste app, e mandar o texto
+// cru foi o que fez o R-4020 ser recusado do outro lado (02/09).
+import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+
 const num = (v) => {
     if (v === undefined || v === null || v === '') return undefined;
     const n = Number(v);
@@ -183,7 +188,9 @@ export function normalizarServicoTomado(d) {
         // ── Identificação da nota (o grupo `nfs` do evento aceito) ──────────
         numero: texto(d?.numero) || null,
         serie: texto(d?.serie) || null,
-        dtEmissao: texto(d?.dataFatoGerador || d?.dhEmi) || null,
+        // ⚠️ MESMA correção do R-4020, no mesmo dia: texto cru aqui é data que
+        // o leiaute não aceita. Ilegível continua null — nunca a data de hoje.
+        dtEmissao: dataDeclaradaDoDocumento(d?.dataFatoGerador || d?.dhEmi) || null,
         chave: texto(d?.chave) || null,
         competencia: texto(d?.competencia) || null,
 

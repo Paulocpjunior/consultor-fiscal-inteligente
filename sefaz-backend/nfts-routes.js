@@ -20,7 +20,9 @@ import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { parseCsvNftsSp } from './nfts-sp-csv-parser.js';
 import { cruzarServicosComNfts } from './nfts-cruzamento.js';
-import { docCancelado, direcaoEfetivaDoc, issRetidoDoDocumento } from './xml-metadata-helper.js';
+import {
+    dataDeclaradaDoDocumento, docCancelado, direcaoEfetivaDoc, issRetidoDoDocumento,
+} from './xml-metadata-helper.js';
 import { ehNotaDeServico } from './sped-selecao-documentos.js';
 
 const router = express.Router();
@@ -58,7 +60,10 @@ async function carregarServicosTomados(db, empresaId, competencia) {
         const v = d.valores || {};
         out.push({
             numero: d.numero || '—',
-            data: (d.dhEmi || '').slice(0, 10),
+            // 🚨 `.slice(0, 10)` só acerta a forma ISO: sobre a do portal de SP
+            // (`11/05/2026 14:31:31`) ele devolve `11/05/2026`, que NÃO é data
+            // ISO — e vai para uma DECLARAÇÃO da prefeitura. Quem lê é o DONO.
+            data: dataDeclaradaDoDocumento(d.dhEmi),
             participante: parte.nome || '—',
             doc: String(parte.cnpjCpf || '').replace(/\D/g, ''),
             municipio: parte.municipio || '',

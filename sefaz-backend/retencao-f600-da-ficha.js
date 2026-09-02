@@ -41,7 +41,9 @@
 // Os DONOS das leituras de documento — nenhuma cópia aqui: o lado, o
 // cancelamento, o participante nas duas formas e o valor já têm régua única.
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
-import { direcaoEfetivaDoc, docCancelado, valorDoDocumento } from './xml-metadata-helper.js';
+import {
+    dataDeclaradaDoDocumento, direcaoEfetivaDoc, docCancelado, valorDoDocumento,
+} from './xml-metadata-helper.js';
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 const centavos = (v) => Math.round((Number(v) || 0) * 100);
@@ -75,7 +77,10 @@ export function notasQueAncoramRetencao(notas) {
         if (!Number.isFinite(base) || base <= 0) continue;
         out.push({
             numero: String(cru.numero || cru.chave || '(sem número)'),
-            data: cru.dataEmissao || cru.dhEmi || null,
+            // ⚠️ A data sai NORMALIZADA daqui, não lá no formatador: valor
+            // intermediário que só acerta porque o consumidor conserta é o
+            // acerto por acidente — o próximo consumidor não conserta.
+            data: dataDeclaradaDoDocumento(cru.dataEmissao || cru.dhEmi) || null,
             base, cnpjFonte,
         });
     }
