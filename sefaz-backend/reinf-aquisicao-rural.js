@@ -58,6 +58,11 @@
 // bloqueia com a causa na mão; ninguém deduz o tipo.
 // ============================================================================
 
+// 🚨 A data atravessa o túnel na forma que o leiaute aceita (`AAAA-MM-DD`) —
+// o `dhEmi` chega em TRÊS formas neste app, e mandar o texto cru foi o que fez
+// o R-4020 ser recusado do outro lado em 02/09. Aqui era a MESMA linha.
+import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const texto = (v) => String(v ?? '').trim();
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -249,7 +254,11 @@ export function normalizarAquisicao(n) {
     return {
         chave: texto(n?.chave) || null,
         numero: texto(n?.numero) || null,
-        data: texto(n?.dhEmi) || null,
+        // ⚠️ A data do fato gerador sai em `AAAA-MM-DD`, lida do TEXTO pelo
+        // DONO — `new Date('11/05/2026')` é 5 de NOVEMBRO, e um dia trocado
+        // aqui declara a aquisição na competência errada. Ilegível vira null,
+        // nunca a data de hoje.
+        data: dataDeclaradaDoDocumento(n?.dhEmi) || null,
         base: r2(n?.base),
         // A quebra do FUNRURAL, com os nomes do CÁLCULO (não os do leiaute):
         // as tags do R-2055 não estão provadas, e nome que finge ser do leiaute

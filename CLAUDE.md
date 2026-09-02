@@ -5,6 +5,75 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A DATA ATRAVESSAVA O TÚNEL CRUA — e o R-4020 recusava do outro lado**
+  (02/09, Paulo: *"pode atacar r2010 e r4020 no contabil"*, com o print do
+  Consultor Contábil: *"Nenhum beneficiário pôde ser convertido em evento ·
+  ELEVADORES ATLAS SCHINDLER LTDA. — R-4020 inválido: **pagamentos[0].dtFG deve
+  ser AAAA-MM-DD**"*).
+  🔴 **É A ARMADILHA DAS DUAS FORMAS, no campo que diz a COMPETÊNCIA.** O
+  `dhEmi` chega em **três** formas neste app — `2026-08-14T08:35:36-03:00` (XML
+  ABRASF), **`11/05/2026 14:31:31`** (portal de SP) e **Timestamp do Firestore**
+  — e o túnel mandava `texto(...)`, ou seja o que estivesse lá. Do outro lado,
+  data que o leiaute não aceita.
+  ⚠️ **E o comentário no topo do próprio módulo já prometia o contrário**: ele
+  diz que ler as DUAS formas do documento **é o serviço que este túnel presta**,
+  porque quem conhece a forma do documento é o CFI. A data ficou de fora da
+  promessa — é o vício de 13/08 (*regra escrita não é regra travada*) dentro da
+  função que a enuncia.
+  🔎 **E NÃO ERAM DOIS: ERAM QUATRO — quem achou o resto foi a VARREDURA.** Eu
+  ia corrigir o R-4020 e o R-2010, que o print nomeou;
+  `dataDoTunelPassaPeloDono.test.ts` achou o **R-2055** (`reinf-aquisicao-rural`,
+  o terceiro túnel do Reinf) e a **NFTS** (`nfts-routes`), que fazia
+  `.slice(0, 10)` — e sobre `11/05/2026 14:31:31` isso devolve **`11/05/2026`**,
+  que não é data ISO, numa DECLARAÇÃO da prefeitura. **Trava por LISTA cobre o
+  que eu lembrei, e o que eu lembrava era metade** (13/08, pela enésima vez).
+  ⚠️ **A VARREDURA NASCEU COM 8 ALARMES E 4 ERAM CÓDIGO CERTO** — triagem antes
+  de virar correção, como sempre: gravação do documento **como ele chegou**
+  (a forma crua é o que a fonte diz, e quem normaliza é a LEITURA), emissão de
+  DPS própria (ali `new Date()` é o instante da emissão de agora) e listagem de
+  diagnóstico. As quatro são exceção DECLARADA COM O MOTIVO, e um segundo teste
+  exige que cada exceção **ainda case a assinatura** — exceção órfã envelhece em
+  silêncio dizendo que cobre algo que já não existe.
+  ⚠️ **A ASSINATURA É ESTREITA**: casa só a ATRIBUIÇÃO de campo de DATA a partir
+  de `dhEmi`. Cálculo de IDADE (`getTime()`), ordenação por texto e o
+  `fmt.formatDate` do SPED (que já delega ao dono) **não casam** — alarme sobre
+  código certo é o jeito conhecido de a equipe desligar a trava.
+  ✂️ **E DOIS VALORES INTERMEDIÁRIOS ACERTAVAM POR ACIDENTE** (o `data` do F600
+  e o do bloco M): eles só saíam certos porque o CONSUMIDOR consertava no
+  `fmt.formatDate`. **Valor que acerta porque o consumidor conserta é o acerto
+  por acidente — o próximo consumidor não conserta.** Normalizam na origem.
+  🚨 **OS DOIS ERROS TÊM CUSTOS OPOSTOS, e é isso que decide o `null`**: data
+  ilegível vira **null** e o evento é RECUSADO (ruidoso, mas seguro); data
+  CHUTADA vira evento **ACEITO** declarando o fato gerador em outra competência
+  — e a Receita não devolve. Campo de data não recebe default (a régua de 06/08).
+  🔴 **E O MESMO ARQUIVO GUARDAVA A SEGUNDA CÓPIA DA RÉGUA**: o
+  `movimento-fiscal-contabil.js` — a fronteira que entrega o movimento ao CCI —
+  importa **CINCO** donos do `xml-metadata-helper` e rolava o **próprio parser de
+  data** ao lado. Ele acertava hoje; divergiria no primeiro ajuste, e a
+  divergência apareceria como *"o Contábil e o Fiscal declaram meses diferentes
+  sobre a MESMA nota"*.
+  🚨 **E ALI A NOTA SUMIA CALADA** — `if (!data) return null` e `if (!(valor>0))
+  return null`, sem contador nenhum: o Contábil recebia um mês **menor do que
+  houve** e nada acusava. **Queda por FILTRO × queda por LACUNA são coisas
+  diferentes**: cancelada e nota do outro lado NÃO pertencem àquele movimento
+  (contá-las faria o alarme nascer em todo mês normal); nota sem valor e sem data
+  PERTENCEM. Agora saem em `foraPorLacuna` + `lacunas` **com o número da nota** —
+  *"1 nota ficou de fora"* manda varrer o mês inteiro atrás dela —, e as duas
+  causas têm **ressalvas próprias**, porque sem valor não dá para lançar e sem
+  data não dá para saber a competência.
+  📌 **UMA FIXTURE FOI TROCADA, pelo motivo certo**: ela travava o `resumo` com
+  `toEqual` **sem** `foraPorLacuna` — descrevia o mundo em que a queda por lacuna
+  era silenciosa. O campo sai **sempre**, porque zero ali é a RESPOSTA ("nada
+  ficou de fora"), não o default de quem não olhou.
+  🐛 **E A TRAVA DO `.d.ts` MORDEU DUAS VEZES**: pus `@ts-expect-error` em dois
+  imports cujo `.d.ts` já existe (silenciar ali devolveria o módulo a `any`), e o
+  campo novo do resumo precisou entrar no `.d.ts` no MESMO PR — senão o tipo
+  descreveria um payload que a produção não produz.
+  🚩 **O QUE ISTO NÃO FECHA, e vai dito**: o `tpServico` do R-2010 que *"não está
+  assumindo"* é do outro repo (`plano-contas-iob`) e não foi tocado — este PR
+  corrige a metade que mora no CFI. E **nenhuma transmissão real foi feita**: o
+  que se prova aqui é a FORMA do campo, não que a Receita aceitou o evento.
+
 - **🚨 O PAINEL MANDAVA CONSERTAR O APLICATIVO ERRADO — `GRAPH_*` NESTE SERVIÇO
   É O E-MAIL, NÃO O SHAREPOINT** (02/09, print do Paulo do Diagnóstico →
   Config, no MESMO dia em que ele perguntou DUAS vezes *"o e-mail não tínhamos
