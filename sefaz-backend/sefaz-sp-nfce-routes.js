@@ -148,6 +148,13 @@ router.post('/reconferir-chave', requireAdmin, async (req, res) => {
         // ao lado de "nenhum evento de cancelamento", e não havia como saber
         // QUAL evento tinha vindo.
         eventosResumo: Array.isArray(dl.eventosResumo) ? dl.eventosResumo : [],
+        // 📌 O XML DO EVENTO, CRU (recolhido na tela). A 1ª rodada gastou um
+        // clique do dono para descobrir que o `cStat` não vinha — com o bruto
+        // à mão, a próxima resposta estranha se lê sem outra ida e volta.
+        // ⚠️ Só o EVENTO, nunca a nota: o evento traz chave, protocolo e
+        // justificativa; a autorizada traz itens, valores e o consumidor.
+        eventosXml: (Array.isArray(dl.eventosXml) ? dl.eventosXml : [])
+          .map((x) => String(x).slice(0, 4000)),
       },
       situacao: veredito.situacao,
       motivo: veredito.motivo,

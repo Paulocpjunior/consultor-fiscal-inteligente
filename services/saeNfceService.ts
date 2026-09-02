@@ -81,6 +81,8 @@ export interface ReconferirNfceResultado {
             tpEvento: string | null; cStat: string | null;
             dhEvento: string | null; nProt: string | null; xMotivo: string | null;
         }>;
+        /** O XML do evento, cru — para a resposta estranha não custar outra rodada. */
+        eventosXml?: string[];
     };
     situacao?: 'cancelada' | 'nao-cancelada' | 'nao-cancelada-por-recusa'
         | 'cancelamento-nao-confirmado' | 'indeterminado';

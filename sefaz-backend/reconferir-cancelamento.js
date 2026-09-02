@@ -283,6 +283,49 @@ export function lerRespostaCancelamento(resp) {
                         : 'Cancelamento registrado na SEFAZ (cStat 135).',
                 };
             }
+            // 🚨 O PROTOCOLO É A PROVA QUANDO O cStat NÃO VEM (02/09, 2ª rodada
+            // do print do Paulo na NFC-e 1194):
+            //
+            //   `tpEvento 110111 (cancelamento) · cStat — · (sem xMotivo) ·
+            //    prot 135265738206956 · 2026-08-22T16:50:16-03:00`
+            //
+            // O SAE-NFC-e devolveu o evento COM número de protocolo e COM data
+            // de registro, e SEM o `cStat`. Segurar a nota ali seria ficar
+            // parado sobre a resposta que o órgão de fato deu.
+            //
+            // 📖 A RÉGUA: `nProt` mora em `retEvento` e a SEFAZ só o emite para
+            // evento **REGISTRADO** — evento RECUSADO volta sem protocolo. Logo
+            // um 110111 com protocolo é cancelamento registrado.
+            //
+            // ⚠️ E ELA SÓ VALE QUANDO O cStat ESTÁ AUSENTE: com cStat presente
+            // quem manda é ele (573 é recusa e a nota continua válida). Ausência
+            // é silêncio; recusa é resposta — a mesma fronteira de sempre.
+            //
+            // 🚩 O que isto NÃO é: medição contra uma resposta de evento
+            // RECUSADO — não tenho uma. Por isso a confirmação sai CARIMBADA
+            // (`origemDaConfirmacao: 'protocolo'`) e a frase diz que o cStat não
+            // veio, para quem conferir saber sobre o que está olhando.
+            if (!cStatEvento) {
+                const nProtEv = (xml.match(/<(?:\w+:)?nProt[^>]*>\s*(\d+)/) || [])[1] || null;
+                if (nProtEv) {
+                    const dhReg = (xml.match(/<(?:\w+:)?dhRegEvento[^>]*>\s*([^<]+)/) || [])[1] || null;
+                    const just = (xml.match(/<(?:\w+:)?xJust[^>]*>\s*([^<]*)/) || [])[1] || null;
+                    return {
+                        situacao: 'cancelada',
+                        cStat: null,
+                        evento: {
+                            tpEvento: '110111', tipo: 'cancelamento', cStat: null,
+                            dhEvento: dhReg, nProt: nProtEv, xJust: just,
+                            origemDaConfirmacao: 'protocolo',
+                        },
+                        motivo: `Evento de cancelamento REGISTRADO na SEFAZ — protocolo ${nProtEv}`
+                            + `${dhReg ? ` em ${dhReg}` : ''}. O cStat do evento não veio nesta resposta; `
+                            + 'quem confirma aqui é o PROTOCOLO, que a SEFAZ só emite para evento '
+                            + 'registrado (evento recusado volta sem protocolo).',
+                    };
+                }
+            }
+
             // ⚠️ SÓ QUANDO O PROTOCOLO NÃO VEIO — e a fronteira é a régua da
             // casa: RECUSA é RESPOSTA (a SEFAZ disse "não registrei", e a nota
             // continua válida — é o caso do cStat 573, coberto por teste

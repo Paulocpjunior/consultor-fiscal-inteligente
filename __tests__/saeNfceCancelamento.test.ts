@@ -128,6 +128,66 @@ describe('quem DECIDE continua sendo o dono único da leitura', () => {
         expect(r.situacao).not.toBe('nao-cancelada');
     });
 
+    // ========================================================================
+    // 🚨 2ª RODADA DO PRINT (02/09) — o SAE manda o evento COM PROTOCOLO e SEM
+    // cStat:
+    //   `tpEvento 110111 (cancelamento) · cStat — · (sem xMotivo) ·
+    //    prot 135265738206956 · 2026-08-22T16:50:16-03:00`
+    //
+    // 📖 `nProt` mora em `retEvento` e a SEFAZ só o emite para evento
+    // REGISTRADO — evento RECUSADO volta sem protocolo. Segurar a nota ali
+    // seria ficar parado sobre a resposta que o órgão de fato deu.
+    // ========================================================================
+    it('protocolo confirma o cancelamento quando o cStat não vem', () => {
+        const r = lerCancelamentoNfce({
+            cStat: '200',
+            xMotivo: 'Consulta realizada com sucesso',
+            nfeProcXml: '<nfeProc><infNFe/></nfeProc>',
+            eventosXml: ['<evento><infEvento><tpEvento>110111</tpEvento></infEvento></evento>'
+                + '<retEvento><infEvento><nProt>135265738206956</nProt>'
+                + '<dhRegEvento>2026-08-22T16:50:16-03:00</dhRegEvento></infEvento></retEvento>'],
+        });
+        expect(r.situacao).toBe('cancelada');
+        expect(r.evento).toMatchObject({
+            tpEvento: '110111', nProt: '135265738206956',
+            // ⚠️ A ORIGEM vai carimbada: não foi o cStat que confirmou.
+            origemDaConfirmacao: 'protocolo', cStat: null,
+        });
+        expect(r.motivo).toMatch(/protocolo 135265738206956/);
+        expect(r.motivo).toMatch(/cStat do evento não veio/);
+    });
+
+    // ⚠️ E A RÉGUA SÓ VALE COM O cStat AUSENTE: havendo cStat, quem manda é ele
+    // — 573 é RECUSA, e a nota continua válida. Ausência é silêncio; recusa é
+    // resposta. Marcar nota válida como cancelada APAGA receita, que é pior.
+    it('protocolo NÃO vence um cStat de recusa', () => {
+        const r = lerCancelamentoNfce({
+            cStat: '200',
+            nfeProcXml: '<nfeProc><infNFe/></nfeProc>',
+            eventosXml: ['<procEventoNFe><tpEvento>110111</tpEvento><cStat>573</cStat>'
+                + '<nProt>135265738206956</nProt></procEventoNFe>'],
+        });
+        expect(r.situacao).toBe('nao-cancelada');
+    });
+
+    // ⚠️ Sem protocolo E sem cStat continua retida — nem cancelada, nem válida.
+    it('sem protocolo e sem cStat continua não confirmado', () => {
+        const r = lerCancelamentoNfce({
+            cStat: '200',
+            nfeProcXml: '<nfeProc><infNFe/></nfeProc>',
+            eventosXml: ['<evento><infEvento><tpEvento>110111</tpEvento></infEvento></evento>'],
+        });
+        expect(r.situacao).toBe('cancelamento-nao-confirmado');
+    });
+
+    // ⚠️ A leitura das tags aceita PREFIXO de namespace e ATRIBUTOS — a versão
+    // que exigia a tag nua emudeceria sobre uma resposta que traz o dado.
+    it('lê a tag com prefixo de namespace', () => {
+        const [ev] = resumirEventos(['<ns2:procEventoNFe><ns2:tpEvento>110111</ns2:tpEvento>'
+            + '<ns2:cStat>135</ns2:cStat><ns2:nProt>135260</ns2:nProt></ns2:procEventoNFe>']);
+        expect(ev).toMatchObject({ tpEvento: '110111', cStat: '135', nProt: '135260' });
+    });
+
     // ✂️ E a CAUSA do recorte perdido foi fechada na origem: o parser prefere o
     // par `evento` + `retEvento` quando não há o embrulho `procEventoNFe`.
     it('o recorte pega o par evento+retEvento, com o cStat do protocolo', () => {

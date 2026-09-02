@@ -67,14 +67,18 @@ export function recortarEventos(body) {
  * Foi o print de 02/09 que provou: a tela mostrou `eventos: 1` ao lado de
  * *"nenhum evento de cancelamento"*, e não havia como saber o que tinha vindo.
  */
+// ⚠️ Lê a tag COM prefixo de namespace e COM atributos (`<ns2:cStat>`,
+// `<cStat xmlns="…">`). A primeira versão exigia a tag nua e teria emudecido
+// sobre uma resposta que traz o dado — a família do `localErroAviso`.
+const tag = (xml, nome) => (xml.match(new RegExp(`<(?:\\w+:)?${nome}[^>]*>\\s*([^<]+)`, 'i')) || [])[1] || null;
+
 export function resumirEventos(eventosXml) {
     return (Array.isArray(eventosXml) ? eventosXml : []).map((ev) => ({
-        tpEvento: (ev.match(/<tpEvento>\s*(\d+)\s*<\/tpEvento>/) || [])[1] || null,
-        cStat: (ev.match(/<cStat>\s*(\d+)\s*<\/cStat>/) || [])[1] || null,
-        dhEvento: (ev.match(/<dhRegEvento>\s*([^<]+)/) || [])[1]
-            || (ev.match(/<dhEvento>\s*([^<]+)/) || [])[1] || null,
-        nProt: (ev.match(/<nProt>\s*(\d+)\s*<\/nProt>/) || [])[1] || null,
-        xMotivo: (ev.match(/<xMotivo>\s*([^<]+)/) || [])[1] || null,
+        tpEvento: (tag(ev, 'tpEvento') || '').replace(/\D/g, '') || null,
+        cStat: (tag(ev, 'cStat') || '').replace(/\D/g, '') || null,
+        dhEvento: tag(ev, 'dhRegEvento') || tag(ev, 'dhEvento'),
+        nProt: (tag(ev, 'nProt') || '').replace(/\D/g, '') || null,
+        xMotivo: tag(ev, 'xMotivo'),
     }));
 }
 
