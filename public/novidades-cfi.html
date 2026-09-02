@@ -77,7 +77,27 @@
 <section>
     <h2>🆕 O que mudou agora (02/09) — leia esta parte primeiro</h2>
 
-    <h3>1. 🔐 <strong>Guia não sai por e-mail e nada arquiva no SharePoint</strong> — o que fazer hoje</h3>
+    <h3>1. 🚫 <strong>NFC-e cancelada aparecendo com valor</strong> — agora tem como perguntar à SEFAZ</h3>
+    <p>A captura de NFC-e pergunta <strong>uma vez por nota</strong>, e o cancelamento acontece
+    sempre <strong>depois</strong> da autorização — então <strong>nenhum trilho automático
+    descobre sozinho</strong> que a nota foi cancelada, e ela continua somando no faturamento.</p>
+    <div class="alerta">⚠️ <strong>O botão "Reconferir" da aba 🚫 NÃO resolve isso</strong>, e ele
+    já diz por quê: aquele webservice é de <strong>NF-e (modelo 55)</strong> e
+    <strong>recusa NFC-e</strong>. Clicar de novo nunca vai mudar o número.</div>
+    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → aba
+    <strong>Captura</strong> → <strong>NFC-e Saída (SP)</strong> → card
+    <strong>“🚫 Esta NFC-e está cancelada?”</strong>. Cole a <strong>chave de 44 dígitos</strong>
+    <em>ou</em> o <strong>ID do evento</strong> (o app tira a chave dele sozinho) e clique
+    <strong>Perguntar à SEFAZ</strong>.</div>
+    <p>Confirmado o cancelamento, o app <strong>grava o evento</strong> na nota e ela
+    <strong>sai do faturamento e dos livros</strong>. Quem afirma o cancelamento é a
+    <strong>SEFAZ</strong> — o app não marca nada à mão.</p>
+    <div class="alerta">⚠️ Se a resposta for <strong>“veio evento sem protocolo”</strong> ou
+    <strong>“não deu para concluir”</strong>, a nota <strong>não é liberada como válida</strong>:
+    a tela mostra a resposta do órgão inteira (e o XML do evento, no bloco recolhido) — mande o
+    print em vez de decidir na mão.</div>
+
+    <h3>2. 🔐 <strong>Guia não sai por e-mail e nada arquiva no SharePoint</strong> — o que fazer hoje</h3>
     <p>A Microsoft está <strong>recusando as credenciais</strong> do escritório (o erro
     <code>AADSTS7000215</code>). Enquanto isso durar: o botão <strong>"Enviar pelo sistema"
     não manda o e-mail</strong> (DAS, DARF, DARE e ISS) e <strong>nenhuma guia é arquivada na
@@ -97,7 +117,7 @@
     é o <em>ID</em> no lugar do <em>Valor</em>, ou um espaço colado no fim — antes ele só dizia
     "configurado", que não é a mesma pergunta. O valor em si nunca aparece na tela.</div>
 
-    <h3>2. 📥 <strong>XML da NFS-e do portal nacional</strong> agora importa</h3>
+    <h3>3. 📥 <strong>XML da NFS-e do portal nacional</strong> agora importa</h3>
     <p>A NFS-e do <strong>Padrão Nacional</strong> — a que a maioria dos municípios
     <strong>fora de São Paulo</strong> usa — vinha num XML que a tela de confirmação
     reconhecia como sendo da empresa e que, ao clicar em Importar, voltava
@@ -116,7 +136,7 @@
     verdade, "não conferido" — e <strong>nunca como 0,00</strong>, que seria dizer que não houve
     retenção.</div>
 
-    <h3>3. 🔎 <strong>NFS-e em PDF importada e "não tem nenhuma nota"</strong> — resolvido</h3>
+    <h3>4. 🔎 <strong>NFS-e em PDF importada e "não tem nenhuma nota"</strong> — resolvido</h3>
     <p>O PDF importava, a tela dizia <em>"importada com sucesso"</em> e a nota
     <strong>não aparecia em lugar nenhum</strong>: nem na lista, nem no Livro de Serviços
     Prestados. A nota <strong>estava gravada</strong> — o que não batia era a
@@ -135,14 +155,14 @@
     com o motivo escrito — nota sem competência não aparece em recorte de mês nenhum, e é melhor
     saber na hora do que descobrir no fechamento.</div>
 
-    <h3>4. 📄 <strong>Importar NFS-e em PDF</strong> voltou a gravar</h3>
+    <h3>5. 📄 <strong>Importar NFS-e em PDF</strong> voltou a gravar</h3>
     <p>O erro <em>"Firebase Storage: User does not have permission… (storage/unauthorized)"</em>
     saiu. A permissão da pasta dos PDFs existia no projeto e <strong>nunca tinha sido
     publicada</strong> — por isso o erro continuou aparecendo mesmo depois de corrigido.</p>
     <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → aba
     <strong>Importar</strong> → <strong>NFSe (PDF)</strong>.</div>
 
-    <h3>5. 📉 Baixa de estoque no <strong>Bloco K</strong> (registro K220)</h3>
+    <h3>6. 📉 Baixa de estoque no <strong>Bloco K</strong> (registro K220)</h3>
     <p>O K200 é o <strong>saldo</strong>. A baixa que <strong>não passa por ordem de
     produção</strong> — reclassificar um código, fracionar, trocar embalagem — é o
     <strong>K220</strong>, e agora dá para apontar.</p>
@@ -158,7 +178,7 @@
     admitido ali. Se você apontar mesmo assim, a geração <strong>avisa</strong> e diz que a saída
     é trocar o leiaute em Dados Fiscais.</div>
 
-    <h3>6. ✍️ <strong>Retenção do R-4020</strong>: o app parou de mandar o valor errado</h3>
+    <h3>7. ✍️ <strong>Retenção do R-4020</strong>: o app parou de mandar o valor errado</h3>
     <p>A NFS-e de São Paulo tem campos de PIS e COFINS que <strong>muitos prestadores preenchem
     com o tributo da operação deles</strong>, não com a retenção — e a própria nota costuma avisar
     isso em "Outras Informações". Declarar aqueles valores <strong>infla a retenção</strong>.</p>
@@ -177,7 +197,7 @@
     <div class="alerta">⚠️ O ajuste é <strong>da NOTA</strong>, não do prestador: duas notas do
     mesmo fornecedor podem reter diferente.</div>
 
-    <h3>7. ⛔ <strong>“Arquivo não é desta empresa”</strong> — a mensagem que era mentira</h3>
+    <h3>8. ⛔ <strong>“Arquivo não é desta empresa”</strong> — a mensagem que era mentira</h3>
     <p>Jogando o XML de uma NFS-e, a tela dizia <em>“0 desta empresa · 1 sem CNPJ legível”</em> e
     gritava que o arquivo era de outro cliente. <strong>Era dela.</strong> A conferência da tela
     conhecia NF-e e CT-e e <strong>não conhecia NFS-e</strong> (que usa prestador/tomador, não
@@ -189,7 +209,7 @@
     <div class="alerta">⚠️ Se você conferiu cadastro de cliente por causa dessa mensagem nos
     últimos dias, o cadastro provavelmente estava certo o tempo todo.</div>
 
-    <h3>8. 🏛️ O <strong>envio do ISS pelo sistema existe</strong> — faltava dizer o que falta</h3>
+    <h3>9. 🏛️ O <strong>envio do ISS pelo sistema existe</strong> — faltava dizer o que falta</h3>
     <p>O botão <strong>Enviar guia ao cliente</strong> do ISS ficava apagado e parecia função
     inexistente. Ele faz o <strong>mesmo rito do DAS e do DARF</strong>: envio pelo servidor,
     gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.</p>
@@ -197,7 +217,7 @@
     <strong>no portal da Prefeitura</strong> — o CFI não cria o número dela. Emita lá, clique em
     <strong>📎 Anexar PDF da guia</strong> e o botão liga. Agora a tela escreve isso.</div>
 
-    <h3>9. 🚨 Falha do SharePoint: <strong>não é a pasta do cliente</strong></h3>
+    <h3>10. 🚨 Falha do SharePoint: <strong>não é a pasta do cliente</strong></h3>
     <p>A etapa 5 travava com <code>AADSTS7000215: Invalid client secret</code> e o app mandava
     <em>“conferir o acesso à pasta”</em>. A pasta está certa: o que expirou é a
     <strong>credencial do escritório</strong> — e enquanto ela não for renovada

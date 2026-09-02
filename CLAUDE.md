@@ -108,10 +108,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ⚠️ **E a leitura das tags passou a aceitar PREFIXO de namespace e ATRIBUTOS**
   (`<ns2:cStat>`): exigir a tag nua emudeceria sobre uma resposta que TRAZ o
   dado — a família do `localErroAviso` de novo, na minha própria correção.
+  ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (Paulo: *"deu certo, a NF 1194 saiu do
+  relatório e o faturamento bateu"*). O que prova não é a tela dizer
+  "cancelada": é a nota **sair do relatório** e o **total fechar** — a régua de
+  sempre, validação por RESULTADO.
+  📌 **E A LIÇÃO DE MÉTODO É A MAIS CARA DO DIA: foram TRÊS rodadas, e em cada
+  uma o print dele derrubou a MINHA tela.** (1) eu disse *"não sei se o SAE
+  conta cancelamento"* — **um clique dele respondeu**; (2) a tela mostrou
+  `eventos: 1` ao lado de *"nenhum evento de cancelamento"*, e o contador sem
+  conteúdo custou uma rodada inteira; (3) o resumo mostrou o evento e faltava o
+  `cStat`, e só então apareceu o **protocolo**, que era a resposta desde a
+  primeira consulta.
+  🚨 **REGRA QUE FICA: cada campo que a tela ESCONDE da resposta do órgão custa
+  uma rodada do dono.** Não é estética — é o dono clicando, printando e
+  esperando, três vezes, por dado que já tinha chegado. Por isso a resposta sobe
+  INTEIRA (cStat · xMotivo · autorizada · cada evento com tpEvento, cStat,
+  protocolo e data · e o XML cru recolhido). **Quando o app pode PERGUNTAR ao
+  órgão, a dúvida se fecha com um clique — mas só se a tela mostrar o que
+  voltou.**
   📌 **REGRA QUE FICA: dedup por EXISTÊNCIA responde "já tenho o documento",
   nunca "já sei tudo sobre ele".** Todo fato que nasce DEPOIS da captura —
   cancelamento, CC-e, denegação — é invisível para um trilho que só pergunta uma
   vez. Onde o fato posterior muda LIVRO, tem de existir o caminho de reperguntar.
+  🚩 **O QUE CONTINUA ABERTO, e não vira "resolvido" por causa desta nota**: o
+  trilho **automático** segue cego — a captura de NFC-e não repergunta, então a
+  próxima cancelada só é descoberta se alguém clicar. Fechar isso é decidir
+  QUANDO reperguntar (as notas do mês em aberto? as dos últimos N dias?), e isso
+  é decisão do dono, com custo de consulta na SEFAZ. **Não ressuscitar como
+  defeito**: é lacuna nomeada, não conserto pendente.
 
 - **🚨 "✓ NFSe Nac" NUMA EMPRESA QUE NÃO TEM TRILHO DE NFS-e — e a ação mandava
   clicar num botão que o próprio trilho recusa** (02/09, Paulo: *"verifica push
