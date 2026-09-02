@@ -5,6 +5,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "JÁ TÍNHAMOS MATADO ONTEM A QUESTÃO DO E-MAIL" — e o app não tinha como
+  responder** (02/09, Paulo, pela SEGUNDA vez no mesmo dia; de manhã ele já
+  tinha perguntado *"email não tínhamos matado ontem?"*).
+  📌 **Ele estava meio certo, e o "meio" é o problema**: a credencial do
+  **SharePoint** foi corrigida e está mesmo funcionando — hoje o proxy listou
+  sites e pastas. O **e-mail é OUTRO aplicativo do Azure**, e continua recusado.
+  🔴 **E O QUE FAZ OS DOIS PARECEREM UM SÓ É O NOME DA VARIÁVEL — medido no
+  código**: `GRAPH_CLIENT_SECRET` existe em **DOIS serviços**, com o MESMO
+  nome — no **proxy** (`graph-client-secret:latest` do Secret Manager, app
+  **`a876887f…`**, SharePoint) e no **serviço do CFI** (app **`59fd4ec9…`**,
+  ENVIO DE E-MAIL). Renovar um não conserta o outro, e o nome igual faz "matei"
+  parecer valer para os dois.
+  🚨 **E NÃO EXISTIA JEITO DE CONFERIR SEM MANDAR GUIA A UM CLIENTE** — foi
+  assim que a Sandra descobriu. É a primeira regra permanente deste projeto
+  (*validação por RESULTADO*) faltando justamente no trilho que mais dói: o
+  card do SharePoint ganhou o `checkAuth()` hoje de manhã e o e-mail ficou sem
+  nada.
+  ✂️ **Sonda `✉️ Testar credencial do e-mail`** no Diagnóstico → Config: PEDE o
+  token à Microsoft e mostra a resposta — **sem enviar mensagem a ninguém** (um
+  teste recorta a rota e prova que ela chama `getGraphToken` e nunca
+  `enviarEmail`).
+  ⚠️ **INVALIDA O CACHE ANTES DE PERGUNTAR**: o token vale ~1h, e sondar com o
+  velho responderia *"está tudo bem"* sobre a credencial ANTIGA — exatamente a
+  pergunta que ninguém quer errar logo depois de trocar o segredo.
+  ⚠️ **E O APLICATIVO VEM DA RESPOSTA, não de uma lista minha**: é o id que
+  separa o do e-mail do do SharePoint. App não mapeado sai com o id CRU e
+  **nenhum lugar inventado**.
+  ⚠️ **Token OK prova a CREDENCIAL, e a frase diz isso** — não prova que a
+  caixa do remetente existe nem que a mensagem chegou. Prometer mais seria o
+  farol desonesto de sempre.
+  📌 **REGRA QUE FICA: variável com o MESMO NOME em dois serviços é a armadilha
+  das duas formas com outra roupa** — e a saída não é lembrar da diferença, é
+  ter um botão que MEDE cada uma.
+
 - **🚨 UM LADO NÃO LIDO NÃO VIRA DIREÇÃO CHUTADA — três casos no mesmo dia, a
   mesma classe** (02/09).
   🔴 **(1) O PRIMEIRO BLOCO QUE *EXISTE* NÃO É O PRIMEIRO QUE *TEM O
