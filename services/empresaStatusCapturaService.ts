@@ -66,7 +66,7 @@ export interface EmpresaStatusCaptura {
         tomadasUlt?: number | null;
     } | null;
     capturaNfseNacionalOk: boolean;
-    capturaNfseNacionalVia?: 'cloud-a1' | 'a3-local' | 'inativa' | 'bloqueada';
+    capturaNfseNacionalVia?: 'cloud-a1' | 'cloud-a1-raiz' | 'a3-sem-trilho-nfse' | 'inativa' | 'bloqueada';
     motivosBloqueio: string[];
     /** dadosFiscais completo — semeia o modal "Completar cadastro". */
     dadosFiscais?: import('../types').EmpresaDadosFiscais;
