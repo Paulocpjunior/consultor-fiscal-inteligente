@@ -32,7 +32,30 @@ import { normalizarCodCliente } from './cod-cliente.js';
 import { validarRegimeParaGravacao } from './regime-tributario.js';
 // 🏦 DeRE: o regime específico de IBS/CBS é vocabulário fechado — fora dele é
 // RECUSA com a lista, nunca descarte calado (o desenho do regimeTributario).
-import { validarRegimeEspecificoParaGravacao } from './dere-regimes.js';
+import { validarRegimeEspecificoParaGravacao, REGIMES_ESPECIFICOS_IBS_CBS } from './dere-regimes.js';
+import { TABELA_13_UF, lerAtividadeDere } from './dere-evento-d1001.js';
+
+/** 🏦 DeRE — listas do D-1001 só entram com código que a tabela oficial tem. */
+function validarListaDere(campo, bruto) {
+    const itens = (Array.isArray(bruto) ? bruto : String(bruto ?? '').split(/[,;\s]+/))
+        .map((x) => String(x ?? '').trim().toUpperCase()).filter(Boolean);
+    const lista = [...new Set(itens)];
+    const ruins = [];
+    if (campo === 'dereAtividades') {
+        // `REGIME:NNC` — as tabelas repetem códigos, então a atividade só existe junto do regime.
+        for (const c of lista) if (!lerAtividadeDere(c).ok) ruins.push(c);
+        if (ruins.length) return { ok: false, lista, motivo: `Atividade(s) fora das Tabelas 21/31/41 do Anexo I da DeRE (forma REGIME:NNC): ${ruins.join(', ')}.` };
+    } else if (campo === 'dereRegimesSecundarios') {
+        const validos = new Set(REGIMES_ESPECIFICOS_IBS_CBS.filter((r) => r.dereConfirmada).map((r) => r.codigo));
+        for (const c of lista) if (!validos.has(c)) ruins.push(c);
+        if (ruins.length) return { ok: false, lista, motivo: `Regime(s) secundário(s) sem código no D-1001: ${ruins.join(', ')}. Só valem SERVICOS_FINANCEIROS, PLANOS_SAUDE e CONCURSOS_PROGNOSTICOS.` };
+        if (lista.length > 3) return { ok: false, lista, motivo: 'O D-1001 admite até 3 regimes secundários.' };
+    } else if (campo === 'dereUfsCredenciadas') {
+        for (const c of lista) if (!TABELA_13_UF[Number(c)]) ruins.push(c);
+        if (ruins.length) return { ok: false, lista, motivo: `UF(s) fora da Tabela 13 (código IBGE de 2 dígitos): ${ruins.join(', ')}.` };
+    }
+    return { ok: true, lista, motivo: null };
+}
 import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
 import { ccmSpDaEmpresa, ccmSpParaGravar } from './ccm-sp.js';
 import { trilhoDaNfceSaida, avisoDaLinhaNfce } from './trilho-saida-modelo.js';
@@ -799,6 +822,14 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // é o cadastro; o app não deduz. Campo entra na whitelist E no modal no
     // MESMO PR (regra do #382).
     'contribuinteIcms',
+    // 🏦 DeRE — o INSUMO do D-1001 (Informações do Contribuinte), 02/09 à noite,
+    // Paulo: "Fiscal, tudo roda no Fiscal". O evento sai INTEIRO do cadastro:
+    // atividades das Tabelas 21/31/41 (NNC), regimes secundários, natureza
+    // tributária (0 regular · 1 imunidade), UFs credenciadas (só prognósticos,
+    // Tabela 13) e início/fim da validade. Nenhum é deduzido pelo app — e sem
+    // eles a prévia do D-1001 RECUSA nomeando o campo. Whitelist E modal no
+    // MESMO PR (regra do #382).
+    'dereAtividades', 'dereRegimesSecundarios', 'dereIndNatTrib', 'dereUfsCredenciadas', 'dereIniValid', 'dereFimValid',
     // 🏭 Bloco K (29/08). Quem apresenta o controle da produção e do estoque é
     // o estabelecimento INDUSTRIAL ou equiparado — e o app NÃO DEDUZ isso: a
     // 🚦 Migração detecta produção pelos CFOPs, mas detectar movimento é SINAL,
@@ -941,6 +972,22 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
                 const r = validarRegimeEspecificoParaGravacao(val);
                 if (!r.ok) return res.status(400).json({ error: 'REGIME_ESPECIFICO_INVALIDO', message: r.motivo });
                 val = r.codigo || '';
+            }
+            // 🏦 DeRE: as listas do D-1001 entram só com códigos que a FONTE tem
+            // (Tabelas 21/31/41, vocabulário dos regimes, Tabela 13). Código
+            // fora da tabela é RECUSA com o valor nomeado — gravar e deixar a
+            // prévia recusar depois faria a pessoa procurar o erro na tela
+            // errada. Lista vazia APAGA o campo.
+            if (k === 'dereAtividades' || k === 'dereRegimesSecundarios' || k === 'dereUfsCredenciadas') {
+                const r = validarListaDere(k, val);
+                if (!r.ok) return res.status(400).json({ error: 'DERE_CAMPO_INVALIDO', message: r.motivo });
+                val = r.lista.length ? r.lista : '';
+            }
+            if (k === 'dereIndNatTrib' && val !== '' && !['0', '1'].includes(String(val))) {
+                return res.status(400).json({ error: 'DERE_CAMPO_INVALIDO', message: 'indNatTrib deve ser 0 (tributação regular) ou 1 (imunidade/não incidência).' });
+            }
+            if ((k === 'dereIniValid' || k === 'dereFimValid') && val !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(String(val))) {
+                return res.status(400).json({ error: 'DERE_CAMPO_INVALIDO', message: `${k} deve estar em AAAA-MM-DD.` });
             }
             if (k === 'uf' && typeof val === 'string') val = val.toUpperCase();
             if (k === 'ccmSp' && typeof val === 'string') val = val.replace(/\D/g, '');

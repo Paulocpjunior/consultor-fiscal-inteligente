@@ -491,11 +491,13 @@ describe('🚨 o campo chega a quem monta o mês, ao cadastro e à tela', () => 
         expect(readFileSync(join(RAIZ, 'docs/dere/xsd/retornoLoteDere-v1_0_1.xsd'), 'utf8')).toMatch(/name="protocolo"[\s\S]*?maxLength value="28"/);
     });
 
-    it('nenhum gerador de evento da DeRE existe — e a tela diz isso em vez de prometer', () => {
-        // Inventar XML sem o XSD é o `1405` num arquivo que a Receita processa.
-        // Se um dia o gerador nascer, este teste é trocado junto com a frase da
-        // tela — nunca só um dos dois.
-        expect(ler('components/DerePanel.tsx')).toMatch(/não gera nem transmite/);
+    it('o CFI monta a PRÉVIA do D-1001 e NÃO transmite — e a tela diz exatamente isso', () => {
+        // 02/09 à noite, Paulo: "Fiscal, tudo roda no Fiscal". O gerador do
+        // D-1001 nasceu (dere-evento-d1001.js) e a frase da tela mudou JUNTO —
+        // nunca só um dos dois. Transmissão continua inexistente: sem credencial
+        // do piloto e sem o XSD do fechamento, `entregaPeloApp` segue false.
+        expect(ler('components/DerePanel.tsx')).toMatch(/PRÉVIA do D-1001 e não transmite/);
         expect(ler('sefaz-backend/dere.js')).toMatch(/entregaPeloApp: false/);
+        expect(ler('sefaz-backend/dere-evento-d1001.js')).toMatch(/export function montarEventoD1001/);
     });
 });

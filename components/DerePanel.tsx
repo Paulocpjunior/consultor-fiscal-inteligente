@@ -6,11 +6,12 @@
  * PARECE estar (pelo CNAE — sugestão, não decisão), quando vence e quais
  * eventos a competência exige.
  *
- * ⚠️ O que ele NÃO faz vai na cara da tela: o app não gera nem transmite os
- * eventos. Os leiautes 1.1.0, o manual do desenvolvedor e parte dos XSD estão
- * LIDOS e servidos aqui, mas faltam os XSD do D-1199/D-2101, o insumo (plano
- * de contas, balancete) é contábil e a transmissão exige credencial do piloto
- * da Reforma.
+ * ⚠️ O que ele faz e o que NÃO faz vai na cara da tela: monta a PRÉVIA do
+ * D-1001 (do cadastro, conferida contra o XSD oficial) e não transmite nada.
+ * Os leiautes 1.1.0, o manual do desenvolvedor e parte dos XSD estão LIDOS e
+ * servidos aqui, mas faltam os XSD do D-1199/D-2101, o insumo dos mensais
+ * (plano de contas, balancete) é contábil e a transmissão exige credencial do
+ * piloto da Reforma.
  * Prometer geração aqui seria a promessa que a tela não cumpre (a lição do ✕
  * de 14/08).
  *
@@ -19,7 +20,11 @@
  */
 import React, { useState } from 'react';
 import { auth } from '../services/firebaseConfig';
-import type { TriagemDere, LinhaDere } from '../sefaz-backend/dere';
+import type { TriagemDere, LinhaDere, DeclaracaoDere } from '../sefaz-backend/dere';
+import type { EventoD1001 } from '../sefaz-backend/dere-evento-d1001';
+import type { ConferenciaXsd } from '../sefaz-backend/dere-xsd-bolso';
+
+type PreviaD1001 = { ok: boolean; evento: EventoD1001; conferenciaXsd: ConferenciaXsd | null; error?: string };
 
 const fmtCnpj = (c?: string | null) =>
     String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') || '—';
@@ -50,6 +55,28 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
     const [r, setR] = useState<TriagemDere | null>(null);
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
+    // 🏦 Prévia do D-1001 por DECLARAÇÃO (raiz). Paulo, 02/09: "Fiscal, tudo
+    // roda no Fiscal" — o evento nasce aqui, do cadastro, e é conferido contra
+    // o XSD da Receita antes de qualquer transmissão (que ainda não existe).
+    const [previas, setPrevias] = useState<Record<string, PreviaD1001 | 'carregando'>>({});
+    const [tpAmb, setTpAmb] = useState<'1' | '2'>('2');
+
+    const gerarPrevia = async (d: DeclaracaoDere) => {
+        const cnpj = d.estabelecimentos[0]?.cnpj;
+        if (!cnpj) return;
+        setPrevias(p => ({ ...p, [d.raiz]: 'carregando' }));
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            const resp = await fetch(`/api/admin/cadastro/dere-d1001-previa?cnpj=${encodeURIComponent(cnpj)}&tpAmb=${tpAmb}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const j = await resp.json();
+            if (!resp.ok && !j?.evento) throw new Error(j?.error || `HTTP ${resp.status}`);
+            setPrevias(p => ({ ...p, [d.raiz]: j }));
+        } catch (e: any) {
+            setPrevias(p => ({ ...p, [d.raiz]: { ok: false, evento: { ok: false, xml: null, id: null, pendencias: [], avisos: [], veredicto: null, resumo: null }, conferenciaXsd: null, error: e?.message || 'Falha ao montar a prévia.' } }));
+        }
+    };
 
     const rodar = async () => {
         setErro(null);
@@ -154,10 +181,10 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                     </div>
 
                     <div className="rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-2 text-amber-800 dark:text-amber-300">
-                        ⚠️ <strong>O CFI não gera nem transmite os eventos da DeRE.</strong> Os leiautes
-                        oficiais, o manual do desenvolvedor e parte dos XSD estão lidos e servidos abaixo — mas
-                        faltam os XSD do fechamento (D-1199), do D-2101 e de dois retornos, o insumo dos eventos
-                        (plano de contas comentado, balancete mensal) é contábil, e
+                        ⚠️ <strong>O CFI monta a PRÉVIA do D-1001 e não transmite nada.</strong> A casa da geração é
+                        o Fiscal (decisão do Paulo, 02/09) — o D-1001 já sai do cadastro, conferido contra o XSD
+                        oficial. Os demais eventos ainda não: faltam os XSD do fechamento (D-1199), do D-2101 e de
+                        dois retornos, o insumo dos mensais (plano de contas comentado, balancete) é contábil, e
                         a transmissão exige credencial do piloto da Reforma (procuração no e-CAC + portal da
                         produção restrita). A entrega é por fora; o mês do cliente passa a cobrar a obrigação,
                         e ela se registra em Vencimentos como entregue fora do app.
@@ -185,6 +212,76 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                                 ⚠️ {r.obrigadasSemRaiz.length} obrigada(s) com CNPJ ilegível no cadastro — não dá para dizer a qual
                                 declaração pertencem.
                             </p>
+                        )}
+                        {!!r.declaracoes.length && (
+                            <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                                <p className="font-bold text-slate-700 dark:text-slate-200">
+                                    🧾 Prévia do D-1001 (Informações do Contribuinte) por declaração
+                                </p>
+                                <p className="text-slate-500">
+                                    O evento sai do CADASTRO (Dados Fiscais → DeRE: atividades, regimes secundários, natureza tributária,
+                                    UFs credenciadas, validade) e é conferido contra o <strong>XSD oficial</strong>. A prévia
+                                    <strong> não assina nem transmite</strong> — o que falta no cadastro sai nomeado.
+                                </p>
+                                <label className="mt-1 block text-slate-500">
+                                    Ambiente:{' '}
+                                    <select value={tpAmb} onChange={e => setTpAmb(e.target.value as '1' | '2')} className="p-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100">
+                                        <option value="2">2 — Produção restrita (piloto)</option>
+                                        <option value="1">1 — Produção</option>
+                                    </select>
+                                </label>
+                                <ul className="mt-2 space-y-2">
+                                    {r.declaracoes.map(d => {
+                                        const pv = previas[d.raiz];
+                                        return (
+                                            <li key={d.raiz} className="border-t border-slate-100 dark:border-slate-800 pt-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-mono">{d.raiz}</span>
+                                                    <span className="text-slate-500">{d.estabelecimentos.map(e => e.nome).join(' · ')}</span>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); gerarPrevia(d); }}
+                                                        disabled={pv === 'carregando' || d.regimesDivergem}
+                                                        title={d.regimesDivergem ? 'Regimes divergentes entre os estabelecimentos — acerte o cadastro antes' : 'Monta o XML do D-1001 e confere contra o XSD'}
+                                                        className="btn-press px-3 py-1 rounded-lg bg-slate-700 text-white text-xs font-bold disabled:opacity-40 whitespace-nowrap"
+                                                    >{pv === 'carregando' ? 'Montando…' : '👁 Prévia do D-1001'}</button>
+                                                </div>
+                                                {pv && pv !== 'carregando' && (
+                                                    <div className="mt-1">
+                                                        {pv.error && <p className="text-red-700 dark:text-red-300">{pv.error}</p>}
+                                                        {!!pv.evento.pendencias.length && (
+                                                            <div className="rounded border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-red-800 dark:text-red-300">
+                                                                <strong>O D-1001 não pôde ser montado — falta no cadastro:</strong>
+                                                                <ul className="ml-4 list-disc">{pv.evento.pendencias.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                                                            </div>
+                                                        )}
+                                                        {pv.evento.ok && pv.evento.xml && (
+                                                            <div>
+                                                                <p className={pv.conferenciaXsd?.ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
+                                                                    {pv.conferenciaXsd?.ok
+                                                                        ? <>✓ XML conferido contra <code>{pv.evento.resumo?.xsd}</code> — nenhum erro de schema.</>
+                                                                        : <>✕ O XML NÃO passa no XSD <code>{pv.evento.resumo?.xsd}</code>:</>}
+                                                                </p>
+                                                                {!!pv.conferenciaXsd?.erros.length && <ul className="ml-4 list-disc text-red-700 dark:text-red-300">{pv.conferenciaXsd.erros.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+                                                                <p className="text-slate-500">
+                                                                    Id <code>{pv.evento.id}</code> · regime principal {pv.evento.resumo?.regTribPrinc}
+                                                                    {pv.evento.resumo?.regTribSecund.length ? ` · secundários ${pv.evento.resumo.regTribSecund.join(', ')}` : ''}
+                                                                    {' · '}indNatTrib {pv.evento.resumo?.indNatTrib} · validade desde {pv.evento.resumo?.iniValid}
+                                                                    {' · '}{pv.evento.resumo?.grupos.map(g => `${g.rotulo}: ${g.atividades.join(', ')}`).join(' · ')}
+                                                                </p>
+                                                                <ul className="ml-4 list-disc text-amber-700 dark:text-amber-300">{pv.evento.avisos.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                                                                <details className="mt-1">
+                                                                    <summary className="cursor-pointer text-slate-500">XML da prévia (sem assinatura)</summary>
+                                                                    <pre className="mt-1 p-2 rounded bg-slate-100 dark:bg-slate-800 text-[10px] overflow-x-auto whitespace-pre-wrap break-all">{pv.evento.xml}</pre>
+                                                                </details>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
                         )}
                     </div>
 
