@@ -180,15 +180,33 @@ function parseListagem(body) {
   };
 }
 
+// 🚨 O CORPO PODIA TRAZER O EVENTO E ESTE LEITOR JOGAVA FORA (02/09, caso
+// NFC-e 1194 da ARMAZEM DE BICHOS — cancelada e aparecendo COM VALOR no app).
+//
+// Ele recortava SÓ `<nfeProc>` e descartava todo o resto do corpo. Se a SEFAZ
+// devolve o `<procEventoNFe>` do cancelamento junto (ou no lugar) da
+// autorizada, o app nunca ficaria sabendo — é a família do `localErroAviso`
+// (12/08) e do `dhEmisUltNfce`: **o dado chega e o leitor descarta**.
+//
+// ⚠️ Isto NÃO afirma que o SAE manda o evento — nada aqui foi medido contra
+// uma resposta real. O que muda é que, se vier, ele deixa de ser jogado fora;
+// e quando NÃO vier, o `cStat`/`xMotivo` sobem inteiros para quem perguntar
+// ver a resposta do órgão em vez de um "não achei" do app.
 function parseDownload(body) {
+  const texto = String(body);
   const cStat = pick(body, 'cStat');
   const xMotivo = pick(body, 'xMotivo');
   const nProt = pick(body, 'nProt');
   // O XML autorizado vem INLINE em <nfeProc>...</nfeProc> (sem gzip/base64).
-  const m = String(body).match(/<nfeProc[\s>][\s\S]*?<\/nfeProc>/i);
+  const m = texto.match(/<nfeProc[\s>][\s\S]*?<\/nfeProc>/i);
   const nfeProcXml = m ? m[0] : null;
+  // Evento (cancelamento, CC-e) — `procEventoNFe` é o embrulho com protocolo;
+  // `evento` solto cobre a resposta que vem sem ele.
+  const eventosXml = texto.match(/<procEventoNFe[\s>][\s\S]*?<\/procEventoNFe>/gi)
+    || texto.match(/<evento[\s>][\s\S]*?<\/evento>/gi)
+    || [];
   return {
-    cStat, xMotivo, nProt, nfeProcXml,
+    cStat, xMotivo, nProt, nfeProcXml, eventosXml,
     ok: cStat === '200' && !!nfeProcXml,   // 200 = download com sucesso
   };
 }

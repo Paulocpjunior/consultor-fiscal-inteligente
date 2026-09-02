@@ -5,6 +5,64 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A NFC-e CANCELADA CONTINUAVA VALENDO — e o botão que ele apertou nunca
+  ia resolver, porque é de OUTRO MODELO** (02/09, Paulo: *"NFC-E 1194 da empresa
+  0065 — ARMAZEM DE BICHOS está cancelada e ela aparece com valor no consultor,
+  dei o botão reconferir e continua com o valor"*, com o id do evento na mão e o
+  detalhe que fecha o eixo: *"essa nota é uma NFC-E, modelo 65"*).
+  🔴 **A CAUSA É ESTRUTURAL, e foi MEDIDA no código — não é o botão falhando.**
+  O dedup da captura de NFC-e é por **EXISTÊNCIA**
+  (`if (snap.exists && temItens !== false) jaCompletas++`): nota já baixada
+  **nunca é rebaixada**. E o cancelamento acontece **SEMPRE DEPOIS** da
+  autorização — por definição, só se cancela o que foi autorizado. Ou seja: **o
+  trilho é cego ao cancelamento por construção**, dê o SAE o que der. É a fila
+  da reconferência que não andava (20/08) um trilho adiante.
+  📌 **E O BOTÃO ESTAVA CERTO — ele RECUSA e DIZ por quê.** O *"Reconferir"* é o
+  do **modelo 55**, e o próprio print dele mostra a frase: *"132 nota(s) ficaram
+  de fora por não serem NF-e (modelo 55) — este webservice só consulta modelo
+  55"*. O `NFeDistribuicaoDFe` recusa modelo 65 com **cStat 618** (provado na MV
+  LIDER, 19/08) e não entrega saída ao emitente (Rej. 641), e o
+  `NFeConsultaProtocolo4` foi **DELETADO de propósito** em 18/08. **Insistir no
+  clique nunca ia resolver** — e a saída não é insistir, é ter o caminho do 65.
+  🔴 **E O LEITOR DO SAE DESCARTAVA O QUE PODIA RESPONDER**: `parseDownload`
+  recortava **só `<nfeProc>`** e jogava fora o resto do corpo — se a SEFAZ manda
+  o `<procEventoNFe>` junto, o app nunca ficaria sabendo. É a família do
+  `localErroAviso` (12/08): **o dado chega e o leitor descarta.**
+  ✂️ Nasceu **🚫 Esta NFC-e está cancelada?** (aba NFC-e Saída): pergunta ao
+  SAE-NFC-e com o **A1 do PRÓPRIO emitente** (o serviço exige que a chave
+  pertença a ele; o cert sai pela RAIZ, matriz cobre filial).
+  📌 **ELE NÃO MARCA NADA À MÃO — a regra fundadora continua de pé.** Quem
+  AFIRMA o cancelamento é a SEFAZ; quem **DECIDE** o que a resposta significa é
+  `lerRespostaCancelamento` (**dono único**, importado — escrever um segundo
+  leitor faria a mesma nota ser julgada de dois jeitos), e quem **GRAVA** é
+  `gravarCancelamentoConfirmado` (a gravação única de 21/08). Um teste proíbe
+  `status: 'cancelado'` escrito à mão na rota.
+  ⚠️ **A PERGUNTA É CARIMBADA MESMO QUANDO A RESPOSTA É "não está cancelada"** —
+  senão o conhecimento evapora e a próxima rodada redescobre tudo, que foi
+  exatamente o 🔎 mudo de 21/08.
+  ⚠️ **A FRASE DO `indeterminado` MUDA DE TRILHO, e isso é decisão declarada**:
+  a do dono fala em *"certificado sem autorização para este CNPJ ou UF
+  diferente"* — no SAE isso é **FALSO** (o cert é o do próprio emitente e não há
+  escolha de UF). A **situação** continua sendo a dele; só a **frase**, que é do
+  trilho, é trocada — dizer a falha errada manda procurar no lugar errado.
+  🚩 **E O QUE ISTO NÃO PROVA VAI DITO**: **não sei se o SAE conta o
+  cancelamento** — nada aqui foi medido contra uma resposta real, e o serviço
+  existe para entregar a AUTORIZADA. Por isso a resposta do órgão sobe
+  **INTEIRA** na tela (cStat · xMotivo · tem autorizada · nº de eventos): se ele
+  não contar, **essa tela é a prova disso** em um clique, e aí o caminho passa a
+  ser trazer o XML do evento por outro meio. Afirmar "não está cancelada" no
+  escuro devolveria ao faturamento uma nota que a SEFAZ nunca defendeu.
+  ⚠️ **E a importação manual do NAVEGADOR não serve para isso**: o
+  `xmlParserService` **não conhece evento** — ele recusaria o XML. Quem sabe
+  anexar (`eventoNFCe`, `110111`, `anexarEventoNaNFe`) é o importer do BACKEND.
+  📌 **A ENTRADA ACEITA O QUE O DONO TEM NA MÃO**: ele trouxe o **ID do evento**,
+  não a chave — e o id É a chave (`ID` + tpEvento + 44 + seq). Pedir a chave de
+  volta seria devolver um recorte que o app sabe fazer.
+  📌 **REGRA QUE FICA: dedup por EXISTÊNCIA responde "já tenho o documento",
+  nunca "já sei tudo sobre ele".** Todo fato que nasce DEPOIS da captura —
+  cancelamento, CC-e, denegação — é invisível para um trilho que só pergunta uma
+  vez. Onde o fato posterior muda LIVRO, tem de existir o caminho de reperguntar.
+
 - **🚨 "✓ NFSe Nac" NUMA EMPRESA QUE NÃO TEM TRILHO DE NFS-e — e a ação mandava
   clicar num botão que o próprio trilho recusa** (02/09, Paulo: *"verifica push
   de nfs de entrada cliente, silvio freire"*, e logo depois o detalhe que muda
