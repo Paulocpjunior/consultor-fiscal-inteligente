@@ -1,5 +1,17 @@
 // @ts-expect-error modulo JS puro
-import { respostaSaeParaLeitura, lerCancelamentoNfce, conferirChaveNfce, chaveDoIdDeEvento, entradaParaChave } from '../sefaz-backend/sae-nfce-cancelamento.js';
+import { respostaSaeParaLeitura, lerCancelamentoNfce, conferirChaveNfce, chaveDoIdDeEvento, entradaParaChave, recortarEventos, resumirEventos } from '../sefaz-backend/sae-nfce-cancelamento.js';
+
+/** O que o `parseDownload` do cliente monta — pelos MESMOS donos. */
+const lerCorpo = (corpo: string) => {
+    const eventosXml = recortarEventos(corpo);
+    return {
+        cStat: (corpo.match(/<cStat>\s*(\d+)/) || [])[1] || null,
+        xMotivo: (corpo.match(/<xMotivo>\s*([^<]+)/) || [])[1] || null,
+        nfeProcXml: (corpo.match(/<nfeProc[\s>][\s\S]*?<\/nfeProc>/i) || [])[0] || null,
+        eventosXml,
+        eventosResumo: resumirEventos(eventosXml),
+    };
+};
 
 // ============================================================================
 // 🚨 NFC-e CANCELADA APARECENDO COM VALOR — e o "Reconferir" nunca ia resolver
@@ -86,6 +98,62 @@ describe('quem DECIDE continua sendo o dono único da leitura', () => {
         expect(r.situacao).toBe('cancelada');
     });
 
+    // ========================================================================
+    // 🚨 O PRINT DE 02/09 DERRUBOU A PRIMEIRA VERSÃO — "eventos: 1" ao lado de
+    // "nenhum evento de cancelamento. A nota vale."
+    //
+    // As duas coisas não podem conviver: o órgão MANDOU um evento e o app
+    // liberou a nota. A causa: o `retEvento` (que carrega o cStat da
+    // homologação) é IRMÃO de `evento`, não filho — um recorte
+    // `<evento>…</evento>` traz o pedido assinado SEM o protocolo, e o leitor
+    // via o tpEvento 110111 com cStat vazio e caía no fallback.
+    //
+    // ⚠️ E o fallback afirmava na direção CARA: devolver ao faturamento uma
+    // nota que a SEFAZ pode ter cancelado.
+    // ========================================================================
+    it('evento 110111 SEM protocolo não vira "a nota vale"', () => {
+        const r = lerCancelamentoNfce({
+            cStat: '200',
+            xMotivo: 'Consulta realizada com sucesso',
+            nfeProcXml: '<nfeProc><infNFe/></nfeProc>',
+            // O recorte que sobra quando o retEvento fica de fora.
+            eventosXml: ['<evento><infEvento Id="ID1101113526..."><tpEvento>110111</tpEvento>'
+                + '<xJust>cancelamento</xJust></infEvento></evento>'],
+        });
+        expect(r.situacao).toBe('cancelamento-nao-confirmado');
+        expect(r.motivo).toMatch(/EVENTO DE CANCELAMENTO/);
+        expect(r.motivo).not.toMatch(/A nota vale|nenhum evento/i);
+        // ⚠️ Não grava (não há confirmação) e não libera (há evento).
+        expect(r.situacao).not.toBe('cancelada');
+        expect(r.situacao).not.toBe('nao-cancelada');
+    });
+
+    // ✂️ E a CAUSA do recorte perdido foi fechada na origem: o parser prefere o
+    // par `evento` + `retEvento` quando não há o embrulho `procEventoNFe`.
+    it('o recorte pega o par evento+retEvento, com o cStat do protocolo', () => {
+        const corpo = '<retorno><cStat>200</cStat><xMotivo>Consulta realizada com sucesso</xMotivo>'
+            + '<evento><infEvento><tpEvento>110111</tpEvento></infEvento></evento>'
+            + '<retEvento><infEvento><cStat>135</cStat><nProt>135260</nProt></infEvento></retEvento>'
+            + '</retorno>';
+        const dl = lerCorpo(corpo);
+        expect(dl.eventosXml).toHaveLength(1);
+        expect(dl.eventosXml[0]).toMatch(/retEvento/);
+        expect(dl.eventosResumo[0]).toMatchObject({ tpEvento: '110111', cStat: '135', nProt: '135260' });
+        // E com o par completo o veredito volta a ser CANCELADA.
+        expect(lerCancelamentoNfce(dl).situacao).toBe('cancelada');
+    });
+
+    // 📌 CONTADOR SOZINHO NÃO DIZ NADA — foi o que fez o print ser ilegível.
+    it('o resumo diz QUAL evento veio', () => {
+        const dl = lerCorpo(
+            '<retorno><cStat>200</cStat><procEventoNFe><tpEvento>110110</tpEvento>'
+            + '<cStat>135</cStat><xMotivo>Evento registrado</xMotivo></procEventoNFe></retorno>',
+        );
+        expect(dl.eventosResumo).toEqual([expect.objectContaining({ tpEvento: '110110', cStat: '135' })]);
+        // ⚠️ E evento que NÃO é cancelamento continua deixando a nota válida.
+        expect(lerCancelamentoNfce(dl).situacao).toBe('nao-cancelada');
+    });
+
     it('autorizada sem evento é VIGENTE — prova positiva', () => {
         const r = lerCancelamentoNfce({
             cStat: '200', xMotivo: 'Download realizado',
@@ -151,10 +219,18 @@ describe('🔎 por que nenhum trilho automático descobre o cancelamento', () =>
         expect(fonte).toMatch(/snap\.exists[\s\S]{0,80}jaCompletas\+\+/);
     });
 
-    it('o download do SAE deixou de descartar o evento', () => {
+    // ⚠️ A ASSINATURA MUDOU DE "cita procEventoNFe" PARA "DELEGA AO DONO": o
+    // recorte saiu do cliente porque ele usa `import.meta` e não carrega no
+    // jest — régua dentro de módulo que o teste não carrega é régua sem prova.
+    // Cliente com recorte PRÓPRIO seria a segunda cópia, e ela divergiria no
+    // primeiro leiaute novo de resposta.
+    it('o download do SAE delega o recorte do evento ao dono', () => {
         const fonte = semComentario(readFileSync(join(RAIZ, 'sefaz-backend/sefaz-sp-nfce-client.js'), 'utf8'));
-        expect(fonte).toMatch(/procEventoNFe/);
-        expect(fonte).toMatch(/eventosXml/);
+        expect(fonte).toMatch(/recortarEventos.*sae-nfce-cancelamento|sae-nfce-cancelamento[\s\S]{0,80}recortarEventos/);
+        expect(fonte).toMatch(/eventosXml = recortarEventos\(/);
+        expect(fonte).toMatch(/eventosResumo = resumirEventos\(/);
+        // E não sobrou recorte próprio no cliente.
+        expect(fonte).not.toMatch(/match\(\/<procEventoNFe/);
     });
 
     // 🔴 E o webservice de NF-e não cobre o buraco: ele recusa modelo 65

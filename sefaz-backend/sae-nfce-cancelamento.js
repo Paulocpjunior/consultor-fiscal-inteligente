@@ -39,6 +39,46 @@
 import { lerRespostaCancelamento } from './reconferir-cancelamento.js';
 
 /**
+ * Recorta os EVENTOS do corpo da resposta do SAE.
+ *
+ * 📌 Mora AQUI, e não no cliente, porque o `sefaz-sp-nfce-client.js` usa
+ * `import.meta` (bundle de CA) e **não carrega no jest** — régua dentro de
+ * módulo que o teste não carrega é régua sem prova (a lição do E116 e do
+ * `rotina-empresa-insumo`). O cliente IMPORTA daqui.
+ *
+ * 🚨 A ORDEM É A RÉGUA, e ela foi medida contra o print do Paulo (02/09):
+ * `retEvento` — que carrega o cStat da HOMOLOGAÇÃO — é **IRMÃO** de `evento`,
+ * não filho. Um recorte `<evento>…</evento>` traz o pedido ASSINADO e deixa o
+ * protocolo de fora; aí o leitor vê o `tpEvento 110111` sem cStat nenhum e a
+ * nota era liberada como válida. Por isso: embrulho completo > par
+ * evento+retEvento > evento solto.
+ */
+export function recortarEventos(body) {
+    const texto = String(body || '');
+    return texto.match(/<procEventoNFe[\s>][\s\S]*?<\/procEventoNFe>/gi)
+        || texto.match(/<evento[\s>][\s\S]*?<\/retEvento>/gi)
+        || texto.match(/<evento[\s>][\s\S]*?<\/evento>/gi)
+        || [];
+}
+
+/**
+ * QUAL evento veio — contador sozinho não diz nada.
+ *
+ * Foi o print de 02/09 que provou: a tela mostrou `eventos: 1` ao lado de
+ * *"nenhum evento de cancelamento"*, e não havia como saber o que tinha vindo.
+ */
+export function resumirEventos(eventosXml) {
+    return (Array.isArray(eventosXml) ? eventosXml : []).map((ev) => ({
+        tpEvento: (ev.match(/<tpEvento>\s*(\d+)\s*<\/tpEvento>/) || [])[1] || null,
+        cStat: (ev.match(/<cStat>\s*(\d+)\s*<\/cStat>/) || [])[1] || null,
+        dhEvento: (ev.match(/<dhRegEvento>\s*([^<]+)/) || [])[1]
+            || (ev.match(/<dhEvento>\s*([^<]+)/) || [])[1] || null,
+        nProt: (ev.match(/<nProt>\s*(\d+)\s*<\/nProt>/) || [])[1] || null,
+        xMotivo: (ev.match(/<xMotivo>\s*([^<]+)/) || [])[1] || null,
+    }));
+}
+
+/**
  * Adapta a resposta do `baixarXmlNFCe` para a forma que o dono lê:
  * `{ cStat, xMotivo, xmls: [{ xml }] }`.
  *

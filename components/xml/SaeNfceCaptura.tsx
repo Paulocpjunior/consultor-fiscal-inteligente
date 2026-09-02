@@ -225,6 +225,7 @@ const SaeNfceCaptura: React.FC = () => {
                             {rec.situacao === 'cancelada' && '🚫 CANCELADA'}
                             {rec.situacao === 'nao-cancelada' && '🟢 Vigente (a SEFAZ entregou o documento e não há evento)'}
                             {rec.situacao === 'nao-cancelada-por-recusa' && '🟡 Sem confirmação de cancelamento'}
+                            {rec.situacao === 'cancelamento-nao-confirmado' && '🟠 VEIO evento de cancelamento SEM protocolo que o confirme'}
                             {rec.situacao === 'indeterminado' && '⚠ Não deu para concluir'}
                         </p>
                         <p className="text-xs text-slate-600 dark:text-slate-300">{rec.motivo}</p>
@@ -232,6 +233,20 @@ const SaeNfceCaptura: React.FC = () => {
                             Resposta do órgão: cStat {rec.sefaz?.cStat || '—'} · {rec.sefaz?.xMotivo || '(sem xMotivo)'} ·
                             autorizada: {rec.sefaz?.temAutorizada ? 'sim' : 'não'} · eventos: {rec.sefaz?.eventos ?? 0}
                         </p>
+                        {/* QUAL evento veio — o contador sozinho fez a tela dizer
+                            "eventos: 1" ao lado de "nenhum evento de cancelamento". */}
+                        {!!rec.sefaz?.eventosResumo?.length && (
+                            <ul className="text-[11px] text-slate-500 dark:text-slate-400 font-mono list-disc list-inside">
+                                {rec.sefaz.eventosResumo.map((ev, i) => (
+                                    <li key={i} className="break-all">
+                                        tpEvento {ev.tpEvento || '—'}
+                                        {ev.tpEvento === '110111' ? ' (cancelamento)' : ''} ·
+                                        cStat {ev.cStat || '—'} · {ev.xMotivo || '(sem xMotivo)'} ·
+                                        prot {ev.nProt || '—'} · {ev.dhEvento || '—'}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                         {rec.gravado && (
                             <p className="text-xs text-emerald-600 dark:text-emerald-400">
                                 ✓ Cancelamento GRAVADO no documento — a nota sai do faturamento e dos livros.
