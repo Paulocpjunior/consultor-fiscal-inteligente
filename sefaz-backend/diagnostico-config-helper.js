@@ -29,6 +29,8 @@
 // 'informativo' pro admin enxergar que pode customizar.
 // ============================================================================
 
+import { formaDoClientSecret, segredosDeClientSecret } from './forma-do-segredo.js';
+
 /**
  * Definicao das configs verificadas. Centralizado pra adicionar/remover sem
  * mexer na logica.
@@ -177,6 +179,31 @@ export function diagnosticarConfig(env, ambiente = 'prod') {
                 valorAtual: valor,
             });
         }
+    }
+
+    // 2b. FORMA do que está gravado — não basta estar PREENCHIDO.
+    //
+    // 🚨 Em 01-02/09 os dois client secrets do Azure estavam preenchidos, e os
+    // dois guardavam o *Secret ID* (GUID de 36 caracteres) em vez do Valor: a
+    // Microsoft recusava com AADSTS7000215 e o painel dizia "configurado".
+    // "Preenchido" é STATUS; a forma é RESULTADO — a régua da casa desde 22/07.
+    //
+    // ⚠️ Por VARREDURA (`*_CLIENT_SECRET`), nunca por lista: credencial nova
+    // entra sozinha. E só acusa o que se prova (GUID e espaço) — ver
+    // `forma-do-segredo.js`.
+    for (const chave of segredosDeClientSecret(e)) {
+        const forma = formaDoClientSecret(e[chave]);
+        if (!forma.ehProblema || forma.forma === 'vazio') continue; // vazio já é `env_vazia`
+        const def = CONFIGS_MONITORADAS.find((c) => c.chave === chave);
+        achados.push({
+            tipo: 'segredo_forma_errada',
+            chave,
+            categoria: def ? def.categoria : 'sharepoint',
+            criticidade: 'critico',
+            descricao: def ? def.descricao : 'Client secret de app do Azure AD',
+            impacto: `O segredo está preenchido (${forma.caracteres} caracteres) e a Microsoft vai RECUSAR `
+                + `(AADSTS7000215). ${forma.diagnostico}`,
+        });
     }
 
     // 3. Kill-switch EMISSAO_BLOQUEADA — checa se está coerente

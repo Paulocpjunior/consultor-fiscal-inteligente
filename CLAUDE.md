@@ -5,6 +5,59 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 GASTEI UM DIA PERGUNTANDO "QUAL DOS DOIS TEXTOS VOCÊ COPIOU?" — e a
+  resposta estava no próprio segredo gravado, a um comando de distância**
+  (02/09, os dois apps do Azure recusando; Paulo, ao fim: *"não está rolando!
+  vc está cada vez mais perdido"*, e ele tinha razão).
+  🔴 **DUAS VEZES NO MESMO CAMPO, A MESMA CLASSE: ler a mensagem como se fosse
+  diagnóstico.** Em 01/09 eu afirmei que o segredo tinha **EXPIRADO** e a tela
+  do Azure dizia 2028. Corrigido isso, o app passou a AFIRMAR *"o que está
+  gravado é o ID, não o VALOR"* — e essa sentença é **texto PADRÃO que a
+  Microsoft anexa a TODO `AADSTS7000215`**: ela sai igual quando o Valor está
+  certo e foi mandado para o **app errado** (o CFI tem dois) e quando a colagem
+  veio truncada. **Trocar uma afirmação errada por outra não é correção.**
+  📌 **O QUE FECHOU A QUESTÃO FOI MEDIR, não ler**: `graph-client-secret` e
+  `graph-notificacoes-secret` tinham os DOIS **36 bytes e formato de GUID** —
+  o *Secret ID*. Um comando respondeu o que um dia de mensagem não respondeu.
+  ✂️ `forma-do-segredo.js` (PURO) traz essa medição para DENTRO do app e é o
+  dono de *"que FORMA tem o segredo gravado?"*; o **Diagnóstico → Config**
+  passou a acusar. Ele respondia *"está preenchido?"*, que é **STATUS** — a
+  primeira regra permanente deste projeto — e agora responde *"o que está
+  preenchido tem a forma certa?"*, que é **RESULTADO**.
+  🔒 **O VALOR NUNCA SAI**: saem forma, comprimento e diagnóstico. A rota do
+  diagnóstico existe justamente porque *"não expõe VALORES das envs"* — e um
+  teste serializa a resposta e prova que nem um pedaço do segredo aparece.
+  ⚠️ **SÓ ACUSA O QUE SE PROVA**: GUID exato (o Secret ID) e espaço/quebra
+  (que nunca pertence a um segredo). Todo o resto é `nao-reconhecida`, que
+  **não é aprovação** — segredo com a forma certa e do app ERRADO recusa
+  igual, e isso nenhuma medição de forma alcança. Cravar "curto demais" seria
+  acusar credencial VÁLIDA, o jeito conhecido de a equipe desligar a trava.
+  ⚠️ **E ESPAÇO TEM AÇÃO PRÓPRIA** (regravar sem o espaço), separada de "é o
+  ID" (criar segredo novo): fundir as duas mandaria criar segredo por causa de
+  um `\n` colado.
+  ✂️ **A CAUSA FOI RENOMEADA para `segredo-nao-confere`** — o nome do que se
+  SABE. `segredo-id-em-vez-do-valor` afirmava mais do que se mediu, e **nome de
+  causa que afirma demais é o `csllOuTotal` com outra roupa**: quem lê aquilo
+  no código acredita. A instrução passou a listar as TRÊS possibilidades com as
+  ações delas e a mandar ler a MEDIÇÃO.
+  📌 **UMA ASSERÇÃO FOI TROCADA, e ela é o retrato do defeito**: o teste exigia
+  `/ID do segredo, não o VALOR/` — ele **descrevia** a minha afirmação errada
+  em vez de pegá-la, exatamente como o `/EXPIRA/` do dia anterior. **Segunda
+  vez que o teste documenta a afirmação em vez de cobrá-la.**
+  🚩 **O QUE ISTO NÃO RESOLVE, e vai dito**: os dois segredos continuam
+  gravados errados na produção — trocar quem os grava é clique no portal, não
+  código. Enquanto durar, **nenhum e-mail de guia sai pelo app** (a saída é
+  "Abrir no Outlook Web", que não passa por esta credencial, com o PDF anexado
+  à mão e o gestor em cópia visível) e **nada é arquivado no SharePoint** (a
+  etapa 5 do rito trava na carteira inteira — e **reenviar a guia DUPLICA a
+  cobrança**, nunca é a saída).
+  📌 **E A LIÇÃO DE POSTURA, que é a mais cara**: eu repeti o mesmo pedido em
+  quatro formas diferentes (portal, Cloud Shell, az CLI, device code) sobre um
+  console que ele nem abre, mandei um link 404 e misturei os dois consoles sem
+  nomear a aba. **Quando a terceira tentativa do mesmo caminho falha, o que
+  falta não é outra ferramenta — é uma MEDIÇÃO que responda a pergunta.** Foi o
+  que este PR construiu, e ela devia ter vindo na primeira hora.
+
 - **🚨 "IMPORTADA COM SUCESSO" — E A NOTA NÃO APARECIA EM LUGAR NENHUM** (01/09,
   Paulo, 0257 · MARCOS ANTONIO ZAMBOLIN: *"fiz a importação do PDF da NFSe, ele
   diz que foi importado com sucesso, porém quando eu vou buscar a nota ou tiro

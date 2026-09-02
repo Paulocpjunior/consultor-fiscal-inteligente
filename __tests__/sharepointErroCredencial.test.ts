@@ -103,10 +103,21 @@ describe('🚨 a ação da credencial diz as três coisas que ninguém deduziria
 // Valor aparece só no instante em que o segredo é criado.
 // ============================================================================
 describe('🚨 a causa sai da RESPOSTA, e o app não deduz o resto', () => {
-    it('o erro REAL do print é ID em vez de VALOR — a própria resposta diz', () => {
-        expect(causaDaFalhaDeCredencial(ERRO_REAL)).toBe('segredo-id-em-vez-do-valor');
+    it('o erro REAL do print é segredo recusado — e o app NÃO afirma qual das três causas', () => {
+        expect(causaDaFalhaDeCredencial(ERRO_REAL)).toBe('segredo-nao-confere');
         const acao = instrucaoDaCredencial(ERRO_REAL);
-        expect(acao).toMatch(/ID do segredo, não o VALOR/);
+        // ⚠️ ASSERÇÃO TROCADA EM 02/09, e ela é o retrato do defeito: a antiga
+        // exigia /ID do segredo, não o VALOR/ — ou seja, ela DESCREVIA a
+        // afirmação errada em vez de pegá-la. A frase da Microsoft é texto
+        // PADRÃO de todo 7000215; afirmar a causa a partir dela é o mesmo
+        // vício do "o segredo EXPIROU", que a tela do Azure desmentiu.
+        expect(acao).toMatch(/texto PADRÃO/);
+        // As TRÊS possibilidades, porque as ações são diferentes.
+        expect(acao).toMatch(/Secret ID/);
+        expect(acao).toMatch(/OUTRO aplicativo/);
+        expect(acao).toMatch(/truncada|espaço/);
+        // E quem desempata é a MEDIÇÃO, não a mensagem.
+        expect(acao).toMatch(/Diagnóstico/);
         // ⚠️ E ela DESMENTE a leitura de validade, que é a primeira parada errada.
         expect(acao).toMatch(/NÃO é validade/);
         // O :latest é lido quando o contêiner sobe — gravar a versão nova não basta.
@@ -116,7 +127,7 @@ describe('🚨 a causa sai da RESPOSTA, e o app não deduz o resto', () => {
     it('a frase pela SENTENÇA, sem depender do código', () => {
         expect(causaDaFalhaDeCredencial(
             'Ensure the secret being sent in the request is the client secret value, not the client secret ID',
-        )).toBe('segredo-id-em-vez-do-valor');
+        )).toBe('segredo-nao-confere');
     });
 
     // ⚠️ Segredo VENCIDO é outro fato, com outra ação — e quem decide é a

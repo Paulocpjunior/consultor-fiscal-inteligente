@@ -71,6 +71,21 @@ export function ehFalhaDeCredencial(motivo) {
 // régua do `cStat 653` e do `cStat 640` da SEFAZ. Segredo VENCIDO devolve
 // outro código, com a palavra "expired" escrita; carimbar de memória o número
 // dele seria inventar código de tabela oficial.
+//
+// 🚨 **E EU ERREI DE NOVO NA DIREÇÃO CONTRÁRIA — 02/09.** Corrigida a
+// afirmação de expiração, a frase passou a AFIRMAR *"o que está gravado é o
+// ID"*. Também não se prova pela mensagem: aquela sentença é o texto PADRÃO
+// que a Microsoft anexa a **todo** 7000215 — ela aparece igual quando o Valor
+// está certo e foi mandado para o **app errado** (o CFI tem dois), e quando a
+// colagem veio truncada. Duas vezes no mesmo campo, a mesma classe: **ler a
+// mensagem como se fosse diagnóstico**.
+//
+// ✂️ A causa passou a se chamar `'segredo-nao-confere'` — o nome do que se
+// SABE — e a instrução lista as três possibilidades com as ações delas. Quem
+// desempata é a MEDIÇÃO (`forma-do-segredo.js`, ligado no Diagnóstico →
+// Config), que diz a FORMA do segredo gravado sem nunca mostrar o valor.
+// 📌 **Nome de causa que afirma mais do que se mediu é o `csllOuTotal` com
+// outra roupa**: quem lê `segredo-id-em-vez-do-valor` no código acredita.
 // ============================================================================
 
 // ============================================================================
@@ -144,7 +159,7 @@ export function appDaCredencial(motivo) {
 export function causaDaFalhaDeCredencial(motivo) {
     const m = String(motivo || '');
     // A mais específica primeiro: a própria resposta nomeia ID × Valor.
-    if (/AADSTS7000215/i.test(m) || /secret\s+value.*not.*secret\s+id/i.test(m)) return 'segredo-id-em-vez-do-valor';
+    if (/AADSTS7000215/i.test(m) || /secret\s+value.*not.*secret\s+id/i.test(m)) return 'segredo-nao-confere';
     if (/expir/i.test(m) && /(secret|key|certificate)/i.test(m)) return 'segredo-expirado';
     if (/AADSTS90002/i.test(m) || /tenant[^.]*not\s+found/i.test(m)) return 'tenant-inexistente';
     return 'indeterminada';
@@ -177,12 +192,18 @@ function ondeGravar(motivo) {
  */
 export function instrucaoDaCredencial(motivo) {
     switch (causaDaFalhaDeCredencial(motivo)) {
-        case 'segredo-id-em-vez-do-valor':
-            return 'A Microsoft diz QUAL é o erro: o que está gravado é o ID do segredo, não o VALOR dele. '
-                + 'No Azure (App registrations → Certificates & secrets) o Secret ID é um GUID e fica visível '
-                + 'sempre; o Valor aparece SÓ no instante em que o segredo é criado e depois vira hmB*** — '
-                + 'não há como recuperá-lo, é preciso criar um segredo NOVO e copiar a coluna Valor na hora. '
-                + '⚠️ Isto NÃO é validade: segredo dentro do prazo recusa igual se o que foi gravado foi o ID.'
+        case 'segredo-nao-confere':
+            return 'O segredo gravado não confere com o que o Azure espera para este aplicativo. '
+                + '⚠️ A frase que vem junto ("informe o VALOR do segredo, não o ID") é o texto PADRÃO que a '
+                + 'Microsoft anexa a TODO AADSTS7000215 — ela é a causa mais comum, não um diagnóstico. '
+                + 'São TRÊS possibilidades, com ações diferentes: (1) foi copiado o Secret ID (um GUID de 36 '
+                + 'caracteres, o único campo que a tela do Azure deixa copiável depois — o Valor aparece SÓ '
+                + 'no instante da criação e depois vira hmB***); (2) o segredo é de OUTRO aplicativo (o CFI '
+                + 'tem dois, e o Valor certo do app errado recusa exatamente assim); (3) a colagem veio '
+                + 'truncada ou com espaço/quebra de linha no fim. '
+                + 'Quem desempata é a MEDIÇÃO, não a mensagem: o painel Diagnóstico → Config diz a FORMA do '
+                + 'que está gravado (ele acusa "é o ID" e "tem espaço" sem nunca mostrar o valor). '
+                + '⚠️ E isto NÃO é validade: segredo dentro do prazo recusa igual.'
                 + ondeGravar(motivo);
         case 'segredo-expirado':
             return 'O segredo venceu. Crie um novo no Azure (App registrations → Certificates & secrets → '

@@ -9,9 +9,13 @@ export function ehFalhaDeCredencial(motivo?: unknown): boolean;
 /**
  * Qual é a causa da recusa, quando a resposta da Microsoft permite dizer.
  * `'indeterminada'` é resposta legítima — o app não deduz o motivo.
+ *
+ * ⚠️ `'segredo-nao-confere'` diz o que se SABE: o segredo foi recusado. A
+ * frase "informe o VALOR, não o ID" vem colada a TODO 7000215 e não separa as
+ * três causas possíveis — quem separa é a medição em `forma-do-segredo.js`.
  */
 export function causaDaFalhaDeCredencial(motivo?: unknown):
-    'segredo-id-em-vez-do-valor' | 'segredo-expirado' | 'tenant-inexistente' | 'indeterminada';
+    'segredo-nao-confere' | 'segredo-expirado' | 'tenant-inexistente' | 'indeterminada';
 
 /** A instrução da causa — dono único, lida pelo card E pelo painel de envios. */
 export function instrucaoDaCredencial(motivo?: unknown): string;
