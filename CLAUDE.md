@@ -5,6 +5,49 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O AVISO FALAVA DO QUE A RODADA IA FAZER, NÃO DO QUE ELA FEZ — e o dono
+  circulou a frase em VERMELHO** (02/09, print da MV LIDER 0639 · 08/2026,
+  horas depois de a tela passar a encadear as rodadas sozinha).
+  📖 A mesma tela dizia, a dois parágrafos de distância: **`0 consultada(s) · 0
+  cancelada(s) · 0 não canceladas`** e *"Esta rodada perguntou **60** de 126
+  notas e a próxima começa automaticamente. **São 3 rodadas para cobrir as
+  126.**"*
+  🔴 **A CAUSA É DE FONTE, e ela é fina**: o número saía de
+  `selecao.aConsultar.length` — a **SELEÇÃO**, ou seja quantas CABERIAM na
+  rodada. A SEFAZ tinha pedido pausa no **cStat 656 ANTES da primeira
+  consulta**, então a rodada perguntou ZERO. Quem responde "o que aconteceu" é
+  `resultados.length`, e só ele.
+  🚨 **E A ERRADA ERA A QUE FALA EM VOZ ALTA**: o resumo, correto, é uma linha
+  de contadores; a frase é prosa em caixa própria e é ela que a pessoa lê. Duas
+  leituras do mesmo fato na mesma tela — o defeito que esta casa mais paga —
+  agora entre **o que o app FEZ e o que ele diz ter feito**, que é exatamente a
+  família do "60 de 215 seriam consultadas" × "a rodada parou em 60 de 215" de
+  18/08, na MESMA empresa.
+  ⚠️ **E ELA PROMETIA A PRÓXIMA RODADA QUE NÃO IA COMEÇAR**: com o 656 o
+  encadeamento PARA (a régua do respiro, 27/08) — a frase e o comportamento
+  discordavam, e quem lê fica esperando.
+  ✂️ **E O "SÃO 3 RODADAS" SAIU DA RODADA REAL — foi o que ele circulou.** Desde
+  que a tela ENCADEIA sozinha, dizer o número de rodadas ali soa como tarefa
+  DELE: é a régua de 02/09 lida pela metade (o teto passou a ser do app, e a
+  frase continuava contando quantas vezes alguém teria de clicar). **Na PRÉVIA
+  ela FICA**, porque lá ela informa o tamanho do trabalho ANTES do clique, que
+  é justamente o que se quer saber.
+  📌 **UMA ASSERÇÃO FOI TROCADA, e ela é o retrato do defeito**: o teste exigia
+  `/10 de 30/` passando `resultados: []` — ou seja **ele DESCREVIA a mentira**,
+  afirmando "perguntou 10" sobre uma rodada que não perguntou nada. A intenção
+  que ele protege (o TOTAL tem de aparecer, senão a lista cortada se lê como
+  "conferi tudo") continua travada, agora com resultados de verdade.
+  ⚠️ **E O FATO TEM DE VIAJAR**: a régua certa com a rota não passando o
+  `abortou656` devolve a frase mentirosa em silêncio — é a família do argumento
+  que ninguém passa (`obrigacoesStPorUf`, 29/08). Travado por varredura na
+  chamada da rodada REAL (as outras duas — prévia e "nada a consultar" — não
+  perguntam à SEFAZ, então o 656 não se aplica a elas).
+  📌 **REGRA QUE FICA: frase que fala no passado se escreve do RESULTADO, nunca
+  da intenção.** Todo número que a tela diz ter feito sai do que voltou
+  (`resultados`), não do que foi selecionado — e quando o outro lado interrompe,
+  a frase para de prometer o próximo passo. Contador ao lado dizendo o contrário
+  é a prova de que a prosa está lendo a fonte errada.
+
 - **🚨 O DOCUMENTO DIZIA "NÃO RETIDOS" E O APP MANDAVA AJUSTAR À MÃO** (02/09,
   Paulo na HS PROJETOS · 08/2026, nota **22243** da EMBRATOP GEO: *"puxou uma
   nota que não tem retenção, mas foi informado errado, **como não considerar
@@ -44,6 +87,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fonte, e vale tanto quanto um campo preenchido — desde que a presença dele
   seja conhecida.** O `?? 0` da fronteira apaga essa diferença em silêncio, e
   com ela some a única prova de que o emitente respondeu "não houve".
+  ✅ **FECHADO EM PRODUÇÃO NO MESMO DIA** (print do Paulo na HS PROJETOS ·
+  08/2026): `1 beneficiário(s) PJ · 1 pronto(s) · **0 pendente(s)**`, com a
+  EMBRATOP saindo NOMEADA na ressalva (*"1 nota(s) FORA do R-4020 porque o
+  próprio documento declara que NÃO houve retenção … EMBRATOP GEO TECNOLOGIAS
+  LTDA (nota 22243)"*) e o evento **transmitido em PRODUÇÃO, protocolo
+  1.202609.1063204552**.
+  📌 **E O QUE PROVA NÃO É A TELA DIZER "0 pendente": é o EVENTO SAIR.** A
+  pendência antiga mandava ajustar uma retenção que não existe, então ela
+  travava a transmissão — o recibo é que mostra que a nota saiu do evento **e**
+  o resto foi declarado. Validação por RESULTADO, como sempre.
 
 - **🚨 O TETO DE SEGURANÇA VIROU TAREFA DO COLABORADOR — "reconferir 3 vezes de
   1 em 1"** (02/09, Paulo na MV LIDER 0639 · 08/2026: *"tenho 3 canceladas e não

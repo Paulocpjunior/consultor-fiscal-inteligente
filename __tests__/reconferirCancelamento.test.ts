@@ -77,13 +77,66 @@ describe('seleção do que reconferir', () => {
         expect(s.aConsultar).toHaveLength(10);
         expect(s.total).toBe(30);
         expect(s.cortadas).toBe(20);
-        expect(resumirReconferencia({ selecao: s, resultados: [] }).avisos.join(' '))
-            // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (02/09): ela prendia o TEXTO
-            // "parou em 10 de 30", e a frase mudou por decisão — a tela passou
-            // a ENCADEAR as rodadas, então "rode de novo" virava um clique
-            // inútil. O que ela protege continua: o TOTAL tem de aparecer,
-            // senão a lista cortada se lê como "conferi tudo".
-            .toMatch(/10 de 30/);
+        // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (02/09, 2ª vez): ela prendia o
+        // TEXTO "parou em 10 de 30" e passava com `resultados: []` — ou seja
+        // ela DESCREVIA o defeito, afirmando "perguntou 10" sobre uma rodada
+        // que não perguntou nada. O que ela protege continua de pé: o TOTAL
+        // tem de aparecer, senão a lista cortada se lê como "conferi tudo".
+        const dezPerguntadas = s.aConsultar.map((x: any) => ({ id: x.id, situacao: 'nao-cancelada' }));
+        expect(resumirReconferencia({ selecao: s, resultados: dezPerguntadas }).avisos.join(' '))
+            .toMatch(/perguntou 10 de 30/);
+    });
+
+    // ============================================================================
+    // 🚨 O AVISO FALAVA DO QUE A RODADA IA FAZER, NÃO DO QUE ELA FEZ (02/09,
+    // print do Paulo na MV LIDER 0639): o resumo dizia "0 consultada(s)" e, um
+    // parágrafo abaixo, "Esta rodada perguntou 60 de 126 notas e a próxima
+    // começa automaticamente". A SEFAZ tinha PARADO a rodada no cStat 656 antes
+    // de ela consultar qualquer coisa.
+    //
+    // Duas leituras do mesmo fato na mesma tela, e a errada era a que fala em
+    // voz alta — o `aConsultar.length` é a SELEÇÃO, não o que aconteceu.
+    // ============================================================================
+    it('rodada barrada pelo 656 não afirma ter perguntado, nem promete a próxima', () => {
+        const docs = Array.from({ length: 126 }, (_, i) => saida({ id: `d${i}`, numero: i, chave: chaveDe(i) }));
+        const s = selecionarParaReconferir(docs, { ...REGUAS, limite: 60 });
+        const frase = resumirReconferencia({ selecao: s, resultados: [], abortou656: true }).avisos.join(' ');
+        expect(frase).toMatch(/perguntou 0 de 126/);
+        // ⚠️ Prometer a próxima rodada aqui é a contradição de novo: ela não vai
+        // começar sozinha — a SEFAZ pediu ~1h de pausa.
+        expect(frase).not.toMatch(/próxima começa automaticamente/);
+    });
+
+    // ⚠️ E O "SÃO N RODADAS" SÓ VALE NA PRÉVIA — foi essa frase que o dono
+    // circulou em vermelho. Na rodada REAL ela soa como tarefa dele, e desde
+    // 02/09 quem encadeia é o app; na prévia ela FICA, porque informa o tamanho
+    // do trabalho ANTES do clique.
+    it('"São N rodadas" fica na prévia e sai da rodada real', () => {
+        const docs = Array.from({ length: 126 }, (_, i) => saida({ id: `d${i}`, numero: i, chave: chaveDe(i) }));
+        const s = selecionarParaReconferir(docs, { ...REGUAS, limite: 60 });
+        const previa = resumirReconferencia({ selecao: s, resultados: [], simulado: true }).avisos.join(' ');
+        expect(previa).toMatch(/3 rodadas/);
+        expect(previa).toMatch(/ENCADEIA as rodadas sozinho/);
+
+        const real = resumirReconferencia({
+            selecao: s,
+            resultados: s.aConsultar.map((x: any) => ({ id: x.id, situacao: 'nao-cancelada' })),
+        }).avisos.join(' ');
+        expect(real).not.toMatch(/rodadas para cobrir/);
+    });
+
+    // 📌 E O FATO TEM DE VIAJAR: régua certa com a rota não passando o
+    // `abortou656` devolve a frase mentirosa de volta, em silêncio — é a
+    // família do argumento que ninguém passa (`obrigacoesStPorUf`, 29/08).
+    it('a rota entrega o 656 ao resumo — argumento que ninguém passa não quebra nada, mente', () => {
+        const rota = require('fs').readFileSync(
+            require('path').resolve(__dirname, '../sefaz-backend/conferencia-chaves-routes.js'), 'utf8',
+        );
+        // ⚠️ Ancora na chamada da rodada REAL, não na primeira do arquivo: há
+        // duas antes dela (a prévia e o "nada a consultar"), e nenhuma das duas
+        // pergunta à SEFAZ — o 656 não se aplica a elas.
+        const chamada = rota.slice(rota.indexOf('const resumo = resumirReconferencia({'));
+        expect(chamada.slice(0, 400)).toMatch(/abortou656/);
     });
 });
 
