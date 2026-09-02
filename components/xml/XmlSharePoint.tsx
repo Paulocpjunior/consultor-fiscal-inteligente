@@ -554,7 +554,11 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                         <input
                             value={customPath}
                             onChange={e => setCustomPath(e.target.value)}
-                            placeholder="Cole o link da pasta (Copiar link no SharePoint) ou digite Empresas/Grupo X/…/XML SAÍDA"
+                            /* 🚨 O placeholder ENSINAVA a árvore morta ("Empresas/Grupo
+                               X/…"): o nível de grupo não existe, e exemplo errado num
+                               campo é pior que exemplo nenhum — a pessoa digita o que
+                               está escrito e leva 404. */
+                            placeholder="Cole o link da pasta (Copiar link no SharePoint) ou digite Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Setembro/XML SAÍDA"
                             className="w-full mt-1 p-2.5 text-xs rounded-lg outline-none"
                             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                         />
@@ -595,9 +599,26 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                                 inexistente é trabalho perdido de quem preenche. */}
                             <div className="col-span-2">
                                 <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Empresa (pasta REAL no SharePoint)</label>
-                                <input value={empresaPasta} onChange={e => setEmpresaPasta(e.target.value)} placeholder="0040_Clinica Mantoan"
+                                {/* 🚨 PLACEHOLDER COM CARA DE VALOR — o defeito de
+                                    20/08 (o `1556` cinza do campo de CFOP, lido como
+                                    preenchido) repetido por mim. O campo nasce VAZIO,
+                                    o botão fica apagado dizendo "falta Empresa (pasta)",
+                                    e a pessoa vê um nome de pasta dentro dele: para
+                                    quem usa, "parece preenchido" e "está preenchido"
+                                    são a mesma coisa. O exemplo mora FORA do campo. */}
+                                <input value={empresaPasta} onChange={e => setEmpresaPasta(e.target.value)} placeholder="—"
                                     className="w-full mt-1 p-2 text-xs rounded-lg outline-none"
-                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
+                                    style={{
+                                        background: 'var(--bg-card)', color: 'var(--text-primary)',
+                                        // Vazio se DESTACA: ele é a única coisa que separa
+                                        // este campo de uma célula de leitura.
+                                        border: empresaPasta.trim() ? '1px solid var(--border-default)' : '1px solid var(--accent)',
+                                        boxShadow: empresaPasta.trim() ? undefined : '0 0 0 2px rgba(99,102,241,0.25)',
+                                    }} />
+                                <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                                    O nome REAL da pasta, como está no SharePoint — descubra no
+                                    <strong> 🔎 O que existe nesta biblioteca?</strong> acima. Ex.: <code>0040_Clinica Mantoan</code>.
+                                </p>
                             </div>
                             <div>
                                 <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Ano</label>

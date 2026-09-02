@@ -96,3 +96,38 @@ describe('🖥️ a tela concorda com o trilho', () => {
         expect(tela).toMatch(/setConfigErro\(d\.error/);
     });
 });
+
+// ============================================================================
+// 🚨 PLACEHOLDER COM CARA DE VALOR PREENCHIDO
+//
+// 20/08, campo do cérebro do CFOP: o `1556` cinza foi lido como valor, a
+// pessoa clicou e nada aconteceu. Eu repeti o defeito em 02/09 no campo
+// "Empresa (pasta)", com `0040_Clinica Mantoan` dentro dele — o campo nasce
+// VAZIO, o botão fica apagado dizendo que ele falta, e ali dentro há um nome
+// de pasta. **Para quem usa, "parece preenchido" e "está preenchido" são a
+// mesma coisa.**
+//
+// ⚠️ E o placeholder do caminho personalizado ENSINAVA a árvore morta
+// ("Empresas/Grupo X/…"): exemplo errado num campo é pior que exemplo nenhum,
+// porque a pessoa digita o que está escrito e leva 404.
+// ============================================================================
+describe('🚨 o campo obrigatório não finge estar preenchido', () => {
+    const bruto = readFileSync(join(RAIZ, 'components/xml/XmlSharePoint.tsx'), 'utf8');
+
+    it('o campo da pasta da empresa não tem exemplo com cara de valor', () => {
+        const linha = bruto.split('\n').find((l) => l.includes('value={empresaPasta}')) || '';
+        expect(linha).toMatch(/placeholder="—"/);
+    });
+
+    // ⚠️ Vazio se DESTACA: sem isso ele é indistinguível de célula de leitura,
+    // que foi exatamente o que aconteceu na aba do cérebro do CFOP.
+    it('vazio fica destacado até ser preenchido', () => {
+        expect(tela).toMatch(/empresaPasta\.trim\(\) \? '1px solid var\(--border-default\)' : '1px solid var\(--accent\)'/);
+    });
+
+    // 🚨 Nenhum placeholder ensina o nível de GRUPO, que não existe.
+    it('nenhum placeholder ensina a árvore morta', () => {
+        const placeholders = [...bruto.matchAll(/placeholder="([^"]*)"/g)].map((m) => m[1]);
+        expect(placeholders.filter((p) => /Grupo/i.test(p))).toEqual([]);
+    });
+});

@@ -5,6 +5,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O PLACEHOLDER COM CARA DE VALOR — a lição de 20/08 repetida POR MIM, no
+  dia seguinte de escrevê-lo** (02/09, print do Paulo: o campo *Empresa
+  (pasta)* mostrando `0040_Clinica Mantoan` e, logo acima, o aviso vermelho
+  *"Falta preencher: Empresa (pasta)"* com o botão apagado).
+  📌 O campo nasce VAZIO e o exemplo estava DENTRO dele. **Para quem usa,
+  "parece preenchido" e "está preenchido" são a mesma coisa** — é literalmente
+  o `1556` cinza do campo do cérebro do CFOP (20/08), que naquele dia custou
+  dois prints dele para eu entender.
+  ✂️ Placeholder virou `—` (o mesmo da aba ✏️ CFOP por nota), o exemplo saiu
+  para FORA do campo e o **vazio se destaca** com anel, que é o que o separa de
+  uma célula de leitura.
+  🚨 **E O PLACEHOLDER DO CAMINHO PERSONALIZADO ENSINAVA A ÁRVORE MORTA**
+  (*"Empresas/Grupo X/…/XML SAÍDA"*) — a varredura do caminho morto não o pegou
+  porque ele nem cita `DEPARTAMENTO FISCAL`. **Exemplo errado num campo é pior
+  que exemplo nenhum**: a pessoa digita o que está escrito e leva 404. A trava
+  passou a proibir `Grupo` em qualquer placeholder deste card.
+  🐛 **E A PRÓPRIA PROVA DA TRAVA APAGOU A CORREÇÃO**: para provar por reversão
+  eu editei o arquivo e desfiz com `git checkout <arquivo>` — que joga fora
+  **todo** o trabalho não commitado dele, não só a linha do teste. Prova por
+  reversão se faz **com o commit já feito**, ou restaurando de uma cópia.
+
 - **🚨 O CADASTRO DO CAMINHO MORTO NÃO ERA UM CAMPO ESQUECIDO — ERA UM
   BLOQUEIO** (02/09, achado indo conferir o botão ANTES de mandar o Paulo
   clicar).
