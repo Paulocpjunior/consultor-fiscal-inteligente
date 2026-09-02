@@ -111,3 +111,61 @@ export async function testSharePointConnection(folderUrl: string): Promise<{ ok:
         return { ok: false, mensagem: err?.message || 'Falha na conexão.' };
     }
 }
+
+// ============================================================================
+// 🔎 "A ÁRVORE ESTÁ EM QUAL SITE?" — o app responde, ninguém navega
+//
+// 02/09. O erro passou a dizer ONDE procurou (`/sites/ClientesSP2 → "…"`,
+// 404 itemNotFound) e sobrou uma pergunta factual: a pasta existe nesse site
+// ou no `/sites/GRUPOFISCAL`, que é o do link que a equipe usa?
+//
+// 📌 Devolver essa pergunta para uma pessoa navegar no SharePoint é o que
+// este dia inteiro ensinou a não fazer. O token já funciona — então quem
+// responde é a MEDIÇÃO, como no `forma-do-segredo.js`.
+// ============================================================================
+
+export interface SharePointPasta {
+    nome: string;
+    /** Quantos itens a pasta tem, quando o Graph informa. */
+    filhos: number | null;
+}
+
+export interface SharePointNivel {
+    /** O site de fato consultado — é ele que a env `SHAREPOINT_SITE_PATH` decide. */
+    site: string;
+    caminho: string;
+    pastas: SharePointPasta[];
+    /**
+     * ⚠️ Vai junto de propósito: pasta com 0 subpastas e 300 arquivos é o FIM
+     * da árvore, e sem esse número ela se lê como pasta vazia.
+     */
+    arquivos: number;
+}
+
+export interface SharePointSite {
+    id: string;
+    nome: string;
+    /** O caminho que vai na env — é ele que a pessoa precisa, não o GUID. */
+    caminho: string;
+    url: string;
+}
+
+/** Lista as PASTAS de um nível. Caminho vazio = raiz da biblioteca. */
+export async function explorarPasta(caminho = '', sitePath = ''): Promise<SharePointNivel> {
+    const resp = await proxyFetch('/api/sharepoint/explorar', { caminho, sitePath });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Erro ao explorar (${resp.status})`);
+    }
+    return resp.json();
+}
+
+/** Os sites que esta credencial enxerga. */
+export async function listarSitesSharePoint(busca = '*'): Promise<SharePointSite[]> {
+    const resp = await proxyFetch('/api/sharepoint/sites', { busca });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Erro ao listar sites (${resp.status})`);
+    }
+    return (await resp.json()).sites || [];
+}

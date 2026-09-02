@@ -1,0 +1,85 @@
+// ============================================================================
+// 🔎 "A ÁRVORE ESTÁ EM QUAL SITE?" — quem responde é o app, não uma pessoa
+//
+// 02/09. Corrigido o corte da mensagem e tirado o site cravado, o erro passou
+// a dizer ONDE procurou:
+//
+//   Failed to list folder (404) em …/sites/ClientesSP2 →
+//   "Empresas//DEPARTAMENTO FISCAL/2026/09-2026//XML SAÍDA" — itemNotFound
+//
+// …e sobrou uma pergunta FACTUAL: a pasta existe nesse site, ou no
+// /sites/GRUPOFISCAL, que é o do link que a equipe usa?
+//
+// 📌 Devolver essa pergunta para o dono navegar no SharePoint é exatamente o
+// que o dia inteiro ensinou a não fazer. O token já funciona — então o app
+// LISTA. É a mesma virada do `forma-do-segredo.js`: parar de perguntar e medir.
+//
+// ⚠️ A trava é sobre a LIGAÇÃO: rota no proxy, porta no serviço e botão na
+// tela. Rota sem botão é código morto com cara de entrega (13/08).
+// ============================================================================
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const raiz = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8');
+const semComentario = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+const PROXY = semComentario(raiz('proxy-backend', 'sharepoint-sync.js'));
+const ROTAS = semComentario(raiz('proxy-backend', 'server.js'));
+const SERVICO = semComentario(raiz('services', 'sharePointXmlService.ts'));
+const TELA = semComentario(raiz('components', 'xml', 'XmlSharePoint.tsx'));
+
+describe('🔎 a medição existe ponta a ponta', () => {
+    it('o proxy lista pastas e sites', () => {
+        expect(PROXY).toMatch(/export async function listarPastas/);
+        expect(PROXY).toMatch(/export async function listarSites/);
+    });
+
+    it('as rotas existem e chamam o dono', () => {
+        expect(ROTAS).toMatch(/\/api\/sharepoint\/explorar/);
+        expect(ROTAS).toMatch(/\/api\/sharepoint\/sites/);
+        expect(ROTAS).toMatch(/listarPastas\(token/);
+        expect(ROTAS).toMatch(/listarSites\(token/);
+    });
+
+    it('o serviço tem a porta', () => {
+        expect(SERVICO).toMatch(/export async function explorarPasta/);
+        expect(SERVICO).toMatch(/export async function listarSitesSharePoint/);
+    });
+
+    // 🚨 Rota sem botão não é funcionalidade — é código morto com cara de
+    // entrega. Foi assim que o rito do fechamento do Reinf subiu invisível.
+    it('e a TELA chama as duas — senão é rota sem botão', () => {
+        expect(TELA).toMatch(/explorarPasta/);
+        expect(TELA).toMatch(/listarSitesSharePoint/);
+        expect(TELA).toMatch(/O que existe nesta biblioteca/);
+        expect(TELA).toMatch(/Quais sites o app enxerga/);
+    });
+});
+
+describe('🚦 o que a medição diz — e o que ela se recusa a esconder', () => {
+    // ⚠️ Pasta com 0 subpastas e 300 arquivos é o FIM da árvore. Sem a
+    // contagem de arquivos ela se lê como pasta vazia, e a pessoa conclui que
+    // está no lugar errado quando chegou no certo.
+    it('a contagem de ARQUIVOS vai junto das pastas', () => {
+        expect(PROXY).toMatch(/arquivos: itens\.filter\(i => i\.file\)\.length/);
+        expect(TELA).toMatch(/nivel\.arquivos/);
+    });
+
+    // ⚠️ O erro do Graph diz "não existe" sem dizer onde — e é o SITE que
+    // decide isso. Causa junto do número.
+    it('o erro de listagem nomeia o site consultado', () => {
+        expect(PROXY).toMatch(/Failed to list folder \(\$\{resp\.status\}\) em \$\{SHAREPOINT_HOST\}\$\{alvo\}/);
+        expect(PROXY).toMatch(/Failed to resolve site \(\$\{siteResp\.status\}\) em/);
+    });
+
+    // ⚠️ Sem `Sites.Read.All` o Graph responde 403. Isso vai DITO — tratar
+    // como "não há sites" faria concluir que o SharePoint está vazio.
+    it('lista de sites vazia não é dita como "não existe site"', () => {
+        expect(TELA).toMatch(/Sites\.Read\.All/);
+    });
+
+    // 🔒 É diagnóstico: lê nome de pasta e nada mais.
+    it('a tela promete o limite do que ele faz', () => {
+        expect(TELA).toMatch(/não baixa, não grava/);
+    });
+});
