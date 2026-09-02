@@ -1,0 +1,2700 @@
+
+
+===== PÁGINA 1 =====
+CGIBS  RECEITA FEDERAL 
+Comitê Gestor do IBS  Ministério da Fazenda 
+Leiautes da DeRE 
+Versão 1.1.0  |  22 de junho de 2026 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+DeRE 
+Declaração de Regimes Específicos 
+Leiautes 
+ 
+ 
+
+
+===== PÁGINA 2 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 1 de 51 
+ 
+SUMÁRIO 
+LEIAUTES ................................ ................................ ................................ ................................ ................................ ................................ ........................ 2 
+1 EVENTOS DE TABELA ................................ ................................ ................................ ................................ ................................ ............................  2 
+1.1 EVENTO D-1001 – INFORMAÇÕES DO CONTRIBUINTE ................................ ................................ ................................ ................................  2 
+1.1.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ................. 2 
+1.1.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................ .. 3 
+1.2 EVENTO D-1011 – PLANO GERAL DE CONTAS COMENTADO ................................ ................................ ................................ ....................... 6 
+1.2.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ................. 6 
+1.2.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................ .. 7 
+2 EVENTOS PERIÓDICOS ................................ ................................ ................................ ................................ ................................ ........................ 11 
+2.1 EVENTO D-1101 – BALANCETE MENSAL ................................ ................................ ................................ ................................ ...................... 11 
+2.1.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 11 
+2.1.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  12 
+2.2 EVENTO D-1106 – IDENTIFICAÇÃO DE APLICAÇÕES FINANCEIRAS ................................ ................................ ................................ ......... 15 
+2.2.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 15 
+2.2.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  16 
+2.3 EVENTO D-1199 – FECHAMENTO DE EVENTOS MENSAIS ................................ ................................ ................................ .........................  19 
+2.3.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 19 
+2.3.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  20 
+2.4 EVENTO D-2101 – DÉBITO EM OPERAÇÕES COM TÍTULOS DE DÍVIDA COM OFERTA PÚBLICA ................................ ............................  22 
+2.4.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 22 
+2.4.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  23 
+3 EVENTOS DE RETORNO E TOTALIZAÇÃO ................................ ................................ ................................ ................................ ..........................  26 
+3.1 EVENTO D-9001 – RETORNO – EVENTOS DE TABELA ................................ ................................ ................................ ................................  26 
+3.1.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 26 
+3.1.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  27 
+3.2 EVENTO D-9101 – RETORNO TOTALIZADOR – BALANCETE MENSAL ................................ ................................ ................................ ....... 29 
+3.2.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 29 
+3.2.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  30 
+3.3 EVENTO D-9106 – RETORNO TOTALIZADOR – IDENTIFICAÇÃO DE APLICAÇÕES FINANCEIRAS ................................ ..........................  32 
+3.3.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 32 
+3.3.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  33 
+3.4 EVENTO D-9121 – RETORNO TOTALIZADOR – DÉBITO EM OPERAÇÕES COM TÍTULOS DE DÍVIDA COM OFERTA PÚBLICA .............. 35 
+3.4.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 35 
+3.4.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  36 
+3.5 EVENTO D-9199 – RETORNO TOTALIZADOR – FECHAMENTO DE EVENTOS MENSAIS ................................ ................................ .......... 38 
+3.5.1 Estrutura Hierárquica do Evento (Resumo) ................................ ................................ ................................ ................................ ............... 38 
+3.5.2 Especificação Técnica dos Campos (Detalhamento) ................................ ................................ ................................ ................................  40 
+ 
+ 
+
+===== PÁGINA 3 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 2 de 51 
+ 
+LEIAUTES 
+1 EVENTOS DE TABELA 
+1.1 EVENTO D-1001 – INFORMAÇÕES DO CONTRIBUINTE 
+1.1.1 Estrutura Hierárquica do Evento (Resumo) 
+D-1001 – Informações do Contribuinte – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtInfoContrib DeRE Evento Informações do Contribuinte. 1-1 id O 
+3 ideEvento evtInfoContrib Informações de identificação do evento. 1-1 - O 
+3 ideContrib evtInfoContrib Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 idePeriodo evtInfoContrib Período de validade. 1-1 iniValid, fimValid O 
+4 novaValidade idePeriodo Novo período de validade. 0-1 iniValid, fimValid F (se {tpOper} = [2]); 
+N (nos demais casos). 
+3 infoContrib evtInfoContrib Informações do contribuinte. 0-1 - N (se {tpOper} = [3]); 
+O (nos demais casos). 
+4 servFinanc infoContrib Informações de serviços financeiros. 0-1 - O (se {regTribPrinc} = [1] ou 
+se existir {regTribSecund} = 
+[1]); 
+N (nos demais casos). 
+5 tpAtividades servFinanc Lista de atividades realizadas pelo 
+contribuinte. 
+1-1 - O 
+4 plAssistSaude infoContrib Informações de planos de assistência à 
+saúde. 
+0-1 - O (se {regTribPrinc} = [2] ou 
+se existir {regTribSecund} = 
+[2]); 
+N (nos demais casos). 
+5 tpAtividades plAssistSaude Lista de atividades realizadas pelo 
+contribuinte. 
+1-1 - O 
+4 prognosticos infoContrib Informações de concursos de prognósticos. 0-1 - O (se {regTribPrinc} = [3] ou 
+se existir {regTribSecund} = 
+[3]); 
+N (nos demais casos). 
+5 tpAtividades prognosticos Lista de atividades realizadas pelo 
+contribuinte. 
+1-1 - O 
+5 UFsCredenc prognosticos Listagem das Unidades da Federação (UF) 
+nas quais o contribuinte possui 
+credenciamento para operar. 
+0-1 - OC 
+ 
+ 
+
+===== PÁGINA 4 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 3 de 51 
+ 
+1.1.2 Especificação Técnica dos Campos (Detalhamento) 
+D-1001 – Informações do Contribuinte – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtInfoContrib DeRE G - 1-1 - - Evento Informações do Contribuinte. 
+3 id evtInfoContrib A C 1-1 42 - Identificador que representa unicamente o evento. 
+Regra de validação: 
+RN - Unicidade Recepção Evento 
+4 ideEvento evtInfoContrib G - 1-1 - - Informações de identificação do evento. 
+5 tpOper ideEvento E N 1-1 1 - Tipo de operação do evento. 
+Nota: A alteração substitui integralmente as informações do evento 
+enviado anteriormente. 
+Valores válidos: 
+1 – Inclusão; 
+2 – Alteração; 
+3 – Exclusão. 
+Regras de validação: 
+INCLUSAO_COM_CHAVE_PREEXISTENTE 
+ALTERACAO_SEM_CHAVE_PREEXISTENTE 
+EXCLUSAO_SEM_CHAVE_PREEXISTENTE 
+6 motExcl ideEvento E N 0-1 1 - Motivo da Exclusão. 
+Código do motivo que justifica a exclusão do evento. 
+Validação: Obrigatório se {tpOper} = [3]. 
+Valores válidos: 
+1 – Determinação judicial ou administrativa; 
+2 – Envio indevido (fato inexistente); 
+3 – Erro na identificação (CNPJ/período incorretos); 
+9 – Outro. 
+Regra de validação: 
+EXIGIR_MOTIVO_EXCLUSAO 
+7 nrProc ideEvento E C 0-1 1-21 - Informar o número do processo administrativo/judicial. 
+Validação: Obrigatório se {motExcl} = [1]. 
+Deve ser um número de processo válido e existente no evento D-
+1021. 
+Regra de validação: 
+EXIGIR_NUMERO_PROCESSO 
+8 tpAmb ideEvento E N 1-1 1 - Identificação do ambiente para o qual os dados estão sendo 
+transmitidos. 
+Valores válidos: 
+1 – Produção; 
+2 – Produção restrita. 
+Regra de validação: 
+AMBIENTE 
+9 aplicEmi ideEvento E N 1-1 1 - Identificação do aplicativo emissor do evento. 
+Valores válidos: 
+1 – Emissão com aplicativo da empresa; 
+2 – Aplicativo governamental. 
+10 verAplic ideEvento E C 1-1 1-20 - Versão do aplicativo emissor do evento. 
+11 ideContrib evtInfoContrib G - 1-1 - - Informações de identificação do contribuinte. 
+12 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+Regra de validação: 
+CONTRIBUINTE_NO_CADASTRO 
+
+===== PÁGINA 5 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 4 de 51 
+ 
+D-1001 – Informações do Contribuinte – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+13 idePeriodo evtInfoContrib G - 1-1 - - Período de validade. 
+14 iniValid idePeriodo E D 1-1 10 - Data de início da validade das informações. 
+Máscara: AAAA-MM-DD 
+Validação: Deve ser igual ou posterior à data de início da 
+obrigatoriedade da DeRE para o declarante. 
+Regra de validação: 
+INI_VALID 
+15 fimValid idePeriodo E D 0-1 10 - Data de término da validade das informações, se houver. 
+Máscara: AAAA-MM-DD 
+Validação: Se informado, deve ser igual ou posterior a {iniValid}. 
+Regra de validação: 
+FIM_VALID 
+16 novaValidade idePeriodo G - 0-1 - - Novo período de validade. 
+Usado exclusivamente quando a vigência do evento precisa ser 
+alterada para um valor diferente. 
+Preenchimento exclusivo se {tpOper} = [2] (Alteração) e se houver 
+alteração do {idePeriodo} referenciado. 
+Regra de validação: 
+EXIGIR_TP_OPER_ALTERACAO_PARA_NOVA_VALIDADE 
+17 iniValid novaValidade E D 1-1 10 - Data de início da nova validade das informações. 
+Máscara: AAAA-MM-DD 
+Validação: Deve ser igual ou posterior à data de início da 
+obrigatoriedade da DeRE para o declarante. 
+Regra de validação: 
+INI_VALID 
+18 fimValid novaValidade E D 0-1 10 - Data de término da nova validade das informações, se houver. 
+Máscara: AAAA-MM-DD 
+Validação: Se informado, deve ser igual ou posterior a {iniValid}. 
+Regra de validação: 
+FIM_VALID 
+19 infoContrib evtInfoContrib G - 0-1 - - Informações do contribuinte. 
+Regra de validação: 
+OBRIGAR_PREENCH_INFO_CONTRIB 
+20 regTribPrinc infoContrib E N 1-1 1 - Regime de tributação ao qual o contribuinte está sujeito em sua 
+atividade preponderante. 
+Valores válidos: 
+1 – Regime Específico de Serviços Financeiros; 
+2 – Regime Específico de Plano de Assistência à Saúde; 
+3 – Regime Específico de Concursos de Prognósticos; 
+9 – Outros Regimes de Tributação. 
+21 regTribSecund infoContrib E N 0-3 1 - Regime de tributação ao qual o contribuinte está sujeito em sua 
+atividade secundária. 
+Validação: Não pode ser igual ao informado em {regTribPrinc}. 
+Valores válidos: 
+1 – Regime Específico de Serviços Financeiros; 
+2 – Regime Específico de Plano de Assistência à Saúde; 
+3 – Regime Específico de Concursos de Prognósticos. 
+Regra de validação: 
+REG_SEC_DIFERENTE_REG_PRINC 
+22 indNatTrib infoContrib E N 1-1 1 - Indicador da natureza tributária do declarante (para casos de 
+imunidades ou não incidências subjetivas). 
+Valores válidos: 
+0 – Tributação regular; 
+1 – Imunidade ou não incidência. 
+
+===== PÁGINA 6 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 5 de 51 
+ 
+D-1001 – Informações do Contribuinte – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+23 servFinanc infoContrib G - 0-1 - - Informações de serviços financeiros. 
+Exclusivo para contribuintes deste setor. 
+Regras de validação: 
+EXIGIR_GRUPO_REGIME 
+REJEITAR_GRUPO_REGIME 
+24 tpAtividades servFinanc G - 1-1 - - Lista de atividades realizadas pelo contribuinte. 
+25 tpAtividade tpAtividades E C 1-99 3 - Identificação da atividade realizada pelo contribuinte, conforme 
+<<Tabela 21 – Atividades de Serviços Financeiros>>. 
+Máscara: NNC 
+Regra de validação: 
+TPATIVIDADE_REGFIN 
+26 plAssistSaude infoContrib G - 0-1 - - Informações de planos de assistência à saúde. 
+Exclusivo para contribuintes deste setor. 
+Regras de validação: 
+EXIGIR_GRUPO_REGIME 
+REJEITAR_GRUPO_REGIME 
+27 tpAtividades plAssistSaude G - 1-1 - - Lista de atividades realizadas pelo contribuinte. 
+28 tpAtividade tpAtividades E C 1-99 3 - Identificação da atividade realizada pelo contribuinte, conforme 
+<<Tabela 31 – Atividades de Planos de Assistência à Saúde>>. 
+Máscara: NNC 
+Regra de validação: 
+TPATIVIDADE_REGSAUDE 
+29 prognosticos infoContrib G - 0-1 - - Informações de concursos de prognósticos. 
+Exclusivo para contribuintes deste setor. 
+Regras de validação: 
+EXIGIR_GRUPO_REGIME 
+REJEITAR_GRUPO_REGIME 
+30 tpAtividades prognosticos G - 1-1 - - Lista de atividades realizadas pelo contribuinte. 
+31 tpAtividade tpAtividades E C 1-99 3 - Identificação da atividade realizada pelo contribuinte, conforme 
+<<Tabela 41 – Atividades de Concursos de Prognósticos>>. 
+Máscara: NNC 
+Regra de validação: 
+TPATIVIDADE_REGPROG 
+32 UFsCredenc prognosticos G - 0-1 - - Listagem das Unidades da Federação (UF) nas quais o contribuinte 
+possui credenciamento para operar. 
+33 UFCredenc UFsCredenc E N 1-30 2 - Identificação da Unidade Federativa credenciadora, conforme 
+<<Tabela 13 – Unidades Federativas (UF)>>. 
+ 
+ 
+
+===== PÁGINA 7 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 6 de 51 
+ 
+1.2 EVENTO D-1011 – PLANO GERAL DE CONTAS COMENTADO 
+1.2.1 Estrutura Hierárquica do Evento (Resumo) 
+D-1011 – Plano Geral de Contas Comentado – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtPGCC DeRE Evento Plano Geral de Contas Comentado. 1-1 id O 
+3 ideEvento evtPGCC Informações de identificação do evento. 1-1 - O 
+3 ideContrib evtPGCC Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 idePeriodo evtPGCC Período de validade. 1-1 iniValid, fimValid O 
+4 novaValidade idePeriodo Novo período de validade. 0-1 iniValid, fimValid F (se {tpOper} = [2]); 
+N (nos demais casos). 
+3 infoPGCC evtPGCC Informações do plano geral de contas 
+comentado. 
+0-1 - N (se {tpOper} = [3]); 
+O (nos demais casos). 
+4 infoContas infoPGCC Lista de detalhamentos de informações de 
+contas contábeis. 
+1-1 - O 
+5 infoConta infoContas Detalhamento de informações da conta 
+contábil. 
+1-50000 cCta O 
+ 
+ 
+
+===== PÁGINA 8 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 7 de 51 
+ 
+1.2.2 Especificação Técnica dos Campos (Detalhamento) 
+D-1011 – Plano Geral de Contas Comentado – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtPGCC DeRE G - 1-1 - - Evento Plano Geral de Contas Comentado. 
+3 id evtPGCC A C 1-1 42 - Identificador que representa unicamente o evento. 
+Regra de validação: 
+RN - Unicidade Recepção Evento 
+4 ideEvento evtPGCC G - 1-1 - - Informações de identificação do evento. 
+5 tpOper ideEvento E N 1-1 1 - Tipo de operação do evento. 
+Nota: A alteração substitui integralmente as informações do evento 
+enviado anteriormente. 
+Valores válidos: 
+1 – Inclusão; 
+2 – Alteração; 
+3 – Exclusão. 
+Regras de validação: 
+INCLUSAO_COM_CHAVE_PREEXISTENTE 
+ALTERACAO_SEM_CHAVE_PREEXISTENTE 
+EXCLUSAO_SEM_CHAVE_PREEXISTENTE 
+6 motExcl ideEvento E N 0-1 1 - Motivo da Exclusão. 
+Código do motivo que justifica a exclusão do evento. 
+Validação: Obrigatório se {tpOper} = [3]. 
+Valores válidos: 
+1 – Determinação judicial ou administrativa; 
+2 – Envio indevido (fato inexistente); 
+3 – Erro na identificação (CNPJ/período incorretos); 
+9 – Outro. 
+Regra de validação: 
+EXIGIR_MOTIVO_EXCLUSAO 
+7 nrProc ideEvento E C 0-1 1-21 - Informar o número do processo administrativo/judicial. 
+Validação: Obrigatório se {motExcl} = [1]. 
+Deve ser um número de processo válido e existente no evento D-
+1021. 
+Regra de validação: 
+EXIGIR_NUMERO_PROCESSO 
+8 tpAmb ideEvento E N 1-1 1 - Identificação do ambiente para o qual os dados estão sendo 
+transmitidos. 
+Valores válidos: 
+1 – Produção; 
+2 – Produção restrita. 
+Regra de validação: 
+AMBIENTE 
+9 aplicEmi ideEvento E N 1-1 1 - Identificação do aplicativo emissor do evento. 
+Valores válidos: 
+1 – Emissão com aplicativo da empresa; 
+2 – Aplicativo governamental. 
+10 verAplic ideEvento E C 1-1 1-20 - Versão do aplicativo emissor do evento. 
+11 ideContrib evtPGCC G - 1-1 - - Informações de identificação do contribuinte. 
+12 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+Regras de validação: 
+CONTRIBUINTE_NO_CADASTRO 
+EXISTE_INFO_CONTRIBUINTE 
+
+===== PÁGINA 9 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 8 de 51 
+ 
+D-1011 – Plano Geral de Contas Comentado – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+13 idePeriodo evtPGCC G - 1-1 - - Período de validade. 
+14 iniValid idePeriodo E D 1-1 10 - Data de início da validade das informações. 
+Máscara: AAAA-MM-DD 
+Validação: Deve ser igual ou posterior à data de início da 
+obrigatoriedade da DeRE para o declarante. 
+Regra de validação: 
+INI_VALID 
+15 fimValid idePeriodo E D 0-1 10 - Data de término da validade das informações, se houver. 
+Máscara: AAAA-MM-DD 
+Validação: Se informado, deve ser igual ou posterior a {iniValid}. 
+Regra de validação: 
+FIM_VALID 
+16 novaValidade idePeriodo G - 0-1 - - Novo período de validade. 
+Usado exclusivamente quando a vigência do evento precisa ser 
+alterada para um valor diferente. 
+Preenchimento exclusivo se {tpOper} = [2] (Alteração) e se houver 
+alteração do {idePeriodo} referenciado. 
+Regra de validação: 
+EXIGIR_TP_OPER_ALTERACAO_PARA_NOVA_VALIDADE 
+17 iniValid novaValidade E D 1-1 10 - Data de início da nova validade das informações. 
+Máscara: AAAA-MM-DD 
+Validação: Deve ser igual ou posterior à data de início da 
+obrigatoriedade da DeRE para o declarante. 
+Regra de validação: 
+INI_VALID 
+18 fimValid novaValidade E D 0-1 10 - Data de término da nova validade das informações, se houver. 
+Máscara: AAAA-MM-DD 
+Validação: Se informado, deve ser igual ou posterior a {iniValid}. 
+Regra de validação: 
+FIM_VALID 
+19 infoPGCC evtPGCC G - 0-1 - - Informações do plano geral de contas comentado. 
+Regra de validação: 
+OBRIGAR_PREENCH_INFO_PGCC 
+20 planoCtaRef infoPGCC E N 1-1 1 - Identificação do Plano de Contas Referencial vinculado à atividade 
+preponderante do contribuinte. 
+Valores válidos: 
+1 – COSIF; 
+2 – ANS; 
+3 – SUSEP; 
+4 – SPED. 
+21 freqEncerr infoPGCC E C 1-1 1 - Indicador de frequência de encerramento contábil. 
+Informa a periodicidade com que a entidade realiza o encerramento 
+das contas de resultado (receitas e despesas) para apuração do 
+resultado do exercício. 
+Valores válidos: 
+A – Anual; 
+S – Semestral; 
+Q – Quadrimestral; 
+T – Trimestral; 
+B – Bimestral; 
+M – Mensal. 
+
+===== PÁGINA 10 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 9 de 51 
+ 
+D-1011 – Plano Geral de Contas Comentado – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+22 infoContas infoPGCC G - 1-1 - - Lista de detalhamentos de informações de contas contábeis. 
+23 infoConta infoContas G - 1-50000 - - Detalhamento de informações da conta contábil. 
+24 cCta infoConta E C 1-1 1-53 - Código completo da conta. 
+Resultante da concatenação de {cCtaInterna} e {cDbrMista}. 
+Preenchimento: Informar apenas caracteres alfanuméricos, sem 
+pontos ou traços. 
+Regras de validação: 
+CCTA_CONCATENACAO 
+UNICIDADE_CCTA 
+25 cCtaInterna infoConta E C 1-1 1-50 - Código da conta contábil de acordo com o Plano de Contas interno 
+(Grupo, Subgrupo, Título e Subtítulo). 
+Preenchimento: Informar apenas caracteres alfanuméricos, sem 
+pontos ou traços. 
+Nota: Devem ser informadas todas as contas patrimoniais e de 
+resultado. 
+26 cDbrMista infoConta E C 1-1 3 - Desdobramento de conta mista. 
+Preenchimento: Se não houver desdobramento, informar [000]. 
+Caso contrário, sequencial de [001] a [999]. 
+Nota: Havendo conta mista, esta assume nível sintético [000] e seus 
+desdobramentos assumem nível analítico. 
+Valores válidos: 
+000-999. 
+27 nomeCta infoConta E C 1-1 1-100 - Nome da conta. 
+28 indCta infoConta E C 1-1 1 - Indicador do tipo de conta (sintética ou analítica). 
+Valores válidos: 
+S – Sintética; 
+A – Analítica. 
+Regra de validação: 
+INDCTA_CONTAS_DESDOBR 
+29 descCta infoConta E C 0-1 1-600 - Descrição detalhada da natureza das operações contabilizadas na 
+conta. 
+Validação: Obrigatório se {indCta} = [A]. 
+Regra de validação: 
+DESCRICAO_CTA 
+30 cCtaSup infoConta E C 0-1 1-53 - Código da Conta {cCta} hierárquica imediatamente superior. 
+Preenchimento: Informar apenas caracteres alfanuméricos, sem 
+pontos ou traços. A conta desdobrada deve referenciar a mesma 
+superior da conta mista. 
+Validação: Não preencher se for conta de nível 1 (raiz). Deve existir 
+um {cCta} correspondente no grupo {infoConta}. 
+Regra de validação: 
+PAI_CTA_ANALITICA 
+31 cCtaRef infoConta E C 1-1 1-13 - Código da conta do plano de contas referencial, conforme opção 
+selecionada no evento Informações do Contribuinte. 
+Preenchimento: Informar apenas caracteres alfanuméricos, sem 
+pontos ou traços. 
+Validação: O código deve existir na tabela correspondente ao plano 
+informado em {planoCtaRef}: 
+Se [1] (COSIF): <<Tabela 22 – Plano de Contas Referencial – COSIF>> 
+Se [2] (ANS): <<Tabela 32 – Plano de Contas Referencial – ANS>> 
+Se [3] (SUSEP): <<Tabela 23 – Plano de Contas Referencial – 
+SUSEP>> 
+Se [4] (SPED): <<Tabela 14 – Plano de Contas Referencial – SPED>> 
+Caso o {cDbrMista} seja maior que [000], o {cCtaRef} desta {cCta} 
+deve ser igual ao {cCtaRef} da {cCtaSup}. 
+Regras de validação: 
+CONTA_NO_PLANO_CONTAS_REFERENCIAL 
+OBRIGAR_CCTAREF_IGUAL_CONTA_PRINCIPAL 
+
+===== PÁGINA 11 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 10 de 51 
+ 
+D-1011 – Plano Geral de Contas Comentado – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+32 nivelCta infoConta E N 1-1 1-2 - Nível hierárquico da conta. 
+Preenchimento: Número sequencial de 1 a 99. 
+Valores válidos: 
+1-99. 
+33 natCta infoConta E C 1-1 1 - Natureza da conta. 
+Valores válidos: 
+C – Credora; 
+D – Devedora; 
+V – Variável. 
+34 codNat infoConta E N 1-1 1 - Código da Natureza da Conta. 
+Valores válidos: 
+1 – Contas do ativo; 
+2 – Contas do passivo; 
+3 – Contas do patrimônio líquido; 
+4 – Contas de receita; 
+5 – Contas de despesa. 
+35 codTrib infoConta E N 0-1 9 - Código de tributação para fins de IBS, CBS e IS. 
+Preenchimento: Informar apenas caracteres numéricos, sem pontos 
+ou traços. 
+Validação: Exclusivo se {indCta} = [A]. Deve ser um código vigente 
+na <<Tabela 11 – Códigos de Tributação (codTrib)>>. 
+Regras de validação: 
+OBRIGAR_CODTRIB 
+EXISTE_CODTRIB_NA_TABELA 
+36 indTribISS infoConta E N 0-1 1 - Indicador de sujeição ou vinculação ao ISSQN. 
+Informa se os valores recebidos ou receitas auferidas sofrem a 
+incidência de ISSQN. 
+Validação: Não preencher se {indCta} = [S]. 
+Valores válidos: 
+0 – Não sujeita ao ISS; 
+1 – Sujeita ao ISS. 
+Regra de validação: 
+OBRIGAR_IND_TRIB_ISS 
+37 idLeiDisp infoConta E C 0-1 5 - Código que identifica o fundamento legal utilizado para embasar a 
+destinação obrigatória de recursos a órgãos/fundos públicos/demais 
+beneficiários ou a classificação tributária que exija comprovação legal 
+específica na escrituração. 
+Máscara: CC-CC 
+Nota: Regra de preenchimento do campo a ser informada em futura 
+versão da DeRE. 
+Valores válidos: 
+00-00. 
+38 iniVig infoConta E D 1-1 10 - Data de início de vigência da conta. 
+Máscara: AAAA-MM-DD 
+39 fimVig infoConta E D 0-1 10 - Data de término de vigência da conta, se houver. 
+Máscara: AAAA-MM-DD 
+Validação: Se informada, deve ser igual ou posterior a {iniVig}. 
+Regra de validação: 
+DT_FIM_VIGENCIA 
+ 
+ 
+
+===== PÁGINA 12 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 11 de 51 
+ 
+2 EVENTOS PERIÓDICOS 
+2.1 EVENTO D-1101 – BALANCETE MENSAL 
+2.1.1 Estrutura Hierárquica do Evento (Resumo) 
+D-1101 – Balancete Mensal – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtBalancete DeRE Evento Balancete Mensal. 1-1 id O 
+3 ideEvento evtBalancete Informações de identificação do evento. 1-1 - O 
+3 ideContrib evtBalancete Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 idePeriodo evtBalancete Período de referência das informações do 
+evento. 
+1-1 perApur O 
+3 infoBalancete evtBalancete Informações do Balancete Mensal. 0-1 - N (se {tpOper} = [3]); 
+O (nos demais casos). 
+4 infoContas infoBalancete Lista de contas do balancete. 1-1 - O 
+5 infoConta infoContas Detalhamento de informações da conta 
+contábil no balancete. 
+1-10000 - O 
+ 
+ 
+
+===== PÁGINA 13 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 12 de 51 
+ 
+2.1.2 Especificação Técnica dos Campos (Detalhamento) 
+D-1101 – Balancete Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtBalancete DeRE G - 1-1 - - Evento Balancete Mensal. 
+3 id evtBalancete A C 1-1 42 - Identificador que representa unicamente o evento. 
+Regra de validação: 
+RN - Unicidade Recepção Evento 
+4 ideEvento evtBalancete G - 1-1 - - Informações de identificação do evento. 
+5 tpOper ideEvento E N 1-1 1 - Tipo de operação do evento. 
+Nota: A alteração substitui integralmente as informações do evento 
+enviado anteriormente. 
+Valores válidos: 
+1 – Inclusão; 
+2 – Alteração; 
+3 – Exclusão. 
+Regras de validação: 
+INCLUSAO_COM_CHAVE_PREEXISTENTE 
+ALTERACAO_SEM_CHAVE_PREEXISTENTE 
+EXCLUSAO_SEM_CHAVE_PREEXISTENTE 
+6 motExcl ideEvento E N 0-1 1 - Motivo da Exclusão. 
+Código do motivo que justifica a exclusão do evento. 
+Validação: Obrigatório se {tpOper} = [3]. 
+Valores válidos: 
+1 – Determinação judicial ou administrativa; 
+2 – Envio indevido (fato inexistente); 
+3 – Erro na identificação (CNPJ/período incorretos); 
+9 – Outro. 
+Regra de validação: 
+EXIGIR_MOTIVO_EXCLUSAO 
+7 nrProc ideEvento E C 0-1 1-21 - Informar o número do processo administrativo/judicial. 
+Validação: Obrigatório se {motExcl} = [1]. 
+Deve ser um número de processo válido e existente no evento D-
+1021. 
+Regra de validação: 
+EXIGIR_NUMERO_PROCESSO 
+8 nrRecibo ideEvento E C 0-1 31 - Caso seja um evento de alteração/retificação ou exclusão, preencher 
+com o número do recibo do arquivo a ser alterado/retificado ou 
+excluído. 
+Regras de validação: 
+RN - Formação do Número do Recibo do Evento 
+ULTIMO_RECIBO_ATIVO 
+EXIGIR_NR_RECIBO 
+9 tpAmb ideEvento E N 1-1 1 - Identificação do ambiente para o qual os dados estão sendo 
+transmitidos. 
+Valores válidos: 
+1 – Produção; 
+2 – Produção restrita. 
+Regra de validação: 
+AMBIENTE 
+10 aplicEmi ideEvento E N 1-1 1 - Identificação do aplicativo emissor do evento. 
+Valores válidos: 
+1 – Emissão com aplicativo da empresa; 
+2 – Aplicativo governamental. 
+11 verAplic ideEvento E C 1-1 1-20 - Versão do aplicativo emissor do evento. 
+
+===== PÁGINA 14 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 13 de 51 
+ 
+D-1101 – Balancete Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+12 ideContrib evtBalancete G - 1-1 - - Informações de identificação do contribuinte. 
+13 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+Regras de validação: 
+EXISTE_INFO_CONTRIBUINTE 
+CONTRIBUINTE_NO_CADASTRO 
+14 idePeriodo evtBalancete G - 1-1 - - Período de referência das informações do evento. 
+15 perApur idePeriodo E D 1-1 7 - Informar o período de apuração, sendo o ano e mês da competência 
+da declaração. 
+Máscara: AAAA-MM 
+Validação: Se {tpOper} = [1], só pode existir um único {perApur} para 
+cada {nrInsc}. 
+Quando informado {nrRecibo}, o {perApur} deve ser exatamento ao 
+mesmo existente no {nrRecibo} (caracteres 6 a 11 do recibo). 
+Regras de validação: 
+OBRIGAR_PERAPUR_IGUAL_NRRECIBO 
+16 infoBalancete evtBalancete G - 0-1 - - Informações do Balancete Mensal. 
+Regra de validação: 
+OBRIGAR_PREENCH_INFO_BALANCETE 
+17 infoContas infoBalancete G - 1-1 - - Lista de contas do balancete. 
+18 infoConta infoContas G - 1-10000 - - Detalhamento de informações da conta contábil no balancete. 
+19 cCta infoConta E C 1-1 1-53 - Código da Conta Analítica (como informada no evento D-
+1011.{cCta}). 
+Nota: Devem estar no PGCC vigente no último dia do {perApur} 
+todas as contas que tiveram movimentação no período, ainda que 
+tenham sido criadas ou encerradas no período. 
+Validação: Não informar contas sintéticas. 
+O {cCta} deve existir e estar vigente na tabela PGCC do contribuinte 
+no último dia do {perApur} correspondente. 
+Regra de validação: 
+CCTA_NO_PGCC 
+20 natSaldoInic infoConta E C 1-1 1 - Natureza do saldo inicial da conta na abertura do período de 
+apuração. 
+Valores válidos: 
+D – Devedor; 
+C – Credor. 
+21 vSaldoInic infoConta E N 1-1 4-18 2 Valor do saldo inicial da conta no período de competência. 
+Preenchimento: Valor absoluto (sem sinal).  
+Se D-1011.{codNat} = [1, 2 ou 3] (contas patrimoniais); então 
+{vSaldoInic} deve corresponder ao {vSaldoFinal} da conta no período 
+anterior.  
+Se {codNat} = [4 ou 5] e D-1011.{freqEncerr} = [A] e {perApur} = 
+[AAAA-01]; então {vSaldoInic} = [0.00]. 
+Se {codNat} = [4 ou 5] e D-1011.{freqEncerr} = [S], e {perApur} = 
+[AAAA-01 ou AAAA-07]; então {vSaldoInic} = [0.00]. 
+Se {codNat} = [4 ou 5] e D-1011.{freqEncerr} = [Q], e {perApur} = 
+[AAAA-01; AAAA-05 ou AAAA-09]; então {vSaldoInic} = [0.00]. 
+Se {codNat} = [4 ou 5] e D-1011.{freqEncerr} = [T], e {perApur} = 
+[AAAA-01;AAAA-04; AAAA-07 ou AAAA-10]; então {vSaldoInic} = 
+[0.00]. 
+Se {codNat} = [4 ou 5] e D-1011.{freqEncerr} = [B], e {perApur} = 
+[AAAA-01; AAAA-03; AAAA-05; AAAA-07; AAAA-09; AAAA-11]; então 
+{vSaldoInic} = [0.00]. 
+Se {codNat} = [4 ou 5] e D-1011.{freqEncerr} = [M], então {vSaldoInic} 
+= [0.00]. 
+22 vMovDebt infoConta E N 1-1 4-18 2 Valor total dos lançamentos a débito realizados na conta no mês de 
+competência, em valor absoluto e sem sinal. 
+Preenchimento: Informar [0.00] se não houver movimentação. 
+
+===== PÁGINA 15 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 14 de 51 
+ 
+D-1101 – Balancete Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+23 vAjusteDebt infoConta E N 0-1 4-18 2 Valor dos ajustes a serem excluídos no {vMovDebt} para fins de 
+cálculo do {vApur} (ex: estornos, cancelamentos etc.). 
+Validação: Deve ser menor ou igual a {vMovDebt}. 
+24 vMovCred infoConta E N 1-1 4-18 2 Valor total dos lançamentos a crédito realizados na conta no mês de 
+competência, em valor absoluto e sem sinal. 
+Preenchimento: Informar [0.00] se não houver movimentação. 
+25 vAjusteCred infoConta E N 0-1 4-18 2 Valor dos ajustes a serem excluídos no {vMovCred}, ex: estornos, 
+cancelamentos etc., ou a serem somados no {vMovDev} para fins de 
+cálculo do {vApur} . 
+Validação: Deve ser menor ou igual a {vMovCred}. 
+26 natSaldoFinal infoConta E C 1-1 1 - Natureza do saldo final da conta no encerramento do mês de 
+competência. 
+Valores válidos: 
+D – Devedor; 
+C – Credor. 
+27 vSaldoFinal infoConta E N 1-1 4-18 2 Valor do saldo final da conta no período de competência. Deve ser 
+informado antes do encerramento das contas de resultado. 
+Preenchimento: Valor absoluto (sem sinal). 
+Regra de validação: 
+CONFERIR_SALDO_FINAL_NAT_SALDO_FINAL 
+28 natVApur infoConta E C 0-1 1 - Informar a natureza do movimento informado no {vApur}. 
+Validação: Obrigatório se {vApur} > [0.00]. 
+Valores válidos: 
+D – Movimento devedor; 
+C – Movimento credor. 
+Regra de validação: 
+OBRIGAR_NATVAPUR 
+29 vApur infoConta E N 1-1 4-18 2 Valor base sobre o qual serão aplicadas as regras definidas pelo 
+código de tributação ({codTrib}). 
+Preenchimento: Informar [0.00] se não houver movimentação. 
+Regra de validação: 
+CONFERIR_VAPUR 
+ 
+ 
+
+===== PÁGINA 16 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 15 de 51 
+ 
+2.2 EVENTO D-1106 – IDENTIFICAÇÃO DE APLICAÇÕES FINANCEIRAS 
+2.2.1 Estrutura Hierárquica do Evento (Resumo) 
+D-1106 – Identificação de Aplicações Financeiras – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtAplicResTec DeRE Evento de identificação e detalhamento de 
+aplicações financeiras sobre reserva técnica. 
+1-1 id O 
+3 ideEvento evtAplicResTec Informações de identificação do evento. 1-1 - O 
+3 ideContrib evtAplicResTec Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 idePeriodo evtAplicResTec Período de referência das informações do 
+evento. 
+1-1 perApur O 
+3 infoAplicResTec evtAplicResTec Informações de aplicações financeiras sobre 
+reserva técnica. 
+0-1 - N (se {tpOper} = [3]); 
+O (nos demais casos). 
+4 infoAplic infoAplicResTec Detalhamento das informações da aplicação 
+financeira sobre reserva técnica. 
+0-100 cCta N (se {semAplic} = [1]); 
+O (nos demais casos). 
+5 detAtivo infoAplic Detalhamento do título/ativo. 1-500 idAtivo O 
+ 
+ 
+
+===== PÁGINA 17 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 16 de 51 
+ 
+2.2.2 Especificação Técnica dos Campos (Detalhamento) 
+D-1106 – Identificação de Aplicações Financeiras – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtAplicResTec DeRE G - 1-1 - - Evento de identificação e detalhamento de aplicações financeiras 
+sobre reserva técnica. 
+Regra de validação: 
+CODTRIB_PERMITIDO_D1106 
+3 id evtAplicResTec A C 1-1 42 - Identificador que representa unicamente o evento. 
+Regra de validação: 
+RN - Unicidade Recepção Evento 
+4 ideEvento evtAplicResTec G - 1-1 - - Informações de identificação do evento. 
+5 tpOper ideEvento E N 1-1 1 - Tipo de operação do evento. 
+Nota: A alteração substitui integralmente as informações do evento 
+enviado anteriormente. 
+Valores válidos: 
+1 – Inclusão; 
+2 – Alteração; 
+3 – Exclusão. 
+Regras de validação: 
+INCLUSAO_COM_CHAVE_PREEXISTENTE 
+ALTERACAO_SEM_CHAVE_PREEXISTENTE 
+EXCLUSAO_SEM_CHAVE_PREEXISTENTE 
+6 motExcl ideEvento E N 0-1 1 - Motivo da Exclusão. 
+Código do motivo que justifica a exclusão do evento. 
+Validação: Obrigatório se {tpOper} = [3]. 
+Valores válidos: 
+1 – Determinação judicial ou administrativa; 
+2 – Envio indevido (fato inexistente); 
+3 – Erro na identificação (CNPJ/período incorretos); 
+9 – Outro. 
+Regra de validação: 
+EXIGIR_MOTIVO_EXCLUSAO 
+7 nrProc ideEvento E C 0-1 1-21 - Informar o número do processo administrativo/judicial. 
+Validação: Obrigatório se {motExcl} = [1]. 
+Deve ser um número de processo válido e existente no evento D-
+1021. 
+Regra de validação: 
+EXIGIR_NUMERO_PROCESSO 
+8 nrRecibo ideEvento E C 0-1 31 - Caso seja um evento de alteração/retificação ou exclusão, preencher 
+com o número do recibo do arquivo a ser alterado/retificado ou 
+excluído. 
+Regras de validação: 
+RN - Formação do Número do Recibo do Evento 
+EXIGIR_NR_RECIBO 
+ULTIMO_RECIBO_ATIVO 
+9 tpAmb ideEvento E N 1-1 1 - Identificação do ambiente para o qual os dados estão sendo 
+transmitidos. 
+Valores válidos: 
+1 – Produção; 
+2 – Produção restrita. 
+Regra de validação: 
+AMBIENTE 
+10 aplicEmi ideEvento E N 1-1 1 - Identificação do aplicativo emissor do evento. 
+Valores válidos: 
+1 – Emissão com aplicativo da empresa; 
+2 – Aplicativo governamental. 
+11 verAplic ideEvento E C 1-1 1-20 - Versão do aplicativo emissor do evento. 
+
+===== PÁGINA 18 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 17 de 51 
+ 
+D-1106 – Identificação de Aplicações Financeiras – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+12 ideContrib evtAplicResTec G - 1-1 - - Informações de identificação do contribuinte. 
+13 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+Regras de validação: 
+CONTRIBUINTE_NO_CADASTRO 
+EXISTE_INFO_CONTRIBUINTE 
+14 idePeriodo evtAplicResTec G - 1-1 - - Período de referência das informações do evento. 
+15 perApur idePeriodo E D 1-1 7 - Informar o período de apuração, sendo o ano e mês da competência 
+da declaração. 
+Máscara: AAAA-MM 
+Validação: Se {tpOper} = [1], só pode existir um único {perApur} para 
+cada {nrInsc}. 
+Quando informado {nrRecibo}, o {perApur} deve ser exatamento ao 
+mesmo existente no {nrRecibo} (caracteres 6 a 11 do recibo). 
+Regras de validação: 
+OBRIGAR_PERAPUR_IGUAL_NRRECIBO 
+16 infoAplicResTec evtAplicResTec G - 0-1 - - Informações de aplicações financeiras sobre reserva técnica. 
+Regra de validação: 
+OBRIGAR_PREENCH_INFO_RES_TEC 
+17 semAplic infoAplicResTec E N 0-1 1 - Indicação da inexistência de aplicações financeiras sobre reserva 
+técnica. 
+Preenchimento: Deve ser preenchido exclusivamente quando o 
+contribuinte não possuir ativos financeiros vinculados à reserva 
+técnica a detalhar no período de apuração {perApur}. 
+Valores válidos: 
+1 – Não existem informações de aplicações financeiras a declarar 
+para este período. 
+18 infoAplic infoAplicResTec G - 0-100 - - Detalhamento das informações da aplicação financeira sobre reserva 
+técnica. 
+19 cCta infoAplic E C 1-1 1-53 - Código da Conta Analítica (como informada no evento D-
+1011.{cCta}). 
+Nota: Devem estar no PGCC vigente no último dia do {perApur} 
+todas as contas que tiveram movimentação no período, ainda que 
+tenham sido criadas ou encerradas no período. 
+Validação: Não informar contas sintéticas. 
+O {cCta} deve existir e estar vigente na tabela PGCC do contribuinte 
+no último dia do {perApur} correspondente. 
+Regras de validação: 
+CCTA_NO_PGCC 
+CODTRIB_COMPATIVEL_EVT 
+20 detAtivo infoAplic G - 1-500 - - Detalhamento do título/ativo. 
+21 idAtivo detAtivo A C 1-1 1-30 - Número de identificação do título/ativo. 
+22 descAtivo detAtivo E C 1-1 1-255 - Descrição da denominação do ativo financeiro vinculado a reserva 
+técnica. 
+23 vSaldoInic detAtivo E N 1-1 4-18 2 Valor do título em 01/01/2026 ou na data da aquisição, se esta for 
+posterior a esta data. 
+Preenchimento: Deve ser igual ao {vSaldoFinal} do período anterior 
+para o mesmo {idAtivo} (exceto na primeira competência do 
+declarante). 
+24 vRendPerReceb detAtivo E N 0-1 4-18 2 Valor de rendimentos periódicos recebidos no período de apuração 
+(cupons, dividentos, etc). 
+25 vVarMensal detAtivo E N 0-1 4-18 2 Valores de variação mensal a serem incorporados ao saldo do ativo. 
+Nota: Valores podem ser positivos ou negativos. 
+26 vPrincLiqResg detAtivo E N 1-1 4-18 2 Valor do principal liquidado ou resgatado do ativo financeiro. 
+27 vRendLiqResg detAtivo E N 0-1 4-18 2 Valor dos rendimentos recebidos na liquidação ou resgate do ativo 
+financeiro. 
+
+===== PÁGINA 19 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 18 de 51 
+ 
+D-1106 – Identificação de Aplicações Financeiras – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+28 vSaldoFinal detAtivo E N 1-1 4-18 2 Valor do título no último dia do período de apuração {perApur}. 
+Cálculo: 
+{vSaldoInic} + {vVarMensal} - {vPrincLiqResg} 
+29 vApur detAtivo E N 1-1 4-18 2 Valor base sobre o qual serão aplicadas as regras definidas pelo 
+código de tributação ({codTrib}). 
+Cálculo: 
+{vRendPerReceb} + {vRendLiqResg} 
+ 
+ 
+
+===== PÁGINA 20 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 19 de 51 
+ 
+2.3 EVENTO D-1199 – FECHAMENTO DE EVENTOS MENSAIS 
+2.3.1 Estrutura Hierárquica do Evento (Resumo) 
+D-1199 – Fechamento Mensal – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtFechMensal DeRE Evento de Fechamento Mensal. 1-1 id O 
+3 ideEvento evtFechMensal Informações de identificação do evento. 1-1 - O 
+3 ideContrib evtFechMensal Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 idePeriodo evtFechMensal Período de referência das informações do 
+evento. 
+1-1 perApur O 
+3 infoFechamento evtFechMensal Informações sobre o fechamento da 
+apuração mensal e aproveitamento de 
+bases de cálculo negativas (BCN). 
+0-1 - F 
+4 gUtilizBCN infoFechamento Grupo de informação de aproveitamento de 
+bases de cálculo negativa de períodos 
+anteriores. 
+0-1 - F 
+5 infoBCN gUtilizBCN Detalhamento de informações da base de 
+cálculo negativa por tipo de serviço. 
+1-99 codBCNRaiz O 
+5 detBCNeg gUtilizBCN Informação individualizada de cada base de 
+cálculo negativa a ser aproveitada pelo 
+contribuinte. 
+0-99 codBCN O (se {metodoAproveit} = 
+[1]); 
+N (nos demais casos). 
+ 
+ 
+
+===== PÁGINA 21 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 20 de 51 
+ 
+2.3.2 Especificação Técnica dos Campos (Detalhamento) 
+D-1199 – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtFechMensal DeRE G - 1-1 - - Evento de Fechamento Mensal. 
+Regras de validação: 
+EVENTOS_OBRIGATORIOS_PERIODO 
+RN - Validar Saldos Finais Eventos Auxiliares e Balancete 
+3 id evtFechMensal A C 1-1 42 - Identificador que representa unicamente o evento. 
+Regra de validação: 
+RN - Unicidade Recepção Evento 
+4 ideEvento evtFechMensal G - 1-1 - - Informações de identificação do evento. 
+5 tpOper ideEvento E N 1-1 1 - Tipo de operação do evento. 
+Nota: O envio deste evento consolida a totalização da apuração 
+mensal. Para retificações, exige-se a transmissão prévia do evento de 
+reabertura correspondente. 
+Valores válidos: 
+1 – Inclusão. 
+Regra de validação: 
+INCLUSAO_COM_CHAVE_PREEXISTENTE 
+6 tpAmb ideEvento E N 1-1 1 - Identificação do ambiente para o qual os dados estão sendo 
+transmitidos. 
+Valores válidos: 
+1 – Produção; 
+2 – Produção restrita. 
+Regra de validação: 
+AMBIENTE 
+7 aplicEmi ideEvento E N 1-1 1 - Identificação do aplicativo emissor do evento. 
+Valores válidos: 
+1 – Emissão com aplicativo da empresa; 
+2 – Aplicativo governamental. 
+8 verAplic ideEvento E C 1-1 1-20 - Versão do aplicativo emissor do evento. 
+9 ideContrib evtFechMensal G - 1-1 - - Informações de identificação do contribuinte. 
+10 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+Regras de validação: 
+CONTRIBUINTE_NO_CADASTRO 
+EXISTE_INFO_CONTRIBUINTE 
+11 idePeriodo evtFechMensal G - 1-1 - - Período de referência das informações do evento. 
+12 perApur idePeriodo E D 1-1 7 - Informar o período de apuração, sendo o ano e mês da competência 
+da declaração. 
+Máscara: AAAA-MM 
+Validação: Só pode existir um único {perApur} para cada {nrInsc}. 
+Não é permitida a inclusão de um novo fechamento para um período 
+que já possua um evento D-1199 ativo, exceto se precedido pelo 
+respectivo evento de reabertura. 
+
+===== PÁGINA 22 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 21 de 51 
+ 
+D-1199 – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+13 infoFechamento evtFechMensal G - 0-1 - - Informações sobre o fechamento da apuração mensal e 
+aproveitamento de bases de cálculo negativas (BCN). 
+14 gUtilizBCN infoFechamento G - 0-1 - - Grupo de informação de aproveitamento de bases de cálculo 
+negativa de períodos anteriores. 
+15 infoBCN gUtilizBCN G - 1-99 - - Detalhamento de informações da base de cálculo negativa por tipo 
+de serviço. 
+16 codBCNRaiz infoBCN E C 1-1 5 - Informar o código identificador da base de cálculo negativa 
+específica a que se deseja utilizar a base de cálculo negativa, 
+conforme <<Tabela 12 – Códigos de Bases de Cálculo>>. 
+17 usarBCNAcum infoBCN E N 1-1 1 - Informar a opção por utilizar (se existir) o valor de base de cálculo 
+negativa acumulada em períodos anteriores. 
+Valores válidos: 
+0 – Opção por NÃO efetuar o aproveitamento de bases negativas 
+neste período; 
+1 – Opção por efetuar o aproveitamento de bases negativas neste 
+período. 
+18 metodoAproveit infoBCN E N 0-1 1 - Informar qual método o contribuinte deseja para o aproveitamento 
+da base de cálculo negativa. 
+Preenchimento: Obrigatório se {usarBCNAcum} = [1]. 
+Não informar se {usarBCNAcum} = [0]. 
+ 
+Valores válidos: 
+0 – Método PEPS calculado automaticamente pelo sistema; 
+1 – Informação manual pelo contribuinte de valores de bases de 
+cálculo negativas que deseja realizar o aproveitamento, com a 
+informação dos respectivos períodos de origem. 
+19 vUtilBCN infoBCN E N 0-1 4-18 2 Valor máximo da base de cálculo negativa que o contribuinte deseja 
+realizar o aproveitamento na competência atual para o respectivo 
+{codBCNRaiz}. 
+Preenchimento: Informar se {usarBCNAcum} = [1] e 
+{metodoAproveit} = [0] e contribuinte quiser limitar o valor da BCN a 
+ser utilizado; 
+Não informar caso o contribuinte deseje aproveitar todo o valor da 
+base de cálculo negativa disponível. 
+Validação: Se o valor informado pelo contribuinte for superior ao 
+existente em sua conta corrente para aquele {codBCNRaiz}, será 
+atribuído o valor máximo disponível na conta corrente e retornado 
+alerta informando não existir o saldo total disponível naquela base 
+de cálculo negativa. 
+20 detBCNeg gUtilizBCN G - 0-99 - - Informação individualizada de cada base de cálculo negativa a ser 
+aproveitada pelo contribuinte. 
+21 codBCN detBCNeg E C 1-1 13 - Informar o código da Base de Cálculo Negativa que se deseja deduzir 
+nessa competência. 
+22 vUsarBCN detBCNeg E N 0-1 4-18 2 Valor máximo da base de cálculo negativa que o contribuinte deseja 
+realizar o aproveitamento na competência atual. 
+Preenchimento: Não informar caso o contribuinte deseje aproveitar 
+toda a base de cálculo negativa disponível no {codBCN}. 
+Validação: Se o valor informado pelo contribuinte for superior ao 
+existente em sua conta corrente para aquele {codBCN}, será atribuído 
+o valor máximo disponível na conta corrente e retornado alerta 
+informando não existir o saldo total disponível naquela base de 
+cálculo negativa. 
+ 
+ 
+
+===== PÁGINA 23 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 22 de 51 
+ 
+2.4 EVENTO D-2101 – DÉBITO EM OPERAÇÕES COM TÍTULOS DE DÍVIDA COM OFERTA 
+PÚBLICA 
+2.4.1 Estrutura Hierárquica do Evento (Resumo) 
+D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtDebOpOfPublic DeRE Evento débito mensal de operações com 
+títulos de dívida com oferta pública. 
+1-1 id O 
+3 ideEvento evtDebOpOfPublic Informações de identificação do evento. 1-1 - O 
+3 ideContrib evtDebOpOfPublic Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 idePeriodo evtDebOpOfPublic Período de referência das informações do 
+evento. 
+1-1 perApur O 
+3 infoDebOpOfPublic evtDebOpOfPublic Informações de títulos de dívida com oferta 
+pública. 
+0-1 - N (se {tpOper} = [3]); 
+O (nos demais casos). 
+4 infoTitulo infoDebOpOfPublic Informações do título de dívida com oferta 
+pública. 
+0-100 cCta N (se {semTitulos} = [1]); 
+O (nos demais casos). 
+5 detTitulo infoTitulo Detalhamento do título. 1-500 idTitulo O 
+ 
+ 
+
+===== PÁGINA 24 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 23 de 51 
+ 
+2.4.2 Especificação Técnica dos Campos (Detalhamento) 
+D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtDebOpOfPublic DeRE G - 1-1 - - Evento débito mensal de operações com títulos de dívida com oferta 
+pública. 
+Regra de validação: 
+CODTRIB_PERMITIDO_D2101 
+3 id evtDebOpOfPublic A C 1-1 42 - Identificador que representa unicamente o evento. 
+Regra de validação: 
+RN - Unicidade Recepção Evento 
+4 ideEvento evtDebOpOfPublic G - 1-1 - - Informações de identificação do evento. 
+5 tpOper ideEvento E N 1-1 1 - Tipo de operação do evento. 
+Nota: A alteração substitui integralmente as informações do evento 
+enviado anteriormente. 
+Valores válidos: 
+1 – Inclusão; 
+2 – Alteração; 
+3 – Exclusão. 
+Regras de validação: 
+INCLUSAO_COM_CHAVE_PREEXISTENTE 
+ALTERACAO_SEM_CHAVE_PREEXISTENTE 
+EXCLUSAO_SEM_CHAVE_PREEXISTENTE 
+6 motExcl ideEvento E N 0-1 1 - Motivo da Exclusão. 
+Código do motivo que justifica a exclusão do evento. 
+Validação: Obrigatório se {tpOper} = [3]. 
+Valores válidos: 
+1 – Determinação judicial ou administrativa; 
+2 – Envio indevido (fato inexistente); 
+3 – Erro na identificação (CNPJ/período incorretos); 
+9 – Outro. 
+Regra de validação: 
+EXIGIR_MOTIVO_EXCLUSAO 
+7 nrProc ideEvento E C 0-1 1-21 - Informar o número do processo administrativo/judicial. 
+Validação: Obrigatório se {motExcl} = [1]. 
+Deve ser um número de processo válido e existente no evento D-
+1021. 
+Regra de validação: 
+EXIGIR_NUMERO_PROCESSO 
+8 nrRecibo ideEvento E C 0-1 31 - Caso seja um evento de alteração/retificação ou exclusão, preencher 
+com o número do recibo do arquivo a ser alterado/retificado ou 
+excluído. 
+Regras de validação: 
+RN - Formação do Número do Recibo do Evento 
+EXIGIR_NR_RECIBO 
+ULTIMO_RECIBO_ATIVO 
+9 tpAmb ideEvento E N 1-1 1 - Identificação do ambiente para o qual os dados estão sendo 
+transmitidos. 
+Valores válidos: 
+1 – Produção; 
+2 – Produção restrita. 
+Regra de validação: 
+AMBIENTE 
+10 aplicEmi ideEvento E N 1-1 1 - Identificação do aplicativo emissor do evento. 
+Valores válidos: 
+1 – Emissão com aplicativo da empresa; 
+2 – Aplicativo governamental. 
+11 verAplic ideEvento E C 1-1 1-20 - Versão do aplicativo emissor do evento. 
+12 ideContrib evtDebOpOfPublic G - 1-1 - - Informações de identificação do contribuinte. 
+
+===== PÁGINA 25 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 24 de 51 
+ 
+D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+13 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+Regras de validação: 
+CONTRIBUINTE_NO_CADASTRO 
+EXISTE_INFO_CONTRIBUINTE 
+14 idePeriodo evtDebOpOfPublic G - 1-1 - - Período de referência das informações do evento. 
+15 perApur idePeriodo E D 1-1 7 - Informar o período de apuração, sendo o ano e mês da competência 
+da declaração. 
+Máscara: AAAA-MM 
+Validação: Se {tpOper} = [1], só pode existir um único {perApur} para 
+cada {nrInsc}. 
+Quando informado {nrRecibo}, o {perApur} deve ser exatamento ao 
+mesmo existente no {nrRecibo} (caracteres 6 a 11 do recibo). 
+Regras de validação: 
+OBRIGAR_PERAPUR_IGUAL_NRRECIBO 
+16 infoDebOpOfPublic evtDebOpOfPublic G - 0-1 - - Informações de títulos de dívida com oferta pública. 
+Regra de validação: 
+OBRIGAR_PREENCH_INFO_DEB_OF_PUB 
+17 semTitulos infoDebOpOfPublic E N 0-1 1 - Indicação da inexistência de títulos de dívida com oferta pública 
+movimentados no período. 
+Preenchimento: Deve ser preenchido exclusivamente quando o 
+contribuinte não possuir movimento com títulos de dívida com 
+oferta pública a detalhar no período de apuração {perApur}. 
+Valores válidos: 
+1 – Sem movimento com títulos de dívida com oferta pública neste 
+período. 
+18 infoTitulo infoDebOpOfPublic G - 0-100 - - Informações do título de dívida com oferta pública. 
+19 cCta infoTitulo E C 1-1 1-53 - Código da Conta Analítica (como informada no evento D-
+1011.{cCta}). 
+Nota: Devem estar no PGCC vigente no último dia do {perApur} 
+todas as contas que tiveram movimentação no período, ainda que 
+tenham sido criadas ou encerradas no período. 
+Validação: Não informar contas sintéticas. 
+O {cCta} deve existir e estar vigente na tabela PGCC do contribuinte 
+no último dia do {perApur} correspondente. 
+Regras de validação: 
+CCTA_NO_PGCC 
+CODTRIB_COMPATIVEL_EVT 
+20 detTitulo infoTitulo G - 1-500 - - Detalhamento do título. 
+21 idTitulo detTitulo A C 1-1 1-30 - Código de identificação do título conforme padrão adotado 
+(referencia ISO 6166 ou ISIN). 
+Validação: Se {tpAquis} = [2], preencher com número sequencial 
+único para o título dentro do {cCta}. 
+Regra de validação: 
+NUM_SEQ_UNICO 
+22 descFundo detTitulo E C 0-1 1-255 - Descrição do nome do fundo. 
+Validação: Obrigatório se {tpAquis} = [2]. 
+Regra de validação: 
+OBRIGAR_PREENCH_DESC_FUNDO 
+23 tpAquis detTitulo E N 1-1 1 - Tipo de aquisição dos títulos de dívida com oferta pública (art. 195). 
+Valores válidos: 
+1 – Compra direta (§ 1º do Art. 195); 
+2 – Compra por meio de fundos de investimento exclusivos com 
+composição mínima de 95% de títulos de dívida (§ 2º do Art. 195). 
+24 CNPJDevedor detTitulo E C 1-1 14 - Informar o número de inscrição no CNPJ do devedor emitente do 
+título de dívida. 
+Validação: Deve ser um CNPJ válido com 14 posições. 
+Regra de validação: 
+DV_CNPJ 
+
+===== PÁGINA 26 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 25 de 51 
+ 
+D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+25 dtAquisicao detTitulo E D 1-1 10 - Data de aquisição do título de dívida. 
+Máscara: AAAA-MM-DD 
+Validação: Deve ser uma data válida. 
+26 dtInicioJuros detTitulo E D 1-1 10 - Data base referência de início do cálculo dos juros pagos em 
+{dtFimJuros}. 
+Máscara: AAAA-MM-DD 
+Validação: Deve ser uma data válida igual ou posterior a 
+{dtAquisicao}. 
+Regra de validação: 
+DT_INICIO_JUROS_POSTERIOR_DT_AQUISICAO 
+27 dtFimJuros detTitulo E D 1-1 10 - Data de reconhecimento da receita dos juros sobre os títulos de 
+dívida. 
+Máscara: AAAA-MM-DD 
+Validação: A data deve estar dentro do {perApur} deste evento. Deve 
+ser uma data válida igual ou posterior a {dtAquisicao}. 
+Regra de validação: 
+DT_FIM_JUROS 
+28 dtLiquidacao detTitulo E D 0-1 10 - Data de liquidação do título de dívida. 
+Máscara: AAAA-MM-DD 
+Validação: A data deve estar dentro do {perApur} deste evento. Deve 
+ser uma data válida igual ou posterior a {dtAquisicao}. 
+Regra de validação: 
+DT_LIQUIDACAO 
+29 vInicTitulo detTitulo E N 1-1 6-20 4 Representa o valor do título sobre o qual haverá a incidência dos 
+juros no período. 
+Preenchimento: Deve ser igual ao {vFinalTitulo} do período anterior 
+para o mesmo {idTitulo} (exceto na primeira competência do 
+declarante). 
+30 vFinalTitulo detTitulo E N 1-1 6-20 4 Valor do título ao final do período (após o pagamento dos juros e 
+amortizações) 
+31 pJuros detTitulo E N 1-1 8-10 6 Taxa de juros do período compreendido entre {dtInicioJuros} e 
+{dtFimJuros}. 
+Preenchimento: Não usar o símbolo (%). 
+32 vJuros detTitulo E N 1-1 6-20 4 Valor da receita de juros e demais rendimentos financeiros auferidos 
+sobre o título no período. 
+Cálculo: 
+{vInicTitulo} * {pJuros} / 100 
+Regra de validação: 
+CONFERIR_JUROS 
+33 pSelic detTitulo E N 1-1 8-10 6 Taxa da Selic diária acumulada do período compreendido entre 
+{dtInicioJuros} e {dtFimJuros}. 
+Preenchimento: Não usar o símbolo (%). 
+34 vSelic detTitulo E N 1-1 6-20 4 Valor equivalente à variação da taxa Selic no período. 
+Representa o teto tributável para a operação. 
+Cálculo: 
+{vInicTitulo} * {pSelic} / 100 
+Regra de validação: 
+CONFERIR_SELIC 
+35 vPisCofins detTitulo E N 0-1 6-20 4 Valor da dedução relativa ao PIS/COFINS incidente sobre a receita 
+tributada. 
+Nota: Informar apenas a parcela passível de dedução da base de 
+cálculo do IBS/CBS. 
+36 vApur detTitulo E N 1-1 6-20 4 Valor base sobre o qual serão aplicadas as regras definidas pelo 
+código de tributação ({codTrib}). 
+Cálculo: 
+(MENORENTRE({vSelic} e {vJuros})) - {vPisCofins} 
+ 
+ 
+
+===== PÁGINA 27 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 26 de 51 
+ 
+3 EVENTOS DE RETORNO E TOTALIZAÇÃO 
+3.1 EVENTO D-9001 – RETORNO – EVENTOS DE TABELA  
+3.1.1 Estrutura Hierárquica do Evento (Resumo) 
+D-9001 – Retorno – Eventos de Tabela – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtRetornoTabela DeRE Retorno de eventos de tabela. 1-1 id O 
+3 ideContrib evtRetornoTabela Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 ideStatus evtRetornoTabela Situação do processamento do evento. 1-1 - O 
+4 ocorrencias ideStatus Informações de ocorrências registradas. 0-10 - O (se {cdRetorno} = [0]); 
+F (nos demais casos). 
+3 infoRecEv evtRetornoTabela Informações de processamento dos eventos. 1-1 - O 
+3 infoEvento evtRetornoTabela Informações do evento processado. 0-1 - O (se {cdRetorno} = [1]); 
+N (nos demais casos). 
+4 idePeriodo infoEvento Grupo de identificação do período de 
+validade do evento. 
+1-1 iniValid, fimValid O 
+5 novaValidade idePeriodo Novo período de validade. 0-1 iniValid, fimValid OC 
+3 extratoEventos evtRetornoTabela Grupo contendo o "extrato" completo das 
+vigências ativas para os eventos 
+processados da respectiva tabela do 
+contribuinte. 
+0-1 - OC 
+4 detEvento extratoEventos Detalhamento do evento constante na 
+tabela do contribuinte. 
+0-100 - O 
+4 detLacuna extratoEventos Detalhamento de período descoberto (sem 
+cobertura de evento) na linha do tempo. 
+0-100 - OC 
+ 
+ 
+
+===== PÁGINA 28 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 27 de 51 
+ 
+3.1.2 Especificação Técnica dos Campos (Detalhamento) 
+D-9001 – Retorno – Eventos de Tabela – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtRetornoTabela DeRE G - 1-1 - - Retorno de eventos de tabela. 
+3 id evtRetornoTabela A C 1-1 42 - Identificação única do evento (campo id do evento transmitido pelo 
+contribuinte, a que se refere este retorno). 
+4 ideContrib evtRetornoTabela G - 1-1 - - Informações de identificação do contribuinte. 
+5 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+6 ideStatus evtRetornoTabela G - 1-1 - - Situação do processamento do evento. 
+7 cdRetorno ideStatus E N 1-1 1 - Código indicativo do status do retorno. 
+Valores válidos: 
+0 – Erro; 
+1 – Sucesso. 
+8 descRetorno ideStatus E C 1-1 4,7 - Descrição literal do status do retorno. 
+Valores válidos: 
+– Erro; 
+– Sucesso. 
+9 ocorrencias ideStatus G - 0-10 - - Informações de ocorrências registradas. 
+10 codigo ocorrencias E C 1-1 1-6 - Código numérico da ocorrência. 
+11 descricao ocorrencias E C 1-1 1-2048 - Descrição detalhada da ocorrência (mensagem de erro ou aviso). 
+12 tipo ocorrencias E N 1-1 1 - Classificação do tipo da ocorrência. 
+Valores válidos: 
+1 – Erro; 
+2 – Aviso. 
+13 localizacao ocorrencias E C 0-1 1-2048 - Identificação do campo ou grupo onde a ocorrência foi detectada. 
+14 infoRecEv evtRetornoTabela G - 1-1 - - Informações de processamento dos eventos. 
+15 nrRecibo infoRecEv E C 0-1 31 - Número do recibo do evento processado com sucesso. 
+Validação: Preenchido somente quando {cdRetorno} = [1] (Sucesso). 
+Regra de validação: 
+RN - Formação do Número do Recibo do Evento 
+16 protocoloLote infoRecEv E C 0-1 28 - Número do protocolo de entrega do lote. 
+Regra de validação: 
+RN - Numero do Protocolo do Lote 
+17 dhRecepcao infoRecEv E D 1-1 25-33 - Data e hora da recepção do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+18 dhProcess infoRecEv E D 1-1 25-33 - Data e hora do início do processamento do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+19 tpEv infoRecEv E C 1-1 6 - Sigla de identificação do tipo de evento. 
+Exemplo: D-1001, D-1011. 
+20 hash infoRecEv E C 1-1 44 - Hashcode do arquivo processado. 
+21 infoEvento evtRetornoTabela G - 0-1 - - Informações do evento processado. 
+22 idePeriodo infoEvento G - 1-1 - - Grupo de identificação do período de validade do evento. 
+23 iniValid idePeriodo E D 1-1 10 - Data de início da validade informada no evento. 
+Máscara: AAAA-MM-DD 
+24 fimValid idePeriodo E D 0-1 10 - Data de término da validade informada no evento, se houver. 
+Máscara: AAAA-MM-DD 
+25 novaValidade idePeriodo G - 0-1 - - Novo período de validade. 
+Nota: Preenchido exclusivamente em casos de alteração de vigência 
+de evento já existente. 
+26 iniValid novaValidade E D 1-1 10 - Data de início da nova validade das informações. 
+Máscara: AAAA-MM-DD 
+27 fimValid novaValidade E D 0-1 10 - Data de término da nova validade das informações, se houver. 
+Máscara: AAAA-MM-DD 
+
+===== PÁGINA 29 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 28 de 51 
+ 
+D-9001 – Retorno – Eventos de Tabela – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+28 extratoEventos evtRetornoTabela G - 0-1 - - Grupo contendo o "extrato" completo das vigências ativas para os 
+eventos processados da respectiva tabela do contribuinte. 
+Retorna a "Foto" atualizada após o processamento. 
+29 detEvento extratoEventos G - 0-100 - - Detalhamento do evento constante na tabela do contribuinte. 
+30 nrRecibo detEvento E C 1-1 31 - Número do recibo do evento que fundamenta a vigência deste 
+período. 
+31 iniValid detEvento E D 1-1 10 - Data de início de validade informada pelo contribuinte. 
+Máscara: AAAA-MM-DD 
+32 fimValid detEvento E D 0-1 10 - Data de fim de validade informada pelo contribuinte. 
+Preenchimento: Não informado se for indeterminada/aberta. 
+Máscara: AAAA-MM-DD 
+33 fimValidEfetiva detEvento E D 0-1 10 - Data limite da validade do evento considerada pelo sistema. 
+Corresponde à data efetiva de encerramento do período, aplicando-
+se as regras de não-sobreposição. 
+Preenchimento: 
+a) Se {fimValid} foi informado: Este campo será idêntico ao {fimValid}; 
+b) Se {fimValid} é indeterminado e não há evento posterior: Este 
+campo não é informado; 
+c) Se {fimValid} é indeterminado, mas existe evento posterior: Este 
+campo conterá a data de corte (dia anterior ao início do próximo 
+evento), indicando encurtamento forçado da validade por 
+sobreposição de novo evento ({indAjusteAutomatico} = [1]). 
+Máscara: AAAA-MM-DD 
+34 indAjusteAuto detEvento E N 0-1 1 - Indicador se este período sofreu corte temporal com a atribuição do 
+campo {fimValidEfetiva} pelo sistema em razão da existência de outro 
+evento com vigência posterior. 
+Valores válidos: 
+0 – Não; 
+1 – Sim (houve corte pelo sistema). 
+35 detLacuna extratoEventos G - 0-100 - - Detalhamento de período descoberto (sem cobertura de evento) na 
+linha do tempo. 
+36 iniLacuna detLacuna E D 1-1 10 - Data de início do período da lacuna. 
+Máscara: AAAA-MM-DD 
+37 fimLacuna detLacuna E D 0-1 10 - Data fim do período da lacuna. 
+Preenchimento: Não informado se for indeterminada/aberta. 
+Máscara: AAAA-MM-DD 
+ 
+ 
+
+===== PÁGINA 30 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 29 de 51 
+ 
+3.2 EVENTO D-9101 – RETORNO TOTALIZADOR – BALANCETE MENSAL 
+3.2.1 Estrutura Hierárquica do Evento (Resumo) 
+D-9101 – Retorno Totalizador – Balancete Mensal – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtRetornoBalan DeRE Retorno do evento Balancete Mensal. 1-1 id O 
+3 ideContrib evtRetornoBalan Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 ideStatus evtRetornoBalan Situação do processamento do evento. 1-1 - O 
+4 ocorrencias ideStatus Informações de ocorrências registradas. 0-10 - O (se {cdRetorno} = [0]); 
+F (nos demais casos). 
+3 infoRecEv evtRetornoBalan Informações de processamento dos eventos. 1-1 - O 
+3 infoEvento evtRetornoBalan Informações do evento processado. 0-1 - O (se {cdRetorno} = [1]); 
+N (nos demais casos). 
+4 idePeriodo infoEvento Grupo de identificação do período de 
+referência das informações do evento. 
+1-1 perApur O 
+4 infoTotBalan infoEvento Informações de totalizadores do evento D-
+1101 - Balancete Mensal {evtBalancete}. 
+0-1 - O (se {tpOper} = [1|2]); 
+N (se {tpOper} = [3]). 
+5 gTotalCodTrib infoTotBalan Totalização de informações por Código de 
+Tributação. 
+0-999 codTrib, indTribISS OC 
+ 
+ 
+
+===== PÁGINA 31 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 30 de 51 
+ 
+3.2.2 Especificação Técnica dos Campos (Detalhamento) 
+D-9101 – Retorno Totalizador – Balancete Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtRetornoBalan DeRE G - 1-1 - - Retorno do evento Balancete Mensal. 
+3 id evtRetornoBalan A C 1-1 42 - Identificação única do evento (campo id do evento transmitido pelo 
+contribuinte, a que se refere este retorno). 
+4 ideContrib evtRetornoBalan G - 1-1 - - Informações de identificação do contribuinte. 
+5 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+6 ideStatus evtRetornoBalan G - 1-1 - - Situação do processamento do evento. 
+7 cdRetorno ideStatus E N 1-1 1 - Código indicativo do status do retorno. 
+Valores válidos: 
+0 – Erro; 
+1 – Sucesso. 
+8 descRetorno ideStatus E C 1-1 4,7 - Descrição literal do status do retorno. 
+Valores válidos: 
+– Erro; 
+– Sucesso. 
+9 ocorrencias ideStatus G - 0-10 - - Informações de ocorrências registradas. 
+10 codigo ocorrencias E C 1-1 1-6 - Código numérico da ocorrência. 
+11 descricao ocorrencias E C 1-1 1-2048 - Descrição detalhada da ocorrência (mensagem de erro ou aviso). 
+12 tipo ocorrencias E N 1-1 1 - Classificação do tipo da ocorrência. 
+Valores válidos: 
+1 – Erro; 
+2 – Aviso. 
+13 localizacao ocorrencias E C 0-1 1-2048 - Identificação do campo ou grupo onde a ocorrência foi detectada. 
+14 infoRecEv evtRetornoBalan G - 1-1 - - Informações de processamento dos eventos. 
+15 nrRecibo infoRecEv E C 0-1 31 - Número do recibo do evento processado com sucesso. 
+Validação: Preenchido somente quando {cdRetorno} = [1] (Sucesso). 
+Regra de validação: 
+RN - Formação do Número do Recibo do Evento 
+16 seqEvento infoRecEv E N 0-1 2 - Número sequencial de identificação que indica a versão do evento 
+processado na base de dados. 
+Nota: O controle sequencial é ininterrupto para a mesma chave de 
+identificação. A exclusão de um evento não zera a contagem para 
+futuras reinclusões. 
+Exemplo: 
+1º Envio (Inclusão): seqEvento = [00]; 
+2º Envio (Alteração): seqEvento = [01]; 
+3º Envio (Exclusão): seqEvento = [02]; 
+4º Envio (Nova Inclusão): seqEvento = [03]. 
+Valores válidos: 
+00 – Evento Original (atribuído exclusivamente no processamento 
+com sucesso da primeira Inclusão ({tpOper} = [1]) para uma chave 
+inédita no banco de dados); 
+1-99 – Evento Versionado (atribuído de forma sucessiva e 
+cronológica ao processar eventos de Alteração ({tpOper} = [2]), 
+Exclusão ({tpOper} = [3]) ou nova Inclusão ({tpOper} = [1]) de uma 
+chave previamente excluída). 
+17 protocoloLote infoRecEv E C 0-1 28 - Número do protocolo de entrega do lote. 
+Regra de validação: 
+RN - Numero do Protocolo do Lote 
+18 dhRecepcao infoRecEv E D 1-1 25-33 - Data e hora da recepção do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+19 dhProcess infoRecEv E D 1-1 25-33 - Data e hora do início do processamento do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+
+===== PÁGINA 32 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 31 de 51 
+ 
+D-9101 – Retorno Totalizador – Balancete Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+20 tpEv infoRecEv E C 1-1 6 - Sigla de identificação do tipo de evento. 
+Exemplo: D-1101. 
+21 hash infoRecEv E C 1-1 44 - Hashcode do arquivo processado. 
+22 infoEvento evtRetornoBalan G - 0-1 - - Informações do evento processado. 
+23 idePeriodo infoEvento G - 1-1 - - Grupo de identificação do período de referência das informações do 
+evento. 
+24 perApur idePeriodo E D 1-1 7 - Período de apuração, sendo o ano e mês da competência da 
+declaração. 
+Máscara: AAAA-MM 
+Cálculo: 
+Valor do campo {perApur} informado no evento de origem. 
+25 infoTotBalan infoEvento G - 0-1 - - Informações de totalizadores do evento D-1101 – Balancete Mensal 
+{evtBalancete}. 
+26 gTotalCodTrib infoTotBalan G - 0-999 - - Totalização de informações por Código de Tributação. 
+27 codTrib gTotalCodTrib E N 1-1 9 - Código de tributação para fins de IBS, CBS e IS. 
+Preenchimento: Listagem de valores únicos de {codTrib} informados 
+no evento D-1101 ({evtBalancete}). 
+28 indTribISS gTotalCodTrib E N 1-1 1 - Indicador de sujeição ou vinculação ao ISSQN. 
+Preenchimento: Se não informado, atribuir [0]. 
+Valores válidos: 
+0 – Não sujeita ao ISS; 
+1 – Sujeita ao ISS. 
+29 vApurTot gTotalCodTrib E N 1-1 4-18 2 Somatório de todas as ocorrências de {vApur} do evento D-1101 
+({evtBalancete}) para o {codTrib} e {indTribISS} informados. 
+Cálculo: 
+SOMA({vApur.codTrib} = {codTrib}) 
+30 vTotSaldoInic gTotalCodTrib E N 0-1 4-18 2 Somatório de todas as ocorrências de {vSaldoInic} do evento D-1101 
+({evtBalancete}) para o {codTrib} informado. 
+Preenchimento: Campo retornado apenas se {codTrib} = 
+[220110001; 220210001; 220310001]. 
+Cálculo: 
+SOMA({vSaldoInic.codTrib} = [220110001; 220210001; 220310001]) 
+31 vTotSaldoFinal gTotalCodTrib E N 0-1 4-18 2 Somatório de todas as ocorrências de {vSaldoFinal} do evento D-
+1101 ({evtBalancete}) para o {codTrib} informado. 
+Preenchimento: Campo retornado apenas se {codTrib} = 
+[220110001; 220210001; 220310001]. 
+Cálculo: 
+SOMA({vSaldoFinal.codTrib} = [220110001; 220210001; 220310001]) 
+ 
+ 
+
+===== PÁGINA 33 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 32 de 51 
+ 
+3.3 EVENTO D-9106 – RETORNO TOTALIZADOR – IDENTIFICAÇÃO DE APLICAÇÕES 
+FINANCEIRAS 
+3.3.1 Estrutura Hierárquica do Evento (Resumo) 
+D-9106 – Retorno Totalizador – Identificação de Aplicações Financeiras – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtRetornoAplicFin DeRE Retorno do evento Identificação de 
+Aplicações Financeiras. 
+1-1 id O 
+3 ideContrib evtRetornoAplicFin Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 ideStatus evtRetornoAplicFin Situação do processamento do evento. 1-1 - O 
+4 ocorrencias ideStatus Informações de ocorrências registradas. 0-10 - O (se {cdRetorno} = [0]); 
+F (nos demais casos). 
+3 infoRecEv evtRetornoAplicFin Informações de processamento dos eventos. 1-1 - O 
+3 infoEvento evtRetornoAplicFin Informações do evento processado. 0-1 - O (se {cdRetorno} = [1]); 
+N (nos demais casos). 
+4 idePeriodo infoEvento Grupo de identificação do período de 
+referência das informações do evento. 
+1-1 perApur O 
+4 infoTotAplicFin infoEvento Informações de totalizadores do evento D-
+1106 - Aplicações Financeiras 
+{evtAplicResTec}. 
+0-1 - O (se {tpOper} = [1|2]); 
+N (se {tpOper} = [3]). 
+ 
+ 
+
+===== PÁGINA 34 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 33 de 51 
+ 
+3.3.2 Especificação Técnica dos Campos (Detalhamento) 
+D-9106 – Retorno Totalizador – Identificação de Aplicações Financeiras – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtRetornoAplicFin DeRE G - 1-1 - - Retorno do evento Identificação de Aplicações Financeiras. 
+3 id evtRetornoAplicFin A C 1-1 42 - Identificação única do evento (campo id do evento transmitido pelo 
+contribuinte, a que se refere este retorno). 
+4 ideContrib evtRetornoAplicFin G - 1-1 - - Informações de identificação do contribuinte. 
+5 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+6 ideStatus evtRetornoAplicFin G - 1-1 - - Situação do processamento do evento. 
+7 cdRetorno ideStatus E N 1-1 1 - Código indicativo do status do retorno. 
+Valores válidos: 
+0 – Erro; 
+1 – Sucesso. 
+8 descRetorno ideStatus E C 1-1 4,7 - Descrição literal do status do retorno. 
+Valores válidos: 
+– Erro; 
+– Sucesso. 
+9 ocorrencias ideStatus G - 0-10 - - Informações de ocorrências registradas. 
+10 codigo ocorrencias E C 1-1 1-6 - Código numérico da ocorrência. 
+11 descricao ocorrencias E C 1-1 1-2048 - Descrição detalhada da ocorrência (mensagem de erro ou aviso). 
+12 tipo ocorrencias E N 1-1 1 - Classificação do tipo da ocorrência. 
+Valores válidos: 
+1 – Erro; 
+2 – Aviso. 
+13 localizacao ocorrencias E C 0-1 1-2048 - Identificação do campo ou grupo onde a ocorrência foi detectada. 
+14 infoRecEv evtRetornoAplicFin G - 1-1 - - Informações de processamento dos eventos. 
+15 nrRecibo infoRecEv E C 0-1 31 - Número do recibo do evento processado com sucesso. 
+Validação: Preenchido somente quando {cdRetorno} = [1] (Sucesso). 
+Regra de validação: 
+RN - Formação do Número do Recibo do Evento 
+16 seqEvento infoRecEv E N 0-1 2 - Número sequencial de identificação que indica a versão do evento 
+processado na base de dados. 
+Nota: O controle sequencial é ininterrupto para a mesma chave de 
+identificação. A exclusão de um evento não zera a contagem para 
+futuras reinclusões. 
+Exemplo: 
+1º Envio (Inclusão): seqEvento = [00]; 
+2º Envio (Alteração): seqEvento = [01]; 
+3º Envio (Exclusão): seqEvento = [02]; 
+4º Envio (Nova Inclusão): seqEvento = [03]. 
+Valores válidos: 
+00 – Evento Original (atribuído exclusivamente no processamento 
+com sucesso da primeira Inclusão ({tpOper} = [1]) para uma chave 
+inédita no banco de dados); 
+1-99 – Evento Versionado (atribuído de forma sucessiva e 
+cronológica ao processar eventos de Alteração ({tpOper} = [2]), 
+Exclusão ({tpOper} = [3]) ou nova Inclusão ({tpOper} = [1]) de uma 
+chave previamente excluída). 
+17 protocoloLote infoRecEv E C 0-1 28 - Número do protocolo de entrega do lote. 
+Regra de validação: 
+RN - Numero do Protocolo do Lote 
+18 dhRecepcao infoRecEv E D 1-1 25-33 - Data e hora da recepção do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+19 dhProcess infoRecEv E D 1-1 25-33 - Data e hora do início do processamento do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+
+===== PÁGINA 35 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 34 de 51 
+ 
+D-9106 – Retorno Totalizador – Identificação de Aplicações Financeiras – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+20 tpEv infoRecEv E C 1-1 6 - Sigla de identificação do tipo de evento. 
+Exemplo: D-1106. 
+21 hash infoRecEv E C 1-1 44 - Hashcode do arquivo processado. 
+22 infoEvento evtRetornoAplicFin G - 0-1 - - Informações do evento processado. 
+23 idePeriodo infoEvento G - 1-1 - - Grupo de identificação do período de referência das informações do 
+evento. 
+24 perApur idePeriodo E D 1-1 7 - Período de apuração, sendo o ano e mês da competência da 
+declaração. 
+Máscara: AAAA-MM 
+Cálculo: 
+Valor do campo {perApur} informado no evento de origem. 
+25 infoTotAplicFin infoEvento G - 0-1 - - Informações de totalizadores do evento D-1106 – Aplicações 
+Financeiras {evtAplicResTec}. 
+26 vApurTot infoTotAplicFin E N 1-1 4-18 2 Somatório de todas as ocorrências de {vApur} do evento D-1106 
+({evtAplicResTec}). 
+Cálculo: 
+SOMA({vApur}) 
+ 
+ 
+
+===== PÁGINA 36 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 35 de 51 
+ 
+3.4 EVENTO D-9121 – RETORNO TOTALIZADOR – DÉBITO EM OPERAÇÕES COM TÍTULOS 
+DE DÍVIDA COM OFERTA PÚBLICA 
+3.4.1 Estrutura Hierárquica do Evento (Resumo) 
+D-9121 – Retorno Totalizador – Débito em Operações com Títulos de Dívida com Oferta Pública – Estrutura Hierárquica do 
+Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtRetornoTitPub DeRE Retorno do evento Débito em Operações 
+com Títulos de Dívida com Oferta Pública. 
+1-1 id O 
+3 ideContrib evtRetornoTitPub Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 ideStatus evtRetornoTitPub Situação do processamento do evento. 1-1 - O 
+4 ocorrencias ideStatus Informações de ocorrências registradas. 0-10 - O (se {cdRetorno} = [0]); 
+F (nos demais casos). 
+3 infoRecEv evtRetornoTitPub Informações de processamento dos eventos. 1-1 - O 
+3 infoEvento evtRetornoTitPub Informações do evento processado. 0-1 - O (se {cdRetorno} = [1]); 
+N (nos demais casos). 
+4 idePeriodo infoEvento Grupo de identificação do período de 
+referência das informações do evento. 
+1-1 perApur O 
+4 infoTotTitOfPub infoEvento Informações de totalizadores do evento D-
+2101 - Débito em Operações com Títulos de 
+Dívida com Oferta Pública 
+{evtDebOpOferPublica}. 
+0-1 - O (se {tpOper} = [1|2]); 
+N (se {tpOper} = [3]). 
+ 
+ 
+
+===== PÁGINA 37 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 36 de 51 
+ 
+3.4.2 Especificação Técnica dos Campos (Detalhamento) 
+D-9121 – Retorno Totalizador – Débito em Operações com Títulos de Dívida com Oferta Pública – Especificação Técnica de 
+Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtRetornoTitPub DeRE G - 1-1 - - Retorno do evento Débito em Operações com Títulos de Dívida com 
+Oferta Pública. 
+3 id evtRetornoTitPub A C 1-1 42 - Identificação única do evento (campo id do evento transmitido pelo 
+contribuinte, a que se refere este retorno). 
+4 ideContrib evtRetornoTitPub G - 1-1 - - Informações de identificação do contribuinte. 
+5 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+6 ideStatus evtRetornoTitPub G - 1-1 - - Situação do processamento do evento. 
+7 cdRetorno ideStatus E N 1-1 1 - Código indicativo do status do retorno. 
+Valores válidos: 
+0 – Erro; 
+1 – Sucesso. 
+8 descRetorno ideStatus E C 1-1 4,7 - Descrição literal do status do retorno. 
+Valores válidos: 
+– Erro; 
+– Sucesso. 
+9 ocorrencias ideStatus G - 0-10 - - Informações de ocorrências registradas. 
+10 codigo ocorrencias E C 1-1 1-6 - Código numérico da ocorrência. 
+11 descricao ocorrencias E C 1-1 1-2048 - Descrição detalhada da ocorrência (mensagem de erro ou aviso). 
+12 tipo ocorrencias E N 1-1 1 - Classificação do tipo da ocorrência. 
+Valores válidos: 
+1 – Erro; 
+2 – Aviso. 
+13 localizacao ocorrencias E C 0-1 1-2048 - Identificação do campo ou grupo onde a ocorrência foi detectada. 
+14 infoRecEv evtRetornoTitPub G - 1-1 - - Informações de processamento dos eventos. 
+15 nrRecibo infoRecEv E C 0-1 31 - Número do recibo do evento processado com sucesso. 
+Validação: Preenchido somente quando {cdRetorno} = [1] (Sucesso). 
+Regra de validação: 
+RN - Formação do Número do Recibo do Evento 
+16 seqEvento infoRecEv E N 0-1 2 - Número sequencial de identificação que indica a versão do evento 
+processado na base de dados. 
+Nota: O controle sequencial é ininterrupto para a mesma chave de 
+identificação. A exclusão de um evento não zera a contagem para 
+futuras reinclusões. 
+Exemplo: 
+1º Envio (Inclusão): seqEvento = [00]; 
+2º Envio (Alteração): seqEvento = [01]; 
+3º Envio (Exclusão): seqEvento = [02]; 
+4º Envio (Nova Inclusão): seqEvento = [03]. 
+Valores válidos: 
+00 – Evento Original (atribuído exclusivamente no processamento 
+com sucesso da primeira Inclusão ({tpOper} = [1]) para uma chave 
+inédita no banco de dados); 
+1-99 – Evento Versionado (atribuído de forma sucessiva e 
+cronológica ao processar eventos de Alteração ({tpOper} = [2]), 
+Exclusão ({tpOper} = [3]) ou nova Inclusão ({tpOper} = [1]) de uma 
+chave previamente excluída). 
+17 protocoloLote infoRecEv E C 0-1 28 - Número do protocolo de entrega do lote. 
+Regra de validação: 
+RN - Numero do Protocolo do Lote 
+18 dhRecepcao infoRecEv E D 1-1 25-33 - Data e hora da recepção do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+
+===== PÁGINA 38 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 37 de 51 
+ 
+D-9121 – Retorno Totalizador – Débito em Operações com Títulos de Dívida com Oferta Pública – Especificação Técnica de 
+Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+19 dhProcess infoRecEv E D 1-1 25-33 - Data e hora do início do processamento do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+20 tpEv infoRecEv E C 1-1 6 - Sigla de identificação do tipo de evento. 
+Exemplo: D-2101. 
+21 hash infoRecEv E C 1-1 44 - Hashcode do arquivo processado. 
+22 infoEvento evtRetornoTitPub G - 0-1 - - Informações do evento processado. 
+23 idePeriodo infoEvento G - 1-1 - - Grupo de identificação do período de referência das informações do 
+evento. 
+24 perApur idePeriodo E D 1-1 7 - Período de apuração, sendo o ano e mês da competência da 
+declaração. 
+Máscara: AAAA-MM 
+Cálculo: 
+Valor do campo {perApur} informado no evento de origem. 
+25 infoTotTitOfPub infoEvento G - 0-1 - - Informações de totalizadores do evento D-2101 – Débito em 
+Operações com Títulos de Dívida com Oferta Pública 
+{evtDebOpOferPublica}. 
+26 vApurTot infoTotTitOfPub E N 1-1 4-18 2 Somatório de todas as ocorrências de {vApur} do evento D-2101 
+({evtDebOpOferPublica}). 
+Cálculo: 
+SOMA({vApur}) 
+ 
+ 
+
+===== PÁGINA 39 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 38 de 51 
+ 
+3.5 EVENTO D-9199 – RETORNO TOTALIZADOR – FECHAMENTO DE EVENTOS MENSAIS 
+3.5.1 Estrutura Hierárquica do Evento (Resumo) 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+1 DeRE   Envelope raiz dos eventos da DeRE. 1-1 - O 
+2 evtRetornoMensal DeRE Retorno totalizador – Fechamento mensal. 1-1 id O 
+3 ideContrib evtRetornoMensal Informações de identificação do 
+contribuinte. 
+1-1 nrInsc O 
+3 ideStatus evtRetornoMensal Situação do processamento do evento. 1-1 - O 
+4 ocorrencias ideStatus Informações de ocorrências registradas. 0-10 - O (se {cdRetorno} = [0]); 
+F (nos demais casos). 
+3 infoRecEv evtRetornoMensal Informações de processamento dos 
+eventos. 
+1-1 - O 
+3 infoEvento evtRetornoMensal Informações do evento processado. 0-1 - O (se {cdRetorno} = [1]); 
+N (nos demais casos). 
+4 idePeriodo infoEvento Grupo de identificação do período de 
+referência das informações do evento. 
+1-1 perApur O 
+4 infoTotFinanceiro infoEvento Informações relativas a totalizadores dos 
+Serviços Financeiros. 
+0-1 - OC 
+5 detBC infoTotFinanceiro Detalhamento da base de cálculo. 1-100 - O 
+6 gBCIBS detBC Detalhamento da base de cálculo do IBS. 1-1 - O 
+6 gBCCBS detBC Detalhamento da base de cálculo da CBS. 1-1 - O 
+6 infoBCN detBC Grupo de informações de bases de cálculo 
+negativas. 
+0-1 - OC 
+7 gBCNIBS infoBCN Grupo de detalhamento de bases de cálculo 
+negativas de IBS. 
+1-1 codBCNRaiz O 
+8 detBCN gBCNIBS Detalhamento da composição do saldo por 
+período de origem. 
+0-100 codBCN OC 
+7 gBCNCBS infoBCN Grupo de detalhamento de bases de cálculo 
+negativas de CBS. 
+1-1 codBCNRaiz O 
+8 detBCN gBCNCBS Detalhamento da composição do saldo por 
+período de origem. 
+0-100 codBCN OC 
+5 totalTributos infoTotFinanceiro Totalização dos tributos do Regime 
+Específico de Serviços Financeiros. 
+1-1 - O 
+4 infoTotSaude infoEvento Informações relativas a totalizadores dos 
+Planos de Assistência à Saúde. 
+0-1 - OC 
+5 detBC infoTotSaude Detalhamento da base de cálculo. 1-100 - O 
+6 gBCIBS detBC Detalhamento da base de cálculo do IBS. 1-1 - O 
+6 gBCCBS detBC Detalhamento da base de cálculo da CBS. 1-1 - O 
+6 infoBCN detBC Grupo de informações de bases de cálculo 
+negativas. 
+0-1 - OC 
+7 gBCNIBS infoBCN Grupo de detalhamento de bases de cálculo 
+negativas de IBS. 
+1-1 codBCNRaiz O 
+8 detBCN gBCNIBS Detalhamento da composição do saldo por 
+período de origem. 
+0-100 codBCN OC 
+7 gBCNCBS infoBCN Grupo de detalhamento de bases de cálculo 
+negativas de CBS. 
+1-1 codBCNRaiz O 
+8 detBCN gBCNCBS Detalhamento da composição do saldo por 
+período de origem. 
+0-100 codBCN OC 
+5 totalTributos infoTotSaude Totalização dos tributos do Regime 
+Específico de Planos de Assistência à Saúde. 
+1-1 - O 
+4 infoTotProg infoEvento Informações relativas a totalizadores dos 
+Concursos de Prognósticos. 
+0-1 - OC 
+
+===== PÁGINA 40 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 39 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Estrutura Hierárquica do Evento (Resumo) 
+Nível Grupo Grupo Pai Descrição Ocorr Chave Condição 
+5 detBC infoTotProg Detalhamento da base de cálculo. 1-100 - O 
+6 gBCIBS detBC Detalhamento da base de cálculo do IBS. 1-1 - O 
+6 gBCCBS detBC Detalhamento da base de cálculo da CBS. 1-1 - O 
+6 gBCIS detBC Detalhamento da base de cálculo do IS. 1-1 - O 
+6 infoBCN detBC Grupo de informações de bases de cálculo 
+negativas. 
+0-1 - OC 
+7 gBCNIBS infoBCN Grupo de detalhamento de bases de cálculo 
+negativas de IBS. 
+1-1 codBCNRaiz O 
+8 detBCN gBCNIBS Detalhamento da composição do saldo por 
+período de origem. 
+0-100 codBCN OC 
+7 gBCNCBS infoBCN Grupo de detalhamento de bases de cálculo 
+negativas de CBS. 
+1-1 codBCNRaiz O 
+8 detBCN gBCNCBS Detalhamento da composição do saldo por 
+período de origem. 
+0-100 codBCN OC 
+5 totalTributos infoTotProg Totalização dos tributos do Regime 
+Específico de Concursos de Prognósticos. 
+1-1 - O 
+4 totalTributosGeral infoEvento Totalização dos tributos do declarante. 1-1 - O 
+ 
+ 
+
+===== PÁGINA 41 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 40 de 51 
+ 
+3.5.2 Especificação Técnica dos Campos (Detalhamento) 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+1 DeRE - G - 1-1 - - Envelope raiz dos eventos da DeRE. 
+2 evtRetornoMensal DeRE G - 1-1 - - Retorno totalizador – Fechamento mensal. 
+3 id evtRetornoMensal A C 1-1 42 - Identificação única do evento (campo id do evento transmitido pelo 
+contribuinte, a que se refere este retorno). 
+4 ideContrib evtRetornoMensal G - 1-1 - - Informações de identificação do contribuinte. 
+5 nrInsc ideContrib E C 1-1 8 - Número de inscrição do contribuinte (CNPJ raiz). 
+Validação: Deve ser um CNPJ raiz válido de 8 posições. 
+6 ideStatus evtRetornoMensal G - 1-1 - - Situação do processamento do evento. 
+7 cdRetorno ideStatus E N 1-1 1 - Código indicativo do status do retorno. 
+Valores válidos: 
+0 – Erro; 
+1 – Sucesso. 
+8 descRetorno ideStatus E C 1-1 4,7 - Descrição literal do status do retorno. 
+Valores válidos: 
+– Erro; 
+– Sucesso. 
+9 ocorrencias ideStatus G - 0-10 - - Informações de ocorrências registradas. 
+10 codigo ocorrencias E C 1-1 1-6 - Código numérico da ocorrência. 
+11 descricao ocorrencias E C 1-1 1-2048 - Descrição detalhada da ocorrência (mensagem de erro ou aviso). 
+12 tipo ocorrencias E N 1-1 1 - Classificação do tipo da ocorrência. 
+Valores válidos: 
+1 – Erro; 
+2 – Aviso. 
+13 localizacao ocorrencias E C 0-1 1-2048 - Identificação do campo ou grupo onde a ocorrência foi detectada. 
+14 infoRecEv evtRetornoMensal G - 1-1 - - Informações de processamento dos eventos. 
+15 nrRecibo infoRecEv E C 0-1 31 - Número do recibo do evento processado com sucesso. 
+Validação: Preenchido somente quando {cdRetorno} = [1] (Sucesso). 
+Regra de validação: 
+RN - Formação do Número do Recibo do Evento 
+16 seqEvento infoRecEv E N 0-1 2 - Número sequencial de identificação que indica a versão do evento 
+processado na base de dados. 
+Nota: O controle sequencial é ininterrupto para a mesma chave de 
+identificação. 
+Exemplo: 
+1º Envio (Inclusão): seqEvento = [00]; 
+2º Envio (Nova Inclusão): seqEvento = [1]; 
+3º Envio (Nova Inclusão): seqEvento = [2]. 
+Valores válidos: 
+00 – Evento Original (atribuído exclusivamente no processamento 
+com sucesso da primeira Inclusão ({tpOper} = [1]) para uma chave 
+inédita no banco de dados); 
+1-99 – Evento Versionado (atribuído de forma sucessiva e 
+cronológica ao processar eventos de Alteração ({tpOper} = [2]), 
+Exclusão ({tpOper} = [3]) ou nova Inclusão ({tpOper} = [1]) de uma 
+chave previamente excluída). 
+17 protocoloLote infoRecEv E C 0-1 28 - Número do protocolo de entrega do lote. 
+Regra de validação: 
+RN - Numero do Protocolo do Lote 
+18 dhRecepcao infoRecEv E D 1-1 25-33 - Data e hora da recepção do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+19 dhProcess infoRecEv E D 1-1 25-33 - Data e hora do início do processamento do evento (UTC). 
+Máscara: AAAA-MM-DDThh:mm:ss.sssssssTZD 
+20 tpEv infoRecEv E C 1-1 6 - Sigla de identificação do tipo de evento. 
+Exemplo: D-1199. 
+
+===== PÁGINA 42 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 41 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+21 hash infoRecEv E C 1-1 44 - Hashcode do arquivo processado. 
+22 infoEvento evtRetornoMensal G - 0-1 - - Informações do evento processado. 
+23 idePeriodo infoEvento G - 1-1 - - Grupo de identificação do período de referência das informações do 
+evento. 
+24 perApur idePeriodo E D 1-1 7 - Período de apuração, sendo o ano e mês da competência da 
+declaração. 
+Máscara: AAAA-MM 
+Cálculo: 
+Valor do campo {perApur} informado no evento de origem. 
+25 infoTotFinanceiro infoEvento G - 0-1 - - Informações relativas a totalizadores dos Serviços Financeiros. 
+26 detBC infoTotFinanceiro G - 1-100 - - Detalhamento da base de cálculo. 
+27 codBC detBC E C 1-1 4 - Código identificador da Base de Cálculo, conforme <<Tabela 12 – 
+Códigos de Bases de Cálculo>>. 
+28 xDetBC detBC E C 1-1 1-1024 - Descrição da base de cálculo. 
+29 memoriaCalculo detBC E C 1-1 1-4096 - Descrição textual dos valores intermediários usados no cálculo. 
+Todos os valores apresentados serão truncados em dez casas 
+decimais. 
+30 gBCIBS detBC G - 1-1 - - Detalhamento da base de cálculo do IBS. 
+31 vBCIBS gBCIBS E N 1-1 4-18 2 Valor da base de cálculo do IBS. 
+Cálculo: 
+SE {tabCodBC.vBCIBS} >= [0.00], 
+ENTÃO {vBCIBS} = {tabCodBC.vBCIBS}, 
+SENÃO {vBCIBS} = [0.00] 
+32 vBCNIBS gBCIBS E N 0-1 4-18 2 Valor absoluto do prejuízo (base de cálculo negativa do IBS) gerado 
+na apuração do período corrente. 
+Preenchimento: Este campo é informado exclusivamente caso o 
+resultado do cálculo resulte em uma base de cálculo negativa 
+({tabCodBC.vBCIBS} < [0.00]). O valor é apresentado em módulo. 
+Cálculo: 
+{vBCNIBS} = {tabCodBC.vBCIBS} * (-1) 
+33 vDedBCN gBCIBS E N 0-1 4-18 2 Valor da base de cálculo negativa relativa a período de apuração 
+anterior a deduzir nesta competência. 
+Preenchimento: corresponde ao valor informado em {D-
+1199.vUtilBCN} ou {D-1199.vUsarBCN} para o {codBCN} 
+correspondente ao {detBC.codBC}. 
+Validação: O valor de {vDedBCN} deve ser menor ou igual a 
+{vBCIBS}. Caso ultrapasse, o valor de {vDedBCN} fica limitado ao 
+valor da {vBCIBS}, ajustando o valor utilizado na tabela de bases de 
+cálculo negativas. 
+34 vBCApurIBS gBCIBS E N 1-1 4-18 2 Base de cálculo efetiva do IBS após compensação de saldos de base 
+de cálculo negativas de períodos anteriores. 
+Cálculo: 
+SE {vBCIBS} = [0.00], 
+ENTÃO {vBCApurIBS} = [0.00], 
+SENÃO {vBCApurIBS} = {vBCIBS} - {vDedBCN} 
+35 pIBSMun gBCIBS E N 1-1 8-10 6 Alíquota do IBS municipal. 
+Sem símbolo (%). 
+36 vIBSMun gBCIBS E N 1-1 4-18 2 Valor do IBS municipal. 
+Cálculo: 
+{vBCApurIBS} * ({pIBSMun} / 100) 
+37 pIBSUF gBCIBS E N 1-1 8-10 6 Alíquota do IBS estadual. 
+Sem símbolo (%). 
+38 vIBSUF gBCIBS E N 1-1 4-18 2 Valor do IBS estadual. 
+Cálculo: 
+{vBCApurIBS} * ({pIBSUF} / 100) 
+39 pIBS gBCIBS E N 1-1 8-10 6 Soma das alíquotas {pIBSMun} e {pIBSUF}. 
+Sem símbolo (%). 
+
+===== PÁGINA 43 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 42 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+40 vIBSTot gBCIBS E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+{vIBSMun} + {vIBSUF} 
+41 gBCCBS detBC G - 1-1 - - Detalhamento da base de cálculo da CBS. 
+42 vBCCBS gBCCBS E N 1-1 4-18 2 Valor da base de cálculo da CBS. 
+Cálculo: 
+SE {tabCodBC.vBCCBS} >= [0.00], 
+ENTÃO {vBCCBS} = {tabCodBC.vBCCBS}, 
+SENÃO {vBCCBS} = [0.00] 
+43 vBCNCBS gBCCBS E N 0-1 4-18 2 Valor absoluto da base de cálculo negativa da CBS gerado na 
+apuração do período corrente. 
+Preenchimento: Este campo é informado exclusivamente caso o 
+resultado do cálculo resulte em uma base de cálculo negativa 
+({tabCodBC.vBCCBS} < [0.00]). O valor é apresentado em módulo. 
+Cálculo: 
+{vBCNCBS} = {tabCodBC.vBCCBS} * (-1) 
+44 vDedBCN gBCCBS E N 0-1 4-18 2 Valor da base de cálculo negativa relativa a período de apuração 
+anterior a deduzir nesta competência. 
+Preenchimento: corresponde ao valor informado em {D-
+1199.vUtilBCN} ou {D-1199.vUsarBCN} para o {codBCN} 
+correspondente ao {detBC.codBC}. 
+Validação: O valor de {vDedBCN} deve ser menor ou igual a 
+{vBCCBS}. Caso ultrapasse, o valor de {vDedBCN} fica limitado ao 
+valor da {vBCCBS}, ajustando o valor utilizado na tabela de bases de 
+cálculo negativas. 
+45 vBCApurCBS gBCCBS E N 1-1 4-18 2 Base de cálculo efetiva da CBS após compensação de saldos de base 
+de cálculo negativas de períodos anteriores. 
+Cálculo: 
+SE {vBCCBS} = [0.00], 
+ENTÃO {vBCApurCBS} = [0.00], 
+SENÃO {vBCApurCBS} = {vBCCBS} - {vDedBCN} 
+46 pCBS gBCCBS E N 1-1 8-10 6 Alíquota da CBS. 
+Sem símbolo (%). 
+47 vCBS gBCCBS E N 1-1 4-18 2 Valor da CBS. 
+Cálculo: 
+{vBCApurCBS} * ({pCBS} / 100) 
+48 infoBCN detBC G - 0-1 - - Grupo de informações de bases de cálculo negativas. 
+49 gBCNIBS infoBCN G - 1-1 - - Grupo de detalhamento de bases de cálculo negativas de IBS. 
+50 codBCNRaiz gBCNIBS E C 1-1 5 - Código identificador raiz da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+51 vSaldoAnt gBCNIBS E N 1-1 4-18 2 Valor do saldo anterior. 
+Montante acumulado da base de cálculo negativa disponível no 
+início do período de apuração atual, antes das compensações do 
+mês. 
+52 vUtilPer gBCNIBS E N 1-1 4-18 2 Valor da base de cálculo negativa utilizado como dedução da base 
+de cálculo do período de apuração atual. 
+Cálculo: 
+Igual a {vDedBCN} 
+53 vSaldoFinal gBCNIBS E N 1-1 4-18 2 Valor do saldo remanescente de base de cálculo negativa a ser 
+transportado para o próximo período de apuração. 
+Cálculo: 
+{vSaldoAnt} - {vUtilPer} + {vBCNIBS} (se houver) 
+54 qtdOrigens gBCNIBS E N 1-1 1-2 - Quantidade de períodos de origem. Indica quantos períodos 
+distintos compõem o saldo atual. 
+Exemplo: Se o saldo é composto por bases negativas de jan/25 e 
+mar/26, {qtdOrigens} = [2]. 
+
+===== PÁGINA 44 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 43 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+55 detBCN gBCNIBS G - 0-100 - - Detalhamento da composição do saldo por período de origem. 
+56 codBCN detBCN E C 1-1 13 - Código identificador da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+57 perOrigem detBCN E D 1-1 7 - Período de origem da base de cálculo negativa. 
+Máscara: AAAA-MM 
+58 vOrigemIni detBCN E N 1-1 4-18 2 Valor inicial da base de cálculo negativa no respectivo período de 
+origem. 
+59 vSaldoAnt detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa disponível para uso neste período 
+de apuração. 
+Cálculo: 
+SE {perOrigem} = {perApur}, 
+ENTÃO {vSaldoAnt} = [0.00], 
+SENÃO {vSaldoAnt} = {vSaldoFinal} do {perApur} imediatamente 
+anterior. 
+60 vUtilPer detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa utilizada neste período de 
+apuraçao. 
+61 vSaldoFinal detBCN E N 1-1 4-18 2 Saldo remanescente desta base de cálculo negativa para os 
+próximos períodos de apuração. 
+62 gBCNCBS infoBCN G - 1-1 - - Grupo de detalhamento de bases de cálculo negativas de CBS. 
+63 codBCNRaiz gBCNCBS E C 1-1 5 - Código identificador raiz da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+64 vSaldoAnt gBCNCBS E N 1-1 4-18 2 Valor do saldo anterior. 
+Montante acumulado da base de cálculo negativa disponível no 
+início do período de apuração atual, antes das compensações do 
+mês. 
+65 vUtilPer gBCNCBS E N 1-1 4-18 2 Valor da base de cálculo negativa utilizado como dedução da base 
+de cálculo do período de apuração atual. 
+Cálculo: 
+Igual a {vDedBCN} 
+66 vSaldoFinal gBCNCBS E N 1-1 4-18 2 Valor do saldo remanescente de base de cálculo negativa a ser 
+transportado para o próximo período de apuração. 
+Cálculo: 
+{vSaldoAnt} - {vUtilPer} + {vBCNCBS} (se houver) 
+67 qtdOrigens gBCNCBS E N 1-1 1-2 - Quantidade de períodos de origem. Indica quantos períodos 
+distintos compõem o saldo atual. 
+Exemplo: Se o saldo é composto por bases negativas de jan/25 e 
+mar/26, {qtdOrigens} = [2]. 
+68 detBCN gBCNCBS G - 0-100 - - Detalhamento da composição do saldo por período de origem. 
+69 codBCN detBCN E C 1-1 13 - Código identificador da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+70 perOrigem detBCN E D 1-1 7 - Período de origem da base de cálculo negativa. 
+Máscara: AAAA-MM 
+71 vOrigemIni detBCN E N 1-1 4-18 2 Valor inicial da base de cálculo negativa no respectivo período de 
+origem. 
+72 vSaldoAnt detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa disponível para uso neste período 
+de apuração. 
+Cálculo: 
+SE {perOrigem} = {perApur}, 
+ENTÃO {vSaldoAnt} = [0.00], 
+SENÃO {vSaldoAnt} = {vSaldoFinal} do {perApur} imediatamente 
+anterior. 
+73 vUtilPer detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa utilizada neste período de 
+apuraçao. 
+74 vSaldoFinal detBCN E N 1-1 4-18 2 Saldo remanescente desta base de cálculo negativa para os 
+próximos períodos de apuração. 
+
+===== PÁGINA 45 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 44 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+75 totalTributos infoTotFinanceiro G - 1-1 - - Totalização dos tributos do Regime Específico de Serviços 
+Financeiros. 
+76 vIBSMun totalTributos E N 1-1 4-18 2 Valor do IBS municipal. 
+Cálculo: 
+SOMA({infoTotFinanceiro.detBC.vIBSMun}) 
+77 vIBSUF totalTributos E N 1-1 4-18 2 Valor do IBS estadual. 
+Cálculo: 
+SOMA({infoTotFinanceiro.detBC.vIBSUF}) 
+78 vIBSTot totalTributos E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+{totalTributos.vIBSMun} + {totalTributos.vIBSUF} 
+79 vCBS totalTributos E N 1-1 4-18 2 Valor da CBS. 
+Cálculo: 
+SOMA({infoTotFinanceiro.detBC.vCBS}) 
+80 infoTotSaude infoEvento G - 0-1 - - Informações relativas a totalizadores dos Planos de Assistência à 
+Saúde. 
+81 detBC infoTotSaude G - 1-100 - - Detalhamento da base de cálculo. 
+82 codBC detBC E C 1-1 4 - Código identificador da Base de Cálculo, conforme <<Tabela 12 – 
+Códigos de Bases de Cálculo>>. 
+83 xDetBC detBC E C 1-1 1-1024 - Descrição da base de cálculo. 
+84 memoriaCalculo detBC E C 1-1 1-4096 - Descrição textual dos valores intermediários usados no cálculo. 
+Todos os valores apresentados serão truncados em dez casas 
+decimais. 
+85 gBCIBS detBC G - 1-1 - - Detalhamento da base de cálculo do IBS. 
+86 vBCIBS gBCIBS E N 1-1 4-18 2 Valor da base de cálculo do IBS. 
+Cálculo: 
+SE {tabCodBC.vBCIBS} >= [0.00], 
+ENTÃO {vBCIBS} = {tabCodBC.vBCIBS}, 
+SENÃO {vBCIBS} = [0.00] 
+87 vBCNIBS gBCIBS E N 0-1 4-18 2 Valor absoluto do prejuízo (base de cálculo negativa do IBS) gerado 
+na apuração do período corrente. 
+Preenchimento: Este campo é informado exclusivamente caso o 
+resultado do cálculo resulte em uma base de cálculo negativa 
+({tabCodBC.vBCIBS} < [0.00]). O valor é apresentado em módulo. 
+Cálculo: 
+{vBCNIBS} = {tabCodBC.vBCIBS} * (-1) 
+88 vDedBCN gBCIBS E N 0-1 4-18 2 Valor da base de cálculo negativa relativa a período de apuração 
+anterior a deduzir nesta competência. 
+Preenchimento: corresponde ao valor informado em {D-
+1199.vUtilBCN} ou {D-1199.vUsarBCN} para o {codBCN} 
+correspondente ao {detBC.codBC}. 
+Validação: O valor de {vDedBCN} deve ser menor ou igual a 
+{vBCIBS}. Caso ultrapasse, o valor de {vDedBCN} fica limitado ao 
+valor da {vBCIBS}, ajustando o valor utilizado na tabela de bases de 
+cálculo negativas. 
+89 vBCApurIBS gBCIBS E N 1-1 4-18 2 Base de cálculo efetiva do IBS após compensação de saldos de base 
+de cálculo negativas de períodos anteriores. 
+Cálculo: 
+SE {vBCIBS} = [0.00], 
+ENTÃO {vBCApurIBS} = [0.00], 
+SENÃO {vBCApurIBS} = {vBCIBS} - {vDedBCN} 
+90 pIBSMun gBCIBS E N 1-1 8-10 6 Alíquota do IBS municipal. 
+Sem símbolo (%). 
+91 vIBSMun gBCIBS E N 1-1 4-18 2 Valor do IBS municipal. 
+Cálculo: 
+{vBCApurIBS} * ({pIBSMun} / 100) 
+92 pIBSUF gBCIBS E N 1-1 8-10 6 Alíquota do IBS estadual. 
+Sem símbolo (%). 
+
+===== PÁGINA 46 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 45 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+93 vIBSUF gBCIBS E N 1-1 4-18 2 Valor do IBS estadual. 
+Cálculo: 
+{vBCApurIBS} * ({pIBSUF} / 100) 
+94 pIBS gBCIBS E N 1-1 8-10 6 Soma das alíquotas {pIBSMun} e {pIBSUF}. 
+Sem símbolo (%). 
+95 vIBSTot gBCIBS E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+{vIBSMun} + {vIBSUF} 
+96 gBCCBS detBC G - 1-1 - - Detalhamento da base de cálculo da CBS. 
+97 vBCCBS gBCCBS E N 1-1 4-18 2 Valor da base de cálculo da CBS. 
+Cálculo: 
+SE {tabCodBC.vBCCBS} >= [0.00], 
+ENTÃO {vBCCBS} = {tabCodBC.vBCCBS}, 
+SENÃO {vBCCBS} = [0.00] 
+98 vBCNCBS gBCCBS E N 0-1 4-18 2 Valor absoluto da base de cálculo negativa da CBS gerado na 
+apuração do período corrente. 
+Preenchimento: Este campo é informado exclusivamente caso o 
+resultado do cálculo resulte em uma base de cálculo negativa 
+({tabCodBC.vBCCBS} < [0.00]). O valor é apresentado em módulo. 
+Cálculo: 
+{vBCNCBS} = {tabCodBC.vBCCBS} * (-1) 
+99 vDedBCN gBCCBS E N 0-1 4-18 2 Valor da base de cálculo negativa relativa a período de apuração 
+anterior a deduzir nesta competência. 
+Preenchimento: corresponde ao valor informado em {D-
+1199.vUtilBCN} ou {D-1199.vUsarBCN} para o {codBCN} 
+correspondente ao {detBC.codBC}. 
+Validação: O valor de {vDedBCN} deve ser menor ou igual a 
+{vBCCBS}. Caso ultrapasse, o valor de {vDedBCN} fica limitado ao 
+valor da {vBCCBS}, ajustando o valor utilizado na tabela de bases de 
+cálculo negativas. 
+100 vBCApurCBS gBCCBS E N 1-1 4-18 2 Base de cálculo efetiva da CBS após compensação de saldos de base 
+de cálculo negativas de períodos anteriores. 
+Cálculo: 
+SE {vBCCBS} = [0.00], 
+ENTÃO {vBCApurCBS} = [0.00], 
+SENÃO {vBCApurCBS} = {vBCCBS} - {vDedBCN} 
+101 pCBS gBCCBS E N 1-1 8-10 6 Alíquota da CBS. 
+Sem símbolo (%). 
+102 vCBS gBCCBS E N 1-1 4-18 2 Valor da CBS. 
+Cálculo: 
+{vBCApurCBS} * ({pCBS} / 100) 
+103 infoBCN detBC G - 0-1 - - Grupo de informações de bases de cálculo negativas. 
+104 gBCNIBS infoBCN G - 1-1 - - Grupo de detalhamento de bases de cálculo negativas de IBS. 
+105 codBCNRaiz gBCNIBS E C 1-1 5 - Código identificador raiz da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+106 vSaldoAnt gBCNIBS E N 1-1 4-18 2 Valor do saldo anterior. 
+Montante acumulado da base de cálculo negativa disponível no 
+início do período de apuração atual, antes das compensações do 
+mês. 
+107 vUtilPer gBCNIBS E N 1-1 4-18 2 Valor da base de cálculo negativa utilizado como dedução da base 
+de cálculo do período de apuração atual. 
+Cálculo: 
+Igual a {vDedBCN} 
+108 vSaldoFinal gBCNIBS E N 1-1 4-18 2 Valor do saldo remanescente de base de cálculo negativa a ser 
+transportado para o próximo período de apuração. 
+Cálculo: 
+{vSaldoAnt} - {vUtilPer} + {vBCNIBS} (se houver) 
+
+===== PÁGINA 47 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 46 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+109 qtdOrigens gBCNIBS E N 1-1 1-2 - Quantidade de períodos de origem. Indica quantos períodos 
+distintos compõem o saldo atual. 
+Exemplo: Se o saldo é composto por bases negativas de jan/25 e 
+mar/26, {qtdOrigens} = [2]. 
+110 detBCN gBCNIBS G - 0-100 - - Detalhamento da composição do saldo por período de origem. 
+111 codBCN detBCN E C 1-1 13 - Código identificador da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+112 perOrigem detBCN E D 1-1 7 - Período de origem da base de cálculo negativa. 
+Máscara: AAAA-MM 
+113 vOrigemIni detBCN E N 1-1 4-18 2 Valor inicial da base de cálculo negativa no respectivo período de 
+origem. 
+114 vSaldoAnt detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa disponível para uso neste período 
+de apuração. 
+Cálculo: 
+SE {perOrigem} = {perApur}, 
+ENTÃO {vSaldoAnt} = [0.00], 
+SENÃO {vSaldoAnt} = {vSaldoFinal} do {perApur} imediatamente 
+anterior. 
+115 vUtilPer detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa utilizada neste período de 
+apuraçao. 
+116 vSaldoFinal detBCN E N 1-1 4-18 2 Saldo remanescente desta base de cálculo negativa para os 
+próximos períodos de apuração. 
+117 gBCNCBS infoBCN G - 1-1 - - Grupo de detalhamento de bases de cálculo negativas de CBS. 
+118 codBCNRaiz gBCNCBS E C 1-1 5 - Código identificador raiz da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+119 vSaldoAnt gBCNCBS E N 1-1 4-18 2 Valor do saldo anterior. 
+Montante acumulado da base de cálculo negativa disponível no 
+início do período de apuração atual, antes das compensações do 
+mês. 
+120 vUtilPer gBCNCBS E N 1-1 4-18 2 Valor da base de cálculo negativa utilizado como dedução da base 
+de cálculo do período de apuração atual. 
+Cálculo: 
+Igual a {vDedBCN} 
+121 vSaldoFinal gBCNCBS E N 1-1 4-18 2 Valor do saldo remanescente de base de cálculo negativa a ser 
+transportado para o próximo período de apuração. 
+Cálculo: 
+{vSaldoAnt} - {vUtilPer} + {vBCNCBS} (se houver) 
+122 qtdOrigens gBCNCBS E N 1-1 1-2 - Quantidade de períodos de origem. Indica quantos períodos 
+distintos compõem o saldo atual. 
+Exemplo: Se o saldo é composto por bases negativas de jan/25 e 
+mar/26, {qtdOrigens} = [2]. 
+123 detBCN gBCNCBS G - 0-100 - - Detalhamento da composição do saldo por período de origem. 
+124 codBCN detBCN E C 1-1 13 - Código identificador da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+125 perOrigem detBCN E D 1-1 7 - Período de origem da base de cálculo negativa. 
+Máscara: AAAA-MM 
+126 vOrigemIni detBCN E N 1-1 4-18 2 Valor inicial da base de cálculo negativa no respectivo período de 
+origem. 
+127 vSaldoAnt detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa disponível para uso neste período 
+de apuração. 
+Cálculo: 
+SE {perOrigem} = {perApur}, 
+ENTÃO {vSaldoAnt} = [0.00], 
+SENÃO {vSaldoAnt} = {vSaldoFinal} do {perApur} imediatamente 
+anterior. 
+128 vUtilPer detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa utilizada neste período de 
+apuraçao. 
+
+===== PÁGINA 48 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 47 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+129 vSaldoFinal detBCN E N 1-1 4-18 2 Saldo remanescente desta base de cálculo negativa para os 
+próximos períodos de apuração. 
+130 totalTributos infoTotSaude G - 1-1 - - Totalização dos tributos do Regime Específico de Planos de 
+Assistência à Saúde. 
+131 vIBSMun totalTributos E N 1-1 4-18 2 Valor do IBS municipal 
+Cálculo: 
+SOMA({infoTotSaude.detBC.vIBSMun}) 
+132 vIBSUF totalTributos E N 1-1 4-18 2 Valor do IBS estadual. 
+Cálculo: 
+SOMA({infoTotSaude.detBC.vIBSUF}) 
+133 vIBSTot totalTributos E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+{totalTributos.vIBSMun} + {totalTributos.vIBSUF} 
+134 vCBS totalTributos E N 1-1 4-18 2 Valor da CBS. 
+Cálculo: 
+SOMA({infoTotSaude.detBC.vCBS}) 
+135 infoTotProg infoEvento G - 0-1 - - Informações relativas a totalizadores dos Concursos de 
+Prognósticos. 
+136 detBC infoTotProg G - 1-100 - - Detalhamento da base de cálculo. 
+137 codBC detBC E C 1-1 4 - Código identificador da Base de Cálculo, conforme <<Tabela 12 – 
+Códigos de Bases de Cálculo>>. 
+138 xDetBC detBC E C 1-1 1-1024 - Descrição da base de cálculo. 
+139 memoriaCalculo detBC E C 1-1 1-4096 - Descrição textual dos valores intermediários usados no cálculo. 
+Todos os valores apresentados serão truncados em dez casas 
+decimais. 
+140 gBCIBS detBC G - 1-1 - - Detalhamento da base de cálculo do IBS. 
+141 vBCIBS gBCIBS E N 1-1 4-18 2 Valor da base de cálculo do IBS. 
+Cálculo: 
+SE {tabCodBC.vBCIBS} >= [0.00], 
+ENTÃO {vBCIBS} = {tabCodBC.vBCIBS}, 
+SENÃO {vBCIBS} = [0.00] 
+142 vBCNIBS gBCIBS E N 0-1 4-18 2 Valor absoluto do prejuízo (base de cálculo negativa do IBS) gerado 
+na apuração do período corrente. 
+Preenchimento: Este campo é informado exclusivamente caso o 
+resultado do cálculo resulte em uma base de cálculo negativa 
+({tabCodBC.vBCIBS} < [0.00]). O valor é apresentado em módulo. 
+Cálculo: 
+{vBCNIBS} = {tabCodBC.vBCIBS} * (-1) 
+143 vDedBCN gBCIBS E N 0-1 4-18 2 Valor da base de cálculo negativa relativa a período de apuração 
+anterior a deduzir nesta competência. 
+Preenchimento: corresponde ao valor informado em {D-
+1199.vUtilBCN} ou {D-1199.vUsarBCN} para o {codBCN} 
+correspondente ao {detBC.codBC}. 
+Validação: O valor de {vDedBCN} deve ser menor ou igual a 
+{vBCIBS}. Caso ultrapasse, o valor de {vDedBCN} fica limitado ao 
+valor da {vBCIBS}, ajustando o valor utilizado na tabela de bases de 
+cálculo negativas. 
+144 vBCApurIBS gBCIBS E N 1-1 4-18 2 Base de cálculo efetiva do IBS após compensação de saldos de base 
+de cálculo negativas de períodos anteriores. 
+Cálculo: 
+SE {vBCIBS} = [0.00], 
+ENTÃO {vBCApurIBS} = [0.00], 
+SENÃO {vBCApurIBS} = {vBCIBS} - {vDedBCN} 
+145 pIBSMun gBCIBS E N 1-1 8-10 6 Alíquota do IBS municipal. 
+Sem símbolo (%). 
+146 vIBSMun gBCIBS E N 1-1 4-18 2 Valor do IBS municipal. 
+Cálculo: 
+{vBCApurIBS} * ({pIBSMun} / 100) 
+
+===== PÁGINA 49 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 48 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+147 pIBSUF gBCIBS E N 1-1 8-10 6 Alíquota do IBS estadual. 
+Sem símbolo (%). 
+148 vIBSUF gBCIBS E N 1-1 4-18 2 Valor do IBS estadual. 
+Cálculo: 
+{vBCApurIBS} * ({pIBSUF} / 100) 
+149 pIBS gBCIBS E N 1-1 8-10 6 Soma das alíquotas {pIBSMun} e {pIBSUF}. 
+Sem símbolo (%). 
+150 vIBSTot gBCIBS E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+{vIBSMun} + {vIBSUF} 
+151 gBCCBS detBC G - 1-1 - - Detalhamento da base de cálculo da CBS. 
+152 vBCCBS gBCCBS E N 1-1 4-18 2 Valor da base de cálculo da CBS. 
+Cálculo: 
+SE {tabCodBC.vBCCBS} >= [0.00], 
+ENTÃO {vBCCBS} = {tabCodBC.vBCCBS}, 
+SENÃO {vBCCBS} = [0.00] 
+153 vBCNCBS gBCCBS E N 0-1 4-18 2 Valor absoluto da base de cálculo negativa da CBS gerado na 
+apuração do período corrente. 
+Preenchimento: Este campo é informado exclusivamente caso o 
+resultado do cálculo resulte em uma base de cálculo negativa 
+({tabCodBC.vBCCBS} < [0.00]). O valor é apresentado em módulo. 
+Cálculo: 
+{vBCNCBS} = {tabCodBC.vBCCBS} * (-1) 
+154 vDedBCN gBCCBS E N 0-1 4-18 2 Valor da base de cálculo negativa relativa a período de apuração 
+anterior a deduzir nesta competência. 
+Preenchimento: corresponde ao valor informado em {D-
+1199.vUtilBCN} ou {D-1199.vUsarBCN} para o {codBCN} 
+correspondente ao {detBC.codBC}. 
+Validação: O valor de {vDedBCN} deve ser menor ou igual a 
+{vBCCBS}. Caso ultrapasse, o valor de {vDedBCN} fica limitado ao 
+valor da {vBCCBS}, ajustando o valor utilizado na tabela de bases de 
+cálculo negativas. 
+155 vBCApurCBS gBCCBS E N 1-1 4-18 2 Base de cálculo efetiva da CBS após compensação de saldos de base 
+de cálculo negativas de períodos anteriores. 
+Cálculo: 
+SE {vBCCBS} = [0.00], 
+ENTÃO {vBCApurCBS} = [0.00], 
+SENÃO {vBCApurCBS} = {vBCCBS} - {vDedBCN} 
+156 pCBS gBCCBS E N 1-1 8-10 6 Alíquota da CBS. 
+Sem símbolo (%). 
+157 vCBS gBCCBS E N 1-1 4-18 2 Valor da CBS. 
+Cálculo: 
+{vBCApurCBS} * ({pCBS} / 100) 
+158 gBCIS detBC G - 1-1 - - Detalhamento da base de cálculo do IS. 
+159 vBCIS gBCIS E N 1-1 4-18 2 Valor da base de cálculo do Imposto Seletivo (IS). 
+Cálculo: 
+SE {tabCodBC.vBCIS} >= [0.00], 
+ENTÃO {vBCIS} = {tabCodBC.vBCIS}, 
+SENÃO {vBCIS} = [0.00] 
+160 vBCApurIS gBCIS E N 1-1 4-18 2 Valor da base de cálculo efetiva do Imposto Seletivo. 
+Cálculo: 
+{vBCApurIS} = {vBCIS} 
+161 pIS gBCIS E N 1-1 8-10 6 Alíquota do Imposto Seletivo do Regime Específico de Concursos de 
+Prognósticos. 
+Sem símbolo (%). 
+162 vIS gBCIS E N 1-1 4-18 2 Valor do Imposto Seletivo. 
+Cálculo: 
+{vBCApurIS} * ({pIS} / 100) 
+
+===== PÁGINA 50 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 49 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+163 infoBCN detBC G - 0-1 - - Grupo de informações de bases de cálculo negativas. 
+164 gBCNIBS infoBCN G - 1-1 - - Grupo de detalhamento de bases de cálculo negativas de IBS. 
+165 codBCNRaiz gBCNIBS E C 1-1 5 - Código identificador raiz da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+166 vSaldoAnt gBCNIBS E N 1-1 4-18 2 Valor do saldo anterior. 
+Montante acumulado da base de cálculo negativa disponível no 
+início do período de apuração atual, antes das compensações do 
+mês. 
+167 vUtilPer gBCNIBS E N 1-1 4-18 2 Valor da base de cálculo negativa utilizado como dedução da base 
+de cálculo do período de apuração atual. 
+Cálculo: 
+Igual a {vDedBCN} 
+168 vSaldoFinal gBCNIBS E N 1-1 4-18 2 Valor do saldo remanescente de base de cálculo negativa a ser 
+transportado para o próximo período de apuração. 
+Cálculo: 
+{vSaldoAnt} - {vUtilPer} + {vBCNIBS} (se houver) 
+169 qtdOrigens gBCNIBS E N 1-1 1-2 - Quantidade de períodos de origem. Indica quantos períodos 
+distintos compõem o saldo atual. 
+Exemplo: Se o saldo é composto por bases negativas de jan/25 e 
+mar/26, {qtdOrigens} = [2]. 
+170 detBCN gBCNIBS G - 0-100 - - Detalhamento da composição do saldo por período de origem. 
+171 codBCN detBCN E C 1-1 13 - Código identificador da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+172 perOrigem detBCN E D 1-1 7 - Período de origem da base de cálculo negativa. 
+Máscara: AAAA-MM 
+173 vOrigemIni detBCN E N 1-1 4-18 2 Valor inicial da base de cálculo negativa no respectivo período de 
+origem. 
+174 vSaldoAnt detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa disponível para uso neste período 
+de apuração. 
+Cálculo: 
+SE {perOrigem} = {perApur}, 
+ENTÃO {vSaldoAnt} = [0.00], 
+SENÃO {vSaldoAnt} = {vSaldoFinal} do {perApur} imediatamente 
+anterior. 
+175 vUtilPer detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa utilizada neste período de 
+apuraçao. 
+176 vSaldoFinal detBCN E N 1-1 4-18 2 Saldo remanescente desta base de cálculo negativa para os 
+próximos períodos de apuração. 
+177 gBCNCBS infoBCN G - 1-1 - - Grupo de detalhamento de bases de cálculo negativas de CBS. 
+178 codBCNRaiz gBCNCBS E C 1-1 5 - Código identificador raiz da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+179 vSaldoAnt gBCNCBS E N 1-1 4-18 2 Valor do saldo anterior. 
+Montante acumulado da base de cálculo negativa disponível no 
+início do período de apuração atual, antes das compensações do 
+mês. 
+180 vUtilPer gBCNCBS E N 1-1 4-18 2 Valor da base de cálculo negativa utilizado como dedução da base 
+de cálculo do período de apuração atual. 
+Cálculo: 
+Igual a {vDedBCN} 
+181 vSaldoFinal gBCNCBS E N 1-1 4-18 2 Valor do saldo remanescente de base de cálculo negativa a ser 
+transportado para o próximo período de apuração. 
+Cálculo: 
+{vSaldoAnt} - {vUtilPer} + {vBCNCBS} (se houver) 
+182 qtdOrigens gBCNCBS E N 1-1 1-2 - Quantidade de períodos de origem. Indica quantos períodos 
+distintos compõem o saldo atual. 
+Exemplo: Se o saldo é composto por bases negativas de jan/25 e 
+mar/26, {qtdOrigens} = [2]. 
+
+===== PÁGINA 51 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 50 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+183 detBCN gBCNCBS G - 0-100 - - Detalhamento da composição do saldo por período de origem. 
+184 codBCN detBCN E C 1-1 13 - Código identificador da base de cálculo negativa, conforme 
+<<Tabela 12 – Códigos de Bases de Cálculo>>. 
+185 perOrigem detBCN E D 1-1 7 - Período de origem da base de cálculo negativa. 
+Máscara: AAAA-MM 
+186 vOrigemIni detBCN E N 1-1 4-18 2 Valor inicial da base de cálculo negativa no respectivo período de 
+origem. 
+187 vSaldoAnt detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa disponível para uso neste período 
+de apuração. 
+Cálculo: 
+SE {perOrigem} = {perApur}, 
+ENTÃO {vSaldoAnt} = [0.00], 
+SENÃO {vSaldoAnt} = {vSaldoFinal} do {perApur} imediatamente 
+anterior. 
+188 vUtilPer detBCN E N 1-1 4-18 2 Valor da base de cálculo negativa utilizada neste período de 
+apuraçao. 
+189 vSaldoFinal detBCN E N 1-1 4-18 2 Saldo remanescente desta base de cálculo negativa para os 
+próximos períodos de apuração. 
+190 totalTributos infoTotProg G - 1-1 - - Totalização dos tributos do Regime Específico de Concursos de 
+Prognósticos. 
+191 vIS totalTributos E N 1-1 4-18 2 Valor do Imposto Seletivo (IS). 
+Cálculo: 
+SOMA({infoTotalProg.detBC.vIS}) 
+192 vIBSMun totalTributos E N 1-1 4-18 2 Valor do IBS municipal. 
+Cálculo: 
+SOMA({infoTotProg.detBC.vIBSMun}) 
+193 vIBSUF totalTributos E N 1-1 4-18 2 Valor do IBS estadual. 
+Cálculo: 
+SOMA({infoTotProg.detBC.vIBSUF}) 
+194 vIBSTot totalTributos E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+{totalTributos.vIBSMun} + {totalTributos.vIBSUF} 
+195 vCBS totalTributos E N 1-1 4-18 2 Valor da CBS. 
+Cálculo: 
+SOMA({infoTotProg.detBC.vCBS}) 
+196 totalTributosGeral infoEvento G - 1-1 - - Totalização dos tributos do declarante. 
+197 vIS totalTributosGeral E N 0-1 4-18 2 Valor total do Imposto Seletivo (IS). 
+Preenchimento: Corresponde ao campo {vIS} do grupo 
+{totalTributos} do grupo {infoTotProg}. 
+Cálculo: 
+SOMA({totalTributos.vIS}) 
+198 vIBSMun totalTributosGeral E N 1-1 4-18 2 Valor total do IBS municipal. 
+Preenchimento: Soma do campo {vIBSMun} de todas as ocorrências 
+do grupo {totalTributos} dos grupos {infoTotFinanc}, {infoTotSaude} 
+e {infoTotProg}. 
+Cálculo: 
+SOMA({totalTributos.vIBSMun}) 
+199 vIBSUF totalTributosGeral E N 1-1 4-18 2 Valor total do IBS estadual. 
+Preenchimento: Soma do campo {vIBSUF} de todas as ocorrências 
+do grupo {totalTributos} dos grupos {infoTotFinanc}, {infoTotSaude} 
+e {infoTotProg}. 
+Cálculo: 
+SOMA({totalTributos.vIBSUF}) 
+200 vIBSTot totalTributosGeral E N 1-1 4-18 2 Valor total do IBS. 
+Cálculo: 
+SOMA({totalTributosGeral.vIBSMun}) + 
+SOMA({totalTributosGeral.vIBSUF}) 
+
+===== PÁGINA 52 =====
+Leiautes da DeRE Versão 1.1.0 
+ 
+Página 51 de 51 
+ 
+D-9199 – Retorno Totalizador – Fechamento Mensal – Especificação Técnica de Campos (Detalhamento) 
+# Grupo/Tag Grupo Pai Cat Tipo Ocorr Tam Dec Descrição 
+201 vCBS totalTributosGeral E N 1-1 4-18 2 Valor total da CBS. 
+Preenchimento: Soma do campo {vCBS} de todas as ocorrências do 
+grupo {totalTributos} dos grupos {infoTotFinanc}, {infoTotSaude} e 
+{infoTotProg}. 
+Cálculo: 
+SOMA({totalTributos.vCBS}) 
+ 

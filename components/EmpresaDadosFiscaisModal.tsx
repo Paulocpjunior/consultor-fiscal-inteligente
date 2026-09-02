@@ -885,7 +885,7 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                         value: r.codigo,
                                         label: r.dereConfirmada
                                             ? `${r.rotulo} — entra na DeRE`
-                                            : (r.codigo === 'NENHUM' ? r.rotulo : `${r.rotulo} — alcance da DeRE não confirmado`),
+                                            : (r.codigo === 'NENHUM' ? r.rotulo : `${r.rotulo} — fora do leiaute vigente da DeRE`),
                                     })),
                                 ]}
                                 hint="LC 214/2025, Título V. Decide se a DeRE (mensal, dia 15 do mês seguinte, a partir da competência 10/2026) entra no mês deste cliente. Optante do Simples fica fora."

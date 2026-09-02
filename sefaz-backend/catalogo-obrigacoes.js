@@ -295,8 +295,9 @@ const ISS = {
 // ⚠️ O PRAZO É "ATÉ O DIA 15 DO MÊS SEGUINTE" e, pelo esclarecimento CGIBS/RFB
 // de 26/08, NÃO se prorroga quando cai em dia não útil — o que casa com a
 // política da casa de sempre antecipar. Optante do Simples fica FORA (não é a
-// lista dele). ⚠️ Fonte lida por RESUMO de terceiros: gov.br está bloqueado
-// nesta rede (ver `dere-regimes.js`). Por isso `revisar: true`.
+// lista dele). ⚠️ O PRAZO continua conhecido por RESUMO de terceiros (o Ato
+// Conjunto 4/2026 não foi lido — gov.br bloqueado nesta rede); o QUE se declara
+// e QUEM cabe saem dos leiautes 1.1.0 LIDOS (docs/dere/). Por isso `revisar: true`.
 const DERE = {
     obrigacao: 'DERE', label: 'DeRE', nome: 'DeRE — Declaração de Regimes Específicos (IBS/CBS)',
     esfera: 'federal', abrangencia: 'BR',
@@ -847,7 +848,7 @@ export function mesDoCliente(empresa, competencia) {
  * Só age se a entrada DERE está entre as propostas da competência (ou seja, no
  * regime e dentro da vigência). Devolve:
  *   ativa     — a entrada promovida (cadastro afirma regime obrigado);
- *   pendente  — a entrada com o motivo ESPECÍFICO (candidata / não confirmado);
+ *   pendente  — a entrada com o motivo ESPECÍFICO (só a CANDIDATA por CNAE);
  *   veredicto — a decisão do dono, para a tela dizer o que aconteceu.
  */
 function resolverDereDoCliente(empresa, regime, propostas) {
@@ -867,7 +868,7 @@ function resolverDereDoCliente(empresa, regime, propostas) {
             veredicto: v,
         };
     }
-    if (v.decisao === 'candidata' || v.decisao === 'regime-nao-confirmado') {
+    if (v.decisao === 'candidata') {
         return {
             ativa: null,
             // A frase do `dependeDe` é o que a Rotina imprime ao lado do nome —
@@ -876,7 +877,10 @@ function resolverDereDoCliente(empresa, regime, propostas) {
             veredicto: v,
         };
     }
-    // nao-se-aplica · sem-sinal · dispensada-simples: fora do mês, DITO.
+    // nao-se-aplica · sem-sinal · dispensada-simples · regime-fora-do-leiaute:
+    // fora do mês, DITO em `dere.decisao`. O "fora do leiaute" NÃO é pendência:
+    // o leiaute 1.1.0 não tem grupo para o regime, então não há o que entregar
+    // — cobrar seria alarme que ninguém consegue apagar (a lição do aluguel).
     return { ativa: null, pendente: null, veredicto: v };
 }
 

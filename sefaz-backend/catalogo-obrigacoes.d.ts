@@ -8,9 +8,11 @@ export type Esfera = 'federal' | 'estadual' | 'municipal';
 
 /** A decisão da DeRE para um cliente (dono: dere-regimes.js). */
 export interface VeredictoDereDoMes {
-    decisao: 'dispensada-simples' | 'obrigada' | 'nao-se-aplica' | 'regime-nao-confirmado' | 'candidata' | 'sem-sinal';
+    decisao: 'dispensada-simples' | 'obrigada' | 'nao-se-aplica' | 'regime-fora-do-leiaute' | 'candidata' | 'sem-sinal';
     regimeEspecifico: string | null;
     rotulo: string | null;
+    /** O valor do D-1001 {regTribPrinc} (1/2/3) — null fora do leiaute. */
+    codigoD1001: number | null;
     motivo: string;
     acao: string | null;
     sinalCnae: { regime: string; rotulo: string; cnae: string } | null;
