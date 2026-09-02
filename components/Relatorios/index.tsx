@@ -17,9 +17,9 @@
  *  - farol honesto: leitura truncada e retenções não gravadas (docs antigos)
  *    aparecem na tela E no PDF.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
-import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, type EmpresaXmlOption } from '../../services/xmlFiscalService';
+import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, getTrilhoSaida, type EmpresaXmlOption, type TrilhoSaida } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 // Régua ÚNICA de correlação — a mesma do Exportar SAGE e do modal de CFOP.
 import {
@@ -1346,6 +1346,27 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
     const pararRef = useRef(false);
     const [rodada, setRodada] = useState(0);
 
+    // 🚨 O BURACO DO MODELO 65 SE LÊ COMO FALHA DO APP — e com A3 ele não é
+    // (02/09, Paulo na MV LIDER: *"não puxou todas as NFC-E, só puxou 1"*).
+    //
+    // A captura de NFC-e roda pelo SAE-NFC-e, que exige o A1 do PRÓPRIO
+    // emitente. Com A3 a chave vive no CARTÃO e não roda no Cloud Run: quem
+    // traz é o Agente A3, na máquina onde o cartão está. Sem essa frase, a
+    // linha `65 · série 1 · 347–347 · 1` manda procurar defeito onde não há.
+    //
+    // ⚠️ Vem do BACKEND porque `empresas_certificados` é fechado ao navegador
+    // de propósito (guarda `storagePath` e `passwordEnc`).
+    const [trilho, setTrilho] = useState<TrilhoSaida | null>(null);
+    useEffect(() => {
+        let vivo = true;
+        // ⚠️ Só pergunta quando HÁ linha de modelo 65 — a frase existe para
+        // explicar aquela linha, e carregá-la sempre seria uma chamada por
+        // abertura de relatório sem nada a dizer.
+        if (!linhas.some((l: any) => String(l.modelo) === '65')) { setTrilho(null); return; }
+        getTrilhoSaida(empresa).then((t) => { if (vivo) setTrilho(t); });
+        return () => { vivo = false; };
+    }, [empresa?.id, empresa?.cnpj, linhas.length]);
+
     const reconferir = async (simular: boolean) => {
         setReconferindo(true);
         setRodada(0);
@@ -1586,7 +1607,14 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                         <tbody>
                             {linhas.map(l => (
                                 <tr key={`${l.modelo}|${l.serie}`} className="border-b border-slate-100 dark:border-slate-700/50">
-                                    <td className="py-1 font-bold">{l.modelo} · série {l.serie}</td>
+                                    <td className="py-1 font-bold">
+                                        {l.modelo} · série {l.serie}
+                                        {String(l.modelo) === '65' && trilho?.avisoNfce && (
+                                            <span className="block font-normal text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                                                ⚠ {trilho.avisoNfce}
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="text-right font-mono">{l.primeiro}–{l.ultimo}</td>
                                     <td className="text-right font-mono">{l.autorizadas}</td>
                                     <td className="pl-3 font-mono text-slate-500">{formatarFaixas(l.canceladas) || '—'}</td>

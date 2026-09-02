@@ -32,6 +32,7 @@ import { normalizarCodCliente } from './cod-cliente.js';
 import { validarRegimeParaGravacao } from './regime-tributario.js';
 import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
 import { ccmSpDaEmpresa, ccmSpParaGravar } from './ccm-sp.js';
+import { trilhoDaNfceSaida, avisoDaLinhaNfce } from './trilho-saida-modelo.js';
 import { coberturaNfseSpPortal } from './captura-nfse-sp-cobertura.js';
 import { coberturaNfseNacional } from './captura-nfse-nacional-cobertura.js';
 
@@ -87,6 +88,85 @@ function toMillis(v) {
 
 // CNPJ do escritório (SP Assessoria Contábil) — quem detém o cert default.
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
+
+// ============================================================================
+// GET /api/admin/sefaz/trilho-saida?empresaId=&cnpj=
+//
+// "Por qual trilho a NFC-e (mod 65) desta empresa chega?" — a pergunta que o
+// painel de Canceladas/Faltantes não sabia responder (02/09, Paulo na MV LIDER:
+// *"não puxou todas as NFC-E, só puxou 1"*).
+//
+// 🔒 O certificado NÃO trafega: sai só o METADADO (tipo, se está válido, se a
+// matriz cobre). `empresas_certificados` é fechado ao navegador de propósito —
+// ele guarda `storagePath` e `passwordEnc`.
+// ============================================================================
+router.get('/trilho-saida', requireAuth, async (req, res) => {
+    try {
+        const empresaId = String(req.query.empresaId || '').trim();
+        const cnpj = String(req.query.cnpj || '').replace(/\D/g, '');
+        if (!empresaId && !cnpj) return res.status(400).json({ error: 'Informe empresaId ou cnpj.' });
+
+        const db = fa().firestore();
+        const agora = new Date();
+        let cert = null;
+        if (empresaId) {
+            const snap = await db.collection('empresas_certificados').doc(empresaId).get();
+            if (snap.exists) cert = snap.data();
+        }
+        // Filial sem cert próprio: a matriz cobre pela RAIZ (regra de 27/08).
+        // ⚠️ Só se olha a raiz quando NÃO há cert próprio — o próprio vence.
+        let temA1MesmaRaizValido = false;
+        if (!cert && cnpj.length === 14) {
+            const base = cnpj.slice(0, 8);
+            const todos = await db.collection('empresas_certificados')
+                .select('cnpj', 'tipoCert', 'notAfter', 'storagePath', 'passwordEnc').get();
+            const daRaiz = [];
+            todos.forEach((d) => {
+                const x = d.data() || {};
+                const c = String(x.cnpj || '').replace(/\D/g, '');
+                if (c.slice(0, 8) !== base) return;
+                // 🔒 Só a EXISTÊNCIA das partes sigilosas atravessa — o caminho
+                // no Storage e a senha cifrada não saem deste laço (a régua do
+                // túnel de certificados, 07/08).
+                daRaiz.push({
+                    empresaId: d.id,
+                    cnpj: c,
+                    tipoCert: x.tipoCert || 'A1',
+                    notAfter: x.notAfter || null,
+                    hasStoragePath: !!x.storagePath,
+                    hasPasswordEnc: !!x.passwordEnc,
+                });
+            });
+            temA1MesmaRaizValido = !!selecionarCertA1PorBase(daRaiz, cnpj, agora.getTime());
+        }
+
+        const tipoCert = cert ? (cert.tipoCert || 'A1') : 'nenhum';
+        const certUploaded = !!cert;
+        const certValido = cert
+            ? (cert.notAfter ? new Date(cert.notAfter) > agora : tipoCert === 'A3')
+            : false;
+
+        const nfce = trilhoDaNfceSaida({
+            tipoCert,
+            certUploaded,
+            certValido,
+            temA1MesmaRaizValido,
+            ehEscritorio: cnpj === CNPJ_ESCRITORIO,
+        });
+        return res.json({
+            ok: true,
+            empresaId: empresaId || null,
+            cnpj: cnpj || null,
+            // Metadado, nunca o certificado.
+            certificado: { tipoCert, certUploaded, certValido, temA1MesmaRaizValido },
+            nfce,
+            avisoNfce: avisoDaLinhaNfce(nfce),
+        });
+    } catch (e) {
+        console.error('[trilho-saida] erro:', e.message);
+        return res.status(500).json({ error: e.message });
+    }
+});
 
 router.get('/empresas-status-captura', requireAuth, async (req, res) => {
     try {
