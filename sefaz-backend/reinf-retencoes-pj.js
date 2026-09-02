@@ -132,6 +132,10 @@ export function normalizarNotaTomada(d) {
         // contribuições, não a CSLL. Chamar de `csll` faria o outro lado
         // declarar o total como CSLL — e ninguém veria.
         csllOuTotal: r2(fed.csllOuTotal ?? 0),
+        // ⚠️ PRESENÇA ≠ ZERO: o `?? 0` acima colapsa ausência em zero, e é
+        // justamente essa diferença que decide se o documento DIZ "não houve
+        // retenção" ou se ele simplesmente não trouxe o campo.
+        csllOuTotalPresente: fed.csllOuTotal !== undefined,
         inss: r2(fed.inss ?? 0),
 
         // Código MUNICIPAL de serviço (SP), não item da LC 116. O de-para não
@@ -160,6 +164,8 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
     const alvo = soDigitos(cnpjTomador);
     const notas = [];
     let semRetencao = 0;
+    let semRetencaoDeclarada = 0;
+    const forasSemRetencao = [];
     let dePessoaFisica = 0;
 
     for (const d of documentos || []) {
@@ -183,7 +189,33 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
 
         const coerencia = conferirRetencaoFederal({
             base: n.base, pis: n.pis, cofins: n.cofins, csll: n.csllOuTotal,
+            csllPresente: n.csllOuTotalPresente,
         });
+
+        // 🚨 NOTA QUE O DOCUMENTO DECLARA SEM RETENÇÃO NÃO VIRA EVENTO (02/09,
+        // HS PROJETOS · nota 22243 da EMBRATOP GEO): os campos de PIS/COFINS
+        // trazem o tributo da OPERAÇÃO e o campo de contribuições RETIDAS está
+        // zerado, com a nota dizendo "PIS/COFINS/CSLL Não Retidos". O R-4020
+        // declara RETENÇÃO — sem retenção não há evento, e o beneficiário
+        // deixa de ficar pendente esperando um ajuste que não existe.
+        //
+        // ⚠️ IRRF é OUTRA retenção: havendo IR retido a nota FICA, mesmo com a
+        // CSRF zerada — tirá-la deixaria de declarar o IR que houve.
+        // ⚠️ E o AJUSTE continua trazendo a nota de volta: quem tem prova de
+        // que houve retenção declara, e a declaração vence o documento.
+        if (coerencia.situacao === 'sem-retencao-declarada' && !n.ir && !ajuste) {
+            semRetencaoDeclarada += 1;
+            // ⚠️ NÃO SOME CALADA: sumir da lista é o que faz alguém achar que
+            // declarou tudo. Ela sai NOMEADA, com o prestador e a nota.
+            forasSemRetencao.push({
+                prestadorCnpj: n.prestadorCnpj,
+                prestadorNome: n.prestadorNome,
+                numero: n.numero,
+                base: n.base,
+                motivo: coerencia.motivo,
+            });
+            continue;
+        }
         notas.push({
             ...n,
             coerencia,
@@ -206,6 +238,12 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
             notas: notas.length,
             prestadores: new Set(notas.map((n) => n.prestadorCnpj)).size,
             semRetencao,
+            // Contado À PARTE de `semRetencao`: lá o documento não trouxe campo
+            // nenhum; aqui ele trouxe e DECLAROU que não houve retenção. São
+            // fatos diferentes, e o segundo é o que responde "por que esta nota
+            // sumiu da lista".
+            semRetencaoDeclarada,
+            forasSemRetencao,
             dePessoaFisica,
             comIncoerencia: comProblema,
             camposDaOperacao,
@@ -219,13 +257,15 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
             ...efetivas,
         },
         ressalvas: ressalvasDoPayload({
-            notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao, ...efetivas,
+            notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao,
+            semRetencaoDeclarada, forasSemRetencao, ...efetivas,
         }),
     };
 }
 
 function ressalvasDoPayload({
     notas, dePessoaFisica, comProblema, camposDaOperacao,
+    semRetencaoDeclarada = 0, forasSemRetencao = [],
     ajustadas = 0, csrfDecomposta = 0, csllDerivada = 0, exigemAjuste = 0,
 }) {
     const out = [
@@ -280,6 +320,21 @@ function ressalvasDoPayload({
         // Zero nunca é sucesso: pode ser mês sem retenção OU captura faltando.
         out.push('NENHUMA nota tomada com retenção nesta competência. Se o cliente contrata serviços com '
             + 'retenção, o problema é de CAPTURA — não é ausência de obrigação.');
+    }
+    // 🚨 NOTA QUE O DOCUMENTO DECLARA SEM RETENÇÃO NÃO SOME CALADA (02/09, HS
+    // PROJETOS): ela não vira evento — o R-4020 declara RETENÇÃO —, mas sumir
+    // da lista é o que faz alguém achar que declarou tudo.
+    if (semRetencaoDeclarada) {
+        const quais = forasSemRetencao
+            .map((f) => `${f.prestadorNome || f.prestadorCnpj}${f.numero ? ` (nota ${f.numero})` : ''}`)
+            .join('; ');
+        out.push(
+            `${semRetencaoDeclarada} nota(s) FORA do R-4020 porque o próprio documento declara que NÃO houve `
+            + `retenção: os campos de PIS e COFINS trazem o tributo da OPERAÇÃO do prestador `
+            + '(não-cumulativo 1,65% e 7,60%) e o campo de contribuições sociais RETIDAS está ZERADO — a '
+            + `NFS-e paulistana imprime "PIS/COFINS/CSLL Não Retidos". Não há ajuste a fazer nelas${quais ? `: ${quais}` : ''}. `
+            + 'Se houve retenção e o documento está errado, declare o ajuste — a declaração vence o documento.',
+        );
     }
     return out;
 }

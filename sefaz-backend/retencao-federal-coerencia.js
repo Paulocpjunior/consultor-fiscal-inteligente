@@ -74,6 +74,11 @@ export function conferirRetencaoFederal(n) {
     const pis = num(n?.pis);
     const cofins = num(n?.cofins);
     const csll = num(n?.csll);
+    // ⚠️ PRESENÇA ≠ ZERO no campo da CSRF. Quem chama pode ter colapsado
+    // ausência em 0 (`?? 0`) — então a presença viaja SEPARADA. É ela que
+    // distingue "o documento DIZ que não houve retenção" de "o documento não
+    // trouxe o campo", e essas duas coisas pedem respostas opostas.
+    const csrfPresente = n?.csllPresente === true;
 
     const aliquotas = {
         pis: aliquotaEfetiva(pis, base),
@@ -128,6 +133,44 @@ export function conferirRetencaoFederal(n) {
     // PRESTADOR, várias vezes maior que a retenção real.
     if (bate(aliquotas.pis, ALIQ_NAO_CUMULATIVO.pis) && bate(aliquotas.cofins, ALIQ_NAO_CUMULATIVO.cofins)) {
         const temCsrf = bate(aliquotas.csll, ALIQ_CSRF);
+
+        // 🚨 O DOCUMENTO DIZ QUE NÃO HOUVE RETENÇÃO — e o app mandava ajustar
+        // à mão (02/09, Paulo na HS PROJETOS · 08/2026, nota 22243 da EMBRATOP
+        // GEO: *"puxou uma nota que não tem retenção, mas foi informado errado,
+        // como não considerar ela?"*).
+        //
+        // O PDF da NFS-e paulistana traz, lado a lado:
+        //   · PIS/PASEP 2,31 (1,65% de 140) e COFINS 10,64 (7,60%) — as
+        //     alíquotas do NÃO-CUMULATIVO, ou seja o tributo da OPERAÇÃO do
+        //     prestador, que é o caso ATLAS de 07/08;
+        //   · **Contribuições Sociais - Retidas: 0,00**, com a descrição
+        //     **"0 - PIS/COFINS/CSLL Não Retidos"**.
+        //
+        // Os dois sinais concordam, e o campo de contribuições retidas é O
+        // campo da retenção neste leiaute (é dele que sai a CSRF de 4,65% no
+        // caso ATLAS). Com ele PRESENTE e ZERO, a resposta está no documento:
+        // **não houve retenção**. Mandar ajustar à mão aqui é a régua de 24/08
+        // ao contrário — quando o app tem como saber a resposta, avisar não é
+        // entrega, é passar o problema adiante.
+        //
+        // ⚠️ E ela só vale com a assinatura da OPERAÇÃO já provada acima: PIS
+        // em 0,65% + COFINS em 3% com CSRF zerada seria retenção de verdade com
+        // o campo agregado em branco, e concluir "sem retenção" ali declararia
+        // a MENOS do que foi retido.
+        if (csrfPresente && csll === 0) {
+            return {
+                situacao: 'sem-retencao-declarada',
+                motivo: `PIS em ${aliquotas.pis}% e COFINS em ${aliquotas.cofins}% são o tributo da OPERAÇÃO `
+                    + 'do prestador (regime não-cumulativo), e o campo de contribuições sociais RETIDAS do '
+                    + 'documento está ZERADO — a própria nota declara "PIS/COFINS/CSLL Não Retidos". '
+                    + 'Não há retenção a declarar nesta nota.',
+                acao: null,
+                aliquotas,
+                // Não exige ação: não há o que ajustar numa nota sem retenção.
+                exigeAcao: false,
+            };
+        }
+
         return {
             situacao: 'campos-sao-totais-da-operacao',
             motivo: `PIS em ${aliquotas.pis}% e COFINS em ${aliquotas.cofins}% são as alíquotas do regime `
