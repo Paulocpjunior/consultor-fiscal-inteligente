@@ -86,6 +86,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   teste não carrega é régua sem prova. Foi para o módulo PURO, e o cliente
   IMPORTA; a varredura deixou de exigir "cita `procEventoNFe`" e passou a exigir
   **delegação**, proibindo recorte próprio no cliente.
+  ✅ **E A 2ª RODADA DO PRINT RESPONDEU A PERGUNTA QUE EU TINHA DEIXADO ABERTA:
+  O SAE CONTA, SIM — e manda o PROTOCOLO.** A linha veio
+  `tpEvento 110111 (cancelamento) · cStat — · (sem xMotivo) ·
+  prot 135265738206956 · 2026-08-22T16:50:16-03:00`. Ou seja: evento de
+  cancelamento **com número de protocolo e data de registro**, e **sem cStat**.
+  📖 **`nProt` mora em `retEvento` e a SEFAZ só o emite para evento
+  REGISTRADO** — evento RECUSADO volta **sem** protocolo. Então o protocolo
+  CONFIRMA, e segurar a nota ali seria ficar parado sobre a resposta que o
+  órgão de fato deu. A confirmação sai **CARIMBADA**
+  (`origemDaConfirmacao: 'protocolo'`) e a frase diz que o cStat não veio.
+  ⚠️ **E A RÉGUA SÓ VALE COM O cStat AUSENTE**: havendo cStat, quem manda é ele
+  — **573 é RECUSA e a nota continua VÁLIDA**. É a fronteira de sempre:
+  **ausência é silêncio, recusa é resposta**; e marcar nota válida como
+  cancelada **apaga receita**, que é o lado caro.
+  🚩 **O que ISTO não é: medição contra uma resposta de evento RECUSADO** — não
+  tenho uma. Por isso o carimbo, e por isso o **XML do evento sobe CRU** na tela
+  (recolhido): a 1ª rodada custou um clique do dono só para descobrir que o
+  cStat não vinha. ⚠️ Sobe só o EVENTO, nunca a autorizada — o evento traz
+  chave, protocolo e justificativa; a nota traz itens, valores e o consumidor.
+  ⚠️ **E a leitura das tags passou a aceitar PREFIXO de namespace e ATRIBUTOS**
+  (`<ns2:cStat>`): exigir a tag nua emudeceria sobre uma resposta que TRAZ o
+  dado — a família do `localErroAviso` de novo, na minha própria correção.
   📌 **REGRA QUE FICA: dedup por EXISTÊNCIA responde "já tenho o documento",
   nunca "já sei tudo sobre ele".** Todo fato que nasce DEPOIS da captura —
   cancelamento, CC-e, denegação — é invisível para um trilho que só pergunta uma

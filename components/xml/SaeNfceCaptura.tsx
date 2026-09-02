@@ -258,6 +258,14 @@ const SaeNfceCaptura: React.FC = () => {
                                 não havia o que carimbar. Capture o período antes.
                             </p>
                         )}
+                        {!!rec.sefaz?.eventosXml?.length && (
+                            <details className="text-[11px]">
+                                <summary className="cursor-pointer text-slate-500">Ver o XML do evento (resposta crua do órgão)</summary>
+                                {rec.sefaz.eventosXml.map((x, i) => (
+                                    <pre key={i} className="mt-1 whitespace-pre-wrap break-all text-slate-500 dark:text-slate-400">{x}</pre>
+                                ))}
+                            </details>
+                        )}
                         {rec.origemDaEntrada === 'id-de-evento' && (
                             <p className="text-[11px] text-slate-400">Chave extraída do ID do evento: {rec.chave}</p>
                         )}
