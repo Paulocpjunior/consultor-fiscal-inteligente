@@ -5,6 +5,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "ABRIR PELO OUTLOOK WEB DÁ ERRO" — e o Outlook só dizia "Something went
+  wrong"** (02/09, print da colaboradora no Teams, guia do MARCOS ANTONIO
+  ZAMBOLIN; Paulo repassou: *"o que podemos fazer"*).
+  📖 **A CAUSA ESTAVA NA PRÓPRIA URL DO PRINT**: `to=marcio07%2FMD%40gmail.com`
+  — uma **BARRA dentro do e-mail**, que é o jeito clássico de **dois endereços
+  ficarem colados** num campo só. O app mandava o campo **CRU** para a URL.
+  🔴 **E A VALIDAÇÃO ERA `includes('@')`, nos DOIS lados** (o serviço do front e
+  a rota do Graph): `marcio07/MD@gmail.com` passa nela com folga. O Outlook
+  respondia **500 opaco**; o Graph recusaria a mensagem inteira sem nomear o
+  endereço.
+  🚨 **O CUSTO NÃO É O ERRO — É ELE MANDAR PROCURAR NO LUGAR ERRADO.** Quem lê
+  *"Something went wrong · Refresh the application"* conclui que o **app** está
+  quebrado; o problema está no **cadastro**. É a família do *"Já importado"* sem
+  estado (14/08) e do *"arquivo não é desta empresa"* (31/08).
+  ✂️ **O DONO JÁ EXISTIA e ninguém o usava**: `parseDestinatarios`
+  (`email-destinatarios-helper.js`) desde sempre. Só que ele **DESCARTA
+  calado** — política certa para **env var** de cron (há fallback e o
+  destinatário é da casa) e **errada para o e-mail do CLIENTE**, onde descartar
+  significa **o cliente não receber a guia e ninguém saber**.
+  📌 **UM PARSE, DUAS POLÍTICAS, as duas declaradas**: `parseDestinatarios`
+  (descarta, env) e `lerDestinatarios` + `recusaDeDestinatario` (denuncia,
+  envio ao cliente). Escrever um segundo parser seria a cópia de sempre.
+  ⚠️ **A BARRA NÃO É SEPARADOR**: ela pode ser engano de digitação **ou** dois
+  e-mails colados, e o app **não tem como saber qual** — partir no escuro
+  mandaria a guia para um endereço que ninguém digitou. Vira **recusa com o
+  motivo** e o valor NOMEADO.
+  ⚠️ **UM VÁLIDO NÃO APAGA O TORTO**: havendo um bom e um torto, ainda RECUSA —
+  se a equipe pôs dois, é porque os dois têm de receber; mandar só para um é a
+  guia chegando pela metade, calada.
+  ⚠️ **E A RECUSA VEM ANTES DE ABRIR A JANELA**: abrir e só então falhar
+  registraria o rito sobre um envio que não tinha como acontecer.
+  🐛 **E O `mailto` TINHA O DEFEITO GÊMEO esperando**: `encodeURIComponent` na
+  lista inteira transforma a vírgula em `%2C` e os dois endereços viram **UM**,
+  inválido. Cada endereço é codificado à parte.
+  📌 **REGRA QUE FICA: campo que a equipe DIGITA e o app repassa a um sistema de
+  fora passa pelo dono da leitura, nunca por `includes('@')`.** O outro lado
+  responde com o erro DELE — genérico, sem o campo, sem o valor —, e é sempre o
+  nosso app que tem de nomear o que está torto.
+
 - **🚨 A NFC-e CANCELADA CONTINUAVA VALENDO — e o botão que ele apertou nunca
   ia resolver, porque é de OUTRO MODELO** (02/09, Paulo: *"NFC-E 1194 da empresa
   0065 — ARMAZEM DE BICHOS está cancelada e ela aparece com valor no consultor,
