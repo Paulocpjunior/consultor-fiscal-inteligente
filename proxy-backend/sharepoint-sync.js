@@ -3,13 +3,19 @@
 // Uses native fetch (Node 20+). No extra npm dependencies.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { recorteDoCaminho } from './sharepoint-caminho.js';
+
 const TENANT_ID = process.env.SHAREPOINT_TENANT_ID || 'spassessoriacontabilcombr.onmicrosoft.com';
 const CLIENT_ID = process.env.SHAREPOINT_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.GRAPH_CLIENT_SECRET || '';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-const SHAREPOINT_HOST = 'spassessoriacontabilcombr.sharepoint.com';
-const SITE_PATH = '/sites/ClientesSP2';
+// ⚠️ Host e site eram CRAVADOS aqui. O site é o que decide ONDE a pasta é
+// procurada, e em 02/09 isso apareceu como "pasta não existe": o proxy resolve
+// `/sites/ClientesSP2` e o link que a equipe usa é de `/sites/GRUPOFISCAL`.
+// Env com o valor de hoje como padrão — nada muda para quem não setar.
+const SHAREPOINT_HOST = process.env.SHAREPOINT_HOST || 'spassessoriacontabilcombr.sharepoint.com';
+const SITE_PATH = process.env.SHAREPOINT_SITE_PATH || '/sites/ClientesSP2';
 
 // ─── Token cache (in-memory, single-process) ────────────────────────────────
 let _tokenCache = { token: null, expiresAt: 0 };
@@ -86,6 +92,31 @@ async function cachedSiteId(accessToken) {
 }
 
 /**
+ * Resolve um link de compartilhamento do SharePoint no item que ele aponta.
+ *
+ * O Graph faz isso em `/shares/{id}/driveItem`; daí saem o `driveId` e o `id`
+ * do item, que servem para listar os filhos em QUALQUER site — inclusive um
+ * diferente do que este proxy resolve.
+ */
+async function resolverLinkCompartilhado(accessToken, recorte) {
+    const url = `${GRAPH_BASE}/shares/${recorte.shareId}/driveItem`
+        + '?$select=id,name,folder,parentReference';
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Failed to resolve shared link (${resp.status}): ${err}`);
+    }
+    const data = await resp.json();
+    // ⚠️ Link de ARQUIVO não é link de PASTA — listar os filhos de um arquivo
+    // devolve o 400 do Graph, que manda procurar erro no lugar errado.
+    if (!data.folder) {
+        throw new Error(`O link aponta para o arquivo "${data.name}", não para uma pasta. `
+            + 'Abra a PASTA no SharePoint e copie o link dela.');
+    }
+    return { id: data.id, driveId: data.parentReference?.driveId, nome: data.name };
+}
+
+/**
  * List XML files inside a SharePoint folder via Microsoft Graph.
  *
  * @param {string} accessToken - Bearer token
@@ -94,17 +125,31 @@ async function cachedSiteId(accessToken) {
  * @returns {Promise<Array<{id,name,webUrl,size,lastModified}>>}
  */
 export async function listXmlFiles(accessToken, folderPath) {
-    const siteId = await cachedSiteId(accessToken);
+    const recorte = recorteDoCaminho(folderPath);
 
-    // Encode path for URL (Graph API expects `:` path syntax)
-    const encodedPath = folderPath
-        .split('/')
-        .map(segment => encodeURIComponent(segment))
-        .join('/');
+    // 🚨 LINK DE COMPARTILHAMENTO é o gesto natural de quem copia do
+    // SharePoint — e ele carrega o site, a biblioteca e a pasta de uma vez,
+    // então NÃO depende do site que este proxy resolve.
+    let nextUrl;
+    let ondeProcurou;
+    if (recorte.tipo === 'link') {
+        const item = await resolverLinkCompartilhado(accessToken, recorte);
+        nextUrl = `${GRAPH_BASE}/drives/${item.driveId}/items/${item.id}/children`
+            + '?$top=200&$select=id,name,webUrl,size,lastModifiedDateTime,file';
+        ondeProcurou = `link compartilhado → "${item.nome}"`;
+    } else {
+        const siteId = await cachedSiteId(accessToken);
+        // Encode path for URL (Graph API expects `:` path syntax)
+        const encodedPath = recorte.valor
+            .split('/')
+            .map(segment => encodeURIComponent(segment))
+            .join('/');
+        nextUrl = `${GRAPH_BASE}/sites/${siteId}/drive/root:/${encodedPath}:/children?$top=200&$select=id,name,webUrl,size,lastModifiedDateTime,file`;
+        ondeProcurou = `${SHAREPOINT_HOST}${SITE_PATH} → "${recorte.valor}"`;
+    }
 
     // Get children of the folder, paging through all results
     const allItems = [];
-    let nextUrl = `${GRAPH_BASE}/sites/${siteId}/drive/root:/${encodedPath}:/children?$top=200&$select=id,name,webUrl,size,lastModifiedDateTime,file`;
 
     while (nextUrl) {
         const resp = await fetch(nextUrl, {
@@ -113,7 +158,10 @@ export async function listXmlFiles(accessToken, folderPath) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            throw new Error(`Failed to list folder (${resp.status}): ${err}`);
+            // ⚠️ A resposta do Graph não diz ONDE ele procurou, e sem isso
+            // "pasta não existe" manda conferir o nome da pasta quando o
+            // problema pode ser o SITE. Causa junto do número.
+            throw new Error(`Failed to list folder (${resp.status}) em ${ondeProcurou}: ${err}`);
         }
 
         const data = await resp.json();
