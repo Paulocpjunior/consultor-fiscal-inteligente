@@ -4,8 +4,12 @@ import {
     checkSharePointHealth,
     syncSharePointFolder,
     buildFolderPath,
+    explorarPasta,
+    listarSitesSharePoint,
     type SharePointHealthStatus,
     type SharePointSyncResult,
+    type SharePointNivel,
+    type SharePointSite,
 } from '../../services/sharePointXmlService';
 import { importXmlManual, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { isFirebaseConfigured, auth } from '../../services/firebaseConfig';
@@ -123,6 +127,11 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
     const [mes, setMes] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
     const [direcao, setDirecao] = useState<'SAÍDA' | 'ENTRADA'>('SAÍDA');
     const [customPath, setCustomPath] = useState('');
+    // 🔎 Explorador — responde "a árvore está em qual site?" sem ninguém navegar.
+    const [nivel, setNivel] = useState<SharePointNivel | null>(null);
+    const [sites, setSites] = useState<SharePointSite[] | null>(null);
+    const [explorando, setExplorando] = useState(false);
+    const [erroExplorar, setErroExplorar] = useState<string | null>(null);
     const [useCustom, setUseCustom] = useState(false);
 
     const empresaSelecionada = empresas.find(e => e.id === empresaId);
@@ -160,6 +169,36 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
         !empresaPasta.trim() && 'Empresa (pasta)',
         !ano.trim() && 'Ano',
     ].filter(Boolean) as string[]);
+
+    const explorar = async (caminho: string) => {
+        setExplorando(true);
+        setErroExplorar(null);
+        setSites(null);
+        try {
+            setNivel(await explorarPasta(caminho));
+        } catch (e: any) {
+            // ⚠️ A mensagem do Graph vai INTEIRA: ela já carrega o site em que
+            // procurou, e é esse o dado que responde a pergunta.
+            setErroExplorar(e?.message || 'Falha ao ler a pasta.');
+            setNivel(null);
+        } finally {
+            setExplorando(false);
+        }
+    };
+
+    const carregarSites = async () => {
+        setExplorando(true);
+        setErroExplorar(null);
+        setNivel(null);
+        try {
+            setSites(await listarSitesSharePoint());
+        } catch (e: any) {
+            setErroExplorar(e?.message || 'Falha ao listar sites.');
+            setSites(null);
+        } finally {
+            setExplorando(false);
+        }
+    };
 
     const handleSync = async () => {
         if (!folderPath.trim()) {
@@ -297,6 +336,93 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                     Exemplo: <code>Empresas/Grupo Flanacar/DEPARTAMENTO FISCAL/2026/07-2026/CMM/XML SAÍDA</code>
                     {' '}— para notas recebidas, troque o fim por <code>XML ENTRADA</code>.
                 </p>
+
+                {/* 🔎 "A ÁRVORE ESTÁ EM QUAL SITE?" — o app responde, ninguém navega.
+                    02/09: o erro passou a dizer onde procurou (404 em /sites/ClientesSP2)
+                    e sobrou uma pergunta factual. Mandar uma pessoa navegar no SharePoint
+                    para responder é o que este dia inteiro ensinou a não fazer. */}
+                <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => void explorar('')}
+                            disabled={explorando}
+                            className="px-3 py-1.5 text-[11px] font-bold rounded-lg btn-press whitespace-nowrap disabled:opacity-40"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        >
+                            {explorando ? 'Lendo…' : '🔎 O que existe nesta biblioteca?'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void carregarSites()}
+                            disabled={explorando}
+                            className="px-3 py-1.5 text-[11px] font-bold rounded-lg btn-press whitespace-nowrap disabled:opacity-40"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        >
+                            🏢 Quais sites o app enxerga?
+                        </button>
+                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                            Só lê nomes de pasta — não baixa, não grava.
+                        </span>
+                    </div>
+
+                    {erroExplorar && (
+                        <p className="text-[11px] mt-2 break-all" style={{ color: 'var(--danger, #ef4444)' }}>{erroExplorar}</p>
+                    )}
+
+                    {sites && (
+                        <div className="mt-2 text-[11px]" style={{ color: 'var(--text-primary)' }}>
+                            <p className="mb-1" style={{ color: 'var(--text-muted)' }}>
+                                O caminho abaixo é o que vai na variável <code>SHAREPOINT_SITE_PATH</code> do proxy:
+                            </p>
+                            {sites.length === 0
+                                ? <p style={{ color: 'var(--text-muted)' }}>Nenhum site retornado — pode ser falta da permissão Sites.Read.All no app do Azure.</p>
+                                : sites.map(s => (
+                                    <div key={s.id} className="font-mono">
+                                        {s.nome} — <b style={{ color: 'var(--accent)' }}>{s.caminho}</b>
+                                    </div>
+                                ))}
+                        </div>
+                    )}
+
+                    {nivel && (
+                        <div className="mt-2 text-[11px]">
+                            <p className="font-mono mb-1" style={{ color: 'var(--text-muted)' }}>
+                                {nivel.site} → /{nivel.caminho || '(raiz)'}
+                            </p>
+                            {nivel.pastas.length === 0 && nivel.arquivos === 0 && (
+                                <p style={{ color: 'var(--text-muted)' }}>Nada aqui dentro.</p>
+                            )}
+                            <div className="flex flex-wrap gap-1.5">
+                                {nivel.caminho && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void explorar(nivel.caminho.split('/').slice(0, -1).join('/'))}
+                                        className="px-2 py-1 rounded btn-press"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-muted)' }}
+                                    >↑ voltar</button>
+                                )}
+                                {nivel.pastas.map(p => (
+                                    <button
+                                        key={p.nome}
+                                        type="button"
+                                        onClick={() => void explorar(nivel.caminho ? `${nivel.caminho}/${p.nome}` : p.nome)}
+                                        className="px-2 py-1 rounded btn-press font-mono"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                    >📁 {p.nome}</button>
+                                ))}
+                            </div>
+                            {/* ⚠️ A contagem de ARQUIVOS vai junto: pasta com 0 subpastas
+                                e 300 arquivos é o FIM da árvore, e sem esse número ela se
+                                lê como pasta vazia. */}
+                            {nivel.arquivos > 0 && (
+                                <p className="mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                                    …e {nivel.arquivos} arquivo(s) neste nível.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Formulário */}

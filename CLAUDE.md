@@ -32,6 +32,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   passou a aceitar os dois e a DIZER a diferença antes do clique.
   ⚠️ **Link de ARQUIVO é recusado com o nome do arquivo** — listar filhos de um
   arquivo devolve outro 400 do Graph, e a pessoa procuraria erro na pasta.
+  🔎 **E SOBROU UMA PERGUNTA FACTUAL QUE O APP PASSOU A RESPONDER SOZINHO**: a
+  árvore `Empresas/…/XML SAÍDA` existe em QUAL dos dois sites? Eu ia devolver
+  isso para o dono navegar no SharePoint — que é exatamente o que este dia
+  ensinou a não fazer. O token já funciona, então nasceram
+  `listarPastas`/`listarSites` no proxy e os botões **🔎 O que existe nesta
+  biblioteca?** e **🏢 Quais sites o app enxerga?** no card. Ele **anda a
+  árvore clicando** e mostra o `caminho` que vai na env `SHAREPOINT_SITE_PATH`.
+  ⚠️ **A contagem de ARQUIVOS vai junto das pastas**: pasta com 0 subpastas e
+  300 arquivos é o FIM da árvore, e sem esse número ela se lê como vazia — a
+  pessoa concluiria que está no lugar errado justo quando chegou no certo.
+  ⚠️ **Sem `Sites.Read.All` o Graph responde 403, e isso vai DITO** — tratar
+  como "não há sites" faria concluir que o SharePoint está vazio.
+  🔒 É diagnóstico: **lê nome de pasta e nada mais** — não baixa, não grava.
+  📌 **E O BOTÃO DE SINCRONIZAR DISPARAVA COM CAMPO OBRIGATÓRIO VAZIO**: o
+  caminho saía com segmentos vazios (`Empresas//DEPARTAMENTO FISCAL/…//XML
+  SAÍDA`), o Graph respondia `itemNotFound`, e isso manda procurar a PASTA
+  sobre uma pasta que pode estar perfeita — **com o aviso do que faltava na
+  tela um centímetro acima**. Botão apagado, dizendo o que falta.
 
 - **🚨 GASTEI UM DIA PERGUNTANDO "QUAL DOS DOIS TEXTOS VOCÊ COPIOU?" — e a
   resposta estava no próprio segredo gravado, a um comando de distância**
