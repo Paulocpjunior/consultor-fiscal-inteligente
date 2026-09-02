@@ -5,6 +5,43 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CADASTRO DO CAMINHO MORTO NÃO ERA UM CAMPO ESQUECIDO — ERA UM
+  BLOQUEIO** (02/09, achado indo conferir o botão ANTES de mandar o Paulo
+  clicar).
+  🔴 Corrigidos os quatro trilhos, a tela do auto-sync continuava perguntando
+  por `grupo` + `empresaPasta`. E não era só rótulo velho: **a rota `/config`
+  RECUSAVA ligar o auto-sync sem esses dois campos** — ou seja, era
+  **impossível ligar a captura sem preencher um campo que não faz mais nada**.
+  📌 É o achado 18 (21/08) na forma mais cara: lá o aviso mandava a pessoa a um
+  lugar que não resolve; **aqui o lugar que não resolve era a PORTA.**
+  🔴 E a lista de empresas pintava a bolinha VERMELHA lendo os mesmos campos,
+  afirmando *"nada é sincronizado"* — **falso sobre o que o trilho faz hoje** —,
+  com uma fila de trabalho ("N empresas SEM pasta configurada") mandando
+  preencher o campo morto, empresa por empresa, na carteira inteira.
+  ✂️ **A PERGUNTA MUDOU DE STATUS PARA RESULTADO** (a primeira regra permanente
+  deste projeto, pela quarta vez): não é *"tem os campos preenchidos?"*, é **"a
+  pasta desta empresa RESOLVE?"** — e quem responde é o MESMO dono que o
+  auto-sync usa para gravar. Tela que perguntasse diferente do trilho diria
+  "pronta" sobre empresa que o run pula.
+  ⚠️ **A TRAVA PARA LIGAR VIROU O `Cod.Cliente`**, que é o que a régua nova de
+  fato usa — e `grupo`/`empresaPasta` **deixaram de ser gravados**: campo de
+  caminho que ninguém lê é o convite para alguém preenchê-lo de novo.
+  ⚠️ **TRÊS ESTADOS na bolinha, não dois**: sem a listagem o app **não sabe** —
+  âmbar, com a frase dizendo isso. Vermelho ali afirmaria falha por causa de uma
+  rede que piscou, e pintaria a carteira inteira.
+  ⚠️ **E O "Preencher ↓" SAIU**: ele levava ao formulário dos campos mortos. As
+  três causas têm ações OPOSTAS e em lugares diferentes (Cod.Cliente é no
+  cadastro; pasta duplicada e pasta inexistente são no SharePoint), e a ação vem
+  ESCRITA no motivo, do dono.
+  🐛 **E A VARREDURA DE ONTEM ACUSOU CÓDIGO CERTO — a sétima vez do vício**: a
+  janela do *"listagem fora do laço"* ia do `for` até o **FIM DO ARQUIVO** e
+  engolia a rota `/status`, que lista UMA vez por requisição, que é exatamente o
+  que a trava exige. Janela fecha onde o laço fecha.
+  📌 **REGRA QUE FICA: conferir o BOTÃO antes de mandar clicar.** O backend
+  estava certo e a porta continuava trancada por um campo morto — se eu tivesse
+  mandado o dono testar, ele veria a carteira vermelha e concluiria que a
+  correção do dia não funcionou.
+
 - **🧭 O CAMINHO MORTO ESTAVA EM QUATRO TRILHOS — e eu só conhecia DOIS**
   (02/09, Paulo: *"PODE LIGAR NO AUTO-SYNC NO ENVIO DA GUIA"*, autorizando a
   ligação da régua nova).

@@ -31,7 +31,7 @@ import { recortarPreservandoApp } from './sharepoint-erro-credencial.js';
 import { PASTA_RAIZ, caminhoFiscal } from './caminho-sharepoint.js';
 // Dono único de "qual é a pasta desta empresa?" — a frase de cada situação é
 // régua, e quatro cópias dela divergiriam no primeiro ajuste.
-import { listarPastasDeEmpresas, resolverPastaDaEmpresa } from './sharepoint-pastas.js';
+import { listarPastasDeEmpresas, resolverPastaDaEmpresa, codClienteDoCadastro } from './sharepoint-pastas.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -695,20 +695,29 @@ router.post('/config', async (req, res) => {
             return res.status(400).json({ error: 'collection invalida' });
         }
 
-        // Auto-sync ativo com grupo/pasta vazios sincroniza nada em silêncio
-        // (era a causa do run diário 0/0/0 "verde") — rejeita na origem.
-        const grupoCfg = String(sharePointConfig.grupo || '').trim();
-        const pastaCfg = String(sharePointConfig.empresaPasta || '').trim();
-        if (sharePointConfig.autoSyncEnabled && (!grupoCfg || !pastaCfg)) {
+        // 🚨 A TRAVA MUDOU DE CAMPO EM 02/09, e ela era a pior das duas: ela
+        // RECUSAVA ligar o auto-sync sem `grupo` + `empresaPasta` — cadastro
+        // do caminho MORTO. Ou seja, hoje era impossível ligar a captura sem
+        // preencher um campo que não faz mais nada (o achado 18, 21/08, na
+        // forma mais cara: não é aviso que aponta o lugar errado, é BLOQUEIO).
+        //
+        // O que a régua nova precisa é o **Cod.Cliente**: é por ele que a
+        // pasta REAL da empresa é achada em `Empresas`. Sem ele, o auto-sync
+        // sincroniza nada em silêncio, que era o run 0/0/0 "verde" de sempre.
+        const doc = await fa().firestore().collection(collection).doc(empresaId).get();
+        const codCliente = codClienteDoCadastro(doc.data());
+        if (Boolean(sharePointConfig.autoSyncEnabled) && !codCliente) {
             return res.status(400).json({
-                error: 'Preencha Grupo (pasta) e Empresa (pasta) para ativar o auto-sync.',
+                error: 'Esta empresa não tem Cod.Cliente no cadastro — é por ele que a pasta dela é '
+                    + 'encontrada no SharePoint. Preencha em Empresas → Dados Fiscais antes de ligar o auto-sync.',
             });
         }
 
+        // ⚠️ `grupo`/`empresaPasta` NÃO são mais gravados: campo de caminho que
+        // ninguém lê é o convite para alguém preenchê-lo de novo. O que fica é
+        // a MATRÍCULA (quem participa do auto-sync) e o carimbo de quem ligou.
         await fa().firestore().collection(collection).doc(empresaId).update({
             sharePointConfig: {
-                grupo: grupoCfg,
-                empresaPasta: pastaCfg,
                 autoSyncEnabled: Boolean(sharePointConfig.autoSyncEnabled),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedBy: decoded.email || decoded.uid,
@@ -743,40 +752,69 @@ router.get('/status', async (req, res) => {
 
         const lastSync = lastLogSnap.empty ? null : lastLogSnap.docs[0].data();
 
+        // 🚨 A PERGUNTA MUDOU EM 02/09 — de STATUS para RESULTADO.
+        //
+        // Isto respondia *"a empresa tem `grupo` + `empresaPasta` preenchidos?"*
+        // e pintava de vermelho quem não tinha, dizendo *"nada é sincronizado"*.
+        // Os dois campos são cadastro do caminho MORTO: a afirmação passou a
+        // ser FALSA, e a fila de trabalho que ela produzia mandava preencher um
+        // campo que não muda nada (achado 18, 21/08).
+        //
+        // A pergunta que vale é *"a pasta desta empresa RESOLVE?"*, e quem
+        // responde é o DONO — a mesma resolução que o auto-sync usa para
+        // gravar. Uma tela que perguntasse diferente do trilho diria "pronta"
+        // sobre empresa que o run pula.
+        //
+        // ⚠️ UMA listagem por REQUISIÇÃO, e a comparação é pura: leitura por
+        // empresa seria o HTTP 429 de 27/08 com outra roupa.
+        let pastas = null;
+        let pastasErro = null;
+        try {
+            pastas = await listarPastasDeEmpresas();
+        } catch (e) {
+            // ⚠️ Falhar a LEITURA não vira "nenhuma pasta resolve": pintaria a
+            // carteira inteira de vermelho por causa de uma rede que piscou.
+            pastasErro = e.message;
+        }
+
         const empresasAutoSync = [];
-        // Lista de quem AINDA NÃO tem grupo+pasta — o gap que trava a cópia
-        // no SharePoint (XMLs do arquivo E impostos da ordem técnica). Antes
-        // só existia o CONTADOR semConfig no log do cron; ninguém sabia QUEM
-        // faltava sem abrir empresa por empresa (Paulo, 24/07).
-        const empresasSemConfig = [];
+        // Quem NÃO resolve a pasta — a fila de trabalho de verdade, com a
+        // causa e a ação de cada uma vindas do dono.
+        const empresasSemPasta = [];
         for (const col of ['simples_empresas', 'lucro_empresas']) {
             const snap = await db.collection(col).get();
             for (const d of snap.docs) {
                 const data = d.data();
                 if (data._merged_into || data._deleted) continue; // zumbis fora
+                const codCliente = codClienteDoCadastro(data);
+                const achado = pastas
+                    ? await resolverPastaDaEmpresa(data, pastas)
+                    : { ok: false, pasta: null, codCliente, motivo: null };
                 if (data.sharePointConfig?.autoSyncEnabled) {
                     empresasAutoSync.push({
                         id: d.id,
                         nome: data.nome,
                         cnpj: data.cnpj,
-                        grupo: data.sharePointConfig.grupo,
-                        empresaPasta: data.sharePointConfig.empresaPasta,
+                        codCliente,
+                        // `null` = não deu para conferir (a listagem falhou).
+                        pastaResolvida: pastas ? achado : null,
                     });
                 }
-                const cfg = data.sharePointConfig;
-                if (!cfg || !String(cfg.grupo || '').trim() || !String(cfg.empresaPasta || '').trim()) {
-                    empresasSemConfig.push({
+                if (pastas && !achado.ok) {
+                    empresasSemPasta.push({
                         id: d.id,
                         nome: data.razaoSocial || data.nome || '—',
                         cnpj: String(data.cnpj || '').replace(/\D/g, ''),
                         fonte: col === 'simples_empresas' ? 'simples' : 'lucro',
+                        codCliente,
+                        motivo: achado.motivo,
                     });
                 }
             }
         }
-        empresasSemConfig.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        empresasSemPasta.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-        return res.json({ lastSync, empresasAutoSync, empresasSemConfig });
+        return res.json({ lastSync, empresasAutoSync, empresasSemPasta, pastasErro });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }

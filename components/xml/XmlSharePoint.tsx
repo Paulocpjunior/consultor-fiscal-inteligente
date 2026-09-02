@@ -78,7 +78,10 @@ const SharePointAutoSyncStatusLine: React.FC<{ lastSync: SharePointLastSync | nu
             )}
             {!temErroFatal && (lastSync.empresasComConfigIncompleta ?? 0) > 0 && (
                 <>
-                    {' '}— <span className="text-amber-700 dark:text-amber-300">{lastSync.empresasComConfigIncompleta} empresa(s) com grupo/pasta não preenchidos (nada sincronizado para elas)</span>
+                    {/* A causa não é mais "grupo/pasta em branco" (campo morto):
+                        é a pasta que não resolveu, e o motivo de cada uma sai na
+                        lista de empresas logo abaixo. */}
+                    {' '}— <span className="text-amber-700 dark:text-amber-300">{lastSync.empresasComConfigIncompleta} empresa(s) cuja pasta não foi encontrada no SharePoint (nada sincronizado para elas)</span>
                 </>
             )}
             {/* Motivo dominante dos erros JUNTO da contagem (farol honesto) —
@@ -715,10 +718,21 @@ interface AutoSyncStatus {
             erro?: string; errosDetalhe?: string[]; configIncompleta?: boolean;
         }[];
     } | null;
-    empresasAutoSync: { id: string; nome: string; cnpj: string; grupo: string; empresaPasta: string }[];
-    /** Gap que trava a cópia no SharePoint (XMLs + IMPOSTOS): quem ainda
-     *  não tem grupo+pasta preenchidos. */
-    empresasSemConfig?: { id: string; nome: string; cnpj: string; fonte: 'simples' | 'lucro' }[];
+    empresasAutoSync: {
+        id: string; nome: string; cnpj: string; codCliente: string;
+        /** A resolução da pasta REAL — `null` quando não deu para conferir
+         *  (a listagem do SharePoint falhou). Ausência ≠ "não resolve". */
+        pastaResolvida: { ok: boolean; pasta: string | null; motivo: string | null } | null;
+    }[];
+    /** Gap que trava a cópia no SharePoint (XMLs + IMPOSTOS): quem NÃO tem a
+     *  pasta resolvida — com a causa e a ação de cada uma, vindas do dono. */
+    empresasSemPasta?: {
+        id: string; nome: string; cnpj: string; fonte: 'simples' | 'lucro';
+        codCliente: string; motivo: string | null;
+    }[];
+    /** Preenchido quando NÃO deu para listar as pastas — a tela diz isso em
+     *  vez de afirmar que ninguém resolve. */
+    pastasErro?: string | null;
 }
 
 const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }) => {
@@ -728,9 +742,9 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
     const [triggerResult, setTriggerResult] = useState<string | null>(null);
 
     const [configEmpresaId, setConfigEmpresaId] = useState('');
-    const [configGrupo, setConfigGrupo] = useState('');
-    const [configPasta, setConfigPasta] = useState('');
+    // 🗑️ `configGrupo`/`configPasta` SAÍRAM: eram o cadastro do caminho morto.
     const [configEnabled, setConfigEnabled] = useState(true);
+    const [configErro, setConfigErro] = useState<string | null>(null);
     const [savingConfig, setSavingConfig] = useState(false);
 
     const getHeaders = async () => {
@@ -780,25 +794,31 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
             // aparece lá também precisa salvar na coleção certa — Simples ia
             // parar em lucro_empresas sem este fallback).
             const empresa = empresas.find(e => e.id === configEmpresaId)
-                || status?.empresasSemConfig?.find(e => e.id === configEmpresaId);
+                || status?.empresasSemPasta?.find(e => e.id === configEmpresaId);
             const collection = empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
             const headers = await getHeaders();
             const resp = await fetch('/api/admin/sharepoint/config', {
                 method: 'POST', headers,
+                // ⚠️ `grupo`/`empresaPasta` saíram: a pasta é ACHADA pelo
+                // Cod.Cliente. O que se cadastra aqui é só a MATRÍCULA.
                 body: JSON.stringify({
                     empresaId: configEmpresaId,
                     collection,
-                    sharePointConfig: { grupo: configGrupo, empresaPasta: configPasta, autoSyncEnabled: configEnabled },
+                    sharePointConfig: { autoSyncEnabled: configEnabled },
                 }),
             });
             if (resp.ok) {
                 const statusResp = await fetch('/api/admin/sharepoint/status', { headers });
                 if (statusResp.ok) setStatus(await statusResp.json());
                 setConfigEmpresaId('');
-                setConfigGrupo('');
-                setConfigPasta('');
+                setConfigErro(null);
+            } else {
+                // A recusa DIZ o que falta (Cod.Cliente) — engolir aqui faria o
+                // clique não fazer nada, que é a família do "Já importado".
+                const d = await resp.json().catch(() => ({}));
+                setConfigErro(d.error || 'Não foi possível salvar.');
             }
-        } catch { /* ignore */ }
+        } catch (e: any) { setConfigErro(e?.message || 'Falha ao salvar.'); }
         setSavingConfig(false);
     };
 
@@ -858,17 +878,31 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                             <p className="text-[10px] font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Empresas com auto-sync</p>
                             <div className="space-y-1">
                                 {status.empresasAutoSync.map(e => {
-                                    // Bolinha verde só com grupo E pasta preenchidos —
-                                    // sem eles o sync pula a empresa e nada é baixado.
-                                    const cfgOk = !!(e.grupo || '').trim() && !!(e.empresaPasta || '').trim();
+                                    // 🚨 A BOLINHA SAI DO RESULTADO, não do cadastro.
+                                    // Ela lia `grupo`+`empresaPasta` e dizia "nada é
+                                    // sincronizado" — campos do caminho MORTO, ou seja
+                                    // a afirmação ficou FALSA e mandava preencher o que
+                                    // não muda nada. Agora ela responde o que o trilho
+                                    // de fato faz: a pasta desta empresa RESOLVE?
+                                    const res = e.pastaResolvida;
+                                    // ⚠️ Três estados, não dois: sem a listagem o app
+                                    // NÃO SABE — e âmbar não é o vermelho de quem falha.
+                                    const cor = res === null ? 'bg-amber-500' : res.ok ? 'bg-emerald-500' : 'bg-red-500';
                                     return (
                                     <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
-                                        <span className={`w-2 h-2 rounded-full ${cfgOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                        <span className={`w-2 h-2 rounded-full ${cor}`} />
                                         <span style={{ color: 'var(--text-primary)' }}>{e.nome}</span>
-                                        <span style={{ color: 'var(--text-muted)' }}>({e.grupo}/{e.empresaPasta})</span>
-                                        {!cfgOk && (
+                                        {res?.ok && (
+                                            <span style={{ color: 'var(--text-muted)' }}>({res.pasta})</span>
+                                        )}
+                                        {res && !res.ok && (
                                             <span className="font-semibold" style={{ color: 'var(--danger, #ef4444)' }}>
-                                                ⚠ grupo/pasta não preenchidos — nada é sincronizado
+                                                ⚠ {res.motivo}
+                                            </span>
+                                        )}
+                                        {res === null && (
+                                            <span style={{ color: 'var(--text-muted)' }}>
+                                                não deu para conferir a pasta agora
                                             </span>
                                         )}
                                     </div>
@@ -895,32 +929,41 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                         )}
                     </div>
 
-                    {/* Pendentes de configuração — a lista de trabalho do gap
-                        semConfig: sem grupo+pasta nada sobe pro SharePoint
-                        (nem XML do arquivo, nem imposto da ordem técnica).
-                        "Preencher" pré-seleciona a empresa no formulário. */}
-                    {(status?.empresasSemConfig?.length || 0) > 0 && (
+                    {/* 🚨 A FILA MUDOU DE PERGUNTA EM 02/09.
+                        Ela listava quem não tinha `grupo`+`empresaPasta` — o
+                        cadastro do caminho MORTO —, ou seja mandava preencher o
+                        que não muda nada (achado 18, 21/08). Agora ela lista
+                        quem NÃO RESOLVE a pasta, com a causa e a ação de cada
+                        uma vindas do dono: sem Cod.Cliente, código duplicado no
+                        SharePoint, ou pasta que não existe lá. */}
+                    {status?.pastasErro && (
+                        <div className="border-t pt-3 mt-3 text-[11px]" style={{ borderColor: 'var(--border-subtle)', color: 'var(--warning, #d97706)' }}>
+                            ⚠ Não deu para listar as pastas de Empresas agora ({status.pastasErro}) — o app
+                            <strong> não afirma</strong> que as pastas estão faltando; ele não conseguiu conferir.
+                        </div>
+                    )}
+                    {(status?.empresasSemPasta?.length || 0) > 0 && (
                         <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
                             <div className="flex items-center justify-between mb-1">
                                 <p className="text-[10px] font-bold uppercase" style={{ color: 'var(--danger, #ef4444)' }}>
-                                    ⚠ {status!.empresasSemConfig!.length} empresa(s) SEM pasta configurada — nada sobe pro SharePoint
+                                    ⚠ {status!.empresasSemPasta!.length} empresa(s) cuja pasta NÃO foi encontrada — nada sobe pro SharePoint
                                 </p>
                                 <button
                                     onClick={() => {
-                                        const txt = status!.empresasSemConfig!
-                                            .map(e => `${e.cnpj}\t${e.nome}\t${e.fonte === 'simples' ? 'Simples' : 'Lucro'}`)
+                                        const txt = status!.empresasSemPasta!
+                                            .map(e => `${e.cnpj}\t${e.nome}\t${e.fonte === 'simples' ? 'Simples' : 'Lucro'}\t${e.codCliente || '—'}\t${e.motivo || ''}`)
                                             .join('\n');
-                                        navigator.clipboard.writeText(`CNPJ\tEmpresa\tRegime\n${txt}`);
+                                        navigator.clipboard.writeText(`CNPJ\tEmpresa\tRegime\tCod.Cliente\tMotivo\n${txt}`);
                                     }}
                                     className="text-[10px] underline"
                                     style={{ color: 'var(--text-muted)' }}
-                                    title="Copia a lista (CNPJ / nome / regime) pra colar no Excel"
+                                    title="Copia a lista (CNPJ / nome / regime / código / motivo) pra colar no Excel"
                                 >
                                     📋 Copiar lista
                                 </button>
                             </div>
                             <div className="max-h-48 overflow-y-auto space-y-0.5">
-                                {status!.empresasSemConfig!.map(e => {
+                                {status!.empresasSemPasta!.map(e => {
                                     // Cadastro sem nome E sem CNPJ é lixo (não dá nem pra
                                     // achar a pasta no SharePoint) — em vez de "Preencher",
                                     // aponta a exclusão no painel do regime (25/07: a lista
@@ -939,13 +982,15 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                                                 ⚠ cadastro vazio — excluir no painel
                                             </span>
                                         ) : (
-                                            <button
-                                                onClick={() => { setConfigEmpresaId(e.id); setConfigGrupo(''); setConfigPasta(''); }}
-                                                className="ml-auto text-[10px] font-bold underline shrink-0"
-                                                style={{ color: 'var(--accent)' }}
-                                            >
-                                                Preencher ↓
-                                            </button>
+                                            // 🚨 O "Preencher ↓" SAIU: ele levava ao formulário
+                                            // dos campos mortos. A ação de cada causa é OUTRA —
+                                            // Cod.Cliente é no cadastro da empresa, pasta
+                                            // duplicada e pasta inexistente são no SharePoint —
+                                            // e ela vem escrita no motivo, do dono.
+                                            <span className="ml-auto text-[10px] shrink-0 max-w-[55%] truncate"
+                                                style={{ color: 'var(--text-muted)' }} title={e.motivo || undefined}>
+                                                {e.motivo}
+                                            </span>
                                         )}
                                     </div>
                                     );
@@ -957,19 +1002,19 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                     {/* Add empresa config */}
                     <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
                         <p className="text-[10px] font-bold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Adicionar empresa ao auto-sync</p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {/* 🗑️ OS CAMPOS "Grupo (pasta)" E "Empresa (pasta)" SAÍRAM:
+                            a pasta REAL é achada pelo Cod.Cliente, e o nível de
+                            grupo não existe na árvore. Campo que alimenta um
+                            caminho inexistente é trabalho perdido de quem
+                            preenche — e aqui ele era pior: sem ele o app RECUSAVA
+                            ligar o auto-sync. O que se cadastra é a MATRÍCULA. */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             <EmpresaSearchSelect
                             empresas={empresas}
                             value={configEmpresaId}
                             onChange={setConfigEmpresaId}
                             placeholder="Empresa — código, nome ou CNPJ"
                         />
-                            <input value={configGrupo} onChange={e => setConfigGrupo(e.target.value)} placeholder="Grupo (pasta)"
-                                className="p-2 text-xs rounded-lg"
-                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
-                            <input value={configPasta} onChange={e => setConfigPasta(e.target.value)} placeholder="Empresa (pasta)"
-                                className="p-2 text-xs rounded-lg"
-                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
                             <div className="flex items-center gap-2">
                                 <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                                     <input type="checkbox" checked={configEnabled} onChange={e => setConfigEnabled(e.target.checked)} />
@@ -982,6 +1027,14 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                                 </button>
                             </div>
                         </div>
+                        <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                            A pasta da empresa é encontrada pelo <strong>Cod.Cliente</strong> (Empresas → Dados
+                            Fiscais). O app cria as pastas do Departamento Fiscal para baixo — a da empresa, não.
+                        </p>
+                        {/* Recusa DITA: engolir faria o clique não fazer nada. */}
+                        {configErro && (
+                            <p className="text-[11px] mt-2" style={{ color: 'var(--danger, #ef4444)' }}>⛔ {configErro}</p>
+                        )}
                     </div>
                 </>
             )}

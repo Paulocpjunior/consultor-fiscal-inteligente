@@ -75,8 +75,14 @@ describe('🧭 os dois trilhos que gravam usam o DONO', () => {
 
     // ⚠️ UMA leitura por RODADA, não por empresa: ~400 idas ao Graph seriam o
     // HTTP 429 de 27/08 com outra roupa.
+    // 🐛 A JANELA NASCEU LARGA e acusou código CERTO (a sétima vez do vício):
+    // ela ia do laço até o FIM DO ARQUIVO e engolia a rota `/status`, que lista
+    // as pastas UMA vez por requisição — exatamente o que esta trava exige.
+    // A janela fecha onde o laço fecha.
     it('as pastas são lidas uma vez por rodada, fora do laço', () => {
-        const laco = autoSync.slice(autoSync.indexOf('for (const empresa of empresas)'));
+        const ini = autoSync.indexOf('for (const empresa of empresas)');
+        const fim = autoSync.indexOf('const totalNovos', ini);
+        const laco = autoSync.slice(ini, fim > ini ? fim : undefined);
         expect(laco).not.toMatch(/listarPastasDeEmpresas\(\)/);
         expect(autoSync).toMatch(/pastasDeEmpresas = await listarPastasDeEmpresas\(\)/);
     });
