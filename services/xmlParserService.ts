@@ -941,10 +941,36 @@ export function matchCompanyAndDirection(
     const direcao = decidirDirecaoPorTpNF(emit, dest, emp, parsed.tpNF) as XmlDirecao;
     if (direcao !== 'desconhecida') return { ok: true, direcao };
 
+    // 🚨 "NÃO É DESTA EMPRESA" E "NÃO CONSEGUI LER" SÃO FATOS DIFERENTES — e a
+    // mensagem dizia o primeiro sobre o segundo (02/09, caso do Ivan na 0530:
+    // *"não consta como emitente nem destinatário (emit: -, dest: 05022073000106)"*
+    // em notas de serviço PRESTADO, onde a empresa é justamente a prestadora).
+    //
+    // O `emit: -` É A RESPOSTA: o app não leu o prestador daquele XML. Dizer
+    // "não consta" manda conferir o CADASTRO do cliente — que está certo — e o
+    // arquivo, que também está. É a lição de 31/08 (MARCOS ANTONIO ZAMBOLIN)
+    // aplicada ao leitor do BACKEND, que é quem de fato recusa a importação.
+    //
+    // ⚠️ A recusa CONTINUA: sem um dos lados não dá para decidir a DIREÇÃO, e
+    // direção chutada é a nota no livro errado. O que muda é a causa e a ação.
+    const ladosIlegiveis = [!emit && 'emitente/prestador', !dest && 'destinatário/tomador']
+        .filter(Boolean) as string[];
+    if (ladosIlegiveis.length > 0) {
+        const lido = emit ? `emitente ${emit}` : dest ? `destinatário ${dest}` : null;
+        return {
+            ok: false,
+            direcao: 'desconhecida',
+            motivo: `Não deu para LER o ${ladosIlegiveis.join(' nem o ')} deste XML`
+                + `${lido ? ` (só saiu o ${lido})` : ''} — então não dá para dizer de quem ele é `
+                + 'nem se é entrada ou saída. O cadastro da empresa pode estar certo: quem não foi '
+                + 'lido é o arquivo. Mande este XML ao time para o leiaute dele ser reconhecido.',
+        };
+    }
+
     return {
         ok: false,
         direcao: 'desconhecida',
-        motivo: `O CNPJ ${empresaCnpj} não consta como emitente nem destinatário deste XML (emit: ${emit || '-'}, dest: ${dest || '-'}).`,
+        motivo: `O CNPJ ${empresaCnpj} não consta como emitente nem destinatário deste XML (emit: ${emit}, dest: ${dest}).`,
     };
 }
 

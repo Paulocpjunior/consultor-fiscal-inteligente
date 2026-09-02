@@ -5,6 +5,57 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "879 ERROS" NUMA RODADA — E A MAIORIA NÃO ERA ERRO** (02/09, print do
+  Paulo depois de clicar *"Executar Sync Agora"*: `0 novos, 0 duplicados, 879
+  erros` e, logo abaixo, *"Não deu para listar as pastas de Empresas agora
+  (Muitas requisições)"*).
+  📌 **A CONTA FOI MEDIDA NO CÓDIGO, não deduzida**: o auto-sync faz **4
+  chamadas ao proxy por empresa** (2 competências × 2 direções) e há **416
+  empresas** ligadas ⇒ **1.664 chamadas** por rodada, contra um teto de
+  **60/min** publicado pelo próprio proxy (`proxy-backend/server.js`). Da 61ª
+  em diante a resposta é **429** — a rodada gasta minutos colecionando recusas
+  do PRÓPRIO app, e foi ela que derrubou a listagem seguinte do `/status`.
+  🚨 **E O RESTO É 404 ESPERADO — o achado que muda o roteiro do teste**: o
+  auto-sync **LÊ** o SharePoint (baixa o XML que está lá) e **NUNCA cria
+  pasta**; quem cria é o **UPLOAD** (`ensureFolderPath`, medido no proxy). Como
+  a árvore do `Departamento Fiscal` ainda não existe em empresa nenhuma,
+  listá-la responde 404 — **que é a verdade, não uma falha**. Ou seja: eu mandei
+  o dono clicar no botão que LÊ para provar uma correção que só se prova
+  GRAVANDO.
+  ⚠️ **TRÊS BALDES, porque as ações são OPOSTAS**: 404 não pede nada de
+  ninguém; 429 é o app batendo rápido demais (`Não é problema desta empresa`);
+  credencial recusada trava a carteira e é do administrador. Um contador só
+  produzia **879 alarmes vermelhos por rodada sobre a carteira inteira** — a
+  lição das 236 empresas em ALTO (26/08).
+  ⚠️ **O RESPIRO É A RÉGUA DA SEFAZ COM OUTRA ROUPA** (o intervalo do cStat
+  656): quando o outro lado publica um limite, **respeitá-lo é mais barato que
+  colecionar recusas**. O teto vem de env com o valor de hoje como padrão —
+  cravar o número do outro serviço é a família do tenant cravado (28/08).
+  ⚠️ E `desconhecido` **NÃO é aprovação**: segue contando como erro, com a
+  mensagem inteira — afirmar a causa errada manda procurar no lugar errado.
+
+- **🚨 "NÃO É DESTA EMPRESA" ≠ "NÃO CONSEGUI LER" — agora no leitor do BACKEND**
+  (02/09, Ivan Inacio na 0530, importando notas de serviço PRESTADO: *"O CNPJ
+  11010322000138 não consta como emitente nem destinatário deste XML (**emit:
+  -**, dest: 05022073000106)"*).
+  📌 **O `emit: -` É A RESPOSTA**: o app não leu o PRESTADOR — e a empresa é
+  justamente a prestadora. A frase afirmava sobre a POSSE, então ela manda
+  conferir o cadastro do cliente (que está certo) e o arquivo (que também
+  está). É a lição de 31/08 (MARCOS ANTONIO ZAMBOLIN) **aplicada ao leitor do
+  BACKEND**, que é quem de fato recusa a importação — lá foi corrigida a TELA.
+  ⚠️ **A RECUSA CONTINUA**, e isso é decisão: sem um dos lados não dá para
+  decidir a DIREÇÃO, e direção chutada é a nota no livro errado. O que muda é a
+  CAUSA e a AÇÃO — e a frase diz **o que o app CONSEGUIU ler**, senão a pessoa
+  não sabe o que ele viu.
+  🚩 **O QUE ISTO NÃO RESOLVE, e vai dito**: **qual leiaute** aquele XML usa
+  continua desconhecido. Medi os dois leitores (`extrairDadosXml` da tela e
+  `parseNFSeXml` do backend) e os dois cobrem ABRASF (`PrestadorServico` /
+  `Prestador` / `IdentificacaoPrestador`, com e sem `CpfCnpj`, maiúsculas e
+  minúsculas) e o nacional (`<emit>`). Carimbar a causa sem o arquivo seria
+  exatamente o que este projeto passou dois dias pagando — **o XML resolve em
+  uma leitura**, como resolveram o CT-e da A CASTELLANO, o ABRASF de Santo
+  André e o R-2055.
+
 - **🚨 O PLACEHOLDER COM CARA DE VALOR — a lição de 20/08 repetida POR MIM, no
   dia seguinte de escrevê-lo** (02/09, print do Paulo: o campo *Empresa
   (pasta)* mostrando `0040_Clinica Mantoan` e, logo acima, o aviso vermelho
