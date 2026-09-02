@@ -1408,6 +1408,13 @@ export interface EmpresaDadosFiscais {
      * em `sefaz-backend/dere-regimes.js`.
      */
     regimeEspecificoIbsCbs?: string | null;
+    /** 🏦 DeRE · D-1001: atividades (Tabelas 21/31/41, NNC), regimes secundários, natureza tributária, UFs credenciadas, validade. */
+    dereAtividades?: string[];
+    dereRegimesSecundarios?: string[];
+    dereIndNatTrib?: '0' | '1' | '';
+    dereUfsCredenciadas?: string[];
+    dereIniValid?: string;
+    dereFimValid?: string;
     /**
      * Cod.Cliente — código da empresa no E-Fiscal (Paulo, 04/08). TEXTO de 4
      * dígitos com zero à esquerda ('0001'–'9999'), ÚNICO na carteira. É a

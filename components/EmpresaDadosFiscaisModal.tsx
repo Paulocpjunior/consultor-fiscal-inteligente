@@ -13,7 +13,8 @@ import { soZerosComoVazio } from '../sefaz-backend/ccm-sp.js';
 // 🏦 DeRE: as opções do regime específico vêm do DONO — copiá-las aqui seria a
 // segunda cópia do vocabulário, e a tela ofereceria um código que o backend
 // recusa no primeiro regime novo.
-import { REGIMES_ESPECIFICOS_IBS_CBS } from '../sefaz-backend/dere-regimes.js';
+import { REGIMES_ESPECIFICOS_IBS_CBS, ATIVIDADES_DERE } from '../sefaz-backend/dere-regimes.js';
+import { IND_NAT_TRIB, TABELA_13_UF } from '../sefaz-backend/dere-evento-d1001.js';
 import { buscarCep } from '../services/cepService';
 import { listarContadores, salvarContador, type Contador } from '../services/contadoresService';
 // As tabelas do frete contratado vêm do DONO no backend — reescrevê-las aqui
@@ -891,6 +892,100 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 hint="LC 214/2025, Título V. Decide se a DeRE (mensal, dia 15 do mês seguinte, a partir da competência 10/2026) entra no mês deste cliente. Optante do Simples fica fora."
                             />
                         </div>
+                        {/* 🏦 DeRE · insumo do D-1001 (Paulo, 02/09: "Fiscal, tudo roda no
+                            Fiscal"). Só aparece para regime com código no D-1001 — é o único
+                            caso em que existe evento a montar. Cada campo é FATO da empresa
+                            que o app não deduz: as atividades vêm das Tabelas 21/31/41 do
+                            Anexo I (copiadas em ATIVIDADES_DERE), a natureza tributária é
+                            afirmação (imunidade não se presume), as UFs credenciadas só
+                            existem para prognósticos e a validade não recebe default. */}
+                        {(() => {
+                            const principal = REGIMES_ESPECIFICOS_IBS_CBS.find(r => r.codigo === dados.regimeEspecificoIbsCbs && r.dereConfirmada);
+                            if (!principal) return null;
+                            const secundarios = (dados.dereRegimesSecundarios || []) as string[];
+                            const regimes = [principal, ...REGIMES_ESPECIFICOS_IBS_CBS.filter(r => r.dereConfirmada && r.codigo !== principal.codigo && secundarios.includes(r.codigo))];
+                            const atividades = (dados.dereAtividades || []) as string[];
+                            const ufs = (dados.dereUfsCredenciadas || []) as string[];
+                            const setLista = (key: 'dereAtividades' | 'dereRegimesSecundarios' | 'dereUfsCredenciadas', lista: string[]) =>
+                                setDados(prev => ({ ...prev, [key]: lista }));
+                            const alternar = (key: 'dereAtividades' | 'dereRegimesSecundarios' | 'dereUfsCredenciadas', atual: string[], cod: string, on: boolean) =>
+                                setLista(key, on ? [...new Set([...atual, cod])] : atual.filter(x => x !== cod));
+                            // Grupo 3 do D-1001 = prognósticos: pelo código do leiaute, nunca pelo nome.
+                            const temPrognosticos = regimes.some(r => r.codigoD1001 === 3);
+                            return (
+                                <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-3" data-testid="dere-d1001-cadastro">
+                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">🏦 DeRE — o que o D-1001 (Informações do Contribuinte) declara desta empresa</p>
+                                    <p className="text-[11px] text-slate-500">
+                                        O CFI monta o D-1001 a partir daqui (⚙️ Config Admin → 🏦 DeRE → prévia). Nada é deduzido: sem
+                                        estes campos a prévia recusa nomeando o que falta.
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <SelectField
+                                            label="Natureza tributária (indNatTrib)"
+                                            value={dados.dereIndNatTrib || ''}
+                                            onChange={v => handleField('dereIndNatTrib', v as any)}
+                                            options={[{ value: '', label: '— Não informado —' }, ...IND_NAT_TRIB.map(i => ({ value: i.codigo, label: `${i.codigo} — ${i.rotulo}` }))]}
+                                            hint="Imunidade é AFIRMAÇÃO — sem marcação o evento não sai."
+                                        />
+                                        <div>
+                                            <label className="text-xs uppercase font-medium block mb-1 text-slate-500 dark:text-slate-400">Início da validade (iniValid)</label>
+                                            <input type="date" value={dados.dereIniValid || ''} onChange={e => handleField('dereIniValid', e.target.value)}
+                                                className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100" />
+                                            <p className="text-[11px] mt-1 text-slate-400">Para a 1ª onda, 01/10/2026 (início da obrigatoriedade). Não recebe padrão: quem afirma é você.</p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs uppercase font-medium block mb-1 text-slate-500 dark:text-slate-400">Fim da validade (fimValid) — opcional</label>
+                                            <input type="date" value={dados.dereFimValid || ''} onChange={e => handleField('dereFimValid', e.target.value)}
+                                                className="w-full p-2.5 text-sm rounded-lg outline-none bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs uppercase font-medium mb-1 text-slate-500 dark:text-slate-400">Regimes secundários (até 3, diferentes do principal)</p>
+                                        <div className="flex flex-wrap gap-3">
+                                            {REGIMES_ESPECIFICOS_IBS_CBS.filter(r => r.dereConfirmada && r.codigo !== principal.codigo).map(r => (
+                                                <label key={r.codigo} className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                    <input type="checkbox" checked={secundarios.includes(r.codigo)} onChange={e => alternar('dereRegimesSecundarios', secundarios, r.codigo, e.target.checked)} />
+                                                    {r.rotulo}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {regimes.map(r => (
+                                        <div key={r.codigo}>
+                                            <p className="text-xs uppercase font-medium mb-1 text-slate-500 dark:text-slate-400">
+                                                Atividades — {r.rotulo} (Tabela {r.codigoD1001}1 do Anexo I){' '}
+                                                <span className="normal-case text-slate-400">· marque pelo menos uma</span>
+                                            </p>
+                                            <div className="max-h-40 overflow-y-auto rounded border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                                {/* Grava `REGIME:NNC`: as três tabelas repetem códigos (01A existe nas três). */}
+                                                {(ATIVIDADES_DERE as any)[r.codigo].map(([cod, desc]: readonly [string, string]) => {
+                                                    const chave = `${r.codigo}:${cod}`;
+                                                    return (
+                                                        <label key={chave} className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                            <input type="checkbox" className="mt-0.5" checked={atividades.includes(chave)} onChange={e => alternar('dereAtividades', atividades, chave, e.target.checked)} />
+                                                            <span><code>{cod}</code> {desc}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {temPrognosticos && (
+                                        <div>
+                                            <p className="text-xs uppercase font-medium mb-1 text-slate-500 dark:text-slate-400">UFs credenciadas (só concursos de prognósticos · Tabela 13)</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {Object.entries(TABELA_13_UF).map(([cod, uf]) => (
+                                                    <label key={cod} className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                                                        <input type="checkbox" checked={ufs.includes(cod)} onChange={e => alternar('dereUfsCredenciadas', ufs, cod, e.target.checked)} />
+                                                        {cod} {uf}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                         {(dados.regimeTributario === 'IMUNE' || dados.regimeTributario === 'ISENTA') && (
                             <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
                                 ⚠️ <strong>O CFI ainda não tem a lista de obrigações desta entidade.</strong>{' '}

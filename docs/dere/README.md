@@ -84,6 +84,15 @@
 - `{regTribPrinc}`/`{regTribSecund}` são `xs:byte` com enumeração 1/2/3 (e 9
   no principal) — o `codigoD1001` de `dere-regimes.js`.
 
+## O que o app já MONTA a partir destes arquivos
+
+- **D-1001** (`sefaz-backend/dere-evento-d1001.js`): XML na ordem do
+  `evtInfoContrib-v1_0_1.xsd`, a partir do cadastro (`dadosFiscais.dere*`), sem
+  `ds:Signature`, conferido contra o XSD pelo `dere-xsd-bolso.js`. Prévia em
+  ⚙️ Config Admin → 🏦 DeRE (rota `/api/admin/cadastro/dere-d1001-previa`).
+  **Não assina, não transmite.** Decisão do Paulo (02/09): a geração roda no
+  Fiscal; o insumo contábil dos mensais virá pelo túnel.
+
 ## Como o texto foi extraído
 
 `pypdf` num venv isolado (o `cryptography` do sistema está quebrado), uma

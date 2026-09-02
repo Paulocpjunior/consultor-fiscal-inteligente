@@ -79,11 +79,44 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   …/v1/consulta/lotes/{protocolo}`, XMLDSig RSA-SHA256/C14N/EndCertOnly com
   A1/A3 ICP-Brasil, e os **três pré-requisitos ADMINISTRATIVOS do dono**:
   piloto da Reforma, procuração no e-CAC ("Piloto da CBS" + "DeRE") e
-  credencial em piloto-cbs.tributos.gov.br. **Continua sem gerar/transmitir**:
-  o XSD do D-1001/D-1011 agora está na mão (gerar o evento de TABELA virou
-  possível tecnicamente), mas faltam os do fechamento e do D-2101, o insumo
-  dos mensais é contábil e a credencial é dele — a casa da geração é decisão
-  dele, não extensão minha.
+  credencial em piloto-cbs.tributos.gov.br.
+  🏛️ **A CASA DA GERAÇÃO FOI DECIDIDA — "Fiscal, tudo roda no Fiscal"** (Paulo,
+  02/09 à noite, respondendo à pergunta Fiscal × Contábil). Os eventos da DeRE
+  nascem no CFI; o Contábil continua sendo a FONTE do insumo dos mensais (PGCC,
+  balancete), que virá pelo túnel quando esses eventos entrarem. **E o D-1001
+  já nasceu** (`dere-evento-d1001.js`, PURO): é o único evento cujo insumo é
+  inteiramente de CADASTRO — atividades (Tabelas 21/31/41), regimes
+  secundários, `indNatTrib`, UFs credenciadas (Tabela 13, só prognósticos),
+  `iniValid`/`fimValid` — seis campos novos em `dadosFiscais.dere*`, whitelist
+  (com recusa de código fora da tabela) E modal no MESMO PR (regra do #382). O
+  XML sai na ORDEM do XSD, sem `ds:Signature` (quem assina é o gateway, na
+  transmissão que ainda não existe), e a rota
+  `GET /api/admin/cadastro/dere-d1001-previa?cnpj=&tpAmb=` devolve o XML mais a
+  conferência — botão **👁 Prévia do D-1001** por DECLARAÇÃO (raiz) no card.
+  📐 **E A CONFERÊNCIA É CONTRA O PRÓPRIO XSD** (`dere-xsd-bolso.js`, PURO): ele
+  lê o arquivo da Receita (sequência, min/max, atributos, pattern, enumeração,
+  min/maxLength, xs:date/byte) e confere o XML — o teste GERA e CONFERE, e
+  prova que o conferidor PEGA XML torto (ordem trocada, enumeração, pattern,
+  elemento desconhecido, `@id` ausente, namespace). O `ds:Signature` fica de
+  fora DITO nos avisos, nunca aprovado em silêncio; construção que ele não sabe
+  ler vira aviso, não aprovação. ⚠️ **O XSD é lido de `dist/docs/dere/xsd`
+  (servido), nunca de `docs/`**: a imagem de runtime copia `dist` e
+  `sefaz-backend`, e ler de `docs/` passaria no jest e quebraria no Cloud Run
+  (a lição do `services/` de 27/08) — travado por teste.
+  🚨 **O QUE O GERADOR RECUSA, com a régua do leiaute nomeada**: empresa não
+  obrigada pelo cadastro; secundário igual ao principal
+  (REG_SEC_DIFERENTE_REG_PRINC); atividade de regime não declarado
+  (REJEITAR_GRUPO_REGIME — as tabelas REPETEM códigos, `01A` existe nas três);
+  regime sem atividade (EXIGIR_GRUPO_REGIME); UF fora da Tabela 13 ou em quem
+  não é de prognósticos; `indNatTrib` ausente (**imunidade é afirmação, não
+  default**); `iniValid` ausente ou anterior a 01/10/2026 (INI_VALID) —
+  **data de validade não recebe default**, a tela diz qual é a da 1ª onda e
+  quem afirma é a pessoa. A prévia só monta INCLUSÃO: alteração/exclusão
+  exigem o recibo do evento anterior, e não há trilho para isso.
+  🚩 **O QUE CONTINUA FORA, e vai dito**: transmitir (credencial do piloto +
+  gateway assinando com o A1 do cofre — o desenho do Reinf), D-1011 (PGCC, do
+  Contábil pelo túnel), D-1101/D-1106 (insumo contábil mensal) e os quatro
+  eventos sem XSD. `entregaPeloApp` segue **false**.
   ✂️ **O QUE ENTROU** (`dere-regimes.js` PURO = vocabulário + régua "está na
   DeRE?" · `dere.js` PURO = eventos, cronograma, prazo, situação, triagem):
   (1) entrada `DERE` no catálogo — federal, mensal, dia 15, antecipa,
@@ -112,9 +145,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   da geração é o Consultor Contábil, **decisão do dono**. Até lá a entrega é por
   fora e se registra em Vencimentos como obrigação entregue fora do app.
   📌 **FILA DO PAULO**: (a) confirmar se algum cliente da carteira fornece sob
-  regime específico (a fila da 🏦 DeRE responde quem PARECE); (b) decidir a
-  casa da geração dos eventos — e, antes de qualquer código, os três
-  pré-requisitos administrativos (piloto, procuração, credencial); (c) se
+  regime específico (a fila da 🏦 DeRE responde quem PARECE) — e, nele,
+  preencher os campos da DeRE em Dados Fiscais e clicar **👁 Prévia do D-1001**:
+  é o XML que a Receita vai receber, conferido contra o XSD dela; (b) ~~decidir
+  a casa~~ **decidido: Fiscal** — agora os três pré-requisitos administrativos
+  (piloto, procuração, credencial) antes do gateway de transmissão; (c) se
   tiver o **MOD 1.0.1**, as **Mensagens de Erro** e os **XSD de D-1199, D-2101,
   D-9121 e D-9199**, mandar em PDF/ZIP como mandou estes: entram em
   `docs/dere/` e `public/docs/dere/` no mesmo desenho.

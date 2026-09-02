@@ -11,6 +11,8 @@
 //   GET /api/admin/cadastro/certificados/:cnpj
 //   GET /api/admin/cadastro/fechamentos?competencia=      (fase 5 — o CCI importa)
 //   GET /api/admin/cadastro/fechamentos/:cnpj?competencia=
+//   GET /api/admin/cadastro/dere-carteira?competencia=      (🏦 DeRE — a fila)
+//   GET /api/admin/cadastro/dere-d1001-previa?cnpj=&tpAmb=  (🏦 DeRE — prévia do D-1001, sem transmitir)
 //
 // Ideia do Paulo (07/08), depois que a colaboradora recebeu "CNPJ não
 // cadastrado" para uma empresa cadastrada. O mesmo cliente vive no CFI, no
@@ -34,6 +36,13 @@ import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horar
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { triarCarteira } from './triagem-terceiro-setor.js';
 import { triarCarteiraDere } from './dere.js';
+import { montarEventoD1001 } from './dere-evento-d1001.js';
+import { conferirXmlContraXsd } from './dere-xsd-bolso.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+import { regimeDaEmpresa } from './regime-tributario.js';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
@@ -109,6 +118,54 @@ router.get('/triagem-terceiro-setor', autorizar, async (req, res) => {
  *
  * `?competencia=` em 'AAAA-MM' ou 'MM/AAAA'; sem ela, o mês anterior ao atual.
  */
+/**
+ * 🧾 PRÉVIA DO D-1001 — o primeiro evento da DeRE que o CFI monta (Paulo,
+ * 02/09: "Fiscal, tudo roda no Fiscal"). Lê o doc CRU da empresa (o insumo
+ * mora em `dadosFiscais`), monta o XML SEM assinatura e o confere contra o
+ * XSD oficial servido pelo próprio app. NÃO grava, NÃO assina, NÃO transmite.
+ *
+ * `?cnpj=` (14) · `?tpAmb=` 1 produção / 2 produção restrita (padrão 2).
+ * Pendência de cadastro volta 200 com `evento.ok=false` e a lista NOMEADA —
+ * é resposta, não erro: quem lê precisa saber o que preencher.
+ */
+router.get('/dere-d1001-previa', autorizar, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.query.cnpj);
+        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        const db = getDb();
+        const ref = await acharEmpresaCadastrada(db, cnpj);
+        if (!ref) return res.status(404).json({ ok: false, error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI.` });
+        const snap = await db.collection(ref.colecao).doc(ref.empresaId).get();
+        const doc = { id: snap.id, colecao: ref.colecao, ...(snap.data() || {}) };
+        const regime = regimeDaEmpresa(doc).regime;
+        const evento = montarEventoD1001(doc, { regimeCatalogo: regime, tpAmb: req.query.tpAmb === '1' ? 1 : 2 });
+        let conferenciaXsd = null;
+        if (evento.ok) {
+            const xsd = lerXsdServido(evento.resumo.xsd);
+            conferenciaXsd = xsd
+                ? conferirXmlContraXsd(evento.xml, xsd)
+                : { ok: false, erros: [`XSD ${evento.resumo.xsd} não encontrado no servidor — a prévia saiu SEM conferência de schema.`], avisos: [], raiz: null, namespace: null };
+        }
+        return res.json({ ok: evento.ok && !!conferenciaXsd?.ok, evento, conferenciaXsd, regimeCatalogo: regime });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e?.message || 'Falha ao montar a prévia do D-1001.' });
+    }
+});
+
+/**
+ * O XSD é servido pelo app (public/ → dist/docs/dere/xsd). A imagem de runtime
+ * copia `dist` e `sefaz-backend`, NÃO `docs/` — ler de `docs/dere/xsd` aqui
+ * funcionaria no jest e quebraria no Cloud Run (a lição do `services/` de 27/08).
+ */
+function lerXsdServido(arquivo) {
+    const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+    for (const dir of ['dist/docs/dere/xsd', 'public/docs/dere/xsd']) {
+        const p = join(raiz, dir, arquivo);
+        if (existsSync(p)) return readFileSync(p, 'utf8');
+    }
+    return null;
+}
+
 router.get('/dere-carteira', autorizar, async (req, res) => {
     try {
         const comp = competenciaDaConsulta(req.query.competencia);
