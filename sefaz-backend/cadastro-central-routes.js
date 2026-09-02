@@ -33,6 +33,7 @@ import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horario-acesso.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { triarCarteira } from './triagem-terceiro-setor.js';
+import { triarCarteiraDere } from './dere.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
@@ -96,6 +97,45 @@ router.get('/triagem-terceiro-setor', autorizar, async (req, res) => {
         return res.status(500).json({ error: e?.message || 'Falha na triagem.' });
     }
 });
+
+/**
+ * 🏦 DeRE — quem está, quem PARECE estar, e quando vence (02/09).
+ *
+ * Paulo: *"crie uma nova função capaz de atender esta obrigação chamada DERE"*.
+ * A resposta do app é a FILA: obrigadas (cadastro afirma regime específico de
+ * IBS/CBS), candidatas (o CNAE sugere e o cadastro não diz), regimes que a
+ * documentação lida não confirma, e o que ficou de fora — contado. Consulta
+ * PURA, como a triagem do terceiro setor: quem grava é o cadastro.
+ *
+ * `?competencia=` em 'AAAA-MM' ou 'MM/AAAA'; sem ela, o mês anterior ao atual.
+ */
+router.get('/dere-carteira', autorizar, async (req, res) => {
+    try {
+        const comp = competenciaDaConsulta(req.query.competencia);
+        if (!comp) {
+            return res.status(400).json({ error: 'Competência inválida — use AAAA-MM ou MM/AAAA.' });
+        }
+        const cadastro = await lerCadastro(getDb());
+        return res.json({ ok: true, ...triarCarteiraDere(cadastro.empresas, comp) });
+    } catch (e) {
+        return res.status(500).json({ error: e?.message || 'Falha ao levantar a DeRE da carteira.' });
+    }
+});
+
+/** 'AAAA-MM' | 'MM/AAAA' → 'MM/AAAA' (o formato do catálogo). Vazio = mês anterior. */
+function competenciaDaConsulta(bruto) {
+    const t = String(bruto || '').trim();
+    if (!t) {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() - 1);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+    const iso = normalizarCompetencia(t);
+    if (!iso) return null;
+    const [ano, mes] = iso.split('-');
+    return `${mes}/${ano}`;
+}
 
 router.get('/empresas', autorizar, async (req, res) => {
     try {

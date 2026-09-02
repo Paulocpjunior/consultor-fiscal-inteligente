@@ -1401,6 +1401,14 @@ export interface EmpresaDadosFiscais {
      */
     semFinsLucrativos?: boolean;
     /**
+     * 🏦 DeRE (02/09) — em qual REGIME ESPECÍFICO de IBS/CBS a empresa fornece
+     * (LC 214/2025, Título V: serviços financeiros, planos de saúde, loterias,
+     * imóveis, cooperativas…). `NENHUM` = olhei e não se aplica. Vazio = não
+     * informado (o app só SUGERE pelo CNAE, nunca decide). Vocabulário e régua
+     * em `sefaz-backend/dere-regimes.js`.
+     */
+    regimeEspecificoIbsCbs?: string | null;
+    /**
      * Cod.Cliente — código da empresa no E-Fiscal (Paulo, 04/08). TEXTO de 4
      * dígitos com zero à esquerda ('0001'–'9999'), ÚNICO na carteira. É a
      * chave do confronto CNPJ ↔ schema e{código} na migração do PG12, e o

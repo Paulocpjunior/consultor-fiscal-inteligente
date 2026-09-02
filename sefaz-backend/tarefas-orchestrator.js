@@ -203,6 +203,10 @@ export async function executarCronMensal(competencia, opts = {}) {
                 const mes = mesDoCliente({
                     colecao,
                     regimePadrao: emp.regimePadrao,
+                    // 🏦 DeRE: só vira tarefa quando o cadastro afirma o regime
+                    // específico; o CNAE vai como SINAL (candidata, não tarefa).
+                    regimeEspecificoIbsCbs: emp.dadosFiscais?.regimeEspecificoIbsCbs || '',
+                    cnae: emp.cnae || emp.dadosFiscais?.cnae || '',
                     uf: emp.dadosFiscais?.uf || emp.uf || '',
                     codMunIBGE: String(emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '').trim(),
                     prazosMunicipais,
