@@ -9,7 +9,10 @@
 //   SEFAZ_CRON_SECRET             Todos os crons de sincronizacao
 //   STORAGE_BUCKET                Upload .pfx, XMLs
 //   FISCAL_GATEWAY_TOKEN          Endpoint /internal de plano-contas
-//   GRAPH_*                       SharePoint sync de XMLs
+//   GRAPH_*                       ENVIO DE E-MAIL deste serviço (guia ao
+//                                 cliente, alertas, cofre) — NÃO é o SharePoint:
+//                                 aquele é OUTRO app do Azure, com credenciais
+//                                 próprias no PROXY (02/09).
 //
 // E modos operacionais (mock vs serpro real):
 //   DCTFWEB_MODE / DAS_MODE / DARF_MODE / NFSE_NAC_MODE
@@ -60,20 +63,39 @@ export const CONFIGS_MONITORADAS = [
         defaultRuntime: 'consultorfiscalapp.firebasestorage.app',
         descricao: 'Bucket de armazenamento Firebase',
         impacto: 'Upload de .pfx e download de XMLs falha' },
-    // ── SharePoint
-    { chave: 'GRAPH_TENANT_ID', categoria: 'sharepoint', criticidade: 'alto',
-        descricao: 'Tenant ID do Microsoft Graph',
-        impacto: 'SharePoint sync de XMLs não roda' },
-    { chave: 'GRAPH_CLIENT_ID', categoria: 'sharepoint', criticidade: 'alto',
-        descricao: 'Client ID do app no Azure AD',
-        impacto: 'SharePoint sync de XMLs não roda' },
-    { chave: 'GRAPH_CLIENT_SECRET', categoria: 'sharepoint', criticidade: 'alto',
-        descricao: 'Client secret do app no Azure AD',
-        impacto: 'SharePoint sync de XMLs não roda' },
+    // ── E-mail (Microsoft Graph)
+    //
+    // 🚨 ESTAS TRÊS ESTAVAM CLASSIFICADAS COMO "SHAREPOINT", E ISSO MANDAVA
+    // CONSERTAR O APLICATIVO ERRADO (02/09, print do Paulo, no mesmo dia em
+    // que ele perguntou DUAS vezes *"o e-mail não tínhamos matado ontem?"*).
+    //
+    // Medido no código: **neste serviço** (`consultor-fiscal-inteligente`) o
+    // `GRAPH_*` é lido por `graph-provider.js` (envio da guia ao cliente),
+    // `graph-mail-reader.js` (cofre de e-mail) e `teams-aviso.js` — **nenhum
+    // deles é SharePoint**. Quem fala com o SharePoint é o PROXY, que tem as
+    // credenciais DELE (app `a876887f…`, Secret Manager `graph-client-secret`).
+    //
+    // ⚠️ O nome da variável é o MESMO nos dois serviços — é isso que faz
+    // "matei ontem" parecer valer para os dois. Um rótulo errado aqui é o
+    // achado 18 (21/08) na forma mais cara: a pessoa vai, conserta o que já
+    // estava certo, e o e-mail continua morto.
+    { chave: 'GRAPH_TENANT_ID', categoria: 'email', criticidade: 'alto',
+        descricao: 'Tenant ID do Microsoft Graph (envio de e-mail deste serviço)',
+        impacto: 'Nenhum e-mail sai pelo app (guia ao cliente, alertas, cofre de e-mail)' },
+    { chave: 'GRAPH_CLIENT_ID', categoria: 'email', criticidade: 'alto',
+        descricao: 'Client ID do app de E-MAIL no Azure AD (não é o do SharePoint)',
+        impacto: 'Nenhum e-mail sai pelo app (guia ao cliente, alertas, cofre de e-mail)' },
+    { chave: 'GRAPH_CLIENT_SECRET', categoria: 'email', criticidade: 'alto',
+        descricao: 'Client secret do app de E-MAIL no Azure AD — o do SharePoint é OUTRO, e mora no proxy',
+        impacto: 'Nenhum e-mail sai pelo app (guia ao cliente, alertas, cofre de e-mail). '
+            + 'Grave em GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente (Cloud Run) — '
+            + 'corrigir o segredo do proxy NÃO conserta este.' },
     // SHAREPOINT_HOST so importa se a empresa usa o sync de XML via SharePoint.
-    // GRAPH_* (acima) sao usados TAMBEM pra email (cert-alerta, captura-resumo,
-    // que funcionam). Logo, GRAPH_* setado != SharePoint em uso. Marcamos
-    // opcional pra nao alarmar quem usa SharePoint apenas pra email.
+    //
+    // 🚨 O COMENTÁRIO ANTIGO DIZIA QUE `GRAPH_*` ERA "TAMBÉM" PARA E-MAIL —
+    // meia-verdade que sustentou o rótulo errado. Neste serviço o `GRAPH_*` é
+    // **SÓ** e-mail: o SharePoint é falado pelo PROXY, com credenciais dele.
+    // Marcamos opcional para não alarmar quem não usa o sync de XML.
     { chave: 'SHAREPOINT_HOST', categoria: 'sharepoint', criticidade: 'alto', opcional: true,
         descricao: 'Host do SharePoint (ex.: empresa.sharepoint.com)',
         impacto: 'SharePoint sync de XMLs não roda (só importa se você usa essa via de importação)' },
