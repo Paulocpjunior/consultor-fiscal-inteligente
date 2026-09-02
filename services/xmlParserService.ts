@@ -91,6 +91,10 @@ export function competenciaFromIso(iso: string): string {
 import { classificarPorCfop } from './cfopClassifier';
 // Régua ÚNICA de direção (tpNF decide quando a empresa é a emitente).
 import { decidirDirecaoPorTpNF } from '../sefaz-backend/xml-metadata-helper.js';
+// 🚨 Na NFS-e o cancelamento está DENTRO do documento (não há evento) — e a
+// régua lê o vocabulário dele, em vez de listar o nome da tag de cada
+// prefeitura. Caso ZAMBOLIN 08/2026: nota cancelada somando no faturamento.
+import { cancelamentoDeclarado } from './nfseCancelamento';
 export { classificarPorCfop };
 
 // ─── Tipos internos do parser ───────────────────────────────────────────────
@@ -583,9 +587,44 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     const codigoCnae = getTextContent(servico, 'CodigoCnae');
 
     // ── Prestador ──────────────────────────────────────────────────────────
-    const prestadorEl = infNfse.getElementsByTagName('PrestadorServico')[0]
+    // 🚨 O PRIMEIRO BLOCO QUE **EXISTE** NÃO É O PRIMEIRO QUE **TEM O
+    // DOCUMENTO** — e essa diferença custou a importação do Ivan (0530, 02/09).
+    //
+    // MEDIDO no XML real (318.xml, ABRASF v2 com o bloco IBS/CBS da reforma):
+    // `<PrestadorServico>` EXISTE e contém **só** RazaoSocial, Endereco e
+    // Contato — **nenhum CNPJ**. O documento do prestador mora em
+    // `DeclaracaoPrestacaoServico › InfDeclaracaoPrestacaoServico › Prestador ›
+    // CpfCnpj › Cnpj`. O leitor achava `PrestadorServico`, parava ali, e o
+    // `emit` saía VAZIO — a recusa dizia "não consta como emitente" sobre a
+    // própria prestadora.
+    //
+    // ⚠️ O tomador escapou por acidente: o bloco dele TEM
+    // `IdentificacaoTomador`. Era a mesma armadilha esperando a próxima
+    // prefeitura que aninhasse diferente.
+    const blocoComDocumento = (nomes: string[]): Element | null => {
+        let primeiro: Element | null = null;
+        for (const nome of nomes) {
+            const els = Array.from(infNfse!.getElementsByTagName(nome)) as Element[];
+            for (const el of els) {
+                if (!primeiro) primeiro = el;
+                const temDoc = getTextContent(el, 'Cnpj') || getTextContent(el, 'cnpj')
+                    || getTextContent(el, 'CNPJ') || getTextContent(el, 'Cpf')
+                    || getTextContent(el, 'cpf') || getTextContent(el, 'CPF');
+                if (temDoc) return el;
+            }
+        }
+        // ⚠️ Nenhum tem documento ⇒ devolve o primeiro que existe, porque ele
+        // ainda carrega NOME e ENDEREÇO — perdê-los seria trocar um buraco por
+        // dois.
+        return primeiro;
+    };
+
+    const prestadorEl = blocoComDocumento(['PrestadorServico', 'prestadorServico', 'Prestador', 'prestador']);
+    // O bloco do NOME nem sempre é o bloco do DOCUMENTO (é o caso deste
+    // leiaute): quem tem a razão social é `PrestadorServico`.
+    const prestadorNomeEl = infNfse.getElementsByTagName('PrestadorServico')[0]
         || infNfse.getElementsByTagName('prestadorServico')[0]
-        || infNfse.getElementsByTagName('Prestador')[0];
+        || prestadorEl;
     const identPrestador = prestadorEl
         ? (prestadorEl.getElementsByTagName('IdentificacaoPrestador')[0]
             || prestadorEl.getElementsByTagName('identificacaoPrestador')[0])
@@ -595,23 +634,26 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
         getTextContent(identPrestador, 'Cnpj')
         || getTextContent(identPrestador, 'cnpj')
         || getTextContent(prestadorEl, 'Cnpj')
+        || getTextContent(prestadorEl, 'cnpj')
     );
     const prestadorCpf = onlyDigits(
         getTextContent(identPrestador, 'Cpf')
         || getTextContent(identPrestador, 'cpf')
+        || getTextContent(prestadorEl, 'Cpf')
+        || getTextContent(prestadorEl, 'cpf')
     );
 
-    const prestadorEnder = prestadorEl
-        ? (prestadorEl.getElementsByTagName('Endereco')[0]
-            || prestadorEl.getElementsByTagName('endereco')[0])
+    const prestadorEnder = prestadorNomeEl
+        ? (prestadorNomeEl.getElementsByTagName('Endereco')[0]
+            || prestadorNomeEl.getElementsByTagName('endereco')[0])
         : null;
 
     const emitente: DocumentoFiscalParticipante = {
         cnpjCpf: prestadorCnpj || prestadorCpf,
-        nome: getTextContent(prestadorEl, 'RazaoSocial')
-            || getTextContent(prestadorEl, 'razaoSocial')
-            || getTextContent(prestadorEl, 'NomeFantasia'),
-        fantasia: getTextContent(prestadorEl, 'NomeFantasia') || undefined,
+        nome: getTextContent(prestadorNomeEl, 'RazaoSocial')
+            || getTextContent(prestadorNomeEl, 'razaoSocial')
+            || getTextContent(prestadorNomeEl, 'NomeFantasia'),
+        fantasia: getTextContent(prestadorNomeEl, 'NomeFantasia') || undefined,
         ie: getTextContent(identPrestador, 'InscricaoMunicipal')
             || getTextContent(identPrestador, 'inscricaoMunicipal') || undefined,
         uf: getTextContent(prestadorEnder, 'Uf')
@@ -629,9 +671,10 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     };
 
     // ── Tomador ────────────────────────────────────────────────────────────
-    const tomadorEl = infNfse.getElementsByTagName('TomadorServico')[0]
-        || infNfse.getElementsByTagName('tomadorServico')[0]
-        || infNfse.getElementsByTagName('Tomador')[0];
+    // A MESMA régua do prestador: o tomador deste leiaute escapou por acidente
+    // (o bloco dele tem `IdentificacaoTomador`), e era a mesma armadilha
+    // esperando a próxima prefeitura que aninhasse diferente.
+    const tomadorEl = blocoComDocumento(['TomadorServico', 'tomadorServico', 'Tomador', 'tomador']);
     const identTomador = tomadorEl
         ? (tomadorEl.getElementsByTagName('IdentificacaoTomador')[0]
             || tomadorEl.getElementsByTagName('identificacaoTomador')[0])
@@ -736,12 +779,20 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
         : 'Prestação de serviço';
 
     // ── Status ─────────────────────────────────────────────────────────────
-    // NFSe emitida e presente no XML é sempre autorizada.
-    // Cancelamento vem em XML separado (evento).
-    const cancelada = getTextContent(infNfse, 'NfseCancelamento')
-        || getTextContent(infNfse, 'DataHoraCancelamento')
-        || getTextContent(doc.documentElement, 'NfseCancelamento');
-    const status: XmlStatusDocumento = cancelada ? 'cancelado' : 'autorizado';
+    // 🚨 NA NFS-e O CANCELAMENTO ESTÁ DENTRO DO DOCUMENTO — não há evento (é a
+    // exceção declarada em `docCancelado`). Este trecho conhecia DUAS tags
+    // (`NfseCancelamento`, `DataHoraCancelamento`) e a NFS-e 205 de Santo André
+    // (MARCOS ANTONIO ZAMBOLIN, 08/2026) veio com o carimbo CANCELADA na cara
+    // do PDF e entrou como **Vigente**: o relatório somou 27.219,10 num mês de
+    // 13.609,55, porque a 206 SUBSTITUI a 205 e as duas foram contadas.
+    //
+    // ⚠️ Em vez de acrescentar o nome da tag daquela prefeitura — o que
+    // deixaria a PRÓXIMA no mesmo silêncio —, a régua lê o VOCABULÁRIO do
+    // documento inteiro. Listar nomes é a trava por LISTA (13/08).
+    const todasAsTags = Array.from(doc.getElementsByTagName('*'))
+        .map((el) => ({ tag: el.nodeName, texto: el.textContent || '' }));
+    const cancelamento = cancelamentoDeclarado(todasAsTags);
+    const status: XmlStatusDocumento = cancelamento.cancelada ? 'cancelado' : 'autorizado';
 
     return {
         chave,

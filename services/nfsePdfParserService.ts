@@ -398,7 +398,7 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
 export function matchNfseEmpresa(
     parsed: NfsePdfParsed,
     cnpjEmpresa: string,
-): { ok: boolean; direcao: 'entrada' | 'saida'; motivo?: string } {
+): { ok: boolean; direcao: 'entrada' | 'saida'; motivo?: string; derivada?: boolean } {
     const alvo = onlyDigits(cnpjEmpresa);
     const prest = onlyDigits(parsed.prestador.cnpj);
     const toma = onlyDigits(parsed.tomador.cnpj);
@@ -417,20 +417,30 @@ export function matchNfseEmpresa(
         const textoLimpo = parsed.rawText.replace(/\D/g, '');
         const idxAlvo = textoLimpo.indexOf(alvo);
         if (idxAlvo >= 0) {
-            // Procura QUALQUER outro CNPJ no texto bruto (com ou sem pontuacao)
-            const todosCnpjs = (parsed.rawText.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{14}/g) || [])
+            // 🚨 A CHAVE DE ACESSO VIRAVA UM CNPJ FALSO (02/09, RADIO E TV SUL
+            // AMERICANA · DANFSe v2.0 de Brasília): a chave tem 44 dígitos e
+            // `\d{14}` casa os 14 primeiros dela. Esse "CNPJ" aparece no TOPO
+            // do documento, então a heurística de posição concluía que a
+            // empresa vinha DEPOIS — e carimbou **ENTRADA** numa nota em que
+            // ela é a PRESTADORA. Chave fora da lista de candidatos.
+            const chaves = parsed.rawText.match(/\d{44}/g) || [];
+            const semChave = chaves.reduce((t, c) => t.split(c).join(' '), parsed.rawText);
+            const todosCnpjs = (semChave.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{14}/g) || [])
                 .map(s => s.replace(/\D/g, ''))
                 .filter(d => d.length === 14 && d !== alvo);
             if (todosCnpjs.length > 0) {
                 // Estrategia: ABRASF normalmente lista PRESTADOR antes de TOMADOR.
-                // Posicao do alvo nos digitos vs posicao do primeiro outro CNPJ.
                 const idxOutro = textoLimpo.indexOf(todosCnpjs[0] || '');
                 const direcao: 'entrada' | 'saida' = idxAlvo > idxOutro ? 'entrada' : 'saida';
-                return { ok: true, direcao };
+                // ⚠️ DERIVADA: saiu da POSIÇÃO no texto, não de um campo que o
+                // documento nomeia. Ela é palpite, e palpite não se apresenta
+                // como fato — quem confirma é a pessoa, na tela.
+                return { ok: true, direcao, derivada: true };
             }
-            // Encontrou alvo mas nao outro CNPJ - aceita como entrada por default
-            // (cliente eh provavelmente o tomador em PDF que ele mesmo guarda).
-            return { ok: true, direcao: 'entrada' };
+            // 🚨 AQUI ESTAVA O CHUTE, e ele estava escrito: *"aceita como
+            // entrada por default (cliente eh PROVAVELMENTE o tomador)"*.
+            // Direção decide em QUAL LIVRO a nota entra — provável não serve.
+            return { ok: true, direcao: 'entrada', derivada: true };
         }
     }
 

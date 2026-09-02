@@ -5,6 +5,54 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 UM LADO NÃO LIDO NÃO VIRA DIREÇÃO CHUTADA — três casos no mesmo dia, a
+  mesma classe** (02/09).
+  🔴 **(1) O PRIMEIRO BLOCO QUE *EXISTE* NÃO É O PRIMEIRO QUE *TEM O
+  DOCUMENTO*** (Ivan Inacio, 0530, notas de serviço PRESTADO recusadas com
+  `emit: -`). **MEDIDO no XML real**: o `<PrestadorServico>` daquele leiaute
+  (ABRASF v2 com o bloco IBS/CBS da reforma) contém **só** RazaoSocial,
+  Endereco e Contato — **nenhum CNPJ**; o documento mora em
+  `DeclaracaoPrestacaoServico › InfDeclaracaoPrestacaoServico › Prestador ›
+  CpfCnpj › Cnpj`. O leitor achava o primeiro, parava, e o emitente saía
+  VAZIO. ⚠️ O TOMADOR escapou **por acidente** (o bloco dele tem
+  `IdentificacaoTomador`) — era a mesma armadilha esperando a próxima
+  prefeitura. Os dois passaram pela mesma régua: **escolher o bloco que TEM o
+  documento**, com o NOME continuando a vir do bloco que tem o nome (perder a
+  razão social ao consertar o CNPJ seria trocar um buraco por dois).
+  ✅ **Provado contra o arquivo REAL**: antes `emit: -`; depois
+  `emit=11010322000138 · direcao: 'saida'`. A fixture do teste reproduz a
+  ESTRUTURA medida, com CNPJ de teste — **nada do cliente entra no repo**.
+  🔴 **(2) O PDF AFIRMAVA "ENTRADA (somos tomador)" COM OS DOIS LADOS VAZIOS**
+  (RADIO E TV SUL AMERICANA, DANFSe v2.0 de Brasília, onde a empresa é a
+  PRESTADORA). O chute estava ESCRITO no código: *"aceita como entrada por
+  default (cliente eh **provavelmente** o tomador)"*. **Direção decide em QUAL
+  LIVRO a nota entra** — provável não serve.
+  🐛 **E a heurística de posição lia a CHAVE como CNPJ**: a chave tem 44
+  dígitos e `\d{14}` casa os 14 primeiros dela; esse "CNPJ" está no TOPO do
+  documento, então a conta concluía que a empresa vinha DEPOIS e carimbava
+  entrada. Chave fora dos candidatos.
+  ✂️ **Palpite não se apresenta como fato**: direção DERIVADA (posição no
+  texto, não campo nomeado) vira **ESCOLHA na tela**, em âmbar, com o motivo —
+  não um selo azul afirmando.
+  🔴 **(3) NOTA CANCELADA CONTANDO NO FATURAMENTO** (MARCOS ANTONIO ZAMBOLIN,
+  08/2026): a NFS-e **205** tem o carimbo CANCELADA na cara do PDF e o app a
+  mostrava **🟢 Vigente**; o relatório somou **R$ 27.219,10** num mês de
+  **R$ 13.609,55**, porque a 206 SUBSTITUI a 205 e as duas foram contadas.
+  📌 **Na NFS-e o cancelamento está DENTRO do documento** (é a exceção de
+  `docCancelado`: não há evento). O leitor conhecia DUAS tags e a de Santo
+  André não é nenhuma delas — então a régua passou a ler o **VOCABULÁRIO** do
+  documento (qualquer tag que fale de *cancelamento* com conteúdo), como o
+  explorador do SharePoint: **navegar, não prever**.
+  ⚠️ **A régua é CONSERVADORA porque os lados custam diferente**: deixar
+  cancelada passar infla o faturamento; marcar nota VÁLIDA como cancelada
+  **apaga receita** de livro fiscal, que é pior. Valor negativo (`false`,
+  `não`, `0`) não cancela, e a **SUBSTITUIÇÃO fica de fora** — `NfseSubstituida`
+  e `NfseSubstituidora` apontam para lados OPOSTOS, e trocá-las apagaria a nota
+  boa.
+  🚩 **O ACERVO NÃO SE CONSERTA SOZINHO**: a 205 já está gravada como
+  autorizada. O caminho é reimportar o MESMO PDF/XML com **↻ Substituir os que
+  já estão no banco** (14/08) — o id é determinístico, então ele cai por cima.
+
 - **🚨 "ME MANDE O ARQUIVO" É PASSAR O PROBLEMA DE VOLTA — e o app tinha o
   arquivo na mão** (02/09, caso do Ivan na 0530; eu pedi o XML e o Paulo
   cortou: *"vc esta brincando? como vou enviar um arquivo xml se vc diz que nao
