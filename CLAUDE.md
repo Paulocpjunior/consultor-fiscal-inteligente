@@ -5,6 +5,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "✓ NFSe Nac" NUMA EMPRESA QUE NÃO TEM TRILHO DE NFS-e — e a ação mandava
+  clicar num botão que o próprio trilho recusa** (02/09, Paulo: *"verifica push
+  de nfs de entrada cliente, silvio freire"*, e logo depois o detalhe que muda
+  tudo: *"este cliente usa certificado A3"*).
+  🔴 `classificarCapturaNfseNacionalAdn` respondia, para A3, **`ok: true · via:
+  'a3-local' · motivo: null`** — linha limpa, sem bloqueio —, apoiado num
+  comentário que dizia *"conta como coberto no painel porque depende do agente
+  local A3"*.
+  ✅ **QUEM FECHOU A MEDIÇÃO FOI O DONO**: *"o agente só puxa NF-e da SEFAZ, não
+  puxa NFS-e"*. E o CÓDIGO concorda: o `GET /state/:cnpj` do agente devolve
+  **`sefaz_state`** (o cursor do **DistDFe**, que é NF-e), e **não existe rota
+  que ofereça o cursor do ADN** (`nfse_nacional_dfe_state`) — sem cursor não há
+  de onde retomar, logo não há busca.
+  📌 **É o `temA3Proprio` de 23/08 repetido no trilho da NFS-e**: validação por
+  **STATUS** (tem cartão A3 no cadastro) lida como **RESULTADO** (está
+  capturando). A correção daquele dia fechou a NF-e e **não entrou aqui**.
+  🔴 **E O PRÓPRIO TRILHO JÁ RECUSAVA**: `nfse-nacional-dfe-eligibility.js`
+  devolve INELEGÍVEL para A3 (*"ADN no Cloud Run exige A1 proprio; certificado
+  A3 precisa fluxo/agente local especifico"* — fluxo que não existe). **Duas
+  leituras do mesmo fato discordando**: a elegibilidade dizia "não roda", o
+  painel dizia "✓ ok".
+  🚨 **E A AÇÃO ANTIGA MANDAVA AO LUGAR QUE NÃO RESOLVE** — o achado 18 (21/08)
+  na forma mais cara: como o ADN nunca roda, a cobertura caía em
+  `adn-sem-visita` e dizia *"Rode a captura da NFS-e Nacional para este CNPJ"*,
+  **clique que o trilho recusa**. ⚠️ E o número de alarmes **NÃO muda** com a
+  correção: a empresa já acendia. O que muda é a CAUSA e a AÇÃO.
+  🐛 **E A MINHA PRIMEIRA VARREDURA DERRUBOU A MINHA PRÓPRIA CONCLUSÃO — pela
+  razão certa.** Eu ia provar "o agente não captura NFS-e" medindo se o backend
+  do agente MENCIONA NFS-e; ela acusou o `agent-routes.js`, que de fato importa
+  `importarDfeNfseNacional`. **ROTA QUE ACEITA ≠ TRILHO QUE TRAZ**: o
+  `POST /upload-batch` DETECTA NFS-e Nacional e importa — é **REDE**, para o dia
+  em que chegar. Guardei a correção sem subir e fui medir de novo, em vez de
+  empurrar: eu ia apagar o verde de ~202 empresas A3 sobre uma premissa que a
+  varredura tinha acabado de derrubar.
+  ✂️ **A assinatura mudou de "menciona NFS-e" para "oferece o CURSOR do ADN"** —
+  a primeira acusava código certo, e alarme sobre código certo é o jeito
+  conhecido de a equipe desligar a trava (a sétima vez do vício).
+  ⚠️ **O A1 DA MATRIZ CONTINUA VENCENDO O A3** (mesma raiz, regra de 27/08 do
+  caso J.N. VINATEX): ele é testado ANTES, então chegar no ramo do A3 significa
+  que ele não existe — e por isso ele vai NA FRASE como a primeira saída.
+  📌 **REGRA QUE FICA: quando o dono acrescenta um detalhe do cliente ("ele usa
+  A3"), isso não é contexto — é a MEDIÇÃO mudando de eixo.** A pergunta era
+  sobre captura de NFS-e; o A3 respondeu qual trilho se aplica, e sem ele eu
+  teria olhado o trilho errado.
+
 - **🚨 A DATA ATRAVESSAVA O TÚNEL CRUA — e o R-4020 recusava do outro lado**
   (02/09, Paulo: *"pode atacar r2010 e r4020 no contabil"*, com o print do
   Consultor Contábil: *"Nenhum beneficiário pôde ser convertido em evento ·

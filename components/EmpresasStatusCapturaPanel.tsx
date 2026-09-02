@@ -906,14 +906,21 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                             <Pill
                                                 ok={e.capturaNfseNacionalOk}
                                                 alerta={e.coberturaNfseNac?.cor === 'atencao'}
-                                                label={e.capturaNfseNacionalVia === 'a3-local' ? 'NFSe Nac A3' : 'NFSe Nac'}
-                                                // ⚠️ Os DOIS fatos convivem: o A3 diz de onde
-                                                // vem a captura, a cobertura diz se ela
-                                                // ENTREGOU. Trocar um pelo outro apagaria
-                                                // metade da resposta.
+                                                // 🚨 O rótulo "NFSe Nac A3" AFIRMAVA cobertura
+                                                // que não existe: o agente local captura NF-e e
+                                                // NFC-e, NUNCA NFS-e (02/09, caso SILVIO FREIRE).
+                                                // Empresa A3 fica sem trilho automático aqui, e a
+                                                // linha diz isso em vez de sugerir que o agente
+                                                // resolve.
+                                                label={e.capturaNfseNacionalVia === 'a3-sem-trilho-nfse'
+                                                    ? 'NFSe Nac (A3 sem trilho)' : 'NFSe Nac'}
+                                                // ⚠️ Os DOIS fatos convivem: de onde VIRIA a
+                                                // captura, e se ela ENTREGOU. Trocar um pelo
+                                                // outro apagaria metade da resposta.
                                                 title={[
-                                                    e.capturaNfseNacionalVia === 'a3-local'
-                                                        ? 'Coberta por certificado A3. Captura depende do agente local cfi-a3, fora do cron em nuvem.'
+                                                    e.capturaNfseNacionalVia === 'a3-sem-trilho-nfse'
+                                                        ? 'Certificado A3 não roda no Cloud Run, e o agente local A3 captura NF-e e NFC-e — nunca NFS-e. '
+                                                          + 'Rodar a captura do ADN não resolve: o próprio trilho recusa a empresa.'
                                                         : null,
                                                     e.coberturaNfseNac?.texto,
                                                     e.coberturaNfseNac?.acao,
