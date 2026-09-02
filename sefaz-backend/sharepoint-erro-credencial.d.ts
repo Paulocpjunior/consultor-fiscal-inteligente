@@ -40,6 +40,12 @@ export function appDaCredencial(motivo?: unknown): {
  */
 export function mensagemDeCredencialRecusada(erro?: unknown): string | null;
 
+/**
+ * Corta a mensagem sem deixar o corte engolir o nome do app do Azure — ele é
+ * o que decide ONDE gravar o segredo, e vem DEPOIS no texto da Microsoft.
+ */
+export function recortarPreservandoApp(mensagem?: unknown, limite?: number): string;
+
 /** A ação de uma falha de credencial, dita para quem está no fim de mês. */
 export declare const ACAO_CREDENCIAL_ENVIO: string;
 

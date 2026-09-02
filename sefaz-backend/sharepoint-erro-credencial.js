@@ -245,6 +245,36 @@ export function mensagemDeCredencialRecusada(erro) {
 }
 
 /**
+ * 🚨 O CORTE DECAPITA O NOME DO APP — e ele é a única coisa que decide ONDE
+ * gravar o segredo.
+ *
+ * 02/09, no print do Auto-Sync: **1.668 erros**, todos terminando em
+ * *"...is the client secre"* — cortados no caractere 200, e a Microsoft só
+ * nomeia o aplicativo **depois** disso (`for a secret added to app '…'`).
+ * Resultado: o card dizia *"a resposta não nomeou o aplicativo"* sobre 416
+ * respostas que nomeavam.
+ *
+ * 📌 É o MESMO defeito que o `pendenciaDeGravacaoSharePoint` tinha um dia
+ * antes (corte em 220 antes de ler), agora um nível acima — na GRAVAÇÃO do
+ * log. Lá o dado ainda existia; aqui ele **nunca chega**.
+ *
+ * ⚠️ A saída não é tirar o limite (log de 400 empresas não pode crescer sem
+ * teto): é o corte **não poder** engolir o fato decisivo. O app id é extraído
+ * da mensagem INTEIRA e reanexado depois do corte.
+ */
+export function recortarPreservandoApp(mensagem, limite = 200) {
+    const inteiro = String(mensagem || '');
+    if (inteiro.length <= limite) return inteiro;
+    const { id } = appDaCredencial(inteiro);
+    if (!id) return inteiro.slice(0, limite);
+    // ⚠️ O sufixo reproduz a FORMA que `appDaCredencial` lê (`app '<id>'`) —
+    // reanexar o id noutro formato o deixaria invisível para o próprio dono,
+    // que é o defeito com outra roupa. Pego pelo teste.
+    const sufixo = ` […] [app '${id}']`;
+    return inteiro.slice(0, Math.max(0, limite - sufixo.length)) + sufixo;
+}
+
+/**
  * A ação de uma falha de credencial, dita para quem está no fim de mês.
  *
  * 🚨 Ela diz TRÊS coisas que ninguém deduziria olhando a linha de um cliente:
