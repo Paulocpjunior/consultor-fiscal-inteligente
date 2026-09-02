@@ -355,12 +355,19 @@ describe('🚨 o payload do R-4020 entrega a retenção EFETIVA', () => {
     });
 
     // ⚠️ O ajuste de UMA nota não alcança a outra — nem do mesmo prestador.
+    //
+    // ⚠️ FIXTURE TROCADA (02/09): ela usava `valorCsll: 0` para forçar o estado
+    // "documento suspeito", e desde o caso da EMBRATOP GEO **CSRF presente e
+    // ZERO é RESPOSTA** — o documento declara que não houve retenção, e a nota
+    // sai do R-4020 sem ajuste nenhum. Ou seja, a fixture descrevia um mundo
+    // que o app não vive mais. O que ela protege continua inteiro: o valor
+    // agora é uma CSRF que NÃO fecha em 4,65%, que é o suspeito de verdade.
     it('ajustar uma nota não mexe na outra do mesmo prestador', () => {
         const p = montarPayloadReinfPJ({
             cnpjTomador: CNPJ_TOMADOR, competencia: '2026-08',
             documentos: [
-                docAtlas({ chave: 'NFSE-1', numero: '1', valorCsll: 0 }),
-                docAtlas({ chave: 'NFSE-2', numero: '2', valorCsll: 0 }),
+                docAtlas({ chave: 'NFSE-1', numero: '1', valorCsll: 100 }),
+                docAtlas({ chave: 'NFSE-2', numero: '2', valorCsll: 100 }),
             ],
             ajustes: { 'NFSE-1': { pis: 1, cofins: 2, csll: 3, autor: 'a@b.com', motivo: 'x'.repeat(20) } },
         });

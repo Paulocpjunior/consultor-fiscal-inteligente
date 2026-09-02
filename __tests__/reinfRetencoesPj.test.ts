@@ -185,3 +185,70 @@ describe('as ressalvas nunca somem', () => {
         expect(p.ressalvas.join(' ')).toMatch(/problema é de CAPTURA/);
     });
 });
+
+// ============================================================================
+// 🚨 A NOTA SEM RETENÇÃO SAI DO R-4020 — e NOMEADA (02/09, HS PROJETOS)
+//
+// Paulo: *"puxou uma nota que não tem retenção, mas foi informado errado, como
+// não considerar ela?"*. A EMBRATOP ficava PENDENTE esperando um ajuste que não
+// existe: o R-4020 declara RETENÇÃO, e naquela nota não houve nenhuma.
+// ============================================================================
+describe('🚫 nota que o documento declara sem retenção', () => {
+    // Os números são os do PDF: base 140,00 · PIS 2,31 (1,65%) · COFINS 10,64
+    // (7,60%) · contribuições retidas 0,00.
+    const nota = (extra: any = {}) => ({
+        tipoDoc: 'NFSe', direcao: 'entrada', status: 'autorizado',
+        numero: '22243',
+        prestadorCnpj: '03497158000107', prestadorNome: 'EMBRATOP GEO TECNOLOGIAS LTDA',
+        tomadorCnpj: '05147016000145',
+        valores: { valorServicos: 140, pis: 2.31, cofins: 10.64, csll: 0 },
+        ...extra,
+    });
+
+    it('não vira evento, e o beneficiário deixa de ficar pendente', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: '05147016000145', competencia: '2026-08', documentos: [nota()],
+        });
+        expect(p.notas).toHaveLength(0);
+        expect(p.resumo.semRetencaoDeclarada).toBe(1);
+        // ⚠️ Contado À PARTE de `semRetencao`: lá o documento não trouxe campo
+        // nenhum; aqui ele trouxe e DECLAROU que não houve retenção.
+        expect(p.resumo.semRetencao).toBe(0);
+    });
+
+    it('NÃO some calada — sai nomeada, com prestador e nota', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: '05147016000145', competencia: '2026-08', documentos: [nota()],
+        });
+        expect(p.resumo.forasSemRetencao[0]).toMatchObject({
+            prestadorNome: 'EMBRATOP GEO TECNOLOGIAS LTDA', numero: '22243',
+        });
+        const texto = p.ressalvas.join(' | ');
+        expect(texto).toMatch(/EMBRATOP GEO TECNOLOGIAS LTDA \(nota 22243\)/);
+        expect(texto).toMatch(/Não Retidos/);
+        expect(texto).toMatch(/Não há ajuste a fazer/);
+    });
+
+    // ⚠️ IRRF É OUTRA RETENÇÃO: havendo IR retido a nota FICA, mesmo com a CSRF
+    // zerada — tirá-la deixaria de declarar o IR que houve.
+    it('com IRRF retido a nota FICA', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: '05147016000145', competencia: '2026-08',
+            documentos: [nota({ valores: { valorServicos: 140, pis: 2.31, cofins: 10.64, csll: 0, ir: 2.1 } })],
+        });
+        expect(p.notas).toHaveLength(1);
+        expect(p.resumo.semRetencaoDeclarada).toBe(0);
+    });
+
+    // ⚠️ E O AJUSTE TRAZ A NOTA DE VOLTA: quem tem prova de que houve retenção
+    // declara, e a declaração vence o documento.
+    it('o ajuste declarado traz a nota de volta', () => {
+        const doc = nota({ chave: 'CH-22243' });
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: '05147016000145', competencia: '2026-08', documentos: [doc],
+            ajustes: { 'CH-22243': { pis: 0.91, cofins: 4.2, csll: 1.4, autor: 'sandra', motivo: 'retencao conferida no banco' } },
+        });
+        expect(p.notas).toHaveLength(1);
+        expect(p.resumo.semRetencaoDeclarada).toBe(0);
+    });
+});

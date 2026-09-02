@@ -13,6 +13,10 @@ export interface CoerenciaRetencao {
         | 'sem-retencao'
         | 'csll-e-o-total'
         | 'campos-sao-totais-da-operacao'
+        // O documento DECLARA que não houve retenção: campos de PIS/COFINS com
+        // a assinatura da OPERAÇÃO e o campo de contribuições RETIDAS presente
+        // e ZERO ("PIS/COFINS/CSLL Não Retidos" na NFS-e paulistana).
+        | 'sem-retencao-declarada'
         | 'aliquota-fora'
         | 'coerente';
     motivo: string;
@@ -23,6 +27,10 @@ export interface CoerenciaRetencao {
 
 export function conferirRetencaoFederal(n: {
     base?: unknown; pis?: unknown; cofins?: unknown; csll?: unknown; ir?: unknown; inss?: unknown;
+    /** PRESENÇA do campo de contribuições retidas — `?? 0` do chamador colapsa
+     *  ausência em zero, e é essa diferença que decide "o documento diz que não
+     *  houve" × "o documento não trouxe o campo". */
+    csllPresente?: boolean;
 }): CoerenciaRetencao;
 
 // `any` de propósito: os consumidores existentes acessam o resumo livremente.

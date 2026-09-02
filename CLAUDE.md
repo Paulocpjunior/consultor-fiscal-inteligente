@@ -5,6 +5,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O DOCUMENTO DIZIA "NÃO RETIDOS" E O APP MANDAVA AJUSTAR À MÃO** (02/09,
+  Paulo na HS PROJETOS · 08/2026, nota **22243** da EMBRATOP GEO: *"puxou uma
+  nota que não tem retenção, mas foi informado errado, **como não considerar
+  ela?**"*).
+  📖 **O PDF traz a resposta, lado a lado**: `PIS/PASEP 2,31` (**1,65%** de 140)
+  e `COFINS 10,64` (**7,60%**) — as alíquotas do **NÃO-CUMULATIVO**, ou seja o
+  tributo da **OPERAÇÃO** do prestador (o caso ATLAS de 07/08) —, e
+  **`Contribuições Sociais - Retidas: 0,00`** com a descrição
+  **`0 - PIS/COFINS/CSLL Não Retidos`**.
+  🔴 **O app já detectava a assinatura da operação e PARAVA na denúncia**: a
+  EMBRATOP ficava **pendente** com um *"Ajustar retenção da nota 22243"*,
+  esperando um ajuste **que não existe** — não há retenção a ajustar. É a régua
+  de 24/08 ao contrário: **quando o app tem como saber a resposta, avisar não é
+  entrega, é passar o problema adiante**.
+  📌 **E O CAMPO DE CONTRIBUIÇÕES RETIDAS É *O* CAMPO DA RETENÇÃO NESTE
+  LEIAUTE** — é dele que sai a **CSRF de 4,65%** no caso ATLAS. Presente e
+  **ZERO**, com a assinatura da operação já provada, os dois sinais concordam:
+  **não houve retenção**. Situação nova `sem-retencao-declarada`, e a nota **sai
+  do R-4020** (o evento declara RETENÇÃO — sem retenção não há evento).
+  ⚠️ **PRESENÇA ≠ ZERO, e é isso que sustenta tudo**: o túnel fazia
+  `csllOuTotal: r2(fed.csllOuTotal ?? 0)` — **ausência colapsada em zero**. A
+  presença passou a viajar SEPARADA (`csllOuTotalPresente`); sem o campo o app
+  **não conclui nada** e a nota continua exigindo conferência, porque o
+  documento não disse.
+  🚨 **E A RÉGUA SÓ VALE COM A ASSINATURA DA OPERAÇÃO**: PIS **0,65%** + COFINS
+  **3%** com a CSRF zerada é **retenção de verdade** com o campo agregado em
+  branco — concluir "sem retenção" ali declararia **a MENOS do que foi retido**.
+  ⚠️ **IRRF É OUTRA RETENÇÃO**: havendo IR retido a nota **FICA**, mesmo com a
+  CSRF zerada — tirá-la deixaria de declarar o IR que houve.
+  ⚠️ **E O AJUSTE TRAZ A NOTA DE VOLTA**: quem tem prova de que houve retenção
+  declara, e **a declaração vence o documento**.
+  ⚠️ **NÃO SOME CALADA**: sai NOMEADA (prestador + número da nota) em
+  `forasSemRetencao`, contada **à parte** de `semRetencao` — lá o documento não
+  trouxe campo nenhum; aqui ele trouxe e DECLAROU. Sumir da lista é o que faz
+  alguém achar que declarou tudo.
+  📌 **REGRA QUE FICA: campo que o documento traz ZERADO é uma AFIRMAÇÃO da
+  fonte, e vale tanto quanto um campo preenchido — desde que a presença dele
+  seja conhecida.** O `?? 0` da fronteira apaga essa diferença em silêncio, e
+  com ela some a única prova de que o emitente respondeu "não houve".
+
 - **🚨 O TETO DE SEGURANÇA VIROU TAREFA DO COLABORADOR — "reconferir 3 vezes de
   1 em 1"** (02/09, Paulo na MV LIDER 0639 · 08/2026: *"tenho 3 canceladas e não
   considerou, pede para eu reconferi 3 vezes de 1 em 1, isso que precisa
