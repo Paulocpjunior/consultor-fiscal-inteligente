@@ -70,3 +70,80 @@ describe('painel de envios — prova de saída fica separada do rito', () => {
         expect(p.semProvaDeEnvio).toHaveLength(1);
     });
 });
+
+// ============================================================================
+// 🚨 "ABRIR PELO OUTLOOK WEB DÁ ERRO" — e o Outlook só dizia "Something went
+// wrong" (02/09, print da colaboradora no Teams, cliente MARCOS ANTONIO
+// ZAMBOLIN).
+//
+// A URL do print traz `to=marcio07%2FMD%40gmail.com`: uma **BARRA dentro do
+// e-mail**, que é o jeito clássico de dois endereços ficarem colados num campo
+// só. O app mandava o campo CRU para a URL — `includes('@')` passava — e o
+// Outlook devolvia um 500 opaco.
+//
+// 📌 O custo real não é o erro: é ele mandar procurar defeito no APP quando o
+// problema está no CADASTRO. Mensagem que não nomeia a causa gasta o dia de
+// quem lê (a régua do "Já importado", 14/08).
+// ============================================================================
+describe('🚫 endereço torto não vira URL — ele vira RECUSA com o motivo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { lerDestinatarios, recusaDeDestinatario, parseDestinatarios } = require('../sefaz-backend/email-destinatarios-helper.js');
+
+    it('o caso do print: barra dentro do endereço é recusado NOMEANDO o valor', () => {
+        const r = lerDestinatarios('marcio07/MD@gmail.com');
+        expect(r.validos).toEqual([]);
+        expect(r.invalidos[0].valor).toBe('marcio07/MD@gmail.com');
+        const frase = recusaDeDestinatario(r);
+        expect(frase).toMatch(/marcio07\/MD@gmail\.com/);
+        expect(frase).toMatch(/Dados Fiscais/);
+        // 🚨 E a frase DIZ por que o Outlook não ajuda — senão a pessoa volta a
+        // procurar no app.
+        expect(frase).toMatch(/Something went wrong/);
+    });
+
+    it('dois e-mails colados por @ também são recusados, com a saída', () => {
+        const frase = recusaDeDestinatario(lerDestinatarios('a@x.com.br@y.com'));
+        expect(frase).toMatch(/mais de um @/);
+        expect(frase).toMatch(/ponto e vírgula/);
+    });
+
+    // ⚠️ ENDEREÇO TORTO NÃO É DESCARTADO EM SILÊNCIO NEM COM UM VÁLIDO DO LADO:
+    // se a equipe pôs dois, é porque os dois têm de receber. Mandar só para um
+    // seria a guia chegando pela metade sem ninguém saber.
+    it('um válido não apaga o torto', () => {
+        const r = lerDestinatarios('bom@cliente.com.br; ruim/2@cliente.com.br');
+        expect(r.validos).toEqual(['bom@cliente.com.br']);
+        expect(recusaDeDestinatario(r)).toMatch(/ruim\/2@cliente\.com\.br/);
+    });
+
+    it('lista legítima passa e vai inteira para o To', () => {
+        const r = lerDestinatarios('um@x.com.br; dois@y.com.br');
+        expect(r.validos).toEqual(['um@x.com.br', 'dois@y.com.br']);
+        expect(recusaDeDestinatario(r)).toBeNull();
+        const link = montarLinkOutlookWeb({ para: 'um@x.com.br; dois@y.com.br' });
+        expect(decodeURIComponent(link)).toContain('to=um@x.com.br;dois@y.com.br');
+    });
+
+    // ⚠️ `Nome <a@b>` é forma legítima de colagem — fica o que está entre < >.
+    it('aceita a forma Nome <email>', () => {
+        expect(lerDestinatarios('<maria@cliente.com.br>').validos).toEqual(['maria@cliente.com.br']);
+    });
+
+    it('campo vazio diz onde preencher', () => {
+        expect(recusaDeDestinatario(lerDestinatarios(''))).toMatch(/ausente/);
+    });
+
+    // ⚠️ A POLÍTICA DE ENV NÃO MUDOU: ali descartar é aceitável (há fallback e
+    // o destinatário é da casa). Duas políticas, um parse só.
+    it('parseDestinatarios (env) continua descartando e caindo no fallback', () => {
+        expect(parseDestinatarios('lixo, bom@x.com.br')).toEqual(['bom@x.com.br']);
+        expect(parseDestinatarios('', 'padrao@x.com.br')).toEqual(['padrao@x.com.br']);
+    });
+
+    // 🚨 E O MAILTO CODIFICA CADA ENDEREÇO: `encodeURIComponent` na lista
+    // inteira viraria a vírgula em %2C e os dois virariam UM endereço inválido.
+    it('mailto com dois destinatários mantém a vírgula separando', () => {
+        const link = montarMailtoEnvio({ para: 'um@x.com.br; dois@y.com.br' });
+        expect(link.startsWith('mailto:um%40x.com.br,dois%40y.com.br')).toBe(true);
+    });
+});

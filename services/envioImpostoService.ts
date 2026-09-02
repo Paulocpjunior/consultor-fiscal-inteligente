@@ -14,6 +14,13 @@
  */
 import { getAuth } from 'firebase/auth';
 import { mensagemDeCredencialRecusada } from '../sefaz-backend/sharepoint-erro-credencial.js';
+// 🚨 O e-mail do cliente passa pelo DONO (02/09, print da colaboradora: "a
+// opção ABRIR PELO OUTLOOK WEB dá erro"). A URL do print traz
+// `to=marcio07%2FMD%40gmail.com` — uma BARRA dentro do endereço —, e o app
+// mandava o campo CRU para a URL: o Outlook respondia "Something went wrong",
+// que não diz nada e faz procurar defeito no app quando o problema é o
+// cadastro. Quem lê o campo é o dono, nunca um `includes('@')` de cada lado.
+import { lerDestinatarios, recusaDeDestinatario } from '../sefaz-backend/email-destinatarios-helper.js';
 
 export const GESTOR_EMAIL = 'alexandre@spassessoriacontabil.com.br';
 
@@ -111,16 +118,22 @@ export async function registrarEnvioImposto(input: EnvioImpostoInput): Promise<R
  * cópia de arquivo da ordem técnica é garantida pelo SharePoint (regra 1).
  */
 export function montarMailtoEnvio(p: { para: string; assunto?: string; corpo?: string; cc?: string[] }): string {
-    const dest = String(p.para || '').trim();
+    const destinos = lerDestinatarios(p.para).validos;
+    const dest = destinos.join(',');
+    const jaNoPara = new Set(destinos.map((e) => e.toLowerCase()));
     const listaCc = [...new Set([GESTOR_EMAIL, ...(p.cc || [])]
         .map((e) => String(e || '').trim().toLowerCase())
-        .filter((e) => e && e !== dest.toLowerCase()))];
+        .filter((e) => e && !jaNoPara.has(e)))];
     const qs = new URLSearchParams();
     if (listaCc.length) qs.set('cc', listaCc.join(','));
     if (p.assunto) qs.set('subject', p.assunto);
     if (p.corpo) qs.set('body', p.corpo);
     const query = qs.toString().replace(/\+/g, '%20');
-    return `mailto:${encodeURIComponent(dest)}${query ? `?${query}` : ''}`;
+    // ⚠️ Codifica CADA endereço e junta com vírgula: `encodeURIComponent` na
+    // lista inteira viraria a vírgula em %2C e o mailto trataria os dois
+    // endereços como UM só, inválido.
+    const paraNaUrl = destinos.map((e) => encodeURIComponent(e)).join(',');
+    return `mailto:${paraNaUrl}${query ? `?${query}` : ''}`;
 }
 
 export type ModoComposicao = 'outlook-web' | 'app-instalado';
@@ -137,10 +150,14 @@ export type ModoComposicao = 'outlook-web' | 'app-instalado';
  * O deep link do Outlook Web abre a composição numa aba, já preenchida.
  */
 export function montarLinkOutlookWeb(p: { para: string; assunto?: string; corpo?: string; cc?: string[] }): string {
-    const dest = String(p.para || '').trim();
+    // Só endereço LIDO pelo dono entra na URL — endereço torto vira
+    // "Something went wrong" do Outlook, sem dizer o que houve.
+    const destinos = lerDestinatarios(p.para).validos;
+    const dest = destinos.join(';');
+    const jaNoPara = new Set(destinos.map((e) => e.toLowerCase()));
     const listaCc = [...new Set([GESTOR_EMAIL, ...(p.cc || [])]
         .map((e) => String(e || '').trim().toLowerCase())
-        .filter((e) => e && e !== dest.toLowerCase()))];
+        .filter((e) => e && !jaNoPara.has(e)))];
     const qs = new URLSearchParams();
     qs.set('to', dest);
     if (listaCc.length) qs.set('cc', listaCc.join(';'));
@@ -193,11 +210,13 @@ export function abrirComposicaoEmail(
 export async function enviarPorEmailDoColaborador(
     input: Omit<EnvioImpostoInput, 'canal'> & { assunto?: string; corpo?: string; modo?: ModoComposicao },
 ): Promise<RitoResultado & { composicao?: ComposicaoAberta }> {
-    if (!input.para || !input.para.includes('@')) {
-        return { ok: false, error: 'E-mail do cliente ausente — preencha o e-mail no cadastro da empresa (dados fiscais).' };
-    }
+    // ⚠️ RECUSA ANTES DE ABRIR A JANELA: abrir com endereço torto entrega ao
+    // colaborador o "Something went wrong" do Outlook, que não nomeia nada — e
+    // o rito seria registrado sobre um envio que não tem como acontecer.
+    const recusa = recusaDeDestinatario(lerDestinatarios(input.para));
+    if (recusa) return { ok: false, error: recusa };
     const composicao = abrirComposicaoEmail(
-        { para: input.para, assunto: input.assunto, corpo: input.corpo },
+        { para: input.para || '', assunto: input.assunto, corpo: input.corpo },
         input.modo || 'outlook-web',
     );
     const { assunto: _a, corpo: _c, modo: _m, ...resto } = input;

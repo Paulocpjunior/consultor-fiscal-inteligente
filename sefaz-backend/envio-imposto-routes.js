@@ -20,7 +20,7 @@ import { refazerRitoDoEnvio } from './refazer-rito-store.js';
 import { executarRitoEnvioImposto, GESTOR_EMAIL } from './envio-imposto.js';
 import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
-import { parseDestinatarios } from './email-destinatarios-helper.js';
+import { parseDestinatarios, lerDestinatarios, recusaDeDestinatario } from './email-destinatarios-helper.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
 import { enviarTemplateWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
 import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates.js';
@@ -155,9 +155,14 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         if (!empresaCnpj || !tipo || !competencia) {
             return res.status(400).json({ ok: false, error: 'empresaCnpj + tipo + competencia são obrigatórios' });
         }
-        if (!para || !String(para).includes('@')) {
-            return res.status(400).json({ ok: false, error: 'E-mail do cliente ausente — preencha em Dados Fiscais da empresa.' });
-        }
+        // 🚨 O MESMO DONO QUE O FRONT USA (02/09): `includes('@')` aceitava
+        // `marcio07/MD@gmail.com` — dois e-mails colados por uma barra —, e o
+        // Graph recusaria a mensagem inteira sem nomear o endereço. Endereço
+        // torto vira RECUSA com o motivo, nunca descarte calado: descartar
+        // significa o cliente não receber a guia e ninguém saber.
+        const lidos = lerDestinatarios(para);
+        const recusaPara = recusaDeDestinatario(lidos);
+        if (recusaPara) return res.status(400).json({ ok: false, error: recusaPara });
         if (!mensagem) return res.status(400).json({ ok: false, error: 'Mensagem obrigatória.' });
 
         const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
@@ -181,8 +186,12 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             dominios: dominiosPermitidos(),
         });
 
+        // O Graph recebe a lista LIDA (ele aceita string[]) — mandar o campo
+        // cru devolveria a mensagem inteira recusada sem nomear o endereço.
+        const paraLista = lidos.validos;
+        const jaNoPara = new Set(paraLista.map((e) => e.toLowerCase()));
         const bcc = parseDestinatarios(process.env.DAS_ENVIO_BCC || process.env.DAS_ENVIO_CC, GESTOR_EMAIL)
-            .filter((c) => c.toLowerCase() !== String(para).trim().toLowerCase());
+            .filter((c) => !jaNoPara.has(c.toLowerCase()));
 
         const assuntoFinal = assunto || `${String(tipo).toUpperCase()} ${competencia} — ${empresaNome || ''}`.trim();
         const corpoHtml = montarEmailGuia({
@@ -208,7 +217,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         let remetente = escolha.remetente;
         let fonteRemetente = escolha.fonte;
         let avisoRemetente = escolha.motivo;
-        let envio = await enviarEmail({ remetente, para, bcc, assunto: assuntoFinal, corpoHtml, anexos });
+        let envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos });
 
         if (!envio.ok && fonteRemetente === 'colaborador' && ehErroDeCaixaInexistente(envio.error)) {
             // A caixa do colaborador não existe/não envia — a guia do cliente
@@ -216,7 +225,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             avisoRemetente = `a caixa ${remetente} não pôde enviar; usamos ${padrao}`;
             remetente = padrao;
             fonteRemetente = 'padrao';
-            envio = await enviarEmail({ remetente, para, bcc, assunto: assuntoFinal, corpoHtml, anexos });
+            envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos });
         }
         if (!envio.ok) return res.status(502).json({ ok: false, error: envio.error || 'Falha ao enviar o e-mail.' });
 
