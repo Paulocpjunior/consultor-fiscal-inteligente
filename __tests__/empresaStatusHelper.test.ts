@@ -42,6 +42,58 @@ describe('classificarCapturaNfseNacionalAdn', () => {
         expect(r.motivo).toMatch(/Importar|cofre|município/i);
     });
 
+    // ========================================================================
+    // 🚨 E A PRIMEIRA VERSÃO DA FRASE AFIRMAVA DEMAIS (02/09, mesmo dia)
+    //
+    // Paulo: *"empresa não tem A1, somente A3"*. A frase dizia *"não existe
+    // trilho automático de NFS-e para esta empresa"* — e isso é **FALSO em SP
+    // capital**: lá a NFS-e TOMADA vem pelo portal da Prefeitura, que usa CCM +
+    // autorização e **não usa certificado nenhum**.
+    //
+    // Mandar essa empresa importar à mão seria trabalho manual por cima de uma
+    // captura que já roda. **Frase que afirma demais é o `csllOuTotal` com
+    // outra roupa**: quem lê acredita.
+    // ========================================================================
+    it('em SP capital a frase aponta o PORTAL, não manda importar à mão', () => {
+        const r = classificarCapturaNfseNacionalAdn({
+            nfseNacionalDfeAtivo: true,
+            temA1ProprioValido: false,
+            ehEscritorio: false,
+            tipoCert: 'A3',
+            usaCertEscritorio: false,
+            procuracaoEcacAtiva: false,
+            certUploaded: true,
+            certValido: false,
+            nfseSpAplicavel: true,
+        });
+        expect(r.via).toBe('a3-sem-trilho-nfse');
+        // O fato do ADN continua dito — o A3 não o resolve.
+        expect(r.motivo).toMatch(/NUNCA NFS-e/);
+        // 🚨 Mas NÃO pode afirmar que a empresa está sem trilho.
+        expect(r.motivo).not.toMatch(/não há outro trilho|não existe trilho/i);
+        expect(r.motivo).toMatch(/portal da Prefeitura/i);
+        expect(r.motivo).toMatch(/não usa certificado/i);
+        // ⚠️ E não manda importar à mão quem já é capturado.
+        expect(r.motivo).not.toMatch(/Importar em Central/i);
+    });
+
+    // ⚠️ AUSENTE = false, de propósito: assumir "é da capital" no escuro
+    // mandaria conferir um portal que não se aplica (o caso 4BZ/Jundiaí de
+    // 24/07, ao contrário).
+    it('sem saber o município, não promete o portal de SP', () => {
+        const r = classificarCapturaNfseNacionalAdn({
+            nfseNacionalDfeAtivo: true,
+            temA1ProprioValido: false,
+            ehEscritorio: false,
+            tipoCert: 'A3',
+            usaCertEscritorio: false,
+            procuracaoEcacAtiva: false,
+            certUploaded: true,
+            certValido: false,
+        });
+        expect(r.motivo).not.toMatch(/portal da Prefeitura/i);
+    });
+
     // ⚠️ O A1 DA MATRIZ continua vencendo o A3: o ADN aceita mesma raiz (regra
     // de 27/08, caso J.N. VINATEX). Sem isto a filial com matriz A1 cairia no
     // bloqueio novo sem necessidade.

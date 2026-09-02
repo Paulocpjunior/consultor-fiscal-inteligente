@@ -49,6 +49,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   A3"), isso não é contexto — é a MEDIÇÃO mudando de eixo.** A pergunta era
   sobre captura de NFS-e; o A3 respondeu qual trilho se aplica, e sem ele eu
   teria olhado o trilho errado.
+  🚨 **E A FRASE QUE EU ESCREVI AFIRMAVA DEMAIS — corrigida horas depois, no
+  MESMO dia** (Paulo: *"empresa não tem A1 somente A3"*). Ela dizia *"não existe
+  trilho automático de NFS-e para esta empresa"*, e isso é **FALSO em SP
+  CAPITAL**: ali a NFS-e TOMADA vem pelo **portal da Prefeitura**, que é **CCM +
+  autorização** e **não usa certificado NENHUM** — o A3 é irrelevante para
+  aquele trilho. Mandar essa empresa *"importar em Central de XMLs"* seria
+  trabalho manual por cima de uma captura que **já roda**.
+  ✂️ O ramo passou a receber `nfseSpAplicavel` (do MESMO dono que a coluna
+  NFS-e SP usa — reimplementar ali seria a segunda cópia): na capital ele diz o
+  fato do ADN **e aponta a coluna NFS-e SP**; fora dela ele mantém as saídas
+  (A1 próprio, A1 da matriz, portal do município, cofre, importação).
+  ⚠️ **AUSENTE = false, de propósito**: sem município cadastrado o app **não
+  promete o portal** — afirmar "é da capital" no escuro mandaria conferir um
+  trilho que não se aplica (o caso 4BZ/Jundiaí de 24/07, ao contrário).
+  📌 **FRASE QUE AFIRMA DEMAIS É O `csllOuTotal` COM OUTRA ROUPA**: quem lê
+  acredita. O ramo fala do **ADN** — então ele afirma sobre o ADN, e nada mais.
+  E o custo dos dois erros é oposto: dizer "coberto" sobre quem não captura
+  esconde lacuna; dizer "sem trilho" sobre quem captura **cria trabalho manual**
+  e ensina a desconfiar do painel.
 
 - **🚨 A DATA ATRAVESSAVA O TÚNEL CRUA — e o R-4020 recusava do outro lado**
   (02/09, Paulo: *"pode atacar r2010 e r4020 no contabil"*, com o print do
