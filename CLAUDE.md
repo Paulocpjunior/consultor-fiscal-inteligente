@@ -5,6 +5,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CAMINHO DO SHAREPOINT QUE O APP MONTA NÃO EXISTE — a árvore real é
+  OUTRA desde a raiz** (02/09, medido clique a clique pelo explorador que
+  nasceu horas antes; Paulo, ao ver o nível: *"não tem grupo"*).
+  📌 O app monta `Empresas / GRUPO / DEPARTAMENTO FISCAL / ANO / MÊS-ANO /
+  EMPRESA / XML SAÍDA`. O que existe em `/sites/ClientesSP2` é:
+  **`Empresas / {código}_{nome da empresa} / {Departamento} / {ANO} / {mês por
+  NOME}`** — `Empresas/0040_Clinica Mantoan/Departamento Contábil/2026/Setembro`.
+  🔴 **São TRÊS divergências, não uma**: (1) o nível **GRUPO não existe**;
+  (2) **empresa e departamento estão trocados** — a empresa vem ANTES do
+  departamento; (3) o mês é **por nome e escrito de forma inconsistente**
+  (`Jan`, `Fev`, `Março`, `Abril`, `Maio`, `Junho`, `Julho`, `Agosto`,
+  `Setembro`, `Out`, `Novembro`), e **`09-2026` não existe em lugar nenhum**.
+  🚩 **E a pasta do FISCAL não estava lá**: a empresa medida tem só
+  `Departamento Contábil`. Ou seja, o trilho de XML do fiscal não tem, hoje,
+  pasta por empresa nesse site — decisão do dono, não dedução minha.
+  ⚠️ **A CONSEQUÊNCIA DE DESENHO É MAIOR QUE O DE-PARA**: com nome de mês
+  escrito à mão e inconsistente, **caminho MONTADO por concatenação não fecha**
+  — a régua certa é **NAVEGAR**: listar o nível e CASAR o nome (o que o
+  explorador já faz), nunca prever a string. Concatenar aqui é a família do
+  campo cravado: acerta no exemplo e erra no acervo.
+  📌 **E O QUE ACHOU ISSO FOI A MEDIÇÃO, não a leitura**: dois dias de
+  `AADSTS7000215` esconderam que, **mesmo com a credencial certa**, o caminho
+  nunca casaria. A régua da casa (*validação por RESULTADO*) aplicada à
+  ESTRUTURA: o app passou a listar o que existe em vez de afirmar o que deveria
+  existir.
+
 - **✅ A CREDENCIAL DO SHAREPOINT VOLTOU — e quem provou foi a MUDANÇA DO ERRO,
   não uma tela verde** (02/09). Depois de dois dias de `AADSTS7000215` (401,
   `invalid_client`), o "Sincronizar agora" respondeu **`400 BadRequest —

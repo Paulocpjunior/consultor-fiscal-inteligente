@@ -133,6 +133,7 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
     const [explorando, setExplorando] = useState(false);
     const [erroExplorar, setErroExplorar] = useState<string | null>(null);
     const [buscaSite, setBuscaSite] = useState('');
+    const [buscaPasta, setBuscaPasta] = useState('');
 
     // 🚨 A BUSCA DO GRAPH DEVOLVE TUDO — inclusive `/contentstorage/...`, que é
     // armazenamento PESSOAL (OneDrive), e as entradas "Designer"/"Pages"/"My
@@ -142,6 +143,13 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
     // quantas ficaram de fora, senão isto vira "meu site não existe".
     const sitesDeEquipe = (sites || []).filter(s => s.caminho.startsWith('/sites/'))
         .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    // Filtro do nível aberto — um `/Empresas` tem uma pasta por cliente.
+    const pastasVisiveis = (() => {
+        const q = buscaPasta.trim().toLowerCase();
+        const todas = nivel?.pastas || [];
+        return q ? todas.filter(p => p.nome.toLowerCase().includes(q)) : todas;
+    })();
+
     const sitesVisiveis = (() => {
         const q = buscaSite.trim().toLowerCase();
         const casam = q ? sitesDeEquipe.filter(s => `${s.nome} ${s.caminho}`.toLowerCase().includes(q)) : sitesDeEquipe;
@@ -195,6 +203,9 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
         setErroExplorar(null);
         setSites(null);
         setSiteExplorado(alvo);
+        // ⚠️ Filtro do nível ANTERIOR esconderia tudo no nível novo, e a pessoa
+        // leria "pasta vazia" sobre uma pasta cheia.
+        setBuscaPasta('');
         try {
             setNivel(await explorarPasta(caminho, alvo));
         } catch (e: any) {
@@ -460,7 +471,27 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                             {nivel.pastas.length === 0 && nivel.arquivos === 0 && (
                                 <p style={{ color: 'var(--text-muted)' }}>Nada aqui dentro.</p>
                             )}
-                            <div className="flex flex-wrap gap-1.5">
+                            {/* 🚨 UM NÍVEL PODE TER CENTENAS DE PASTAS — a raiz de
+                                /Empresas tem uma por cliente. Sem filtro a lista quebra a
+                                tela e a resposta ("existe uma pasta que começa com X?")
+                                fica escondida no meio. */}
+                            {nivel.pastas.length > 20 && (
+                                <input
+                                    value={buscaPasta}
+                                    onChange={e => setBuscaPasta(e.target.value)}
+                                    placeholder="Filtrar pastas deste nível"
+                                    className="w-full mb-1.5 p-2 text-xs rounded-lg outline-none"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                            )}
+                            {/* ⚠️ Recorte SEMPRE diz "X de N": com filtro ativo, sumir
+                                calado faria concluir que a pasta não existe. */}
+                            {nivel.pastas.length > 20 && (
+                                <p className="mb-1" style={{ color: 'var(--text-muted)' }}>
+                                    Mostrando {pastasVisiveis.length} de {nivel.pastas.length} pasta(s)
+                                </p>
+                            )}
+                            <div className="flex flex-wrap gap-1.5" style={{ maxHeight: 300, overflowY: 'auto' }}>
                                 {nivel.caminho && (
                                     <button
                                         type="button"
@@ -469,7 +500,7 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                                         style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-muted)' }}
                                     >↑ voltar</button>
                                 )}
-                                {nivel.pastas.map(p => (
+                                {pastasVisiveis.map(p => (
                                     <button
                                         key={p.nome}
                                         type="button"
