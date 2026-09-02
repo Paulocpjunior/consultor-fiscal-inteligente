@@ -364,9 +364,13 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                     para responder é o que este dia inteiro ensinou a não fazer. */}
                 <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                     <div className="flex flex-wrap items-center gap-2">
+                        {/* 🐛 Ele ficava preso no ÚLTIMO site aberto: quem clicasse num site
+                            da lista e depois aqui via o MESMO site de novo, achando que
+                            estava vendo a biblioteca do proxy — e não havia caminho de
+                            volta. "Esta biblioteca" é a que o proxy usa; o `''` volta a ela. */}
                         <button
                             type="button"
-                            onClick={() => void explorar('')}
+                            onClick={() => void explorar('', '')}
                             disabled={explorando}
                             className="px-3 py-1.5 text-[11px] font-bold rounded-lg btn-press whitespace-nowrap disabled:opacity-40"
                             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
