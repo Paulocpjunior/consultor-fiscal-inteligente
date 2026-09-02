@@ -32,6 +32,20 @@ import { PASTA_RAIZ, caminhoFiscal } from './caminho-sharepoint.js';
 // Dono único de "qual é a pasta desta empresa?" — a frase de cada situação é
 // régua, e quatro cópias dela divergiriam no primeiro ajuste.
 import { listarPastasDeEmpresas, resolverPastaDaEmpresa, codClienteDoCadastro } from './sharepoint-pastas.js';
+// 🚨 "879 erros" e a maioria não era erro — a classificação separa o que pede
+// ações OPOSTAS: pasta que ainda não existe, limite do próprio proxy e
+// credencial recusada.
+import { classificarErroDeLeitura, intervaloEntreChamadasMs, resumoDaRodada } from './sharepoint-erro-leitura.js';
+
+/**
+ * O teto publicado pelo proxy (`proxy-backend/server.js`: 60/min por IP).
+ *
+ * ⚠️ Ele vive numa env com o valor de HOJE como padrão: cravar aqui o número
+ * do outro serviço é a família do tenant cravado (28/08) — mudou lá, o app
+ * continua batendo rápido demais e ninguém liga uma coisa à outra.
+ */
+const RESPIRO_PROXY_MS = intervaloEntreChamadasMs(process.env.SHAREPOINT_PROXY_POR_MINUTO || 60);
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const router = express.Router();
 router.use(express.json());
@@ -410,7 +424,12 @@ async function syncEmpresa(db, empresa, competencias, pastasDeEmpresas) {
     const directions = ['SAÍDA', 'ENTRADA'];
     const summary = {
         empresaId: empresa.id, empresaNome: empresa.nome,
-        novos: 0, duplicados: 0, erros: 0, total: 0,
+        // 🚨 TRÊS BALDES, não um (02/09): a rodada devolveu "879 erros" e a
+        // maioria não era erro. `semPasta` é 404 de LEITURA — a competência
+        // ainda não existe no SharePoint, e o auto-sync não cria pasta (quem
+        // cria é a gravação). `limite` é o 429 do NOSSO proxy, que não tem
+        // nada a ver com a empresa da linha.
+        novos: 0, duplicados: 0, erros: 0, semPasta: 0, limite: 0, total: 0,
         competencias: [...competencias],
         // Motivo das primeiras falhas por pasta — sem isso o log só dizia
         // "erros: 2" e era impossível saber se a pasta não existe, o proxy
@@ -425,12 +444,23 @@ async function syncEmpresa(db, empresa, competencias, pastasDeEmpresas) {
             const folderPath = caminhoFiscal({ pastaEmpresa: achado.pasta, ano, mes, direcao: dir });
             let syncResult;
             try {
+                // ⚠️ RESPIRO: o proxy publica 60/min e a rodada faz 4 chamadas
+                // por empresa. Sem isto, 1.664 chamadas viram ~880 recusas do
+                // próprio app — é o respiro de 90s da SEFAZ com outra roupa.
+                if (RESPIRO_PROXY_MS > 0) await esperar(RESPIRO_PROXY_MS);
                 syncResult = await fetchFromProxy('/api/sharepoint/sync', { folderPath });
             } catch (err) {
+                const cls = classificarErroDeLeitura(err.message);
+                // 🚨 404 de LEITURA não é falha: é "esta competência ainda não
+                // existe no SharePoint". Contá-lo como erro pintava a carteira
+                // inteira de vermelho todo dia sobre uma situação normal.
+                if (cls.causa === 'pasta-inexistente') { summary.semPasta++; continue; }
+                if (cls.causa === 'limite-do-proxy') summary.limite++;
                 console.warn(`[auto-sync] ${empresa.nome} ${competencia} ${dir}: ${err.message}`);
                 summary.erros++;
                 if (summary.errosDetalhe.length < 6) {
-                    summary.errosDetalhe.push(recortarPreservandoApp(`${competencia} ${dir}: ${err.message}`));
+                    const acao = cls.acao ? ` — ${cls.acao}` : '';
+                    summary.errosDetalhe.push(recortarPreservandoApp(`${competencia} ${dir}: ${err.message}${acao}`));
                 }
                 continue;
             }
@@ -636,9 +666,16 @@ router.post('/auto-sync', async (req, res) => {
         // Empresa que falhou inteira (erro/config incompleta) também conta como
         // erro — antes só os erros por arquivo entravam e a falha sumia do total.
         const totalErros = results.reduce((s, r) => s + (r.erros || 0) + (r.erro ? 1 : 0), 0);
+        // 🚨 OS DOIS NÚMEROS QUE SAÍRAM DO BALDE DE "ERRO" (02/09) — porque
+        // pedem ações diferentes, e uma delas é NENHUMA.
+        const totalSemPasta = results.reduce((s, r) => s + (r.semPasta || 0), 0);
+        const totalLimite = results.reduce((s, r) => s + (r.limite || 0), 0);
         const empresasComConfigIncompleta = results.filter(r => r.configIncompleta).length;
 
-        console.log(`[auto-sync] Concluido: ${totalNovos} novos, ${totalDup} duplicados, ${totalErros} erros`);
+        console.log(`[auto-sync] Concluido: ${resumoDaRodada({
+            novos: totalNovos, duplicados: totalDup, erros: totalErros,
+            semPasta: totalSemPasta, limite: totalLimite,
+        })}`);
 
         // Log the sync run
         await db.collection('sharepoint_sync_log').add({
@@ -647,6 +684,7 @@ router.post('/auto-sync', async (req, res) => {
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             empresasProcessadas: empresas.length,
             totalNovos, totalDup, totalErros,
+            totalSemPasta, totalLimite,
             empresasComConfigIncompleta,
             erroFatal: null,
             results,
@@ -659,6 +697,13 @@ router.post('/auto-sync', async (req, res) => {
             totalNovos,
             totalDup,
             totalErros,
+            totalSemPasta,
+            totalLimite,
+            // A frase COM a causa sai daqui — a tela não a reescreve.
+            resumo: resumoDaRodada({
+                novos: totalNovos, duplicados: totalDup, erros: totalErros,
+                semPasta: totalSemPasta, limite: totalLimite,
+            }),
             empresasComConfigIncompleta,
             results,
         });

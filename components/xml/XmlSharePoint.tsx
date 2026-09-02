@@ -794,7 +794,12 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
             });
             const data = await resp.json();
             if (resp.ok) {
-                setTriggerResult(`Sync concluído: ${data.totalNovos} novos, ${data.totalDup} duplicados, ${data.totalErros} erros.`);
+                // 🚨 "0 novos, 0 duplicados, 879 erros" era uma MENTIRA sobre a
+                // saúde da captura: a maioria era pasta que ainda não existe
+                // (o auto-sync LÊ; quem cria pasta é a gravação) e recusa do
+                // próprio proxy por limite. A frase vem do backend, com a causa
+                // junto do número — escrevê-la aqui seria a segunda cópia.
+                setTriggerResult(`Sync concluído: ${data.resumo || `${data.totalNovos} novos, ${data.totalDup} duplicados, ${data.totalErros} erros`}.`);
                 const statusResp = await fetch('/api/admin/sharepoint/status', { headers });
                 if (statusResp.ok) setStatus(await statusResp.json());
             } else {
