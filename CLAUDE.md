@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "ME MANDE O ARQUIVO" É PASSAR O PROBLEMA DE VOLTA — e o app tinha o
+  arquivo na mão** (02/09, caso do Ivan na 0530; eu pedi o XML e o Paulo
+  cortou: *"vc esta brincando? como vou enviar um arquivo xml se vc diz que nao
+  posso capturar?"*).
+  📌 Ele está certo, e a régua já estava escrita desde 24/08: **quando o app
+  tem como saber a resposta, avisar não é entrega — é passar o problema
+  adiante**. E aqui o app TEM: o Ivan largou o XML na tela, o app leu, falhou,
+  e a saída que eu ofereci foi um e-mail para mim.
+  ✂️ `xmlOndeEstaOCnpj.ts` (PURO) responde a pergunta que o colaborador não tem
+  como responder sozinho: **este XML tem o CNPJ da minha empresa, e em qual
+  lugar?** Ele percorre com uma PILHA de tags e devolve o CAMINHO
+  (`PrestadorServico › IdentificacaoPrestador › Cnpj`) — **não prevê estrutura
+  nenhuma**, que é justamente o que fez a leitura falhar.
+  🚦 **AS DUAS RESPOSTAS MANDAM A LUGARES OPOSTOS, e é isso que a torna útil**:
+  o CNPJ **está** no arquivo ⇒ o defeito é do LEITOR do app, e o caminho da tag
+  É a correção (ninguém mexe em cadastro); o CNPJ **não está** ⇒ a recusa
+  estava certa, e a tela diz de quem é o arquivo pelos documentos que ele traz.
+  ⚠️ **Arquivo sem CNPJ nenhum é um TERCEIRO caso** (baixa incompleta) — dizer
+  "é de outra empresa" ali mandaria procurar no lugar errado.
+  🔒 **Sai ESTRUTURA, nunca conteúdo**: nomes de tag e o CNPJ que a própria
+  pessoa digitou. Um teste prova que valor do documento não aparece na frase.
+  📌 **REGRA QUE FICA: antes de pedir um arquivo ao dono, perguntar se o APP
+  não o tem.** Se ele tem, quem responde é ele — e a resposta vira a correção,
+  não uma ida e volta.
+
 - **🚨 "879 ERROS" NUMA RODADA — E A MAIORIA NÃO ERA ERRO** (02/09, print do
   Paulo depois de clicar *"Executar Sync Agora"*: `0 novos, 0 duplicados, 879
   erros` e, logo abaixo, *"Não deu para listar as pastas de Empresas agora

@@ -25,6 +25,9 @@ import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './f
 import { lerTodosOsVinculos } from './carteiraVinculos';
 import { fetchAllDocs } from './firestorePaginate';
 import { listarEmpresasPerfilBackend } from './empresasPerfilService';
+// 🚨 O app TEM o arquivo — então ele responde "onde está o CNPJ desta empresa
+// neste XML?" em vez de pedir que alguém o envie (02/09, caso do Ivan).
+import { procurarCnpjNoXml, explicarProcura } from './xmlOndeEstaOCnpj';
 import {
     parseNFeXml,
     matchCompanyAndDirection,
@@ -425,7 +428,20 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
 
         const match = matchCompanyAndDirection(parsed, empresa.cnpj);
         if (!match.ok) {
-            throw new Error(match.motivo || 'XML não pertence à empresa selecionada.');
+            // 🚨 O APP TEM O ARQUIVO — então ele RESPONDE, em vez de pedir que
+            // alguém o envie (02/09, caso do Ivan na 0530; Paulo: *"como vou
+            // enviar um arquivo se você diz que não posso capturar?"*). A régua
+            // de 24/08: quando o app tem como saber a resposta, avisar não é
+            // entrega, é passar o problema adiante.
+            //
+            // A procura responde as DUAS coisas de uma vez: se o CNPJ da
+            // empresa está no XML, o defeito é do LEITOR e o caminho da tag é a
+            // correção; se não está, a recusa estava certa e a tela diz de quem
+            // é o arquivo.
+            const procura = procurarCnpjNoXml(xmlText, empresa.cnpj);
+            const e = new Error(match.motivo || 'XML não pertence à empresa selecionada.');
+            (e as any).acao = explicarProcura(procura, empresa.cnpj);
+            throw e;
         }
 
         const xmlHash = await sha256Hex(xmlText);
