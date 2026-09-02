@@ -11,7 +11,11 @@ async function authHeader(): Promise<Record<string, string>> {
 // 'opcional'    = gate de feature opcional (SharePoint/gateway) — so importa
 //                 se a empresa usa aquela integracao. Nao bloqueia.
 export type CriticidadeConfig = 'critico' | 'alto' | 'medio' | 'informativo' | 'opcional';
-export type TipoAchado = 'env_vazia' | 'env_via_default' | 'env_opcional' | 'modo_inadequado' | 'flag_indefinida';
+// 'segredo_forma_errada' = a env ESTÁ preenchida e o que está nela tem forma
+// que a Microsoft recusa (o Secret ID no lugar do Valor, espaço colado).
+// Preenchido é STATUS; a forma é RESULTADO.
+export type TipoAchado = 'env_vazia' | 'env_via_default' | 'env_opcional' | 'modo_inadequado'
+    | 'flag_indefinida' | 'segredo_forma_errada';
 
 export interface AchadoConfig {
     tipo: TipoAchado;
