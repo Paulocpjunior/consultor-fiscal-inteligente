@@ -502,6 +502,10 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 procuracaoEcacAtiva: emp.procuracaoEcacAtiva,
                 certUploaded,
                 certValido,
+                // 🚨 O portal de SP capital não usa certificado — sem este fato
+                // a frase do A3 afirmaria "não há trilho" sobre empresa cuja
+                // NFS-e tomada já é capturada (02/09).
+                nfseSpAplicavel,
             });
             const capturaNfseNacionalVia = nfseNacStatus.via;
             if (nfseNacStatus.motivo) motivosBloqueio.push(nfseNacStatus.motivo);
