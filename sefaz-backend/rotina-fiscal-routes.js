@@ -58,6 +58,8 @@ function coberturaDoCliente(e, competencia, prazosMunicipais = []) {
             // Município + calendários: é o que transforma o ISS de pendência
             // nomeada em obrigação com data — para quem tem o calendário.
             codMunIBGE: e.codMunIBGE, prazosMunicipais,
+            // 🏦 DeRE: cadastro do regime específico + CNAE (sinal).
+            regimeEspecificoIbsCbs: e.regimeEspecificoIbsCbs, cnae: e.cnae,
         }, `${mes}/${ano}`);
     } catch (err) {
         console.warn(`[rotina] cobertura do catálogo falhou (${e.nome}):`, err.message);

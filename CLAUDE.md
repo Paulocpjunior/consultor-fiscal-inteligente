@@ -5,6 +5,63 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏦 A DeRE NÃO É "DECLARAÇÃO DE RETENÇÕES" — é a Declaração Eletrônica de
+  REGIMES ESPECÍFICOS de IBS/CBS, e o CFI passou a saber QUEM, QUANDO e O QUÊ**
+  (02/09, Paulo: *"analise este link, preciso que crie uma nova função capaz de
+  atender esta obrigação chamada DERE"*, com o link do gov.br/sped).
+  📖 **O QUE ELA É**: obrigação acessória da reforma tributária (EC 132/2023 ·
+  LC 214/2025, Título V) para quem fornece sob **regime específico** de IBS/CBS
+  (e IS) — serviços financeiros (art. 182), planos de assistência à saúde (art.
+  234), concursos de prognósticos/loterias (art. 248), e os demais capítulos
+  (combustíveis, imóveis, cooperativas, bares/hotelaria, SAF, missões).
+  **Mensal, até o dia 15 do mês seguinte** (Ato Conjunto RFB/CGIBS 4/2026);
+  **1ª competência 10/2026**, entrega até **15/11/2026** — e o esclarecimento
+  CGIBS/RFB de 26/08 diz que o prazo **não prorroga** em dia não útil, o que
+  casa com a política da casa (antecipa ⇒ **13/11/2026**, porque 15 é domingo e
+  14 é sábado). **Optante do Simples fica fora.** Eventos: D-1001 e D-1011
+  (tabela, recebidos a partir de 01/10/2026 e exigidos ANTES da 1ª mensal),
+  D-1101/1106/1121/2101/1199 (mensais), D-9xxx (retorno). O nome parecido com
+  DIRF engana: ela declara **plano de contas e balancete**, não retenções.
+  🚧 **COMO A INFORMAÇÃO CHEGOU, e o que isso limita**: a rede deste ambiente
+  bloqueia gov.br, sped.rfb.gov.br e cgibs.gov.br (o mesmo bloqueio do CONFAZ e
+  do Guia do SPED). **O Manual (MOD 1.0.1) e os leiautes 1.0.0 NÃO foram
+  lidos** — o que entrou veio por RESUMO de terceiros das notícias oficiais, e
+  está carimbado assim em `FONTES_DERE`. Por isso o alcance só está
+  `dereConfirmada: true` nos três públicos que o manual nomeia; os outros
+  regimes ficam **"não confirmado"** — o app não afirma nem que entram nem que
+  saem, e manda ler o manual. **Nome de causa que afirma demais é o
+  `csllOuTotal` com outra roupa.**
+  ✂️ **O QUE ENTROU** (`dere-regimes.js` PURO = vocabulário + régua "está na
+  DeRE?" · `dere.js` PURO = eventos, cronograma, prazo, situação, triagem):
+  (1) entrada `DERE` no catálogo — federal, mensal, dia 15, antecipa,
+  `vigenciaDesde: '10/2026'` (conceito NOVO: obrigação com início de vigência
+  não nasce em competência anterior — cobrar 09/2026 seria cobrar o que não
+  existia), no comum do Lucro, na imune/isenta e no INDEFINIDO, **nunca no
+  Simples**; (2) campo de cadastro **`regimeEspecificoIbsCbs`** (whitelist +
+  modal no MESMO PR, regra do #382; vocabulário FECHADO, recusa com a lista) que
+  **PROMOVE** a entrada a ativa no `mesDoCliente` quando afirma regime obrigado
+  — aí ela vira tarefa, Rotina, Vencimentos e Guia do mês com vencimento —, e a
+  **TIRA** quando diz `NENHUM`; (3) fila da carteira em **⚙️ Config Admin →
+  🏦 DeRE** (rota `/api/admin/cadastro/dere-carteira`): obrigadas com prazo,
+  candidatas, regime não confirmado, e o que ficou de fora CONTADO; (4) o campo
+  atravessa o túnel do cadastro central — o Contábil é quem tem o insumo dos
+  eventos e precisa saber quem está.
+  🚨 **O SILÊNCIO NÃO ACENDE A CARTEIRA**: empresa sem cadastro E sem sinal de
+  CNAE **não vira pendência** (`sem-sinal`, dito na fila) — seria a lição das
+  236 em ALTO por um campo que 400 clientes nunca vão preencher. Quem vira
+  pendência NOMEADA é a **candidata** (CNAE 64xx/65x/6550/9200 sugere e o
+  cadastro cala) — sugestão carimbada, o desenho da triagem do terceiro setor.
+  **CNAE é SINAL, não enquadramento** (a régua do bloco K e do `contribuinteIpi`).
+  🚩 **O QUE O APP NÃO FAZ, e a tela DIZ**: **não gera nem transmite evento**.
+  Montar XML de declaração sem o XSD na mão é o `1405` num arquivo que a
+  Receita processa; e o insumo (PGCC, balancete) é CONTÁBIL — a casa provável
+  da geração é o Consultor Contábil, **decisão do dono**. Até lá a entrega é por
+  fora e se registra em Vencimentos como obrigação entregue fora do app.
+  📌 **FILA DO PAULO**: (a) confirmar se algum cliente da carteira fornece sob
+  regime específico (a fila da 🏦 DeRE responde quem PARECE); (b) decidir a
+  casa da geração dos eventos; (c) quando alguém tiver o MOD 1.0.1 aberto,
+  conferir a coluna `dereConfirmada` dos regimes não confirmados — muda num
+  lugar só.
 - **🚨 O AVISO FALAVA DO QUE A RODADA IA FAZER, NÃO DO QUE ELA FEZ — e o dono
   circulou a frase em VERMELHO** (02/09, print da MV LIDER 0639 · 08/2026,
   horas depois de a tela passar a encadear as rodadas sozinha).

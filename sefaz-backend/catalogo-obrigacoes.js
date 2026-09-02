@@ -77,6 +77,10 @@
 import { ehDiaUtil } from './feriados-nacionais.js';
 import { resolverPrazoMunicipal, resolverPrazoEstadual } from './prazos-municipais.js';
 import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
+// 🏦 DeRE — "esta empresa está em regime específico de IBS/CBS?" tem dono
+// único, lido também pela triagem da carteira. Reimplementar aqui seria a
+// segunda cópia que faz o mês e a fila discordarem sobre a mesma empresa.
+import { decidirDereNoCadastro } from './dere-regimes.js';
 
 /** Regimes que o mês entende. INDEFINIDO é um estado real, não um erro. */
 export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'IMUNE', 'ISENTA', 'INDEFINIDO'];
@@ -269,6 +273,42 @@ const ISS = {
     status: 'proposta', dependeDe: 'calendário do município', revisar: true,
 };
 
+// 🏦 DeRE — DECLARAÇÃO ELETRÔNICA DE REGIMES ESPECÍFICOS (IBS/CBS/IS).
+//
+// A obrigação acessória da reforma tributária para quem fornece sob REGIME
+// ESPECÍFICO do Título V da LC 214/2025 (serviços financeiros, planos de saúde,
+// loterias…). Paulo, 02/09: *"crie uma nova função capaz de atender esta
+// obrigação chamada DERE"*.
+//
+// Por que ela nasce `proposta`: o que decide se ELA SE APLICA a um cliente é
+// um fato de cadastro que o app não tem como deduzir — em qual regime
+// específico a empresa opera. `mesDoCliente` PROMOVE a entrada a 'ativa' quando
+// o cadastro afirma um regime obrigado, e a TIRA da lista quando o cadastro diz
+// "não se aplica" (ver `resolverDereDoCliente`). Empresa sem cadastro e sem
+// sinal de CNAE NÃO vira pendência — seria acender a carteira inteira por um
+// campo que 400 clientes nunca vão precisar preencher (a lição das 236 em ALTO).
+//
+// `vigenciaDesde`: a 1ª competência com escrituração mensal é 10/2026 (Ato
+// Conjunto RFB/CGIBS 4/2026 — entrega até 15/11/2026). Antes disso a entrada
+// não nasce em mês nenhum, para não cobrar obrigação que ainda não existia.
+//
+// ⚠️ O PRAZO É "ATÉ O DIA 15 DO MÊS SEGUINTE" e, pelo esclarecimento CGIBS/RFB
+// de 26/08, NÃO se prorroga quando cai em dia não útil — o que casa com a
+// política da casa de sempre antecipar. Optante do Simples fica FORA (não é a
+// lista dele). ⚠️ Fonte lida por RESUMO de terceiros: gov.br está bloqueado
+// nesta rede (ver `dere-regimes.js`). Por isso `revisar: true`.
+const DERE = {
+    obrigacao: 'DERE', label: 'DeRE', nome: 'DeRE — Declaração de Regimes Específicos (IBS/CBS)',
+    esfera: 'federal', abrangencia: 'BR',
+    frequencia: M, diaVencimento: 15, mesesApos: 1,
+    ajusteDiaNaoUtil: 'antecipa',
+    baseLegal: 'LC 214/2025 (Título V — regimes específicos) · Ato Conjunto RFB/CGIBS 4/2026 (dia 15 do mês '
+        + 'seguinte à competência; 1ª competência 10/2026, entrega até 15/11/2026; prazo não prorroga em dia não útil)',
+    status: 'proposta', dependeDe: 'regime específico de IBS/CBS no cadastro (Dados Fiscais)',
+    vigenciaDesde: '10/2026',
+    revisar: true,
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // IMUNES, ISENTAS E TERCEIRO SETOR — as respostas do Paulo, 18/08
 // ═══════════════════════════════════════════════════════════════════════════
@@ -331,7 +371,9 @@ const EFD_CONTRIB_ANUAL = {
         + 'confira antes de deixar de entregar.',
 };
 
-const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, ISS];
+// A DeRE entra no COMUM do Lucro: ela independe de Presumido × Real — o que
+// decide é o regime ESPECÍFICO de IBS/CBS, resolvido pelo cadastro no mês.
+const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, ISS, DERE];
 
 /**
  * A lista da IMUNE e da ISENTA.
@@ -348,6 +390,11 @@ const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, IS
 const IMUNE_ISENTA = [
     DCTFWEB_EVENTOS, INSS_CPP_SE_FOLHA,
     EFD_CONTRIB_ANUAL, ECD_SE_MOVIMENTO, ECF_SE_MOVIMENTO,
+    // A DeRE alcança "todas as pessoas jurídicas, INCLUSIVE imunes e isentas"
+    // que forneçam sob regime específico (esclarecimento CGIBS/RFB) — uma
+    // cooperativa de saúde imune é exatamente o caso. Continua `proposta`: só
+    // o cadastro a promove.
+    DERE,
 ];
 
 export const CATALOGO = {
@@ -383,6 +430,13 @@ function partesDaCompetencia(competencia) {
 export function assertCompetencia(competencia) {
     partesDaCompetencia(competencia);
     return competencia;
+}
+
+/** Ordena duas competências MM/AAAA: <0 se `a` vem antes de `b`. */
+export function compararCompetencias(a, b) {
+    const pa = partesDaCompetencia(a);
+    const pb = partesDaCompetencia(b);
+    return (pa.ano * 12 + pa.mes) - (pb.ano * 12 + pb.mes);
 }
 
 export function competenciaFechaTrimestre(competencia) {
@@ -460,6 +514,9 @@ export function obrigacoesAplicaveis(regime, competencia, opts = {}) {
     const incluirPropostas = opts.incluirPropostas === true;
     return lista.filter((r) => {
         if (!incluirPropostas && r.status !== 'ativa') return false;
+        // Obrigação com INÍCIO de vigência não nasce em competência anterior a
+        // ele — cobrar a DeRE em 09/2026 seria cobrar o que ainda não existia.
+        if (r.vigenciaDesde && compararCompetencias(competencia, r.vigenciaDesde) < 0) return false;
         if (r.frequencia === M) return true;
         if (r.frequencia === T) return competenciaFechaTrimestre(competencia);
         if (r.frequencia === A) return competenciaFechaAno(competencia);
@@ -515,9 +572,14 @@ export function normalizarRegimeCatalogo(regime) {
  * reimplementaria a resolução municipal — e um deles ficaria para trás, que é
  * exatamente o que aconteceu com o cron.
  */
-export function obrigacoesDoCliente(regime, competencia, { uf = '', codMunIBGE = '', prazosMunicipais = [] } = {}) {
+export function obrigacoesDoCliente(regime, competencia, {
+    uf = '', codMunIBGE = '', prazosMunicipais = [], cnae = '', regimeEspecificoIbsCbs = '',
+} = {}) {
     const { regime: chave, reconhecido } = normalizarRegimeCatalogo(regime);
     const mes = mesDoCliente({
+        // 🏦 DeRE: sem estes dois o mês responderia `sem-sinal` para TODO
+        // cliente — o cadastro que afirma o regime específico nunca chegaria.
+        cnae, regimeEspecificoIbsCbs,
         colecao: chave === 'SIMPLES' ? 'simples_empresas' : 'lucro_empresas',
         regimePadrao: chave === 'LUCRO_PRESUMIDO' ? 'presumido' : (chave === 'LUCRO_REAL' ? 'real' : ''),
         // IMUNE/ISENTA não têm coleção própria — sem o campo explícito aqui,
@@ -690,11 +752,25 @@ export function mesDoCliente(empresa, competencia) {
         }));
     const semPrazoPorCodigo = new Set(municipaisSemPrazo.map((r) => r.obrigacao));
 
+    // ═══ 🏦 DeRE: O CADASTRO DECIDE, E O SILÊNCIO NÃO ACENDE A CARTEIRA ═════
+    //
+    // A entrada nasce `proposta` porque "esta empresa fornece sob regime
+    // específico de IBS/CBS?" é fato de CADASTRO. Quatro saídas, com ações
+    // opostas, e por isso separadas (ver `decidirDereNoCadastro`):
+    //   · obrigada        ⇒ vira obrigação ATIVA, com vencimento — o cron cria;
+    //   · nao-se-aplica / sem-sinal ⇒ SAI das pendências (não é alarme: é o
+    //     caso comum da carteira), mas fica DITA em `dere.decisao`;
+    //   · candidata (CNAE sugere) / regime-nao-confirmado ⇒ continua pendência
+    //     NOMEADA, com o motivo específico no lugar do genérico.
+    const dere = resolverDereDoCliente(empresa, regime, propostas);
+
     // O que continua pendente é só o que NÃO foi resolvido pelo cadastro NEM
     // virou obrigação com data a informar (hoje sobra o INSS patronal, que
     // depende da folha — informação que ninguém no fiscal tem para dar).
-    const propostasPendentes = propostas.filter((r) =>
-        !resolvidasPorCodigo.has(r.obrigacao) && !semPrazoPorCodigo.has(r.obrigacao));
+    const propostasPendentes = propostas
+        .filter((r) => !resolvidasPorCodigo.has(r.obrigacao) && !semPrazoPorCodigo.has(r.obrigacao))
+        .filter((r) => r.obrigacao !== 'DERE' || dere.pendente)
+        .map((r) => (r.obrigacao === 'DERE' && dere.pendente ? dere.pendente : r));
 
     const alertas = [];
     if (prazoDeOutraUf.length) {
@@ -737,6 +813,7 @@ export function mesDoCliente(empresa, competencia) {
         obrigacoes: [
             ...ativas.map((r) => estaduaisResolvidas.get(r.obrigacao) || r),
             ...municipaisResolvidas,
+            ...(dere.ativa ? [dere.ativa] : []),
         ].map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) }))
             // Sem calendário não há data: `vencimento` fica NULO em vez de
             // receber o dia de outra cidade. Ausente ≠ chutado.
@@ -751,12 +828,56 @@ export function mesDoCliente(empresa, competencia) {
         /** Obrigações cujo prazo cadastrado é de OUTRA UF (ou indeterminado). */
         prazoDeOutraUf,
         prazoSemUfDoCliente,
+        /** 🏦 A decisão da DeRE para este cliente nesta competência (null antes
+         *  da vigência ou fora do regime que a tem). Sai SEMPRE que a entrada
+         *  existir — inclusive `nao-se-aplica`/`sem-sinal`, que não acendem
+         *  nada mas ficam DITOS. */
+        dere: dere.veredicto,
         alertas,
         /** true quando o catálogo NÃO cobre o cliente — a etapa 4 não pode dar
          *  verde nesse caso (trava T1 do escopo). */
         coberturaIncompleta: regime === 'INDEFINIDO' || propostasPendentes.length > 0
             || prazoDeOutraUf.length > 0 || prazoSemUfDoCliente.length > 0,
     };
+}
+
+/**
+ * 🏦 A DeRE de UM cliente numa competência: promove, tira ou mantém pendente.
+ *
+ * Só age se a entrada DERE está entre as propostas da competência (ou seja, no
+ * regime e dentro da vigência). Devolve:
+ *   ativa     — a entrada promovida (cadastro afirma regime obrigado);
+ *   pendente  — a entrada com o motivo ESPECÍFICO (candidata / não confirmado);
+ *   veredicto — a decisão do dono, para a tela dizer o que aconteceu.
+ */
+function resolverDereDoCliente(empresa, regime, propostas) {
+    const entrada = propostas.find((r) => r.obrigacao === 'DERE');
+    if (!entrada) return { ativa: null, pendente: null, veredicto: null };
+    const v = decidirDereNoCadastro(empresa, { regimeCatalogo: regime });
+    if (v.decisao === 'obrigada') {
+        return {
+            ativa: {
+                ...entrada,
+                status: 'ativa', dependeDe: null, revisar: false,
+                regimeEspecifico: v.regimeEspecifico,
+                regimeEspecificoRotulo: v.rotulo,
+                baseLegal: `${entrada.baseLegal} · ${v.motivo}`,
+            },
+            pendente: null,
+            veredicto: v,
+        };
+    }
+    if (v.decisao === 'candidata' || v.decisao === 'regime-nao-confirmado') {
+        return {
+            ativa: null,
+            // A frase do `dependeDe` é o que a Rotina imprime ao lado do nome —
+            // genérico ("cadastro") mandaria procurar sem dizer o quê.
+            pendente: { ...entrada, dependeDe: v.motivo, acaoDere: v.acao },
+            veredicto: v,
+        };
+    }
+    // nao-se-aplica · sem-sinal · dispensada-simples: fora do mês, DITO.
+    return { ativa: null, pendente: null, veredicto: v };
 }
 
 /** As esferas que definem prazo. A taxonomia é estável — o que muda é a data. */
@@ -813,3 +934,10 @@ export function pendenciasDeConfirmacao() {
     }
     return Array.from(vistos.values());
 }
+
+/**
+ * 🏦 A entrada da DeRE, exportada para o dono do resto da obrigação
+ * (`dere.js`: eventos, cronograma, situação por empresa, triagem). O prazo
+ * mora AQUI, com as demais obrigações — `dere.js` importa, nunca recalcula.
+ */
+export const OBRIGACAO_DERE = DERE;

@@ -17,6 +17,7 @@ import {
 import { dataHoraSp } from '../services/spConnect';
 import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
 import TriagemTerceiroSetorPanel from './TriagemTerceiroSetorPanel';
+import DerePanel from './DerePanel';
 import { tenhoAcessoAuditoria } from '../services/auditoriaDonoService';
 
 // Lazy: quem não é dono nunca baixa o painel.
@@ -422,6 +423,15 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                         confirmação — não de apuração. */}
                     <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
                         <TriagemTerceiroSetorPanel onShowToast={(m) => setMsg({ texto: m, tipo: 'ok' })} />
+                    </section>
+
+                    {/* ── 🏦 DeRE (regimes específicos de IBS/CBS) ─────────────────
+                        Mesma razão dos dois acima: é CONFIG de cadastro que vale
+                        para a casa (quem está em regime específico) e o trabalho é
+                        de CONFIRMAÇÃO. A obrigação em si aparece no mês do cliente
+                        (Rotina, Vencimentos, Guia do mês) — aqui é a fila. */}
+                    <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                        <DerePanel onShowToast={(m) => setMsg({ texto: m, tipo: 'ok' })} />
                     </section>
 
                     {/* ── Horários dos colaboradores (atalho) ─────────────────── */}

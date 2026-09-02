@@ -30,6 +30,9 @@ import { selecionarCertA1PorBase } from './cert-base-helper.js';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 import { normalizarCodCliente } from './cod-cliente.js';
 import { validarRegimeParaGravacao } from './regime-tributario.js';
+// 🏦 DeRE: o regime específico de IBS/CBS é vocabulário fechado — fora dele é
+// RECUSA com a lista, nunca descarte calado (o desenho do regimeTributario).
+import { validarRegimeEspecificoParaGravacao } from './dere-regimes.js';
 import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
 import { ccmSpDaEmpresa, ccmSpParaGravar } from './ccm-sp.js';
 import { trilhoDaNfceSaida, avisoDaLinhaNfce } from './trilho-saida-modelo.js';
@@ -848,6 +851,11 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // #382 na íntegra. São EIXOS SEPARADOS de propósito: "terceiro setor" não é
     // regime, e convive com ele (um templo é imune E sem fins lucrativos).
     'regimeTributario', 'semFinsLucrativos',
+    // 🏦 DeRE (02/09): em qual regime ESPECÍFICO de IBS/CBS a empresa fornece
+    // (LC 214/2025, Título V). É o fato que decide se a DeRE entra no mês do
+    // cliente — e o app NÃO deduz pelo CNAE (CNAE é sinal, vira candidata).
+    // Vocabulário e régua em `dere-regimes.js`. Whitelist + modal no MESMO PR.
+    'regimeEspecificoIbsCbs',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.
@@ -929,6 +937,11 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
                 dadosFiscais[k] = v.regime;
             }
             let val = typeof v === 'string' ? v.trim() : v;
+            if (k === 'regimeEspecificoIbsCbs') {
+                const r = validarRegimeEspecificoParaGravacao(val);
+                if (!r.ok) return res.status(400).json({ error: 'REGIME_ESPECIFICO_INVALIDO', message: r.motivo });
+                val = r.codigo || '';
+            }
             if (k === 'uf' && typeof val === 'string') val = val.toUpperCase();
             if (k === 'ccmSp' && typeof val === 'string') val = val.replace(/\D/g, '');
             // Condição rural (🌾 DIPAM/FUNRURAL): objeto com forma fixa — grava

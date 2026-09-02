@@ -10,6 +10,10 @@ import type { EmpresaDadosFiscais } from '../types';
 import { CloseIcon, BuildingIcon } from './Icons';
 import { sanitizarDadosFiscais } from '../services/empresaDadosFiscaisSanitize';
 import { soZerosComoVazio } from '../sefaz-backend/ccm-sp.js';
+// 🏦 DeRE: as opções do regime específico vêm do DONO — copiá-las aqui seria a
+// segunda cópia do vocabulário, e a tela ofereceria um código que o backend
+// recusa no primeiro regime novo.
+import { REGIMES_ESPECIFICOS_IBS_CBS } from '../sefaz-backend/dere-regimes.js';
 import { buscarCep } from '../services/cepService';
 import { listarContadores, salvarContador, type Contador } from '../services/contadoresService';
 // As tabelas do frete contratado vêm do DONO no backend — reescrevê-las aqui
@@ -861,6 +865,31 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                     </span>
                                 </span>
                             </label>
+                        </div>
+                        {/* 🏦 DeRE — 02/09, Paulo: "crie uma nova função capaz de atender
+                            esta obrigação chamada DERE". A Declaração de Regimes
+                            Específicos (IBS/CBS) só existe para quem fornece sob regime
+                            específico da LC 214/2025 — e ISSO é fato de cadastro, que o
+                            app não deduz pelo CNAE (CNAE é sinal, vira candidata na fila
+                            do ⚙️ Config Admin). Marcado um regime obrigado, a DeRE entra
+                            no mês do cliente com vencimento; "Não se aplica" tira a
+                            pendência; em branco, o app não afirma nada. */}
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <SelectField
+                                label="Regime específico de IBS/CBS (DeRE)"
+                                value={dados.regimeEspecificoIbsCbs || ''}
+                                onChange={v => handleField('regimeEspecificoIbsCbs', v as any)}
+                                options={[
+                                    { value: '', label: '— Não informado (o app só sugere pelo CNAE) —' },
+                                    ...REGIMES_ESPECIFICOS_IBS_CBS.map(r => ({
+                                        value: r.codigo,
+                                        label: r.dereConfirmada
+                                            ? `${r.rotulo} — entra na DeRE`
+                                            : (r.codigo === 'NENHUM' ? r.rotulo : `${r.rotulo} — alcance da DeRE não confirmado`),
+                                    })),
+                                ]}
+                                hint="LC 214/2025, Título V. Decide se a DeRE (mensal, dia 15 do mês seguinte, a partir da competência 10/2026) entra no mês deste cliente. Optante do Simples fica fora."
+                            />
                         </div>
                         {(dados.regimeTributario === 'IMUNE' || dados.regimeTributario === 'ISENTA') && (
                             <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
