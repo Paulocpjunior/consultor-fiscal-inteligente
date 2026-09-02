@@ -25,6 +25,13 @@ import { secretsMatch } from './cron-secret.js';
 // DEPOIS na resposta da Microsoft — o card acusava "a resposta não nomeou o
 // aplicativo" sobre 416 respostas que nomeavam.
 import { recortarPreservandoApp } from './sharepoint-erro-credencial.js';
+// 🚨 O caminho MUDOU em 02/09: a árvore real não tem nível de GRUPO, a empresa
+// vem ANTES do departamento e o mês é por NOME. E o nome da pasta da empresa é
+// HUMANO — tem de ser ACHADO pelo código, nunca montado. Ver caminho-sharepoint.js.
+import { PASTA_RAIZ, caminhoFiscal } from './caminho-sharepoint.js';
+// Dono único de "qual é a pasta desta empresa?" — a frase de cada situação é
+// régua, e quatro cópias dela divergiriam no primeiro ajuste.
+import { listarPastasDeEmpresas, resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -324,9 +331,11 @@ function classifyCfop(itens, direcao) {
     return 'outro';
 }
 
-function buildFolderPath(grupo, ano, mes, empresa, direcao) {
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${ano}/${mes}-${ano}/${empresa}/XML ${direcao}`;
-}
+// 🗑️ `buildFolderPath` foi DELETADO. Ele montava
+// `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mes}-{ano}/{empresa}/XML {dir}`
+// — um caminho que NÃO EXISTE no SharePoint (medido em 02/09). Código morto
+// aqui seria a isca para alguém reativar a régua velha.
+
 
 async function fetchFromProxy(path, body) {
     const resp = await fetch(`${PROXY_URL}${path}`, {
@@ -369,17 +378,21 @@ async function checarProxySharePoint() {
 
 // ─── Sync logic ─────────────────────────────────────────────────────────────
 
-async function syncEmpresa(db, empresa, competencias) {
+async function syncEmpresa(db, empresa, competencias, pastasDeEmpresas) {
     const cfg = empresa.sharePointConfig;
     if (!cfg || !cfg.autoSyncEnabled) return null;
     // Config incompleta NÃO pode ser pulada em silêncio: a empresa aparece na
     // lista de auto-sync, o run termina 0/0/0 verde e ninguém percebe que
     // nada foi sincronizado. Devolve resultado com erro pra contar e exibir.
-    if (!cfg.grupo || !cfg.empresaPasta) {
+    // 🚨 A PASTA DA EMPRESA É ACHADA, NÃO MONTADA (02/09). Os nomes são
+    // humanos — `0004 – AÇOUGUE YOKOAMA`, `0019 _3D PICTURES` — e montar
+    // criaria uma pasta NOVA ao lado da que existe, duplicando o cliente.
+    const achado = await resolverPastaDaEmpresa(empresa, pastasDeEmpresas);
+    if (!achado.ok) {
         return {
             empresaId: empresa.id,
             empresaNome: empresa.nome,
-            erro: 'Configuração incompleta: grupo/pasta do SharePoint não preenchidos',
+            erro: achado.motivo,
             configIncompleta: true,
         };
     }
@@ -409,7 +422,7 @@ async function syncEmpresa(db, empresa, competencias) {
         const [ano, mes] = competencia.split('-');
 
         for (const dir of directions) {
-            const folderPath = buildFolderPath(cfg.grupo, ano, mes, cfg.empresaPasta, dir);
+            const folderPath = caminhoFiscal({ pastaEmpresa: achado.pasta, ano, mes, direcao: dir });
             let syncResult;
             try {
                 syncResult = await fetchFromProxy('/api/sharepoint/sync', { folderPath });
@@ -576,12 +589,37 @@ router.post('/auto-sync', async (req, res) => {
             return res.status(502).json({ error: saude.motivo, competencia, competencias });
         }
 
-        console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), competencia(s) ${competencia}`);
+        // 🚨 AS PASTAS DAS EMPRESAS SÃO LIDAS UMA VEZ POR RODADA. O nome é
+        // humano e tem de ser ACHADO pelo código; ler por empresa seriam ~400
+        // idas ao Graph (o HTTP 429 de 27/08 com outra roupa).
+        // ⚠️ Falhar aqui é FATAL e vai DITO: sem a lista, NENHUMA empresa
+        // resolve o caminho, e 416 linhas de "pasta não encontrada" mandariam
+        // criar 416 pastas que talvez já existam.
+        let pastasDeEmpresas;
+        try {
+            pastasDeEmpresas = await listarPastasDeEmpresas();
+        } catch (e) {
+            const motivo = `Não foi possível listar as pastas de ${PASTA_RAIZ} no SharePoint: ${e.message}`;
+            console.error(`[auto-sync] abortado: ${motivo}`);
+            await db.collection('sharepoint_sync_log').add({
+                competencia,
+                competencias,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                empresasProcessadas: 0,
+                totalNovos: 0, totalDup: 0, totalErros: empresas.length,
+                erroFatal: motivo,
+                results: [],
+            }).catch(() => {});
+            return res.status(502).json({ error: motivo, competencia, competencias });
+        }
+
+        console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), `
+            + `${pastasDeEmpresas.length} pasta(s) em ${PASTA_RAIZ}, competencia(s) ${competencia}`);
 
         const results = [];
         for (const empresa of empresas) {
             try {
-                const result = await syncEmpresa(db, empresa, competencias);
+                const result = await syncEmpresa(db, empresa, competencias, pastasDeEmpresas);
                 if (result) results.push(result);
             } catch (err) {
                 console.error(`[auto-sync] erro em ${empresa.nome}:`, err.message);

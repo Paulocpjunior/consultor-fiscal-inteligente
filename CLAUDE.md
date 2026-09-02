@@ -5,6 +5,64 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧭 O CAMINHO MORTO ESTAVA EM QUATRO TRILHOS — e eu só conhecia DOIS**
+  (02/09, Paulo: *"PODE LIGAR NO AUTO-SYNC NO ENVIO DA GUIA"*, autorizando a
+  ligação da régua nova).
+  📌 Eu ia corrigir os dois que ele nomeou. Quem achou o resto foi a
+  **VARREDURA** (`caminhoSharepointLigado.test.ts`): o **arquivo do cofre de
+  e-mail** (`cofre-sharepoint-arquivo.js`) e os **recibos da REINF**
+  (`reinf-retencoes-pj-routes.js`) montavam o MESMO caminho inexistente. É a
+  lição de 13/08 na forma mais cara — **trava por LISTA cobre o que eu lembrei**,
+  e o que eu lembrava era metade.
+  ✂️ **O DONO DA ÁRVORE É ÚNICO** (`caminho-sharepoint.js`, PURO):
+  `caminhoDaFolha` é a raiz e `caminhoFiscal`/`caminhoImpostos`/`caminhoRecibos`
+  são apelidos dela. Cinco módulos montando a própria produziriam exatamente o
+  que este dia achou.
+  🚨 **E A SEGUNDA CÓPIA NASCEU NA MINHA FRENTE — o que se repete não é o
+  `fetch`, são as TRÊS FRASES.** *"não achei"*, *"achei duas"* e *"o cadastro
+  não tem código"* pedem ações **OPOSTAS**, e a frase de cada uma é RÉGUA:
+  quatro cópias divergiriam no primeiro ajuste, e o colaborador leria
+  instruções diferentes para o mesmo problema. `sharepoint-pastas.js` é o dono,
+  e o teste exige que **nenhum dos quatro trilhos** carregue a frase.
+  ⚠️ **FALHA AO LISTAR NÃO É "pasta não existe"**: dizer isso mandaria criar
+  uma pasta que provavelmente já está lá — e, no lote, viraria **416 linhas**
+  mandando criar 416 pastas. No auto-sync ela é **FATAL e DITA** (`erroFatal`,
+  HTTP 502); a listagem sai **UMA vez por rodada, fora do laço** (leitura por
+  empresa seria o HTTP 429 de 27/08 com outra roupa).
+  ⚠️ **E O APP NÃO CRIA A PASTA DA EMPRESA**, só as do fiscal para baixo: o
+  nome dela é HUMANO (`0004 – AÇOUGUE YOKOAMA`, `0019 _3D PICTURES`) e criar
+  seria duplicar o cliente ao lado do que existe. Código duplicado (`0109` está
+  lá duas vezes) **não vira escolha silenciosa** — recusa nomeando as duas.
+  🐛 **A VARREDURA NASCEU LARGA e acusou código CERTO — a sexta vez do vício**:
+  ela casava `${mes}-${ano}` solto e apontou o `rotina-fiscal.js`, onde isso é
+  a **CHAVE do faturamento do Simples** (`MM-AAAA`), não um caminho. Estreitada
+  para exigir o contexto `DEPARTAMENTO FISCAL/`. **Alarme sobre código certo é
+  o jeito conhecido de a equipe desligar a trava.**
+  🐛 **E O STRIPPER DE COMENTÁRIO DE BLOCO ENGOLIU O ARQUIVO — o defeito de
+  26/08, dentro da minha própria trava**: `/\*[\s\S]*?\*\//` atravessou a fonte
+  por causa de um regex do código (`/^(\d{4})-(\d{2})$/`), e a varredura passou
+  a ler MEIA fonte. Saem só comentário de LINHA e linhas de bloco iniciadas com
+  `*`.
+  📌 **TRÊS FIXTURES TROCADAS, e as três pelo mesmo motivo**: elas travavam o
+  caminho `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/{empresa}/…`
+  no TEXTO — ou seja, **passavam verdes descrevendo a pasta que produzia 404**,
+  e a do REINF ainda exigia que a rota montasse o caminho à mão. Travar a forma
+  antiga impede a correção que a régua manda fazer.
+  🐛 **E UMA ASSERÇÃO MINHA LEU PROSA, no mesmo PR**: `not.toMatch(/sharePointConfig/)`
+  sobre o arquivo INTEIRO reprovou a correção, porque o comentário que a
+  EXPLICA cita o campo morto. **Varredura lê CÓDIGO, nunca a prosa que o
+  explica** (a mordida do ISS, 22/08).
+  ✂️ **E O AVISO DA TELA DO REINF APONTAVA UM LUGAR QUE NÃO RESOLVE MAIS**: ele
+  lia `sharePointConfig.grupo` e mandava preencher *"grupo + pasta em
+  Integrações → SharePoint"* — cadastro do caminho MORTO. É o achado 18
+  (21/08): a pessoa preenche e nada muda. Agora a causa vem do DONO, com a ação
+  de cada uma das três.
+  🚩 **O QUE ISTO NÃO PROVA, e vai dito**: nenhuma gravação real aconteceu
+  ainda. A árvore foi medida em UMA empresa (`0040_Clinica Mantoan`), que tem
+  só `Departamento Contábil` — a pasta do fiscal **será criada pelo app**
+  (decisão do dono). **Validar numa empresa só antes de soltar nas 416**: se eu
+  errei alguma suposição, o erro fica em uma pasta, não em 416.
+
 - **🚨 O CAMINHO DO SHAREPOINT QUE O APP MONTA NÃO EXISTE — a árvore real é
   OUTRA desde a raiz** (02/09, medido clique a clique pelo explorador que
   nasceu horas antes; Paulo, ao ver o nível: *"não tem grupo"*).

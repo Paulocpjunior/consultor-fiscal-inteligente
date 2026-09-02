@@ -140,9 +140,20 @@ export function acharPastaPorNome(pastas, aceitos) {
  * seja, foi LIDO do SharePoint) e o resto é o que o app cria.
  */
 export function caminhoFiscal({ pastaEmpresa, ano, mes, direcao = 'SAÍDA' }) {
+    return caminhoDaFolha({ pastaEmpresa, ano, mes, folha: `XML ${direcao}` });
+}
+
+/**
+ * Uma FOLHA qualquer dentro do mês — `XML SAÍDA`, `IMPOSTOS`, `RECIBOS`.
+ *
+ * ⚠️ Ela é o dono ÚNICO da árvore: `caminhoFiscal` e `caminhoImpostos` são
+ * apelidos dela. Cada módulo montar a sua própria produziria o que este dia
+ * achou — o mesmo caminho escrito em cinco lugares, e um deles errado.
+ */
+export function caminhoDaFolha({ pastaEmpresa, ano, mes, folha }) {
     const nomeMes = nomeDoMes(mes);
-    if (!pastaEmpresa || !ano || !nomeMes) return null;
-    return [PASTA_RAIZ, pastaEmpresa, DEPARTAMENTO_FISCAL, String(ano), nomeMes, `XML ${direcao}`].join('/');
+    if (!pastaEmpresa || !ano || !nomeMes || !folha) return null;
+    return [PASTA_RAIZ, pastaEmpresa, DEPARTAMENTO_FISCAL, String(ano), nomeMes, folha].join('/');
 }
 
 /**
@@ -152,7 +163,16 @@ export function caminhoFiscal({ pastaEmpresa, ano, mes, direcao = 'SAÍDA' }) {
  * `Departamento Fiscal` do mês, junto do que se refere àquela competência.
  */
 export function caminhoImpostos({ pastaEmpresa, ano, mes }) {
-    const nomeMes = nomeDoMes(mes);
-    if (!pastaEmpresa || !ano || !nomeMes) return null;
-    return [PASTA_RAIZ, pastaEmpresa, DEPARTAMENTO_FISCAL, String(ano), nomeMes, 'IMPOSTOS'].join('/');
+    return caminhoDaFolha({ pastaEmpresa, ano, mes, folha: 'IMPOSTOS' });
+}
+
+/**
+ * A pasta dos RECIBOS da REINF — irmã de IMPOSTOS.
+ *
+ * 📌 IMPOSTOS guarda a GUIA (o que o cliente paga); RECIBOS guarda a PROVA DE
+ * ENTREGA da obrigação acessória. Misturar faz alguém mandar recibo no lugar
+ * da guia.
+ */
+export function caminhoRecibos({ pastaEmpresa, ano, mes }) {
+    return caminhoDaFolha({ pastaEmpresa, ano, mes, folha: 'RECIBOS' });
 }

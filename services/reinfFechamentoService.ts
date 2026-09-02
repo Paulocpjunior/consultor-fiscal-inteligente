@@ -38,7 +38,15 @@ export interface PrepararFechamento {
     apurado: { base: number; inss: number; gilrat: number; senar: number; total: number };
     entregas: EntregaReinf[];
     lotesSemCompetencia: number;
-    temPastaSharePoint: boolean;
+    /**
+     * Onde o recibo será arquivado — e, quando não houver onde, POR QUÊ.
+     *
+     * ⚠️ O booleano antigo (`temPastaSharePoint`) lia o cadastro do caminho
+     * MORTO e mandava preencher "grupo + pasta", que hoje não resolve nada.
+     * O `motivo` vem do dono (`sharepoint-pastas.js`) e traz a ação certa de
+     * cada causa — sem Cod.Cliente, pasta duplicada ou pasta inexistente.
+     */
+    pastaSharePoint: { ok: boolean; pasta: string | null; motivo: string | null; codCliente: string };
     /**
      * Códigos de receita do FUNRURAL, vindos do BACKEND de propósito.
      *

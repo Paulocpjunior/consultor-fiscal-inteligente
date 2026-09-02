@@ -5,7 +5,7 @@
 // autXML, portal, cofre de e-mail, importação manual/ZIP…), na MESMA estrutura
 // de pastas que o sync já usa:
 //
-//   Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/{empresaPasta}/XML {SAÍDA|ENTRADA}
+//   Empresas/{código}_{nome}/Departamento Fiscal/{ano}/{Mês}/XML {SAÍDA|ENTRADA}
 //
 // Até 24/07/2026 só arquivava docs do cofre (origem='email') — as 15k+ notas
 // da captura DistDFe ficavam SÓ no app e as pastas SharePoint (local de
@@ -22,6 +22,9 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+// Dono único do caminho (a árvore real foi medida em 02/09).
+import { caminhoFiscal } from './caminho-sharepoint.js';
+import { listarPastasDeEmpresas, resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 
 const PROXY_URL = process.env.SHAREPOINT_PROXY_URL
   || 'https://consultor-fiscal-proxy-631239634290.us-west1.run.app';
@@ -43,12 +46,17 @@ export function rotuloDirecao(direcao) {
  * Monta o caminho da pasta no SharePoint — MESMA árvore do sharepoint-auto-sync.
  * @returns {string|null} null se faltar dado obrigatório.
  */
-export function buildFolderPathArquivo(grupo, empresaPasta, competencia, direcao) {
+/**
+ * 🚨 A ASSINATURA MUDOU EM 02/09 e ela perdeu o `grupo`: esse nível NÃO EXISTE
+ * na árvore real. `pastaEmpresa` é o nome REAL da pasta (`0040_Clinica
+ * Mantoan`), achado pelo Cod.Cliente — ele é humano e não se monta.
+ */
+export function buildFolderPathArquivo(pastaEmpresa, competencia, direcao) {
   const rot = rotuloDirecao(direcao);
   const m = /^(\d{4})-(\d{2})$/.exec(String(competencia || ''));
-  if (!grupo || !empresaPasta || !rot || !m) return null;
+  if (!pastaEmpresa || !rot || !m) return null;
   const [, ano, mes] = m;
-  return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${ano}/${mes}-${ano}/${empresaPasta}/XML ${rot}`;
+  return caminhoFiscal({ pastaEmpresa, ano, mes, direcao: rot });
 }
 
 async function fetchProxyUpload(folderPath, filename, contentBase64) {
@@ -64,18 +72,27 @@ async function fetchProxyUpload(folderPath, filename, contentBase64) {
   return resp.json();
 }
 
-// empresas com sharePointConfig completo, indexadas por empresaId.
-async function carregarConfigsSharePoint(db) {
+/**
+ * A PASTA REAL de cada empresa, indexada por empresaId.
+ *
+ * 🚨 Antes ela guardava `grupo` + `empresaPasta` do CADASTRO e montava o
+ * caminho. A árvore real não tem grupo, e o nome da pasta é humano — ele é
+ * ACHADO pelo Cod.Cliente, e as pastas são lidas UMA vez por rodada (uma
+ * leitura por empresa seriam ~400 idas ao Graph).
+ *
+ * ⚠️ Empresa sem pasta resolvida fica de FORA, e o motivo é o do dono — não
+ * uma frase nova, que divergiria da que o auto-sync mostra para o mesmo caso.
+ */
+async function carregarPastasDasEmpresas(db, pastas) {
   const porId = new Map();
   for (const col of ['simples_empresas', 'lucro_empresas']) {
     const snap = await db.collection(col).get();
-    snap.forEach((doc) => {
+    for (const doc of snap.docs) {
       const d = doc.data() || {};
-      const cfg = d.sharePointConfig;
-      if (cfg && cfg.grupo && cfg.empresaPasta) {
-        porId.set(doc.id, { grupo: cfg.grupo, empresaPasta: cfg.empresaPasta, nome: d.razaoSocial || d.nome || '—' });
-      }
-    });
+      if (!d.sharePointConfig?.autoSyncEnabled && !d.sharePointConfig) continue;
+      const r = await resolverPastaDaEmpresa(d, pastas);
+      if (r.ok) porId.set(doc.id, { pasta: r.pasta, nome: d.razaoSocial || d.nome || '—' });
+    }
   }
   return porId;
 }
@@ -118,7 +135,16 @@ export async function arquivarNoSharePoint({ maxDocs = 200, maxLeituras = 2000 }
     cicloCompleto: false, pausadoPorTeto: false,
   };
 
-  const porId = await carregarConfigsSharePoint(db);
+  // ⚠️ Falha ao listar as pastas PARA a rodada com o motivo: sem a lista,
+  // nenhuma empresa resolve, e "0 arquivados" pareceria "não havia nada".
+  let pastasDeEmpresas;
+  try {
+    pastasDeEmpresas = await listarPastasDeEmpresas();
+  } catch (e) {
+    r.erroFatal = `Não foi possível listar as pastas de empresa no SharePoint: ${e.message}`;
+    return r;
+  }
+  const porId = await carregarPastasDasEmpresas(db, pastasDeEmpresas);
   r.empresasComConfig = porId.size;
 
   const stateRef = db.doc(STATE_ARQUIVO);
@@ -147,7 +173,7 @@ export async function arquivarNoSharePoint({ maxDocs = 200, maxLeituras = 2000 }
       const elig = elegivelParaArquivoSp(data);
       const cfg = elig.ok ? porId.get(data.empresaId) : null;
       const folderPath = (elig.ok && cfg)
-        ? buildFolderPathArquivo(cfg.grupo, cfg.empresaPasta, data.competencia, data.direcao)
+        ? buildFolderPathArquivo(cfg.pasta, data.competencia, data.direcao)
         : null;
       const precisaUpload = !!(elig.ok && cfg && folderPath);
 
