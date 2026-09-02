@@ -68,6 +68,41 @@ export async function capturarNFCeSaida(params: {
     return data;
 }
 
+export interface ReconferirNfceResultado {
+    ok: boolean;
+    chave?: string;
+    origemDaEntrada?: 'chave' | 'id-de-evento';
+    cnpjEmitente?: string;
+    /** A resposta do órgão, inteira — é ela que responde quando o app não sabe nomear. */
+    sefaz?: { cStat: string | null; xMotivo: string | null; temAutorizada: boolean; eventos: number };
+    situacao?: 'cancelada' | 'nao-cancelada' | 'nao-cancelada-por-recusa' | 'indeterminado';
+    motivo?: string;
+    documentoNaBase?: boolean;
+    gravado?: boolean;
+    duracaoMs?: number;
+    error?: string;
+    code?: string;
+}
+
+/**
+ * "Esta NFC-e está cancelada?" — pergunta ao SAE-NFC-e com o A1 do próprio
+ * emitente. Aceita a CHAVE de 44 dígitos ou o ID do evento.
+ *
+ * ⚠️ Não marca nada à mão: quem afirma o cancelamento é a SEFAZ, e a gravação
+ * passa pelo mesmo dono que a reconferência de NF-e usa.
+ */
+export async function reconferirNfcePorChave(entrada: string): Promise<ReconferirNfceResultado> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sae-nfce/reconferir-chave', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: entrada }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ...data, ok: false };
+    return { ...data, ok: true };
+}
+
 export interface AutXmlHarvestResultado {
     ok: boolean;
     escritorio?: string;

@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { getAuth } from 'firebase/auth';
-import { capturarNFCeSaida, type SaeNfceResultado } from '../../services/saeNfceService';
+import {
+    capturarNFCeSaida, reconferirNfcePorChave,
+    type SaeNfceResultado, type ReconferirNfceResultado,
+} from '../../services/saeNfceService';
 
 /**
  * SaeNfceCaptura — painel admin da captura de SAÍDA de NFC-e (modelo 65) via
@@ -23,6 +26,22 @@ const SaeNfceCaptura: React.FC = () => {
     const [resp, setResp] = useState<SaeNfceResultado | null>(null);
     const [rodada, setRodada] = useState(0);
     const pararRef = useRef(false);
+    // Reconferência de UMA NFC-e (cancelamento) — ver o bloco 🚫 lá embaixo.
+    const [chaveRec, setChaveRec] = useState('');
+    const [recLoading, setRecLoading] = useState(false);
+    const [rec, setRec] = useState<ReconferirNfceResultado | null>(null);
+
+    const reconferir = async () => {
+        setRecLoading(true);
+        setRec(null);
+        try {
+            setRec(await reconferirNfcePorChave(chaveRec));
+        } catch (e: any) {
+            setRec({ ok: false, error: e?.message || 'Falha ao perguntar à SEFAZ.' });
+        } finally {
+            setRecLoading(false);
+        }
+    };
 
     const rodar = async () => {
         setLoading(true);
@@ -164,6 +183,72 @@ const SaeNfceCaptura: React.FC = () => {
                     )}
                 </div>
             )}
+
+            {/* ─── Reconferir cancelamento de UMA NFC-e ──────────────────── */}
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    🚫 Esta NFC-e está cancelada?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    A captura de NFC-e pergunta <strong>uma vez por nota</strong> e o cancelamento acontece
+                    sempre <strong>depois</strong> da autorização — então nenhum trilho automático descobre
+                    sozinho. O botão <em>Reconferir</em> da aba 🚫 é o de <strong>NF-e (modelo 55)</strong> e
+                    recusa NFC-e; é aqui que se pergunta pelo modelo 65.
+                </p>
+                <div className="flex flex-wrap items-end gap-2 mt-3">
+                    <label className="text-xs text-slate-600 dark:text-slate-300 flex-1 min-w-[20rem]">
+                        Chave (44 dígitos) ou ID do evento
+                        <input value={chaveRec} onChange={e => setChaveRec(e.target.value)}
+                            placeholder="—"
+                            className="block mt-1 w-full px-2 py-1.5 text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 font-mono" />
+                    </label>
+                    <button onClick={reconferir} disabled={recLoading || chaveRec.replace(/\D/g, '').length < 44}
+                        className="px-4 py-1.5 text-xs font-bold rounded-md bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white whitespace-nowrap">
+                        {recLoading ? 'Perguntando à SEFAZ…' : 'Perguntar à SEFAZ'}
+                    </button>
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                    Quem afirma o cancelamento é a SEFAZ — o app não marca nada à mão. Confirmado, ele grava o
+                    evento no documento (pelo mesmo caminho da reconferência de NF-e) e a nota sai do
+                    faturamento.
+                </p>
+
+                {rec && !rec.ok && (
+                    <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
+                        <p className="text-xs text-red-700 dark:text-red-300 break-words">⛔ {rec.error || 'Erro desconhecido.'}</p>
+                    </div>
+                )}
+
+                {rec && rec.ok && (
+                    <div className="mt-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded p-3 space-y-1">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-100">
+                            {rec.situacao === 'cancelada' && '🚫 CANCELADA'}
+                            {rec.situacao === 'nao-cancelada' && '🟢 Vigente (a SEFAZ entregou o documento e não há evento)'}
+                            {rec.situacao === 'nao-cancelada-por-recusa' && '🟡 Sem confirmação de cancelamento'}
+                            {rec.situacao === 'indeterminado' && '⚠ Não deu para concluir'}
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{rec.motivo}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-all">
+                            Resposta do órgão: cStat {rec.sefaz?.cStat || '—'} · {rec.sefaz?.xMotivo || '(sem xMotivo)'} ·
+                            autorizada: {rec.sefaz?.temAutorizada ? 'sim' : 'não'} · eventos: {rec.sefaz?.eventos ?? 0}
+                        </p>
+                        {rec.gravado && (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                                ✓ Cancelamento GRAVADO no documento — a nota sai do faturamento e dos livros.
+                            </p>
+                        )}
+                        {rec.situacao === 'cancelada' && !rec.documentoNaBase && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                                ⚠ A SEFAZ confirma o cancelamento, mas esta chave <strong>não está na base</strong> —
+                                não havia o que carimbar. Capture o período antes.
+                            </p>
+                        )}
+                        {rec.origemDaEntrada === 'id-de-evento' && (
+                            <p className="text-[11px] text-slate-400">Chave extraída do ID do evento: {rec.chave}</p>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* ─── Certificado A3 (cartão/token) ─────────────────────────── */}
             <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">

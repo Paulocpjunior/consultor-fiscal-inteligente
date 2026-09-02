@@ -19,6 +19,10 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
+import { baixarXmlNFCe } from './sefaz-sp-nfce-client.js';
+import { loadCertEmpresaPorCnpjBase } from './cert-storage.js';
+import { lerCancelamentoNfce, entradaParaChave } from './sae-nfce-cancelamento.js';
+import { gravarCancelamentoConfirmado, carimbarPerguntaSefaz } from './cancelamento-gravacao.js';
 import { importarXmlSefaz } from './xml-importer.js';
 import { carregarEmpresas, acharDono } from './xml-empresa-matcher.js';
 import { repararDocsSemDono } from './docs-sem-dono.js';
@@ -50,6 +54,106 @@ router.post('/capturar', requireAdmin, async (req, res) => {
     return res.status(status).json({ ...r, duracaoMs: Date.now() - inicio });
   } catch (e) {
     console.error('[sae-nfce] erro:', e.message);
+    return res.status(500).json({ error: e.message, duracaoMs: Date.now() - inicio });
+  }
+});
+
+// ============================================================================
+// POST /api/admin/sae-nfce/reconferir-chave   body: { chave | idEvento }
+//
+// "Esta NFC-e está cancelada?" — perguntando ao SAE-NFC-e com o A1 do PRÓPRIO
+// emitente (o serviço exige que a chave pertença ao certificado).
+//
+// 🚨 POR QUE ELA EXISTE (02/09, NFC-e 1194 da ARMAZEM DE BICHOS): a captura de
+// NFC-e pergunta UMA VEZ por chave (dedup por existência) e o cancelamento
+// acontece sempre DEPOIS da autorização — então nenhum trilho automático do CFI
+// aprende dele. E o botão "Reconferir" da tela é o do MODELO 55, que recusa
+// NFC-e e DIZ isso na frase: insistir nele nunca ia resolver.
+//
+// ⚠️ ELA NÃO MARCA NADA À MÃO. Quem afirma o cancelamento é a SEFAZ; quem
+// decide o que a resposta significa é `lerRespostaCancelamento` (dono único) e
+// quem grava é `gravarCancelamentoConfirmado` (gravação única, 21/08). O app só
+// PERGUNTA — e, como toda pergunta a órgão nesta casa, ela é CARIMBADA mesmo
+// quando a resposta é "não está cancelada", senão o conhecimento evapora e a
+// próxima rodada redescobre tudo (a lição do 🔎 mudo, 21/08).
+// ============================================================================
+router.post('/reconferir-chave', requireAdmin, async (req, res) => {
+  const inicio = Date.now();
+  try {
+    const entrada = entradaParaChave(req.body?.idEvento || req.body?.chave || '');
+    if (!entrada.ok) return res.status(400).json({ error: entrada.motivo });
+    const { chave } = entrada;
+    const cnpjEmitente = chave.substring(6, 20);
+
+    // O certificado sai da RAIZ (matriz cobre filial) — mesma régua da captura.
+    const cert = await loadCertEmpresaPorCnpjBase(cnpjEmitente);
+    if (!cert?.pfxBuffer) {
+      return res.status(404).json({
+        error: `Não achei no cofre o certificado A1 do emitente ${cnpjEmitente} (nem pela raiz). `
+          + 'O SAE-NFC-e só responde com o certificado do PRÓPRIO emitente — sem ele não dá para perguntar.',
+        code: 'SEM_CERT',
+        chave,
+      });
+    }
+
+    let dl;
+    try {
+      dl = await baixarXmlNFCe({ chNFCe: chave, cert, tpAmb: Number(req.body?.tpAmb) || 1 });
+    } catch (e) {
+      // Falha de REDE não é resposta: não carimba e não conclui nada.
+      return res.status(502).json({
+        error: `Não consegui perguntar ao SAE-NFC-e: ${e.message}. A nota fica como está — falha de `
+          + 'consulta não prova que a nota é válida.',
+        chave,
+      });
+    }
+
+    const veredito = lerCancelamentoNfce(dl);
+    const db = getDbNfce();
+    const docRef = db.collection('documentos_fiscais').doc(chave);
+    const snap = await docRef.get();
+    const existe = snap.exists;
+
+    let gravado = false;
+    if (existe) {
+      // Carimba a PERGUNTA sempre (é o que faz a fila andar e o que evita
+      // redescobrir a mesma nota).
+      await carimbarPerguntaSefaz({ db, docId: chave, situacao: veredito.situacao, cStat: veredito.cStat || null });
+      if (veredito.situacao === 'cancelada' && veredito.evento) {
+        await gravarCancelamentoConfirmado({
+          db,
+          FieldValue: admin.firestore.FieldValue,
+          docId: chave,
+          evento: veredito.evento,
+          origem: 'sae-nfce-reconferir-chave',
+          usuario: req.user?.email || null,
+        });
+        gravado = true;
+      }
+    }
+
+    return res.json({
+      ok: true,
+      chave,
+      origemDaEntrada: entrada.origem,
+      cnpjEmitente,
+      // A resposta do órgão vai INTEIRA — quando o app não souber nomear o que
+      // voltou, é ela que responde (a lição do `localErroAviso`, 12/08).
+      sefaz: {
+        cStat: dl.cStat || null,
+        xMotivo: dl.xMotivo || null,
+        temAutorizada: !!dl.nfeProcXml,
+        eventos: Array.isArray(dl.eventosXml) ? dl.eventosXml.length : 0,
+      },
+      situacao: veredito.situacao,
+      motivo: veredito.motivo,
+      // `existe: false` é fato, não erro: a nota pode nunca ter sido capturada.
+      documentoNaBase: existe,
+      gravado,
+      duracaoMs: Date.now() - inicio,
+    });
+  } catch (e) {
+    console.error('[sae-nfce] reconferir-chave erro:', e.message);
     return res.status(500).json({ error: e.message, duracaoMs: Date.now() - inicio });
   }
 });
