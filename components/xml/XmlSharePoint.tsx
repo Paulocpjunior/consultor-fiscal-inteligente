@@ -166,6 +166,15 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
             setErro('Preencha o caminho da pasta.');
             return;
         }
+        // ⚠️ Rede E botão: o botão fica apagado, mas a recusa vive aqui porque
+        // é ela que NOMEIA o campo. Mandar o caminho com pedaço vazio produz
+        // um "a pasta não existe" do SharePoint sobre uma pasta que existe.
+        if (faltando.length > 0) {
+            setErro(`Falta preencher: ${faltando.join(', ')}. Sem isso o caminho sai com pedaços vazios `
+                + '(Empresas//DEPARTAMENTO FISCAL/…) e o SharePoint responde que a pasta não existe — '
+                + 'o problema não é a pasta.');
+            return;
+        }
         setLoading(true);
         setErro(null);
         setSyncResult(null);
@@ -400,9 +409,23 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                     </>
                 )}
 
+                {/* 🚨 O BOTÃO DISPARAVA COM CAMPO OBRIGATÓRIO VAZIO — e o app
+                    JÁ SABIA quais faltavam (o aviso vermelho logo acima). O
+                    caminho saía com segmentos vazios
+                    ("Empresas//DEPARTAMENTO FISCAL/…//XML SAÍDA") e o Graph
+                    respondia `itemNotFound`, que manda procurar a PASTA no
+                    SharePoint — a primeira parada errada, sobre uma pasta que
+                    pode estar perfeita. Botão apagado DIZ o que falta (a régua
+                    de 20/08: "parece desabilitado" e "está desabilitado" são a
+                    mesma coisa para quem usa). */}
                 <button
                     onClick={handleSync}
-                    disabled={loading || !health?.configured}
+                    disabled={loading || !health?.configured || faltando.length > 0}
+                    title={
+                        faltando.length > 0
+                            ? `Falta preencher: ${faltando.join(', ')} — sem isso o caminho sai com pedaços vazios e o SharePoint responde que a pasta não existe.`
+                            : !health?.configured ? 'O proxy do SharePoint não está configurado.' : undefined
+                    }
                     className="px-5 py-2.5 text-sm font-bold rounded-lg transition-colors disabled:opacity-40"
                     style={{ background: 'var(--accent)', color: '#fff' }}
                 >
