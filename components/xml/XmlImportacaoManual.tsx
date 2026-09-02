@@ -154,7 +154,11 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                 let msg = err?.message || 'Falha desconhecida.';
                 if (err instanceof XmlParseError) msg = `XML inválido: ${msg}`;
                 if (err instanceof DocumentoDuplicadoError) msg = `Duplicado: ${msg}`;
-                out.push({ fileName: file.name, status: 'erro', mensagem: msg });
+                // 🚨 A RECUSA VEM COM A MEDIÇÃO JUNTO (02/09, caso do Ivan): o
+                // app procurou o CNPJ da empresa DENTRO do XML e diz onde ele
+                // está — ou que não está. Sem isso a saída era pedir o arquivo
+                // a alguém, que é passar o problema adiante (régua de 24/08).
+                out.push({ fileName: file.name, status: 'erro', mensagem: msg, acao: err?.acao });
             }
         }
         setResults(prev => [...out, ...prev]);
