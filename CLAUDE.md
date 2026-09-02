@@ -5,6 +5,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O PAINEL MANDAVA CONSERTAR O APLICATIVO ERRADO — `GRAPH_*` NESTE SERVIÇO
+  É O E-MAIL, NÃO O SHAREPOINT** (02/09, print do Paulo do Diagnóstico →
+  Config, no MESMO dia em que ele perguntou DUAS vezes *"o e-mail não tínhamos
+  matado ontem?"*).
+  🔴 As três chaves (`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`,
+  `GRAPH_CLIENT_SECRET`) estavam na categoria **SHAREPOINT**, com o impacto
+  *"SharePoint sync de XMLs não roda"*. Quem lesse ia consertar o segredo do
+  SharePoint — **que já estava certo** — e o e-mail continuaria morto.
+  📌 **MEDIDO no código**: neste serviço quem lê `GRAPH_*` é `graph-provider.js`
+  (a guia ao cliente), `graph-mail-reader.js` (cofre de e-mail) e
+  `teams-aviso.js`. **Nenhum é SharePoint** — quem fala com o SharePoint é o
+  PROXY, com as credenciais DELE.
+  ⚠️ **E O COMENTÁRIO AO LADO SUSTENTAVA O ERRO com uma meia-verdade**: dizia
+  que `GRAPH_*` era *"usado TAMBÉM pra email"*. Neste serviço ele é **SÓ**
+  e-mail — e foi esse "também" que deixou o rótulo passar por revisado.
+  ✂️ **A TRAVA SE PROVA CONTRA O CÓDIGO, não contra a minha memória**: a
+  varredura acha quem lê `process.env.GRAPH_*` e exige que **nenhum** chame
+  `graph.microsoft.com/v1.0/sites|drives`. No dia em que este serviço falar com
+  o SharePoint por essa env, a trava cai e o rótulo é revisto — em vez de
+  envelhecer errado em silêncio.
+  📌 **REGRA QUE FICA: rótulo de env é PONTEIRO — errar o rótulo é o achado 18
+  (21/08) na forma mais cara.** Não é aviso apontando lugar que não resolve: é
+  aviso apontando o lugar de OUTRO problema, que já estava resolvido.
+
 - **🚨 "JÁ TÍNHAMOS MATADO ONTEM A QUESTÃO DO E-MAIL" — e o app não tinha como
   responder** (02/09, Paulo, pela SEGUNDA vez no mesmo dia; de manhã ele já
   tinha perguntado *"email não tínhamos matado ontem?"*).
