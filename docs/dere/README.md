@@ -16,6 +16,7 @@
 | `04-anexo-ii-regras-de-validacao-v1.1.0.txt` | 1.1.0 | 22/06/2026 | Regras de validação com o código de mensagem (MSxxxx) e se interrompem o processamento; as RNs de chave, recibo, protocolo e ID |
 | `05-historico-de-versoes-v1.1.0.txt` | 1.1.0 | 22/06/2026 | O que mudou da 1.0.1 (29/05/2026) para a 1.1.0 |
 | `07-manual-do-desenvolvedor-v1.0.2.txt` | 1.0.2 | 18/08/2026 | APIs (Receita Integra, lote, consulta), assinatura XMLDSig, certificados, produção restrita |
+| `xsd/` (9 arquivos) | 1.0.0–1.0.2 | pacote "06 - Arquivos XSD (Nota Orientativa 2026)", 02/09/2026 | Schemas: `envioLoteDere` / `retornoLoteDere` (lote), `evtInfoContrib` (D-1001), `evtPGCC` (D-1011), `evtBalancete` (D-1101), `evtAplicResTec` (D-1106), `evtRetornoTabela` (D-9001), `evtRetornoBalan` (D-9101), `evtRetornoAplicFin` (D-9106). **Parcial**: não vieram D-1199, D-2101, D-9121, D-9199 |
 
 ## O que NÃO está aqui (e por isso o app não afirma)
 
@@ -24,8 +25,9 @@
   Ato Conjunto RFB/CGIBS 4/2026 e do esclarecimento CGIBS/RFB de 26/08/2026,
   conhecidos por resumo de terceiros.
 - **06** (não veio) e **08 — Mensagens de Erro do Sistema** (citado no Anexo II).
-- **XSD** dos eventos e do lote — o Manual do Desenvolvedor diz onde baixar
-  (Portal SPED e cgibs.gov.br), mas os arquivos não estão neste repo.
+- **XSD de D-1199 (fechamento), D-2101, D-9121 e D-9199** — o pacote da Nota
+  Orientativa 2026 não os trouxe. Montar XML desses eventos por dedução é o
+  `1405` num arquivo que a Receita processa.
 
 ## Os fatos que o app usa, com a página
 
@@ -68,6 +70,19 @@
   certificado final; pré-requisitos administrativos: piloto da Reforma,
   procuração no e-CAC ("Piloto da CBS" + "DeRE") e credencial gerada no portal
   `piloto-cbs.tributos.gov.br`.
+
+## O que o XSD confirmou contra o módulo (`dere.js`)
+
+- `{nrInsc}` é `[0-9A-Z]{8}` — raiz **alfanumérica** (o CNPJ alfanumérico vale
+  desde 07/2026); `raizDoCnpj` passou a manter letras, em maiúsculas.
+- O `id` do evento casa `DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}` (evtBalancete,
+  evtAplicResTec, retornos) — os 42 de `montarIdEventoDere`. O XSD admite T=2;
+  a RN do Anexo II só define 1 (CNPJ) e é ela que o módulo segue.
+- `{tpAtividade}` é `[0-9]{2}[A-Z]` — a máscara de `ATIVIDADES_DERE`.
+- `nrRecibo` tem `maxLength 31` e `protocolo` `maxLength 28` — os tetos de
+  `lerRecibo`/`lerProtocolo`.
+- `{regTribPrinc}`/`{regTribSecund}` são `xs:byte` com enumeração 1/2/3 (e 9
+  no principal) — o `codigoD1001` de `dere-regimes.js`.
 
 ## Como o texto foi extraído
 

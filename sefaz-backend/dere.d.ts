@@ -10,6 +10,18 @@ export interface EventoDere {
     nota?: string;
     /** Evento auxiliar exigido só de quem tem no PGCC conta com um destes codTribs (Anexo II). */
     condicional?: { codTribs: readonly string[]; texto: string };
+    /** Arquivo do XSD em docs/dere/xsd/ quando ele veio no pacote; null quando não veio. */
+    xsd?: string | null;
+}
+
+export interface XsdDere {
+    arquivo: string;
+    elemento: string;
+    /** Código do evento do leiaute (D-NNNN); null para os schemas de lote. */
+    evento: string | null;
+    versao: string;
+    namespace: string;
+    oQue: string;
 }
 export interface EventosDaCompetencia { tabela: EventoDere[]; mensais: EventoDere[] }
 
@@ -82,6 +94,8 @@ export interface TriagemDere {
     fontes: Record<string, string>;
     documentos: readonly DocumentoDere[];
     documentosFaltando: readonly string[];
+    xsd: readonly XsdDere[];
+    xsdFaltando: string[];
     integracao: IntegracaoDere;
     obrigadas: LinhaDere[];
     declaracoes: DeclaracaoDere[];
@@ -103,6 +117,8 @@ export const EVENTOS_DERE: readonly EventoDere[];
 export const INTEGRACAO_DERE: IntegracaoDere;
 export const DOCUMENTOS_DERE: readonly DocumentoDere[];
 export const DOCUMENTOS_DERE_FALTANDO: readonly string[];
+export const XSD_DERE: readonly XsdDere[];
+export function xsdFaltando(): string[];
 
 export function montarIdEventoDere(
     args: { codigoEvento: string; cnpj: string; data: Date; sequencial?: number },

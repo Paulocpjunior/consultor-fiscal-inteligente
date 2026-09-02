@@ -7,9 +7,10 @@
  * eventos a competência exige.
  *
  * ⚠️ O que ele NÃO faz vai na cara da tela: o app não gera nem transmite os
- * eventos. Os leiautes 1.1.0 e o manual do desenvolvedor estão LIDOS e
- * servidos aqui (PDF), mas o XSD não está no repo, o insumo (plano de contas,
- * balancete) é contábil e a transmissão exige credencial do piloto da Reforma.
+ * eventos. Os leiautes 1.1.0, o manual do desenvolvedor e parte dos XSD estão
+ * LIDOS e servidos aqui, mas faltam os XSD do D-1199/D-2101, o insumo (plano
+ * de contas, balancete) é contábil e a transmissão exige credencial do piloto
+ * da Reforma.
  * Prometer geração aqui seria a promessa que a tela não cumpre (a lição do ✕
  * de 14/08).
  *
@@ -154,8 +155,9 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
 
                     <div className="rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-2 text-amber-800 dark:text-amber-300">
                         ⚠️ <strong>O CFI não gera nem transmite os eventos da DeRE.</strong> Os leiautes
-                        oficiais e o manual do desenvolvedor estão lidos e servidos abaixo — mas o XSD não está
-                        no app, o insumo dos eventos (plano de contas comentado, balancete mensal) é contábil, e
+                        oficiais, o manual do desenvolvedor e parte dos XSD estão lidos e servidos abaixo — mas
+                        faltam os XSD do fechamento (D-1199), do D-2101 e de dois retornos, o insumo dos eventos
+                        (plano de contas comentado, balancete mensal) é contábil, e
                         a transmissão exige credencial do piloto da Reforma (procuração no e-CAC + portal da
                         produção restrita). A entrega é por fora; o mês do cliente passa a cobrar a obrigação,
                         e ela se registra em Vencimentos como entregue fora do app.
@@ -248,6 +250,23 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                                 </li>
                             ))}
                         </ul>
+                        <p className="mt-2 text-slate-600 dark:text-slate-300">
+                            <strong>XSD (schemas) — pacote "Arquivos XSD (Nota Orientativa 2026)"</strong>, {r.xsd.length} arquivo(s):
+                        </p>
+                        <ul className="mt-1 ml-4 list-disc">
+                            {r.xsd.map(x => (
+                                <li key={x.arquivo}>
+                                    <a href={`/docs/dere/xsd/${x.arquivo}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 dark:text-blue-300 underline font-mono">{x.arquivo}</a>
+                                    <span className="text-slate-400"> · {x.evento ? <code>{x.evento}</code> : 'lote'} · {x.oQue}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        {!!r.xsdFaltando.length && (
+                            <p className="mt-1 text-amber-700 dark:text-amber-300">
+                                ⚠️ Eventos do leiaute <strong>sem XSD</strong> neste pacote: {r.xsdFaltando.join(', ')} — nada se monta
+                                deles por dedução.
+                            </p>
+                        )}
                         <p className="mt-2 text-slate-500"><strong>Ainda NÃO lido</strong> — o app não afirma nada que dependa disto:</p>
                         <ul className="ml-4 list-disc text-slate-500">{r.documentosFaltando.map((t, i) => <li key={i}>{t}</li>)}</ul>
                     </details>

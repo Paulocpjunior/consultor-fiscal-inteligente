@@ -252,9 +252,14 @@ export function regimeEspecificoPorCodigo(codigo) {
     return REGIMES_ESPECIFICOS_IBS_CBS.find((r) => r.codigo === c) || null;
 }
 
-/** A declaração é por CNPJ RAIZ (`{nrInsc}`, 8 posições, em todo evento). */
+/**
+ * A declaração é por CNPJ RAIZ (`{nrInsc}`, 8 posições, em todo evento).
+ * O XSD (`envioLoteDere`, `evtInfoContrib`) define `[0-9A-Z]{8}` — o CNPJ
+ * ALFANUMÉRICO já vale desde 07/2026, então letras contam, em MAIÚSCULAS. Só
+ * o que não é letra nem dígito sai (pontos, barra, traço).
+ */
 export function raizDoCnpj(cnpj) {
-    const d = String(cnpj == null ? '' : cnpj).replace(/\D/g, '');
+    const d = String(cnpj == null ? '' : cnpj).replace(/[^0-9A-Za-z]/g, '').toUpperCase();
     return d.length === 14 ? d.slice(0, 8) : null;
 }
 
