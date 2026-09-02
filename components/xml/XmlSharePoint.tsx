@@ -312,15 +312,25 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 {useCustom ? (
                     <div>
                         <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>
-                            Caminho no SharePoint
+                            Caminho ou link da pasta no SharePoint
                         </label>
                         <input
                             value={customPath}
                             onChange={e => setCustomPath(e.target.value)}
-                            placeholder="Empresas/Grupo X/DEPARTAMENTO FISCAL/2026/05-2026/EMPRESA/XML SAÍDA"
+                            placeholder="Cole o link da pasta (Copiar link no SharePoint) ou digite Empresas/Grupo X/…/XML SAÍDA"
                             className="w-full mt-1 p-2.5 text-xs rounded-lg outline-none"
                             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                         />
+                        {/* 🚨 O link e o caminho procuram em lugares DIFERENTES, e a
+                            pessoa precisa saber disso ANTES de clicar: o caminho é
+                            resolvido no site que o proxy conhece, e o link carrega o
+                            site dele junto. Foi essa diferença que produziu "pasta não
+                            existe" sobre um link de outro site. */}
+                        <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                            {customPath.trim().startsWith('http')
+                                ? '🔗 É um LINK — ele leva o site e a biblioteca junto, então vale para qualquer site do SharePoint. Tem que ser o link da PASTA, não de um arquivo.'
+                                : '📁 É um CAMINHO — ele é procurado a partir da raiz da biblioteca do site que o proxy consulta. Se a pasta for de outro site, cole o LINK dela.'}
+                        </p>
                     </div>
                 ) : (
                     <>

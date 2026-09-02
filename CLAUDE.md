@@ -5,6 +5,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✅ A CREDENCIAL DO SHAREPOINT VOLTOU — e quem provou foi a MUDANÇA DO ERRO,
+  não uma tela verde** (02/09). Depois de dois dias de `AADSTS7000215` (401,
+  `invalid_client`), o "Sincronizar agora" respondeu **`400 BadRequest —
+  Resource not found for the segment 'root:'`**. **Graph não devolve 400 para
+  quem não autenticou**: o token saiu, o `siteId` foi resolvido, e o que
+  falhou foi a PASTA. É a régua da casa lida ao contrário — *validação por
+  RESULTADO* também vale para dizer que algo VOLTOU.
+  ⚠️ **E o card continuava VERMELHO com razão**: ele lê a ÚLTIMA RODADA, e a
+  última era o Auto-Sync de 01/09. Rodada manual de hoje não é gravada em
+  lugar nenhum — o card não mente, ele não sabe.
+  🔴 **E os DOIS defeitos que sobraram são de ENDEREÇO, não de credencial**:
+  · **O SITE ESTAVA CRAVADO NO CÓDIGO** (`SITE_PATH = '/sites/ClientesSP2'`),
+  e o link que a equipe usa é de **`/sites/GRUPOFISCAL`**. Mesmo com o caminho
+  certo, a pasta seria procurada no site errado — e o Graph responde *"não
+  existe"*, que manda conferir o **nome da pasta**. É a família do tenant
+  cravado (28/08): env com o valor de hoje como padrão, e o erro passou a
+  DIZER onde procurou (`host + site → "caminho"`), senão a primeira parada é a
+  errada.
+  · **O CAMPO PEDIA "CAMINHO" E A PESSOA COLA O LINK** — que é o gesto natural
+  de quem clica em *Copiar link* no SharePoint. O proxy monta
+  `/drive/root:/{caminho}:/children`, e uma URL inteira ali produz aquele 400.
+  ✂️ **O link não é o jeito errado: é o MELHOR**, porque carrega site,
+  biblioteca e pasta de uma vez — o Graph resolve em `/shares/{u!base64url}/
+  driveItem`, e daí saem `driveId`+`id` que listam em QUALQUER site. A tela
+  passou a aceitar os dois e a DIZER a diferença antes do clique.
+  ⚠️ **Link de ARQUIVO é recusado com o nome do arquivo** — listar filhos de um
+  arquivo devolve outro 400 do Graph, e a pessoa procuraria erro na pasta.
+
 - **🚨 GASTEI UM DIA PERGUNTANDO "QUAL DOS DOIS TEXTOS VOCÊ COPIOU?" — e a
   resposta estava no próprio segredo gravado, a um comando de distância**
   (02/09, os dois apps do Azure recusando; Paulo, ao fim: *"não está rolando!
