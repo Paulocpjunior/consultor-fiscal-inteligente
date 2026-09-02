@@ -132,6 +132,21 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
     const [sites, setSites] = useState<SharePointSite[] | null>(null);
     const [explorando, setExplorando] = useState(false);
     const [erroExplorar, setErroExplorar] = useState<string | null>(null);
+    const [buscaSite, setBuscaSite] = useState('');
+
+    // 🚨 A BUSCA DO GRAPH DEVOLVE TUDO — inclusive `/contentstorage/...`, que é
+    // armazenamento PESSOAL (OneDrive), e as entradas "Designer"/"Pages"/"My
+    // workspace" que a Microsoft cria sozinha. Numa lista de centenas, achar o
+    // site do escritório a olho é impossível: sobra ruído e a pessoa desiste.
+    // ⚠️ Filtrar é recorte, e recorte se DIZ — o contador abaixo mostra
+    // quantas ficaram de fora, senão isto vira "meu site não existe".
+    const sitesDeEquipe = (sites || []).filter(s => s.caminho.startsWith('/sites/'))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const sitesVisiveis = (() => {
+        const q = buscaSite.trim().toLowerCase();
+        const casam = q ? sitesDeEquipe.filter(s => `${s.nome} ${s.caminho}`.toLowerCase().includes(q)) : sitesDeEquipe;
+        return casam.slice(0, 60);
+    })();
     const [useCustom, setUseCustom] = useState(false);
 
     const empresaSelecionada = empresas.find(e => e.id === empresaId);
@@ -170,12 +185,18 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
         !ano.trim() && 'Ano',
     ].filter(Boolean) as string[]);
 
-    const explorar = async (caminho: string) => {
+    // `sitePath` vazio = o site que o proxy resolve hoje. Passar outro deixa
+    // CONFERIR o vizinho sem mexer na configuração — que é justamente a dúvida
+    // de 02/09 (a árvore está em ClientesSP2 ou no site do link?).
+    const [siteExplorado, setSiteExplorado] = useState('');
+    const explorar = async (caminho: string, sitePath?: string) => {
+        const alvo = sitePath !== undefined ? sitePath : siteExplorado;
         setExplorando(true);
         setErroExplorar(null);
         setSites(null);
+        setSiteExplorado(alvo);
         try {
-            setNivel(await explorarPasta(caminho));
+            setNivel(await explorarPasta(caminho, alvo));
         } catch (e: any) {
             // ⚠️ A mensagem do Graph vai INTEIRA: ela já carrega o site em que
             // procurou, e é esse o dado que responde a pergunta.
@@ -372,16 +393,58 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
 
                     {sites && (
                         <div className="mt-2 text-[11px]" style={{ color: 'var(--text-primary)' }}>
-                            <p className="mb-1" style={{ color: 'var(--text-muted)' }}>
-                                O caminho abaixo é o que vai na variável <code>SHAREPOINT_SITE_PATH</code> do proxy:
-                            </p>
-                            {sites.length === 0
-                                ? <p style={{ color: 'var(--text-muted)' }}>Nenhum site retornado — pode ser falta da permissão Sites.Read.All no app do Azure.</p>
-                                : sites.map(s => (
-                                    <div key={s.id} className="font-mono">
-                                        {s.nome} — <b style={{ color: 'var(--accent)' }}>{s.caminho}</b>
+                            {sites.length === 0 ? (
+                                <p style={{ color: 'var(--text-muted)' }}>
+                                    Nenhum site retornado — pode ser falta da permissão Sites.Read.All no app do Azure.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                                        Clique num site para abrir a árvore dele. O caminho <code>/sites/…</code> é o que
+                                        vai na variável <code>SHAREPOINT_SITE_PATH</code> do proxy.
+                                    </p>
+                                    <input
+                                        value={buscaSite}
+                                        onChange={e => setBuscaSite(e.target.value)}
+                                        placeholder="Filtrar por nome ou caminho — ex.: fiscal"
+                                        className="w-full mb-2 p-2 text-xs rounded-lg outline-none"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                    />
+                                    {/* ⚠️ RECORTE SEMPRE DIZ "X de N" (régua do farol honesto,
+                                        30/07): a busca do Graph devolve centenas de entradas e
+                                        cortar calado faria a pessoa concluir que o site dela não
+                                        existe. */}
+                                    <p className="mb-1" style={{ color: 'var(--text-muted)' }}>
+                                        Mostrando {sitesVisiveis.length} de {sitesDeEquipe.length} site(s) de equipe
+                                        {sites.length > sitesDeEquipe.length
+                                            && ` — ${sites.length - sitesDeEquipe.length} entrada(s) de armazenamento pessoal ficaram de fora`}
+                                    </p>
+                                    <div className="flex flex-col gap-0.5" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                        {sitesVisiveis.map(s => {
+                                            const emUso = health?.sitePath && s.caminho.toLowerCase() === health.sitePath.toLowerCase();
+                                            return (
+                                                <button
+                                                    key={s.id}
+                                                    type="button"
+                                                    onClick={() => void explorar('', s.caminho)}
+                                                    className="text-left px-2 py-1 rounded btn-press font-mono"
+                                                    style={{
+                                                        background: 'var(--bg-card)',
+                                                        border: `1px solid ${emUso ? 'var(--accent)' : 'var(--border-default)'}`,
+                                                        color: 'var(--text-primary)',
+                                                    }}
+                                                >
+                                                    {s.nome} — <b style={{ color: 'var(--accent)' }}>{s.caminho}</b>
+                                                    {emUso && <span style={{ color: 'var(--accent)' }}> · é o que o proxy usa hoje</span>}
+                                                </button>
+                                            );
+                                        })}
+                                        {sitesVisiveis.length === 0 && (
+                                            <p style={{ color: 'var(--text-muted)' }}>Nenhum site com esse texto.</p>
+                                        )}
                                     </div>
-                                ))}
+                                </>
+                            )}
                         </div>
                     )}
 
