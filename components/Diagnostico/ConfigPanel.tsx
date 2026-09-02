@@ -7,8 +7,9 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    getDiagnosticoConfig,
+    getDiagnosticoConfig, testarCredencialEmail,
     type DiagnosticoConfigResposta, type AchadoConfig, type CriticidadeConfig,
+    type CredencialEmailVeredito,
 } from '../../services/diagnosticoConfigService';
 
 interface Props { onShowToast?: (msg: string) => void; }
@@ -35,6 +36,10 @@ const ConfigPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
     const [filtro, setFiltro] = useState<CriticidadeConfig | 'todas'>('todas');
+    // 🚨 A sonda da credencial do E-MAIL — ver o bloco abaixo.
+    const [email, setEmail] = useState<CredencialEmailVeredito | null>(null);
+    const [testandoEmail, setTestandoEmail] = useState(false);
+    const [erroEmail, setErroEmail] = useState<string | null>(null);
 
     const carregar = async () => {
         setLoading(true); setErro(null);
@@ -60,6 +65,13 @@ const ConfigPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
         return Array.from(m.entries());
     }, [lista]);
 
+    const testarEmail = async () => {
+        setTestandoEmail(true); setErroEmail(null);
+        try { setEmail(await testarCredencialEmail()); }
+        catch (e: any) { setErroEmail(e?.message || 'Falha ao testar'); }
+        finally { setTestandoEmail(false); }
+    };
+
     const card: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' };
 
     return (
@@ -81,6 +93,85 @@ const ConfigPanel: React.FC<Props> = ({ onShowToast: _onShowToast }) => {
                         <Kpi label="Opcionais" value={String((data.resumo as any).opcionais ?? 0)} />
                         <Kpi label="Info (default OK)" value={String((data.resumo as any).informativos ?? 0)} />
                         <Kpi label="Ambiente" value={data.ambiente.toUpperCase()} />
+                    </div>
+                )}
+            </div>
+
+
+            {/* ================================================================
+                🚨 A CREDENCIAL DO E-MAIL SÓ FALHAVA NA HORA DE MANDAR A GUIA
+
+                02/09, Paulo: *"já tínhamos matado ontem a questão do e-mail"*.
+                A credencial do SharePoint foi corrigida ontem e funciona — mas
+                o e-mail é OUTRO aplicativo do Azure, guardado numa variável de
+                MESMO NOME em OUTRO serviço. O único jeito de descobrir era
+                mandar uma guia a um cliente e ver falhar, que foi como a
+                Sandra descobriu.
+
+                ⚠️ Este botão PERGUNTA à Microsoft e mostra a resposta dela —
+                NÃO envia mensagem a ninguém.
+               ================================================================ */}
+            <div className="p-4 rounded-xl" style={card}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                            ✉️ A credencial do e-mail está funcionando?
+                        </h3>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            Pergunta à Microsoft e mostra a resposta. <b>Não envia mensagem a ninguém.</b>{' '}
+                            É outro aplicativo do Azure — corrigir o do SharePoint não conserta este.
+                        </p>
+                    </div>
+                    <button
+                        onClick={testarEmail}
+                        disabled={testandoEmail}
+                        className="px-4 py-2 text-xs font-bold rounded-lg disabled:opacity-40"
+                        style={{ background: 'var(--accent)', color: '#fff' }}
+                    >
+                        {testandoEmail ? 'Perguntando…' : '✉️ Testar credencial do e-mail'}
+                    </button>
+                </div>
+
+                {erroEmail && (
+                    <p className="mt-3 text-xs" style={{ color: 'var(--danger)' }}>⛔ {erroEmail}</p>
+                )}
+
+                {email && (
+                    <div className="mt-3 p-3 rounded-lg text-xs"
+                        style={{
+                            background: 'var(--bg-card)',
+                            border: `1px solid ${email.cor === 'verde' ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.45)'}`,
+                        }}>
+                        <p className="font-bold" style={{ color: email.cor === 'verde' ? 'var(--success)' : 'var(--danger)' }}>
+                            {email.cor === 'verde' ? '✓' : '⛔'} {email.titulo}
+                        </p>
+                        <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>{email.detalhe}</p>
+                        {/* 🚨 O aplicativo vem da RESPOSTA da Microsoft, não de uma
+                            lista nossa: é ele que separa o app do e-mail do app do
+                            SharePoint, e foi confundir os dois que fez "matamos
+                            ontem" valer para um só. */}
+                        {email.app && (
+                            <p className="mt-2" style={{ color: 'var(--text-muted)' }}>
+                                Aplicativo nomeado pela Microsoft: <code>{email.app.id}</code>
+                                {email.app.nome ? ` — ${email.app.nome}` : ' (não mapeado neste app)'}
+                            </p>
+                        )}
+                        {email.onde && (
+                            <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Onde se grava: {email.onde}</p>
+                        )}
+                        {email.respostaMicrosoft && (
+                            <details className="mt-2">
+                                <summary className="cursor-pointer" style={{ color: 'var(--text-muted)' }}>
+                                    Resposta da Microsoft (inteira)
+                                </summary>
+                                <pre className="mt-1 whitespace-pre-wrap break-all text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                    {email.respostaMicrosoft}
+                                </pre>
+                            </details>
+                        )}
+                        <p className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                            Testado em {new Date(email.testadoEm).toLocaleString('pt-BR')}
+                        </p>
                     </div>
                 )}
             </div>
