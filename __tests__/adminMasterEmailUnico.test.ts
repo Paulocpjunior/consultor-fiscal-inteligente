@@ -32,6 +32,8 @@ describe('🔒 o e-mail do admin master mora num lugar só', () => {
             ...fontes(join(RAIZ, 'hooks')),
             join(RAIZ, 'App.tsx'),
         ];
+        // Varredura vazia é trava falsa: hoje são ~430 arquivos, o piso é folga.
+        expect(alvos.length).toBeGreaterThan(200);
         const infratores = alvos
             .filter((p) => relative(RAIZ, p).replace(/\\/g, '/') !== DONO)
             .filter((p) => readFileSync(p, 'utf8').includes(EMAIL_ADMIN_MASTER))

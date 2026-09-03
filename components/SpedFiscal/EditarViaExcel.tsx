@@ -12,6 +12,7 @@
 
 import React, { useState } from 'react';
 import { parseSped, exportarXlsx, aplicarEdicoesXlsx, reconstruirSped, validarEstrutura, aplicarRegrasTributarias, aplicarRegrasContribuicoes, analisarRecuperacaoMonofasico, corrigirC190, corrigirFormato, type ValidacaoSped, type RegrasTributariasResult, type RecuperacaoMonofasico, type CorrecaoC190, type CorrecaoFormato } from '../../services/spedFiscalExcelEditor';
+import { lerTextoLatin1OuUtf8 } from '../../services/lerArquivoTexto';
 
 type Status =
     | { fase: 'idle' }
@@ -37,7 +38,7 @@ const EditarViaExcel: React.FC = () => {
     const handleSpedUpload = async (file: File) => {
         setStatus({ fase: 'analisando' });
         try {
-            const txt = await file.text();
+            const txt = await lerTextoLatin1OuUtf8(file);
             const parsed = await parseSped(txt);
             const validacao = await validarEstrutura(parsed);
             const regras = await aplicarRegrasTributarias(parsed);

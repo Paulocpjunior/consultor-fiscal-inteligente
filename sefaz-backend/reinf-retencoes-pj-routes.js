@@ -35,7 +35,7 @@ import { caminhoRecibos } from './caminho-sharepoint.js';
 import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
 import { guardaLocalOuIrmao, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
 import { validarAjusteRetencao } from './retencao-pj-ajuste.js';
@@ -103,7 +103,10 @@ const COMPETENCIA = /^\d{4}-\d{2}$/;
  * desenho antigo engolia a recusa do requireAdmin e caía num cross-project que
  * aceitava o PRÓPRIO projeto, ou seja qualquer colaborador logado passava.
  */
-const autorizar = guardaLocalOuIrmao(requireAdmin, [PROJETO.contabil]);
+// As consultas e o AJUSTE declarado são trabalho do colaborador (a aba de
+// serviços tomados do card DCTFWeb não é de admin) — quem julga o token do CFI
+// é o requireAuth. Só o fechamento da competência continua requireAdmin.
+const autorizarColaborador = guardaLocalOuIrmao(requireAuth, [PROJETO.contabil]);
 
 // ────────────────────────────────────────────────────────────────────────────
 // ✍️ AJUSTE DE RETENÇÃO — 1 doc por EMPRESA × COMPETÊNCIA, com um mapa por
@@ -186,7 +189,7 @@ async function acharEmpresa(db, cnpj) {
     return null;
 }
 
-router.get('/retencoes-pj', autorizar, async (req, res) => {
+router.get('/retencoes-pj', autorizarColaborador, async (req, res) => {
     try {
         const competencia = String(req.query.competencia || '').trim();
         const cnpj = soDigitos(req.query.cnpj);
@@ -235,7 +238,7 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
 // UM ajuste por chamada, sobre UMA nota. Ver o bloco `lerAjustesDeRetencao`
 // acima para por que a soma é incremental.
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/retencoes-pj/ajuste', autorizar, express.json({ limit: '256kb' }), async (req, res) => {
+router.post('/retencoes-pj/ajuste', autorizarColaborador, async (req, res) => {
     try {
         const { cnpj: cnpjBruto, competencia, chave, remover, motivo, autor } = req.body || {};
         const cnpj = soDigitos(cnpjBruto);
@@ -326,7 +329,7 @@ router.post('/retencoes-pj/ajuste', autorizar, express.json({ limit: '256kb' }),
 // que leiaute deduzido. É de lá que veio o achado que manda no módulo: a BASE
 // de retenção NÃO é o valor bruto quando há dedução de material/insumo.
 // ────────────────────────────────────────────────────────────────────────────
-router.get('/servicos-tomados', autorizar, async (req, res) => {
+router.get('/servicos-tomados', autorizarColaborador, async (req, res) => {
     try {
         const competencia = String(req.query.competencia || '').trim();
         const cnpj = soDigitos(req.query.cnpj);
@@ -369,7 +372,7 @@ router.get('/servicos-tomados', autorizar, async (req, res) => {
 // normaliza portal/XML/ADN e o CCI continua responsavel pela previa e pela
 // gravacao contábil. Lista vazia vem acompanhada de documentosLidos para nao
 // ser confundida com prova de ausencia de movimento.
-router.get('/movimento-fiscal', autorizar, async (req, res) => {
+router.get('/movimento-fiscal', autorizarColaborador, async (req, res) => {
     try {
         const competencia = String(req.query.competencia || '').trim();
         const cnpj = soDigitos(req.query.cnpj);
@@ -421,7 +424,7 @@ router.get('/movimento-fiscal', autorizar, async (req, res) => {
 // como o R-2055 é declarado). Recalcular do outro lado abriria a porta pro
 // pior defeito de um arquivo fiscal: dois números pro mesmo fato.
 // ────────────────────────────────────────────────────────────────────────────
-router.get('/aquisicao-rural', autorizar, async (req, res) => {
+router.get('/aquisicao-rural', autorizarColaborador, async (req, res) => {
     try {
         const competencia = String(req.query.competencia || '').trim();
         const cnpj = soDigitos(req.query.cnpj);
@@ -603,7 +606,7 @@ router.get('/fechamento-competencia/preparar', requireAdmin, async (req, res) =>
 // Falha no e-mail NÃO derruba o arquivamento (nem o contrário): cada etapa
 // devolve seu próprio status, como no rito das guias.
 // ============================================================================
-router.post('/fechamento-competencia', requireAdmin, express.json({ limit: '12mb' }), async (req, res) => {
+router.post('/fechamento-competencia', requireAdmin, async (req, res) => {
     try {
         const cnpj = soDigitos(req.body?.cnpj);
         const competencia = String(req.body?.competencia || '').trim();

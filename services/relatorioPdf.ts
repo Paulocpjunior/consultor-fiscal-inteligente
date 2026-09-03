@@ -222,10 +222,17 @@ export async function gerarRelatorioPdf(p: RelatorioPdfParams): Promise<void> {
     }
 
     if (p.observacoes?.length) {
-        if (y > H - 20 - p.observacoes.length * 3.5) { rodape(); pdf.addPage(); cabecalho(); }
+        if (y > H - 20) { rodape(); pdf.addPage(); cabecalho(); }
         y += 3;
         pdf.setFontSize(6.5).setTextColor(...CINZA);
         for (const obs of p.observacoes) {
+            // A quebra é DENTRO do laço: uma lista longa de ressalvas (um mês
+            // com dezenas de notas fora) saía por baixo do rodapé, invisível —
+            // e ressalva que não se lê é ressalva que não existe.
+            if (y > H - 10) {
+                rodape(); pdf.addPage(); cabecalho();
+                pdf.setFontSize(6.5).setTextColor(...CINZA);
+            }
             pdf.text(`• ${obs}`, M, y);
             y += 3.5;
         }

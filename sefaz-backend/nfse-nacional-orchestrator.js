@@ -7,6 +7,7 @@ import admin from 'firebase-admin';
 import { getNfseNacionalProvider, getNfseNacionalMode } from './nfse-nacional-provider.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+import { proximoSequencialDps } from './nfse-nacional-dps-builder.js';
 
 const COLLECTION = 'nfse_nacional_emitidas';
 
@@ -21,12 +22,30 @@ export async function emitirNfse(req) {
     assertEmissaoLiberada('NFSE_NAC');
     const provider = getNfseNacionalProvider();
     const mode = getNfseNacionalMode();
-    const nfse = await provider.emitirNfse(req);
-
     const db = fa().firestore();
+
+    // 🚨 O nDPS SAÍA DO RELÓGIO (03/09): não era sequencial e repetia no
+    // mesmo segundo — e o builder passou a RECUSAR sem `sequencial`. O
+    // próximo número sai das DPS já emitidas desta empresa (o pure decide; a
+    // leitura é daqui, que é quem tem o banco). A tela não manda sequencial.
+    const serieDps = req.serie || 1;
+    let sequencial = req.sequencial;
+    if (sequencial === undefined || sequencial === null || sequencial === '') {
+        if (!req.empresaId) throw new Error('empresaId obrigatorio — sem ele não dá para achar o último nDPS emitido');
+        const jaEmitidas = (await fetchAllDocs(
+            db.collection(COLLECTION).where('empresaId', '==', req.empresaId),
+            { label: 'nfse_nacional_emitidas/proximo-ndps' },
+        )).map((d) => d.data());
+        sequencial = proximoSequencialDps(jaEmitidas, serieDps);
+    }
+    const nfse = await provider.emitirNfse({ ...req, sequencial, serie: serieDps });
+
     const docId = nfse.chave;
     const payload = {
         empresaId: req.empresaId,
+        // Gravados para o próximo número não depender de reler o idDps.
+        serieDps,
+        nDps: sequencial,
         ...nfse,
         modeUsado: mode,
         emitidaEm: nfse.dataEmissao,

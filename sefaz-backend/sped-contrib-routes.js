@@ -57,7 +57,7 @@ router.get('/preview', requireAdmin, async (req, res) => {
  * Body: { empresaId, competencia }
  * Retorna o .txt do SPED Contribuicoes montado, com Content-Disposition pra download.
  */
-router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
+router.post('/gerar', requireAdmin, async (req, res) => {
     try {
         const { empresaId } = req.body || {};
         const comp = competenciaParaGerarArquivo((req.body || {}).competencia);

@@ -251,8 +251,11 @@ service cloud.firestore {
     // sub-rogação do FUNRURAL). Colaborador LÊ (a tela mostra o que já foi
     // confirmado no CADESP); só admin/backend GRAVA — confirmar natureza
     // jurídica errada muda o que vai declarado na EFD e na GIA.
+    // Leitura FECHADA ao navegador (04/09): a aba 🌾 lê pelo backend
+    // (/api/admin/dipam/*), que já devolve o cadastro junto da apuração —
+    // nenhum código de cliente consulta a coleção pelo SDK web.
     match /produtores_rurais/{docId} {
-      allow read: if isSignedIn();
+      allow read: if false;
       allow write: if isAdmin();
     }
 
@@ -430,39 +433,52 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // ─── Coleções operacionais (escritas pelo backend via admin SDK,
-    //     leitura no frontend por qualquer signed-in) ─────────────────
+    // ─── Coleções operacionais (escritas pelo backend via admin SDK).
+    //     Desde 04/09 a leitura pelo navegador também está FECHADA nas que
+    //     nenhum código de cliente lê — o dado chega por rota. ──────────
 
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /caixa_postal_mensagens/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /das_emitidos/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 
-    // PGDAS-D de mês sem movimento: leitura pra tela, escrita SÓ pelo backend.
+    // PGDAS-D de mês sem movimento: escrita SÓ pelo backend (leitura pela rota).
     // A declaração é uma afirmação à Receita — quem grava é o rito que conferiu
     // a saúde da captura e registrou quem confirmou, nunca o navegador.
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /pgdas_sem_movimento/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 
-    // fechamentos_competencia: o "DAR FIM DE MÊS" (26/08). Leitura pra tela,
+    // fechamentos_competencia: o "DAR FIM DE MÊS" (26/08). Leitura pela rota,
     // escrita SÓ pelo backend — e aqui isso É a trava, não higiene: a decisão
     // do Paulo é que etapa aberta BLOQUEIA, e essa pré-condição é conferida na
     // rota. Escrita pelo navegador seria o bloqueio inteiro contornável com um
     // setDoc. Reabrir também é da rota, porque é ato de admin com motivo
     // escrito — e o número já pode ter sido importado pela contabilidade.
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /fechamentos_competencia/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 
@@ -530,27 +546,30 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /nfse_nacional_emitidas/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /dctfweb_declaracoes/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 
-    match /darf_emitidos/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if false;
-    }
-
+    // Leitura FECHADA ao navegador (04/09): nenhum código de cliente lê esta
+    // coleção pelo SDK web — quem lê é o backend (admin SDK) e entrega por rota,
+    // com o escopo da carteira conferido lá. Regra aberta sem leitor é
+    // superfície sem dono (__tests__/rulesCobremCatalogo.test.ts).
     match /notificacoes/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 1000;
+      allow read: if false;
       allow write: if false;
     }
 

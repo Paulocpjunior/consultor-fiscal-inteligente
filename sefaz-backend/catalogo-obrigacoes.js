@@ -187,9 +187,14 @@ const SPED = {
     // ESTADUAL: este prazo é o de SÃO PAULO. Cliente de outra UF tem outro e o
     // catálogo ainda não os tem — a abrangência denuncia isso em vez de fingir.
     esfera: 'estadual', abrangencia: 'UF:SP',
-    frequencia: M, diaVencimento: 25, mesesApos: 2,
+    // 🚨 "dia 25 do mês SUBSEQUENTE ao da apuração" (CAT 147/2009, art. 10):
+    // é UM mês depois, não dois. Até 03/09 este catálogo dizia `mesesApos: 2`
+    // enquanto o `calendario-obrigacoes.js` (SPED_FISCAL) dizia 1 — a MESMA
+    // obrigação com duas datas, e a que virava TAREFA (esta) era a atrasada
+    // em um mês inteiro. Duas leituras do mesmo prazo é o defeito de sempre.
+    frequencia: M, diaVencimento: 25, mesesApos: 1,
     ajusteDiaNaoUtil: 'antecipa',
-    baseLegal: 'Portaria CAT 147/2009 (SP) — prazo estadual',
+    baseLegal: 'Portaria CAT 147/2009 (SP), art. 10 — dia 25 do mês subsequente',
     status: 'ativa', revisar: true,
 };
 const INSS_CPP = {

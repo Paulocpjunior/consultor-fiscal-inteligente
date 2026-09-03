@@ -39,9 +39,21 @@ export async function listarNfse(
     return res.json();
 }
 
-export async function getNbsCodigos(): Promise<NbsCodigo[]> {
-    const res = await fetch(`${BASE}/nbs`);
-    if (!res.ok) throw new Error(`getNbsCodigos: ${res.status}`);
+/**
+ * Tabela NBS para o dropdown de emissão.
+ *
+ * 🚨 A rota `/nbs` passou a exigir autenticação (auditoria de 03/09: ela
+ * servia 2.000 leituras a anônimo) — e esta chamada saía SEM o header. O
+ * fetch voltava 401, o `.catch(() => {})` do modal engolia, e o dropdown
+ * ficava VAZIO em silêncio: quem emite não tinha como escolher o serviço e
+ * não sabia por quê. Header e `res.ok` conferidos; quem chama DIZ na tela.
+ */
+export async function getNbsCodigos(user: User | null = null): Promise<NbsCodigo[]> {
+    const res = await fetch(`${BASE}/nbs`, { headers: await authHeaders(user) });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `getNbsCodigos: HTTP ${res.status}`);
+    }
     return res.json();
 }
 

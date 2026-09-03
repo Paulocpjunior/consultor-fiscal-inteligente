@@ -49,9 +49,13 @@ describe('🚨 a competência tem UM dono, e ele conhece as quatro formas', () =
 });
 
 describe('🚨 consulta por competência cobre as formas GRAVADAS', () => {
-    it('as três formas entram, sem repetir', () => {
+    it('as QUATRO formas entram, sem repetir — inclusive a DATA do 1º dia', () => {
+        // 03/09: a ficha grava a competência como DATA (`AAAA-MM-DD`), e a
+        // consulta por `in` não enumera 31 dias — entra o 1º, que é a forma
+        // que o app grava quando "a competência" é uma data. Outro dia só é
+        // achado quando ele mesmo é a forma crua pedida.
         expect(formasDaCompetencia('07/2026').sort())
-            .toEqual(['07/2026', '2026-07', '202607']);
+            .toEqual(['07/2026', '2026-07', '2026-07-01', '202607']);
     });
 
     // Envio antigo, anterior à normalização, guarda o texto como veio —
@@ -101,7 +105,10 @@ describe('🚨 ninguém reescreve a normalização da competência', () => {
             return out;
         };
         const copias: string[] = [];
-        for (const arquivo of varrer(join(RAIZ, 'sefaz-backend'))) {
+        const arquivos = varrer(join(RAIZ, 'sefaz-backend'));
+        // Varredura vazia é trava falsa: hoje são ~400 módulos, o piso é folga.
+        expect(arquivos.length).toBeGreaterThan(200);
+        for (const arquivo of arquivos) {
             const rel = arquivo.replace(`${RAIZ}/`, '');
             if (rel === DONO || PERMITIDO[rel]) continue;
             if (/export function normalizarCompetencia/.test(readFileSync(arquivo, 'utf8'))) {

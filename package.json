@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Uma ferramenta de consulta de CFOP e NCM com IA para escritórios de contabilidade.",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.19.0"
   },
   "scripts": {
     "dev": "vite",

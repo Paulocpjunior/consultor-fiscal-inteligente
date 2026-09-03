@@ -17,7 +17,6 @@ import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET || '';
-const JSON_LIMIT = '256kb';
 
 // CNPJs da carteira do colaborador como Set (ou null = admin, sem restrição).
 async function cnpjsPermitidos(user) {
@@ -56,7 +55,7 @@ router.get('/listar', requireEmissao, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/emitir', requireEmissao, express.json({ limit: JSON_LIMIT }), async (req, res) => {
+router.post('/emitir', requireEmissao, async (req, res) => {
     try {
         // Escreve no Fisco em nome do CNPJ — exige que ele esteja na carteira.
         const carteira = await podeAcessarCnpj(req.user, req.body?.empresaCnpj);
@@ -69,7 +68,7 @@ router.post('/emitir', requireEmissao, express.json({ limit: JSON_LIMIT }), asyn
 // emitir o DARF — SEM enviar nada. Read-only, NAO passa pelo kill-switch.
 // Uso: validar o idServico (EMITEDARF61 e chute) + estrutura do payload contra
 // o catalogo da conta SERPRO ANTES de ligar a emissao real.
-router.post('/preview', requireEmissao, express.json({ limit: JSON_LIMIT }), (req, res) => {
+router.post('/preview', requireEmissao, (req, res) => {
     try {
         const payload = montarPayloadDarfSerpro(req.body || {});
         res.json({
@@ -81,7 +80,7 @@ router.post('/preview', requireEmissao, express.json({ limit: JSON_LIMIT }), (re
     } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-router.post('/marcar-pago', requireEmissao, express.json({ limit: JSON_LIMIT }), async (req, res) => {
+router.post('/marcar-pago', requireEmissao, async (req, res) => {
     try {
         const { docId, dataPagamento } = req.body;
         if (!docId) return res.status(400).json({ error: 'docId obrigatorio' });

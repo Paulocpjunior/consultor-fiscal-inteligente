@@ -130,7 +130,7 @@ router.get('/inventario', requireAuth, async (req, res) => {
     }
 });
 
-router.post('/inventario', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+router.post('/inventario', requireAuth, async (req, res) => {
     try {
         const { empresaId, data, motInv = '01', itens } = req.body || {};
         if (!empresaId || !/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) {
@@ -193,7 +193,7 @@ router.get('/bloco-k', requireAuth, async (req, res) => {
     }
 });
 
-router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+router.post('/bloco-k', requireAuth, async (req, res) => {
     try {
         const { empresaId, competencia, estoques, producao, movimentacoes } = req.body || {};
         if (!empresaId || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) {
@@ -280,7 +280,7 @@ router.get('/saldo-abertura', requireAdmin, async (req, res) => {
     }
 });
 
-router.post('/saldo-abertura', requireAdmin, express.json({ limit: '20mb' }), async (req, res) => {
+router.post('/saldo-abertura', requireAdmin, async (req, res) => {
     try {
         const { empresaId, texto } = req.body || {};
         if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
@@ -328,7 +328,7 @@ router.post('/saldo-abertura', requireAdmin, express.json({ limit: '20mb' }), as
     }
 });
 
-router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
+router.post('/gerar', requireAdmin, async (req, res) => {
     try {
         const { empresaId } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
@@ -450,7 +450,7 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
  * Body: { txt: string }
  * Valida um arquivo SPED Fiscal TXT e retorna erros/avisos sem gerar download.
  */
-router.get('/validar', requireAdmin, express.json({ limit: '10mb' }), (req, res) => {
+router.get('/validar', requireAdmin, (req, res) => {
     try {
         const { txt } = req.body || {};
         if (!txt || typeof txt !== 'string') {

@@ -29,19 +29,25 @@ const VencimentosSemanaPanel = lazy(() => import('./VencimentosSemanaPanel'));
 const MinhaAgendaPanel = lazy(() => import('../MinhaAgenda/MinhaAgendaPanel'));
 const Tarefas = lazy(() => import('../Tarefas'));
 const CalendarioFiscal = lazy(() => import('../CalendarioFiscal'));
+// 📤 O painel do RITO do envio (#293) ficou SEM PORTA quando o antigo
+// ObrigacoesETarefas saiu: rota e componente existiam e nenhuma tela chamava
+// — "rota sem botão não é funcionalidade" (13/08). A casa dele é aqui, ao
+// lado da baixa da obrigação que o próprio rito faz.
+const EnviosImpostoPainel = lazy(() => import('../EnviosImpostoPainel'));
 
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'proximos' | 'empresa' | 'tarefas' | 'calendario';
+type SubTab = 'proximos' | 'empresa' | 'tarefas' | 'calendario' | 'envios';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'proximos', label: '⏰ Próximos Vencimentos' },
     { id: 'empresa', label: '🏢 Por Empresa' },
     { id: 'tarefas', label: '📋 Tarefas (Kanban)' },
     { id: 'calendario', label: '📅 Calendário' },
+    { id: 'envios', label: '📤 Envios (rito)' },
 ];
 
 const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -73,6 +79,7 @@ const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {sub === 'calendario' && (
                         <CalendarioFiscal currentUser={currentUser} onShowToast={onShowToast || (() => {})} />
                     )}
+                    {sub === 'envios' && <EnviosImpostoPainel />}
                 </Suspense>
             </ErrorBoundary>
         </div>

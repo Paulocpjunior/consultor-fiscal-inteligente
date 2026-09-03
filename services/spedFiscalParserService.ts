@@ -13,6 +13,7 @@ import type {
     SpedConsolidacaoE510,
     User,
 } from '../types';
+import { lerTextoLatin1OuUtf8 } from './lerArquivoTexto';
 
 function onlyDigits(v: string | undefined | null): string {
     return (v || '').replace(/\D+/g, '');
@@ -376,6 +377,6 @@ export async function parseSpedFiscalFile(
     file: File,
     user?: User | null,
 ): Promise<SpedFiscalParseResult> {
-    const text = await file.text();
+    const text = await lerTextoLatin1OuUtf8(file);
     return parseSpedFiscalText(text, file.name, file.size, user);
 }

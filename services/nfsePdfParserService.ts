@@ -11,6 +11,7 @@
  * por sistema com texto extraivel.
  */
 
+import { parseValorMoeda } from './valorDigitado';
 import * as pdfjsLib from 'pdfjs-dist';
 
 if (typeof window !== 'undefined') {
@@ -51,21 +52,24 @@ export interface NfsePdfParsed {
     discriminacao: string;
     naturezaOperacao: string;
 
-    valorServicos: number;
-    baseCalculo: number;
-    aliquotaIss: number;
-    valorIss: number;
-    valorIssRetido: number;
-    valorPis: number;
-    valorCofins: number;
-    valorInss: number;
-    valorIrrf: number;
-    valorCsll: number;
-    valorOutrasRetencoes: number;
-    valorDeducoes: number;
-    valorDescIncondicional: number;
-    valorDescCondicional: number;
-    valorLiquido: number;
+    /** `null` = o PDF não trouxe o campo legível — AUSÊNCIA, nunca zero. */
+    valorServicos: number | null;
+    baseCalculo: number | null;
+    aliquotaIss: number | null;
+    valorIss: number | null;
+    valorIssRetido: number | null;
+    valorPis: number | null;
+    valorCofins: number | null;
+    valorInss: number | null;
+    valorIrrf: number | null;
+    valorCsll: number | null;
+    valorOutrasRetencoes: number | null;
+    valorDeducoes: number | null;
+    valorDescIncondicional: number | null;
+    valorDescCondicional: number | null;
+    valorLiquido: number | null;
+    /** Campos de valor que o PDF não entregou legíveis, NOMEADOS — a tela diz quais. */
+    lacunas?: string[];
 
     municipioEmissor: string;
     rawText: string;
@@ -82,13 +86,21 @@ export class NfsePdfParseError extends Error {
 
 const onlyDigits = (s: string): string => (s || '').replace(/\D+/g, '');
 
-function parseValor(s: string | undefined): number {
-    if (!s) return 0;
-    const cleaned = String(s).replace(/[^\d,.-]/g, '').trim();
-    if (!cleaned) return 0;
-    const normalized = cleaned.replace(/\./g, '').replace(',', '.');
-    const n = parseFloat(normalized);
-    return Number.isFinite(n) ? n : 0;
+/**
+ * O número que o PDF escreve — pelo DONO (`parseValorMoeda`).
+ *
+ * 🚨 A cópia local apagava TODO ponto e virgulava depois: "1234.56" (a forma
+ * que alguns emissores imprimem) virava **123456** — cem vezes o serviço, e
+ * o ilegível virava **0** calado, que é a nota entrando valendo zero no
+ * faturamento e na base do PIS/COFINS sem nenhum validador denunciar.
+ * Ausência e ilegível são **null**; quem grava decide o que fazer com isso
+ * (recusa nomeando o campo), nunca escreve zero.
+ */
+function parseValor(s: string | undefined): number | null {
+    if (!s) return null;
+    const cleaned = String(s).replace(/[^\d,.]/g, '').trim();
+    if (!cleaned) return null;
+    return parseValorMoeda(cleaned);
 }
 
 function findAfter(text: string, label: string, maxChars = 200): string {
@@ -343,13 +355,13 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     // DANFSe v1.0 usa "Al\u00edquota Aplicada\n2,00%" (linha separada);
     // ABRASF inline "Al\u00edquota ISS 2%".
     const aliquotaIssMatch = text.match(/Al[i\u00ed]quota\s+(?:ISS|Aplicada)[\s:]*\n?\s*([\d,]+)\s*%?/i);
-    const aliquotaIss = aliquotaIssMatch ? parseValor(aliquotaIssMatch[1]) : 0;
+    const aliquotaIss = aliquotaIssMatch ? parseValor(aliquotaIssMatch[1]) : null;
 
     const valorIssRetido = parseValor(findValueByLabel(text, ['Valor ISS retido', 'ISS Retido'], numPattern));
     // ISSQN Apurado (DANFSe) ou "Valor ISS" (ABRASF). Bypassa "Valor ISS retido"
     // com lookahead negativo.
     const valorIssMatch = text.match(/(?:ISSQN\s+Apurado|Valor\s+ISS(?!\s+retido))[\s\S]{0,80}?([\d.]+,\d{2})/i);
-    const valorIss = valorIssMatch ? parseValor(valorIssMatch[1]) : 0;
+    const valorIss = valorIssMatch ? parseValor(valorIssMatch[1]) : null;
 
     // Tributos federais: DANFSe v1.0 escreve "PIS - Débito Apuração Própria",
     // "COFINS - Débito Apuração Própria" e "Contribuição Previdenciária - Retida".
@@ -379,6 +391,13 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     const localPrestacaoMatch = text.match(/Local\s+da\s+presta[c\u00e7][a\u00e3]o\s+do\s+servi[c\u00e7]o[\s:]*\n?\s*([^\n]+)/i);
     const municipioPrestacao = localPrestacaoMatch?.[1] ? localPrestacaoMatch[1].trim() : (prestador.municipio || '');
 
+    // O que faltou vai NOMEADO: "valor 0,00" e "valor não lido" são fatos
+    // diferentes, e o segundo é o que faz a nota entrar valendo zero.
+    const lacunas: string[] = [];
+    if (valorServicos === null) lacunas.push('valor do serviço');
+    if (baseCalculo === null) lacunas.push('base de cálculo');
+    if (valorIss === null) lacunas.push('valor do ISS');
+
     return {
         numero, serie, competencia, dataEmissao, codigoVerificacao,
         municipioPrestacao, chaveAcesso,
@@ -390,6 +409,7 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
         valorOutrasRetencoes, valorDeducoes,
         valorDescIncondicional, valorDescCondicional, valorLiquido,
         municipioEmissor,
+        lacunas,
         rawText: text,
     };
 }

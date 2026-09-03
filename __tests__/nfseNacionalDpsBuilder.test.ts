@@ -13,7 +13,7 @@
  */
 
 // @ts-expect-error — modulo .js puro
-import { buildDpsXml, gerarIdDps } from '../sefaz-backend/nfse-nacional-dps-builder.js';
+import { buildDpsXml, gerarIdDps, proximoSequencialDps, dhEmiParaDps } from '../sefaz-backend/nfse-nacional-dps-builder.js';
 
 const baseReq = {
     empresaId: 'emp123',
@@ -166,6 +166,67 @@ describe('buildDpsXml — estrutura e campos obrigatorios', () => {
         expect(() => buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, valor: 0 } })).toThrow(/valor/);
     });
 
+    // ═══ 03/09: o que saía CHUTADO do builder ══════════════════════════════
+    it('sem `sequencial` a emissão é RECUSADA — o nDPS não sai do relógio', () => {
+        for (const seq of [undefined, null, '', 0, -1, 1.5, 'abc']) {
+            expect(() => buildDpsXml({ ...baseReq, sequencial: seq as any })).toThrow(/sequencial \(nDPS\) obrigatorio/);
+        }
+    });
+
+    it('sem `aliquotaIss` a emissão é RECUSADA — 5% de conveniência é ISS afirmado errado', () => {
+        const { aliquotaIss: _a, ...semAliq } = baseReq.servico;
+        expect(() => buildDpsXml({ ...baseReq, servico: semAliq as any })).toThrow(/aliquotaIss obrigatorio/);
+        expect(() => buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, aliquotaIss: 'cinco' } as any })).toThrow(/aliquotaIss ilegível/);
+        // Zero DECLARADO é resposta (isenção), não ausência.
+        expect(buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, aliquotaIss: 0 } }).xml).toContain('<pAliq>0.00</pAliq>');
+    });
+
+    it('valor em pt-BR é lido pelo dono — "1.234,56" nunca vira 1 nem "NaN"', () => {
+        const { xml } = buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, valor: '1.234,56' as any } });
+        expect(xml).toContain('<vServ>1234.56</vServ>');
+        expect(xml).not.toContain('NaN');
+        expect(() => buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, valor: 'abc' as any } })).toThrow(/servico\.valor/);
+    });
+
+    it('dhEmi ausente sai em BRASÍLIA, na forma do XSD (sem Z, sem milissegundos)', () => {
+        const { dataEmissao: _d, ...semData } = baseReq;
+        const { xml } = buildDpsXml(semData as any);
+        const dh = xml.match(/<dhEmi>([^<]+)<\/dhEmi>/)![1];
+        expect(dh).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+        expect(dh).not.toMatch(/Z$/);
+        // dCompet é o DIA daquele instante em Brasília.
+        expect(xml).toContain(`<dCompet>${dh.slice(0, 10)}</dCompet>`);
+    });
+
+    it('31/08 22h em Brasília (= 01/09 01h UTC) NÃO vira competência de setembro', () => {
+        // O mesmo instante, escrito em UTC — antes o builder gravava
+        // `2026-09-01T01:00:00.000Z` e dCompet 2026-09-01.
+        expect(dhEmiParaDps('2026-09-01T01:00:00.000Z')).toBe('2026-08-31T22:00:00-03:00');
+        const { xml } = buildDpsXml({ ...baseReq, dataEmissao: '2026-09-01T01:00:00.000Z' });
+        expect(xml).toContain('<dhEmi>2026-08-31T22:00:00-03:00</dhEmi>');
+        expect(xml).toContain('<dCompet>2026-08-31</dCompet>');
+        // Já na forma do ADN, o texto é respeitado como veio.
+        expect(dhEmiParaDps('2026-06-04T15:00:00-03:00')).toBe('2026-06-04T15:00:00-03:00');
+        expect(() => dhEmiParaDps('ontem')).toThrow(/dataEmissao ilegível/);
+    });
+
+    it('elemento opcional AUSENTE não é emitido vazio (cTribMun, xLgr, xBairro, CEP)', () => {
+        const { xml } = buildDpsXml({
+            ...baseReq,
+            servico: { ...baseReq.servico, cTribMun: undefined },
+            tomador: { ...baseReq.tomador, endereco: { numero: '10', uf: 'SP' } },
+        });
+        expect(xml).not.toMatch(/<cTribMun><\/cTribMun>/);
+        expect(xml).not.toMatch(/<xLgr><\/xLgr>/);
+        expect(xml).not.toMatch(/<xBairro><\/xBairro>/);
+        expect(xml).not.toMatch(/<CEP><\/CEP>/);
+        expect(xml).not.toContain('<cTribMun>');
+        expect(xml).toContain('<nro>10</nro>');
+        // Presente, sai.
+        const { xml: com } = buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, cTribMun: '0107' } });
+        expect(com).toContain('<cTribMun>0107</cTribMun>');
+    });
+
     it('ID DPS gerado bate com gerarIdDps independente', () => {
         const { idDps } = buildDpsXml(baseReq);
         const idEsperado = gerarIdDps({
@@ -176,5 +237,30 @@ describe('buildDpsXml — estrutura e campos obrigatorios', () => {
             numero: 42,
         });
         expect(idDps).toBe(idEsperado);
+    });
+});
+
+// ═══ O PRÓXIMO nDPS SAI DAS EMITIDAS, não do relógio ═════════════════════════
+describe('proximoSequencialDps', () => {
+    it('sem emitida na série ⇒ 1', () => {
+        expect(proximoSequencialDps([], 1)).toBe(1);
+        expect(proximoSequencialDps(undefined as any, 1)).toBe(1);
+    });
+
+    it('é o maior nDps gravado + 1, só da MESMA série', () => {
+        const docs = [
+            { serieDps: 1, nDps: 41 },
+            { serieDps: 1, nDps: 42 },
+            { serieDps: 2, nDps: 900 },
+        ];
+        expect(proximoSequencialDps(docs, 1)).toBe(43);
+        expect(proximoSequencialDps(docs, 2)).toBe(901);
+        expect(proximoSequencialDps(docs, 3)).toBe(1);
+    });
+
+    it('documento antigo sem nDps é lido pelo número DENTRO do idDps', () => {
+        const idDps = gerarIdDps({ ibgeMunicipio: '3550308', tipoInscricao: 'CNPJ', inscricao: '44388152000189', serie: 1, numero: 77 });
+        expect(proximoSequencialDps([{ idDps }], 1)).toBe(78);
+        expect(proximoSequencialDps([{ idDps }], 2)).toBe(1);
     });
 });

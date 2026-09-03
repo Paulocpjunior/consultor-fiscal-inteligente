@@ -23,6 +23,24 @@ import {
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { planejarQuotas, resumoDoPlano, RECEITAS_TRIMESTRAIS_QUOTA, QUOTA_VALOR_MINIMO } from './darf-quotas.js';
+import { limparCnpj } from './documento-dv.js';
+import { dataBrasilia } from './competencia.js';
+
+/**
+ * 🚨 O `docId` DA DECLARAÇÃO LEVAVA O CNPJ CRU (03/09). Com máscara, a
+ * pontuação virava `_` e a MESMA declaração/MIT ganhava um segundo documento
+ * — a transmissão de hoje não via a de ontem. Sai sempre sem máscara; CNPJ
+ * sem 14 posições não identifica empresa e é RECUSADO nomeado.
+ */
+function cnpjParaId(cnpj) {
+    const limpo = limparCnpj(cnpj);
+    if (limpo.length !== 14) {
+        const err = new Error(`CNPJ inválido ("${String(cnpj ?? '')}") — ele identifica a declaração DCTFWeb gravada.`);
+        err.httpStatus = 400;
+        throw err;
+    }
+    return limpo;
+}
 
 const COLLECTION = 'dctfweb_declaracoes';
 // Quotas do trimestral que ainda NÃO podem ser geradas — ver darf-quotas.js.
@@ -137,7 +155,7 @@ export async function transmitirDeclaracao({ empresaId, empresaCnpj, anoPA, mesP
     const provider = getDctfwebProvider();
     const r = await provider.transmitirDeclaracao({ empresaCnpj, anoPA, mesPA, categoria });
 
-    const docId = `${empresaCnpj}_${anoPA}${String(mesPA).padStart(2,'0')}_${categoria || 'GERAL_MENSAL'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const docId = `${cnpjParaId(empresaCnpj)}_${anoPA}${String(mesPA).padStart(2,'0')}_${categoria || 'GERAL_MENSAL'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
     await db.collection(COLLECTION).doc(docId).set(sanitize({
         empresaId, empresaCnpj, categoria: categoria || 'GERAL_MENSAL',
         anoPA, mesPA,
@@ -235,7 +253,8 @@ export async function listarQuotasAgendadas({ mesRef, cnpjsPermitidos = null } =
         .filter((q) => String(q.mesRef || '') <= ref)
         .filter((q) => !permitidos || permitidos.has(q.empresaCnpj))
         .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
-    const hojeRef = new Date().toISOString().slice(0, 7);
+    // 03/09: o Cloud Run é UTC — às 21h de Brasília o `toISOString()` já é amanhã.
+    const hojeRef = dataBrasilia().slice(0, 7);
     return {
         mesRef: ref,
         quotas: linhas.map((q) => ({ ...q, atrasada: String(q.mesRef || '') < hojeRef })),
@@ -332,7 +351,7 @@ export async function gerarDarfsSeparados({
     const naoEmitidos = [];
     const agendadas = [];
     const planoResumos = [];
-    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const hoje = hojeIso || dataBrasilia();
 
     for (const deb of debitosAlvo) {
         if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
@@ -451,7 +470,7 @@ export async function gerarDarfsSeparados({
 // NÃO lê o XML de cada uma (sem custo SERPRO) — só aponta as candidatas; os
 // débitos trimestrais são carregados sob demanda (listarDebitosTrimestrais).
 export async function listarTrimestraisVencendoEsteMes({ cnpjsPermitidos = null, hojeIso } = {}) {
-    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const hoje = hojeIso || dataBrasilia();
     const info = trimestreVencendoEsteMes(hoje);
     if (!info) {
         return { aplicavel: false, motivo: 'Nenhum trimestre de IRPJ/CSLL vence neste mês (vencem em abril, julho, outubro e janeiro).' };
@@ -573,7 +592,7 @@ export async function encerrarApuracaoMit({ empresaId, empresaCnpj, anoPA, mesPA
     const provider = getDctfwebProvider();
     const r = await provider.encerrarApuracaoMit({ empresaCnpj, anoPA, mesPA, dadosApuracaoMit });
 
-    const docId = `${empresaCnpj}_${anoPA}${String(mesPA).padStart(2,'0')}_MIT`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const docId = `${cnpjParaId(empresaCnpj)}_${anoPA}${String(mesPA).padStart(2,'0')}_MIT`.replace(/[^a-zA-Z0-9_-]/g, '_');
     await db.collection(COLLECTION_MIT).doc(docId).set(sanitize({
         empresaId, empresaCnpj, anoPA, mesPA,
         statusEncerramento: r.statusEncerramento,

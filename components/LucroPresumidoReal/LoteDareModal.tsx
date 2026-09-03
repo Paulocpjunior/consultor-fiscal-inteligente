@@ -14,6 +14,7 @@ import { getAuth } from 'firebase/auth';
 import type { LucroPresumidoEmpresa, User } from '../../types';
 import * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import { acharFichaCompetencia } from '../../sefaz-backend/ipi-varredura.js';
+import { fmtBRL } from '../../services/formatos';
 
 interface Props {
     /**
@@ -37,7 +38,6 @@ interface ItemLote {
     incluido: boolean;
 }
 
-const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtCnpj = (c: string) => c.replace(/\D/g, '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 
 const competenciaAnterior = (): string => {

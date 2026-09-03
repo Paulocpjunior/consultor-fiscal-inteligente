@@ -1,3 +1,4 @@
+import { limparCnpj } from './documento-dv.js';
 // ============================================================================
 // sefaz-backend/empresa-cadastro-lookup.js
 //
@@ -41,12 +42,18 @@
 /** As duas coleções de cadastro de cliente. */
 export const COLECOES_CADASTRO = ['simples_empresas', 'lucro_empresas'];
 
-export const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
+// ⚠️ Nome mantido pelos consumidores; a normalização é a do dono (`limparCnpj`),
+// que PRESERVA letras — o CNPJ alfanumérico (07/2026) apagado pelo `\D` ficava
+// com menos de 14 posições e caía em "não é cliente".
+export const soDigitos = (v) => limparCnpj(v);
 
 /** Lápide de exclusão ou de fusão — não é empresa "encontrada". */
 export const ehLapide = (d) => !!(d && (d._deleted || d._merged_into));
 
 const TTL_MS = 10 * 60_000;
+// Negativo vale MENOS: empresa cadastrada há um minuto respondia \"não é cliente\"
+// por dez — afirmação falsa sobre o cadastro, com a ação errada na frente.
+const TTL_NEGATIVO_MS = 60_000;
 
 // cache do ÍNDICE normalizado, por coleção: { mapa: Map<cnpj, id>, ts }
 const indicePorColecao = new Map();
@@ -93,7 +100,7 @@ export async function acharEmpresaCadastrada(db, cnpj, opts = {}) {
     const agoraMs = opts.agoraMs ?? Date.now();
 
     const cacheado = cacheResultado.get(alvo);
-    if (cacheado && (agoraMs - cacheado.ts) < TTL_MS) return cacheado.val;
+    if (cacheado && (agoraMs - cacheado.ts) < (cacheado.val ? TTL_MS : TTL_NEGATIVO_MS)) return cacheado.val;
 
     let val = null;
 

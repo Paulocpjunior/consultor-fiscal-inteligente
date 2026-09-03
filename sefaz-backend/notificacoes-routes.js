@@ -20,7 +20,7 @@ router.get('/status', requireAdmin, (_req, res) => {
 
 // Teste de envio de e-mail. Só admin. Manda um e-mail real pela caixa indicada.
 // Body: { remetente, para } — se omitidos, usa o e-mail do próprio admin logado.
-router.post('/teste-email', requireAdmin, express.json(), async (req, res) => {
+router.post('/teste-email', requireAdmin, async (req, res) => {
     try {
         const remetente = req.body?.remetente || req.user?.email;
         const para = req.body?.para || req.user?.email;
@@ -57,7 +57,7 @@ router.post('/teste-email', requireAdmin, express.json(), async (req, res) => {
 
 // Teste do resumo diario. So admin. Coleta as capturas das ultimas 24h e
 // envia o e-mail de resumo pra caixa do admin logado (ou destinatario do body).
-router.post('/teste-resumo', requireAdmin, express.json(), async (req, res) => {
+router.post('/teste-resumo', requireAdmin, async (req, res) => {
     try {
         const remetente = req.body?.remetente || req.user?.email;
         const destinatarios = req.body?.para || req.user?.email;

@@ -28,7 +28,7 @@ function fa() {
 }
 
 // ── POST /agent-keys — gera uma key nova ─────────────────────────────────
-router.post('/agent-keys', requireAdmin, express.json(), async (req, res) => {
+router.post('/agent-keys', requireAdmin, async (req, res) => {
     try {
         const { ownerUid, label } = req.body || {};
         if (!ownerUid) return res.status(400).json({ error: 'ownerUid obrigatório' });
@@ -84,7 +84,7 @@ router.delete('/agent-keys/:keyId', requireAdmin, async (req, res) => {
 // OU pode marcar como A3 sem subir cert (basta gravar metadado).
 // Implementação: simplesmente atualiza o campo `tipoCert` em
 // empresas_certificados/{empresaId}. Se o doc não existir, cria mínimo.
-router.patch('/cert-empresa/tipo', requireAdmin, express.json(), async (req, res) => {
+router.patch('/cert-empresa/tipo', requireAdmin, async (req, res) => {
     try {
         const { empresaId, tipoCert } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatório' });

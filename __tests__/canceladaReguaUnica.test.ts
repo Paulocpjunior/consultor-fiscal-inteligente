@@ -43,6 +43,7 @@ const EXTENSOES = ['.ts', '.tsx', '.js'];
 const PERMITIDO: Record<string, string> = {
     // É a régua. O campo cru é um dos três sinais que ela combina.
     'sefaz-backend/xml-metadata-helper.js': 'é o arquivo DONO da régua',
+    'sefaz-backend/xml-metadata-helper.d.ts': 'é o TIPO de retorno do dono (`statusDoCstatProtocolo`), não uma régua',
     // Grava o campo a partir do XML — escrita, não leitura de situação.
     'sefaz-backend/xml-importer.js': 'ESCREVE o status a partir do protocolo/evento',
     // Parcelamento tem status próprio ('inadimplente'/'cancelado') e nada tem a

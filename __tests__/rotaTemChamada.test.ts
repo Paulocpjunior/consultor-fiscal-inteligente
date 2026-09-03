@@ -96,12 +96,18 @@ function varrer(dir: string, exts: string[], out: string[] = []): string[] {
 
 describe('🚨 rota nova nasce com o caminho que a chama', () => {
     it('nenhuma rota fica sem chamada e sem motivo declarado', () => {
-        const front = varrer(RAIZ, ['.ts', '.tsx'])
+        const arquivosFront = varrer(RAIZ, ['.ts', '.tsx']);
+        const arquivosBackend = varrer(join(RAIZ, 'sefaz-backend'), ['.js']);
+        // Varredura que não acha arquivo passa verde sem provar nada (o glob
+        // quebrou, a pasta mudou de nome). Hoje são ~550 e ~400; o piso é folga.
+        expect(arquivosFront.length).toBeGreaterThan(300);
+        expect(arquivosBackend.length).toBeGreaterThan(200);
+        const front = arquivosFront
             .map((p) => readFileSync(p, 'utf8'))
             .join('\n');
 
         const orfas: string[] = [];
-        for (const arquivo of varrer(join(RAIZ, 'sefaz-backend'), ['.js'])) {
+        for (const arquivo of arquivosBackend) {
             const rel = arquivo.replace(`${RAIZ}/`, '');
             const src = readFileSync(arquivo, 'utf8');
             for (const m of src.matchAll(/router\.(get|post|put|delete)\(\s*['"]([^'"]+)['"]/g)) {

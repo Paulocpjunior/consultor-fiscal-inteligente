@@ -731,7 +731,7 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
 // ─── Toggle flags ──────────────────────────────────────────────────────────
 // Permite admin ativar/desativar via UI: procuração e-CAC, NFSe Nacional, captura SEFAZ.
 
-router.post('/empresa-toggle-flag', requireAuth, express.json(), async (req, res) => {
+router.post('/empresa-toggle-flag', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ error: 'Apenas administradores' });
@@ -895,7 +895,7 @@ const CAMPOS_DADOS_FISCAIS = new Set([
 // Continuam admin-only as ações destrutivas/estruturais (regime, arquivar,
 // excluir, reset de lock, flags de captura). Quem alterou fica registrado em
 // dadosFiscaisAlteradoPor.
-router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, res) => {
+router.post('/empresa-dados-fiscais', requireAuth, async (req, res) => {
     try {
         const { cnpj, dadosFiscais } = req.body || {};
         const cnpjLimpo = limparCnpj(cnpj);
@@ -1046,7 +1046,7 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
 // confronto é por CNPJ e a régua é a mesma da gravação unitária:
 // normalizarCodCliente + nunca sobrescrever código divergente em silêncio.
 // Admin-only: uma carga errada renomeia a carteira inteira.
-router.post('/importar-cod-cliente', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+router.post('/importar-cod-cliente', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ error: 'Apenas administradores fazem a carga em massa.' });
@@ -1143,7 +1143,7 @@ router.post('/importar-cod-cliente', requireAuth, express.json({ limit: '4mb' })
 // (ex: ajustou procuracao e quer rodar sem esperar a janela vencer),
 // esse endpoint apaga o doc sefaz_locks/{cnpj}. Próximo disparo do
 // orchestrator vai criar o lock de novo.
-router.post('/empresa-reset-lock', requireAuth, express.json(), async (req, res) => {
+router.post('/empresa-reset-lock', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ error: 'Apenas administradores' });
@@ -1175,7 +1175,7 @@ router.post('/empresa-reset-lock', requireAuth, express.json(), async (req, res)
 // sefaz_state referenciam a empresa pelo empresaId (id do doc) e os lookups já
 // caem de simples/{id} → lucro/{id}, então nada quebra. Admin-only.
 const COLECAO_POR_REGIME = { simples: 'simples_empresas', lucro: 'lucro_empresas' };
-router.post('/empresa-corrigir-regime', requireAuth, express.json(), async (req, res) => {
+router.post('/empresa-corrigir-regime', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ error: 'Apenas administradores' });
@@ -1226,7 +1226,7 @@ router.post('/empresa-corrigir-regime', requireAuth, express.json(), async (req,
 // Cadastro errado ou empresa que saiu da carteira: em vez de apagar (e perder
 // os documentos capturados), marca situacao='arquivada'/ativo=false. Some das
 // listas e capturas, mas os dados ficam e dá pra desarquivar. Admin-only.
-router.post('/empresa-arquivar', requireAuth, express.json(), async (req, res) => {
+router.post('/empresa-arquivar', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ error: 'Apenas administradores' });
@@ -1274,7 +1274,7 @@ router.post('/empresa-arquivar', requireAuth, express.json(), async (req, res) =
 // Cadastro-lixo (empresa errada, zero notas): apaga o doc de vez. Trava de
 // segurança: se houver QUALQUER documento_fiscal vinculado (por empresaId ou
 // cnpj), recusa e manda arquivar — pra nunca apagar histórico por engano.
-router.post('/empresa-excluir', requireAuth, express.json(), async (req, res) => {
+router.post('/empresa-excluir', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ error: 'Apenas administradores' });

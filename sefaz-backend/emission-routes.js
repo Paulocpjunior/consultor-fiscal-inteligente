@@ -30,7 +30,7 @@ router.get('/catalogo', requireEmissao, (req, res) => {
     res.json(getCatalogoEmissao(regime));
 });
 
-router.post('/emitir', requireEmissao, express.json(), async (req, res) => {
+router.post('/emitir', requireEmissao, async (req, res) => {
     try { res.json(await emitirGuia(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
 });

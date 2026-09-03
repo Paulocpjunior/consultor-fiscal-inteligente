@@ -198,7 +198,7 @@ router.get('/ipi-varredura', requireAdmin, async (req, res) => {
 // recuperação é da FONTE: nada de pedir arquivo ao cliente ou consultar a SEFAZ.
 //
 // requireAdmin porque ESCREVE em documento fiscal — a varredura só lê.
-router.post('/reler-itens-fiscais', requireAdmin, express.json(), async (req, res) => {
+router.post('/reler-itens-fiscais', requireAdmin, async (req, res) => {
     try {
         const empresaId = String(req.body?.empresaId || '').trim();
         const competencia = normalizarCompetencia(req.body?.competencia);
@@ -218,7 +218,7 @@ router.post('/reler-itens-fiscais', requireAdmin, express.json(), async (req, re
 // TEM itens), este cria os itens do zero quando o XML completo está guardado —
 // e separa por CAUSA o que a releitura não alcança (resumo × sem arquivo).
 // requireAdmin porque ESCREVE em documento fiscal.
-router.post('/reler-notas-vazias', requireAdmin, express.json(), async (req, res) => {
+router.post('/reler-notas-vazias', requireAdmin, async (req, res) => {
     try {
         const empresaId = String(req.body?.empresaId || '').trim();
         const competencia = normalizarCompetencia(req.body?.competencia);

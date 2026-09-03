@@ -52,6 +52,7 @@
 // (`AAAA-MM-DD`) — o `dhEmi` chega em TRÊS formas neste app, e mandar o texto
 // cru foi o que fez o R-4020 ser recusado do outro lado (02/09).
 import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+import { limparCnpj } from './documento-dv.js';
 
 const num = (v) => {
     if (v === undefined || v === null || v === '') return undefined;
@@ -59,7 +60,9 @@ const num = (v) => {
     return Number.isFinite(n) ? n : undefined;
 };
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
+// ⚠️ `limparCnpj` preserva letras: CNPJ alfanumérico (07/2026) apagado pelo `\D`
+// ficava com < 14 posições e o prestador virava "pessoa física" — fora do R-2010.
+const soDigitos = (v) => limparCnpj(v);
 const texto = (v) => String(v ?? '').trim();
 
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);

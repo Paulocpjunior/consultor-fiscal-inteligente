@@ -46,14 +46,30 @@ export const QUOTA_VALOR_MINIMO = 1000;
 /** Códigos de receita do IRPJ/CSLL trimestral que aceitam quota. */
 export const RECEITAS_TRIMESTRAIS_QUOTA = new Set(['2089', '0220', '2372', '6012']);
 
+// Só para INTEIROS de contagem (nº de quotas, cota, ano, mês) — nunca para o
+// VALOR: `Number(v) || 0` transformava débito ilegível em plano de R$ 0,00,
+// calado (03/09). Valor passa por `valorOuErro`.
 const num = (v) => Number(v) || 0;
+
+/**
+ * 🚨 CAMPO DE VALOR NÃO RECEBE DEFAULT. Débito que chega `undefined`, `NaN`
+ * ou texto ilegível virava plano de quotas de R$ 0,00 — e um plano de zero
+ * não avisa ninguém. Recusa nomeada.
+ */
+function valorOuErro(valor) {
+    const v = typeof valor === 'number' ? valor : Number(valor);
+    if (!Number.isFinite(v) || v <= 0) {
+        throw new Error(`Valor do débito inválido (${JSON.stringify(valor)}) — sem ele não há quota a planejar.`);
+    }
+    return v;
+}
 
 /**
  * Divide o débito em N quotas "iguais" em centavos — a 1ª absorve a diferença
  * de arredondamento (prática RFB). A soma SEMPRE fecha com o total.
  */
 export function dividirEmQuotas(valor, n) {
-    const totalCent = Math.round(num(valor) * 100);
+    const totalCent = Math.round(valorOuErro(valor) * 100);
     const partes = Math.max(1, Math.floor(num(n)) || 1);
     const base = Math.floor(totalCent / partes);
     const primeira = totalCent - base * (partes - 1);
@@ -75,8 +91,11 @@ export function vencimentoQuotaTrimestral(anoPA, mesPA, cota) {
     return calcularUltimoDiaUtil(ano, mes);
 }
 
-/** 'AAAA-MM-DD' → chave comparável AAAAMM. */
-const chaveMes = (iso) => Number(String(iso).slice(0, 4)) * 100 + Number(String(iso).slice(5, 7));
+/** 'AAAA-MM-DD' → chave comparável AAAAMM (NaN quando a data não é legível). */
+const chaveMes = (iso) => {
+    const m = /^(\d{4})-(\d{2})/.exec(String(iso ?? ''));
+    return m ? Number(m[1]) * 100 + Number(m[2]) : NaN;
+};
 
 /**
  * O PLANO das quotas de UM débito: o que se emite hoje e o que espera o mês.
@@ -92,7 +111,17 @@ const chaveMes = (iso) => Number(String(iso).slice(0, 4)) * 100 + Number(String(
  */
 export function planejarQuotas({ valor, anoPA, mesPA, quotas = 1, hoje, aceitaQuota = true } = {}) {
     const pedidas = Math.min(3, Math.max(1, Math.floor(num(quotas)) || 1));
-    const total = num(valor);
+    const total = valorOuErro(valor);
+    // 🚨 `hoje` AUSENTE OU ILEGÍVEL FAZIA TODA QUOTA SAIR AGORA (03/09):
+    // `chaveMes(undefined)` era NaN, `mesDaCota > NaN` é false, e o `return`
+    // de baixo carimbava `emitirAgora: true` nas três — exatamente o defeito
+    // que este módulo existe para impedir. A data é PARÂMETRO, e parâmetro
+    // torto é RECUSA, não plano.
+    const mesDeHoje = chaveMes(hoje);
+    if (!Number.isFinite(mesDeHoje)) {
+        throw new Error(`Data de hoje inválida (${JSON.stringify(hoje)}) — esperado AAAA-MM-DD. `
+            + 'Sem ela não dá para saber qual cota já pode sair, e chutar emitiria as três de uma vez.');
+    }
 
     let efetivas = 1;
     let aviso = null;
@@ -107,7 +136,6 @@ export function planejarQuotas({ valor, anoPA, mesPA, quotas = 1, hoje, aceitaQu
     }
 
     const valores = dividirEmQuotas(total, efetivas);
-    const mesDeHoje = chaveMes(hoje);
 
     const linhas = valores.map((v, i) => {
         const cota = i + 1;

@@ -50,11 +50,13 @@ describe('calendarioFiscal', () => {
             expect(v.getMonth()).toBe(5);  // junho
         });
 
-        it('SPED Fiscal competência 04/2026 vence 25/06/2026 (quinta)', () => {
+        it('SPED Fiscal competência 04/2026 vence 25/05/2026 (segunda) — mês SUBSEQUENTE, CAT 147/2009 art. 10', () => {
+            // Até 03/09 esta fixture travava "25/06 (2 meses após)": ela descrevia
+            // o catálogo errado, que discordava do calendario legado (1 mês).
             const regra = OBRIGACOES_POR_REGIME.LUCRO_PRESUMIDO.find(r => r.obrigacao === 'SPED')!;
             const v = calcularVencimento('04/2026', regra);
             expect(v.getDate()).toBe(25);
-            expect(v.getMonth()).toBe(5);  // junho (2 meses após)
+            expect(v.getMonth()).toBe(4);  // maio (mês subsequente)
         });
     });
 

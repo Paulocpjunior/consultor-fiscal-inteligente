@@ -15,7 +15,7 @@ const router = express.Router();
 
 // requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
-router.get('/status', (_req, res) => {
+router.get('/status', requireAuth, (_req, res) => {
     res.json({ mode: getNfseNacionalMode(), ok: true });
 });
 
@@ -69,12 +69,12 @@ router.get('/nbs', requireAuth, async (_req, res) => {
     res.json(NBS_CODIGOS_COMUNS);
 });
 
-router.post('/emitir', requireAdmin, express.json(), async (req, res) => {
+router.post('/emitir', requireAdmin, async (req, res) => {
     try { res.json(await emitirNfse(req.body)); }
     catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-router.post('/cancelar', requireAdmin, express.json(), async (req, res) => {
+router.post('/cancelar', requireAdmin, async (req, res) => {
     try {
         const { chave, motivo } = req.body;
         if (!chave) return res.status(400).json({ error: 'chave obrigatoria' });

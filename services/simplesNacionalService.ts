@@ -12,9 +12,10 @@ import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquene
 import { validarCnpj } from './validadorDocumento';
 import { EMAIL_ADMIN_MASTER } from './adminMaster';
 import { safeStorage } from './safeStorage';
+import { sanitizeForFirestore } from './firestoreSanitize';
 import {
     collection, getDocs, doc, setDoc, getDoc,
-    query, where, limit as fbLimit
+    query, where, limit as fbLimit, writeBatch
 } from 'firebase/firestore';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -105,7 +106,21 @@ const generateUUID = () =>
         ? crypto.randomUUID()
         : Date.now().toString(36) + Math.random().toString(36).substr(2);
 
-const sanitizePayload = (obj: any) => JSON.parse(JSON.stringify(obj));
+// O dono é `sanitizeForFirestore` — a cópia `JSON.parse(JSON.stringify(obj))`
+// engolia NaN como null em silêncio (a régua única, 12/08).
+const sanitizePayload = (obj: any) => sanitizeForFirestore(obj);
+
+/**
+ * 🚨 SESSÃO EXPIRADA NÃO É "GRAVAR SÓ LOCAL". Com Firebase configurado e
+ * `auth.currentUser` nulo, a gravação na nuvem era PULADA e a função resolvia
+ * OK — a tela dizia "salvos no banco de dados" sobre nada gravado. O caminho
+ * só-local existe para o app SEM Firebase (dev); em produção, sem sessão é
+ * recusa dita, nunca sucesso.
+ */
+const MSG_SESSAO_EXPIRADA = 'Sessão expirada — nada foi gravado. Entre novamente.';
+const exigirSessaoParaGravar = (): void => {
+    if (isFirebaseConfigured && db && !auth?.currentUser) throw new Error(MSG_SESSAO_EXPIRADA);
+};
 
 const normalizarPeriodoPgdas = (periodo: unknown): string | null => {
     const raw = String(periodo ?? '').trim();
@@ -250,6 +265,7 @@ export const updateEmpresa = async (
     // localStorage e sumia ao trocar de empresa, pois o refetch da nuvem
     // vencia o cache (caso Carlos Eduardo, 03/07). Falha na nuvem agora
     // propaga: sem gravacao fantasma, a UI mostra o erro real.
+    exigirSessaoParaGravar();
     if (isFirebaseConfigured && db && auth?.currentUser) {
         const { id: _, createdBy: __, createdByEmail: ___, ...safeData } = data as any;
         await setDoc(doc(db, 'simples_empresas', id), sanitizePayload(safeData), { merge: true });
@@ -468,7 +484,7 @@ export const parseAndSaveNotas = async (
 
     const uid = auth?.currentUser?.uid;
     const newNotes: SimplesNacionalNota[] = [];
-    let success = 0;
+    let lidas = 0;
 
     extractedData.forEach(item => {
         if (item.data && item.valor != null) {
@@ -487,27 +503,51 @@ export const parseAndSaveNotas = async (
                     descricao: item.descricao || 'Importado via IA',
                     origem: item.origem || fileType.toUpperCase().replace('.','') + ' Import'
                 });
-                success++;
+                lidas++;
             }
         }
     });
 
     // ── Cloud-first ──
+    // 🚨 SUCESSO SE CONTA DEPOIS DO COMMIT, nunca antes. O `allSettled` + o
+    // contador subindo no parse faziam a tela dizer "N notas importadas" sobre
+    // notas que o banco recusou (permissão, rede). Agora: lotes de 400 num
+    // `writeBatch` (o teto do Firestore é 500), o contador sobe por lote
+    // COMMITADO, e o lote que falhou volta NOMEADO em `errors`.
+    const errors: string[] = [];
+    const gravadas: SimplesNacionalNota[] = [];
     if (isFirebaseConfigured && db && uid) {
         const dbRef = db;  // narrow Firestore (não-null) escapa pra dentro da arrow
-        await Promise.allSettled(newNotes.map(note =>
-            setDoc(doc(dbRef, 'simples_notas', note.id), sanitizePayload({ ...note, createdBy: uid }))));
+        const TAMANHO_LOTE = 400;
+        for (let i = 0; i < newNotes.length; i += TAMANHO_LOTE) {
+            const lote = newNotes.slice(i, i + TAMANHO_LOTE);
+            try {
+                const batch = writeBatch(dbRef);
+                for (const note of lote) {
+                    batch.set(doc(dbRef, 'simples_notas', note.id), sanitizePayload({ ...note, createdBy: uid }));
+                }
+                await batch.commit();
+                gravadas.push(...lote);
+            } catch (e: any) {
+                errors.push(`${lote.length} nota(s) NÃO gravada(s) no banco (lote ${Math.floor(i / TAMANHO_LOTE) + 1}): ${e?.message || 'erro desconhecido'}`);
+            }
+        }
+    } else if (isFirebaseConfigured && db && !uid) {
+        throw new Error(MSG_SESSAO_EXPIRADA);
+    } else {
+        gravadas.push(...newNotes);
     }
 
-    // ── Local cache ──
+    // ── Local cache (só o que foi gravado de verdade) ──
     // Cache corrompido não pode derrubar a importação que JÁ gravou na nuvem:
     // parse que falha vira mapa vazio, nunca exceção depois do setDoc.
     const notasMap: Record<string, SimplesNacionalNota[]> = safeStorage.getJSON(STORAGE_KEY_NOTAS, {});
     if (!notasMap[empresaId]) notasMap[empresaId] = [];
-    notasMap[empresaId].push(...newNotes);
+    notasMap[empresaId].push(...gravadas);
     localStorage.setItem(STORAGE_KEY_NOTAS, JSON.stringify(notasMap));
 
-    return { successCount: success, failCount: extractedData.length - success, errors: [] };
+    const successCount = gravadas.length;
+    return { successCount, failCount: extractedData.length - successCount, errors };
 };
 
 // ─── FATURAMENTO / FOLHA ──────────────────────────────────────────────────────

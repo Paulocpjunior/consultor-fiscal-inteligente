@@ -8,6 +8,7 @@ import { buildFile, buildRecord, LAYOUT_VERSION } from './iobSageLayout';
 import { LAYOUT } from './iobSageLayoutData';
 // MESMA regra de correlação do backend — CFOP de entrada não se duplica aqui.
 import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
+import { cstDoLancamento } from '../sefaz-backend/cst-correlacao.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
 import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
@@ -801,16 +802,31 @@ function buildE221(d: DocumentoFiscal, codigos?: Record<string, string>, codCons
 function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Record<string, string>, redf?: string, codConsumidor = '', ufEmpresa = ''): string[] {
     const c = commonNF(d, codigos, codConsumidor, ufEmpresa);
     return (d.itens || []).map((it, idx) => {
+        const valorItem = (it.vProd || 0) - (it.vDesc || 0);
+        // 🔁 O CST SEGUE O CFOP (Paulo, 18/08): o CFOP já saía correlacionado
+        // (5102 → 1556) e a alocação lia o CST CRU do fornecedor (00) — o .FML
+        // gravava base e crédito de ICMS numa compra de uso/consumo, enquanto
+        // a tela de Relatórios, pelo mesmo dono (`cstDoLancamento`), dizia 90
+        // (Outras). O arquivo e a tela têm de contar a mesma história.
+        const cfopEscriturado = cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d);
+        const cstLanc = cstDoLancamento(
+            (it as any).cstIcms || it.cst || '',
+            cfopEscriturado,
+            (d as any).cstEscriturado,
+        );
+        const cstNum = String(cstLanc.cst || it.cst || '').replace(/\D/g, '');
+        const tributacao = cstNum.length === 3 ? cstNum.slice(1) : cstNum;
+        // Tributação 90 (Outras): a operação não gera crédito deste lado —
+        // o destaque do FORNECEDOR não vira base nem ICMS aqui.
+        const semCreditoPorCst = tributacao === '90' && cstLanc.cst !== null && cstLanc.cst !== cstLanc.original;
         // Tributação REAL do item: base = vBC do XML quando há destaque
         // (cobre base reduzida), isenta (CST 40/41/50) vai em Isentos,
         // demais sem destaque em Outras — espelho do alocarTributacaoIcms.
-        const valorItem = (it.vProd || 0) - (it.vDesc || 0);
-        const temDestaque = (it.vICMS || 0) > 0;
+        const temDestaque = !semCreditoPorCst && (it.vICMS || 0) > 0;
         const baseItem = temDestaque ? ((it.vBC || 0) > 0 ? (it.vBC as number) : valorItem) : 0;
-        const cstNum = String(it.cst || '').replace(/\D/g, '');
-        const isentoItem = !temDestaque && ['40', '41', '50'].includes(cstNum) ? valorItem : 0;
+        const isentoItem = !temDestaque && ['40', '41', '50'].includes(tributacao) ? valorItem : 0;
         const outrasItem = !temDestaque && !isentoItem ? valorItem : 0;
-        const aliquota = it.aliqIcms && it.aliqIcms > 0
+        const aliquota = it.aliqIcms && it.aliqIcms > 0 && temDestaque
             ? it.aliqIcms
             : (baseItem > 0 && temDestaque ? ((it.vICMS || 0) / baseItem) * 100 : 0);
         return buildRecord(L('E222'), {
@@ -821,7 +837,7 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d),
+            'CFOP': cfopEscriturado,
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,
@@ -832,7 +848,7 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'VALOR DO IPI': it.vIPI || 0,
             'VALOR UNITÁRIO': it.vUnCom || 0,
             'BC DO IPI': 0,
-            'VALOR DO ICMS': it.vICMS || 0,
+            'VALOR DO ICMS': temDestaque ? (it.vICMS || 0) : 0,
             'ISENTOS DE ICMS': isentoItem,
             'OUTROS DE ICMS': outrasItem,
             'ICMS SUBST. TRIB.': 0,

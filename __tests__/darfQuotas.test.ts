@@ -90,6 +90,28 @@ describe('MATA-BURRO: quota 2 e 3 NÃO se emitem antes do mês delas', () => {
     });
 });
 
+// ═══ 03/09: `hoje` TORTO FAZIA TODA QUOTA SAIR AGORA ══════════════════════
+// `chaveMes(undefined)` era NaN, `mesDaCota > NaN` é false, e o plano
+// carimbava `emitirAgora: true` nas três — o defeito que o módulo existe para
+// impedir, reaberto por um parâmetro ausente. E `Number(valor) || 0` virava
+// plano de R$ 0,00 sobre débito ilegível.
+describe('MATA-BURRO: parâmetro torto é RECUSA, não plano', () => {
+    it('sem `hoje` (ou ilegível) o plano NÃO nasce — e diz o porquê', () => {
+        for (const hoje of [undefined, null, '', 'julho', '15/07/2026']) {
+            expect(() => planejarQuotas({ valor: 9000, anoPA: 2026, mesPA: 6, quotas: 3, hoje: hoje as any }))
+                .toThrow(/Data de hoje inválida/);
+        }
+    });
+
+    it('valor ilegível/zero/negativo não vira plano de R$ 0,00', () => {
+        for (const valor of [undefined, NaN, 'abc', 0, -10]) {
+            expect(() => planejarQuotas({ valor: valor as any, anoPA: 2026, mesPA: 6, quotas: 1, hoje: '2026-07-15' }))
+                .toThrow(/Valor do débito inválido/);
+            expect(() => dividirEmQuotas(valor as any, 1)).toThrow(/Valor do débito inválido/);
+        }
+    });
+});
+
 describe('limites legais (Lei 9.430 art. 5º §1º)', () => {
     it('nenhuma quota abaixo de R$ 1.000 — cai para quota única COM aviso', () => {
         const p = planejarQuotas({ valor: 2500, anoPA: 2026, mesPA: 6, quotas: 3, hoje: '2026-07-15' });

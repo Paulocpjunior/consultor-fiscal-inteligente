@@ -127,7 +127,7 @@ router.get('/atividade-iss-fixo', requireAuth, async (_req, res) => {
     }
 });
 
-router.put('/atividade-iss-fixo', requireAuth, express.json(), async (req, res) => {
+router.put('/atividade-iss-fixo', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({
@@ -155,7 +155,7 @@ router.put('/atividade-iss-fixo', requireAuth, express.json(), async (req, res) 
     }
 });
 
-router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) => {
+router.post('/emitir-regular', requireEmissao, async (req, res) => {
     try { res.json(await emitirDasRegular(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
@@ -164,7 +164,7 @@ router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) 
 // A declaração vence todo mês (MAED de R$ 50,00 se não entregar); a guia só
 // existe se houver o que pagar. Antes disto, mês sem faturamento não tinha
 // caminho no app e ia pro e-CAC à mão.
-router.post('/declarar-sem-movimento', requireEmissao, express.json(), async (req, res) => {
+router.post('/declarar-sem-movimento', requireEmissao, async (req, res) => {
     try {
         res.json(await declararPgdasSemMovimento({
             ...req.body,
@@ -180,7 +180,7 @@ router.post('/declarar-sem-movimento', requireEmissao, express.json(), async (re
 //
 // requireAdmin (e não requireEmissao): a sonda gasta chamada paga do SERPRO e
 // serve pra DESTRAVAR um bloqueio, não pra operar o mês.
-router.post('/sondar-sem-movimento', requireAdmin, express.json(), async (req, res) => {
+router.post('/sondar-sem-movimento', requireAdmin, async (req, res) => {
     try {
         res.json(await sondarFormaSemMovimento({
             ...req.body,
@@ -189,12 +189,12 @@ router.post('/sondar-sem-movimento', requireAdmin, express.json(), async (req, r
     } catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
-router.post('/emitir-avulso', requireEmissao, express.json(), async (req, res) => {
+router.post('/emitir-avulso', requireEmissao, async (req, res) => {
     try { res.json(await emitirDasAvulso(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
-router.post('/marcar-pago', requireEmissao, express.json(), async (req, res) => {
+router.post('/marcar-pago', requireEmissao, async (req, res) => {
     try {
         const { docId, dataPagamento } = req.body;
         if (!docId) return res.status(400).json({ error: 'docId obrigatorio' });

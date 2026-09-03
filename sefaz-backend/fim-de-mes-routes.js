@@ -222,8 +222,32 @@ router.post('/fechar', requireAuth, async (req, res) => {
             return res.status(400).json({ ok: false, erro: montado.motivo, bloqueios: montado.bloqueios });
         }
 
-        await db.collection(COLECAO).doc(idDoFechamento(r.empresa.id, r.competencia))
-            .set(montado.fechamento, { merge: false });
+        // 🔒 TRANSAÇÃO: o carimbo foi LIDO lá em cima e a decisão saiu dele.
+        // Se entre a leitura e a gravação alguém fechou ou reabriu (dois
+        // cliques, duas abas), gravar por cima apagaria uma versão que o
+        // Contábil pode já ter importado. A gravação relê e só escreve se o
+        // documento ainda é o que a decisão viu (mesma versão, mesmo estado).
+        const ref = db.collection(COLECAO).doc(idDoFechamento(r.empresa.id, r.competencia));
+        const versaoLida = Number(r.fechamento?.versao || 0);
+        const estadoLido = r.fechamento?.estado || null;
+        try {
+            await db.runTransaction(async (tx) => {
+                const snap = await tx.get(ref);
+                const atual = snap.exists ? (snap.data() || {}) : null;
+                const versaoAtual = Number(atual?.versao || 0);
+                const estadoAtual = atual?.estado || null;
+                if (versaoAtual !== versaoLida || estadoAtual !== estadoLido) {
+                    const e = new Error('A competência mudou enquanto você fechava (outra pessoa fechou ou reabriu). '
+                        + 'Recarregue a tela e confira antes de fechar de novo.');
+                    e.conflito = true;
+                    throw e;
+                }
+                tx.set(ref, montado.fechamento, { merge: false });
+            });
+        } catch (e) {
+            if (e?.conflito) return res.status(409).json({ ok: false, erro: e.message });
+            throw e;
+        }
 
         return res.json({ ok: true, fechamento: montado.fechamento, descricao: descreverFechamento(montado.fechamento) });
     } catch (e) {

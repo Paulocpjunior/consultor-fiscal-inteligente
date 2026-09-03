@@ -31,6 +31,7 @@ import { normalizarCompetencia, competenciaTarefa } from './competencia.js';
 import { caminhoImpostos } from './caminho-sharepoint.js';
 // Dono único de "qual é a pasta desta empresa?" — ver sharepoint-pastas.js.
 import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 
 /** Ausência (null/undefined/'') é null — `Number(null)` é 0 e passaria por valor. */
 const dinheiroOuNull = (n) => ((n == null || n === '') ? null : (Number.isFinite(Number(n)) ? Number(n) : null));
@@ -144,17 +145,17 @@ export async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
         }
     }
     if (!cnpjAlvo) return null;
-    for (const col of ['simples_empresas', 'lucro_empresas']) {
-        const snap = await db.collection(col).get();
-        for (const doc of snap.docs) {
-            const d = doc.data();
-            if (d._merged_into || d._deleted) continue;
-            if (String(d.cnpj || '').replace(/\D/g, '') === cnpjAlvo) {
-                return { id: doc.id, col, data: d };
-            }
-        }
-    }
-    return null;
+    // 🚨 Até 03/09 isto varria as DUAS coleções INTEIRAS (~400 documentos) a
+    // cada envio que chegava só com o CNPJ — o HTTP 429 de 27/08 com outra
+    // roupa. O dono da pergunta "este CNPJ é cliente?" é o lookup com cache
+    // (igualdade primeiro, índice normalizado só na falha, lápide fora).
+    const achado = await acharEmpresaCadastrada(db, cnpjAlvo);
+    if (!achado) return null;
+    const doc = await db.collection(achado.colecao).doc(achado.empresaId).get();
+    if (!doc.exists) return null;
+    const d = doc.data();
+    if (d._merged_into || d._deleted) return null;
+    return { id: doc.id, col: achado.colecao, data: d };
 }
 
 /**

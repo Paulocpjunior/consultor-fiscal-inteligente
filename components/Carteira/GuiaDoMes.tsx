@@ -21,6 +21,7 @@ import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFi
 import { montarGuiaDoMes, guiaParaPdf, type LinhaGuia, type CorGuia } from '../../services/guiaDoMes';
 import { carregarObservacoes, salvarObservacao, type ObservacaoCliente } from '../../services/carteiraObservacoesService';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
+import { fmtComp } from '../../services/formatos';
 
 interface Props {
     currentUser: User;
@@ -43,7 +44,6 @@ const competenciaAtual = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
-const fmtComp = (c: string) => c.split('-').reverse().join('/');
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 
 /** Cores do farol — as MESMAS do resto do app. */

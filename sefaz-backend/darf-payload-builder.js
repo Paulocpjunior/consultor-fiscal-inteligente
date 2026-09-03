@@ -22,8 +22,9 @@
 // ============================================================================
 
 import { sugerirCodigoReceita } from './darf-codigos-receita.js';
-import { normalizarCompetencia } from './competencia.js';
+import { normalizarCompetencia, dataBrasilia } from './competencia.js';
 import { ajustarDiaUtil } from './calendario-obrigacoes.js';
+import { dinheiroDeEntrada } from './das-valor-utils.js';
 
 const DARF_ID_SISTEMA = process.env.SERPRO_DARF_SISTEMA || 'SICALC';
 const DARF_ID_SERVICO = process.env.SERPRO_DARF_SERVICO || 'CONSOLIDARGERARDARF51';
@@ -192,7 +193,7 @@ export function resolverCodigoEExtensao(req) {
  * o SICALC cobrar multa/juros indevidos (achado 09/07/2026).
  */
 export function hojeIso() {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    return dataBrasilia(new Date());
 }
 
 const iso00 = (yyyyMmDd) => `${yyyyMmDd}T00:00:00`;
@@ -232,6 +233,18 @@ export function montarPayloadDarfSerpro(req) {
         competencia, req.tributo, req.periodicidade, codigoReceita
     );
 
+    // 🚨 `Number(valor).toFixed(2)` mandava "NaN" ao SICALC quando o valor
+    // chegava em pt-BR ("1.234,56"), e deixava passar negativo. O valor passa
+    // pelo DONO da leitura de dinheiro; ilegível ou ≤ 0 é RECUSA nomeando o
+    // campo — guia de imposto não sai "quase certa".
+    const valorImposto = dinheiroDeEntrada(valor);
+    if (valorImposto === null || valorImposto <= 0) {
+        throw new Error(
+            `valor inválido (${JSON.stringify(valor)}) — informe o valor do imposto em reais, maior que zero `
+            + '(ex.: 1234,56). Nada foi enviado ao SICALC.',
+        );
+    }
+
     // Data de consolidação = data prevista de pagamento. Em dia: o próprio
     // vencimento (sem multa/juros). Vencido: hoje (ajustado a dia útil
     // seguinte) — o SICALC calcula os acréscimos legais.
@@ -250,7 +263,7 @@ export function montarPayloadDarfSerpro(req) {
         tipoPA,
         dataPA,
         vencimento: iso00(vencimento),
-        valorImposto: Number(valor).toFixed(2),
+        valorImposto: valorImposto.toFixed(2),
         dataConsolidacao: iso00(dataConsolidacao),
         // SICALC valida "tamanho deve ser entre 0 e 50" (EntradaIncorreta-
         // SICALC, caso real 08/07/2026) — trunca aqui pra proteger todo

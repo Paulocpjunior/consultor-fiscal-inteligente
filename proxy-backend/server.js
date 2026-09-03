@@ -80,6 +80,13 @@ app.use(helmet());
 // upload de 5 MB levaria 413 do global antes de chegar ao parser de 50 MB.
 const ROTA_UPLOAD = '/api/sharepoint/upload';
 const jsonPequeno = express.json({ limit: '100kb' });
+
+// O erro do Graph/MSAL nomeia tenant, app registration e caminho: sai
+// encurtado e sem GUID para quem chama (o detalhe fica no log do proxy).
+function mensagemSegura(err, padrao) {
+    const m = String((err && err.message) || padrao || 'Erro no proxy.');
+    return m.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').slice(0, 200);
+}
 app.use((req, res, next) => (req.path === ROTA_UPLOAD ? next() : jsonPequeno(req, res, next)));
 
 // CORS: aceita apenas origens conhecidas; chamadas server-to-server sem Origin passam.
@@ -92,13 +99,12 @@ const ALLOWED_ORIGINS = [
     // Sem isto o navegador bloqueava o /api/sharepoint/health e a aba SharePoint
     // mostrava "Proxy indisponivel" mesmo com o proxy no ar.
     'https://consultor-fiscal-inteligente-631239634290.us-west1.run.app',
-    'http://localhost:3000',
-    'http://localhost:5173',
+    ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://localhost:5173']),
 ].filter(Boolean);
 
 // Regex de seguranca: qualquer host run.app do app principal (numeros/revisoes
 // mudam) e do proprio firebase, para nao voltar a quebrar por CORS.
-const ALLOWED_ORIGIN_RE = /^https:\/\/consultor-fiscal-inteligente-[a-z0-9-]+\.us-west1\.run\.app$/;
+const ALLOWED_ORIGIN_RE = /^https:\/\/consultor-fiscal-inteligente-(631239634290|[a-z0-9]{10}-uw)\.(us-west1\.run\.app|a\.run\.app)$/;
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -167,7 +173,7 @@ app.post('/api/sharepoint/list-xmls', async (req, res) => {
         });
     } catch (err) {
         console.error('Erro SharePoint (list-xmls):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro ao listar XMLs.' });
+        return res.status(500).json({ error: mensagemSegura(err, 'Erro ao listar XMLs.') });
     }
 });
 
@@ -189,7 +195,7 @@ app.post('/api/sharepoint/download-xml', async (req, res) => {
         });
     } catch (err) {
         console.error('Erro SharePoint (download-xml):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro ao baixar XML.' });
+        return res.status(500).json({ error: mensagemSegura(err, 'Erro ao baixar XML.') });
     }
 });
 
@@ -214,7 +220,7 @@ app.post('/api/sharepoint/sync', async (req, res) => {
         });
     } catch (err) {
         console.error('Erro SharePoint (sync):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro ao sincronizar XMLs.' });
+        return res.status(500).json({ error: mensagemSegura(err, 'Erro ao sincronizar XMLs.') });
     }
 });
 
@@ -234,7 +240,7 @@ app.post('/api/sharepoint/explorar', async (req, res) => {
         return res.json(await listarPastas(token, String(caminho), String(sitePath)));
     } catch (err) {
         console.error('Erro SharePoint (explorar):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro ao explorar pasta.' });
+        return res.status(500).json({ error: mensagemSegura(err, 'Erro ao explorar pasta.') });
     }
 });
 
@@ -246,7 +252,7 @@ app.post('/api/sharepoint/sites', async (req, res) => {
         return res.json({ sites: await listarSites(token, String(busca)) });
     } catch (err) {
         console.error('Erro SharePoint (sites):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro ao listar sites.' });
+        return res.status(500).json({ error: mensagemSegura(err, 'Erro ao listar sites.') });
     }
 });
 
@@ -266,7 +272,7 @@ app.post(ROTA_UPLOAD, express.json({ limit: '50mb' }), async (req, res) => {
         return res.json({ ok: true, ...result });
     } catch (err) {
         console.error('Erro SharePoint (upload):', err?.message);
-        return res.status(500).json({ error: err?.message || 'Erro ao subir arquivo.' });
+        return res.status(500).json({ error: mensagemSegura(err, 'Erro ao subir arquivo.') });
     }
 });
 

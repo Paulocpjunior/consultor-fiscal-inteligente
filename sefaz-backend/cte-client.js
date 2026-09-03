@@ -137,7 +137,7 @@ function parseRetornoCte(body) {
 
 function descomprimirDocZip(base64) {
   const buf = Buffer.from(base64, 'base64');
-  return zlib.gunzipSync(buf).toString('utf-8');
+  return zlib.gunzipSync(buf, { maxOutputLength: 64 * 1024 * 1024 }).toString('utf-8');
 }
 
 /**

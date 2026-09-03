@@ -179,8 +179,10 @@ const ALLOWED_ORIGINS = [
     // resumo da Caixa Postal daqui, com o próprio token do usuário).
     'https://legalizacao-631239634290.us-west1.run.app',
     'https://legalizacao-zricstsjqa-uw.a.run.app',
-    'http://localhost:3000',
-    'http://localhost:5173',
+    // Origens locais só FORA de produção: em produção elas deixavam qualquer
+    // página servida na máquina de um desenvolvedor falar com o app com o
+    // token dele.
+    ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://localhost:5173']),
 ].filter(Boolean);
 
 function validateCorsOrigin(origin, callback) {
@@ -257,7 +259,14 @@ app.use(helmet({
 // rawBody: o webhook do WhatsApp valida a assinatura HMAC sobre os BYTES
 // como chegaram — re-serializar o JSON mudaria a ordem das chaves e a
 // assinatura nunca bateria. O buffer só vive durante a requisição.
-app.use(express.json({ limit: '20mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
+app.use(express.json({
+    limit: '20mb',
+    // Só o webhook precisa dos bytes crus; guardar o buffer de TODA requisição de
+    // até 20 MB ao lado do JSON dobrava a memória sem uso.
+    verify: (req, _res, buf) => { if (String(req.originalUrl || '').startsWith('/api/whatsapp/webhook')) req.rawBody = buf; },
+}));
+// ⚠️ ESTE parser é o ÚNICO que roda: `express.json` marca `req._body` e todo
+// parser montado depois (por rota) é pulado. Limite por rota mora AQUI.
 
 // Rate limiting. skip: requisicoes de cron autenticadas (Cloud Scheduler)
 // nunca sao limitadas — senao um pico de crons as 7-8h poderia ser barrado.

@@ -7,6 +7,7 @@
  */
 
 import type { GiaStGuia } from './giaStService';
+import { fmtComp } from './formatos';
 
 const fmtBRL = (n: number): string =>
     (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -16,10 +17,7 @@ const fmtCnpj = (c: string): string => {
     return d.length === 14 ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : c;
 };
 
-const fmtCompetencia = (c: string): string => {
-    const m = (c || '').match(/^(\d{4})-(\d{2})$/);
-    return m ? `${m[2]}/${m[1]}` : c;
-};
+const fmtCompetencia = fmtComp;
 
 export async function gerarEspelhoGiaStPdf(guia: GiaStGuia): Promise<void> {
     const { jsPDF } = await import('jspdf');

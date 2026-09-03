@@ -23,15 +23,29 @@
  * `docCancelado` decide na leitura como em todo o resto do app.
  */
 export async function gravarCancelamentoConfirmado({ db, FieldValue, docId, evento, origem, usuario }) {
-    await db.collection('documentos_fiscais').doc(docId).set({
-        status: 'cancelado',
-        eventos: FieldValue.arrayUnion({
-            ...(evento || {}),
-            origem,
-            reconferidoPor: usuario || null,
-            reconferidoEm: Date.now(),
-        }),
-    }, { merge: true });
+    const ref = db.collection('documentos_fiscais').doc(docId);
+    const novo = {
+        ...(evento || {}),
+        origem,
+        reconferidoPor: usuario || null,
+        reconferidoEm: Date.now(),
+    };
+    // 🚨 `arrayUnion` só deduplica objeto IGUAL — e o carimbo `reconferidoEm`
+    // faz cada gravação ser única. Reconferir a mesma nota duas vezes (a fila
+    // GIRA de propósito) empilhava o MESMO evento de cancelamento, e a tela
+    // que lista os eventos mostrava "2 cancelamentos" sobre um só. A identidade
+    // do evento é tpEvento + protocolo + cStat; a transação evita que dois
+    // cliques simultâneos passem os dois pelo "ainda não tem".
+    const chave = (ev) => `${ev?.tpEvento || ''}|${ev?.nProt || ''}|${ev?.cStat || ''}`;
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const eventos = Array.isArray(snap.data?.()?.eventos) ? snap.data().eventos : [];
+        const jaTem = eventos.some((ev) => chave(ev) === chave(novo));
+        const patch = { status: 'cancelado' };
+        if (!jaTem) patch.eventos = FieldValue.arrayUnion(novo);
+        tx.set(ref, patch, { merge: true });
+    });
+    return { duplicado: false };
 }
 
 /**

@@ -18,6 +18,12 @@ module.exports = {
     // OU transforma o .js via a regra de transform abaixo.
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+  // Varreduras de fonte leem centenas de arquivos; 5s (default) já derrubou
+  // suíte verde em runner lento. 30s é teto, não meta.
+  testTimeout: 30000,
+  // Metade dos núcleos: o gate do deploy roda `npx jest --ci` no runner
+  // compartilhado e a suíte inteira com todos os workers estourava memória.
+  maxWorkers: '50%',
   setupFilesAfterEnv: ['<rootDir>/__tests__/setupTests.ts'],
   testPathIgnorePatterns: ['<rootDir>/__tests__/setupTests.ts'],
   transform: {

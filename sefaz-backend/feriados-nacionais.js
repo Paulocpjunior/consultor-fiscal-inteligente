@@ -3,6 +3,19 @@
  * para uso no calendario-obrigacoes do sefaz-backend.
  *
  * Mantenha em sincronia com o TS — feriados fixos e algoritmo de Pascoa.
+ *
+ * ⚠️ ESCOPO: só feriados NACIONAIS (fixos + móveis pela Páscoa). Feriados
+ * ESTADUAIS (9 de julho em SP, 20 de novembro onde ainda é estadual…) e
+ * MUNICIPAIS (aniversário da cidade, padroeiro) NÃO estão cobertos — quem
+ * paga guia estadual/municipal num dia desses precisa conferir o calendário
+ * do ente. Cobri-los é decisão do dono, não dedução: é uma tabela por
+ * município, com vigência, e a régua da casa é "prazo não se inventa".
+ *
+ * 🏦 CARNAVAL: a segunda-feira entrou em 03/09. Ela não é feriado nacional
+ * por lei, mas os BANCOS não abrem (Res. CMN/Febraban) — e guia não se paga
+ * com o banco fechado, então para efeito de "dia útil de PAGAMENTO" ela vale
+ * tanto quanto a terça. Antecipar um vencimento para a segunda de Carnaval
+ * era mandar pagar num dia sem compensação.
  */
 
 const FERIADOS_FIXOS_MMDD = [
@@ -48,9 +61,10 @@ export function feriadosDoAno(ano) {
     const pascoa = domingoDePascoa(ano);
     const set = new Set([
         ...FERIADOS_FIXOS_MMDD,
-        toMMDD(addDias(pascoa, -2)),
-        toMMDD(addDias(pascoa, -47)),
-        toMMDD(addDias(pascoa, 60)),
+        toMMDD(addDias(pascoa, -2)),   // Sexta-feira Santa
+        toMMDD(addDias(pascoa, -48)),  // Carnaval — segunda-feira (bancos fechados)
+        toMMDD(addDias(pascoa, -47)),  // Carnaval — terça-feira
+        toMMDD(addDias(pascoa, 60)),   // Corpus Christi
     ]);
     cacheFeriadosPorAno.set(ano, set);
     return set;

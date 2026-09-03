@@ -31,6 +31,7 @@ import {
 } from '../../services/giaStExportService';
 import { downloadBlob } from '../../services/iobSageExportService';
 import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
+import { fmtComp } from '../../services/formatos';
 
 interface Props {
     currentUser: User;
@@ -66,10 +67,6 @@ const fmtCnpj = (c: string): string => {
     return d.length === 14 ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : c;
 };
 
-const fmtComp = (c: string): string => {
-    const m = (c || '').match(/^(\d{4})-(\d{2})$/);
-    return m ? `${m[2]}/${m[1]}` : c;
-};
 
 /** Vencimento padrão: dia 10 do mês subsequente (Ajuste SINIEF 04/93, cl. 10 §4). */
 function vencimentoPadrao(competencia: string): string {

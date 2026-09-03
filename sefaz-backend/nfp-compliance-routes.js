@@ -19,8 +19,6 @@ import {
 import { consultarCndsPublicas } from './cnd-publica-provider.js';
 
 const router = express.Router();
-router.use(express.json());
-
 // ─── Validação + filtro de carteira ────────────────────────────────────────
 // Toda rota nfp-compliance consome quota SERPRO (paga). Antes, qualquer
 // colaborador podia passar CNPJ arbitrario (incluindo nao-clientes) e queimar

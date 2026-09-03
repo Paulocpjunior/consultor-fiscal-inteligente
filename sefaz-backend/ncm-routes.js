@@ -87,7 +87,7 @@ router.get('/:ncm', requireAuth, async (req, res) => {
     }
 });
 
-router.put('/', requireAuth, express.json(), async (req, res) => {
+router.put('/', requireAuth, async (req, res) => {
     if (!soAdmin(req, res)) return;
     try {
         const v = validarParametroNcm(req.body || {});
@@ -135,7 +135,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
  * Importação em lote. Cada linha passa pela MESMA validação da tela — lote
  * não é atalho para entrar com dado que a tela recusaria.
  */
-router.post('/importar', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+router.post('/importar', requireAuth, async (req, res) => {
     if (!soAdmin(req, res)) return;
     try {
         const linhas = Array.isArray(req.body?.linhas) ? req.body.linhas : [];

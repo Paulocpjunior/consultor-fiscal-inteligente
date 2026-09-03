@@ -35,10 +35,31 @@ const CODIGO_ORGAO_RFB = '1825';
  * @returns {string} 44 dígitos
  */
 export function gerarBarrasDarf({ cnpj, periodo, valor, codigoReceita }) {
-    const cnpjLimpo = String(cnpj || '').replace(/\D/g, '').padStart(14, '0').slice(-14);
-    const periodoLimpo = String(periodo || '').replace(/\D/g, '').padStart(6, '0').slice(0, 6);
-    const codigo = String(codigoReceita || '').replace(/\D/g, '').padStart(4, '0').slice(0, 4);
-    const valorCentavos = Math.round((valor || 0) * 100).toString().padStart(11, '0').slice(-11);
+    // 🚨 NADA AQUI ERA CONFERIDO (03/09): valor em TEXTO virava `NaN` DENTRO
+    // da barra (`Math.round('1.234,56' * 100)`), `07/2026` virava `072026`
+    // (ano 0720) e CNPJ curto era completado com zeros — um código de barras
+    // apontando para contribuinte nenhum. Barra é o que o banco lê: campo
+    // torto é RECUSA nomeada, nunca zero-pad.
+    const cnpjLimpo = String(cnpj || '').replace(/\D/g, '');
+    if (cnpjLimpo.length !== 14) {
+        throw new Error(`CNPJ inválido para o código de barras ("${String(cnpj ?? '')}") — são 14 dígitos.`);
+    }
+    const periodoLimpo = String(periodo ?? '').trim();
+    if (!/^\d{6}$/.test(periodoLimpo) || !(+periodoLimpo.slice(4) >= 1 && +periodoLimpo.slice(4) <= 12)) {
+        throw new Error(`Período de apuração inválido para o código de barras ("${String(periodo ?? '')}") — `
+            + 'esperado AAAAMM (ex.: 202607). Quem normaliza a competência é o dono (competencia.js), antes daqui.');
+    }
+    const codigo = String(codigoReceita || '').replace(/\D/g, '');
+    if (codigo.length !== 4) {
+        throw new Error(`Código de receita inválido para o código de barras ("${String(codigoReceita ?? '')}") — são 4 dígitos.`);
+    }
+    if (typeof valor !== 'number' || !Number.isFinite(valor) || valor <= 0) {
+        throw new Error(`Valor inválido para o código de barras (${JSON.stringify(valor)}) — informe um número > 0 (em reais).`);
+    }
+    const valorCentavos = Math.round(valor * 100).toString().padStart(11, '0');
+    if (valorCentavos.length !== 11) {
+        throw new Error(`Valor ${valor} não cabe nos 11 dígitos do campo de valor do código de barras.`);
+    }
 
     // Monta sem o DV geral (posição 4): 43 chars
     const semDv =
@@ -52,8 +73,8 @@ export function gerarBarrasDarf({ cnpj, periodo, valor, codigoReceita }) {
         codigo +
         '0';
 
-    if (semDv.length !== 43) {
-        throw new Error(`Layout invalido: ${semDv.length} dig (esperado 43)`);
+    if (semDv.length !== 43 || !/^\d{43}$/.test(semDv)) {
+        throw new Error(`Layout invalido: "${semDv}" (esperado 43 dígitos numéricos antes do DV)`);
     }
     // DV geral por MÓDULO 10 — o 3º dígito é 6 (valor efetivo com DV módulo 10);
     // usar módulo 11 aqui gerava barra que o banco rejeita (achado 09/07/2026).

@@ -153,7 +153,7 @@ router.get('/state/:cnpj', requireAgentKey, async (req, res) => {
 //   empresaId, empresaCnpj, capturadoPor: { fonte, hostname },
 //   ultNSU, maxNSU, docs: [{ nsu, schema, xmlGzipBase64 }]
 // }
-router.post('/upload-batch', requireAgentKey, express.json({ limit: '20mb' }), async (req, res) => {
+router.post('/upload-batch', requireAgentKey, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, ultNSU, maxNSU, docs } = req.body || {};
         if (!empresaId || !empresaCnpj) return res.status(400).json({ error: 'empresaId e empresaCnpj obrigatórios' });
@@ -187,7 +187,7 @@ router.post('/upload-batch', requireAgentKey, express.json({ limit: '20mb' }), a
                 // SEFAZ entrega docZip = gzip(xml) em base64. Descomprime aqui.
                 try {
                     const gzBuf = Buffer.from(d.xmlGzipBase64 || '', 'base64');
-                    xml = zlib.gunzipSync(gzBuf).toString('utf-8');
+                    xml = zlib.gunzipSync(gzBuf, { maxOutputLength: 64 * 1024 * 1024 }).toString('utf-8');
                 } catch (e) {
                     throw new Error(`falha descomprimindo docZip nsu=${d.nsu}: ${e.message}`);
                 }

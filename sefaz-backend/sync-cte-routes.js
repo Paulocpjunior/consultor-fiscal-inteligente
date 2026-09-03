@@ -19,7 +19,7 @@ import { podeAcessarCnpj } from './carteira-auth.js';
 
 const router = express.Router();
 
-router.post('/sync-cte-one', requireAuth, express.json(), async (req, res) => {
+router.post('/sync-cte-one', requireAuth, async (req, res) => {
   try {
     const { empresaId, empresaCnpj } = req.body || {};
     if (!empresaId || !empresaCnpj) {

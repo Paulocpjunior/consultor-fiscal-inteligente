@@ -144,8 +144,19 @@ describe('prazo — a direção do ajuste é CAMPO da obrigação, não default 
         expect(v.getDate()).toBe(30);
     });
 
-    it('mesesApos atravessa o ano', () => {
+    it('o SPED vence no mês SUBSEQUENTE (CAT 147/2009 art. 10) — nunca dois meses depois', () => {
+        // Até 03/09 o catálogo dizia `mesesApos: 2` e o calendario legado dizia
+        // 1 — duas datas para a mesma obrigação, e a que virava tarefa era a
+        // atrasada. 07/2026 ⇒ 25/08/2026 (terça, sem ajuste).
         const sped = CATALOGO.LUCRO_REAL.find((r: any) => r.obrigacao === 'SPED')!;
+        expect(sped.mesesApos).toBe(1);
+        const v = calcularVencimento('07/2026', sped);
+        expect(v.getMonth()).toBe(7);
+        expect(v.getDate()).toBe(25);
+    });
+
+    it('mesesApos atravessa o ano', () => {
+        const sped = CATALOGO.LUCRO_REAL.find((r: any) => r.obrigacao === 'EFD_CONTRIB')!;
         const v = calcularVencimento('11/2026', sped); // +2 meses = janeiro/2027
         expect(v.getFullYear()).toBe(2027);
         expect(v.getMonth()).toBe(0);

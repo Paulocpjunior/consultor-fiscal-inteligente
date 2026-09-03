@@ -6,7 +6,8 @@ import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
-import { recorteDaNfsePdf, idDaNfsePdf } from '../../services/nfsePdfRecorte';
+import { recorteDaNfsePdf, idDaNfsePdf, impedimentoDeValorDaNfsePdf } from '../../services/nfsePdfRecorte';
+import { parseValorMoeda } from '../../services/valorDigitado';
 // "Este PDF é MESMO da empresa escolhida?" — reconferido no SALVAR, porque os
 // campos de prestador/tomador desta tela são editáveis depois do drop.
 import { conferirPosseDaNfsePdf } from '../../services/nfsePdfPosse';
@@ -110,8 +111,9 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     };
 
     const updateNumber = (key: keyof NfsePdfParsed, raw: string) => {
-        const n = parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0;
-        updateField(key, n);
+        // Pelo dono: "1234.56" não vira 123456, e o ilegível fica NULO (campo
+        // vazio na tela), nunca zero com cara de valor.
+        updateField(key, parseValorMoeda(raw));
     };
 
     const handleSalvar = async () => {
@@ -134,6 +136,10 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             // no banco e fora de todo recorte de mês (caso 0257, 01/09).
             const recorte = recorteDaNfsePdf(parsed);
             if (recorte.impedimento) { setError(recorte.impedimento); setSaving(false); return; }
+            // 🚨 VALOR NÃO LIDO NÃO VIRA ZERO — a recusa nomeia o campo.
+            const impedimentoValor = impedimentoDeValorDaNfsePdf(parsed);
+            if (impedimentoValor) { setError(impedimentoValor); setSaving(false); return; }
+            const valorServicosLido = parsed.valorServicos as number;
 
             // 🚨 A CONFERÊNCIA DE POSSE SE REFAZ NO SALVAR (03/09, Paulo:
             // *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o
@@ -187,10 +193,11 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             };
             const totaisCompat = {
                 vBC: 0, vICMS: 0, vICMSDeson: 0, vFCP: 0, vBCST: 0, vST: 0,
-                vFCPST: 0, vProd: parsed.valorServicos || 0, vFrete: 0, vSeg: 0,
+                vFCPST: 0, vProd: valorServicosLido, vFrete: 0, vSeg: 0,
                 vDesc: (parsed.valorDescIncondicional || 0) + (parsed.valorDescCondicional || 0),
                 vII: 0, vIPI: 0, vIPIDevol: 0, vPIS: parsed.valorPis || 0,
-                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorLiquido || 0,
+                // Sem líquido legível o total é o BRUTO lido — nunca 0,00.
+                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorLiquido ?? valorServicosLido,
             };
 
             const payload = {
@@ -410,6 +417,11 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Valores (R$)</p>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {!!parsed.lacunas?.length && (
+                                <div className="col-span-full text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded p-2">
+                                    ⚠️ O PDF não trouxe legível: <strong>{parsed.lacunas.join(', ')}</strong>. Campo em branco é AUSÊNCIA, não zero — digite conferindo no papel; sem o valor do serviço a importação é recusada.
+                                </div>
+                            )}
                             <NumField label="Valor servicos" value={parsed.valorServicos} onChange={v => updateNumber('valorServicos', v)} />
                             <NumField label="Base de calculo" value={parsed.baseCalculo} onChange={v => updateNumber('baseCalculo', v)} />
                             <NumField label="Aliquota ISS (%)" value={parsed.aliquotaIss} onChange={v => updateNumber('aliquotaIss', v)} />
@@ -433,7 +445,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                         <div className="flex gap-2">
                             <button onClick={handleCancel} disabled={saving} className="text-xs px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
                             <button onClick={handleSalvar} disabled={saving} className="text-xs px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50">
-                                {saving ? 'Salvando...' : `Confirmar e salvar (${fmtBRL(parsed.valorLiquido)})`}
+                                {saving ? 'Salvando...' : `Confirmar e salvar (${parsed.valorLiquido === null ? 'líquido não lido' : fmtBRL(parsed.valorLiquido)})`}
                             </button>
                         </div>
                     </div>
@@ -451,11 +463,11 @@ const Field: React.FC<FieldProps> = ({ label, value, onChange, fullCol }) => (
     </div>
 );
 
-interface NumFieldProps { label: string; value: number; onChange: (v: string) => void; highlight?: boolean; }
+interface NumFieldProps { label: string; value: number | null; onChange: (v: string) => void; highlight?: boolean; }
 const NumField: React.FC<NumFieldProps> = ({ label, value, onChange, highlight }) => (
     <div>
         <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</label>
-        <input type="text" value={value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={e => onChange(e.target.value)} className={`w-full text-xs text-right border rounded-md px-2 py-1 ${highlight ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 font-bold' : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`} />
+        <input type="text" value={value === null ? '' : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} placeholder="não lido" title={value === null ? 'O PDF não trouxe este valor legível — digite conferindo no papel' : undefined} onChange={e => onChange(e.target.value)} className={`w-full text-xs text-right border rounded-md px-2 py-1 ${value === null ? 'ring-2 ring-amber-400 ' : ''}${highlight ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 font-bold' : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`} />
     </div>
 );
 

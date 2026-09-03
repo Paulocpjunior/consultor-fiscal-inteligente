@@ -13,10 +13,10 @@ import {
     provarCaptura, provarCapturaDaCarteira,
     type ProvaCaptura, type LinhaProva, type ProvaCarteira,
 } from '../../services/provaCapturaService';
+import { fmtComp } from '../../services/formatos';
 
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 const fmtData = (ms?: number | null) => (ms ? new Date(ms).toLocaleString('pt-BR') : '—');
-const fmtComp = (c: string) => c.split('-').reverse().join('/');
 
 const FAROL_BOX: Record<string, string> = {
     ok: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300',

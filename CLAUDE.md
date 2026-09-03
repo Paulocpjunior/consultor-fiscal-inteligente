@@ -297,6 +297,121 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `filtrarNotasBlocoA(notas).some(...)` no orquestrador — e essa forma **virou o
   defeito**, porque declarava o item sintético de uma nota que o bloco A já não
   emite. Travar a forma antiga impede a correção que a régua manda fazer.
+- **🔁 SEGUNDA PASSADA DA AUDITORIA DE 03/09 — a primeira rodada CRIOU três
+  regressões, e só a segunda varredura as viu** (Paulo: *"Roda novamente a
+  auditoria completa"*). Quatro varreduras de novo, ~140 achados, triados no
+  código; os quatro agentes de correção rodaram em paralelo com fronteira de
+  arquivos, e um deles morreu no limite de sessão — o que ficou foi fechado
+  à mão no mesmo PR. Gate verde (lint · jest · build · audit).
+  🚨 **AS TRÊS REGRESSÕES, e a classe delas é uma só**: ao trocar o `engolir`
+  pela `guardaLocalOuIrmao`, eu pus a guarda ERRADA como local em dois routers
+  — `requireAdmin` onde a rota original era `requireAuth` — e o **atendente do
+  Connect deixou de iniciar conversa** e o **colaborador deixou de abrir o
+  R-2010/retenções PJ**; e o `/nbs` ganhou `requireAuth` **sem o frontend
+  mandar o header** (a lista de NBS voltava 401). Corrigir uma classe de
+  segurança sem reler QUEM usava a rota é trocar um furo por um bloqueio; a
+  trava agora é sobre o COMPORTAMENTO de cada uma (`auditoria0309SegundaPassada`).
+  📌 **REGRA QUE FICA: correção de guarda se prova pelos DOIS lados — quem não
+  podia entrar continua fora, e quem podia continua dentro.** Teste que só
+  prova a recusa passa verde sobre a tela quebrada.
+  🧾 **NO NÚCLEO FISCAL, o que mudava número**: (1) o **SPED vencia UM MÊS
+  atrasado** — o catálogo (quem cria a tarefa) dizia `mesesApos: 2` e o
+  `calendario-obrigacoes.js` (legado, só a rota `/api/admin/calendario`) dizia
+  1; a CAT 147/2009 art. 10 é "dia 25 do mês subsequente". Duas datas para a
+  mesma obrigação, e a errada era a que a Rotina lia; a fixture que travava
+  "25/06 (2 meses após)" descrevia o defeito e foi trocada. (2) `'10.500'`
+  digitado no DAS era 10,5 (`dinheiroDeEntrada` em `das-valor-utils.js`,
+  espelho do `parseValorMoeda`: ponto + 3 dígitos é MILHAR). (3) o **id do
+  DAS/DARF/DCTFWeb** levava o CNPJ como veio — com máscara dava OUTRO id, e a
+  idempotência que impede a segunda guia não via a primeira (`cnpjParaId` via
+  `limparCnpj`). (4) o DPS da NFS-e Nacional numerava pelo RELÓGIO e
+  carimbava `dhEmi` em UTC (Cloud Run) — `proximoSequencialDps` lê o último
+  emitido; `dataBrasilia()`/`dataHoraBrasilia()` em `competencia.js` viraram o
+  dono da "data de hoje" (o `hoje` do DCTFWeb e do DARF também). (5) alíquota
+  de ISS **não recebe 5% de default** — builder e provider recusam ausência;
+  zero é resposta. (6) `febraban-barcode` aceitava valor zero e CNPJ curto e
+  montava código de barras com NaN dentro. (7) `multa-calculator`: "dias
+  úteis" era dias corridos (só o nome mentia), o piso de R$ 200 da DCTFWeb
+  não é mora, e os juros SELIC passaram a contar mês calendário. (8) a
+  **segunda-feira de Carnaval** faltava no calendário — antecipar vencimento
+  para dia sem banco; entrou no backend E na tela. (9) `formasDaCompetencia`
+  não enumerava `AAAA-MM-01` (a forma da ficha). (10) o parser ABRASF casava
+  tag por nome QUALIFICADO — prefixo de namespace fazia a nota inteira sumir
+  calada; agora `LOTE_NAO_LIDO` é dito, e retenção ausente é `null`.
+  🔒 **NO BACKEND, o que faltou da primeira rodada**: 7º `/status` sem guarda
+  (NFS-e Nacional); `/status` do bridge dizia a anônimo se o token existe
+  (virou duas camadas: sem token só `ok`); `dp-integration` aceitava QUALQUER
+  app irmão (agora DP e Contábil); **75 `express.json({limit})` por rota eram
+  código MORTO** — o parser global do `server.js` já tinha lido o corpo
+  (`req._body`), então nenhum limite por rota valia; o `rawBody` do webhook
+  só é guardado na rota do webhook; **bomba de zip/gzip** (`maxOutputLength`
+  em `inflateRawSync` e nos quatro `gunzipSync`); webhook do WhatsApp
+  regravava o evento no REPLAY e gravava diagnóstico a cada tentativa (agora
+  curto-circuito + janela de 60 s); o log do sync imprimia 4 bytes do SEGREDO
+  (virou sha256 curto); CORS aceitava `localhost` em produção nos dois
+  serviços e o regex do Cloud Run casava qualquer sufixo; o proxy devolvia a
+  mensagem crua do Graph com GUID de tenant; cache NEGATIVO do lookup de
+  empresa durava 5 min (cliente cadastrado agora só era achado depois — virou
+  1 min); `envio-imposto.resolverEmpresa` varria as DUAS coleções (~400 docs)
+  por envio; **fechar competência** gravava sem reler (dois cliques ou um
+  reabrir no meio gravavam por cima — agora `runTransaction` com versão e
+  estado, 409 se mudou); `arrayUnion` do cancelamento não deduplicava porque
+  `reconferidoEm: Date.now()` fazia cada evento único (identidade =
+  tpEvento+nProt+cStat); a cobertura declarada apagava quem declarou antes
+  (histórico de 10 no doc); o `cStat` do protocolo tinha TRÊS tabelas
+  (`statusDoCstatProtocolo` é o dono; **150** é autorizado fora de prazo);
+  `sanitizeString` deixava passar aspas tipográficas, travessão e CJK e o
+  `buildLine` não tirava `|`/CR/LF de dentro do campo (linha virava duas —
+  contagem do 9999 quebrada); o CFOP/CST "de cabeçalho" era lido em TODA NF-e
+  (achava o do 1º item) — só no CT-e, e nos blocos `<ide>`/`<imp><ICMS>`; o
+  **CT-e tomado pelo remetente** ficava sem dono no backend (`extrairTomadorCte`:
+  toma4, ou o bloco apontado pelo toma3 — o frontend já sabia desde 19/08);
+  **CNPJ ALFANUMÉRICO** (IN RFB 2.229/2024, desde 07/2026) apagado pelo `\D`
+  virava "curto" — `limparCnpj` (que preserva letras) é o dono nos quatro
+  leitores de cadastro (empresa-por-cnpj, cadastro-lookup, cadastro-central,
+  reinf-servicos-tomados).
+  🖥️ **NO FRONTEND** (o agente morreu no limite de sessão com 16 de 18 itens
+  feitos; os dois restantes entraram à mão): `sanitizeForFirestore` recusa
+  NaN/Infinity NOMEANDO o campo (a cópia `JSON.parse(JSON.stringify)` do
+  Simples virava NaN em `null` calado); `services/formatos.ts` é o dono de
+  `fmtBRL`/`fmtComp` — ausência imprime `—`, nunca `R$ 0,00` (⚠️ dez cópias
+  locais com `(Number(v)||0)` FICARAM, nomeadas: migrá-las muda "R$ 0,00" em
+  "—" em dez telas e isso se decide olhando cada uma); `lerTextoLatin1OuUtf8`
+  para os três leitores de SPED da tela (arquivo latin1 chegava com `�`);
+  `sessaoLocal.ts` — o logout apaga cache de cliente/usuário e mantém
+  preferência de UI; `useCategoriasCredito` com rollback FUNCIONAL (dois
+  toggles em voo apagavam um ao outro) — e a primeira versão pôs `onErro` nas
+  deps do efeito e criou um LAÇO INFINITO de leitura (a arrow do chamador muda
+  a cada render), pego pelo teste que travou 30 s: callback de fora entra por
+  `useRef`; Vencimentos ganhou a aba **📤 Envios (rito)** (a rota existia,
+  a tela não); o SAGE lê o CST pelo dono do backend (`cstDoLancamento`);
+  `spConnectService.req()` e ~20 handlers do SpConnect com try/catch e toast
+  honesto.
+  📚 **DOCS/RULES/INFRA**: `public/pendencias-18-08.html` (nomes de clientes
+  numa página pública) DELETADA; guias anonimizados (par HTML+MD, revisão de 4 de
+  setembro); `*_ACTIVATION.md` e README reescritos (o README descrevia um proxy
+  Gemini que não existe); `firestore.rules` fechou a LEITURA de 8 coleções que
+  só o backend lê (`das_emitidos`, `fechamentos_competencia`,
+  `produtores_rurais`…), cada uma provada sem leitor no SDK do navegador, e
+  o bloco morto `darf_emitidos` saiu (a coleção real é `darfs_emitidos`);
+  `rulesCobremCatalogo` (toda `match` tem dono no catálogo) e
+  `guiaLabelExisteNaTela` (todo "Onde:" do guia aponta um rótulo que existe);
+  `App.reforma` deixou de ser `test.todo`; sete varreduras ganharam guarda de
+  contagem (glob quebrado passava verde lendo zero arquivos); `.dockerignore`
+  tira testes/docs da imagem; `lint:strict` no deploy como passo NÃO
+  bloqueante com resumo.
+  🚩 **O QUE FICOU NOMEADO E NÃO ENTROU**: os `\D` nos outros ~40 leitores de
+  CNPJ (o dado ainda não tem letra na carteira — o dia em que tiver, o teste
+  `CNPJ alfanumérico` aponta o desenho); `envio-imposto` `.add()` sem chave de
+  idempotência (retry × reenvio legítimo só se distinguem com chave do
+  cliente); `nfse-nacional-orchestrator` `max+1` não é atômico (duas emissões
+  simultâneas — o ADN recusa a segunda, não sai nota errada); as dez cópias
+  de `fmtBRL`; feriados estaduais/municipais fora do calendário;
+  `B33` listagens sem limite no diagnóstico.
+  📌 **REGRA QUE FICA: auditoria em duas passadas — a segunda lê as correções
+  da primeira como código NOVO.** Foi ela que achou as três regressões, o
+  parser morto por rota e o laço do `useRef`; nenhuma apareceria numa rodada
+  só, porque na primeira elas ainda não existiam.
 - **🔍 AUDITORIA COMPLETA DE 03/09 — quatro varreduras, ~90 achados, e o que
   elas ensinaram sobre o RITO** (Paulo: *"rode uma auditoria completa no
   consultor fiscal, encontre erros, gaps, melhorias, relacione e corrija"*).

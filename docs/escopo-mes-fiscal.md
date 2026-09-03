@@ -277,10 +277,18 @@ memória.
    e confirmar (a) a direção do ajuste do FGTS/INSS/PIS-COFINS — o cron
    antecipava e a tela prorrogava, ficou PRORROGA que é o que a equipe vê;
    (b) a condição de folha do INSS patronal.
-2. **Carimbo de mês fechado / cliente migrado** (T4) — hoje não existe estado.
+2. ~~**Carimbo de mês fechado / cliente migrado** (T4)~~ **FEITO 26/08** — o
+   "DAR FIM DE MÊS" existe: coleção `fechamentos_competencia` (1 doc por
+   empresa × competência, escrita SÓ pelo backend), núcleo
+   `sefaz-backend/fim-de-mes.js`, bloco `components/FimDeMesBloco.tsx` na
+   Rotina do Mês. Fecha o colaborador, reabre só admin com motivo; o carimbo
+   congela acervo, valores e lastro, e o CCI importa dele pelo túnel.
 3. **Fila de conferência no PVA** — E510 (+backfill jun/jul), H005, E250, G125
    estão 🟡 esperando prova humana e vivem em comentário de arquivo.
-4. **Bloco K** — ninguém leu ainda o número da 🚦.
+4. ~~**Bloco K**~~ **FEITO 29/08** (`sped-bloco-k.js` + aba 🏭 Bloco K no card
+   SPED): espinha K001/K010/K100/K200/K220/K230/K235/K990 com prevalidação no
+   mesmo PR; sem apontamento o bloco sai SEM DADOS e o gerador avisa. Vale
+   para 3 empresas da carteira (contagem da 🚦), na onda final.
 5. **Isenção/imunidade no PGDAS-D** — espera o extrato bruto.
 6. **DIFAL: IVA-ST por NCM** — hoje digitado competência a competência quando o
    cadastro NCM não cobre.

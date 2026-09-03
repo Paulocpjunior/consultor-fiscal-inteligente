@@ -82,7 +82,9 @@ class MockProvider {
         // Validacao fiscal — LC 116/2003 art. 8º II: aliquota maxima ISS = 5%.
         // EC 37/2002 art. 88: aliquota minima ISS = 2% (exceto servicos com
         // beneficio formal do municipio listados no art. 88 §1º).
-        const aliq = servico.aliquotaIss ?? 5;
+        // 03/09: alíquota NÃO recebe default — 5% inventado é declaração no DPS.
+        if (servico.aliquotaIss == null || !Number.isFinite(Number(servico.aliquotaIss))) throw new Error('servico.aliquotaIss obrigatoria (0 é resposta; ausente não é).');
+        const aliq = Number(servico.aliquotaIss);
         if (aliq > 5) {
             throw new Error(`Aliquota ISS ${aliq}% excede maximo legal de 5% (LC 116/2003 art. 8º II).`);
         }
@@ -177,7 +179,8 @@ class EmissorNacionalProvider {
         if (!servico?.descricao) throw new Error('servico.descricao obrigatoria');
 
         // Validacao fiscal duplicada do MockProvider (mesmas regras valem).
-        const aliq = servico.aliquotaIss ?? 5;
+        if (servico.aliquotaIss == null || !Number.isFinite(Number(servico.aliquotaIss))) throw new Error('servico.aliquotaIss obrigatoria (0 é resposta; ausente não é).');
+        const aliq = Number(servico.aliquotaIss);
         if (aliq > 5) throw new Error(`Aliquota ISS ${aliq}% excede maximo legal de 5% (LC 116/2003 art. 8º II).`);
         if (aliq < 0) throw new Error('Aliquota ISS nao pode ser negativa.');
 

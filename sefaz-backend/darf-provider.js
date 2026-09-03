@@ -17,6 +17,7 @@ import { calcularMultaDarf } from './multa-calculator.js';
 import {
     montarPayloadDarfSerpro, resolverCodigoReceita, calcularVencimentoDarf,
 } from './darf-payload-builder.js';
+import { normalizarCompetencia } from './competencia.js';
 
 // Re-exporta pra darf-routes (preview) continuar importando daqui.
 export { montarPayloadDarfSerpro };
@@ -69,7 +70,15 @@ class MockProvider {
         if (valor < 10) throw new Error('Valor minimo DARF: R$ 10,00');
 
         const codigoReceita = resolverCodigoReceita(req);
-        const periodoAAAAMM = String(competencia).replace(/\D/g, '').slice(0, 6);
+        // 🚨 `replace(/\D/g,'').slice(0,6)` sobre `07/2026` dava `072026` —
+        // ano 0720, mês 26 — no código de barras e no número do documento.
+        // O período sai do DONO das quatro formas; ilegível é RECUSA.
+        const compNorm = normalizarCompetencia(competencia);
+        if (!compNorm) {
+            throw new Error(`competencia inválida: "${competencia}" — use AAAA-MM (ex.: 2026-07). `
+                + 'Ela vira o período de apuração (AAAAMM) do código de barras.');
+        }
+        const periodoAAAAMM = compNorm.replace('-', '');
         const vencimento = req.vencimento
             || calcularVencimentoDarf(competencia, req.tributo, req.periodicidade);
 

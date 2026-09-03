@@ -62,7 +62,7 @@ function decompressIfNeeded(content, isGzipBase64) {
     if (!isGzipBase64) return content;
     try {
         const buf = Buffer.from(content, 'base64');
-        return zlib.gunzipSync(buf).toString('utf-8');
+        return zlib.gunzipSync(buf, { maxOutputLength: 64 * 1024 * 1024 }).toString('utf-8');
     } catch (e) {
         throw new Error(`falha descomprimindo gzip+base64: ${e.message}`);
     }

@@ -15,6 +15,7 @@ import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { auth } from '../../services/firebaseConfig';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { parseSped, cruzarComCapturadas, type CruzamentoCapturados, type NfeCapturada } from '../../services/spedFiscalExcelEditor';
+import { lerTextoLatin1OuUtf8 } from '../../services/lerArquivoTexto';
 
 interface Props { currentUser: User | null; }
 
@@ -83,7 +84,7 @@ const CruzarComCapturadas: React.FC<Props> = ({ currentUser }) => {
             const cap = await respCap.json();
             setCapturadasInfo({ total: cap.total, descartadas: cap.descartadas });
 
-            const txt = await arqSped.text();
+            const txt = await lerTextoLatin1OuUtf8(arqSped);
             const parsed = await parseSped(txt);
             const r = await cruzarComCapturadas(parsed, cap.nfes as NfeCapturada[]);
             setData(r);

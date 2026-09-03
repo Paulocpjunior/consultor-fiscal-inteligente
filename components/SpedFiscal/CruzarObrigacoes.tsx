@@ -9,6 +9,7 @@
  */
 import React, { useState } from 'react';
 import { parseSped, cruzarObrigacoes, type CruzamentoObrigacoes } from '../../services/spedFiscalExcelEditor';
+import { lerTextoLatin1OuUtf8 } from '../../services/lerArquivoTexto';
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -35,7 +36,7 @@ const CruzarObrigacoes: React.FC = () => {
         if (!arqFiscal || !arqContrib) { setErro('Selecione os DOIS arquivos: SPED Fiscal e SPED Contribuições.'); return; }
         setLoading(true); setErro(null); setData(null);
         try {
-            const [txtA, txtB] = await Promise.all([arqFiscal.text(), arqContrib.text()]);
+            const [txtA, txtB] = await Promise.all([lerTextoLatin1OuUtf8(arqFiscal), lerTextoLatin1OuUtf8(arqContrib)]);
             const [pa, pb] = await Promise.all([parseSped(txtA), parseSped(txtB)]);
             const r = await cruzarObrigacoes(pa, pb);
             setData(r);

@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import type { User, SimplesNacionalEmpresa, NbsCodigo } from '../../types';
 import { emitirNfse, getNbsCodigos, formatBRL } from '../../services/nfseNacionalService';
 import { useConfirm } from '../dialog/DialogProvider';
-import { parseValorMoeda } from '../../services/valorDigitado';
+import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitado';
 
 interface Props {
     empresa: SimplesNacionalEmpresa;
@@ -18,6 +18,9 @@ interface Props {
 const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToast }) => {
     const confirm = useConfirm();
     const [nbsCodigos, setNbsCodigos] = useState<NbsCodigo[]>([]);
+    // Lista que não carregou é DITA: dropdown vazio calado fazia parecer que
+    // não havia serviço a escolher, quando a chamada é que tinha falhado.
+    const [nbsErro, setNbsErro] = useState<string | null>(null);
     const [emitindo, setEmitindo] = useState(false);
 
     // Form
@@ -33,8 +36,12 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const [cClassTrib, setCClassTrib] = useState('00000000');
 
     useEffect(() => {
-        getNbsCodigos().then(setNbsCodigos).catch(() => {});
-    }, []);
+        let ativo = true;
+        getNbsCodigos(currentUser)
+            .then(lista => { if (ativo) { setNbsCodigos(lista); setNbsErro(null); } })
+            .catch((e: any) => { if (ativo) setNbsErro(e?.message || 'falha desconhecida'); });
+        return () => { ativo = false; };
+    }, [currentUser]);
 
     useEffect(() => {
         // Quando troca o NBS, sugere cIndOp + cClassTrib
@@ -53,6 +60,22 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const aliquotaLida = parseValorMoeda(aliquotaIss);
     const valorNum = valorLido ?? 0;
     const aliquotaNum = aliquotaLida ?? 0;
+    // O que o app ENTENDEU do que foi digitado, ao lado do campo — com texto
+    // ilegível o resumo mostrava "ISS 0,00 · líquido 0,00" como se fosse
+    // conta feita sobre um valor real. Ilegível é dito, nunca calculado.
+    const ecoValor = ecoDoValorDigitado(valor);
+    const ecoAliquota = ecoDoValorDigitado(aliquotaIss);
+    const valorIlegivel = !!valor.trim() && valorLido === null;
+    const aliquotaIlegivel = !!aliquotaIss.trim() && aliquotaLida === null;
+    const motivoBloqueio = emitindo ? 'Emitindo…'
+        : valorIlegivel ? `Não entendi o valor do serviço "${valor}" — use 1234,56. A emissão será recusada.`
+        : aliquotaIlegivel ? `Não entendi a alíquota do ISS "${aliquotaIss}" — use 5 ou 2,5. A emissão será recusada.`
+        : !valor.trim() ? 'Falta o valor do serviço.'
+        : valorLido !== null && valorLido <= 0 ? 'O valor do serviço deve ser maior que zero.'
+        : !tomadorDoc ? 'Falta o CNPJ/CPF do tomador.'
+        : !tomadorNome ? 'Falta o nome do tomador.'
+        : !descricao ? 'Falta a descrição do serviço.'
+        : null;
     const issCalculado = +(valorNum * aliquotaNum / 100).toFixed(2);
     const issRetidoValor = issRetido ? issCalculado : 0;
     const liquido = +(valorNum - issRetidoValor).toFixed(2);
@@ -164,6 +187,11 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                                 <option key={n.codigo} value={n.codigo}>{n.codigo} — {n.descricao}</option>
                             ))}
                         </select>
+                        {nbsErro && (
+                            <div className="text-xs text-red-600 dark:text-red-400 mb-2">
+                                ⛔ A tabela NBS não carregou ({nbsErro}) — a lista de serviços está vazia por isso, não porque não há serviço. Feche e abra o modal para tentar de novo.
+                            </div>
+                        )}
                         <textarea
                             value={descricao}
                             onChange={e => setDescricao(e.target.value)}
@@ -215,6 +243,11 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                                 placeholder="1500,00"
                                 className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
                             />
+                            {ecoValor && (
+                                <div className={`text-[11px] mt-0.5 ${ecoValor.ok ? 'text-slate-500' : 'text-red-600 dark:text-red-400 font-semibold'}`}>
+                                    {ecoValor.ok ? ecoValor.texto : `⛔ ${ecoValor.texto}`}
+                                </div>
+                            )}
                         </div>
                         <div>
                             <label className="text-xs text-slate-500 block mb-1">Alíquota ISS (%)</label>
@@ -224,6 +257,9 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                                 placeholder="5"
                                 className="w-full px-3 py-2 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono"
                             />
+                            {ecoAliquota && !ecoAliquota.ok && (
+                                <div className="text-[11px] mt-0.5 text-red-600 dark:text-red-400 font-semibold">⛔ {ecoAliquota.texto}</div>
+                            )}
                         </div>
                     </div>
 
@@ -237,8 +273,13 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                         ISS retido pelo tomador
                     </label>
 
-                    {/* Resumo calculado */}
-                    {valorNum > 0 && (
+                    {/* Resumo calculado — só sobre valor LIDO; ilegível não vira conta */}
+                    {(valorIlegivel || aliquotaIlegivel) && (
+                        <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+                            Sem resumo: {valorIlegivel ? 'o valor do serviço' : 'a alíquota do ISS'} está ilegível — não há ISS nem líquido a mostrar até corrigir o campo.
+                        </div>
+                    )}
+                    {valorNum > 0 && !valorIlegivel && !aliquotaIlegivel && (
                         <div className="bg-slate-50 dark:bg-slate-900/40 rounded-lg p-3 grid grid-cols-3 gap-3 text-sm">
                             <div>
                                 <div className="text-xs text-slate-500">Bruto</div>
@@ -265,7 +306,11 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     </button>
                     <button
                         onClick={handleEmitir}
-                        disabled={emitindo || (valorLido === null ? !valor.trim() : valorLido <= 0) || !tomadorDoc || !tomadorNome || !descricao}
+                        title={motivoBloqueio || 'Emitir a NFS-e Nacional com os dados acima'}
+                        // Ilegível NÃO desliga o botão: o clique é o que devolve a recusa
+                        // NOMEANDO o campo (toast) — botão apagado sem motivo se lê como
+                        // função inexistente. O `title` diz por que vai ser recusado.
+                        disabled={emitindo || !valor.trim() || (valorLido !== null && valorLido <= 0) || !tomadorDoc || !tomadorNome || !descricao}
                         className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
                         {emitindo ? '⏳ Emitindo...' : '📑 Emitir NFSe'}

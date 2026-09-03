@@ -16,6 +16,7 @@ import { auth } from '../../services/firebaseConfig';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { parseSped, conciliarFaturamento, type ConciliacaoFaturamento } from '../../services/spedFiscalExcelEditor';
 import { parseValorMoeda } from '../../services/valorDigitado';
+import { lerTextoLatin1OuUtf8 } from '../../services/lerArquivoTexto';
 
 interface Props { currentUser: User | null; }
 
@@ -85,7 +86,7 @@ const ConciliarFaturamento: React.FC<Props> = ({ currentUser }) => {
             }
 
             // 2. Parse SPED e concilia
-            const txt = await arqSped.text();
+            const txt = await lerTextoLatin1OuUtf8(arqSped);
             const parsed = await parseSped(txt);
             const r = await conciliarFaturamento(parsed, declarado);
             setData(r);

@@ -20,6 +20,7 @@ import FimDeMesBloco from './FimDeMesBloco';
 // então a tela o importa direto, como já faz com as outras réguas do backend.
 import { bloqueioDaEtapa } from '../sefaz-backend/fim-de-mes.js';
 import type { BloqueioFimDeMes } from '../services/fimDeMesService';
+import { fmtComp } from '../services/formatos';
 
 interface Props {
     /** Leva o colaborador à tela da etapa (App resolve o SearchType). */
@@ -45,7 +46,6 @@ const ultimasCompetencias = (n = 12): string[] => {
     return out;
 };
 
-const fmtComp = (c: string) => c.split('-').reverse().join('/');
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 

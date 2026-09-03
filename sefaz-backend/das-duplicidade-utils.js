@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { normalizarValorDas } from './das-valor-utils.js';
+import { normalizarCompetencia } from './competencia.js';
 
 function isStatusAtivo(status) {
     return !status || status === 'pendente' || status === 'vencido';
@@ -13,10 +14,23 @@ function mesmoValor(a, b) {
     return Math.abs(normalizarValorDas(a) - normalizarValorDas(b)) <= 0.01;
 }
 
+/**
+ * A MESMA competência, em qualquer das quatro formas. Comparar `!==` cru era
+ * a armadilha das duas formas na trava que impede a segunda guia: um DAS
+ * gravado como `2026-05` e o pedido chegando `05/2026` nunca se encontravam,
+ * e a duplicata passava. Ilegível de um dos lados NÃO é "igual" — é uma
+ * competência que não se sabe qual é.
+ */
+function mesmaCompetencia(a, b) {
+    const na = normalizarCompetencia(a);
+    const nb = normalizarCompetencia(b);
+    return na !== null && nb !== null && na === nb;
+}
+
 export function encontrarConflitoDasAvulso(existentes = [], req = {}) {
     const valor = normalizarValorDas(req.valor);
     return existentes.find((doc) => {
-        if (!doc || doc.competencia !== req.competencia) return false;
+        if (!doc || !mesmaCompetencia(doc.competencia, req.competencia)) return false;
 
         const tipo = String(doc.tipo || '').toLowerCase();
         const status = doc.statusPagamento || 'pendente';

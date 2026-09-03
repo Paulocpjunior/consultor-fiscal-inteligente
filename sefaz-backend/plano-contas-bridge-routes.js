@@ -33,9 +33,11 @@ function cnpjLimpo(v) {
     return String(v || '').replace(/\D/g, '');
 }
 
-// requireBridgeToken também aqui: sem guarda o /status dizia a qualquer um se o
-// token está configurado e em qual modo cada provider roda.
-router.get('/status', requireBridgeToken, (_req, res) => {
+// Sem o token, o /status responde só o pulso (`{ok:true}`) — serve de sonda de
+// vida para o app irmão sem dizer a anônimo se o token está configurado nem em
+// qual modo cada provider roda; com o token válido, vem o detalhe.
+router.get('/status', (req, res) => {
+    if (!BRIDGE_TOKEN || !secretsMatch(tokenDaRequisicao(req), BRIDGE_TOKEN)) return res.json({ ok: true });
     res.json({
         ok: true,
         bridge: !!BRIDGE_TOKEN,
@@ -56,7 +58,7 @@ router.get('/status', requireBridgeToken, (_req, res) => {
     });
 });
 
-router.post('/fiscal/sync', requireBridgeToken, express.json({ limit: '1mb' }), async (req, res) => {
+router.post('/fiscal/sync', requireBridgeToken, async (req, res) => {
     const cnpj = cnpjLimpo(req.body?.cnpj || req.body?.empresaCnpj);
     if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'cnpj invalido' });
 

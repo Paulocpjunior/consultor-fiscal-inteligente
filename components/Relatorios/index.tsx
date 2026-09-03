@@ -17,7 +17,7 @@
  *  - farol honesto: leitura truncada e retenções não gravadas (docs antigos)
  *    aparecem na tela E no PDF.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User, DocumentoFiscal, LucroPresumidoEmpresa } from '../../types';
 import { listDocumentos, getEmpresasDisponiveis, getIdentificacaoEmpresa, getTrilhoSaida, type EmpresaXmlOption, type TrilhoSaida } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
@@ -78,6 +78,7 @@ import {
 } from '../../services/cfopEscrituradoService';
 // 🧠 O CÉREBRO: o que alguém corrigiu numa nota vira parâmetro do FORNECEDOR.
 import { sugerirParametro } from '../../sefaz-backend/cfop-cerebro.js';
+import { fmtComp } from '../../services/formatos';
 // MESMO painel do modal 🔗 — o cérebro tem UMA casa (Paulo, 18/08).
 import CfopCerebroPainel, { type FornecedorOpcao } from '../CfopCerebroPainel';
 // A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
@@ -140,7 +141,6 @@ const opcoesLucro = (lista: any[]): EmpresaXmlOption[] => (lista || []).map((e) 
 
 const fmtBRL = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-const fmtComp = (c: string) => c.split('-').reverse().join('/');
 const competenciaAtual = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -210,6 +210,10 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 .filter(d => d.empresaId === alvo.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
                 .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao })));
             setRecorteKey(`${alvo.id}|${competencia}`);
+        } catch (e: any) {
+            // Sem catch a rede que cai virava tela parada sem recorte e sem
+            // motivo — a pessoa concluía que a empresa não tem movimento.
+            onShowToast?.(`Não deu para carregar o recorte: ${e?.message || 'falha desconhecida'}`);
         } finally {
             setLoading(false);
         }
@@ -218,6 +222,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
     const docsRecorte = recorteValido ? (docs as DocumentoFiscal[]) : null;
 
     return (
+        <ToastCtx.Provider value={onShowToast}>
         <div className="space-y-4 animate-fade-in">
             <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 rounded-xl text-white flex items-start justify-between gap-3 flex-wrap">
                 <div>
@@ -342,6 +347,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
             {aba === 'trimestre' && <AbaTrimestre currentUser={currentUser} />}
         </div>
+        </ToastCtx.Provider>
     );
 };
 
@@ -361,11 +367,22 @@ const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">{children}</div>
 );
 
+// O toast chega às abas por CONTEXTO: dez abas montam PDF e nenhuma recebia
+// `onShowToast` — passar por props seria dez assinaturas mudando por causa
+// de uma frase de erro.
+const ToastCtx = createContext<((msg: string) => void) | undefined>(undefined);
+
 const usePdf = () => {
+    const onShowToast = useContext(ToastCtx);
     const [gerando, setGerando] = useState(false);
     const rodar = async (fn: () => Promise<void>) => {
         setGerando(true);
-        try { await fn(); } finally { setGerando(false); }
+        try { await fn(); }
+        catch (e: any) {
+            // PDF que não sai sem dizer por quê é clique que "não fez nada".
+            onShowToast?.(`Não deu para gerar o PDF: ${e?.message || 'falha desconhecida'}`);
+        }
+        finally { setGerando(false); }
     };
     return { gerando, rodar };
 };

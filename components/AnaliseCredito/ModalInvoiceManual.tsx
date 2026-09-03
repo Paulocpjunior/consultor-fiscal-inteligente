@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react';
 import { adicionarInvoice } from '../../services/invoicesManuaisService';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 export interface ModalInvoiceManualProps {
   empresaId: string;
@@ -15,13 +16,13 @@ export interface ModalInvoiceManualProps {
   onSalvo: () => void;
 }
 
-// "1.234,56" -> 1234.56 (vazio -> 0)
-const parseBR = (s: string): number => {
-  if (!s) return 0;
-  const limpo = s.trim().replace(/\./g, '').replace(',', '.');
-  const n = parseFloat(limpo);
-  return isNaN(n) ? 0 : n;
-};
+// O número sai do DONO (`parseValorMoeda`): a cópia local apagava TODO ponto,
+// então a forma JS "1234.56" virava 123456 (100×), e o ilegível virava 0
+// calado. Vazio continua 0 (campo opcional); ilegível é RECUSA nomeando o campo.
+const CAMPOS_DE_VALOR: Array<[string, string]> = [
+  ['valorNf', 'Valor da NF'], ['baseCalculo', 'Base de Cálculo'], ['aliquota', 'Alíquota'],
+  ['valorIss', 'Valor do ISS'], ['issRetido', 'ISS retido'],
+];
 
 const ModalInvoiceManual: React.FC<ModalInvoiceManualProps> = ({
   empresaId, periodoNormalizado, onFechar, onSalvo,
@@ -47,6 +48,18 @@ const ModalInvoiceManual: React.FC<ModalInvoiceManualProps> = ({
       setErroLocal('CNPJ, Razão Social e Base de Cálculo são obrigatórios.');
       return;
     }
+    const textos: Record<string, string> = { valorNf, baseCalculo, aliquota, valorIss, issRetido };
+    const lidos: Record<string, number> = {};
+    for (const [campo, rotulo] of CAMPOS_DE_VALOR) {
+      const t = textos[campo].trim();
+      if (!t) { lidos[campo] = 0; continue; }
+      const n = parseValorMoeda(t);
+      if (n === null) {
+        setErroLocal(`Não entendi o campo ${rotulo} ("${t}") — use 1234,56. Nada foi salvo.`);
+        return;
+      }
+      lidos[campo] = n;
+    }
     setSalvando(true);
     try {
       const r = await adicionarInvoice({
@@ -57,11 +70,11 @@ const ModalInvoiceManual: React.FC<ModalInvoiceManualProps> = ({
       serie: serie.trim(),
       cnpjCpf: cnpjCpf.trim(),
       razaoSocial: razaoSocial.trim(),
-      valorNf: parseBR(valorNf) || parseBR(baseCalculo),
-      baseCalculo: parseBR(baseCalculo),
-      aliquota: parseBR(aliquota),
-      valorIss: parseBR(valorIss),
-      issRetido: parseBR(issRetido),
+      valorNf: lidos.valorNf || lidos.baseCalculo,
+      baseCalculo: lidos.baseCalculo,
+      aliquota: lidos.aliquota,
+      valorIss: lidos.valorIss,
+      issRetido: lidos.issRetido,
       });
       if (r.ok) {
         onSalvo();

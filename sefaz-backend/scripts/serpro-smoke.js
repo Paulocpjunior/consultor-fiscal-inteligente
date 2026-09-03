@@ -7,8 +7,12 @@
 // cada response BRUTO em /tmp/serpro-smoke-<sistema>-<cnpj>-<ts>.json e
 // imprime um sumario.
 //
-// Por que existe: dois providers tem TODO[SERPRO_REAL] (das-provider:237,
-// darf-provider:162) — os nomes de campo do response sao SUPOSTOS. Em prod
+// Por que existe: os parsers de response dos providers (SerproProvider.gerarDas
+// e SerproProvider.consultarDeclaracaoPa em das-provider.js;
+// SerproProvider.gerarDarf em darf-provider.js) nasceram de documentacao
+// publica — os nomes de campo do response sao SUPOSTOS ate serem conferidos
+// contra um response real (o unico marcador TODO[SERPRO_REAL] que sobrou no
+// codigo esta em darf-routes.js, no /preview do DARF). Em prod
 // MODE='serpro' eh o default. Esse smoke captura o payload real pra mapear
 // os parsers SEM ADIVINHAR.
 //

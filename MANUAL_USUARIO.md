@@ -1,12 +1,12 @@
 # Manual do Usuario — Consultor Fiscal Inteligente
 
-> Versao: Maio 2026 | SP Assessoria Contabil
+> Versao: Setembro 2026 | SP Assessoria Contabil
 
 ---
 
 ## Acesso ao Sistema
 
-**URL:** Acesse pelo navegador o endereco fornecido pela administracao (aplicacao web hospedada no Firebase).
+**URL:** Acesse pelo navegador o endereco fornecido pela administracao (aplicacao web hospedada no Google Cloud Run; o Firebase e usado para login, banco de dados e arquivos).
 
 **Login:**
 1. Abra o sistema no navegador.
@@ -32,7 +32,7 @@
 1. Clique no botao **Dashboard CEO** na barra de modulos.
 2. O painel carrega automaticamente os KPIs consolidados de todas as empresas.
 3. Revise os cards de indicadores (guias pendentes, mensagens criticas, faturamento).
-4. Clique em **Gerar Insights IA** para obter recomendacoes automaticas.
+4. Clique em **✨ Gerar** (bloco de insights) para obter recomendacoes automaticas.
 5. Use os links rapidos para navegar direto ao modulo que precisa de atencao.
 
 **Dicas:** Acesse diariamente como primeiro passo para priorizar demandas. Os alertas de urgencia indicam acoes que vencem nos proximos dias.
@@ -76,11 +76,11 @@
 **Como usar:**
 1. Clique em **Importa XML/PDF** na barra de modulos (segundo bloco, abaixo da grid principal).
 2. Use a aba **Dashboard** para ver o resumo geral (total de documentos, entradas x saidas, por empresa).
-3. Na aba **Importacao Manual**, arraste XMLs ou clique para selecionar arquivos. Para NFS-e em PDF, use a aba **Importar NFSe (PDF)**.
+3. No grupo **📥 Importar**, sub-aba **📥 Manual & Cofre (saída 55)**, arraste XMLs ou clique para selecionar arquivos. Para NFS-e em PDF, use a sub-aba **NFSe (PDF)**.
 4. Configure empresas na aba **Empresas Monitoradas** para captura automatica via certificado digital.
 5. Na aba **SharePoint**, configure a sincronizacao automatica com pastas do SharePoint da sua organizacao.
 
-**Dicas:** Use a aba **Relatorios** para gerar resumos por periodo e a aba **Exportar IOB SAGE** para integrar com o sistema contabil. Verifique a aba **Erros & Logs** periodicamente para identificar XMLs com problema.
+**Dicas:** Use a aba **Relatorios** para gerar resumos por periodo e a sub-aba **📤 Exportar SAGE (IOB)** (grupo 🔗 Integracoes) para integrar com o sistema contabil. Verifique a aba **Erros & Logs** periodicamente para identificar XMLs com problema.
 
 ---
 
@@ -91,7 +91,7 @@
 **Como usar:**
 1. Clique em **SPED Fiscal** na barra de modulos (segundo bloco).
 2. Selecione a empresa e o periodo de apuracao (mes/ano).
-3. O sistema monta automaticamente os blocos (0, C, D, E, 9) com base nos XMLs importados.
+3. O sistema monta automaticamente os blocos (0, C, D, E, G, H, K, 1 e 9) com base nos XMLs importados — H (inventario) e K (producao/estoque) so saem com os apontamentos cadastrados nas abas 🏭 CIAP / 🏭 Bloco K, e o registro 1900 (EFD-Contribuicoes consolidado) so com os codigos do cadastro; sem o dado, o bloco sai vazio e o gerador AVISA, nunca inventa.
 4. Revise o resumo de registros e clique em **Gerar Arquivo** para baixar o TXT.
 5. Use a aba **Analise e Conferencia** para validar o conteudo antes de transmitir.
 
@@ -166,7 +166,7 @@
 **Como usar:**
 1. Clique em **Caixa Postal** na barra de modulos.
 2. Veja o resumo: total de mensagens, nao lidas, criticas.
-3. Use os filtros por categoria (intimacao, malha fiscal, comunicado) e o toggle **So nao lidas**.
+3. Use os filtros por categoria (intimacao, malha fiscal, comunicado) e o toggle **Apenas nao lidas**.
 4. Clique em uma mensagem para ler o conteudo completo.
 5. Clique em **Sincronizar Todas** para buscar mensagens novas de todas as empresas.
 
@@ -304,6 +304,37 @@
 5. Use o modo **Comparar Topicos** para analisar dois codigos ou situacoes lado a lado.
 
 **Dicas:** Quanto mais contexto voce fornecer (municipio, regime, notas da operacao), mais precisa sera a resposta da IA. As fontes e fundamentacao legal aparecem abaixo da resposta para conferencia.
+
+---
+
+## Modulos ainda sem capitulo neste manual
+
+Os cards abaixo existem na barra de modulos (o nome e o que aparece no card) e
+ainda nao tem passo a passo aqui. A linha diz so ONDE fica; o comportamento
+esta descrito nas 📣 Novidades e nos guias em `/guia-*.html`.
+
+| Card | Onde fica |
+|---|---|
+| **Rotina do Mes** | 1º card do menu — as 5 etapas do mes por cliente, com o botao "Dar fim de mes" |
+| **Reforma Tributaria** (consulta) | barra de consultas, ao lado de CFOP/NCM/Servico — pergunta a IA sobre IBS/CBS |
+| **Obrigacoes & Tarefas** | hub com as sub-abas ⏰ Proximos Vencimentos · 🏢 Por Empresa · 📋 Tarefas (Kanban) · 📅 Calendario (o capitulo "Tarefas" acima cobre so o Kanban) |
+| **Analise Relatorio SAGE** | card proprio — le o relatorio exportado do e-Fiscal |
+| **Regime Tributario** (analisador) | card proprio |
+| **NFTS Sao Paulo** | card proprio — declaracao de servicos TOMADOS de fora de SP |
+| **EFD-Reinf × DCTFWeb** | sub-abas do card DCTFWeb: 🔀 EFD-Reinf × DCTFWeb · 🧰 R-2010 servicos tomados · 🧾 Fechamento EFD-Reinf |
+| **Cobertura ADN (NFS-e Nac.)**, **Cobertura PGDAS-D**, **Cobertura DCTFWeb** | atalhos que abrem a aba de cobertura do hub correspondente (NFS-e Nacional, DAS, DCTFWeb) |
+| **Radar fiscal (e-CAC)** | atalho para a aba de radar do card Caixa Postal |
+| **Minha Agenda Fiscal**, **Vencimentos da Semana** | cards de prazos derivados do cadastro/regime — abrem o hub Obrigacoes & Tarefas no recorte certo |
+| **Prazos de Prescricao** | abre o hub Recuperacao Tributaria na aba de prazos |
+| **Diagnostico Docs Fiscais**, **Cadastros Incompletos**, **Certificados Digitais**, **Configuracoes Operacionais**, **Saude Geral** | sub-abas do hub Diagnostico & Saude (Cadastros Incompletos tambem tem card proprio, admin) |
+| **Sublimite Simples** | abre o hub DAS Simples Nacional na aba do sublimite estadual |
+| **Agentes A3** (admin) | card proprio — status do agente local `cfi-a3` que captura por certificado A3 |
+| **GIA-ST** | card proprio — guia do ICMS-ST a partir do Livro de ICMS Substituto |
+| **Relatorios** | card proprio (grupo Gestao) — livros, resumos por CFOP/UF/produto/participante, retencoes, ✏️ CFOP por nota; tudo em PDF com identidade SP |
+| **Central de XMLs → sub-abas novas** | 🌾 DIPAM / Produtor rural · 🧭 DIFAL aquisicao · 🏷️ Cadastro NCM · 🏛️ ISS SP (guia) · 🔎 Prova de captura · ✅ O cliente fez certo? |
+| **SPED Fiscal → sub-abas novas** | Ajustes E111 · 🏭 CIAP · 🏭 Bloco K · 🏦 Credito acumulado · 🧮 Saldo de abertura · 🏁 Fila de migracao · 🪞 CFI × E-Fiscal |
+| **⚙️ Config Admin** (admin) | topo do app — templates do WhatsApp, horarios, 🏛️ Calendario municipal, 🏦 DeRE, modelo Gemini |
+| **SP Connect** | app proprio em `/connect` (atendimento WhatsApp) — manual dentro do ℹ️ Sobre dele |
 
 ---
 

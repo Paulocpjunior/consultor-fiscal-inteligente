@@ -12,8 +12,6 @@ import { requireAuth } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
-router.use(express.json());
-
 const CRON_SECRET = process.env.SEFAZ_CRON_SECRET;
 
 function requireCronAuth(req, res, next) {

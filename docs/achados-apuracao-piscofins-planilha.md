@@ -1,4 +1,4 @@
-# Achados — apuração de PIS/COFINS em planilha (WALDESA COMERCIO, AC 2025)
+# Achados — apuração de PIS/COFINS em planilha (Cliente A (nome omitido), AC 2025)
 
 > **Origem:** planilha de controle **feita pelo colaborador** que apura este
 > cliente — encaminhada pelo Paulo em 12/08/2026 para análise, não de autoria

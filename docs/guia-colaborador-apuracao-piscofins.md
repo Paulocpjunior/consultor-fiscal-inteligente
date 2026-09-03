@@ -1,13 +1,14 @@
 # Apuração de PIS/COFINS — o que muda, e o que preciso saber de você
 
-<!-- guia-id: piscofins · guia-revisao: 2026-08-12 -->
+<!-- guia-id: piscofins · guia-revisao: 2026-09-04 -->
 <!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
 
 > **Fonte dupla.** Este arquivo e `public/guia-apuracao-piscofins.html` são o
 > MESMO documento — atualizar os dois juntos. O HTML é o que vai ao colaborador
 > (servido pelo próprio app; link de artifact chega como "link inválido" pra ele).
 >
-> Caso: WALDESA COMERCIO, ano-calendário 2025. Documento de conversa, não de
+> Caso: Cliente A (nome e valores ILUSTRATIVOS, arredondados — a aritmética
+> é a mesma da planilha real), ano-calendário 2025. Documento de conversa, não de
 > auditoria. O relatório técnico, com os níveis de prova, é o
 > `docs/achados-apuracao-piscofins-planilha.md`.
 
@@ -23,13 +24,13 @@ para o outro**.
 
 | | PIS | COFINS |
 |---|---|---|
-| Contribuição do mês | 27.625,58 | 127.245,10 |
-| Crédito do mês | 80.557,79 | 371.054,07 |
-| **Resultado** | **−52.932,21** | **−243.808,97** |
+| Contribuição do mês | 26.400,00 | 121.600,00 |
+| Crédito do mês | 66.000,00 | 304.000,00 |
+| **Resultado** | **−39.600,00** | **−182.400,00** |
 
 Contribuição a recolher não pode ser negativa: o excedente é **saldo credor**,
 utilizável nos meses seguintes (Lei 10.637/2002 art. 3º §4º e Lei 10.833/2003
-art. 3º §4º). São **R$ 296.741,18**.
+art. 3º §4º). São **R$ 222.000,00**.
 
 As linhas "TOTAL CRÉDITO MÊS ANTERIOR", "CRÉDITOS UTILIZADOS" e "SALDO CRÉDITO
 MÊS" existem na planilha e estão **em branco nos seis meses** — o controle existe
@@ -50,7 +51,7 @@ COMPRAS MERCADORIAS      (1.1.4.02.0001)
 O não-cumulativo **credita por operação, não por conta contábil** — quem decide é
 o CST de PIS de cada item. Não geram crédito: fornecedor optante do Simples,
 mercadoria monofásica, mercadoria com ST encerrada e CST 70-75. Todas estão
-dentro de "COMPRAS MERCADORIAS". Só junho: **R$ 451.611,87** sem filtro.
+dentro de "COMPRAS MERCADORIAS". Só junho: **R$ 370.000,00** sem filtro.
 
 Este é o ponto de risco para o escritório (crédito indevido = glosa) e empurra o
 imposto no sentido **oposto** ao do ponto 1 — por isso "o total parece razoável"
@@ -78,8 +79,8 @@ nada ao cliente.
    somada à base de crédito; correto, desde que não tenha sido abatida da receita.
 3. **O cliente tem receita isenta / não tributada / monofásica na saída?** As
    linhas de dedução estão em branco.
-4. **As compras de junho foram mesmo 4,8× a média?** (jan-mai: 1.009.359,65 ·
-   jun: 4.873.059,98). Foi esse volume que gerou todo o saldo credor do ponto 1 —
+4. **As compras de junho foram mesmo 4× a média?** (jan-mai: 1.000.000,00 ·
+   jun: 4.000.000,00). Foi esse volume que gerou todo o saldo credor do ponto 1 —
    estoque, compra específica, ou duplicidade no balancete?
 5. **Fretes e combustível chegam como nota fiscal ou só no balancete?** Decide se
    a base sai inteira do CFI ou se parte vem do módulo Contábil.

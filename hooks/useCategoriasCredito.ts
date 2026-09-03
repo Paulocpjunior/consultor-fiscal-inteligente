@@ -10,7 +10,7 @@
  * Recebe a empresaId pra carregar a config dela. Quando muda de empresa,
  * recarrega a config.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { listarCustom, type CategoriaCustom } from '../services/categoriasCreditoService';
 import { carregarCreditConfig, salvarCreditConfig } from '../services/creditConfigService';
 import { CATEGORIAS_CREDITO } from '../services/analiseCreditoExtratoService';
@@ -39,11 +39,23 @@ export function useCategoriasCredito(
     const [categoriasNaoCreditaveis, setCategoriasNaoCreditaveis] = useState<Set<string>>(new Set());
     const [salvandoCategoriaCredito, setSalvandoCategoriaCredito] = useState<string | null>(null);
 
+    // 🚨 `onErro` chega como arrow criada no render do chamador (identidade nova
+    // a cada render). Pô-la nas deps dos efeitos (03/09, 1ª versão desta
+    // correção) fez o efeito rodar de novo a cada render — laço infinito de
+    // leitura, pego pelo teste que travou 30 s. A ref guarda a versão mais
+    // recente SEM reexecutar nada.
+    const onErroRef = useRef(onErro);
+    onErroRef.current = onErro;
+
     // Carrega lista global de custom (independe de empresa)
     useEffect(() => {
         let ativo = true;
         listarCustom().then(list => {
             if (ativo) setCategoriasCustom(list);
+        }).catch((e: any) => {
+            // Promessa sem catch é lista vazia calada — a pessoa concluiria que
+            // não há categoria customizada, quando a leitura é que caiu.
+            if (ativo) onErroRef.current('Não deu para carregar as categorias customizadas: ' + (e?.message || 'desconhecido'));
         });
         return () => { ativo = false; };
     }, [categoriasVersao]);
@@ -54,6 +66,8 @@ export function useCategoriasCredito(
         if (!empresaId) { setCategoriasNaoCreditaveis(new Set()); return; }
         carregarCreditConfig(empresaId).then(cfg => {
             if (ativo) setCategoriasNaoCreditaveis(new Set(cfg.categoriasNaoCreditaveis));
+        }).catch((e: any) => {
+            if (ativo) onErroRef.current('Não deu para carregar a config de crédito desta empresa: ' + (e?.message || 'desconhecido'));
         });
         return () => { ativo = false; };
     }, [empresaId]);
@@ -61,10 +75,17 @@ export function useCategoriasCredito(
     const toggleCategoriaCredito = useCallback(async (categoria: string) => {
         if (!empresaId) return;
         if (categoria === 'SEM_CATEGORIA') return; // sempre nao-creditavel
-        const novo = new Set(categoriasNaoCreditaveis);
-        if (novo.has(categoria)) novo.delete(categoria);
-        else novo.add(categoria);
-        setCategoriasNaoCreditaveis(novo);  // otimista
+        // 🚨 O ROLLBACK É FUNCIONAL, nunca o closure. Dois toggles em voo (A e
+        // B): o rollback de A gravava `categoriasNaoCreditaveis` de ANTES de
+        // B — e apagava B da tela, que tinha sido salvo com sucesso. Cada
+        // toggle inverte só a SUA categoria sobre o estado mais recente.
+        const inverter = (prev: Set<string>) => {
+            const s = new Set(prev);
+            if (s.has(categoria)) s.delete(categoria); else s.add(categoria);
+            return s;
+        };
+        const novo = inverter(categoriasNaoCreditaveis);
+        setCategoriasNaoCreditaveis(inverter);  // otimista
         setSalvandoCategoriaCredito(categoria);
         let r: { ok: boolean; error?: string };
         try {
@@ -77,11 +98,11 @@ export function useCategoriasCredito(
             setSalvandoCategoriaCredito(null);
         }
         if (!r.ok) {
-            // rollback em caso de falha
-            setCategoriasNaoCreditaveis(categoriasNaoCreditaveis);
-            onErro('Erro ao salvar config de crédito: ' + (r.error || 'desconhecido'));
+            // rollback em caso de falha — desfaz SÓ esta categoria
+            setCategoriasNaoCreditaveis(inverter);
+            onErroRef.current('Erro ao salvar config de crédito: ' + (r.error || 'desconhecido'));
         }
-    }, [empresaId, categoriasNaoCreditaveis, onErro]);
+    }, [empresaId, categoriasNaoCreditaveis]);
 
     const todasCategorias = useMemo(() => {
         const customNomes = categoriasCustom.map(c => c.nome);

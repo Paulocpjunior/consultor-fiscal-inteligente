@@ -10,7 +10,7 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
-import { requireCrossProjectAuth } from './require-cross-project-auth.js';
+import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import {
     consultarFgtsDigital,
@@ -21,8 +21,11 @@ import {
 import { consultarCndsPublicas } from './cnd-publica-provider.js';
 
 const router = express.Router();
-router.use(express.json());
 
+// Só os apps que consomem este túnel (DP/Folha e Contábil). O middleware padrão
+// aceitava o PRÓPRIO projeto do CFI — ou seja, qualquer colaborador logado, sem
+// escopo de carteira, consultava o SERPRO de todo cliente cadastrado.
+const requireIrmao = crossProjectAuth([PROJETO.dpFolha, PROJETO.contabil]);
 // ─── Validação ──────────────────────────────────────────────────────────────
 
 function getDb() {
@@ -59,7 +62,7 @@ async function validarCnpj(req, res) {
 // FGTS - Consulta recolhimento por competência
 // POST /api/dp-integration/fgts/recolhimento
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
+router.post('/fgts/recolhimento', requireIrmao, async (req, res) => {
     const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
@@ -79,7 +82,7 @@ router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
 // Tenta SERPRO primeiro; se falhar, cai no fallback de consulta pública (Caixa).
 // POST /api/dp-integration/fgts/crf
 // Body: { cnpj }
-router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
+router.post('/fgts/crf', requireIrmao, async (req, res) => {
     const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     let result;
@@ -106,7 +109,7 @@ router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
 // eSocial - Status de fechamento mensal
 // POST /api/dp-integration/esocial/status
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/esocial/status', requireCrossProjectAuth, async (req, res) => {
+router.post('/esocial/status', requireIrmao, async (req, res) => {
     const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
@@ -123,7 +126,7 @@ router.post('/esocial/status', requireCrossProjectAuth, async (req, res) => {
 // DCTFWeb - Status de transmissão
 // POST /api/dp-integration/dctfweb/status
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/dctfweb/status', requireCrossProjectAuth, async (req, res) => {
+router.post('/dctfweb/status', requireIrmao, async (req, res) => {
     const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
@@ -140,7 +143,7 @@ router.post('/dctfweb/status', requireCrossProjectAuth, async (req, res) => {
 // Batch query — all DP-relevant data for a company in a single call.
 // POST /api/dp-integration/empresa-completo
 // Body: { cnpj, competencia: 'YYYY-MM' }
-router.post('/empresa-completo', requireCrossProjectAuth, async (req, res) => {
+router.post('/empresa-completo', requireIrmao, async (req, res) => {
     const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia || new Date().toISOString().slice(0, 7);

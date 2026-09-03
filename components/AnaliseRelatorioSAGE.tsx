@@ -8,6 +8,7 @@ import {
     type DocSentido,
     type DocStatus,
 } from '../services/sageReportService';
+import { fmtBRL } from '../services/formatos';
 
 interface AnaliseRelatorioSAGEProps {
     onShowToast?: (msg: string) => void;
@@ -29,8 +30,7 @@ const SENTIDO_LABEL: Record<DocSentido, string> = {
     desconhecido: '?',
 };
 
-const formatBRL = (n: number) =>
-    n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
+const formatBRL = fmtBRL;
 
 const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast }) => {
     const [notasBrutas, setNotasBrutas] = useState<SageNota[] | null>(null);

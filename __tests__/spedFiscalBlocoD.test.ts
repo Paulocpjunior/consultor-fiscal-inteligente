@@ -121,7 +121,9 @@ describe('🚨 D190 — CFOP vem do documento, na ótica de quem escritura', () 
         const fs = require('fs');
         const path = require('path');
         const imp = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/xml-importer.js'), 'utf8');
-        expect(imp).toMatch(/cfopCabecalho = pickTag\(xml, 'CFOP'\)/);
+        // 03/09: o cabeçalho só é lido no CT-e e no bloco certo (<ide>/<imp><ICMS>) —
+        // `pickTag(xml,'CFOP')` sem escopo achava o CFOP do 1º item de toda NF-e.
+        expect(imp).toMatch(/cfopCabecalho = ehCte \? \(pickTag\(ideCte, 'CFOP'\)/);
         expect(imp).toMatch(/meta\.cfopCabecalho \? \{ cfop: meta\.cfopCabecalho \}/);
     });
 });

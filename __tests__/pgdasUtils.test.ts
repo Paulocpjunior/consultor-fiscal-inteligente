@@ -1,5 +1,48 @@
 // @ts-ignore modulo .js puro
-import { assertValorPgdasCompativel, extrairDeclaracaoTransmitidaPgdas, montarDadosDeclaracaoPgdas, normalizarValoresDevidosPgdas, somaValoresDevidosPgdas } from '../sefaz-backend/pgdas-utils.js';
+import { assertValorPgdasCompativel, extrairDeclaracaoTransmitidaPgdas, montarDadosDeclaracaoPgdas, normalizarValoresDevidosPgdas, somaValoresDevidosPgdas, lerValoresDevidosPgdas } from '../sefaz-backend/pgdas-utils.js';
+
+// ═══ 03/09: VALOR AUSENTE DO SERPRO VIRAVA 0,00 E ENTRAVA NA SOMA ══════════
+// `round2(Number(n) || 0)` + `valor >= 0` mantinham o tributo sem valor
+// valendo zero: divergência falsa contra a apuração local, ou — pior — soma
+// batendo por coincidência com um débito a menos na declaração.
+describe('pgdas-utils — item ilegível sai NOMEADO e a soma se recusa', () => {
+    const comIlegivel = [
+        { codigoTributo: 1001, valor: 80 },
+        { codigoTributo: 1010 },                 // valor ausente
+        { codigoTributo: 1004, valor: 'abc' },   // ilegível
+        { codigoTributo: 1005, valor: -3 },      // negativo
+        { valor: 12 },                           // sem tributo
+    ];
+
+    it('lerValoresDevidosPgdas separa os legíveis dos ilegíveis, com o motivo', () => {
+        const r = lerValoresDevidosPgdas(comIlegivel);
+        expect(r.valores).toEqual([{ codigoTributo: 1001, valor: 80 }]);
+        expect(r.ilegiveis).toHaveLength(4);
+        expect(r.ilegiveis.map((i: any) => i.codigoTributo)).toEqual([1010, 1004, 1005, undefined]);
+        expect(r.ilegiveis[0].motivo).toMatch(/ausente/);
+    });
+
+    it('a SOMA se recusa enquanto houver ilegível — parcial vira "total"', () => {
+        expect(() => somaValoresDevidosPgdas(comIlegivel)).toThrow(/nao da para ler/);
+        try { somaValoresDevidosPgdas(comIlegivel); } catch (e: any) {
+            expect(e.code).toBe('PGDAS_VALOR_ILEGIVEL');
+            expect(e.message).toMatch(/tributo 1010 = undefined/);
+            expect(e.message).toMatch(/Nenhuma declaracao foi transmitida/);
+        }
+    });
+
+    it('a comparação e o payload de comparação também se recusam', () => {
+        expect(() => assertValorPgdasCompativel({ valorLocal: 80, valoresDevidos: comIlegivel }))
+            .toThrow(/PGDAS|nao da para ler/);
+        expect(() => montarDadosDeclaracaoPgdas({
+            cnpjLimpo: '28810670000192', pa: 202605, transmitir: true, declaracao: {}, valoresParaComparacao: comIlegivel,
+        })).toThrow(/nao da para ler/);
+    });
+
+    it('zero de verdade continua sendo zero (é resposta, não ausência)', () => {
+        expect(somaValoresDevidosPgdas([{ codigoTributo: 1010, valor: 0 }, { codigoTributo: 1001, valor: '80.5' }])).toBe(80.5);
+    });
+});
 
 describe('pgdas-utils', () => {
     const declaracao = {

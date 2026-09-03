@@ -43,6 +43,24 @@ describe('das-duplicidade-utils', () => {
         expect(conflito).toBeNull();
     });
 
+    // ═══ 03/09: a competência era comparada `!==` CRUA ═════════════════════
+    // Um DAS gravado `2026-05` e o pedido chegando `05/2026` nunca se
+    // encontravam — a duplicata passava pela trava que existe para barrá-la.
+    it('acha o conflito quando a competência vem em OUTRA forma', () => {
+        for (const forma of ['05/2026', '202605', '2026-05-15']) {
+            const conflito = encontrarConflitoDasAvulso([
+                { ...baseDoc, tipo: 'regular', statusPagamento: 'pendente' },
+            ], { competencia: forma, valor: 4652.41 });
+            expect({ forma, id: conflito?.id }).toEqual({ forma, id: 'das1' });
+        }
+    });
+
+    it('competência ilegível de um dos lados NÃO é "igual"', () => {
+        expect(encontrarConflitoDasAvulso([
+            { ...baseDoc, tipo: 'regular', statusPagamento: 'pendente', competencia: 'maio' },
+        ], { competencia: 'maio', valor: 4652.41 })).toBeNull();
+    });
+
     it('monta erro 409 com id da guia existente', () => {
         const err = criarErroDuplicidadeDas({ ...baseDoc, tipo: 'regular', statusPagamento: 'pendente' });
         expect(err.httpStatus).toBe(409);

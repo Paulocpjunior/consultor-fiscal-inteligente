@@ -8,8 +8,45 @@ import { getDarfProvider, getDarfMode } from './darf-provider.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
+import { normalizarCompetencia } from './competencia.js';
+import { limparCnpj } from './documento-dv.js';
 
 const COLLECTION = 'darfs_emitidos';
+
+/**
+ * 🚨 O `docId` LEVAVA O CNPJ CRU (03/09): com máscara, a pontuação virava `_`
+ * e o mesmo DARF ganhava outro id. Sai sempre sem máscara; CNPJ sem 14
+ * posições não identifica empresa e é RECUSADO nomeado.
+ */
+function cnpjParaId(cnpj) {
+    const limpo = limparCnpj(cnpj);
+    if (limpo.length !== 14) {
+        const err = new Error(`CNPJ inválido ("${String(cnpj ?? '')}") — ele identifica o DARF emitido e o contribuinte no SICALC.`);
+        err.httpStatus = 400;
+        throw err;
+    }
+    return limpo;
+}
+
+/**
+ * 🚨 A COMPETÊNCIA ENTRAVA CRUA NO DARF (03/09). Chegando `07/2026`, o
+ * provider fazia `replace(/\D/g,'').slice(0,6)` = `072026` — período de
+ * apuração ano **0720**, mês **26**, no código de barras e no número do
+ * documento — e `darf_guias` gravava o texto como veio, então a listagem por
+ * competência nunca o achava. A porta normaliza pelo dono (como o DAS) e
+ * RECUSA o ilegível dizendo as DUAS consequências.
+ */
+function competenciaNormalizadaOuErro(bruta) {
+    const n = normalizarCompetencia(bruta);
+    if (n) return n;
+    const err = new Error(
+        `Competência inválida: "${String(bruta ?? '')}". Use AAAA-MM (ex.: 2026-07). `
+        + 'Ela vai ao SICALC como período de apuração e identifica o DARF emitido — forma '
+        + 'diferente declara outro período e ainda deixa emitir a MESMA guia duas vezes.',
+    );
+    err.httpStatus = 400;
+    throw err;
+}
 
 function fa() {
     if (!admin.apps.length) {
@@ -37,18 +74,22 @@ export async function emitirDarf(req) {
     assertEmissaoLiberada('DARF');
     const {
         empresaId, empresaCnpj, empresaNome,
-        regime, tributo, competencia, valor,
+        regime, tributo, valor,
     } = req;
-    if (!empresaId || !empresaCnpj || !regime || !tributo || !competencia || !valor) {
+    if (!empresaId || !empresaCnpj || !regime || !tributo || !req.competencia || !valor) {
         throw new Error('Campos obrigatorios: empresaId, empresaCnpj, regime, tributo, competencia, valor');
     }
+    const competencia = competenciaNormalizadaOuErro(req.competencia);
+    const cnpjId = cnpjParaId(empresaCnpj);
 
     const provider = getDarfProvider();
     const mode = getDarfMode();
-    const darf = await provider.gerarDarf(req);
+    // O provider recebe a competência JÁ normalizada — é dela que saem o
+    // período de apuração (AAAAMM) e o número do documento.
+    const darf = await provider.gerarDarf({ ...req, competencia });
 
     const db = fa().firestore();
-    const docId = `${empresaCnpj}_${competencia}_${tributo}_${Date.now()}`
+    const docId = `${cnpjId}_${competencia}_${tributo}_${Date.now()}`
         .replace(/[^a-zA-Z0-9_-]/g, '_');
 
     const payload = {

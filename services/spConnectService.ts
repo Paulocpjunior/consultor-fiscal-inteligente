@@ -6,14 +6,26 @@
 import { getAuth } from 'firebase/auth';
 import { ConfigAtendimento, ConversaResumo, FilaAtendimento, MensagemInbox } from './spConnect';
 
+/** A frase de quem chama quando a rede cai — nada saiu, nada foi gravado. */
+export const ERRO_SEM_CONEXAO = 'Sem conexão com o servidor — nada foi enviado. Tente de novo.';
+
 async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolean; error?: string }> {
     const u = getAuth().currentUser;
     if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' } as any;
-    const token = await u.getIdToken();
-    const res = await fetch(url, {
-        ...init,
-        headers: { Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
-    });
+    // 🚨 `getIdToken()` e `fetch()` REJEITAM quando a rede cai, e todo caller
+    // assume `{ok, error}` — a rejeição subia como exceção não tratada, o
+    // botão ficava girando e a tela não dizia nada. Rede que cai é resposta
+    // `ok:false` com a frase, na MESMA forma que o backend responde.
+    let res: Response;
+    try {
+        const token = await u.getIdToken();
+        res = await fetch(url, {
+            ...init,
+            headers: { Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
+        });
+    } catch {
+        return { ok: false, error: ERRO_SEM_CONEXAO } as any;
+    }
     const data = await res.json().catch(() => ({}));
     // 🚨 A RECUSA VIAJA INTEIRA (24/08). Antes só o `error` sobrevivia, e o
     // backend manda junto o que a pessoa precisa pra RESOLVER: `acao`

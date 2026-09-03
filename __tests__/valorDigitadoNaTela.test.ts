@@ -93,7 +93,10 @@ function telas(dir: string, out: string[] = []): string[] {
 describe('🚨 nenhum campo de texto é controlado por um NÚMERO', () => {
     it('a varredura não acha nenhum round-trip vivo', () => {
         const infratores: string[] = [];
-        for (const arquivo of telas(join(RAIZ, 'components'))) {
+        const arquivos = telas(join(RAIZ, 'components'));
+        // Varredura vazia é trava falsa: hoje são ~210 telas, o piso é folga.
+        expect(arquivos.length).toBeGreaterThan(100);
+        for (const arquivo of arquivos) {
             const src = readFileSync(arquivo, 'utf8');
             for (const m of src.matchAll(/<input\b[\s\S]{0,700}?\/>/g)) {
                 const tag = m[0];

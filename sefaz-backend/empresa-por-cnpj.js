@@ -1,3 +1,4 @@
+import { limparCnpj } from './documento-dv.js';
 // ============================================================================
 // sefaz-backend/empresa-por-cnpj.js  (PURO — testável)
 // ----------------------------------------------------------------------------
@@ -28,7 +29,10 @@
 // erro que só falha.
 // ============================================================================
 
-export const soDigitosCnpj = (v) => String(v ?? '').replace(/\D/g, '');
+// ⚠️ O nome ficou pelos consumidores, mas desde 07/2026 o CNPJ pode ter LETRAS
+// (IN RFB 2.229/2024): `\D` apagava as letras e o CNPJ novo virava "curto",
+// ou seja "não cadastrado" sobre cliente cadastrado. Quem normaliza é o dono.
+export const soDigitosCnpj = (v) => limparCnpj(v);
 
 /**
  * A empresa cujo CNPJ bate, comparando SEMPRE por dígitos.

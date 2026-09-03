@@ -131,6 +131,19 @@ function sanitizeString(s, maxLen) {
     let cleaned = String(s)
         .replace(/\|/g, ' ')        // pipes viram espaco
         .replace(/[\x00-\x1F\x7F]/g, ' ')  // control chars viram espaco
+        // 🚨 O arquivo sai em latin1 por `charCodeAt & 0xFF`: tudo acima de
+        // U+00FF vira um byte ARBITRÁRIO — o travessão do Word (U+2013) virava
+        // 0x13 (DC3), byte de controle dentro do campo. Translitera o que tem
+        // equivalente e substitui o resto por '?', que o PVA lê.
+        .replace(/[\u2010-\u2015\u2212]/g, '-')
+        .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+        .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+        .replace(/\u2026/g, '...')
+        .replace(/\u00A0/g, ' ')
+        .replace(/[^\u0000-\u00FF]/gu, (ch) => {
+            const base = ch.normalize('NFD')[0];
+            return base && base.charCodeAt(0) <= 0xFF && base.charCodeAt(0) >= 0x20 ? base : '?';
+        })
         .replace(/\s+/g, ' ')        // espacos consecutivos viram 1
         .trim();
     if (maxLen && cleaned.length > maxLen) {
@@ -174,7 +187,10 @@ function sanitizeCep(s) {
  * Termina com |\r\n.
  */
 function buildLine(campos) {
-    return '|' + campos.map(c => c === null || c === undefined ? '' : String(c)).join('|') + '|\r\n';
+    // Rede da LINHA: campo de texto que chegou aqui sem `sanitizeString` e traz
+    // `|` ou quebra de linha partiria o registro em dois — e o 9900/9990/9999
+    // contam ELEMENTOS, então a contagem sairia errada de uma vez.
+    return '|' + campos.map((c) => (c === null || c === undefined ? '' : String(c).replace(/[|\r\n]/g, ' '))).join('|') + '|\r\n';
 }
 
 export {

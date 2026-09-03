@@ -60,7 +60,7 @@ async function buscarPresentes(db, chaves) {
 // ainda respondia por chaves; a casca resolve as duas coisas de uma vez.
 const acharEmpresaPorCnpj = (db, cnpj) => acharEmpresaCadastrada(db, cnpj);
 
-router.post('/conferencia-chaves', requireAuth, express.json({ limit: '2mb' }), async (req, res) => {
+router.post('/conferencia-chaves', requireAuth, async (req, res) => {
     try {
         const texto = req.body?.texto ?? '';
         const chavesInput = Array.isArray(req.body?.chaves) ? req.body.chaves.join('\n') : '';
@@ -78,7 +78,7 @@ router.post('/conferencia-chaves', requireAuth, express.json({ limit: '2mb' }), 
     }
 });
 
-router.post('/conferencia-chaves-importar', requireAuth, express.json({ limit: '1mb' }), async (req, res) => {
+router.post('/conferencia-chaves-importar', requireAuth, async (req, res) => {
     try {
         const cnpjDest = String(req.body?.cnpjDestinatario || '').replace(/\D/g, '');
         if (cnpjDest.length !== 14) {
@@ -194,7 +194,7 @@ router.post('/conferencia-chaves-importar', requireAuth, express.json({ limit: '
 // `simular: true` responde só o RECORTE (quantas seriam consultadas) sem gastar
 // uma chamada — é o que o painel mostra antes de o colaborador confirmar.
 // ============================================================================
-router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req, res) => {
+router.post('/reconferir-cancelamento', requireAuth, async (req, res) => {
     try {
         const cnpjEmpresa = String(req.body?.cnpj || '').replace(/\D/g, '');
         const competencia = String(req.body?.competencia || '').trim();

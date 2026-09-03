@@ -1,9 +1,9 @@
 # Guia do Colaborador — Captura de SAÍDA (NF-e mod 55)
 
-<!-- guia-id: saida-mod55 · guia-revisao: 2026-08-12 -->
+<!-- guia-id: saida-mod55 · guia-revisao: 2026-09-04 -->
 <!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
 
-**Onde:** Central de Documentos Fiscais → aba **📥 Importar** → **Manual & Cofre (saída 55)**
+**Onde:** Central de Documentos Fiscais → aba **📥 Importar** → **📥 Manual & Cofre (saída 55)**
 
 ---
 
@@ -42,7 +42,7 @@ de importação nossa. Esta aba concentra tudo isso. Era o papel da SIEG; agora 
 
 ---
 
-## 2. 📦 Importação Manual (ZIP)
+## 2. 📥 Manual & Cofre (saída 55) — importação do ZIP
 
 > **Quando usar:** para trazer o **histórico** (notas emitidas antes das
 > ligações acima) ou cobrir um período específico que faltou.
@@ -50,7 +50,8 @@ de importação nossa. Esta aba concentra tudo isso. Era o papel da SIEG; agora 
 > mandar — o ZIP fecha o passado.
 
 **Como:** peça ao cliente (ou exporte da SIEG enquanto ativa) o ZIP com os
-XMLs → arraste na seção de Importação ZIP da aba. O sistema deduplica sozinho:
+XMLs → arraste na seção de importação da aba **📥 Manual & Cofre (saída 55)**
+(dentro de **📥 Importar**). O sistema deduplica sozinho:
 pode subir o mesmo arquivo duas vezes sem medo.
 
 ---

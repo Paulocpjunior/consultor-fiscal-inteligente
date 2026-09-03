@@ -16,6 +16,7 @@ import {
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
 import { parseValorMoeda } from '../../services/valorDigitado';
+import { fmtBRL } from '../../services/formatos';
 
 interface Props {
     cnpj: string;
@@ -51,7 +52,6 @@ const CODIGO_POR_DERIVACAO: Record<string, string> = {
     antecipacao: '',
 };
 
-const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competencia, valorInicial, derivacaoInicial, chaveDocumento, onClose }) => {
     const [codigoServico, setCodigoServico] = useState(

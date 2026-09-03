@@ -1,40 +1,73 @@
 // ============================================================================
 // das-valor-utils.js
-// Normalizacao segura de valores de guia DAS vindos da UI/API.
+// Normalizacao segura de valores de guia DAS vindos da UI/API — e o DONO, no
+// backend, da pergunta "que número a pessoa digitou?".
+//
+// ═══ UMA RÉGUA PARA TEXTO DE DINHEIRO (03/09) ═══════════════════════════════
+//
+// Havia DUAS respostas para o mesmo texto: `parseValorDas('10.500')` lia
+// **10,50** (ponto = decimal) e `numeroDeTexto('10.500')` do SPED lia
+// **10.500,00** (ponto = milhar). Dois leitores, dois valores para a MESMA
+// guia — e a divergência aparece na hora errada: um DARF pedindo R$ 10,50
+// sobre um débito de R$ 10.500,00, calado.
+//
+// A régua adotada é a de `services/valorDigitado.ts` (`parseValorMoeda`), que
+// é quem lê o que a PESSOA digita no frontend — espelhada aqui palavra por
+// palavra, porque o backend não importa TypeScript:
+//   · vírgula presente ⇒ pt-BR: pontos são milhar, vírgula é decimal
+//     ("1.234,56" → 1234.56 · "10,5" → 10.5);
+//   · sem vírgula, UM ponto seguido de 1-2 dígitos ⇒ decimal JS
+//     ("1234.56" → 1234.56, como sai de export de sistema);
+//   · sem vírgula, ponto seguido de 3 dígitos ⇒ MILHAR ("10.500" → 10500 —
+//     é a forma que o e-Fiscal imprime quando o valor é redondo; em pt-BR
+//     ninguém escreve dez reais e cinquenta como "10.500");
+//   · ilegível, negativo ou não finito ⇒ **null** — campo de valor nunca
+//     recebe número inventado nem zero de conveniência.
+//
+// `parseValorDas` continua devolvendo 0 no ilegível porque o contrato dele é
+// alimentar `assertValorMinimoDas` ("Valor mínimo R$ 10,00") — a recusa ali é
+// nomeada de outro jeito. O que mudou é a LEITURA, que passou a ser uma só.
 // ============================================================================
 
+/**
+ * O dono da leitura: texto (ou número) de dinheiro → número com 2 casas, ou
+ * **null** quando não dá para afirmar o valor. Espelho de `parseValorMoeda`.
+ *
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+export function dinheiroDeEntrada(v) {
+    if (typeof v === 'number') {
+        if (!Number.isFinite(v) || v < 0) return null;
+        return Math.round(v * 100) / 100;
+    }
+    const t = String(v ?? '').trim().replace(/^R\$\s*/i, '');
+    if (!t) return null;
+    if (!/^[\d.,\s]+$/.test(t)) return null;
+    const s = t.replace(/\s/g, '');
+
+    let normalizado;
+    if (s.includes(',')) {
+        // Vírgula presente ⇒ forma pt-BR: pontos são milhar, vírgula é decimal.
+        normalizado = s.replace(/\./g, '').replace(',', '.');
+    } else {
+        const pontos = (s.match(/\./g) || []).length;
+        const m = /^(\d+)\.(\d{1,2})$/.exec(s);
+        if (pontos === 1 && m) {
+            // Um ponto com 1-2 casas no fim ⇒ decimal JS ("3241688.71").
+            normalizado = s;
+        } else {
+            // "1.234" / "10.500" / "1.234.567" ⇒ pontos de milhar.
+            normalizado = s.replace(/\./g, '');
+        }
+    }
+    const n = Number(normalizado);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 100) / 100;
+}
+
 export function parseValorDas(value) {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    const raw = String(value ?? '').trim();
-    if (!raw) return 0;
-    const cleaned = raw.replace(/[^\d,.-]/g, '');
-    if (!cleaned) return 0;
-
-    const lastComma = cleaned.lastIndexOf(',');
-    const lastDot = cleaned.lastIndexOf('.');
-    if (lastComma >= 0 && lastDot >= 0) {
-        const decimalSep = lastComma > lastDot ? ',' : '.';
-        const thousandSep = decimalSep === ',' ? '.' : ',';
-        const normalized = cleaned
-            .replace(new RegExp(`\\${thousandSep}`, 'g'), '')
-            .replace(decimalSep, '.');
-        const n = Number(normalized);
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    if (lastComma >= 0) {
-        const n = Number(cleaned.replace(/\./g, '').replace(',', '.'));
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    const dotMatches = cleaned.match(/\./g) || [];
-    if (dotMatches.length > 1) {
-        const n = Number(cleaned.replace(/\./g, ''));
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    const n = Number(cleaned);
-    return Number.isFinite(n) ? n : 0;
+    return dinheiroDeEntrada(value) ?? 0;
 }
 
 export function normalizarValorDas(value) {

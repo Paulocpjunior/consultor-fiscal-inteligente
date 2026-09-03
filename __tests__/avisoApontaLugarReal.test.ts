@@ -50,6 +50,8 @@ const INSTRUCAO = /(preencha|cadastre|informe|configure|corrija)/i;
 describe('🚨 aviso ao usuário aponta TELA, não chave do banco', () => {
     it('nenhuma mensagem manda preencher um caminho de campo do Firestore', () => {
         const infratores: string[] = [];
+        // Varredura vazia é trava falsa: as três pastas somam ~940 arquivos hoje.
+        expect(PASTAS.flatMap((p) => varrer(join(RAIZ, p))).length).toBeGreaterThan(500);
         for (const pasta of PASTAS) {
             for (const arquivo of varrer(join(RAIZ, pasta))) {
                 const rel = relative(RAIZ, arquivo).replace(/\\/g, '/');

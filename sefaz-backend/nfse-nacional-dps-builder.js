@@ -22,7 +22,29 @@
 // Estrutura ID DPS (Manual Anexo I):
 //   IBGE municipio emit (7) + tipoInscricao (1) + CNPJ/CPF zero-pad (14) +
 //   serie (5) + numero (15) = 42 chars
+//
+// ═══ O QUE A AUDITORIA DE 03/09 TIROU DAQUI, e por quê ═══════════════════════
+//   · `dhEmi = new Date().toISOString()` → UTC com `Z` e milissegundos: o XSD
+//     do ADN quer `AAAA-MM-DDThh:mm:ss-03:00`, e uma nota emitida em 31/08 às
+//     22h em Brasília nascia com `dCompet` 01/09 — o mês ERRADO, no XML que a
+//     Receita processa. A hora é de BRASÍLIA, pelo dono (`dataHoraBrasilia`).
+//   · `nDPS = Date.now()/1000 % 1e9` → número que NÃO é sequencial e se
+//     REPETE em duas emissões no mesmo segundo. O nDPS é chave da DPS
+//     (compõe o Id): sem `sequencial` a emissão é RECUSADA nomeada — quem sabe
+//     o último número é quem guarda as emitidas (o orquestrador), nunca o
+//     relógio.
+//   · `aliquotaIss ?? 5` → alíquota é DECLARAÇÃO do prestador; 5% "de
+//     conveniência" é o app afirmando o ISS de um serviço que pode ser de 2%.
+//     Ausente é recusa.
+//   · `parseFloat(String(n))` → "1.234,56" virava 1 e ilegível virava "NaN"
+//     dentro do XML. Valor passa por `dinheiroDeEntrada` (o dono).
+//   · `<cTribMun></cTribMun>`, `<xLgr></xLgr>`, `<xBairro></xBairro>`,
+//     `<CEP></CEP>` VAZIOS quando o dado não veio → o XSD recusa elemento
+//     vazio; opcional ausente NÃO se emite (como o `<IM>` já fazia).
 // ============================================================================
+
+import { dinheiroDeEntrada } from './das-valor-utils.js';
+import { dataHoraBrasilia } from './competencia.js';
 
 /**
  * Gera o ID DPS de 42 caracteres exigido pelo Emissor Nacional.
@@ -60,8 +82,62 @@ const esc = (s) => String(s ?? '')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
-const num2 = (n) => (typeof n === 'number' ? n : parseFloat(String(n) || '0'))
-    .toFixed(2);
+// Formata um número JÁ VALIDADO (2 casas, ponto decimal — a forma do XSD).
+// Quem lê texto de dinheiro é `dinheiroDeEntrada`; aqui nunca chega NaN.
+const num2 = (n) => n.toFixed(2);
+
+// `AAAA-MM-DDThh:mm:ss±hh:mm` — a forma que o XSD do ADN aceita (sem `Z`,
+// sem milissegundos).
+const RE_DHEMI_ADN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+
+/**
+ * O `dhEmi` que vai no XML. Ausente ⇒ AGORA em Brasília. Já na forma do ADN
+ * ⇒ como veio (o instante declarado é o do texto — converter reescreveria a
+ * data que o emitente afirmou). Outro instante legível (ISO com `Z`, Date)
+ * ⇒ o MESMO instante escrito em Brasília. Ilegível ⇒ recusa nomeada.
+ */
+export function dhEmiParaDps(dataEmissao) {
+    if (dataEmissao === undefined || dataEmissao === null || dataEmissao === '') {
+        return dataHoraBrasilia(new Date());
+    }
+    if (typeof dataEmissao === 'string' && RE_DHEMI_ADN.test(dataEmissao)) return dataEmissao;
+    const convertido = dataHoraBrasilia(dataEmissao);
+    if (!convertido) {
+        throw new Error(`dataEmissao ilegível (${JSON.stringify(dataEmissao)}) — use AAAA-MM-DDThh:mm:ss-03:00. `
+            + 'Data chutada é NFS-e na competência errada.');
+    }
+    return convertido;
+}
+
+/**
+ * O PRÓXIMO nDPS da série, a partir das DPS já emitidas (o orquestrador lê a
+ * coleção e passa os documentos; este módulo só decide o número). Lê o
+ * `nDps` gravado e, nos documentos antigos que não o têm, o número que está
+ * DENTRO do `idDps` (posições 27-42, com a série nas 22-27). Sem nenhuma
+ * emitida na série ⇒ 1.
+ *
+ * ⚠️ É um máximo+1 sobre o que já foi GRAVADO — duas emissões simultâneas da
+ * mesma empresa podem pedir o mesmo número; a segunda o ADN recusa por
+ * duplicidade (o que é recusa, não nota errada). Numeração atômica é
+ * decisão de desenho do dono.
+ */
+export function proximoSequencialDps(emitidas, serie = 1) {
+    const serieAlvo = String(serie || 1).replace(/\D/g, '').padStart(5, '0').slice(-5);
+    let maior = 0;
+    for (const d of Array.isArray(emitidas) ? emitidas : []) {
+        let n = null;
+        if (d && d.nDps !== undefined && d.nDps !== null && d.nDps !== '') {
+            const serieDoc = String(d.serieDps ?? d.serie ?? 1).replace(/\D/g, '').padStart(5, '0').slice(-5);
+            if (serieDoc !== serieAlvo) continue;
+            n = Number(String(d.nDps).replace(/\D/g, ''));
+        } else if (d && typeof d.idDps === 'string' && /^\d{42}$/.test(d.idDps)) {
+            if (d.idDps.slice(22, 27) !== serieAlvo) continue;
+            n = Number(d.idDps.slice(27, 42));
+        }
+        if (Number.isFinite(n) && n > maior) maior = n;
+    }
+    return maior + 1;
+}
 
 /**
  * Constroi o XML DPS completo (sem assinatura — assinatura e feita por
@@ -75,13 +151,30 @@ export function buildDpsXml(req) {
     if (!prestador?.cnpj) throw new Error('prestador.cnpj obrigatorio');
     if (!tomador?.nome) throw new Error('tomador.nome obrigatorio');
     if (!servico?.descricao) throw new Error('servico.descricao obrigatorio');
-    if (!(servico?.valor > 0)) throw new Error('servico.valor obrigatorio (>0)');
+    const valorBruto = dinheiroDeEntrada(servico?.valor);
+    if (valorBruto === null || valorBruto <= 0) {
+        throw new Error(`servico.valor obrigatorio (>0) — recebido ${JSON.stringify(servico?.valor)}; use 1234,56 ou 1234.56`);
+    }
+    if (servico?.aliquotaIss === undefined || servico?.aliquotaIss === null || servico?.aliquotaIss === '') {
+        throw new Error('servico.aliquotaIss obrigatorio — a alíquota do ISS é declaração do prestador, o app não a chuta (5% "de conveniência" é ISS afirmado errado)');
+    }
+    const aliquotaIss = dinheiroDeEntrada(servico.aliquotaIss);
+    if (aliquotaIss === null) {
+        throw new Error(`servico.aliquotaIss ilegível (${JSON.stringify(servico.aliquotaIss)}) — use 5 ou 2,5`);
+    }
+    // 🚨 O nDPS é CHAVE da DPS (compõe o Id de 42 posições). Derivá-lo do
+    // relógio produzia número não sequencial e REPETIDO no mesmo segundo.
+    const numeroSeq = Number(sequencial);
+    if (!Number.isInteger(numeroSeq) || numeroSeq < 1 || numeroSeq > 999_999_999_999_999) {
+        throw new Error(`sequencial (nDPS) obrigatorio — inteiro de 1 a 999999999999999, recebido ${JSON.stringify(sequencial)}. `
+            + 'Quem sabe o próximo número é quem guarda as DPS emitidas (proximoSequencialDps), nunca o relógio.');
+    }
 
     const ibgePrestador = String(servico.municipioPrestacao || prestador.municipioIbge || '3550308').replace(/\D/g, '').padStart(7, '0').slice(-7);
     const cnpjEmit = String(prestador.cnpj).replace(/\D/g, '').padStart(14, '0').slice(-14);
     const serie = req.serie || 1;
-    const numero = sequencial || Math.floor(Date.now() / 1000) % 1_000_000_000;
-    const dhEmi = dataEmissao || new Date().toISOString();
+    const numero = numeroSeq;
+    const dhEmi = dhEmiParaDps(dataEmissao);
     // tpAmb: 1 = producao, 2 = homologacao (mesma convencao NFe)
     const tpAmb = ambiente === 'producao' ? '1' : '2';
 
@@ -93,8 +186,6 @@ export function buildDpsXml(req) {
         numero,
     });
 
-    const aliquotaIss = servico.aliquotaIss ?? 5;
-    const valorBruto = +Number(servico.valor).toFixed(2);
     const issValor = +(valorBruto * (aliquotaIss / 100)).toFixed(2);
 
     // tomador: ou CNPJ ou CPF (exclusivo)
@@ -106,16 +197,24 @@ export function buildDpsXml(req) {
             ? `<CPF>${tomadorCpf}</CPF>`
             : '<NIFNaoInformado/>'; // fallback — manual permite NIF estrangeiro / nao informado
 
+    // Elemento OPCIONAL: ausente não se emite — `<x></x>` vazio é o que o XSD
+    // recusa (e o que fazia o `<IM>` já ser condicional).
+    const opcional = (tag, valor) => {
+        const v = String(valor ?? '').trim();
+        return v ? `<${tag}>${esc(v)}</${tag}>` : '';
+    };
+
     // Endereco tomador (opcional)
+    const cepLimpo = tomador.endereco ? String(tomador.endereco.cep || '').replace(/\D/g, '') : '';
     const enderecoBlock = tomador.endereco ? `
       <end>
-        <xLgr>${esc(tomador.endereco.logradouro || '')}</xLgr>
+        ${opcional('xLgr', tomador.endereco.logradouro)}
         <nro>${esc(tomador.endereco.numero || 'S/N')}</nro>
-        ${tomador.endereco.complemento ? `<xCpl>${esc(tomador.endereco.complemento)}</xCpl>` : ''}
-        <xBairro>${esc(tomador.endereco.bairro || '')}</xBairro>
+        ${opcional('xCpl', tomador.endereco.complemento)}
+        ${opcional('xBairro', tomador.endereco.bairro)}
         <cMun>${esc(String(tomador.endereco.codigoMunicipioIbge || ibgePrestador).padStart(7, '0').slice(-7))}</cMun>
         <UF>${esc(tomador.endereco.uf || 'SP')}</UF>
-        <CEP>${esc(String(tomador.endereco.cep || '').replace(/\D/g, ''))}</CEP>
+        ${opcional('CEP', cepLimpo)}
         <cPais>1058</cPais><xPais>BRASIL</xPais>
       </end>` : '';
 
@@ -157,7 +256,7 @@ export function buildDpsXml(req) {
       <locPrest><cLocPrestacao>${ibgePrestador}</cLocPrestacao></locPrest>
       <cServ>
         <cTribNac>${cTribNac}</cTribNac>
-        <cTribMun>${esc(servico.cTribMun || '')}</cTribMun>
+        ${opcional('cTribMun', servico.cTribMun)}
         <xDescServ>${esc(servico.descricao)}</xDescServ>
         <cNBS>${cTribNac}</cNBS>
         <cIntContrib>${esc(servico.cIntContrib || numero)}</cIntContrib>

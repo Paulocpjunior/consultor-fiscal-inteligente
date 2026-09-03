@@ -117,7 +117,7 @@ router.get('/base-credito', requireAdmin, async (req, res) => {
 });
 
 // ── POST backfill do CST ────────────────────────────────────────────────────
-router.post('/backfill-cst', requireAdmin, express.json(), async (req, res) => {
+router.post('/backfill-cst', requireAdmin, async (req, res) => {
     try {
         const empresaId = String(req.body?.empresaId || '').trim() || null;
         const competencias = Array.isArray(req.body?.competencias) ? req.body.competencias : [];

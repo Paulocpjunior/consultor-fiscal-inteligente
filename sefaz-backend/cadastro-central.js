@@ -41,7 +41,11 @@
 
 import { regimeDaEmpresa, rotuloRegime, semFinsLucrativos as ehSemFinsLucrativos } from './regime-tributario.js';
 import { ccmSpDaEmpresa } from './ccm-sp.js';
-export const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
+import { limparCnpj } from './documento-dv.js';
+// ⚠️ Nome mantido pelos consumidores; normaliza pelo dono (`limparCnpj`), que
+// PRESERVA letras — CNPJ alfanumérico (07/2026) apagado pelo `\D` saía do túnel
+// como "cadastro sem CNPJ" sobre cliente cadastrado.
+export const soDigitos = (v) => limparCnpj(v);
 const texto = (v) => {
     const t = String(v ?? '').trim();
     return t || null;

@@ -114,7 +114,7 @@ router.get('/declaracoes', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/sincronizar', requireAuth, express.json(), async (req, res) => {
+router.post('/sincronizar', requireAuth, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = req.body || {};
         if (!empresaId || !empresaCnpj) return res.status(400).json({ error: 'empresaId+empresaCnpj' });
@@ -136,7 +136,7 @@ router.post('/sincronizar', requireAuth, express.json(), async (req, res) => {
 // declaração em andamento com o insumo que chegou depois, e o fluxo (consulta o
 // XML → assina → TRANSDECLARACAO310) a entrega. O que muda é o rito em volta —
 // motivo obrigatório e auditoria com os débitos ANTES e DEPOIS.
-router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
+router.post('/transmitir', requireAuth, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = req.body || {};
         if (!empresaId || !empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaId+empresaCnpj+anoPA+mesPA' });
@@ -245,7 +245,7 @@ router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/gerar-darf', requireAuth, express.json(), async (req, res) => {
+router.post('/gerar-darf', requireAuth, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, categoria, emAndamento } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
@@ -295,7 +295,7 @@ router.get('/debitos', requireAuth, async (req, res) => {
 // Guias separadas por vencimento: 1 DARF avulso (SICALC) por débito da
 // declaração transmitida — PIS/COFINS no dia 25 antecipado, IRPJ/CSLL
 // trimestrais no último dia útil do mês seguinte ao trimestre.
-router.post('/gerar-darfs-separados', requireAuth, express.json(), async (req, res) => {
+router.post('/gerar-darfs-separados', requireAuth, async (req, res) => {
     try {
         const { empresaCnpj, anoPA, mesPA, categoria, quotasTrimestrais, apenasCodigos } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
@@ -332,7 +332,7 @@ router.get('/quotas-agendadas', requireAuth, async (req, res) => {
 // Gera a guia de UMA quota agendada. Uma a uma, por ação explícita — a regra
 // da casa desde 28/07: imposto não sai em lote, e a SEFAZ/RFB não desfaz
 // emissão.
-router.post('/quotas-agendadas/emitir', requireAuth, express.json(), async (req, res) => {
+router.post('/quotas-agendadas/emitir', requireAuth, async (req, res) => {
     try {
         const id = String(req.body?.id || '');
         if (!id) return res.status(400).json({ error: 'Informe o id da quota agendada.' });
@@ -417,7 +417,7 @@ async function checarTravaInsumos(req, { empresaCnpj, empresaId, anoPA, mesPA })
     return null;
 }
 
-router.post('/mit/encerrar', requireAuth, express.json(), async (req, res) => {
+router.post('/mit/encerrar', requireAuth, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, dadosApuracaoMit } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
@@ -435,7 +435,7 @@ router.post('/mit/encerrar', requireAuth, express.json(), async (req, res) => {
 // servidor e transmite o ENCAPURACAO314, com log de auditoria. Os códigos de
 // débito vêm da última apuração anterior da própria empresa no MIT — nunca
 // são chutados de tabela.
-router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, res) => {
+router.post('/mit/preencher-encerrar', requireAuth, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir, familiasSelecionadas } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });
@@ -469,7 +469,7 @@ router.post('/mit/preencher-encerrar', requireAuth, express.json(), async (req, 
 // transmitir=false → proposta antes→depois (preview obrigatório);
 // transmitir=true → remonta tudo no servidor e transmite, com auditoria em
 // dctfweb_mit_retificacoes.
-router.post('/mit/retificar', requireAdmin, express.json(), async (req, res) => {
+router.post('/mit/retificar', requireAdmin, async (req, res) => {
     try {
         const { empresaId, empresaCnpj, anoPA, mesPA, tributosApp, transmitir } = req.body || {};
         if (!empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaCnpj+anoPA+mesPA' });

@@ -110,16 +110,30 @@ export async function restaurarTodasNotas(empresaId: string): Promise<{ ok: bool
     if (!isFirebaseConfigured) return { ok: false, count: 0, error: 'Firebase nao configurado' };
     if (!empresaId) return { ok: false, count: 0, error: 'empresaId obrigatorio' };
     try {
-        const snap = await getDocs(query(
-            collection(db, COLLECTION),
-            where('empresaId', '==', empresaId),
-            fbLimit(500),
-        ));
-        if (snap.empty) return { ok: true, count: 0 };
-        const batch = writeBatch(db);
-        snap.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-        return { ok: true, count: snap.size };
+        // 🚨 O `fbLimit(500)` era um TETO MUDO: acima de 500 regras, a função
+        // restaurava as 500 primeiras e devolvia `count` como se fosse tudo — a
+        // tela dizia "restauradas" e sobravam ocultas. Agora repete até esgotar
+        // (com teto de rodadas contra laço infinito) e DIZ quantas sobraram.
+        const TAMANHO = 500;
+        const MAX_RODADAS = 40;
+        let count = 0;
+        for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
+            const snap = await getDocs(query(
+                collection(db, COLLECTION),
+                where('empresaId', '==', empresaId),
+                fbLimit(TAMANHO),
+            ));
+            if (snap.empty) return { ok: true, count };
+            const batch = writeBatch(db);
+            snap.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            count += snap.size;
+            if (snap.size < TAMANHO) return { ok: true, count };
+        }
+        return {
+            ok: true, count,
+            error: `${count} restaurada(s), mas o teto de ${MAX_RODADAS * TAMANHO} por clique foi atingido — pode ter sobrado; clique de novo para continuar.`,
+        };
     } catch (e) {
         console.error('[notasOcultas] restaurarTodas:', e);
         return { ok: false, count: 0, error: e instanceof Error ? e.message : 'erro' };

@@ -126,7 +126,7 @@ router.get('/', requireAuth, async (req, res) => {
 // por ultimaSincronizacao; tie-break por docId mais longo = mais informacao) e
 // marca os perdedores com _merged_into: <docIdVencedor> + _merged_at + _merged_by.
 // NAO deleta — preserva auditoria. So admin. dryRun=true (default) so simula.
-router.post('/merge-duplicatas', requireAuth, express.json(), async (req, res) => {
+router.post('/merge-duplicatas', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
         const dryRun = req.body?.dryRun !== false; // default true — exige opt-in pra escrever

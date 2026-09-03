@@ -12,6 +12,7 @@
 import React, { useMemo, useState } from 'react';
 import { varrerBasesSimples, type DivergenciaBase } from '../services/simplesBaseDivergencia';
 import type { SimplesNacionalEmpresa } from '../types';
+import { fmtComp } from '../services/formatos';
 
 interface Props {
     empresas: SimplesNacionalEmpresa[];
@@ -22,7 +23,6 @@ interface Props {
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtCnpj = (c: string) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-const fmtComp = (c: string) => c.split('-').reverse().join('/');
 
 const competenciasRecentes = (n = 12): string[] => {
     const out: string[] = [];

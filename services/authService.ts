@@ -19,10 +19,12 @@ import {
 } from 'firebase/firestore';
 
 import { EMAIL_ADMIN_MASTER } from './adminMaster';
+import { limparDadosLocaisDaSessao, ehSessaoNova } from './sessaoLocal';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STORAGE_KEY_SESSION  = 'app_current_session';   // cache local (fallback offline)
 const STORAGE_KEY_LOGS     = 'app_access_logs';        // cache local de logs
+
 const REQUIRED_DOMAIN      = '@spassessoriacontabil.com.br';
 const MASTER_ADMIN_EMAIL   = EMAIL_ADMIN_MASTER;
 
@@ -100,6 +102,7 @@ export const logout = async () => {
     const user = getCurrentUser();
     if (user) logAction(user.id, user.name, 'logout');
     clearLocalSession();
+    limparDadosLocaisDaSessao();
     if (isFirebaseConfigured && auth) await signOut(auth);
 };
 
@@ -111,6 +114,12 @@ export const logout = async () => {
 export const syncUserFromAuth = async (firebaseUser: FirebaseUser): Promise<User> => {
     const cleanEmail = normalizeEmail(firebaseUser.email || '');
     const isMaster   = cleanEmail === normalizeEmail(MASTER_ADMIN_EMAIL);
+    // 🚨 'login' só quando a sessão NÃO existia. O `onAuthStateChanged` dispara
+    // também no refresh de token e no F5 — e cada disparo gravava um 'login'
+    // em `access_logs`, então o histórico dizia que a pessoa entrou dez vezes
+    // numa manhã em que entrou uma. Quem responde é o cache da sessão: se ele
+    // já tem este uid, é a MESMA sessão continuando.
+    const sessaoNova = ehSessaoNova(getCurrentUser(), firebaseUser.uid);
 
     const fallbackUser: User = {
         id:         firebaseUser.uid,
@@ -139,7 +148,7 @@ export const syncUserFromAuth = async (firebaseUser: FirebaseUser): Promise<User
             }
 
             cacheSession(userData);
-            logAction(userData.id, userData.name, 'login');
+            if (sessaoNova) logAction(userData.id, userData.name, 'login');
             return userData;
         }
 
@@ -151,7 +160,7 @@ export const syncUserFromAuth = async (firebaseUser: FirebaseUser): Promise<User
         });
 
         cacheSession(fallbackUser);
-        logAction(fallbackUser.id, fallbackUser.name, 'login');
+        if (sessaoNova) logAction(fallbackUser.id, fallbackUser.name, 'login');
         return fallbackUser;
 
     } catch (e: any) {

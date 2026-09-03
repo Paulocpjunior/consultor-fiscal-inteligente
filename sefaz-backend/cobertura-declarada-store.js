@@ -59,13 +59,38 @@ export async function gravarCoberturaDeclarada(db, { empresaId, empresaCnpj, com
     const id = idDoFechamento(empresaId, competencia);
     const comp = normalizarCompetencia(competencia);
     if (!id || !comp) throw new Error('Empresa ou competência ilegível — a declaração não foi gravada.');
+    const ref = db.collection(COLECAO_COBERTURAS).doc(id);
+    // 🚨 O `set(doc)` sem olhar o que já estava lá APAGAVA a declaração
+    // anterior (03/09): "quem declarou antes, e o quê?" é a pergunta de quem
+    // confere a competência meses depois — e ela ficava sem resposta. A
+    // declaração NOVA continua sendo a que vale (ela substitui a lista de
+    // obrigações cobertas); o histórico fica ao lado, como no `ritoRefeito`.
+    let anterior = null;
+    try {
+        const snap = await ref.get();
+        anterior = snap.exists ? (snap.data() || null) : null;
+    } catch (e) {
+        console.warn(`[cobertura-store] leitura prévia de ${id} indisponível:`, e.message);
+    }
+    const agora = new Date().toISOString();
+    const historico = Array.isArray(anterior?.declaracoesAnteriores) ? anterior.declaracoesAnteriores : [];
     const doc = {
         empresaId: String(empresaId),
         empresaCnpj: String(empresaCnpj || '').replace(/\D/g, '') || null,
         competencia: comp,
         ...declaracao,
-        gravadoEm: new Date().toISOString(),
+        gravadoEm: agora,
+        primeiraDeclaracaoEm: anterior?.primeiraDeclaracaoEm || anterior?.gravadoEm || agora,
+        declaracoesAnteriores: anterior
+            ? [...historico, {
+                gravadoEm: anterior.gravadoEm || null,
+                autor: anterior.autor ?? null,
+                obrigacoes: anterior.obrigacoes ?? null,
+                texto: anterior.texto ?? null,
+                data: anterior.data ?? null,
+            }].slice(-10)
+            : historico,
     };
-    await db.collection(COLECAO_COBERTURAS).doc(id).set(doc);
+    await ref.set(doc);
     return doc;
 }

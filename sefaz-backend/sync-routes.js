@@ -4,6 +4,7 @@
 // ============================================================================
 
 import express from 'express';
+import { createHash } from 'crypto';
 import admin from 'firebase-admin';
 import forge from 'node-forge';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
@@ -65,14 +66,17 @@ function requireCronAuth(req, res, next) {
     // Drift de secret entre Scheduler e Cloud Run e causa conhecida de cron
     // silenciosamente parado (vide commit 71d4c3a + incidente 01/06/2026).
     // Loga prefixos pra diagnosticar sem vazar secret completo.
-    const headerPrefix = headerSecret ? String(headerSecret).slice(0, 4) + '...' : '(ausente)';
-    const envPrefix = secret.slice(0, 4) + '...';
+    // Prefixo do SHA-256, nunca do segredo: 4 bytes do valor real no log eram 4
+    // bytes a menos para adivinhar — e qualquer um forçava a linha a sair.
+    const impressao = (v) => createHash('sha256').update(String(v)).digest('hex').slice(0, 8);
+    const headerPrefix = headerSecret ? impressao(headerSecret) + '…' : '(ausente)';
+    const envPrefix = impressao(secret) + '…';
     const jobName = req.headers['x-cloudscheduler-jobname'] || '(no header)';
     console.warn(`[requireCronAuth] 403 mismatch — header=${headerPrefix} env=${envPrefix} job=${jobName} ip=${req.ip}`);
     return res.status(403).json({ error: 'Cron auth failed' });
 }
 
-router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
+router.post('/sync-one', requireAuth, async (req, res) => {
   try {
     const { empresaId, empresaCnpj, resetNSU = false } = req.body || {};
     if (!empresaId || !empresaCnpj) {
@@ -365,7 +369,7 @@ async function executarSyncDirigido({ cnpjs, sleepMs, pararEm656, capturadoPor, 
   };
 }
 
-router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) => {
+router.post('/sync-targeted', requireCronAuth, async (req, res) => {
   const cnpjs = normalizarCnpjsDirigidos(req.body?.cnpjs);
   if (!cnpjs.length) return res.status(400).json({ error: 'cnpjs array vazio' });
 
@@ -390,7 +394,7 @@ router.post('/sync-targeted', requireCronAuth, express.json(), async (req, res) 
 // e do Cloud Run, e a pessoa concluiria que "não funcionou" no meio de uma
 // captura que está andando. O heartbeat é o MESMO do cron (`sefaz_cron_logs`),
 // senão a rodada do botão não apareceria na saúde dos crons.
-router.post('/sync-targeted-now', requireAuth, express.json(), async (req, res) => {
+router.post('/sync-targeted-now', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Apenas administradores' });
   }
@@ -785,7 +789,7 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
 // global). Se SEFAZ retornar cStat=137 (nao localizado), tenta com o CNPJ
 // EMITENTE (primeiros 7-20 digitos da chave) — assim cobrimos os dois lados
 // da NFe (emitente sempre tem acesso a propria NFe via DistDFe).
-router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, res) => {
+router.post('/consulta-nfe-por-chave', requireAuth, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Apenas administradores' });
@@ -975,7 +979,7 @@ router.post('/consulta-nfe-por-chave', requireAuth, express.json(), async (req, 
 // colaborador está exportando — relendo os XMLs já guardados no Storage.
 // Existe porque esperar o cron drenar não serve pra quem está com a tela
 // aberta e o botão de gerar bloqueado (caso 04/08, EDUARDO GUERRA 08/2026).
-router.post('/corrigir-endereco-destinatario', requireAuth, express.json(), async (req, res) => {
+router.post('/corrigir-endereco-destinatario', requireAuth, async (req, res) => {
   try {
     const { empresaId, competencia } = req.body || {};
     if (!empresaId && !competencia) {
@@ -1005,7 +1009,7 @@ router.post('/corrigir-endereco-destinatario', requireAuth, express.json(), asyn
 // nota, e as duas primeiras posições da chave de acesso são o cUF do
 // emitente. Ou seja: se o CNPJ já apareceu como emitente em qualquer
 // documento nosso, a UF dele está na chave — informação da própria SEFAZ.
-router.post('/uf-participantes', requireAuth, express.json({ limit: '2mb' }), async (req, res) => {
+router.post('/uf-participantes', requireAuth, async (req, res) => {
   try {
     const pedidos = Array.isArray(req.body?.cnpjs) ? req.body.cnpjs : [];
     const alvos = new Set(pedidos.map((c) => String(c || '').replace(/\D/g, '')).filter((c) => c.length === 14));
@@ -1853,7 +1857,7 @@ router.get('/cron-logs', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
+router.post('/toggle/:cnpj', requireAuth, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Apenas administradores podem alterar este status.' });

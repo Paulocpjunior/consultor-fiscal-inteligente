@@ -87,6 +87,32 @@ export function autorizadoNoXml(xml, cnpjEscritorio) {
     return extrairAutXml(xml).includes(alvo);
 }
 
+/**
+ * Tomador do serviço num CT-e (`{cnpj, nome, uf, origem}`), ou `null` fora
+ * do CT-e / sem indicação. `origem` diz de onde saiu ('toma4' ou o bloco
+ * apontado pelo toma3: 'rem' · 'exped' · 'receb' · 'dest').
+ */
+export function extrairTomadorCte(xml) {
+    const s = String(xml || '');
+    if (!/<infCte[\s>]/i.test(s)) return null;
+    const bloco = (tag) => {
+        const b = pickFirstBlock(s, tag);
+        if (!b) return null;
+        // O bloco de endereço não segue o nome do pai à risca: <rem> traz <enderReme>.
+        const ENDERECO = { rem: 'enderReme', exped: 'enderExped', receb: 'enderReceb', dest: 'enderDest', toma4: 'enderToma' };
+        const end = pickFirstBlock(b, ENDERECO[tag]);
+        const cnpj = pickTag(b, 'CNPJ') || pickTag(b, 'CPF') || null;
+        if (!cnpj) return null;
+        return { cnpj, nome: pickTag(b, 'xNome') || null, uf: pickTag(end, 'UF') || null, origem: tag };
+    };
+    const toma4 = bloco('toma4');
+    if (toma4) return toma4;
+    const toma = pickTag(pickFirstBlock(s, 'toma3'), 'toma');
+    const porCodigo = { 0: 'rem', 1: 'exped', 2: 'receb', 3: 'dest' };
+    const tag = porCodigo[String(toma ?? '').trim()];
+    return tag ? bloco(tag) : null;
+}
+
 export function extrairParticipantesNfe(xml) {
     const emit = pickFirstBlock(xml, 'emit');
     const dest = pickFirstBlock(xml, 'dest');
@@ -100,7 +126,17 @@ export function extrairParticipantesNfe(xml) {
     const endEmit = pickFirstBlock(emit, 'enderEmit');
     const endDest = pickFirstBlock(dest, 'enderDest');
 
+    // 🚚 CT-e: <dest> é o destinatário FINAL da mercadoria — a parte que
+    // escritura o frete (e por isso é a contraparte do transportador) é quem
+    // TOMA o serviço: <toma4> traz o tomador com documento próprio; <toma3>
+    // aponta para um dos blocos (0 rem · 1 exped · 2 receb · 3 dest). O
+    // frontend (`parseCTeXml`) já lia isto desde 19/08 (caso A CASTELLANO);
+    // o backend só conhecia <dest>, e o CT-e tomado pelo remetente ficava com
+    // direção "desconhecida" — sem dono, invisível em todo filtro por cliente.
+    const tomador = extrairTomadorCte(xml);
+
     return {
+        tomador,
         emitente: {
             cnpj: pickTag(emit, 'CNPJ') || pickTag(emit, 'CPF') || null,
             nome: pickTag(emit, 'xNome') || null,
@@ -211,6 +247,26 @@ export function ehNotaPropriaDeEntrada(d, empresaCnpj) {
 // da própria nota (legado 101/151 = cancelamento homologado) e os eventos[]
 // (110111 registrado = 135/155). O backfill do sync-cron conserta o banco aos
 // poucos; a leitura não espera o próximo ciclo.
+
+/**
+ * Status do documento pelo cStat do PROTOCOLO (infProt) — DONO ÚNICO.
+ *
+ * 🚨 03/09: o importer e o auto-sync do SharePoint tinham a tabela copiada e
+ * INCOMPLETA — `150` (autorizada FORA DE PRAZO, nota válida) caía em
+ * 'rejeitado' e sumia da escrituração; `151` (cancelamento fora de prazo) e
+ * `301/302/303` (denegação) também viravam 'rejeitado'. Tabela do leiaute
+ * (MOC NF-e): 100/150 autorizada · 101/151 cancelada · 110/301/302/303 denegada
+ * · 102 inutilizada. O resto é recusa da SEFAZ.
+ */
+export function statusDoCstatProtocolo(cStat) {
+    const c = String(cStat || '').trim();
+    if (!c) return 'desconhecido';
+    if (c === '100' || c === '150') return 'autorizado';
+    if (c === '101' || c === '151') return 'cancelado';
+    if (c === '110' || c === '301' || c === '302' || c === '303') return 'denegado';
+    if (c === '102') return 'inutilizado';
+    return 'rejeitado';
+}
 
 const STATUS_CANCELADO = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 /** cStat da PRÓPRIA nota que significa cancelamento (legado pré-evento). */

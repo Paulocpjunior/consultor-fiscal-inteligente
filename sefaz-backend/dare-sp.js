@@ -180,14 +180,22 @@ export const SERVICOS_BLOQUEADOS_LOTE = ['06305', '08101', '1044', '89202'];
 
 /** Uma linha do lote TXT. Valida TUDO via montarDare (mesma régua da guia
  *  unitária) e formata exatamente como os exemplos oficiais. */
-export function montarLinhaLoteTxt({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento }) {
+export function montarLinhaLoteTxt(item) {
+  return montarItemLote(item).linha;
+}
+
+/** A linha E o valor VALIDADO que ela carrega — é dele que o total do lote sai. */
+function montarItemLote({ cnpj, razaoSocial, codigoServico, referencia, valor, vencimento }) {
   const svcNum = String(codigoServico || '').trim();
   if (SERVICOS_BLOQUEADOS_LOTE.includes(svcNum)) {
     throw new Error(`Serviço ${svcNum} não pode ser emitido em lote (regra do portal DARE) — emita pelo Dare Unitário.`);
   }
   const p = montarDare({ cnpj, razaoSocial: razaoSocial || 'lote', codigoServico, referencia, valor, vencimento });
   const vencBr = p.vencimento.split('-').reverse().join('/'); // AAAA-MM-DD → DD/MM/AAAA
-  return `${p.contribuinte.cnpj};${p.codigoServico};${p.referencia};${vencBr};${p.valor.toFixed(2)};1`;
+  return {
+    linha: `${p.contribuinte.cnpj};${p.codigoServico};${p.referencia};${vencBr};${p.valor.toFixed(2)};1`,
+    valor: p.valor,
+  };
 }
 
 /**
@@ -202,13 +210,18 @@ export function montarLoteTxt(itens) {
   if (itens.length > MAX_DOCS_LOTE_DARE) {
     throw new Error(`Lote com ${itens.length} documentos — o portal aceita no máximo ${MAX_DOCS_LOTE_DARE} por lote. Divida em lotes menores.`);
   }
-  const linhas = itens.map((item, i) => {
+  const montados = itens.map((item, i) => {
     try {
-      return montarLinhaLoteTxt(item);
+      return montarItemLote(item);
     } catch (e) {
       throw new Error(`Item ${i + 1} (${item?.razaoSocial || item?.cnpj || '?'}): ${e.message}`);
     }
   });
-  const totalValor = Math.round(itens.reduce((s, it) => s + Number(it.valor || 0) * 100, 0)) / 100;
+  const linhas = montados.map((m) => m.linha);
+  // 🚨 O total era somado dos itens CRUS (`Number(it.valor || 0)`), enquanto
+  // cada linha sai do valor VALIDADO em centavos por `montarDare` (03/09). O
+  // total podia divergir da soma das linhas — e readmitir o que `montarDare`
+  // tinha acabado de recusar. O total é a soma das LINHAS, centavo a centavo.
+  const totalValor = montados.reduce((s, m) => s + Math.round(m.valor * 100), 0) / 100;
   return { texto: linhas.join('\n'), linhas, totalValor };
 }

@@ -112,6 +112,25 @@ export function recorteDaNfsePdf(parsed: {
 }
 
 /**
+ * O VALOR que o documento declara, na régua que decide gravar.
+ *
+ * 🚨 NUNCA ZERO. O leitor do PDF devolve `null` quando o campo não veio
+ * legível; gravar isso como 0 põe a nota no faturamento e na base do
+ * PIS/COFINS valendo nada — e nenhum validador denuncia, porque zero é um
+ * número plausível. Sem o valor do serviço a importação RECUSA nomeando o
+ * campo; o ISS ausente NÃO recusa (há nota sem ISS destacado), mas viaja como
+ * `null`, que é o que os leitores entendem como "o documento não disse".
+ */
+export function impedimentoDeValorDaNfsePdf(parsed: { valorServicos?: number | null; lacunas?: string[] }): string | null {
+    const v = parsed?.valorServicos;
+    if (typeof v === 'number' && Number.isFinite(v)) return null;
+    const quais = (parsed?.lacunas || []).length ? ` Campos não lidos: ${(parsed.lacunas || []).join(', ')}.` : '';
+    return 'O VALOR DO SERVIÇO não foi lido deste PDF (campo "Valor do Serviço" ausente ou ilegível).'
+        + quais
+        + ' A nota não entra valendo zero — digite o valor no campo "Valor servicos" antes de salvar, conferindo no papel.';
+}
+
+/**
  * O id do documento.
  *
  * 🐛 Ele levava `Date.now()` quando a NFS-e não tem chave de acesso (o caso das

@@ -45,6 +45,18 @@ import {
     interpretarRespostaTriagem, decidirDestinoDaTriagem,
 } from './whatsapp-triagem-ia.js';
 
+// Diagnóstico gravado por requisição ANÔNIMA (GET de verificação, POST com
+// assinatura recusada): uma gravação por minuto basta para dizer "a Meta bateu"
+// — sem o teto, qualquer um forçava uma escrita no Firestore por chamada.
+const ultimaGravacaoDiag = new Map();
+function podeGravarDiagnostico(chave, janelaMs = 60_000) {
+    const agora = Date.now();
+    const ultima = ultimaGravacaoDiag.get(chave) || 0;
+    if (agora - ultima < janelaMs) return false;
+    ultimaGravacaoDiag.set(chave, agora);
+    return true;
+}
+
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
 const storage = new Storage();
@@ -69,6 +81,7 @@ router.get('/webhook', (req, res) => {
     // atrasar nem derrubar o handshake real.
     const temHub = Boolean(req.query?.['hub.mode'] || req.query?.['hub.verify_token'] || req.query?.['hub.challenge']);
     setImmediate(async () => {
+        if (!podeGravarDiagnostico('webhook_verificacao')) return;
         try {
             await getDb().collection('whatsapp_config').doc('webhook_verificacao').set({
                 em: new Date().toISOString(),
@@ -742,6 +755,7 @@ router.post('/webhook', async (req, res) => {
         // exatamente a diferença entre INSTAGRAM_APP_SECRET errada e o
         // webhook do caso de uso nem configurado.
         setImmediate(async () => {
+            if (!podeGravarDiagnostico('webhook_post_recusado')) return;
             try {
                 await getDb().collection('whatsapp_config').doc('webhook_post_recusado').set({
                     em: new Date().toISOString(),
@@ -761,10 +775,12 @@ router.post('/webhook', async (req, res) => {
 
         // 1) Evento cru primeiro — se o resto falhar, a reentrega reprocessa.
         const hash = createHash('sha256').update(req.rawBody).digest('hex').slice(0, 40);
-        await db.collection('whatsapp_webhook_eventos').doc(hash).set({
-            recebidoEm: agora,
-            payload: req.body,
-        }, { merge: true });
+        const evRef = db.collection('whatsapp_webhook_eventos').doc(hash);
+        // REPLAY: o mesmo payload assinado reentregue (ou capturado e repetido)
+        // reprocessava tudo — inclusive o BOT, que responde ao cliente e gasta
+        // Gemini a cada repetição. Evento já visto responde 200 e para aqui.
+        if ((await evRef.get()).exists) return res.sendStatus(200);
+        await evRef.set({ recebidoEm: agora, payload: req.body });
 
         // ── 📷 Instagram: MESMO endpoint, outro objeto ──────────────────────
         // A assinatura já foi validada (o app secret assina TODOS os webhooks

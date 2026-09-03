@@ -14,7 +14,21 @@ export interface XmlParticipanteNfe {
 export interface XmlParticipantesNfe {
     emitente: XmlParticipanteNfe;
     destinatario: XmlParticipanteNfe;
+    /** Só CT-e: quem TOMA o frete (toma4, ou o bloco apontado pelo toma3). */
+    tomador: XmlTomadorCte | null;
 }
+
+export interface XmlTomadorCte {
+    cnpj: string;
+    nome: string | null;
+    uf: string | null;
+    origem: 'toma4' | 'rem' | 'exped' | 'receb' | 'dest';
+}
+
+export function extrairTomadorCte(xml: string): XmlTomadorCte | null;
+
+/** Situação do documento pelo cStat do PROTOCOLO (dono único — 150 é autorizado fora de prazo). */
+export function statusDoCstatProtocolo(cStat: string | number | null | undefined): 'autorizado' | 'cancelado' | 'denegado' | 'inutilizado' | 'rejeitado' | 'desconhecido';
 
 export function competenciaFromDhEmi(value: unknown): string | null;
 export function extrairParticipantesNfe(xml: string): XmlParticipantesNfe;

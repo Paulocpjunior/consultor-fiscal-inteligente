@@ -86,7 +86,7 @@ router.get('/', requireAuth, async (req, res) => {
     }
 });
 
-router.post('/', requireAdmin, express.json(), async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
     try {
         const p = req.body || {};
         const v = validarPrazoMunicipal(p);
@@ -138,7 +138,7 @@ router.post('/', requireAdmin, express.json(), async (req, res) => {
 // então ninguém pergunta de novo no mês seguinte. É isso que faz o cadastro se
 // preencher sozinho pelo uso.
 // ============================================================================
-router.post('/informar', requireAuth, express.json(), async (req, res) => {
+router.post('/informar', requireAuth, async (req, res) => {
     try {
         const r = montarPrazoInformadoNoFluxo({
             ...(req.body || {}),
@@ -234,7 +234,7 @@ router.post('/informar', requireAuth, express.json(), async (req, res) => {
 // e devolve a proposta com as fontes. Quem grava é o POST de cadastro, que
 // exige base legal e guarda quem confirmou.
 // ============================================================================
-router.post('/consultar', requireAdmin, express.json(), async (req, res) => {
+router.post('/consultar', requireAdmin, async (req, res) => {
     try {
         const ai = req.app.get('ai');
         if (!ai) return res.status(503).json({ ok: false, error: 'IA indisponível (GEMINI_API_KEY ausente).' });
@@ -280,7 +280,7 @@ router.post('/consultar', requireAdmin, express.json(), async (req, res) => {
     }
 });
 
-router.post('/desativar', requireAdmin, express.json(), async (req, res) => {
+router.post('/desativar', requireAdmin, async (req, res) => {
     try {
         const id = String(req.body?.id || '').trim();
         if (!id) return res.status(400).json({ ok: false, error: 'Informe o id do calendário.' });

@@ -28,6 +28,7 @@ describe('xml-metadata-helper', () => {
         `;
 
         expect(extrairParticipantesNfe(xml)).toEqual({
+            tomador: null, // só CT-e tem tomador
             emitente: {
                 cnpj: '32602701000197', nome: 'J.N. VINATEX COMERCIO LTDA',
                 uf: null, codMunIBGE: null, ie: null,

@@ -45,7 +45,7 @@ function requireCronAuth(req, res, next) {
 }
 
 // ── POST /sync-one ────────────────────────────────────────────────────────
-router.post('/sync-one', requireAdmin, express.json(), async (req, res) => {
+router.post('/sync-one', requireAdmin, async (req, res) => {
     try {
         const { empresaId, empresaCnpj } = req.body || {};
         if (!empresaId || !empresaCnpj) {
@@ -449,7 +449,7 @@ router.get('/municipios', requireAuth, async (req, res) => {
 // Liga/desliga ADN pra TODAS empresas de um (uf, municipio). Body:
 //   { uf: string, municipio: string, ativo: boolean }
 // Util pra "habilitar ADN em todas empresas de Campinas".
-router.post('/toggle-bulk-por-municipio', requireAuth, express.json(), async (req, res) => {
+router.post('/toggle-bulk-por-municipio', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
         const { uf, municipio, ativo } = req.body || {};
@@ -526,7 +526,7 @@ router.post('/toggle-bulk-por-municipio', requireAuth, express.json(), async (re
 // Liga/desliga ADN pra uma LISTA de empresas de uma vez. Body:
 //   { cnpjs: string[], ativo: boolean }
 // Resposta: { atualizados, naoEncontrados, falhas }. So admin.
-router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
+router.post('/toggle-bulk', requireAuth, async (req, res) => {
     try {
         if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
         const { cnpjs, ativo } = req.body || {};
@@ -606,7 +606,7 @@ router.post('/toggle-bulk', requireAuth, express.json(), async (req, res) => {
 
 // ── POST /toggle/:cnpj ────────────────────────────────────────────────────
 // Liga/desliga captura NFSe Nacional pra uma empresa. Só admin.
-router.post('/toggle/:cnpj', requireAuth, express.json(), async (req, res) => {
+router.post('/toggle/:cnpj', requireAuth, async (req, res) => {
     try {
         if (req.user.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
         const cnpj = String(req.params.cnpj).replace(/\D/g, '');

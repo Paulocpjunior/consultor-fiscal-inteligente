@@ -173,7 +173,7 @@ describe('E) res.ok antes do JSON', () => {
 describe('F) cache local não derruba a importação', () => {
     it('as notas do Simples leem pelo safeStorage.getJSON', () => {
         // O caminho da GRAVAÇÃO (depois do setDoc na nuvem) — a leitura já tinha try/catch.
-        const src = depois(semComentarios(ler('services/simplesNacionalService.ts')), "setDoc(doc(dbRef, 'simples_notas'", 700);
+        const src = depois(semComentarios(ler('services/simplesNacionalService.ts')), "batch.set(doc(dbRef, 'simples_notas'", 700);
         expect(src).toMatch(/safeStorage\.getJSON\(STORAGE_KEY_NOTAS, \{\}\)/);
         expect(src).not.toMatch(/JSON\.parse\(/);
     });

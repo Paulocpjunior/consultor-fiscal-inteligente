@@ -62,12 +62,14 @@ function toMMDD(d: Date): string {
 export function feriadosDoAno(ano: number): ReadonlySet<string> {
     const pascoa = domingoDePascoa(ano);
     const sextaSanta = addDias(pascoa, -2);
+    const carnavalSeg = addDias(pascoa, -48);  // segunda-feira (03/09: o backend já contava; a tela antecipava vencimento para dia sem banco)
     const carnaval = addDias(pascoa, -47);     // terça-feira
     const corpusChristi = addDias(pascoa, 60); // 60 dias após Páscoa
 
     return new Set<string>([
         ...FERIADOS_FIXOS_MMDD,
         toMMDD(sextaSanta),
+        toMMDD(carnavalSeg),
         toMMDD(carnaval),
         toMMDD(corpusChristi),
     ]);

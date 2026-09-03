@@ -56,7 +56,10 @@ function exportados(src: string): string[] {
 describe('🚨 `.d.ts` não promete o que o `.js` não entrega', () => {
     it('nenhum tipo declara função que a implementação não tem', () => {
         const fantasmas: string[] = [];
-        for (const dts of varrer(join(RAIZ, 'sefaz-backend'))) {
+        const tipos = varrer(join(RAIZ, 'sefaz-backend'));
+        // Varredura vazia é trava falsa: hoje são ~110 `.d.ts`, o piso é folga.
+        expect(tipos.length).toBeGreaterThan(60);
+        for (const dts of tipos) {
             const js = dts.replace(/\.d\.ts$/, '.js');
             if (!existsSync(js)) continue;
             const entregues = new Set(exportados(readFileSync(js, 'utf8')));
@@ -123,6 +126,8 @@ describe('🚨 `.d.ts` não promete o que o `.js` não entrega', () => {
             }
         };
         for (const pasta of ['__tests__', 'services', 'components']) varrerTs(join(RAIZ, pasta));
+        // Varredura vazia é trava falsa: as três pastas somam centenas de arquivos.
+        expect(arquivos.length).toBeGreaterThan(300);
 
         const cache = new Map<string, Set<string> | null>();
         const tiposDo = (modulo: string): Set<string> | null => {

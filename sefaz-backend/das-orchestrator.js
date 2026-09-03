@@ -14,8 +14,27 @@ import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-dupli
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
 import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, avaliarDeclaracaoJaEntregue } from './pgdas-sem-movimento.js';
 import { candidatosSemMovimento, assertSondaNaoTransmite, lerResultadoCandidato, vereditoDaSonda } from './pgdas-sonda-sem-movimento.js';
+import { limparCnpj } from './documento-dv.js';
 
 const COLLECTION = 'das_emitidos';
+
+/**
+ * 🚨 O `docId` DA IDEMPOTÊNCIA LEVAVA O CNPJ CRU (03/09). O cadastro guarda o
+ * CNPJ em DUAS formas (`51227692000146` e `51.227.692/0001-46`): a pontuação
+ * virava `_`, e `51_227_692_0001-46_2026-07_regular` é OUTRO documento —
+ * ou seja, a trava que impede a segunda emissão não via a primeira, e o MESMO
+ * DAS saía duas vezes. O id sai sempre do CNPJ SEM máscara; CNPJ que não tem
+ * 14 posições não identifica empresa nenhuma e é RECUSADO nomeado.
+ */
+function cnpjParaId(cnpj) {
+    const limpo = limparCnpj(cnpj);
+    if (limpo.length !== 14) {
+        const err = new Error(`CNPJ inválido ("${String(cnpj ?? '')}") — ele identifica o DAS emitido e a empresa no PGDAS-D.`);
+        err.httpStatus = 400;
+        throw err;
+    }
+    return limpo;
+}
 
 function fa() {
     if (!admin.apps.length) {
@@ -109,7 +128,7 @@ export async function emitirDasRegular(req) {
 
     // 3. Persiste no Firestore
     const db = fa().firestore();
-    const docId = `${empresaCnpj}_${competencia}_regular`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const docId = `${cnpjParaId(empresaCnpj)}_${competencia}_regular`.replace(/[^a-zA-Z0-9_-]/g, '_');
     const payload = {
         empresaId,
         empresaCnpj,
@@ -161,7 +180,7 @@ export async function emitirDasAvulso(req) {
     const mode = getDasMode();
     const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'avulso' });
 
-    const docId = `${empresaCnpj}_${competencia}_avulso_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const docId = `${cnpjParaId(empresaCnpj)}_${competencia}_avulso_${Date.now()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
     const payload = {
         empresaId,
         empresaCnpj,
@@ -601,7 +620,7 @@ export async function declararPgdasSemMovimento(req) {
     // `das_emitidos` faria a listagem de guias mostrar uma cobrança que não
     // existe — e o "a recolher" da carteira somar zero como se fosse guia.
     const db = fa().firestore();
-    const docId = `${String(empresaCnpj).replace(/\D/g, '')}_${competencia}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const docId = `${cnpjParaId(empresaCnpj)}_${competencia}`.replace(/[^a-zA-Z0-9_-]/g, '_');
     const payload = {
         empresaId,
         empresaCnpj,

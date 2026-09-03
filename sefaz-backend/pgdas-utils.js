@@ -49,23 +49,70 @@ export function extrairDeclaracaoTransmitidaPgdas(result) {
     return findDeclaracaoTransmitida(result.dados ?? result);
 }
 
-export function normalizarValoresDevidosPgdas(input) {
+/**
+ * 🚨 `round2(Number(n) || 0)` TRANSFORMAVA VALOR AUSENTE/ILEGÍVEL DO SERPRO EM
+ * 0,00 (03/09) — e o `>= 0` do filtro o MANTINHA. Um tributo que voltou sem
+ * valor entrava na soma valendo zero: ou a comparação acusava divergência
+ * falsa (a apuração local tem o tributo, a soma não), ou — pior — batia por
+ * coincidência e a declaração ia com um débito a menos. Item que não dá para
+ * ler sai NOMEADO em `ilegiveis`, e a SOMA se recusa a existir enquanto houver
+ * um: total parcial num campo chamado "valor devido" é lido como o total.
+ *
+ * @returns {{ valores: Array<{codigoTributo:number, valor:number}>, ilegiveis: Array<{codigoTributo:unknown, valor:unknown, motivo:string}> }}
+ */
+export function lerValoresDevidosPgdas(input) {
     const fonte = Array.isArray(input)
         ? input
         : (extrairDeclaracaoTransmitidaPgdas(input)?.valoresDevidos || []);
 
-    return fonte
-        .map((item) => ({
-            codigoTributo: Number(item.codigoTributo ?? item.codTributo),
-            valor: round2(item.valor),
-        }))
-        .filter((item) => Number.isFinite(item.codigoTributo) && item.codigoTributo > 0 && item.valor >= 0)
-        .sort((a, b) => a.codigoTributo - b.codigoTributo);
+    const valores = [];
+    const ilegiveis = [];
+    for (const item of fonte) {
+        const codigoCru = item?.codigoTributo ?? item?.codTributo;
+        const codigoTributo = Number(codigoCru);
+        const valorCru = item?.valor;
+        const valorNum = (valorCru === null || valorCru === undefined || valorCru === '')
+            ? NaN
+            : Number(valorCru);
+        if (!Number.isFinite(codigoTributo) || codigoTributo <= 0) {
+            ilegiveis.push({ codigoTributo: codigoCru, valor: valorCru, motivo: 'código do tributo ausente ou ilegível' });
+            continue;
+        }
+        if (!Number.isFinite(valorNum) || valorNum < 0) {
+            ilegiveis.push({ codigoTributo: codigoCru, valor: valorCru, motivo: 'valor ausente, ilegível ou negativo' });
+            continue;
+        }
+        valores.push({ codigoTributo, valor: round2(valorNum) });
+    }
+    valores.sort((a, b) => a.codigoTributo - b.codigoTributo);
+    return { valores, ilegiveis };
 }
 
+function erroIlegiveis(ilegiveis) {
+    const lista = ilegiveis
+        .map((i) => `tributo ${String(i.codigoTributo ?? '?')} = ${JSON.stringify(i.valor)} (${i.motivo})`)
+        .join('; ');
+    const err = new Error(
+        `SERPRO devolveu valor devido que nao da para ler: ${lista}. `
+        + 'Nenhuma declaracao foi transmitida — a soma ficaria a MENOR e a comparacao com a apuracao local nao teria sentido. '
+        + 'Repita a validacao ou confira a apuracao no PGDAS-D.'
+    );
+    err.code = 'PGDAS_VALOR_ILEGIVEL';
+    err.httpStatus = 502;
+    err.ilegiveis = ilegiveis;
+    return err;
+}
+
+/** Só os legíveis (contrato antigo) — quem precisa saber o que ficou de fora lê `lerValoresDevidosPgdas`. */
+export function normalizarValoresDevidosPgdas(input) {
+    return lerValoresDevidosPgdas(input).valores;
+}
+
+/** A soma RECUSA enquanto houver item ilegível: parcial aqui vira "total". */
 export function somaValoresDevidosPgdas(valoresDevidos) {
-    return round2(normalizarValoresDevidosPgdas(valoresDevidos)
-        .reduce((sum, item) => sum + item.valor, 0));
+    const { valores, ilegiveis } = lerValoresDevidosPgdas(valoresDevidos);
+    if (ilegiveis.length) throw erroIlegiveis(ilegiveis);
+    return round2(valores.reduce((sum, item) => sum + item.valor, 0));
 }
 
 export function montarDadosDeclaracaoPgdas({
@@ -75,7 +122,11 @@ export function montarDadosDeclaracaoPgdas({
     transmitir,
     valoresParaComparacao = [],
 }) {
-    const valoresComparacao = normalizarValoresDevidosPgdas(valoresParaComparacao);
+    const { valores: valoresComparacao, ilegiveis } = lerValoresDevidosPgdas(valoresParaComparacao);
+    // Comparação com um tributo a menos é comparação com outro número — o
+    // SERPRO responderia "diverge" (ou, pior, "confere") sobre uma lista que
+    // não é a dele.
+    if (ilegiveis.length) throw erroIlegiveis(ilegiveis);
     const dados = {
         cnpjCompleto: cnpjLimpo,
         pa,

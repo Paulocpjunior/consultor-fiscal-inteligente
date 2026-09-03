@@ -36,6 +36,7 @@ import { listarPastasDeEmpresas, resolverPastaDaEmpresa, codClienteDoCadastro } 
 // ações OPOSTAS: pasta que ainda não existe, limite do próprio proxy e
 // credencial recusada.
 import { classificarErroDeLeitura, intervaloEntreChamadasMs, resumoDaRodada } from './sharepoint-erro-leitura.js';
+import { statusDoCstatProtocolo } from './xml-metadata-helper.js';
 
 /**
  * O teto publicado pelo proxy (`proxy-backend/server.js`: 60/min por IP).
@@ -48,8 +49,6 @@ const RESPIRO_PROXY_MS = intervaloEntreChamadasMs(process.env.SHAREPOINT_PROXY_P
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const router = express.Router();
-router.use(express.json());
-
 const PROXY_URL = process.env.SHAREPOINT_PROXY_URL
     || 'https://consultor-fiscal-proxy-631239634290.us-west1.run.app';
 const PROXY_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHARED_TOKEN || '';
@@ -208,11 +207,7 @@ function parseXmlServer(xmlText) {
     });
 
     const cStat = getTextContent(doc.getElementsByTagName('infProt')[0], 'cStat');
-    const status = cStat === '100' ? 'autorizado'
-        : cStat === '101' ? 'cancelado'
-        : cStat === '110' ? 'denegado'
-        : cStat === '102' ? 'inutilizado'
-        : !cStat ? 'desconhecido' : 'rejeitado';
+    const status = statusDoCstatProtocolo(cStat);
 
     return {
         chave: extractChaveFromId(infNFe.getAttribute('Id') || ''),
@@ -287,10 +282,7 @@ function parseCTeServer(doc, infCte) {
     const valorRec = num(getTextContent(vPrest, 'vRec'));
 
     const cStat = getTextContent(doc.getElementsByTagName('infProt')[0], 'cStat');
-    const status = cStat === '100' ? 'autorizado'
-        : cStat === '101' ? 'cancelado'
-        : cStat === '110' ? 'denegado'
-        : !cStat ? 'desconhecido' : 'rejeitado';
+    const status = statusDoCstatProtocolo(cStat);
 
     const remetente = pp(rem, enderRem);
     const destinatario = pp(dest, enderDest);

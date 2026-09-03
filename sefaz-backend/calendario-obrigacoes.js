@@ -15,8 +15,16 @@
  *   - Para DAS Simples, FGTS, INSS, eSocial: postergar para proximo dia util
  *     conforme art. 38 da Resolucao CGSN 140/2018 e regras analogas RFB.
  *
- *   - Feriados nacionais nao sao considerados (apenas sabados e domingos).
- *     Para feriados oficiais, consulte calendario da RFB/SEFAZ/Prefeitura.
+ *   - Feriados NACIONAIS sao considerados via `ehDiaUtil` (feriados-nacionais.js).
+ *     Feriados estaduais/municipais NAO: para eles, consulte o calendario da
+ *     SEFAZ/Prefeitura. (Ate 03/09 este cabecalho dizia o contrario — regra
+ *     escrita e regra travada sao coisas diferentes.)
+ *
+ * ⚠️ ESCOPO DESTE MODULO (03/09): quem cria TAREFA e alimenta a Rotina do Mes e o
+ * `catalogo-obrigacoes.js` (dono unico, com a politica da casa: SEMPRE
+ * ANTECIPA). Este arquivo serve so a rota legada `/api/admin/calendario/:ano/:mes`
+ * (server.js) e empresta `ajustarDiaUtil`/`calcularUltimoDiaUtil` ao catalogo.
+ * Regra de prazo nova entra no CATALOGO, nunca aqui.
  */
 
 // ─── Catalogo completo de obrigacoes ─────────────────────────────────────

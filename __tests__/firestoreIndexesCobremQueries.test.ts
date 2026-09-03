@@ -32,6 +32,11 @@ const EXIGIDOS: Array<[string, string, string]> = [
     ['documentos_fiscais', 'empresaCnpj:ASCENDING,dhEmi:ASCENDING', 'services/xmlFiscalService.ts getDocumentosByCnpjPeriodo'],
     ['documentos_fiscais', 'cnpjDest:ASCENDING,dhEmi:ASCENDING', 'services/xmlFiscalService.ts getDocumentosByCnpjPeriodo'],
     ['documentos_fiscais', 'cnpjEmit:ASCENDING,dhEmi:ASCENDING', 'services/xmlFiscalService.ts getDocumentosByCnpjPeriodo'],
+    // Conferido em 04/09 (auditoria): a segunda varredura acusou este índice como
+    // órfão, e ele NÃO é — a paginação da conversa do SP Connect faz
+    // where('conversaId','==') + orderBy('timestamp','desc') (admin SDK, que
+    // também exige o índice composto). Apagá-lo derrubaria a conversa inteira.
+    ['whatsapp_mensagens', 'conversaId:ASCENDING,timestamp:DESCENDING', 'sefaz-backend/whatsapp-routes.js (mensagens da conversa, paginadas)'],
 ];
 
 describe('firestore.indexes.json', () => {

@@ -128,6 +128,25 @@ jobs:
           npm run lint
           npx jest --ci
 
+      # NÃO BLOQUEIA de propósito: o tsconfig.strict.json ainda acusa dívida
+      # antiga do app, e segurar a entrega de imposto por causa dela custaria
+      # mais do que resolve. O que este passo faz é DIZER, no resumo do run,
+      # quando o strict caiu — dívida que ninguém vê é dívida que cresce. Vira
+      # bloqueio no dia em que o `lint:strict` passar limpo na main.
+      - name: Typecheck strict (informativo, não bloqueia)
+        continue-on-error: true
+        run: |
+          if ! npm run lint:strict > /tmp/lint-strict.txt 2>&1; then
+            echo "::warning::lint:strict falhou — não bloqueia o deploy; veja o resumo do job."
+            {
+              echo "### ⚠️ lint:strict falhou (informativo — não bloqueia o deploy)"
+              echo '```'
+              tail -n 60 /tmp/lint-strict.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
       - name: Regressão de calendário fiscal no fuso de São Paulo
         env:
           TZ: America/Sao_Paulo

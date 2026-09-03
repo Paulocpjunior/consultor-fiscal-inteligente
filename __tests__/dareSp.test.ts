@@ -207,6 +207,24 @@ describe('Dare em Lote (TXT) — formato oficial da página DareLote (24/07/2026
         ])).toThrow(/Item 2.*CNPJ inválido/);
     });
 
+    // ═══ 03/09: o total era somado dos itens CRUS, as linhas dos VALIDADOS ══
+    // Cada linha sai de `montarDare` (centavos exatos por item); o total
+    // somava `Number(it.valor)` cru e arredondava UMA vez — podia divergir da
+    // soma das linhas. O total é a soma das linhas, centavo a centavo.
+    it('o total do lote é a SOMA DAS LINHAS, nunca outra conta sobre os itens crus', () => {
+        const base = { razaoSocial: 'T', codigoServico: '04601', referencia: '06/2026', vencimento: '2026-07-20' };
+        // 1.005 em cada item: a linha arredonda para 1.00 (Math.round(100.4999…)),
+        // a soma crua (200.999…) arredondaria para 2.01.
+        const r = montarLoteTxt([
+            { ...base, cnpj: '05049535000685', valor: 1.005 },
+            { ...base, cnpj: '96312889000111', valor: 1.005 },
+        ]);
+        expect(r.linhas.map((l: string) => l.split(';')[4])).toEqual(['1.00', '1.00']);
+        expect(r.totalValor).toBe(2);
+        const somaDasLinhas = r.linhas.reduce((s: number, l: string) => s + Math.round(Number(l.split(';')[4]) * 100), 0) / 100;
+        expect(r.totalValor).toBe(somaDasLinhas);
+    });
+
     it('lote vazio e lote >50 são recusados com mensagem acionável', () => {
         expect(() => montarLoteTxt([])).toThrow(/Lote vazio/);
         const muitos = Array.from({ length: MAX_DOCS_LOTE_DARE + 1 }, () => ({

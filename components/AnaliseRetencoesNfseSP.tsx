@@ -22,6 +22,7 @@ import {
 } from '../services/retencoesNfseAnalyzer';
 import { getEmpresas as getSimplesEmpresas } from '../services/simplesNacionalService';
 import type { User } from '../types';
+import { fmtBRL } from '../services/formatos';
 
 type LinhaAnalisada = LinhaNfseCsv & { analise: AnaliseRetencoes };
 
@@ -38,7 +39,7 @@ const COR_TRIBUTO: Record<typeof TRIBUTOS[number], string> = {
     irrf: 'bg-rose-100 text-rose-800 border-rose-300',
 };
 
-const formatBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const formatBRL = fmtBRL;
 
 interface Props {
     currentUser?: User | null;

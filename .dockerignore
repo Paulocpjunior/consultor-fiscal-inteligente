@@ -6,3 +6,15 @@ dist
 *.log
 coverage
 proxy-backend
+# Nada abaixo entra na imagem: o stage 1 só roda `vite build` (lê package.json,
+# vite.config.ts, index.html, public/ e o código do app) e o stage 2 copia
+# dist/, server.js e sefaz-backend/. Testes, documentação e o pacote do Teams
+# só engordariam o contexto de build. ATENÇÃO: sefaz-backend/ e scripts/ NÃO
+# entram aqui — o runtime copia o primeiro e o build usa o segundo.
+# public/docs/dere/*.pdf ficam (estão em public/, não em docs/).
+__tests__
+docs
+CLAUDE.md
+*_ACTIVATION.md
+MANUAL_USUARIO.md
+teams-app

@@ -9,6 +9,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { painelEnviosImposto, refazerRitoDosEnvios, type PainelEnvios } from '../services/envioImpostoService';
+import { fmtBRL, fmtComp } from '../services/formatos';
 
 const competenciaAtual = (): string => {
     const d = new Date();
@@ -25,8 +26,6 @@ const ultimasCompetencias = (n = 12): string[] => {
     return out;
 };
 
-const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const fmtComp = (c: string) => c.split('-').reverse().join('/');
 
 const CORES: Record<string, string> = {
     ok: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300',

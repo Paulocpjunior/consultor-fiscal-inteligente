@@ -89,7 +89,10 @@ export function extrairArquivosZip(buffer, {
         try {
             let conteudo;
             if (metodo === 0) conteudo = dados;                         // store
-            else if (metodo === 8) conteudo = zlib.inflateRawSync(dados); // deflate
+            // `maxOutputLength`: o tamanho declarado vem do Central Directory, que é
+            // de quem montou o zip — sem o teto na INFLAÇÃO, um zip-bomb passava
+            // pela checagem de cima e alocava sem limite.
+            else if (metodo === 8) conteudo = zlib.inflateRawSync(dados, { maxOutputLength: maxBytesPorArquivo }); // deflate
             else { ignorados.push(`${nome} (compressão ${metodo} não suportada)`); continue; }
             arquivos.push({ nome, conteudo });
         } catch (e) {

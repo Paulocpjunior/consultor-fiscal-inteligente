@@ -273,9 +273,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setSituacaoAviso(null);
         setTransAviso(null);
         setTransFila('');
-        carregarThread(c.numero);
+        // Promessa solta com catch: rede que cai aqui não pode virar exceção
+        // não tratada com a tela em branco — o thread diz que não carregou.
+        carregarThread(c.numero).catch((e: any) => setErroEnvio(e?.message || 'Não deu para carregar a conversa.'));
         if (c.naoLidas > 0) {
-            marcarLida(c.numero); // abrir É ler
+            marcarLida(c.numero).catch(() => { /* marcar lida é conveniência; a leitura de verdade é abrir */ }); // abrir É ler
             setConversas((lst) => lst.map((x) => (x.numero === c.numero ? { ...x, naoLidas: 0 } : x)));
         }
     };
@@ -296,6 +298,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setMensagens((m) => [...m, r.mensagem]);
             if (r.autoAssumida) patchSel({ atribuidoA: meuEmail, transferidaDe: null });
             setTexto('');
+        } catch (e: any) {
+            // O texto NÃO é limpo antes do sucesso: a pessoa reenvia com um clique.
+            setErroEnvio(`A mensagem NÃO saiu — o texto continua aqui. ${e?.message || 'Falha ao enviar.'}`);
         } finally {
             setEnviando(false);
         }
@@ -344,18 +349,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (!sel || !transFila || transFila === (sel.fila || 'recepcao')) return;
         setAcaoErro(null);
         setTransAviso(null);
-        const r = await transferirFila(sel.numero, transFila, transRecado.trim() || undefined);
-        if (!r.ok) { setAcaoErro(r.error || 'A transferência falhou.'); return; }
-        patchSel({ fila: r.fila, atribuidoA: null, transferidaDe: r.transferidaDe });
-        if (r.nota) setMensagens((m) => [...m, r.nota]);
-        setTransFila('');
-        setTransRecado('');
-        setTransAviso({
-            enviado: '✓ Transferida — o cliente foi avisado.',
-            'janela-fechada': '✓ Transferida. O aviso ao cliente NÃO saiu (janela de 24h fechada).',
-            falhou: '✓ Transferida. O aviso ao cliente falhou — a transferência valeu mesmo assim.',
-            desligado: '✓ Transferida (aviso ao cliente desligado na ⚙️).',
-        }[r.avisoCliente] || '✓ Transferida.');
+        try {
+            const r = await transferirFila(sel.numero, transFila, transRecado.trim() || undefined);
+            if (!r.ok) { setAcaoErro(r.error || 'A transferência falhou.'); return; }
+            patchSel({ fila: r.fila, atribuidoA: null, transferidaDe: r.transferidaDe });
+            if (r.nota) setMensagens((m) => [...m, r.nota]);
+            setTransFila('');
+            setTransRecado('');
+            setTransAviso({
+                enviado: '✓ Transferida — o cliente foi avisado.',
+                'janela-fechada': '✓ Transferida. O aviso ao cliente NÃO saiu (janela de 24h fechada).',
+                falhou: '✓ Transferida. O aviso ao cliente falhou — a transferência valeu mesmo assim.',
+                desligado: '✓ Transferida (aviso ao cliente desligado na ⚙️).',
+            }[r.avisoCliente] || '✓ Transferida.');
+        } catch (e: any) {
+            setAcaoErro(`A transferência NÃO aconteceu: ${e?.message || 'falha desconhecida'}`);
+        }
     };
     const acaoAssumir = () => {
         if (!sel) return;
@@ -449,26 +458,34 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         const nova = sel.situacao === 'resolvida' ? 'aberta' : 'resolvida';
         setAcaoErro(null);
         setSituacaoAviso(null);
-        const r = await mudarSituacao(sel.numero, nova);
-        if (!r.ok) { setAcaoErro(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
-        patchSel({ situacao: nova });
-        if (nova === 'resolvida') {
-            setSituacaoAviso({
-                enviada: '✓ Encerrado — pesquisa de avaliação enviada ao cliente.',
-                'janela-fechada': '✓ Encerrado. A pesquisa NÃO saiu (janela de 24h fechada).',
-                falhou: '✓ Encerrado. A pesquisa falhou ao enviar.',
-                desligada: '✓ Encerrado (pesquisa de avaliação desligada na ⚙️).',
-            }[r.avaliacao || 'desligada'] || '✓ Encerrado.');
+        try {
+            const r = await mudarSituacao(sel.numero, nova);
+            if (!r.ok) { setAcaoErro(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
+            patchSel({ situacao: nova });
+            if (nova === 'resolvida') {
+                setSituacaoAviso({
+                    enviada: '✓ Encerrado — pesquisa de avaliação enviada ao cliente.',
+                    'janela-fechada': '✓ Encerrado. A pesquisa NÃO saiu (janela de 24h fechada).',
+                    falhou: '✓ Encerrado. A pesquisa falhou ao enviar.',
+                    desligada: '✓ Encerrado (pesquisa de avaliação desligada na ⚙️).',
+                }[r.avaliacao || 'desligada'] || '✓ Encerrado.');
+            }
+        } catch (e: any) {
+            setAcaoErro(`A situação NÃO mudou: ${e?.message || 'falha desconhecida'}`);
         }
     };
     const acaoNota = async () => {
         if (!sel || !notaTexto.trim()) return;
         setAcaoErro(null);
-        const r = await criarNota(sel.numero, notaTexto.trim());
-        if (!r.ok) { setAcaoErro(r.error || 'A nota não foi gravada.'); return; }
-        setMensagens((m) => [...m, r.mensagem]);
-        setNotaTexto('');
-        setNotaAberta(false);
+        try {
+            const r = await criarNota(sel.numero, notaTexto.trim());
+            if (!r.ok) { setAcaoErro(r.error || 'A nota não foi gravada.'); return; }
+            setMensagens((m) => [...m, r.mensagem]);
+            setNotaTexto('');
+            setNotaAberta(false);
+        } catch (e: any) {
+            setAcaoErro(`A nota NÃO foi gravada — o texto continua aqui. ${e?.message || ''}`.trim());
+        }
     };
 
     // ── F3: vincular contato ↔ cliente (busca nas duas coleções, via backend)
@@ -643,10 +660,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [canalChamada, setCanalChamada] = useState<string>('principal');
     const rodarSonda = async (canal?: string) => {
         setSondando(true); setSondaErro(null);
-        const r = await sondarChamadas(canal ?? canalChamada);
-        setSondando(false);
-        if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar, horarios: r.horarios ?? null });
-        else setSondaErro(r.error || 'A sonda não respondeu.');
+        try {
+            const r = await sondarChamadas(canal ?? canalChamada);
+            if (r.ok) setSonda({ conclusao: r.conclusao, sondas: r.sondas, antesDeLigar: r.antesDeLigar, horarios: r.horarios ?? null });
+            else setSondaErro(r.error || 'A sonda não respondeu.');
+        } catch (e: any) {
+            setSondaErro(e?.message || 'A sonda não respondeu.');
+        } finally {
+            setSondando(false);
+        }
     };
     // Trocar de número LIMPA o que estava na tela antes de medir o novo:
     // resultado do número anterior ao lado do seletor já trocado é a leitura
@@ -696,10 +718,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [sondaIgErro, setSondaIgErro] = useState<string | null>(null);
     const rodarSondaIg = async () => {
         setSondandoIg(true); setSondaIgErro(null);
-        const r = await sondarInstagram();
-        setSondandoIg(false);
-        if (r.ok) setSondaIg({ conclusao: r.conclusao, sondas: r.sondas, sobreRestringirAtendentes: r.sobreRestringirAtendentes });
-        else setSondaIgErro(r.error || 'A sonda não respondeu.');
+        try {
+            const r = await sondarInstagram();
+            if (r.ok) setSondaIg({ conclusao: r.conclusao, sondas: r.sondas, sobreRestringirAtendentes: r.sobreRestringirAtendentes });
+            else setSondaIgErro(r.error || 'A sonda não respondeu.');
+        } catch (e: any) {
+            setSondaIgErro(e?.message || 'A sonda não respondeu.');
+        } finally {
+            setSondandoIg(false);
+        }
     };
     // 📡 Recebimento das DMs — nasce DESLIGADO; o botão assina o webhook na
     // Meta e o estado persistido é o que diz "ligado em …, por …".
@@ -725,10 +752,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
         setIgLigando(true); setIgLigarErro(null);
-        const r = await ligarInstagram();
-        setIgLigando(false);
-        if (r.ok) setIgEstado({ ligadoEm: r.ligadoEm, ligadoPor: r.ligadoPor, appId: r.appId, callback: r.callback, pageId: r.pageId, igId: r.igId, igUsername: r.igUsername });
-        else setIgLigarErro(r.error || 'A Meta recusou a assinatura.');
+        try {
+            const r = await ligarInstagram();
+            if (r.ok) setIgEstado({ ligadoEm: r.ligadoEm, ligadoPor: r.ligadoPor, appId: r.appId, callback: r.callback, pageId: r.pageId, igId: r.igId, igUsername: r.igUsername });
+            else setIgLigarErro(r.error || 'A Meta recusou a assinatura.');
+        } catch (e: any) {
+            setIgLigarErro(e?.message || 'A Meta não respondeu.');
+        } finally {
+            setIgLigando(false);
+        }
     };
     const [atendentes, setAtendentes] = useState<Atendente[]>([]);
     const [atdErro, setAtdErro] = useState<string | null>(null);
@@ -998,10 +1030,15 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [relCarregando, setRelCarregando] = useState(false);
     const abrirRelatorio = async (dias = relDias) => {
         setRelAberto(true); setRelDias(dias); setRelCarregando(true); setRelErro(null);
-        const r = await relatorioAtendimento(dias);
-        setRelCarregando(false);
-        if (r.ok) setRelDados(r);
-        else setRelErro(r.error || 'Falha ao montar o relatório.');
+        try {
+            const r = await relatorioAtendimento(dias);
+            if (r.ok) setRelDados(r);
+            else setRelErro(r.error || 'Falha ao montar o relatório.');
+        } catch (e: any) {
+            setRelErro(e?.message || 'Falha ao montar o relatório.');
+        } finally {
+            setRelCarregando(false);
+        }
     };
 
     // ── 📇 CONTATOS: a agenda que faltava. O importador da Ultra Fox grava em
@@ -1030,18 +1067,23 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const carregarContatos = async (opts: { busca?: string; filtro?: string } = {}) => {
         setCtCarregando(true); setCtErro(null);
         const filtro = opts.filtro !== undefined ? opts.filtro : ctFiltro;
-        const r = await listarContatos({
-            busca: opts.busca !== undefined ? opts.busca : ctBusca,
-            etiqueta: filtro && filtro !== '__sem' ? filtro : '',
-            semEtiqueta: filtro === '__sem',
-        });
-        setCtCarregando(false);
-        if (!r.ok) { setCtErro(r.error || 'Falha ao carregar os contatos.'); return; }
-        setContatos(r.contatos); setEtiquetas(r.etiquetas);
-        setCtResumo({
-            total: r.total, totalFiltrado: r.totalFiltrado, truncado: r.truncado,
-            limiteLeitura: r.limiteLeitura, semEtiquetaTotal: r.semEtiquetaTotal, porEtiqueta: r.porEtiqueta,
-        });
+        try {
+            const r = await listarContatos({
+                busca: opts.busca !== undefined ? opts.busca : ctBusca,
+                etiqueta: filtro && filtro !== '__sem' ? filtro : '',
+                semEtiqueta: filtro === '__sem',
+            });
+            if (!r.ok) { setCtErro(r.error || 'Falha ao carregar os contatos.'); return; }
+            setContatos(r.contatos); setEtiquetas(r.etiquetas);
+            setCtResumo({
+                total: r.total, totalFiltrado: r.totalFiltrado, truncado: r.truncado,
+                limiteLeitura: r.limiteLeitura, semEtiquetaTotal: r.semEtiquetaTotal, porEtiqueta: r.porEtiqueta,
+            });
+        } catch (e: any) {
+            setCtErro(e?.message || 'Falha ao carregar os contatos.');
+        } finally {
+            setCtCarregando(false);
+        }
     };
     const abrirContatos = () => { setContatosAberto(true); setCtMsg(null); carregarContatos(); };
 
@@ -1099,26 +1141,36 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
 
     const exportarDadosTitular = async (numero: string) => {
         setLgpdOcupado(true); setCtMsg(null);
-        const r = await relatorioTitular(numero);
-        setLgpdOcupado(false);
-        if (!r.ok) { setCtMsg(r.error || 'Não deu para gerar o relatório.'); return; }
-        setLgpd({ relatorio: r.relatorio });
-        // Baixar é o direito à PORTABILIDADE (art. 18, V): o titular precisa
-        // levar o arquivo, não só ver na tela de quem atende.
-        const blob = new Blob([JSON.stringify(r.relatorio, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `dados-titular-${numero}.json`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        try {
+            const r = await relatorioTitular(numero);
+            if (!r.ok) { setCtMsg(r.error || 'Não deu para gerar o relatório.'); return; }
+            setLgpd({ relatorio: r.relatorio });
+            // Baixar é o direito à PORTABILIDADE (art. 18, V): o titular precisa
+            // levar o arquivo, não só ver na tela de quem atende.
+            const blob = new Blob([JSON.stringify(r.relatorio, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `dados-titular-${numero}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch (e: any) {
+            setCtMsg(`Não deu para gerar o relatório: ${e?.message || 'falha desconhecida'}`);
+        } finally {
+            setLgpdOcupado(false);
+        }
     };
 
     const pedirPlanoEliminacao = async (numero: string) => {
         setLgpdOcupado(true); setCtMsg(null);
-        const r = await eliminarDadosTitular(numero);
-        setLgpdOcupado(false);
-        if (!r.ok) { setCtMsg(r.error || 'Não deu para montar o plano.'); return; }
-        setLgpd({ plano: r.plano });
+        try {
+            const r = await eliminarDadosTitular(numero);
+            if (!r.ok) { setCtMsg(r.error || 'Não deu para montar o plano.'); return; }
+            setLgpd({ plano: r.plano });
+        } catch (e: any) {
+            setCtMsg(`Não deu para montar o plano: ${e?.message || 'falha desconhecida'}`);
+        } finally {
+            setLgpdOcupado(false);
+        }
     };
 
     const confirmarEliminacao = async (numero: string) => {
@@ -1128,12 +1180,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         );
         if (motivo == null) return;
         setLgpdOcupado(true);
-        const r = await eliminarDadosTitular(numero, { confirmar: true, motivo });
-        setLgpdOcupado(false);
-        if (!r.ok) { setCtMsg(r.error || 'Não deu para eliminar.'); return; }
-        setLgpd(null); setCtSel(null);
-        setCtMsg(`✓ Dados eliminados (${r.removidas || 0} mensagens). O registro da solicitação ficou gravado.`);
-        carregarContatos();
+        try {
+            const r = await eliminarDadosTitular(numero, { confirmar: true, motivo });
+            if (!r.ok) { setCtMsg(r.error || 'Não deu para eliminar.'); return; }
+            setLgpd(null); setCtSel(null);
+            setCtMsg(`✓ Dados eliminados (${r.removidas || 0} mensagens). O registro da solicitação ficou gravado.`);
+            carregarContatos();
+        } catch (e: any) {
+            // Eliminação é ato de LGPD: "não sei se eliminou" tem de ser DITO.
+            setCtMsg(`A eliminação NÃO foi confirmada: ${e?.message || 'falha desconhecida'}. Confira antes de responder ao titular.`);
+        } finally {
+            setLgpdOcupado(false);
+        }
     };
 
     const criarNovoContato = async () => {
@@ -1233,9 +1291,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         } finally { setRegistrando(null); }
     };
     const [salvandoCanal, setSalvandoCanal] = useState(false);
+    // 🚨 Falha ao listar os canais NÃO some calada: sem a lista o seletor do
+    // segundo número simplesmente desaparece, e quem atende conclui que só
+    // existe um número — quando a leitura é que caiu.
+    const [canaisErro, setCanaisErro] = useState<string | null>(null);
     const carregarCanais = useCallback(async () => {
-        const r = await listarCanais();
-        if (r.ok) { setCanais(r.canais || []); setMultiCanal(Boolean(r.multiCanal)); }
+        try {
+            const r = await listarCanais();
+            if (r.ok) { setCanais(r.canais || []); setMultiCanal(Boolean(r.multiCanal)); setCanaisErro(null); }
+            else setCanaisErro(r.error || 'Não deu para listar os números (canais).');
+        } catch (e: any) {
+            setCanaisErro(e?.message || 'Não deu para listar os números (canais).');
+        }
     }, []);
     useEffect(() => { carregarCanais(); }, [carregarCanais]);
     const rotuloCanal = (id: string | null | undefined) =>
@@ -1444,6 +1511,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             await recarregar(true);
             const nova = { numero: r.numero, nome: nc.nomeContato || null, empresaId: null, fila: null, atribuidoA: null, situacao: 'aberta', janela24hAte: null, ultimaMensagem: null, naoLidas: 0, atualizadoEm: null } as ConversaResumo;
             abrir(nova);
+        } catch (e: any) {
+            // O formulário só é limpo DEPOIS do sucesso (acima): aqui os campos continuam.
+            setErroNova(`A mensagem NÃO saiu — o texto continua aqui. ${e?.message || 'Falha ao enviar.'}`);
         } finally {
             setEnviandoNova(false);
         }
@@ -2577,6 +2647,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     sem escolher, esta aba lia e ESCREVIA sempre no principal. */}
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
                                     <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">☎️ Número desta configuração</p>
+                                    {canaisErro && (
+                                        <p className="text-[11px] text-red-600 dark:text-red-400">
+                                            ⛔ A lista de números não carregou ({canaisErro}) — o segundo número pode existir e não aparecer aqui. Feche e reabra a ⚙️ para tentar de novo.
+                                        </p>
+                                    )}
                                     <select value={canalChamada} onChange={(e) => trocarCanalChamada(e.target.value)} className={CAMPO}>
                                         {canais.map((c) => (
                                             <option key={c.id} value={c.id}>
@@ -3253,6 +3328,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     token dele no Cloud Run com o NOME que você informar.
                                     <strong> O token nunca é digitado aqui</strong> (ele não pode ficar no banco).
                                 </p>
+                                {canaisErro && (
+                                    <p className="text-[11px] text-red-600 dark:text-red-400">
+                                        ⛔ A lista de números não carregou ({canaisErro}) — a lista abaixo pode estar incompleta; não é sinal de que só existe um número.
+                                    </p>
+                                )}
                                 <div className="space-y-1.5">
                                     {canais.map((c) => (
                                         <div key={c.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">

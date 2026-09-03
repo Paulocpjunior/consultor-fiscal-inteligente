@@ -126,7 +126,11 @@ describe('parseRespostaConsulta — resposta com NFSes', () => {
         expect(r.nfses[0].servico.aliquota).toBe(2.5);
     });
 
-    it('pula InfNfse sem Numero (registro corrompido)', () => {
+    // ═══ 03/09: lote COM CompNfse e ZERO lidas não é "ok, sem dados" ═══════
+    // O teste antigo ("pula InfNfse sem Numero ⇒ ok:true") DESCREVIA o
+    // defeito: a resposta tinha nota e o parser dizia sucesso com lista vazia
+    // — indistinguível de "a prefeitura não tem nota".
+    it('CompNfse presente e nenhuma lida ⇒ ok:false NOMEADO (não é sem movimento)', () => {
         const xml = `<?xml version="1.0"?>
             <ConsultarNfseResposta xmlns="${NS}">
               <ListaNfse>
@@ -136,8 +140,81 @@ describe('parseRespostaConsulta — resposta com NFSes', () => {
               </ListaNfse>
             </ConsultarNfseResposta>`;
         const r = parseRespostaConsulta(xml);
-        expect(r.ok).toBe(true);
+        expect(r.ok).toBe(false);
         expect(r.nfses).toHaveLength(0);
+        expect(r.mensagens[0].codigo).toBe('LOTE_NAO_LIDO');
+        expect(r.mensagens[0].mensagem).toMatch(/1 CompNfse/);
+    });
+
+    it('tags com PREFIXO de namespace (<ns2:CompNfse>) são lidas pelo localName', () => {
+        const xml = `<?xml version="1.0"?>
+            <ns2:ConsultarNfseResposta xmlns:ns2="${NS}">
+              <ns2:ListaNfse>
+                <ns2:CompNfse><ns2:Nfse><ns2:InfNfse Id="nfse_7">
+                  <ns2:Numero>7</ns2:Numero>
+                  <ns2:DataEmissao>2026-08-01T10:00:00</ns2:DataEmissao>
+                  <ns2:Servico>
+                    <ns2:Valores>
+                      <ns2:ValorServicos>500,00</ns2:ValorServicos>
+                      <ns2:ValorIr>7,50</ns2:ValorIr>
+                    </ns2:Valores>
+                    <ns2:IssRetido>1</ns2:IssRetido>
+                  </ns2:Servico>
+                  <ns2:PrestadorServico>
+                    <ns2:IdentificacaoPrestador><ns2:Cnpj>11.222.333/0001-81</ns2:Cnpj></ns2:IdentificacaoPrestador>
+                    <ns2:RazaoSocial>Prefixado Ltda</ns2:RazaoSocial>
+                  </ns2:PrestadorServico>
+                </ns2:InfNfse></ns2:Nfse></ns2:CompNfse>
+              </ns2:ListaNfse>
+            </ns2:ConsultarNfseResposta>`;
+        const r = parseRespostaConsulta(xml);
+        expect(r.ok).toBe(true);
+        expect(r.nfses).toHaveLength(1);
+        expect(r.nfses[0].numero).toBe('7');
+        expect(r.nfses[0].servico.valorServicos).toBe(500);
+        expect(r.nfses[0].servico.issRetido).toBe(true);
+        expect(r.nfses[0].servico.valorIr).toBe(7.5);
+        expect(r.nfses[0].prestador.cnpj).toBe('11222333000181');
+        expect(r.nfses[0].prestador.nome).toBe('Prefixado Ltda');
+    });
+
+    it('MensagemRetorno prefixada também é lida', () => {
+        const xml = `<?xml version="1.0"?>
+            <ns2:ConsultarNfseResposta xmlns:ns2="${NS}">
+              <ns2:ListaMensagemRetorno><ns2:MensagemRetorno>
+                <ns2:Codigo>E160</ns2:Codigo><ns2:Mensagem>Sem acesso</ns2:Mensagem>
+              </ns2:MensagemRetorno></ns2:ListaMensagemRetorno>
+            </ns2:ConsultarNfseResposta>`;
+        const r = parseRespostaConsulta(xml);
+        expect(r.ok).toBe(false);
+        expect(r.mensagens[0].codigo).toBe('E160');
+    });
+});
+
+// ═══ 03/09: AUSENTE ≠ ZERO RETIDO ═══════════════════════════════════════════
+// `num()` devolvia 0 para <ValorIr> que não veio — e 0 num campo de retenção é
+// a AFIRMAÇÃO de que não houve retenção (o R-4020 lê esse zero). Ausente é
+// null; os leitores (`lerRetencoesFederaisDoDoc`) tratam null como não gravado.
+describe('retenções federais — ausente é null, presente é número', () => {
+    it('sem o grupo de retenções no XML, as cinco saem null', () => {
+        const r = parseRespostaConsulta(respostaComUmaNfse());
+        const s = r.nfses[0].servico;
+        expect([s.valorIr, s.valorInss, s.valorCsll, s.valorPis, s.valorCofins]).toEqual([null, null, null, null, null]);
+        // O que NÃO é retenção continua com o contrato antigo.
+        expect(s.valorServicos).toBe(1000);
+        expect(s.valorIss).toBe(50);
+    });
+
+    it('com as tags presentes (inclusive zero DECLARADO), sai o número', () => {
+        const base = respostaComUmaNfse();
+        const xml = base.replace('<BaseCalculo>',
+            '<ValorPis>6.50</ValorPis><ValorCofins>30,00</ValorCofins><ValorInss>0</ValorInss><ValorIr>15.00</ValorIr><ValorCsll>0.00</ValorCsll><BaseCalculo>');
+        const s = parseRespostaConsulta(xml).nfses[0].servico;
+        expect(s.valorPis).toBe(6.5);
+        expect(s.valorCofins).toBe(30);
+        expect(s.valorInss).toBe(0);
+        expect(s.valorIr).toBe(15);
+        expect(s.valorCsll).toBe(0);
     });
 });
 

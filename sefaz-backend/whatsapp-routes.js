@@ -102,6 +102,14 @@ const autorizar = guardaLocalOuIrmao(
 // Gravação continua requireAdmin — atendente usa, não define.
 const autorizarLeitura = guardaLocalOuIrmao(requireAuth, IRMAOS);
 
+// ATENDENTE do SP Connect (qualquer usuário logado do CFI) OU app irmão —
+// iniciar conversa por template é trabalho do atendente, não do admin. O
+// `_ehAdmin` continua carimbado para a auditoria dizer de onde veio.
+const autorizarAtendente = guardaLocalOuIrmao(
+    (req, res, next) => requireAuth(req, res, () => { req._ehAdmin = req.user?.role === 'admin'; next(); }),
+    IRMAOS,
+);
+
 async function lerCadastro(departamento) {
     const db = getDb();
     let q = db.collection(COLECAO);
@@ -291,7 +299,7 @@ router.post('/enviar', autorizar, async (req, res) => {
                 departamento, template: template.nome,
                 numeroEnviado: envio.numeroEnviado, messageId: envio.messageId,
                 por: req.user?.email || null,
-                projetoOrigem: req.user?.projeto || (req._ehAdmin ? 'cfi' : null),
+                projetoOrigem: req.user?.projectId || (req._ehAdmin ? 'cfi' : null),
                 referencia: p.referencia || null,
                 temDocumento: Boolean(template.temDocumento && p.pdfBase64),
             });
@@ -810,7 +818,7 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
 // validação forte: token Firebase assinado, projeto explicitamente permitido,
 // e-mail verificado e domínio do escritório. As demais rotas do inbox seguem
 // exclusivas do CFI, pois o irmão só inicia a conversa — não lê o atendimento.
-router.post('/conversas/iniciar', autorizar, async (req, res) => {
+router.post('/conversas/iniciar', autorizarAtendente, async (req, res) => {
     try {
         const p = req.body || {};
         const departamento = String(p.departamento || '').trim().toLowerCase();
@@ -1293,11 +1301,15 @@ router.post('/atendimento-config/imagem-fila', requireAdmin, async (req, res) =>
         const url = `${req.protocol}://${req.get('host')}/api/whatsapp/publico/imagem-fila/${fila}`;
 
         const db = getDb();
-        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
-        const atual = resolverConfig(cfgDoc.data());
-        const limpa = resolverConfig({ ...atual, imagensPorFila: { ...atual.imagensPorFila, [fila]: url } });
-        await db.collection('whatsapp_config').doc('atendimento').set({
-            ...limpa, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user?.email || null,
+        // TRANSAÇÃO: ler-modificar-gravar sem ela deixava o admin que salva a
+        // ⚙️ Config apagar o banner que outro admin subiu no meio (dois
+        // escritores, um doc, `set` sem merge).
+        const ref = db.collection('whatsapp_config').doc('atendimento');
+        let limpa;
+        await db.runTransaction(async (t) => {
+            const atual = resolverConfig((await t.get(ref)).data());
+            limpa = resolverConfig({ ...atual, imagensPorFila: { ...atual.imagensPorFila, [fila]: url } });
+            t.set(ref, { ...limpa, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user?.email || null });
         });
         return res.json({ ok: true, config: limpa, url });
     } catch (e) {
@@ -1312,13 +1324,14 @@ router.delete('/atendimento-config/imagem-fila/:fila', requireAdmin, async (req,
         const fila = String(req.params.fila || '').trim().toLowerCase();
         if (!filaValida(fila)) return res.status(400).json({ ok: false, error: 'fila inválida' });
         const db = getDb();
-        const cfgDoc = await db.collection('whatsapp_config').doc('atendimento').get();
-        const atual = resolverConfig(cfgDoc.data());
-        const semEla = { ...atual.imagensPorFila };
-        delete semEla[fila];
-        const limpa = resolverConfig({ ...atual, imagensPorFila: semEla });
-        await db.collection('whatsapp_config').doc('atendimento').set({
-            ...limpa, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user?.email || null,
+        const ref = db.collection('whatsapp_config').doc('atendimento');
+        let limpa;
+        await db.runTransaction(async (t) => {
+            const atual = resolverConfig((await t.get(ref)).data());
+            const semEla = { ...atual.imagensPorFila };
+            delete semEla[fila];
+            limpa = resolverConfig({ ...atual, imagensPorFila: semEla });
+            t.set(ref, { ...limpa, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user?.email || null });
         });
         return res.json({ ok: true, config: limpa });
     } catch (e) {

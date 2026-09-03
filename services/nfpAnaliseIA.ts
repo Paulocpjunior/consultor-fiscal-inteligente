@@ -12,8 +12,8 @@
  */
 import type { NfpAnaliseEmpresa, NfpAnaliseIA } from '../types';
 import { auth } from './firebaseConfig';
+import { fmtBRL } from './formatos';
 
-const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const FONTE_LABEL: Record<NfpAnaliseEmpresa['fonte'], string> = {
     certificado_escritorio: 'varredura automática com certificado digital do escritório',

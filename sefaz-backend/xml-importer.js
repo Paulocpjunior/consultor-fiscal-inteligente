@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
-import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
+import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO, statusDoCstatProtocolo } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 import { decidirPosseDocumento } from './documento-posse.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
@@ -228,13 +228,9 @@ function extrairTotais(xml) {
  */
 function statusFromCStat(xml) {
   const infProt = pickFirstBlock(xml, 'infProt');
-  const cStat = pickTag(infProt, 'cStat');
-  if (cStat === '100') return 'autorizado';
-  if (cStat === '101') return 'cancelado';
-  if (cStat === '110') return 'denegado';
-  if (cStat === '102') return 'inutilizado';
-  if (!cStat) return 'desconhecido';
-  return 'rejeitado';
+  // Tabela no DONO (`statusDoCstatProtocolo`): esta cópia não conhecia o 150
+  // (autorizada fora de prazo) e mandava nota VÁLIDA para 'rejeitado'.
+  return statusDoCstatProtocolo(pickTag(infProt, 'cStat'));
 }
 
 /**
@@ -271,7 +267,9 @@ export function extrairMetadados(xml, schema) {
 
   const participantes = extrairParticipantesNfe(xml);
   const cnpjEmit = participantes.emitente.cnpj || pickTag(xml, 'CNPJEmit') || pickTag(xml, 'CNPJ') || null;
-  const cnpjDest = participantes.destinatario.cnpj || pickTag(xml, 'CNPJDest') || null;
+  // 🚚 No CT-e a contraparte que escritura o frete é o TOMADOR (toma3/toma4),
+  // não o destinatário final da mercadoria — ver `extrairTomadorCte`.
+  const cnpjDest = participantes.tomador?.cnpj || participantes.destinatario.cnpj || pickTag(xml, 'CNPJDest') || null;
 
   const xNome = participantes.emitente.nome || pickTag(xml, 'xNome') || null;
   const dhEmi = pickTag(xml, 'dhEmi') || pickTag(xml, 'dEmi') || pickTag(xml, 'dhEvento') || null;
@@ -286,8 +284,16 @@ export function extrairMetadados(xml, schema) {
   // com CFOP **'5352' CRAVADO** em 100% dos conhecimentos e CST '000' — dado
   // fiscal INVENTADO, a mesma família do 'PARTSEM'. A natureza da operação de
   // transporte não se adivinha; ela está no XML e faltava LER.
-  const cfopCabecalho = pickTag(xml, 'CFOP') || null;
-  const cstCabecalho = pickTag(xml, 'CST') || null;
+  // 🚨 SÓ NO CT-e, e SÓ no bloco certo: `pickTag(xml,'CFOP')` sem escopo
+  // achava o CFOP do 1º ITEM em toda NF-e (e o `CST` achava o do IPI ou do
+  // PIS, porque o ICMSSN escreve CSOSN) — e o documento saía gravado com
+  // `cfop`/`cstIcms` "de cabeçalho" que nunca existiu. No CT-e o CFOP mora em
+  // <ide> e o CST em <imp><ICMS>.
+  const ehCte = /<infCte[\s>]/i.test(xml);
+  const ideCte = ehCte ? pickFirstBlock(xml, 'ide') : '';
+  const icmsCte = ehCte ? pickFirstBlock(pickFirstBlock(xml, 'imp') || '', 'ICMS') : '';
+  const cfopCabecalho = ehCte ? (pickTag(ideCte, 'CFOP') || null) : null;
+  const cstCabecalho = ehCte ? (pickTag(icmsCte, 'CST') || null) : null;
 
   // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
   // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando

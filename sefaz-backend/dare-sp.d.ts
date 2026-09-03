@@ -47,7 +47,9 @@ export function montarLinhaLoteTxt(input: {
 
 // 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
 // importador TypeScript não enxergava o símbolo (erro de compilação).
-export function montarLoteTxt(...args: any[]): any;
+export function montarLoteTxt(itens: Array<{
+    cnpj: string; razaoSocial?: string; codigoServico: string; referencia: string; valor: number; vencimento: string;
+}>): { texto: string; linhas: string[]; totalValor: number };
 export function codigoGnreParaDareSp(codigo: unknown): any;
 export function normalizarReferencia(v: unknown): string;
 export const CONVERSAO_GNRE_DARE_SP: Record<string, any>;

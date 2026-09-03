@@ -26,7 +26,7 @@ const router = express.Router();
  * Body: { xmls: string[] }   (conteúdo de cada arquivo .xml de evento Reinf)
  * Retorna: { eventos: [...analise por evento...], consolidacao: {...} }
  */
-router.post('/analisar', requireAdmin, express.json({ limit: '20mb' }), async (req, res) => {
+router.post('/analisar', requireAdmin, async (req, res) => {
     try {
         const body = req.body || {};
         const xmls = Array.isArray(body.xmls) ? body.xmls
@@ -100,7 +100,7 @@ router.post('/analisar', requireAdmin, express.json({ limit: '20mb' }), async (r
  * cruzamento nunca dá verde, porque "não achei divergência" no que foi subido
  * não é o mesmo que "a competência está completa".
  */
-router.post('/irrf-r4010', requireAdmin, express.json({ limit: '20mb' }), async (req, res) => {
+router.post('/irrf-r4010', requireAdmin, async (req, res) => {
     try {
         const b = req.body || {};
         const xmls = Array.isArray(b.xmls) ? b.xmls : [];

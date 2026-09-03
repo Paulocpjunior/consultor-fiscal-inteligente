@@ -16,8 +16,17 @@ export function normalizarCompetencia(comp: unknown): string | null;
 export function competenciaTarefa(comp: unknown): string | null;
 
 /** TODAS as formas em que a competência pode estar GRAVADA — para consultar
- *  acervo antigo, anterior à normalização. */
+ *  acervo antigo, anterior à normalização. Inclui `AAAA-MM-01` (a ficha grava
+ *  a competência como DATA); outros dias não são enumeráveis num `in` — quem
+ *  lê o resultado normaliza antes de comparar. */
 export function formasDaCompetencia(comp: unknown): string[];
+
+/** `AAAA-MM-DD` do instante em BRASÍLIA (o Cloud Run é UTC). Inválido → null. */
+export function dataBrasilia(d?: Date | string | number): string | null;
+
+/** `AAAA-MM-DDThh:mm:ss-03:00` — o instante em Brasília na forma que os XSD
+ *  fiscais aceitam (sem `Z`, sem milissegundos). Inválido → null. */
+export function dataHoraBrasilia(d?: Date | string | number): string | null;
 
 /**
  * A porta da GERAÇÃO de arquivo. Normaliza as outras formas legítimas

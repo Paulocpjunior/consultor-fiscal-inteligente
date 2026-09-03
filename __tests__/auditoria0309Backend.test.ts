@@ -35,11 +35,12 @@ describe('rotas /status e /nbs não ficam sem guarda', () => {
 });
 
 describe('segredo do bridge do plano de contas', () => {
-    it('é comparado em tempo constante e o /status também exige o token', () => {
+    it('é comparado em tempo constante e o /status só detalha com o token (sem ele, só o pulso)', () => {
         const src = semComentario(ler('sefaz-backend/plano-contas-bridge-routes.js'));
         expect(src).toMatch(/secretsMatch\(tokenDaRequisicao\(req\), BRIDGE_TOKEN\)/);
         expect(src).not.toMatch(/tokenDaRequisicao\(req\) !== BRIDGE_TOKEN/);
-        expect(src).toMatch(/router\.get\('\/status',\s*requireBridgeToken,/);
+        const i = src.indexOf("router.get('/status'");
+        expect(src.slice(i, i + 400)).toMatch(/if \(!BRIDGE_TOKEN \|\| !secretsMatch\(tokenDaRequisicao\(req\), BRIDGE_TOKEN\)\) return res\.json\(\{ ok: true \}\);/);
     });
 });
 
