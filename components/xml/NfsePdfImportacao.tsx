@@ -8,6 +8,9 @@ import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
 import { recorteDaNfsePdf, idDaNfsePdf } from '../../services/nfsePdfRecorte';
+// "Este PDF é MESMO da empresa escolhida?" — reconferido no SALVAR, porque os
+// campos de prestador/tomador desta tela são editáveis depois do drop.
+import { conferirPosseDaNfsePdf } from '../../services/nfsePdfPosse';
 import type { NfsePdfParsed } from '../../services/nfsePdfParserService';
 import type { User } from '../../types';
 
@@ -123,6 +126,28 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             // no banco e fora de todo recorte de mês (caso 0257, 01/09).
             const recorte = recorteDaNfsePdf(parsed);
             if (recorte.impedimento) { setError(recorte.impedimento); setSaving(false); return; }
+
+            // 🚨 A CONFERÊNCIA DE POSSE SE REFAZ NO SALVAR (03/09, Paulo:
+            // *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o
+            // consultor não deu nenhum erro"*). O `matchNfseEmpresa` roda no
+            // DROP — e os campos de prestador e tomador desta tela são
+            // EDITÁVEIS depois dele: entre a conferência e a gravação o CNPJ
+            // pode ter virado outro, e nada reconferia. Conferência que roda
+            // antes da edição não protege o que foi editado.
+            //
+            // ⚠️ E ela usa a RAIZ, não o CNPJ inteiro: matriz e filial são a
+            // mesma empresa em todo o resto do app (a régua do certificado e a
+            // do lote de XML). Nota da filial com a matriz ativa é legítima.
+            const posse = conferirPosseDaNfsePdf({
+                prestadorCnpj: parsed.prestador.cnpj,
+                prestadorNome: parsed.prestador.nome,
+                tomadorCnpj: parsed.tomador.cnpj,
+                tomadorNome: parsed.tomador.nome,
+                empresaCnpj: empresaSelecionada.cnpj,
+                empresaNome: empresaSelecionada.nome,
+                empresas,
+            });
+            if (posse.bloquear) { setError(posse.mensagem); setSaving(false); return; }
 
             const docId = idDaNfsePdf({
                 chaveAcesso: parsed.chaveAcesso,

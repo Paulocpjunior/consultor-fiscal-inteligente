@@ -1,15 +1,47 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { getView } from '../../services/xmlDocumentoView';
-import type { DocumentoFiscal } from '../../types';
+import type { DocumentoFiscal, User } from '../../types';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import { procedenciaDoDocumento, hashCurto, dataLegivel } from '../../services/documentoProcedencia';
+// 🚨 A SAÍDA PARA A NOTA QUE ENTROU NA EMPRESA ERRADA (03/09, Paulo: *"lancei
+// uma nota da J.P. PISSATO na empresa SILVIO FREIRE … como resolver?"*). Não
+// tinha como: `deleteDocumento` existia e NENHUMA tela o chamava.
+import { explicarRetirada, MIN_MOTIVO_RETIRADA } from '../../services/documentoRetirada';
+import { tirarDocumentoDaEmpresa } from '../../services/xmlFiscalService';
 
 interface Props {
     documento: DocumentoFiscal;
     onClose: () => void;
+    currentUser?: User | null;
+    /** Avisado quando a nota sai — a lista tem de recarregar. */
+    onRetirado?: () => void;
+    onShowToast?: (msg: string) => void;
 }
 
-const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
+const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUser, onRetirado, onShowToast }) => {
+    const [abrirRetirada, setAbrirRetirada] = useState(false);
+    const [motivo, setMotivo] = useState('');
+    const [tirando, setTirando] = useState(false);
+    const [erroRetirada, setErroRetirada] = useState<string | null>(null);
+    const jaRetirada = explicarRetirada(d as any);
+
+    const tirar = async () => {
+        setTirando(true); setErroRetirada(null);
+        try {
+            const r = await tirarDocumentoDaEmpresa(d.id, motivo, currentUser || null);
+            if (!r.ok) { setErroRetirada(r.mensagem); return; }
+            onShowToast?.(r.mensagem);
+            setAbrirRetirada(false);
+            setMotivo('');
+            onRetirado?.();
+            onClose();
+        } catch (e: any) {
+            setErroRetirada(e?.message || 'Falha ao tirar a nota.');
+        } finally {
+            setTirando(false);
+        }
+    };
+
     // Por que campos como chave e hash podem faltar. A NFS-e do portal entra
     // por CSV/TXT: sem arquivo XML, sem hash, sem chave de 44 dígitos — e
     // tratar isso como defeito foi o que derrubou a tela (07/08).
@@ -163,6 +195,76 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose }) => {
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-1 leading-snug">
                         ℹ {procedencia.explicacao}
                     </p>
+                )}
+
+                {/* ═══ A NOTA ENTROU NA EMPRESA ERRADA ═══════════════════════
+                    03/09, Paulo: *"lancei uma nota da J.P. PISSATO na empresa
+                    SILVIO FREIRE … como resolver?"* — e não tinha como. A nota
+                    INFLA o livro de quem não a tomou e SOME do livro de quem
+                    tomou, sem nenhum validador acusar: o documento é legítimo
+                    e o cadastro das duas empresas está certo. */}
+                {jaRetirada ? (
+                    <div className="mt-3 rounded-md border border-slate-300 bg-slate-100 dark:bg-slate-700/50 p-3">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">🚫 Nota tirada desta empresa</p>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">{jaRetirada}</p>
+                    </div>
+                ) : !abrirRetirada ? (
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <button
+                            onClick={() => setAbrirRetirada(true)}
+                            className="text-xs rounded-md border border-red-300 text-red-700 dark:text-red-300 px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 btn-press whitespace-nowrap"
+                            title="Para quando a nota foi importada na empresa errada. Ela sai do livro DESTA empresa; o documento não é apagado."
+                        >
+                            🚫 Esta nota não é desta empresa
+                        </button>
+                    </div>
+                ) : (
+                    <div className="mt-3 rounded-md border border-red-300 bg-red-50 dark:bg-red-900/20 p-3">
+                        <p className="text-xs font-bold text-red-800 dark:text-red-300">
+                            Tirar a nota {d.numero} de {d.empresaNome || 'esta empresa'}
+                        </p>
+                        {/* 🚨 A LINHA QUE IMPEDE O LIVRO A MENOS: tirar daqui NÃO
+                            põe na empresa certa. Sem isto, quem tira acha que
+                            resolveu e a nota fica faltando nas DUAS. */}
+                        <p className="text-[11px] text-red-800 dark:text-red-300 mt-1 leading-snug">
+                            Ela sai do livro desta empresa (lista, competência, Livro de Serviços e SPED).
+                            <strong> Isto NÃO a move para a empresa certa</strong> — importe-a lá depois, senão
+                            ela fica faltando nas duas. O documento <strong>não é apagado</strong>: fica
+                            registrado com o motivo e com quem tirou, e dá para voltar atrás.
+                        </p>
+                        <textarea
+                            value={motivo}
+                            onChange={(e) => setMotivo(e.target.value)}
+                            rows={2}
+                            placeholder='Por que ela sai daqui? Ex.: "nota é da J.P. PISSATO, importada aqui por engano"'
+                            className="mt-2 w-full rounded border border-red-300 bg-white dark:bg-slate-800 p-2 text-xs"
+                        />
+                        <p className="text-[10px] text-red-700 dark:text-red-400 mt-0.5">
+                            {motivo.trim().length}/{MIN_MOTIVO_RETIRADA} caracteres — daqui a um mês ninguém
+                            lembra por que a nota saiu.
+                        </p>
+                        {erroRetirada && (
+                            <p className="mt-2 text-[11px] font-semibold text-red-800 dark:text-red-300">{erroRetirada}</p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <button
+                                onClick={tirar}
+                                disabled={tirando || motivo.trim().length < MIN_MOTIVO_RETIRADA}
+                                className="text-xs rounded-md bg-red-600 text-white px-3 py-1.5 font-semibold hover:bg-red-700 disabled:opacity-50 btn-press whitespace-nowrap"
+                                title={motivo.trim().length < MIN_MOTIVO_RETIRADA
+                                    ? `Escreva o motivo (mínimo ${MIN_MOTIVO_RETIRADA} caracteres)`
+                                    : 'Tira a nota do livro desta empresa'}
+                            >
+                                {tirando ? 'Tirando…' : 'Confirmar — tirar do livro desta empresa'}
+                            </button>
+                            <button
+                                onClick={() => { setAbrirRetirada(false); setErroRetirada(null); }}
+                                className="text-xs rounded-md border border-slate-300 px-3 py-1.5 btn-press whitespace-nowrap"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>
