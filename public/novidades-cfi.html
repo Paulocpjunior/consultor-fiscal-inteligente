@@ -68,7 +68,7 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 18 minutos</p>
+            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 17 minutos</p>
         </div>
     </div>
 </header>
@@ -127,7 +127,100 @@
 </section>
 
 <section>
-    <h2>🗓 O que mudou em 02/09</h2>
+    <h2>🆕 O que mais mudou em 03/09 — os casos do dia</h2>
+    <h3>1. 📅 <strong>NFS-e de SP: o mês da nota é o do FATO GERADOR, não o da emissão</strong></h3>
+    <p>Em São Paulo a nota de <strong>31/08</strong> pode ser emitida até o <strong>dia 10/09</strong>
+    (até <strong>05/09</strong> quando há retenção). O portal da Prefeitura lista essa nota dentro de
+    <strong>agosto</strong> — ele filtra por <strong>“Incidência”</strong>, que é a
+    <strong>Data do Fato Gerador</strong>.</p>
+    <div class="alerta">⚠️ <strong>O app recortava o mês pela data de EMISSÃO.</strong> Nota emitida em
+    setembro com fato gerador em agosto era gravada em <strong>09/2026</strong> e
+    <strong>desaparecia de tudo que é de agosto</strong> — lista, Livro de Serviços, ISS da competência
+    e SPED — aparecendo em setembro. <strong>Sem erro nenhum na tela.</strong></div>
+    <div class="onde">📍 <strong>Onde:</strong> vale para os quatro caminhos por onde a NFS-e entra —
+    <strong>CSV do portal de SP</strong>, consulta pelo <strong>web service</strong>,
+    <strong>Padrão Nacional (ADN)</strong> e <strong>XML importado no navegador</strong>. Nada muda na
+    sua rotina: o app passou a gravar a competência certa sozinho.</div>
+    <p>Quando a emissão e a competência caem em meses diferentes, a nota traz a
+    <strong>explicação</strong> do porquê — não é erro, é como SP funciona.</p>
+    <div class="alerta">🚩 <strong>O que ainda NÃO se conserta sozinho:</strong> nota que <em>já estava
+    gravada</em> continua no mês da emissão. Se ao fechar o mês faltar uma NFS-e emitida no mês
+    seguinte, <strong>fale com o Junior antes de lançar à mão</strong> — mudar o mês de uma nota mexe em
+    livro que pode já ter sido entregue.</div>
+
+    <h3>2. 🧾 <strong>EFD-Contribuições recusado inteiro por causa de UMA nota de serviço tomado</strong></h3>
+    <p>O PVA respondia <strong>“Campo obrigatório na entrada · COD_PART”</strong> e
+    <strong>não importava o arquivo</strong> — o arquivo todo barrado por uma nota só.</p>
+    <p>A causa: uma <strong>NFS-e tomada</strong> que entrou pelo <strong>PDF</strong> sem o
+    <strong>CNPJ do prestador</strong> (acontece no leiaute que o app não consegue ler sozinho).</p>
+    <div class="onde">📍 <strong>Onde:</strong> agora o app <strong>tira essa nota do arquivo</strong> e
+    <strong>diz qual é</strong> (prestador + número) no aviso da geração. Para trazê-la de volta:
+    Central de XMLs → <strong>Importar</strong> → <strong>NFS-e (PDF)</strong>, preencha o
+    <strong>CNPJ do prestador</strong> e marque <strong>“↻ Substituir os que já estão no banco”</strong>.
+    Depois gere o SPED de novo.</div>
+    <div class="alerta">⚠️ <strong>Não é problema no cadastro do cliente</strong> — é o documento que
+    entrou sem o prestador. Conferir o cadastro não resolve.</div>
+
+    <h3>3. ⛔ <strong>“Arquivo não é desta empresa”</strong> em nota de serviço TOMADO</h3>
+    <p>Arrastando os XMLs de <strong>serviços tomados</strong>, a tela dizia
+    <strong>“0 desta empresa · 4 de outro CNPJ”</strong> e nomeava o <strong>prestador</strong> como
+    dono do arquivo — e o botão <strong>Importar nem aparecia</strong>, só o Cancelar.</p>
+    <p>A causa: na <strong>NFS-e do Padrão Nacional</strong> o tomador vem numa etiqueta que a tela de
+    conferência ainda não conhecia. Ela lia só o <strong>prestador</strong> e concluía que a nota era de
+    outra empresa.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → <strong>Importar</strong>
+    (avulso ou ZIP). <strong>Nada muda na sua rotina</strong> — a tela passou a reconhecer a empresa
+    como tomadora e o botão Importar volta a aparecer.</div>
+    <div class="alerta">⚠️ <strong>O bloqueio de verdade continua:</strong> XML que é mesmo de outro
+    cliente segue barrado, com o dono nomeado. O que saiu foi a acusação falsa.</div>
+
+    <h3>4. 🧾 <strong>NFTS agora entra no consultor</strong> (serviço tomado, com o ISS retido)</h3>
+    <p>A NFTS aparecia só na conferência e <strong>nunca virava documento</strong>: não estava na lista
+    de XMLs, nem no Livro de Serviços tomados, nem na competência. Não era falha de captura —
+    <strong>faltava o caminho de importar</strong>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> NFTS → <strong>Conferência NFTS</strong>. Além do
+    <strong>🔎 Conferir (não grava)</strong>, existe agora o
+    <strong>⬇ Conferir e IMPORTAR as NFTS</strong>. Exporte o CSV no portal da Prefeitura, escolha a
+    empresa e a competência, e clique no verde.</div>
+    <div class="alerta">📅 <strong>A competência é a da DATA DA PRESTAÇÃO</strong>, não a da emissão —
+    a NFTS emitida em setembro por um serviço de 31/08 entra em <strong>agosto</strong>. A tela diz em
+    qual competência cada nota entrou; procure por ela em XMLs.</div>
+    <div class="alerta">⚠️ <strong>Reimportar o mesmo arquivo NÃO duplica</strong> — a nota cai por cima
+    dela mesma. E a NFTS que o app não conseguir gravar aparece <strong>nomeada</strong>, com o motivo.</div>
+    <div class="alerta">🚩 <strong>Se o arquivo for recusado por “layout”:</strong> o portal exporta em
+    versões, e a tela agora mostra o <strong>cabeçalho que o app leu</strong> numa caixa para copiar.
+    <strong>Copie e mande ao Junior</strong> — não precisa mandar o arquivo do cliente. E o
+    <strong>PDF não serve para importar NFTS</strong>: ali o PDF é usado para <em>emitir</em> a NFTS no
+    portal, que é outra coisa.</div>
+
+    <h3>5. 🚫 <strong>Importei a nota na empresa ERRADA</strong> — agora tem como tirar</h3>
+    <p>Até hoje <strong>não tinha</strong>: a nota entrava no livro do cliente errado e não existia
+    caminho nenhum para tirá-la. E ninguém percebe pelo app — o documento é legítimo e o cadastro das
+    duas empresas está certo, então <strong>nada acende</strong>.</p>
+    <div class="alerta">🚨 <strong>O estrago é dos dois lados:</strong> a nota <strong>infla</strong> o
+    serviço tomado de quem não a tomou (lista, competência, Livro de Serviços e SPED) e
+    <strong>some</strong> do livro de quem tomou.</div>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → <strong>XMLs</strong> → clique na nota
+    para abrir o detalhe → botão <strong>🚫 Esta nota não é desta empresa</strong>. Escreva o motivo
+    (mínimo 15 caracteres) e confirme.</div>
+    <div class="alerta">⚠️ <strong>Tirar daqui NÃO põe na empresa certa.</strong> Depois de tirar,
+    <strong>importe a nota na empresa dona</strong> — senão ela fica faltando nas duas, que é pior.</div>
+    <div class="alerta">ℹ️ <strong>A nota não é apagada:</strong> ela sai das listas e dos livros, mas
+    fica registrada com o motivo e com quem tirou — e dá para voltar atrás.</div>
+
+    <h3>6. 🛡️ <strong>E o PDF passou a conferir de quem é a nota na hora de SALVAR</strong></h3>
+    <p>A conferência acontecia só quando você <em>solta</em> o arquivo — e os campos de prestador e
+    tomador daquela tela <strong>podem ser editados depois</strong>. Entre uma coisa e outra o CNPJ podia
+    virar outro, e nada reconferia.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Importar → <strong>NFS-e (PDF)</strong>. Se a nota não
+    for da empresa ativa, o app <strong>bloqueia e diz de quem ela é</strong> — e, quando é de outro
+    cliente da carteira, diz o nome dele para você trocar no combo.</div>
+    <div class="alerta">⚠️ <strong>Matriz e filial continuam sendo a mesma empresa</strong> (a
+    conferência é pela raiz do CNPJ). E quando o PDF vem <strong>sem</strong> o prestador ou o tomador —
+    acontece em alguns leiautes —, ele <strong>não bloqueia</strong>: avisa, e pede que você preencha o
+    CNPJ ali mesmo. Sem esse campo, o EFD-Contribuições é <strong>barrado inteiro</strong> depois.</div>
+
+    <h2>O que mudou em 02/09</h2>
 
     <h3>1. 🚫 <strong>NFC-e cancelada aparecendo com valor</strong> — agora tem como perguntar à SEFAZ</h3>
     <p>A captura de NFC-e pergunta <strong>uma vez por nota</strong>, e o cancelamento acontece

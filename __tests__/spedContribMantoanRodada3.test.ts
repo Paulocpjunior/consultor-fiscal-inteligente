@@ -139,10 +139,16 @@ describe('🚨 0200 — o item sintético do A170 precisa constar da Tabela de I
         );
     });
 
-    it('o catálogo 0200 registra o código genérico quando há documento sem itens', () => {
-        expect(srcOrchestrator).toMatch(
-            /filtrarNotasBlocoA\(notas\)\.some\(n => !\(n\.itens \|\| \[\]\)\.length\)/,
-        );
+    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (03/09): ela prendia o TEXTO
+    // `filtrarNotasBlocoA(notas).some(...)`, e essa forma virou DEFEITO — ela
+    // declarava o item sintético a partir de notas que o bloco A **não emite
+    // mais** (serviço tomado sem COD_PART sai do arquivo, senão o PVA recusa a
+    // importação inteira). Mantido o item sintético é a recusa do item ÓRFÃO.
+    // O que ela protege continua: quando houver documento DECLARÁVEL sem itens,
+    // o 0200 registra o código genérico — e a pergunta "quais notas o bloco A
+    // declara" tem UM dono, senão os dois divergem no primeiro caso novo.
+    it('o catálogo 0200 registra o código genérico quando há documento DECLARÁVEL sem itens', () => {
+        expect(srcOrchestrator).toMatch(/separarDeclaraveisNoBlocoA\([\s\S]{0,120}\.declaraveis\.some\(n => !\(n\.itens \|\| \[\]\)\.length\)/);
         expect(srcOrchestrator).toContain('itensMap.set(COD_ITEM_SERVICO_GENERICO,');
     });
 });

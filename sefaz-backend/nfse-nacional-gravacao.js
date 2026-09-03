@@ -45,6 +45,8 @@
 // fechar a classe é um evento real de cancelamento vindo do ADN.
 // ============================================================================
 
+import { competenciaDaNfse } from './competencia-da-nfse.js';
+
 const so = (v) => String(v ?? '').replace(/\D/g, '');
 
 /**
@@ -86,7 +88,19 @@ export function direcaoDaNfseNacional(meta, empresaCnpj) {
 export function documentoDaNfseNacional(meta, empresaCnpj) {
     const m = meta || {};
     const direcao = direcaoDaNfseNacional(m, empresaCnpj);
-    const competencia = competenciaDaEmissao(m.dataEmissao);
+    // 🚨 QUEM RECORTA O MÊS É O `dCompet`, NÃO A EMISSÃO (03/09) — e o leitor
+    // do ADN já o lê (`nfse-nacional-leitura.js` → `competencia`), enquanto
+    // esta gravação o jogava fora e recortava `dataEmissao`. É a família do
+    // `localErroAviso`: o dado chega e o leitor descarta, no campo que decide
+    // em qual mês a nota entra.
+    //
+    // 🚩 AQUI É PREVENÇÃO, NÃO DEFEITO MEDIDO: o histórico deste trilho é ZERO
+    // documento (medição de 23/08). O que se corrige é o dia em que o primeiro
+    // chegar — carimbar impacto sem número seria o erro de 22/08 ao contrário.
+    const incidencia = competenciaDaNfse({
+        competenciaDeclarada: m.competencia, dataEmissao: m.dataEmissao,
+    });
+    const competencia = incidencia.competencia;
     // `Number(null)` é 0 e passaria por valor real: ausência fica NaN.
     const valor = (m.valorServico == null || m.valorServico === '') ? NaN : Number(m.valorServico);
 
@@ -105,7 +119,12 @@ export function documentoDaNfseNacional(meta, empresaCnpj) {
     };
 
     if (direcao) out.direcao = direcao;
-    if (competencia) out.competencia = competencia;
+    if (competencia) {
+        out.competencia = competencia;
+        // A ORIGEM viaja: número derivado não se apresenta como lido.
+        out.competenciaOrigem = incidencia.origem;
+        out.competenciaDivergeDaEmissao = incidencia.diverge;
+    }
 
     if (Number.isFinite(valor)) {
         out.valorTotal = valor;
@@ -138,8 +157,13 @@ export function lacunasDaNfseNacional(meta, empresaCnpj) {
     if (!direcaoDaNfseNacional(meta, empresaCnpj)) {
         faltas.push('direção (a empresa não é o prestador nem o tomador desta nota)');
     }
-    if (!competenciaDaEmissao(meta?.dataEmissao)) {
-        faltas.push('competência (data de emissão ilegível)');
+    // ⚠️ A LACUNA PERGUNTA AO MESMO DONO da gravação: perguntar só pela data de
+    // emissão acusaria falta de competência em nota que declara `dCompet` — e
+    // aí a lista de lacunas mentiria sobre um documento completo.
+    if (!competenciaDaNfse({
+        competenciaDeclarada: meta?.competencia, dataEmissao: meta?.dataEmissao,
+    }).competencia) {
+        faltas.push('competência (nem `dCompet` nem data de emissão legíveis)');
     }
     if (meta?.valorServico == null || meta?.valorServico === '' || !Number.isFinite(Number(meta?.valorServico))) {
         faltas.push('valor do serviço');

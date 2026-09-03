@@ -5,6 +5,298 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A NOTA ENTROU NA EMPRESA ERRADA E NÃO HAVIA COMO TIRAR** (03/09, Paulo:
+  *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o consultor não
+  deu nenhum erro avisando de que eu estava importando na empresa errada, e eu
+  não me atentei tbm. **Como resolver?**"*).
+  📌 **A resposta era: NÃO TINHA COMO — e isso foi MEDIDO.** `deleteDocumento`
+  existe em `xmlFiscalService` desde sempre e **NENHUMA tela o chamava**: a
+  "rota sem botão" de 13/08, código morto com cara de entrega. O documento
+  entrou no livro do cliente errado e não havia caminho nenhum para tirá-lo.
+  🚨 **E O CUSTO É DOS DOIS LADOS, sem nenhum validador acusar**: a nota INFLA
+  o serviço tomado de quem não a tomou (lista, competência, Livro de Serviços,
+  bloco A do EFD-Contribuições) e **SOME** do livro de quem tomou. O documento é
+  legítimo e o cadastro das DUAS empresas está certo — não há o que acender.
+  ⚠️ **E `deleteDocumento` NÃO SERVIA**: ele apaga de VERDADE (`deleteDoc` + o
+  arquivo no Storage), levando junto a prova de que a nota esteve ali, quem a
+  pôs e quando. Aqui é **LÁPIDE** (a régua do WALDESA, 24/07): `_deleted` já é
+  filtrado por toda a listagem, o documento fica, e `_deleted: false` traz de
+  volta. Um teste recorta a função e prova que não há `deleteDoc` nela.
+  🚨 **A LINHA QUE IMPEDE O LIVRO A MENOS: tirar de uma NÃO põe na outra** — e
+  a tela DIZ isso, antes e depois do clique. Sem ela, quem tira acha que
+  resolveu e a nota fica faltando nas **DUAS**, que é o erro caro.
+  ⚠️ **MOTIVO ESCRITO (≥15) E AUTOR OBRIGATÓRIOS**, o piso da T3 da DCTFWeb e
+  da reabertura do fim de mês: tirar nota de livro é decisão, e daqui a um mês
+  ninguém lembra por que ela saiu. E **retirar duas vezes é recusado** —
+  repetir sobrescreveria o autor e o motivo originais pelos de agora.
+  🔴 **E O "NÃO DEU NENHUM ERRO" TINHA UMA CAUSA MEDIDA no importador de PDF**:
+  `matchNfseEmpresa` roda no **DROP** — e os campos de prestador e tomador
+  daquela tela são **EDITÁVEIS depois dele**. Entre a conferência e a gravação o
+  CNPJ pode virar outro, e **nada reconferia**. *Conferência que roda antes da
+  edição não protege o que foi editado.* `conferirPosseDaNfsePdf` reconfere no
+  SALVAR, **antes do upload** (bloquear depois deixaria PDF órfão no Storage).
+  ⚠️ **E ELA USA A RAIZ, não o CNPJ inteiro**: matriz e filial são a mesma
+  empresa no resto do app (a régua do certificado e a do lote de XML).
+  ⚠️ **LADO ILEGÍVEL NÃO BLOQUEIA** — a DANFSe v2.0 de Brasília chega com
+  prestador e tomador VAZIOS (02/09, RADIO E TV SUL AMERICANA), e acusar ali
+  seria dizer *"é de outra empresa"* sobre um PDF que o app não conseguiu LER,
+  fechando a única porta que aquela nota tem. Vira aviso mandando preencher o
+  CNPJ, **com a consequência**: COD_PART vazio barra o EFD-Contribuições
+  INTEIRO (a recusa do INSTITUTO HAYAY, no mesmo dia).
+  🚩 **O QUE ISTO NÃO ALCANÇA, e vai dito**: o **✍️ Lançar nota sem XML**. Ali a
+  empresa é um dos lados **por construção** — a pessoa escolhe o cliente e
+  digita só a contraparte —, então nada no documento contradiz a escolha e o app
+  não tem como saber. A saída (tirar a nota) vale para ele igual; a prevenção,
+  não.
+  📌 **REGRA QUE FICA: toda tela que GRAVA documento no cliente precisa da
+  saída para tirá-lo do cliente errado.** Prevenir é metade — a outra metade é o
+  que se faz depois que passou, e sem ela a resposta ao dono é um beco. E
+  *"deleteDocumento existe"* não é a saída: função sem botão não é entrega, e
+  exclusão física não é a operação certa para dado fiscal.
+
+- **🚨 "PASSOU O MATA-BURRO NÃO VOLTA ATRÁS" — a MESMA classe pela QUARTA vez,
+  agora com a empresa do lado do TOMADOR** (03/09, Paulo, GOLDLOG ARMAZENS
+  GERAIS 17.390.490/0001-82: *"o CFI voltou a não reconhecer as notas de
+  serviços tomados, pois está considerando o CNPJ do prestador em vez do CNPJ
+  da empresa como tomadora"*).
+  📖 O modal, literal: **`4 XML(s) · 0 desta empresa · 4 de outro CNPJ`**, com
+  três prestadores nomeados (33.105.122/0001-00 · 63.023.253/0001-09 ·
+  32.076.813/0001-51) e **só o botão Cancelar** — o Importar nem existia.
+  🔴 **A CAUSA É UMA TAG, e ela estava MEDIDA no nome dos próprios arquivos**:
+  as chaves têm **50** caracteres (`3550308` município · `1` ambiente · `2`
+  tipo de inscrição · 14 do CNPJ do PRESTADOR · 27 do resto), ou seja são
+  NFS-e do **padrão NACIONAL** — e ali o tomador é **`<toma>`**. A leitura da
+  TELA (`extrairDadosXml`) conhecia `<dest>`, `<rem>` e os blocos do ABRASF;
+  nenhum deles. E como o nacional **também** traz `<emit>`, o `emit` saía
+  preenchido com o PRESTADOR e o `dest` VAZIO: a tela via um lado só e concluiu
+  que o arquivo era de outra empresa.
+  🚨 **É A TERCEIRA CORREÇÃO PONTUAL DA MESMA SEGUNDA LEITURA**: o CT-e (19/08,
+  `<rem>`), o ABRASF (31/08, `<PrestadorServico>`) e o nacional que entrou em
+  01/09. Nas três eu **acrescentei a tag que faltava** — e a quarta forma ficou
+  de fora, porque acrescentar tag fecha a INSTÂNCIA e deixa a classe aberta.
+  ✂️ **Ela deixou de ser leitura própria e passou a DELEGAR**: `ehNfseNacional`
+  + `lerNfseNacional` (o dono, `nfse-nacional-leitura.js`) — o MESMO que o
+  `xmlParserService` usa desde 01/09, e que já sabe `<emit>`/`<toma>`/chave de
+  50. Agora a tela aprende JUNTO com o importador, que é a única forma de as
+  duas pararem de divergir.
+  ⚠️ **E A CHAVE SAI COM 50, não recortada em 44** — recortar daria uma chave
+  que não existe.
+  ⚠️ **NADA REGRIDE, e o que separa os dois leiautes é a CAIXA DAS LETRAS**: o
+  ABRASF escreve `<InfNfse>` e o nacional `<infNFSe>`; a detecção do dono é
+  case-sensitive de propósito (a lição de 01/09, em que a flag `i` engoliu o
+  ABRASF inteiro).
+  ✅ **E O IMPORTADOR JÁ ACEITAVA — medido antes de mexer**: `parseNFSeNacional`
+  preenche o destinatário a partir do `<toma>` e `matchCompanyAndDirection` lê
+  `parsed.destinatario.cnpjCpf`. Ou seja o botão que faltava levava a uma
+  importação que funciona — era só a tela recusando o que o servidor aceita, o
+  defeito do CT-e da A CASTELLANO na íntegra.
+  📌 **REGRA QUE FICA: quando a MESMA correção acontece pela terceira vez no
+  mesmo lugar, a correção certa não é a quarta tag — é DELEGAR ao dono.** Tag
+  acrescentada à mão só cobre o leiaute que alguém lembrou, e envelhece em
+  SILÊNCIO: o sintoma não é erro, é a tela AFIRMANDO que o arquivo é de outra
+  empresa — o que manda conferir o cadastro do cliente, que está certo.
+  Travado por varredura (a tela não pode citar `toma` no CÓDIGO) mais o caso
+  real do print, e provado desligando a delegação: 4 testes caem.
+
+- **🚨 A NFTS NUNCA VIRAVA DOCUMENTO — o módulo só CRUZAVA** (03/09, Paulo:
+  *"Referente a NFTS, ela não aparece pra mim no consultor, o PDF ele não
+  aceita e o CSV por causa do layout"*).
+  📌 **O "não aparece" era POR CONSTRUÇÃO, e isso foi MEDIDO**: o
+  `nfts-routes.js` tinha UMA rota (`/cruzamento`), que **LÊ**
+  `documentos_fiscais` para conferir e **nunca escreve**. A NFTS não existia em
+  recorte nenhum — nem no Livro de Serviços tomados, nem na competência, nem no
+  bloco A. **Não era defeito de captura: era ausência de trilho.**
+  🚨 **E O QUE FICAVA DE FORA É O QUE CARREGA O IMPOSTO**: a NFTS é o documento
+  em que o TOMADOR declara o serviço de quem não emite NFS-e paulistana — é
+  nela que mora o **ISS RETIDO** que o cliente recolhe.
+  ⚠️ **A COMPETÊNCIA É A DA PRESTAÇÃO, e quem responde é o MESMO dono da
+  NFS-e** (`competenciaDaNfse`): o print traz `Emissão 03/09/2026 · Data
+  Prestação Serv. 31/08/2026` e o portal lista sob `Período: Incidência
+  08/2026`. Duas leituras da mesma pergunta fariam a NFTS e a NFS-e do MESMO
+  mês caírem em competências diferentes.
+  ⚠️ **DIREÇÃO É ENTRADA POR DEFINIÇÃO** (quem emite é o cliente, o serviço é
+  tomado) e o **rótulo é PRÓPRIO** (`tipo: 'NFTS'`): confundi-la com NFS-e
+  faria a mesma prestação ser declarada duas vezes no dia em que o prestador
+  também emitir.
+  ⚠️ **`issRetido` É BOOLEANO no portal** ("Sim"/"Não") e o VALOR mora em
+  `valorIss` — somar o booleano declararia retenção de R$ 1,00. Os dois viajam
+  SEPARADOS (`issRetidoDeclarado` × `valorIssRetido`), que é a régua do
+  `csllOuTotalPresente`.
+  ⚠️ **ID DETERMINÍSTICO** (`ccm do tomador + número`): sem ele, reimportar o
+  MESMO CSV criaria uma segunda NFTS e o serviço contaria duas vezes no livro
+  (o `Date.now()` de 01/09). E a gravação é **MERGE** — reimportar não pode
+  apagar o que outro trilho gravou.
+  ⚠️ **GRAVAR É OPT-IN**: a rota é uma CONFERÊNCIA, e conferência que escreve
+  no banco sem ninguém pedir é a tela decidindo pela pessoa. Quem grava é o
+  clique.
+  🔴 **E A RECUSA DE LAYOUT AFIRMAVA SOBRE A POSSE DO ARQUIVO**: ela dizia
+  *"este arquivo não parece o export de NFTS do portal"* — o que manda procurar
+  no portal um export que **já está certo**. O portal tem **VERSÕES** de
+  leiaute (o print traz `Layout V. 003`, e o de NFS-e RECEBIDAS traz V. 004), e
+  quem não conhece a coluna é o APP. Agora a recusa diz quantas colunas o
+  arquivo tem, quantas o app reconheceu, e **entrega o cabeçalho LIDO** para
+  copiar — é a régua do `xmlOndeEstaOCnpj` (02/09): antes de pedir o arquivo ao
+  dono, perguntar se o app não tem a resposta. **Só NOMES de coluna saem daí,
+  nunca linha de nota.**
+  🚩 **O PDF CONTINUA FORA, e vai DITO**: o trilho de PDF daquele módulo existe
+  para **EMITIR** a NFTS (lê a nota do prestador e monta o TXT do lote da
+  PMSP), não para importar uma NFTS já emitida. Ele não "não aceita" — ele faz
+  outra coisa.
+  📌 **REGRA QUE FICA: módulo que só CONFERE não faz o documento existir.** O
+  sintoma desta classe nunca é erro — é a pessoa procurando no app um documento
+  que o app nunca gravou, e concluindo que a captura falhou.
+
+- **🚨 A TELA SOMAVA AS DUAS PROVAS NUM NÚMERO SÓ — "20 não canceladas" sobre
+  20 notas que a SEFAZ RECUSOU** (03/09, Paulo na MV LIDER 0639 · 08/2026:
+  *"ainda sobre NFS canceladas veja o erro que não estão sendo
+  relacionadas"*).
+  📖 A linha mais alta da caixa dizia **`20 consultada(s) · 0 cancelada(s) · 20
+  não cancelada(s) · 0 indeterminada(s)`** — e dois parágrafos abaixo, no aviso
+  do backend, **"20 nota(s) a SEFAZ recusou por PERMISSÃO (cStat 640)"**. As
+  MESMAS 20.
+  🔴 **A CAUSA É DE SOMA, e ela era da TELA**: `naoCanceladas +
+  naoCanceladasPorRecusa`. O núcleo separa as duas desde 20/08, e o comentário
+  de lá diz por quê — *"lá a prova é POSITIVA (ela entregou o documento e não há
+  evento), aqui é NEGATIVA (ela não disse 653), e fundir as duas apagaria a
+  diferença justo onde importa"*. **O núcleo separou e a tela fundiu.**
+  🚨 **E O CUSTO É MÁXIMO JUSTO NESTA EMPRESA**: a MV LIDER **não tem A1
+  próprio**, então a rodada inteira volta por recusa — o veredito lia "conferi
+  20 e estão boas" sobre 20 notas cujo documento a SEFAZ **não entregou**. É a
+  família do farol honesto: ausência de alarme indistinguível de "está tudo
+  certo".
+  ⚠️ **E A CORREÇÃO NÃO É CHAMAR O 640 DE "SEM RESPOSTA"**: **recusa é
+  RESPOSTA** (a régua de 20/08, provada na PRÓPRIA MV LIDER — nota cancelada
+  volta 653 mesmo a quem não é parte do documento). Rebaixá-lo reintroduziria o
+  defeito pelo outro lado. O que muda é a tela **parar de somar**, e um teste
+  proíbe a expressão "sem resposta" na frase.
+  ✂️ **E AS DE PROVA NEGATIVA SAEM NOMEADAS** (`numerosPorRecusa`, teto de 30
+  com o "+N" à vista): esconder foi metade do *"não estão sendo relacionadas"*.
+  Uma linha compacta, **não 20** — 20 linhas dizendo o mesmo é o que faz
+  ninguém ler as que importam; o que faltava era saber QUAIS dependem da prova
+  fraca, porque são justamente essas que um A1 próprio conferiria pelo XML.
+  🚩 **E A OUTRA METADE DO "NÃO ESTÃO SENDO RELACIONADAS" NÃO É DEFEITO — É
+  LIMITE, e agora vai DITO**: nota **CANCELADA que nunca chegou ao app** aparece
+  como **FALTANTE**, não na coluna Canceladas, e o botão **Reconferir NÃO a
+  alcança** — ele pergunta pela **CHAVE**, e nota que não chegou não tem chave
+  aqui: o `cNF` (8 dígitos) é **aleatório** e não se deriva de série+número.
+  Quem responde por esses números é o portal da SEFAZ ou o ERP do cliente.
+  Deixar a tela calada ali fazia esperar do botão uma resposta que ele não pode
+  dar.
+  📌 **REGRA QUE FICA: quando o núcleo separa dois números de propósito, a tela
+  NÃO os soma.** Toda separação que existe por causa da FORÇA DA PROVA morre no
+  primeiro `a + b` da camada de cima — e morre em silêncio, porque a soma
+  continua "certa" na aritmética. A régua da tela é a mesma do núcleo: se as
+  ações são diferentes, os números são diferentes.
+
+- **🚨 A COMPETÊNCIA DA NFS-e É A INCIDÊNCIA, NÃO A DATA DE EMISSÃO — e o dado
+  chegava nos QUATRO trilhos** (03/09, Paulo com o painel **NFS-e RECEBIDAS**
+  da Prefeitura de SP, CASA DA CRIANCA BETINHO, filtro `Período: Incidência
+  08/2026`: *"em SP eu posso emitir uma nota com data de 31/08 até o dia 10/09;
+  se ela tiver retido, até o dia 05/09"*).
+  📖 **A LINHA DO PRINT É A PROVA**: `S&P ASSESSORIA CONTABIL · Emissão
+  **02/09/2026** 08:36:34 · Data Fato Gerador **31/08/2026**` — listada pelo
+  próprio portal dentro de **agosto**. A NFS-e paulistana tem DUAS datas, e
+  quem decide o mês é o **FATO GERADOR**; o portal chama isso de INCIDÊNCIA.
+  🔴 **QUATRO TRILHOS, e nos quatro o dado CHEGAVA e era DESCARTADO**:
+  · `nfse-sp-importer.js` (WS/XML) recortava `dhEmi` com o `DataFatoGeradorNFe`
+  lido **na linha de cima** e jogado fora; · `nfse-sp-csv-importer.js` (o CSV do
+  portal, o trilho principal hoje) fazia `dataHoraEmissao.slice(0, 7)` com o
+  `dataFatoGerador` (coluna 8 do layout) **parseado e ignorado**;
+  · `nfse-nacional-gravacao.js` (ADN) usava `competenciaDaEmissao` com o
+  **`dCompet`** já lido pelo leitor do ADN; · e `xmlParserService.ts` (ABRASF
+  pelo navegador) tinha a forma mais crua de todas —
+  `const competenciaTag = getTextContent(infNfse, 'Competencia')` e a variável
+  **nunca usada em lugar nenhum**.
+  🚨 **O CUSTO É A AUSÊNCIA PLAUSÍVEL, a mais cara desta casa**: a nota é
+  gravada em `2026-09` e **sai de TODO recorte de agosto** — lista, Livro de
+  Serviços, ISS da competência, bloco A do EFD-Contribuições — e entra em
+  setembro, onde não deveria estar. **Não há erro nenhum na tela**: há um livro
+  a MENOS num mês e a MAIS no outro. É o defeito de 01/09 (ZAMBOLIN) pela outra
+  ponta: lá a competência saía numa FORMA que nenhum filtro casava; aqui ela sai
+  na forma certa e **no mês errado**.
+  ✂️ `competencia-da-nfse.js` (PURO) é o dono, com a precedência **campo
+  DECLARADO (`<Competencia>` / `dCompet`) > FATO GERADOR > EMISSÃO** — o mais
+  específico vence, e a FORMA continua no dono dela (`normalizarCompetencia`,
+  que já conhece as cinco). Duas perguntas, dois donos.
+  ⚠️ **A DIVERGÊNCIA NÃO É ALARME, é EXPLICAÇÃO**: emitir no mês seguinte é
+  LEGAL em SP, então acender ali seria alarme sobre nota correta. O que sai é a
+  frase dizendo por que a nota aparece num mês diferente do da emissão — que é
+  exatamente a pergunta de quem olha as duas colunas do portal lado a lado.
+  ⚠️ **A ORIGEM VIAJA CARIMBADA** (`competenciaOrigem`): número derivado não se
+  apresenta como lido. E o `dataFatoGerador` **cru** é passado ao dono separado
+  do que já tem fallback para `dhEmi` — presença ≠ preenchido (a régua do
+  `csllOuTotalPresente`), senão a origem afirmaria "fato-gerador" sobre uma data
+  de emissão.
+  ⚠️ **E A LACUNA DO ADN PERGUNTOU AO MESMO DONO**: ela conferia só a data de
+  emissão e passaria a acusar "falta competência" em nota que declara `dCompet`
+  — a lista de lacunas mentindo sobre documento completo.
+  ⚠️ **TRIAGEM ANTES DE CORREÇÃO, e ela poupou dois arquivos**: a varredura
+  apontou `xml-importer.js` e `sharepoint-auto-sync.js`, e os dois estão
+  CERTOS — medido: nenhum dos dois lê `InfNfse`/`infNFSe`, eles só produzem
+  NF-e e CT-e, e nesses documentos a emissão É a competência. O
+  `nfsePdfRecorte.ts` também fica FORA, declarado: ele já honra a precedência e
+  sua leitura de data é deliberadamente mais ESTRITA — delegar ali trocaria o
+  `impedimento` (que manda preencher à mão) por competência CHUTADA.
+  🚩 **O QUE ISTO NÃO CONSERTA, e vai dito**: o **ACERVO**. Nota já gravada com
+  a competência da emissão continua no mês errado — e o `dataFatoGerador` ESTÁ
+  no banco, então o app TEM como listar e corrigir. Mudar o mês de uma nota
+  mexe em livro que pode já ter sido entregue, então isso é **decisão do dono,
+  caso a caso, nunca automática** (a régua de 11/08).
+  📌 **REGRA QUE FICA: quando o documento traz DUAS datas, a que recorta o mês é
+  a do FATO, nunca a do papel.** E o sintoma desta classe nunca é erro: é a nota
+  que existe, está gravada e não aparece no mês a que pertence.
+
+- **🚨 SERVIÇO TOMADO SEM COD_PART BARRA O ARQUIVO INTEIRO NO PVA** (03/09,
+  INSTITUTO HAYAY CIENCIA E FE · 08/2026, recibo do Paulo:
+  `Total de Erros 1 — "Campo obrigatório na entrada." · Linha 16 · Campo
+  4 - COD_PART · Registro A100`).
+  📖 A linha, literal: `|A100|0|1||00|||23||25082026|25082026|3000,00|0||3000,00|
+  19,50|3000,00|90,00||||` — `IND_OPER=0` (serviço TOMADO) e o **COD_PART
+  VAZIO**. A NFS-e entrou pelo importador de PDF no leiaute **DANFSe** que o
+  leitor não sabe nomear (o caso RADIO E TV SUL AMERICANA, 02/09 — *"o PDF veio
+  com prestador e tomador VAZIOS"*) e o gerador emitiu a linha assim mesmo.
+  🚨 **O CUSTO É O MAIOR DE TODOS: o PVA não IMPORTA o arquivo.** Não é recusa
+  de um registro que se conserta e reenvia — é o arquivo inteiro barrado na
+  porta por causa de UMA nota, e nada avisava antes.
+  ✂️ `sped-a100-declaravel.js` (PURO) decide, e a nota fica **FORA e NOMEADA**
+  (prestador + número), com a ação certa: reimportar o PDF com o CNPJ do
+  prestador e **"↻ Substituir os que já estão no banco"**. ⚠️ Ela **não** manda
+  conferir o cadastro do cliente — o cadastro está certo; é o documento que
+  entrou sem o prestador (a lição de 02/09: dizer a falha errada manda procurar
+  no lugar errado).
+  🚨 **E A EXCLUSÃO SUSTENTA O 0200 — medido, não deduzido.** Tirar o A100 tira
+  o A170, e o A170 do documento SEM `itens[]` é o **único** que referencia o
+  item sintético `SERV-GENERICO`: se o coletor do 0200 continuasse a declará-lo,
+  o arquivo trocaria esta recusa pela do **item ÓRFÃO** (a que a PWR pagou em
+  19/08). É a régua de 24/08 — **antes de tirar um registro, medir o que ele
+  SUSTENTA** —, e é por isso que a decisão mora num DONO só, lido pelo bloco A
+  **e** pelo coletor do 0200.
+  ⚠️ **SÓ A ENTRADA ACUSA, e é a recusa que diz isso**: a mensagem é literal
+  (*"na entrada"*), e na SAÍDA o campo sai vazio há meses em arquivos que o PVA
+  **ACEITOU** (MANTOAN 07/2026, HS 05/2026). Acusar ali seria alarme sobre
+  arquivo correto — o jeito conhecido de a equipe desligar a prevalidação.
+  ⚠️ **O REGIME MUDA O QUE SE PERDE, então muda a frase**: no CUMULATIVO a
+  aquisição não gera crédito (o A170 sai com CST 70 e zeros), então tirar a nota
+  **não muda um centavo** — o que muda é o arquivo passar. No NÃO-cumulativo ela
+  geraria crédito, e aí a exclusão declara **a MAIOR**: isso vai DITO, senão o
+  crédito some em silêncio.
+  ⚠️ **E O AVISO ENTRA ANTES DO EARLY RETURN**: competência em que TODAS as
+  notas caem aqui sairia com o bloco vazio e **sem uma palavra**.
+  🚦 **A recusa virou REGRA no MESMO PR** (`conferirCodPartDoA100`, com a recusa
+  literal como fonte), lendo as LINHAS do arquivo gerado e nascendo **VERDE**
+  sobre o gerador corrigido.
+  📌 **E O RECORTE DO COD_PART TINHA QUATRO CÓPIAS** — `cnpjCpf || cnpj ||
+  CNPJ` escrito à mão no A100, no C100 e no D100, e é este número que o **0150
+  cadastra**. Virou `codPartDoDocumento` no dono das leituras de participante.
+  ⚠️ A do bloco D **não tinha defeito hoje** (o `nota` dela já passa pelo
+  normalizador) e mesmo assim saiu: é justamente aí que a cópia é perigosa — a
+  próxima correção entraria numa só, e o D100 passaria a referenciar
+  participante diferente do que o 0150 declara, como o `getContadorPadrao` e o
+  `UNIDADES_PADRAO` já divergiram **nesta mesma dupla de arquivos**.
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: ela prendia o TEXTO
+  `filtrarNotasBlocoA(notas).some(...)` no orquestrador — e essa forma **virou o
+  defeito**, porque declarava o item sintético de uma nota que o bloco A já não
+  emite. Travar a forma antiga impede a correção que a régua manda fazer.
 - **🔍 AUDITORIA COMPLETA DE 03/09 — quatro varreduras, ~90 achados, e o que
   elas ensinaram sobre o RITO** (Paulo: *"rode uma auditoria completa no
   consultor fiscal, encontre erros, gaps, melhorias, relacione e corrija"*).

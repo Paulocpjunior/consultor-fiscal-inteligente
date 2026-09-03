@@ -91,6 +91,8 @@ export function competenciaFromIso(iso: string): string {
 import { classificarPorCfop } from './cfopClassifier';
 // Régua ÚNICA de direção (tpNF decide quando a empresa é a emitente).
 import { decidirDirecaoPorTpNF } from '../sefaz-backend/xml-metadata-helper.js';
+// 🚨 A que MÊS a NFS-e pertence: campo declarado > fato gerador > emissão.
+import { competenciaDaNfse } from '../sefaz-backend/competencia-da-nfse.js';
 // 🚨 Na NFS-e o cancelamento está DENTRO do documento (não há evento) — e a
 // régua lê o vocabulário dele, em vez de listar o nome da tag de cada
 // prefeitura. Caso ZAMBOLIN 08/2026: nota cancelada somando no faturamento.
@@ -116,6 +118,16 @@ export interface ParsedXml {
      */
     tpNF?: string | null;
     dhEmi: string;
+    /**
+     * A competência que o DOCUMENTO declara — `<Competencia>` no ABRASF,
+     * `dCompet` no padrão nacional.
+     *
+     * 🚨 É ELA que recorta o mês, não a data de emissão: em SP a nota de 31/08
+     * pode ser emitida até 10/09 (05/09 com retenção), e o portal filtra por
+     * "Incidência". Sem este campo a nota caía no mês da EMISSÃO e saía de todo
+     * recorte do mês a que pertence — sem erro nenhum na tela (03/09).
+     */
+    competenciaDeclarada?: string;
     status: XmlStatusDocumento;
     emitente: DocumentoFiscalParticipante;
     destinatario: DocumentoFiscalParticipante;
@@ -802,6 +814,12 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
         numero,
         natOp,
         dhEmi,
+        // 🚨 A COMPETÊNCIA QUE O DOCUMENTO DECLARA — o `<Competencia>` do ABRASF
+        // era lido nesta função e a variável NUNCA usada em lugar nenhum
+        // (03/09): a competência gravada saía de `competenciaFromIso(dhEmi)`, e
+        // em SP a nota de 31/08 pode ser emitida no mês seguinte. Ela ia para
+        // o mês ERRADO, sem erro nenhum na tela.
+        competenciaDeclarada: competenciaTag || undefined,
         status,
         emitente,
         destinatario,
@@ -1068,7 +1086,13 @@ export function buildDocumentoFiscal(input: {
         // está no banco. Campo que só existe em memória não conserta histórico.
         tpNF: parsed.tpNF ?? null,
         dhEmi: parsed.dhEmi,
-        competencia: competenciaFromIso(parsed.dhEmi),
+        // 🚨 PELO DONO: campo declarado > fato gerador > emissão. Era
+        // `competenciaFromIso(parsed.dhEmi)` — a data de EMISSÃO —, e o
+        // `<Competencia>` do ABRASF era lido no parser e descartado.
+        competencia: competenciaDaNfse({
+            competenciaDeclarada: parsed.competenciaDeclarada,
+            dataEmissao: parsed.dhEmi,
+        }).competencia || competenciaFromIso(parsed.dhEmi),
         direcao: input.direcao,
         categoriaOperacao,
         status: parsed.status,

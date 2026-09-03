@@ -275,7 +275,18 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         />
                         {selectedDoc && (
                             <div className="mt-4">
-                                <XmlDocumentoDetalhe documento={selectedDoc} onClose={() => setSelectedDoc(null)} />
+                                {/* 🚨 A saída da nota que entrou na empresa errada
+                                    (03/09, caso J.P. PISSATO × SILVIO FREIRE) precisa
+                                    do USUÁRIO (a retirada grava quem tirou) e de
+                                    RECARREGAR a lista — senão a nota continua na tela
+                                    depois de sair do livro, e a pessoa clica de novo. */}
+                                <XmlDocumentoDetalhe
+                                    documento={selectedDoc}
+                                    currentUser={currentUser}
+                                    onShowToast={onShowToast}
+                                    onRetirado={() => setRefreshKey(k => k + 1)}
+                                    onClose={() => setSelectedDoc(null)}
+                                />
                             </div>
                         )}
                     </>

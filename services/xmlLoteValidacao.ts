@@ -9,6 +9,9 @@
  * confirmação: de quem são os XMLs, quantos batem com a empresa escolhida e
  * qual empresa cadastrada é a dona de verdade.
  */
+// 🚨 A NFS-e do padrão NACIONAL tem DONO, e é ele que responde aqui — não uma
+// quarta leitura própria. Ver o comentário de `extrairDadosXml` abaixo.
+import { ehNfseNacional, lerNfseNacional } from '../sefaz-backend/nfse-nacional-leitura.js';
 
 /** Raiz (8 primeiros dígitos) do CNPJ — matriz e filiais compartilham. */
 export function raizCnpj(cnpj: string | null | undefined): string {
@@ -24,7 +27,8 @@ export interface DadosXml {
     emit: string | null;
     /** CNPJ/CPF do destinatário. */
     dest: string | null;
-    /** Chave de 44 dígitos, quando presente. */
+    /** Chave do documento, quando presente — 44 dígitos na NF-e/CT-e e **50**
+     *  na NFS-e do padrão nacional. Recortar em 44 daria chave inexistente. */
     chave: string | null;
 }
 
@@ -35,6 +39,40 @@ export interface DadosXml {
  */
 export function extrairDadosXml(xml: string): DadosXml {
     const txt = String(xml || '');
+
+    // 🚨 QUARTA VEZ DA MESMA CLASSE — e desta vez a empresa era a TOMADORA
+    // (03/09, Paulo, GOLDLOG 17.390.490/0001-82: *"o CFI voltou a não
+    // reconhecer as notas de serviços tomados, pois está considerando o CNPJ do
+    // prestador em vez do CNPJ da empresa como tomadora"*). O modal dizia
+    // *"Nenhum dos 4 XMLs é desta empresa — são do CNPJ 33.105.122/0001-00"*,
+    // e o botão Importar nem existia.
+    //
+    // 🔴 A CAUSA: no leiaute NACIONAL o tomador é **`<toma>`**, e esta leitura
+    // conhecia `<dest>`, `<rem>` e os blocos do ABRASF — nenhum deles. Como o
+    // nacional TAMBÉM traz `<emit>` (o prestador é o emitente), o `emit` saía
+    // preenchido e o `dest` VAZIO: a tela via só o prestador e concluía que o
+    // arquivo era de outra empresa. É o mesmo defeito do CT-e (19/08, `<rem>`)
+    // e do ABRASF (31/08, `<PrestadorServico>`), no leiaute que entrou em
+    // 01/09 — três correções pontuais e a quarta forma ficou de fora.
+    //
+    // ✂️ POR ISSO ELA DEIXOU DE SER UMA LEITURA PRÓPRIA E PASSOU A DELEGAR: o
+    // dono do leiaute nacional é `nfse-nacional-leitura.js` — o MESMO que o
+    // `xmlParserService` (quem de fato importa) usa desde 01/09, e que já sabe
+    // que o prestador é `<emit>`, o tomador é `<toma>` e a chave tem 50
+    // caracteres. Corrigir a tag aqui fecharia a INSTÂNCIA e deixaria a classe
+    // aberta pela quinta vez; delegar faz a tela aprender junto com o
+    // importador, que é a única forma de as duas pararem de divergir.
+    if (ehNfseNacional(txt)) {
+        const lida: any = lerNfseNacional(txt);
+        return {
+            emit: soDigitos(lida?.prestador?.cnpjCpf) || null,
+            dest: soDigitos(lida?.tomador?.cnpjCpf) || null,
+            // ⚠️ A chave do nacional tem 50 caracteres, não 44 — ela sai como o
+            // dono a lê. Recortá-la em 44 daria uma chave que não existe.
+            chave: String(lida?.chave || '') || null,
+        };
+    }
+
     const bloco = (tag: 'emit' | 'dest' | 'rem'): string | null => {
         const m = txt.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
         if (!m) return null;

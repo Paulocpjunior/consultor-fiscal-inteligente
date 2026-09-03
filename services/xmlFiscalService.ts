@@ -38,6 +38,10 @@ import {
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
+// A decisão de tirar uma nota da empresa (motivo, autor, lápide) é PURA e mora
+// no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
+// jest não carrega, que é régua sem prova.
+import { retirarDocumentoDaEmpresa } from './documentoRetirada';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
 // fica gravada como 'saida' até o backfill passar, e este painel é o número
@@ -968,6 +972,43 @@ export async function deleteDocumento(id: string): Promise<void> {
         await deleteXml(existing.storagePath).catch(() => {});
     }
     await deleteDoc(doc(db, COLLECTIONS.DOCUMENTOS, id));
+}
+
+/**
+ * Tira da empresa uma nota que entrou na empresa ERRADA.
+ *
+ * 🚨 03/09, Paulo: *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE
+ * … como resolver?"*. A resposta era **não tinha como** — `deleteDocumento`
+ * (logo acima) existe desde sempre e NENHUMA tela a chama: a "rota sem botão"
+ * de 13/08, código morto com cara de entrega.
+ *
+ * ⚠️ E ELA NÃO SERVE PARA ISTO: ela apaga de VERDADE (`deleteDoc` + o arquivo
+ * no Storage), levando junto a prova de que a nota esteve ali, quem a pôs e
+ * quando. Aqui é **LÁPIDE** (a régua do WALDESA, 24/07): o documento fica,
+ * some das listas e dos recortes, e volta com `_deleted: false`.
+ *
+ * A decisão (motivo, autor, o que a frase precisa dizer depois) mora no dono
+ * PURO `documentoRetirada.ts` — aqui é só o I/O.
+ */
+export async function tirarDocumentoDaEmpresa(
+    id: string,
+    motivo: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    const decisao = retirarDocumentoDaEmpresa(
+        existing as any,
+        motivo,
+        { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email },
+    );
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    // MERGE: a lápide não substitui o documento.
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois };
 }
 
 // ─── Agregações para Dashboard / Relatórios ─────────────────────────────────

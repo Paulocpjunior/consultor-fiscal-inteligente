@@ -33,8 +33,11 @@ import {
 import { cadastroDoFreteContratado, decidirFreteNoBlocoD, avisosDoBlocoD } from './frete-contratado-bloco-d.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import {
-    modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc,
+    modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc, codPartDoDocumento,
 } from './participante-doc-helper.js';
+// 🚨 Serviço TOMADO sem COD_PART barra o ARQUIVO INTEIRO no PVA (INSTITUTO
+// HAYAY, 03/09). A decisão é do DONO porque o coletor do 0200 tem de concordar.
+import { separarDeclaraveisNoBlocoA, avisoDoBlocoASemParticipante } from './sped-a100-declaravel.js';
 // CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
 // declarando códigos diferentes para o mesmo item é a divergência de sempre.
 import { cstDoLancamento } from './cst-correlacao.js';
@@ -338,9 +341,25 @@ export function buildBlocoA(dados) {
     const linhas = [];
     /** Documentos que o PVA recusaria por VL_DOC = 0 — saem, mas NOMEADOS. */
     const valorZero = [];
-    const notasA = filtrarNotasBlocoA(dados.notas);
+    // 🚨 SERVIÇO TOMADO SEM COD_PART BARRA O ARQUIVO INTEIRO (03/09, INSTITUTO
+    // HAYAY 08/2026 — "Campo obrigatório na entrada · 4 - COD_PART"). Quem
+    // decide é o DONO, porque o coletor do 0200 tem de concordar: tirar o A100
+    // tira o A170, e o A170 do documento sem itens é o único que referencia o
+    // `SERV-GENERICO` — deixá-lo no 0200 trocaria esta recusa pela do item
+    // ÓRFÃO (a régua de 24/08: medir o que o registro SUSTENTA).
+    const { declaraveis: notasA, foras: semParticipante } = separarDeclaraveisNoBlocoA(
+        filtrarNotasBlocoA(dados.notas), dados.empresa?.cnpj,
+    );
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
+
+    // ⚠️ O aviso entra ANTES do early return: competência em que TODAS as notas
+    // caem aqui sairia com o bloco vazio e sem uma palavra — o que é o defeito
+    // com outra roupa.
+    if (Array.isArray(dados.warnings)) {
+        const aviso = avisoDoBlocoASemParticipante(semParticipante, regimeApuracao);
+        if (aviso) dados.warnings.push(aviso);
+    }
 
     if (notasA.length === 0) {
         linhas.push(fmt.buildLine(['A001', '1']));
@@ -381,10 +400,11 @@ export function buildBlocoA(dados) {
         const indOper = direcao === 'saida' ? '1' : '0';
         const indEmit = direcao === 'saida' ? '0' : '1';
 
-        const participanteRaw = direcao === 'saida' ? nota.destinatario : nota.emitente;
-        const codPart = participanteRaw
-            ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
-            : '';
+        // ⚠️ PELO DONO, como o C100 deste MESMO arquivo: o recorte
+        // `cnpjCpf || cnpj || CNPJ` estava escrito à mão nos dois, e é este
+        // número que o 0150 cadastra — três leituras do mesmo campo é como o
+        // registro passa a referenciar participante que o 0150 não declara.
+        const codPart = codPartDoDocumento(nota, dados.empresa?.cnpj);
 
         const vlDoc = valorDoDocumentoServico(nota);
 
@@ -572,10 +592,7 @@ export function buildBlocoC_Contrib(dados) {
         // inteira apagaria a apuração.
         const indEmit = ehEmissaoPropriaDoc(nota, dados.empresa?.cnpj) ? '0' : '1';
 
-        const participanteRaw = participanteDoDocumento(nota, dados.empresa?.cnpj);
-        const codPart = participanteRaw
-            ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
-            : '';
+        const codPart = codPartDoDocumento(nota, dados.empresa?.cnpj);
 
         // 🚨 O VL_MERC É O VALOR DAS MERCADORIAS — BRUTO. Guia Prático da
         // EFD-Contribuições 1.35, C170 campo 07: *"informar o valor total do
@@ -840,12 +857,14 @@ export function buildBlocoD_Contrib(dados) {
     linhas.push(fmt.buildLine(['D010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
 
     for (const { nota, direcao, vlDoc, decisao } of escriturados) {
-        const participanteRaw = direcao === 'saida'
-            ? (nota.destinatario || nota.tomador)
-            : (nota.emitente || nota.prestador);
-        const codPart = participanteRaw
-            ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || '').replace(/\D/g, '')
-            : '';
+        // ⚠️ ERA A QUARTA CÓPIA DO RECORTE — e ela NÃO tinha defeito hoje: o
+        // `nota` deste laço já passou pelo normalizador acima, então as duas
+        // leituras concordavam. É justamente aí que a cópia é perigosa: a
+        // próxima correção entraria numa só, e o D100 passaria a referenciar
+        // participante diferente do que o 0150 cadastra (o `getContadorPadrao`
+        // e o `UNIDADES_PADRAO`, nesta MESMA dupla de arquivos, já divergiram
+        // assim). Aqui o dono não muda o número — muda quem responde.
+        const codPart = codPartDoDocumento(nota, dados.empresa?.cnpj);
         // A MESMA leitura do C100 vizinho — `formatDate` lê o dia do TEXTO do
         // documento, nunca de conversão de fuso (22/08).
         const dataDoc = fmt.formatDate(nota.dataEmissao || nota.dhEmi);
