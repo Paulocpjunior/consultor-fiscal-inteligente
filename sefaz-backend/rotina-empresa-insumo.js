@@ -71,6 +71,13 @@ export function empresaDaRotina(id, colecao, d) {
         colecao,
         regimePadrao: dados.regimePadrao || df.regimePadrao || '',
         uf: df.uf || dados.uf || '',
+        // 🏦 DeRE (02/09): o regime ESPECÍFICO de IBS/CBS marcado no cadastro
+        // e o CNAE (sinal de candidata) — sem eles o catálogo responderia
+        // `sem-sinal` para todo cliente e a obrigação nunca entraria no mês de
+        // quem a tem. É a lição deste próprio módulo: campo fora do insumo é
+        // régua cega.
+        regimeEspecificoIbsCbs: df.regimeEspecificoIbsCbs || dados.regimeEspecificoIbsCbs || '',
+        cnae: dados.cnae || df.cnae || '',
         capturaAtiva: dados.capturarSefaz !== false,
         // ISS de SP capital: município, CCM e SUP decidem se há guia do
         // município no mês (e se a captura da NFS-e sequer roda).

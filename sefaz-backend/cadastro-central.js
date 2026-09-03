@@ -93,6 +93,11 @@ export function normalizarEmpresaCadastro(doc, regime) {
         regimeRessalva: vereditoRegime.motivo || null,
         // Eixo SEPARADO: terceiro setor não é regime, e convive com ele.
         semFinsLucrativos: ehSemFinsLucrativos(doc),
+        // 🏦 DeRE (02/09): regime ESPECÍFICO de IBS/CBS (LC 214/2025, Título V).
+        // Atravessa o túnel porque o Contábil é quem tem o insumo dos eventos
+        // (PGCC, balancete) — sem saber quem está na DeRE ele não tem por onde
+        // começar. `null` = não informado, que NÃO é "não se aplica".
+        regimeEspecificoIbsCbs: texto(df.regimeEspecificoIbsCbs),
 
         codCliente: texto(df.codCliente),
         cnae: texto(doc.cnae) || texto(df.cnae),

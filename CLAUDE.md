@@ -115,6 +115,154 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   defeito**, porque declarava o item sintético de uma nota que o bloco A já não
   emite. Travar a forma antiga impede a correção que a régua manda fazer.
 
+- **🏦 A DeRE NÃO É "DECLARAÇÃO DE RETENÇÕES" — é a Declaração Eletrônica de
+  REGIMES ESPECÍFICOS de IBS/CBS, e o CFI passou a saber QUEM, QUANDO e O QUÊ**
+  (02/09, Paulo: *"analise este link, preciso que crie uma nova função capaz de
+  atender esta obrigação chamada DERE"*, com o link do gov.br/sped).
+  📖 **O QUE ELA É**: obrigação acessória da reforma tributária (EC 132/2023 ·
+  LC 214/2025, Título V) para quem fornece sob **regime específico** de IBS/CBS
+  (e IS) — serviços financeiros (art. 182), planos de assistência à saúde (art.
+  234), concursos de prognósticos/loterias (art. 248), e os demais capítulos
+  (combustíveis, imóveis, cooperativas, bares/hotelaria, SAF, missões).
+  **Mensal, até o dia 15 do mês seguinte** (Ato Conjunto RFB/CGIBS 4/2026);
+  **1ª competência 10/2026**, entrega até **15/11/2026** — e o esclarecimento
+  CGIBS/RFB de 26/08 diz que o prazo **não prorroga** em dia não útil, o que
+  casa com a política da casa (antecipa ⇒ **13/11/2026**, porque 15 é domingo e
+  14 é sábado). **Optante do Simples fica fora.** Eventos: D-1001 e D-1011
+  (tabela, recebidos a partir de 01/10/2026 e exigidos ANTES da 1ª mensal),
+  D-1101/1106/2101/1199 (mensais), D-9001/9101/9106/9121/9199 (retorno). O
+  nome parecido com DIRF engana: ela declara **plano de contas e balancete**,
+  não retenções.
+  📚 **A FONTE CHEGOU NO MESMO DIA, EM PDF** (Paulo: *"vou te mandar o layout e
+  os manuais aqui em pdf, onde podemos visualizar no CFI"*): Leiautes v1.1.0
+  (eventos · Anexo I tabelas · Anexo II regras de validação · histórico) e o
+  Manual do Desenvolvedor v1.0.2. **Fonte oficial que chega vira ARQUIVO NO
+  REPO** (regra de 20/08): texto grep-ável em `docs/dere/` (com README e a
+  página de cada fato) e os PDFs servidos pelo app em `public/docs/dere/`
+  (⚙️ Config Admin → 🏦 DeRE → 📚 Documentação oficial). O que continua por
+  resumo de terceiros é só o PRAZO (Ato Conjunto 4/2026 + esclarecimento de
+  26/08); o MOD 1.0.1 e as Mensagens de Erro **não vieram** — e isso está DITO
+  na tela (`DOCUMENTOS_DERE_FALTANDO`).
+  📐 **E OS XSD CHEGARAM À NOITE** (Paulo: *"segue XSD"*, zip "06 - Arquivos
+  XSD (Nota Orientativa 2026)"): 9 schemas em `docs/dere/xsd/` e servidos em
+  `/docs/dere/xsd/` — lote (envio/retorno), D-1001, D-1011, D-1101, D-1106 e
+  os retornos D-9001/9101/9106. **O pacote é PARCIAL: D-1199 (fechamento),
+  D-2101, D-9121 e D-9199 NÃO vieram** (`XSD_DERE` + `xsdFaltando()`, e cada
+  evento carrega `xsd` ou `null`). O XSD **confirmou o módulo** em vez de
+  derrubá-lo: `{nrInsc}` é `[0-9A-Z]{8}` (raiz ALFANUMÉRICA — `raizDoCnpj`
+  passou a manter letras), o `id` casa `DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}`
+  (o teste monta um Id com o app e o passa no padrão LIDO do arquivo, não numa
+  cópia), `tpAtividade` é `[0-9]{2}[A-Z]`, recibo ≤ 31 e protocolo ≤ 28. A
+  tabela `XSD_DERE` é provada contra os arquivos (namespace e elemento-raiz
+  têm de estar NO xsd) — tabela digitada de memória é a segunda cópia.
+  🚨 **LER A FONTE DERRUBOU TRÊS AFIRMAÇÕES DA MANHÃ, todas vindas do resumo**:
+  (1) **D-1121 NÃO EXISTE** — o que tem 1121 no nome é o RETORNO D-9121
+  (totalizador do D-2101); eu listava um "D-1121 Relação de Deduções" que a
+  Receita nunca publicou, e o teste agora exige que os eventos casem com o
+  SUMÁRIO do leiaute; (2) **"não confirmado" era a frase errada**: o D-1001
+  `{regTribPrinc}` só admite **1 serviços financeiros · 2 planos de saúde · 3
+  concursos de prognósticos · 9 outros** (o 9 só para quem tem secundário
+  1-3) — imóveis, cooperativas, combustíveis, bares/hotelaria, SAF e missões
+  **não têm grupo no leiaute**, então a decisão virou `regime-fora-do-leiaute`
+  (nada a entregar, o app passa a cobrar sozinho se um leiaute futuro incluir)
+  e **saiu das pendências**: cobrar o que não tem como ser declarado é alarme
+  sem saída; (3) **a declaração é por CNPJ RAIZ** (`{nrInsc}` tem 8 posições
+  em todo evento) — a fila passou a contar DECLARAÇÕES, não estabelecimentos,
+  e raiz com regimes divergentes entre matriz e filial ACENDE em vez de
+  escolher. ⚠️ **Nome de causa que afirma demais é o `csllOuTotal` com outra
+  roupa** — e "não confirmado" afirmava DÚVIDA onde a fonte tinha resposta.
+  📖 **O QUE MAIS O LEIAUTE ENTREGOU, e entrou como DADO**: D-1106 e D-2101
+  são **condicionais** ao `codTrib` do PGCC (Anexo II: 120130001/120230001/
+  120330001 saúde, 111112701 seguros; 110113001/110113002 títulos); D-1199 só
+  admite inclusão, exige D-1101 ativo (MS1146) e retificar exige REABERTURA;
+  as Tabelas 21/31/41 (atividades do D-1001) estão em `ATIVIDADES_DERE`,
+  copiadas; e as **réguas de FORMA do Anexo II viraram função**:
+  `montarIdEventoDere`/`lerIdEventoDere` (42 chars, hora de BRASÍLIA — o
+  Cloud Run é UTC, e Id com hora errada perde a unicidade), `lerRecibo`
+  (`0000-AAAAMM-id`) e `lerProtocolo` (`T.AAAAMM.N`, T=1 produção/2
+  pré-produção) — **protocolo NÃO é recibo**: o POST devolve protocolo (lote
+  recebido) e o recibo só nasce na consulta, assíncrono. Quem transmitir por
+  fora e colar o recibo tem como saber se colou o que a Receita devolveu.
+  🔌 **E A INTEGRAÇÃO ESTÁ ESCRITA COMO REFERÊNCIA** (`INTEGRACAO_DERE`, do
+  Manual 1.0.2): OAuth 2.0 client credentials no Receita Integra (token 60
+  min), produção restrita `POST …/prr-dere/v1/recepcao/lotes` e `GET
+  …/v1/consulta/lotes/{protocolo}`, XMLDSig RSA-SHA256/C14N/EndCertOnly com
+  A1/A3 ICP-Brasil, e os **três pré-requisitos ADMINISTRATIVOS do dono**:
+  piloto da Reforma, procuração no e-CAC ("Piloto da CBS" + "DeRE") e
+  credencial em piloto-cbs.tributos.gov.br.
+  🏛️ **A CASA DA GERAÇÃO FOI DECIDIDA — "Fiscal, tudo roda no Fiscal"** (Paulo,
+  02/09 à noite, respondendo à pergunta Fiscal × Contábil). Os eventos da DeRE
+  nascem no CFI; o Contábil continua sendo a FONTE do insumo dos mensais (PGCC,
+  balancete), que virá pelo túnel quando esses eventos entrarem. **E o D-1001
+  já nasceu** (`dere-evento-d1001.js`, PURO): é o único evento cujo insumo é
+  inteiramente de CADASTRO — atividades (Tabelas 21/31/41), regimes
+  secundários, `indNatTrib`, UFs credenciadas (Tabela 13, só prognósticos),
+  `iniValid`/`fimValid` — seis campos novos em `dadosFiscais.dere*`, whitelist
+  (com recusa de código fora da tabela) E modal no MESMO PR (regra do #382). O
+  XML sai na ORDEM do XSD, sem `ds:Signature` (quem assina é o gateway, na
+  transmissão que ainda não existe), e a rota
+  `GET /api/admin/cadastro/dere-d1001-previa?cnpj=&tpAmb=` devolve o XML mais a
+  conferência — botão **👁 Prévia do D-1001** por DECLARAÇÃO (raiz) no card.
+  📐 **E A CONFERÊNCIA É CONTRA O PRÓPRIO XSD** (`dere-xsd-bolso.js`, PURO): ele
+  lê o arquivo da Receita (sequência, min/max, atributos, pattern, enumeração,
+  min/maxLength, xs:date/byte) e confere o XML — o teste GERA e CONFERE, e
+  prova que o conferidor PEGA XML torto (ordem trocada, enumeração, pattern,
+  elemento desconhecido, `@id` ausente, namespace). O `ds:Signature` fica de
+  fora DITO nos avisos, nunca aprovado em silêncio; construção que ele não sabe
+  ler vira aviso, não aprovação. ⚠️ **O XSD é lido de `dist/docs/dere/xsd`
+  (servido), nunca de `docs/`**: a imagem de runtime copia `dist` e
+  `sefaz-backend`, e ler de `docs/` passaria no jest e quebraria no Cloud Run
+  (a lição do `services/` de 27/08) — travado por teste.
+  🚨 **O QUE O GERADOR RECUSA, com a régua do leiaute nomeada**: empresa não
+  obrigada pelo cadastro; secundário igual ao principal
+  (REG_SEC_DIFERENTE_REG_PRINC); atividade de regime não declarado
+  (REJEITAR_GRUPO_REGIME — as tabelas REPETEM códigos, `01A` existe nas três);
+  regime sem atividade (EXIGIR_GRUPO_REGIME); UF fora da Tabela 13 ou em quem
+  não é de prognósticos; `indNatTrib` ausente (**imunidade é afirmação, não
+  default**); `iniValid` ausente ou anterior a 01/10/2026 (INI_VALID) —
+  **data de validade não recebe default**, a tela diz qual é a da 1ª onda e
+  quem afirma é a pessoa. A prévia só monta INCLUSÃO: alteração/exclusão
+  exigem o recibo do evento anterior, e não há trilho para isso.
+  🚩 **O QUE CONTINUA FORA, e vai dito**: transmitir (credencial do piloto +
+  gateway assinando com o A1 do cofre — o desenho do Reinf), D-1011 (PGCC, do
+  Contábil pelo túnel), D-1101/D-1106 (insumo contábil mensal) e os quatro
+  eventos sem XSD. `entregaPeloApp` segue **false**.
+  ✂️ **O QUE ENTROU** (`dere-regimes.js` PURO = vocabulário + régua "está na
+  DeRE?" · `dere.js` PURO = eventos, cronograma, prazo, situação, triagem):
+  (1) entrada `DERE` no catálogo — federal, mensal, dia 15, antecipa,
+  `vigenciaDesde: '10/2026'` (conceito NOVO: obrigação com início de vigência
+  não nasce em competência anterior — cobrar 09/2026 seria cobrar o que não
+  existia), no comum do Lucro, na imune/isenta e no INDEFINIDO, **nunca no
+  Simples**; (2) campo de cadastro **`regimeEspecificoIbsCbs`** (whitelist +
+  modal no MESMO PR, regra do #382; vocabulário FECHADO, recusa com a lista) que
+  **PROMOVE** a entrada a ativa no `mesDoCliente` quando afirma regime obrigado
+  — aí ela vira tarefa, Rotina, Vencimentos e Guia do mês com vencimento —, e a
+  **TIRA** quando diz `NENHUM`; (3) fila da carteira em **⚙️ Config Admin →
+  🏦 DeRE** (rota `/api/admin/cadastro/dere-carteira`): obrigadas com prazo,
+  candidatas, regime fora do leiaute, e o que ficou de fora CONTADO — as
+  obrigadas também agrupadas por RAIZ, porque a declaração é uma por raiz; (4) o campo
+  atravessa o túnel do cadastro central — o Contábil é quem tem o insumo dos
+  eventos e precisa saber quem está.
+  🚨 **O SILÊNCIO NÃO ACENDE A CARTEIRA**: empresa sem cadastro E sem sinal de
+  CNAE **não vira pendência** (`sem-sinal`, dito na fila) — seria a lição das
+  236 em ALTO por um campo que 400 clientes nunca vão preencher. Quem vira
+  pendência NOMEADA é a **candidata** (CNAE 64xx/65x/6550/9200 sugere e o
+  cadastro cala) — sugestão carimbada, o desenho da triagem do terceiro setor.
+  **CNAE é SINAL, não enquadramento** (a régua do bloco K e do `contribuinteIpi`).
+  🚩 **O QUE O APP NÃO FAZ, e a tela DIZ**: **não gera nem transmite evento**.
+  Montar XML de declaração sem o XSD na mão é o `1405` num arquivo que a
+  Receita processa; e o insumo (PGCC, balancete) é CONTÁBIL — a casa provável
+  da geração é o Consultor Contábil, **decisão do dono**. Até lá a entrega é por
+  fora e se registra em Vencimentos como obrigação entregue fora do app.
+  📌 **FILA DO PAULO**: (a) confirmar se algum cliente da carteira fornece sob
+  regime específico (a fila da 🏦 DeRE responde quem PARECE) — e, nele,
+  preencher os campos da DeRE em Dados Fiscais e clicar **👁 Prévia do D-1001**:
+  é o XML que a Receita vai receber, conferido contra o XSD dela; (b) ~~decidir
+  a casa~~ **decidido: Fiscal** — agora os três pré-requisitos administrativos
+  (piloto, procuração, credencial) antes do gateway de transmissão; (c) se
+  tiver o **MOD 1.0.1**, as **Mensagens de Erro** e os **XSD de D-1199, D-2101,
+  D-9121 e D-9199**, mandar em PDF/ZIP como mandou estes: entram em
+  `docs/dere/` e `public/docs/dere/` no mesmo desenho.
 - **🚨 O AVISO FALAVA DO QUE A RODADA IA FAZER, NÃO DO QUE ELA FEZ — e o dono
   circulou a frase em VERMELHO** (02/09, print da MV LIDER 0639 · 08/2026,
   horas depois de a tela passar a encadear as rodadas sozinha).

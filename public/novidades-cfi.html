@@ -68,7 +68,7 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 14 minutos</p>
+            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 17 minutos</p>
         </div>
     </div>
 </header>
@@ -260,6 +260,49 @@
     <div class="alerta">⚠️ <strong>NÃO reenvie a guia</strong> por causa disso: o cliente já
     recebeu, e reenviar <strong>duplica a cobrança</strong> sem resolver nada. A mensagem agora diz
     isso, e quem resolve é a administração do sistema (renovar o segredo do Azure).</div>
+    <h3>11. 🏦 <strong>DeRE — a nova declaração da reforma tributária</strong> já está no mês do cliente</h3>
+    <p>A <strong>DeRE (Declaração Eletrônica de Regimes Específicos)</strong> é a obrigação mensal
+    da reforma (LC 214/2025) para quem fornece sob <strong>regime específico de IBS/CBS</strong> —
+    serviços financeiros, planos de saúde, loterias e afins. Vence no <strong>dia 15 do mês
+    seguinte</strong>; a primeira competência é <strong>10/2026</strong>, com entrega até
+    <strong>15/11/2026</strong> (cai no domingo, e a casa antecipa: <strong>13/11</strong>).
+    Optante do <strong>Simples fica fora</strong>. Não confunda com a DIRF: ela declara
+    escrituração contábil-fiscal (plano de contas, balancete), não retenções.</p>
+    <div class="onde">📍 <strong>Onde:</strong> em <strong>Empresas → Dados Fiscais → 🏛️ Regime
+    tributário</strong> há o campo novo <strong>“Regime específico de IBS/CBS (DeRE)”</strong>.
+    Marcado um regime obrigado, a DeRE <strong>entra no mês</strong> do cliente (Rotina, Vencimentos,
+    Guia do mês) com o vencimento certo; marcado <strong>“Não se aplica”</strong>, a pendência sai.
+    A fila da carteira está em <strong>⚙️ Config Admin → 🏦 DeRE</strong>: quem está, quem
+    <em>parece</em> estar pelo CNAE (é sugestão — quem confirma é você, no cadastro) e quando vence.</div>
+    <div class="onde">📚 <strong>Documentação oficial dentro do CFI:</strong> em <strong>⚙️ Config Admin →
+    🏦 DeRE → 📚 Documentação oficial</strong> estão os PDFs da Receita — Leiautes dos eventos v1.1.0,
+    Anexo I (tabelas), Anexo II (regras de validação), Histórico de versões e o Manual do
+    Desenvolvedor v1.0.2 — abrindo em nova aba — e os <strong>9 XSD</strong> do pacote “Nota Orientativa
+    2026” (lote, D-1001, D-1011, D-1101, D-1106 e três retornos). Ao lado, o que <strong>ainda não</strong>
+    está lá (Manual do Usuário, Mensagens de Erro e os XSD do D-1199, D-2101, D-9121 e D-9199), para
+    ninguém achar que o app leu o que não leu.
+    Do leiaute saíram três correções: a lista de eventos é a do sumário oficial (D-1001/1011 de tabela,
+    D-1101/1106/2101/1199 mensais — <strong>não existe D-1121</strong>); só <strong>serviços
+    financeiros, planos de saúde e concursos de prognósticos</strong> cabem na declaração hoje (os
+    demais regimes aparecem como “fora do leiaute”, sem pendência); e a declaração é <strong>por CNPJ
+    raiz</strong> — matriz e filiais entram numa só, e a fila conta declarações.</div>
+    <div class="onde">🧾 <strong>O D-1001 já sai do CFI — como prévia.</strong> Decisão do Paulo: a geração da
+    DeRE roda no <strong>Fiscal</strong>. O primeiro evento, <strong>D-1001 (Informações do
+    Contribuinte)</strong>, nasce inteiro do cadastro: em <strong>Empresas → Dados Fiscais → 🏦 DeRE</strong>
+    (aparece quando o regime específico marcado cabe na DeRE) você marca as <strong>atividades</strong>
+    (tabelas oficiais), os regimes secundários, a <strong>natureza tributária</strong>, as UFs credenciadas
+    (só loterias/apostas) e a <strong>data de início da validade</strong> (01/10/2026 na primeira onda —
+    o app não preenche por você). Em <strong>⚙️ Config Admin → 🏦 DeRE</strong>, cada declaração tem o botão
+    <strong>👁 Prévia do D-1001</strong>: ele monta o XML e confere <strong>contra o XSD da Receita</strong>.
+    Faltou campo, a prévia diz qual. A prévia <strong>não assina nem transmite</strong>.</div>
+    <div class="alerta">⚠️ <strong>O CFI ainda não transmite a DeRE, e só monta o D-1001.</strong>
+    Os eventos mensais (balancete, aplicações financeiras) dependem do plano de contas e do balancete,
+    que são do Contábil; faltam os XSD do fechamento e do D-2101; e a transmissão exige credencial do
+    piloto da Reforma (procuração no e-CAC). A entrega é <strong>por fora</strong>, e se registra em
+    Vencimentos como obrigação entregue fora do app — a Rotina deixa de cobrar a partir daí.<br>
+    ⚠️ Empresa <strong>sem</strong> regime marcado e <strong>sem</strong> sinal no CNAE
+    <strong>não</strong> acende pendência: o app não afirma que ela está fora, só que não tem como
+    saber. Se você souber de um cliente em regime específico, marque no cadastro.</div>
 </section>
 
 <section>

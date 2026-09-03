@@ -71,6 +71,29 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A DeRE — em qual regime ESPECÍFICO de IBS/CBS a empresa fornece',
+        dono: 'sefaz-backend/dere-regimes.js',
+        comoUsar: "import { REGIMES_ESPECIFICOS_IBS_CBS, decidirDereNoCadastro } from 'sefaz-backend/dere-regimes.js'",
+        porque: '02/09, Paulo: *"crie uma nova função capaz de atender esta obrigação chamada DERE"*. A pergunta '
+            + '"esta empresa está na DeRE?" tem TRÊS leitores desde o primeiro dia — o catálogo que monta o mês, a '
+            + 'fila da carteira e o modal do cadastro — e o alcance da declaração só está confirmado para três '
+            + 'regimes (serviços financeiros, planos de saúde, loterias). Uma segunda cópia do vocabulário faria a '
+            + 'tela oferecer um regime que o mês não conhece, ou o mês cobrar quem a fila diz que está fora. E o '
+            + 'manual (MOD 1.0.1) não foi lido nesta rede: quando alguém o ler, a coluna `dereConfirmada` muda num '
+            + 'lugar só.',
+        assinaturas: [
+            // Os códigos do vocabulário escritos como literal fora do dono.
+            /'SERVICOS_FINANCEIROS'/,
+            /'CONCURSOS_PROGNOSTICOS'/,
+            // A coluna que decide o alcance — reescrevê-la é reescrever a régua.
+            /dereConfirmada\s*:/,
+        ],
+        permitido: [
+            // O tipo é a DECLARAÇÃO do dono, não uma segunda cópia (regra do .d.ts).
+            'sefaz-backend/dere-regimes.d.ts',
+        ],
+    },
+    {
         nome: 'O CCM DE SP — duas formas, e os SÓ-ZEROS como vazio',
         dono: 'sefaz-backend/ccm-sp.js',
         comoUsar: "import { ccmSpDaEmpresa, temCcmSp, ccmSpParaGravar, soZerosComoVazio } from 'sefaz-backend/ccm-sp.js'",
