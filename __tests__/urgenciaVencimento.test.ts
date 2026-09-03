@@ -8,7 +8,6 @@
  * esquecer a outra faz a tela dizer "vence em 3 dias" enquanto o resumo diário
  * conta como "7 dias", e as duas parecem certas sozinhas.
  */
-// @ts-expect-error — módulo .js puro (sem tipos)
 import { classificarUrgencia, urgenciaDominante, diasAteVencimento, URGENCIA_FAROL } from '../sefaz-backend/urgencia-vencimento';
 import { classificarUrgenciaVencimento } from '../services/vencimentosLogic';
 

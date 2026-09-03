@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ingerirXmlEmail, type XmlEmailIngestResultado } from '../../services/saeNfceService';
+import { EMAIL_COFRE_XML } from '../../services/cofreInstrucoes';
 
 /**
  * CofreEmailPanel — o "cofre" do CFI que substitui o cofre da SIEG.
@@ -83,7 +84,7 @@ const CofreEmailPanel: React.FC = () => {
                     )}
                     {/(404|NotFound|ErrorInvalidUser|MailboxNotEnabled|ResourceNotFound)/i.test(resp.error || '') && (
                         <p className="text-[11px] text-red-500 dark:text-red-400 mt-1">
-                            A caixa <code>xml@spassessoriacontabil.com.br</code> não foi encontrada / não tem caixa de correio habilitada. Confirme que ela existe e tem licença de e-mail.
+                            A caixa <code>{EMAIL_COFRE_XML}</code> não foi encontrada / não tem caixa de correio habilitada. Confirme que ela existe e tem licença de e-mail.
                         </p>
                     )}
                     {(resp.error || '').includes('não configurada') && (

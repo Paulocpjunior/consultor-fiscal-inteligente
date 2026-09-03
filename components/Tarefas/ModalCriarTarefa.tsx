@@ -40,18 +40,23 @@ const ModalCriarTarefa: React.FC<Props> = ({ empresas, onFechar, onCriou }) => {
         const dataVenc = new Date(vencimento + 'T00:00:00');
 
         setSalvando(true);
-        const r = await criarTarefaManual({
-            titulo: titulo.trim(),
-            descricao: descricao.trim(),
-            empresaId: emp.id,
-            empresaCnpj: emp.cnpj || '',
-            empresaNome: emp.nome || '',
-            obrigacao,
-            vencimento: dataVenc,
-        });
-        setSalvando(false);
-        if (r.ok) onCriou();
-        else setErroLocal(r.error || 'Erro ao criar');
+        try {
+            const r = await criarTarefaManual({
+                titulo: titulo.trim(),
+                descricao: descricao.trim(),
+                empresaId: emp.id,
+                empresaCnpj: emp.cnpj || '',
+                empresaNome: emp.nome || '',
+                obrigacao,
+                vencimento: dataVenc,
+            });
+            if (r.ok) onCriou();
+            else setErroLocal(r.error || 'Erro ao criar');
+        } catch (e: any) {
+            setErroLocal(e?.message || 'Erro ao criar');
+        } finally {
+            setSalvando(false);
+        }
     };
 
     return (

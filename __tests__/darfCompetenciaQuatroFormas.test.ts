@@ -88,7 +88,6 @@ describe('🚨 competência ilegível NÃO vira a data de hoje', () => {
 // quem chama RECUSA com o motivo. Ao contrário do DARF, aqui a ausência nunca
 // virou a data de hoje — este era o desenho certo desde sempre.
 // ═══════════════════════════════════════════════════════════════════════════
-// @ts-expect-error — módulo backend .js sem .d.ts
 import { normalizarReferencia } from '../sefaz-backend/dare-sp.js';
 
 describe('🚨 a referência do DARE lê as quatro formas', () => {

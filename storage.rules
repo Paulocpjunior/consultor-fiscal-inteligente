@@ -41,6 +41,22 @@ service firebase.storage {
                     );
     }
 
+    // 🚨 SUBPASTAS de /xmls/{empresaId}/ (ex.: `eventos/`) — LEITURA (03/09).
+    //
+    // O importer do backend grava o XML de EVENTO (cancelamento, CC-e) em
+    // `xmls/{empresaId}/eventos/{chave}-{seq}.xml`, e `{file}` acima casa UM
+    // segmento só: o caminho aninhado caía no default deny. O backend grava
+    // pelo Admin SDK (que não passa por rules), então a gravação nunca doeu —
+    // a LEITURA pelo navegador é que respondia `storage/unauthorized` sem
+    // diagnóstico (a razão escrita em xmlStorageService.downloadXmlText, 31/07).
+    //
+    // Só READ, de propósito: write/delete continuam do Admin SDK ou da regra
+    // de um segmento acima — abrir escrita recursiva a qualquer logado seria
+    // deixar gravar em qualquer profundidade sem teto de tamanho/tipo.
+    match /xmls/{empresaId}/{subpasta}/{allPaths=**} {
+      allow read: if request.auth != null;
+    }
+
     // 🚨 PDFs da importação de NFS-e (NfsePdfImportacao).
     //
     // 31/08, Paulo, importando uma NFS-e da Prefeitura de Santo André:

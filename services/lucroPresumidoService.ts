@@ -12,9 +12,10 @@ import { normalizarCompetencia } from '../sefaz-backend/competencia.js';
 // admin), mas `${id}_07/2026` e `${id}_2026-07` seriam DOIS carimbos para o
 // mesmo mês. Montá-lo à mão aqui foi pego pela varredura.
 import { idDoFechamento, COLECAO_FECHAMENTOS } from '../sefaz-backend/fechamento-store.js';
+import { EMAIL_ADMIN_MASTER } from './adminMaster';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
-const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
+const MASTER_ADMIN_EMAIL = EMAIL_ADMIN_MASTER;
 
 const generateUUID = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();

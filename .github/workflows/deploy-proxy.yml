@@ -9,6 +9,12 @@ on:
       - '.github/workflows/deploy-proxy.yml'
   workflow_dispatch:
 
+# Run vermelho num painel que ninguém abre não é aviso. Issue é (13/08).
+# `contents: read` é o mínimo pro checkout; o job de aviso pede `issues: write`.
+permissions:
+  contents: read
+  issues: write
+
 env:
   PROJECT_ID: consultorfiscalapp
   SERVICE_NAME: consultor-fiscal-proxy
@@ -19,10 +25,24 @@ jobs:
   deploy:
     name: Build & Deploy Proxy
     runs-on: ubuntu-latest
+    # Sem teto o job pendurado (runner sem cota, push da imagem travado) fica
+    # horas "em andamento" — e o avisador só dispara quando ele TERMINA.
+    timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # A imagem do proxy roda em node:20 (proxy-backend/Dockerfile) e o
+      # package.json dele declara `engines.node >=20`; o `npm ci` e o
+      # `node --check` abaixo precisam rodar na MESMA major, senão o gate
+      # aprova sintaxe/lock que a imagem recusa (ou vice-versa).
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -101,3 +121,57 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --format 'value(status.url)'
+
+  # ═══ REDE DE SEGURANÇA — o MESMO desenho do deploy-app.yml ═══════════════
+  # "Toda workflow que a casa depende nasce com o `if: failure()` que vira
+  # issue" (17/08). Job PRÓPRIO com `needs`, e ZERO `uses:`: em 17/08 o
+  # deploy 566 caiu em "Prepare all required actions" (o GitHub devolveu
+  # 429/503 ao baixar uma action) e NENHUM passo do job rodou — inclusive o
+  # avisador, que morava dentro dele. O `gh` já vem no runner.
+  # Dispara em falha E em cancelamento (cota da conta cancela aos 15m sem
+  # executar nada, e isso é tão invisível quanto falha).
+  avisar-falha:
+    needs: deploy
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Deploy falhou — abrir/atualizar issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Dado de fora entra por `env:`, nunca por `${{ }}` dentro do
+          # script — a mensagem do commit vira CÓDIGO no bash (13/08, deploy 470).
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          RESULTADO: ${{ needs.deploy.result }}
+        run: |
+          TITULO="🚨 Deploy do proxy SharePoint FALHOU — a versão mesclada não está no ar"
+          # Só a PRIMEIRA linha da mensagem: squash é um muro de texto.
+          RESUMO=$(printf '%s' "$COMMIT_MSG" | head -n 1)
+          {
+            printf 'O workflow terminou em **%s**.\n\n' "$RESULTADO"
+            printf '**O `proxy-backend/` mesclado NÃO está publicado** — o Cloud Run `consultor-fiscal-proxy` continua na revisão anterior.\n\n'
+            printf 'Consequência: o auto-sync de XMLs e a cópia da guia na pasta IMPOSTOS do rito (etapa 5 do fim de mês) passam pela MESMA porta — se a correção era do proxy, a carteira inteira continua com o defeito, e um print da tela parece defeito do app principal.\n\n'
+            printf '| | |\n| --- | --- |\n'
+            printf '| Commit | `%s` |\n' "$COMMIT_SHA"
+            printf '| Mensagem | %s |\n' "$RESUMO"
+            printf '| Resultado | %s |\n' "$RESULTADO"
+            printf '| Run | %s |\n\n' "$RUN_URL"
+            printf '**O que fazer**\n'
+            printf '1. Abrir o run e ver QUAL passo caiu (o log diz).\n'
+            printf '2. Gate (sintaxe/auditoria do proxy): corrigir e mesclar de novo.\n'
+            printf '3. Infraestrutura (download de action, runner, cota, push da imagem, Cloud Run): reexecutar o run.\n'
+            printf '4. Se persistir: `gcloud run deploy consultor-fiscal-proxy` com a MESMA linha de env/secrets deste workflow — o tenant e o client id cravados aqui são a fonte da verdade (28/08).\n'
+            printf '\n_Esta issue é fechada à mão quando o deploy voltar a passar._\n'
+          } > /tmp/corpo-issue.md
+          EXISTE=$(gh issue list --repo "$REPO" --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTE" ]; then
+            # Uma issue por incidente: falhar de novo COMENTA.
+            gh issue comment "$EXISTE" --repo "$REPO" --body-file /tmp/corpo-issue.md
+          else
+            gh issue create --repo "$REPO" --title "$TITULO" --body-file /tmp/corpo-issue.md
+          fi

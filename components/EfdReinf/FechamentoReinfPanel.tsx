@@ -32,6 +32,7 @@ import {
     prepararFechamentoReinf, fecharCompetenciaReinf,
     type PrepararFechamento, type EntregaReinf, type RespostaFechamento,
 } from '../../services/reinfFechamentoService';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 interface Props { onShowToast?: (msg: string) => void }
 
@@ -104,7 +105,17 @@ const FechamentoReinfPanel: React.FC<Props> = ({ onShowToast }) => {
 
     const fechar = async () => {
         if (!base) return;
-        setErro(null); setFechando(true);
+        setErro(null);
+        // Linha preenchida que o app NÃO entende é RECUSA nomeando o código —
+        // `Number(...) || 0` gravava ZERO no R-2099, que é a afirmação de que a
+        // Receita totalizou nada naquele código. Vazio continua sendo ausência.
+        const linhasComValor = totalizador.filter((t) => t.codigoReceita && String(t.valor).trim() !== '');
+        const ilegiveis = linhasComValor.filter((t) => parseValorMoeda(String(t.valor)) === null);
+        if (ilegiveis.length) {
+            setErro(`Não entendi o valor do totalizador em ${ilegiveis.map((t) => `${t.codigoReceita} ("${t.valor}")`).join(', ')} — use 1234,56. Nada foi registrado.`);
+            return;
+        }
+        setFechando(true);
         try {
             const anexos = await Promise.all(arquivos.map(async (f) => ({
                 nome: f.name, base64: await lerBase64(f), mime: f.type || 'application/octet-stream',
@@ -121,9 +132,8 @@ const FechamentoReinfPanel: React.FC<Props> = ({ onShowToast }) => {
                 // Valor em branco NÃO vira zero: linha sem número fica fora, e a
                 // conferência acusa "a Receita não totalizou este código".
                 // Zero digitado é resposta; vazio é ausência de resposta.
-                totalizador: totalizador
-                    .filter((t) => t.codigoReceita && String(t.valor).trim() !== '')
-                    .map((t) => ({ codigoReceita: t.codigoReceita, valor: Number(String(t.valor).replace(',', '.')) || 0 })),
+                totalizador: linhasComValor
+                    .map((t) => ({ codigoReceita: t.codigoReceita, valor: parseValorMoeda(String(t.valor)) as number })),
                 fechamento: reciboFech.trim() ? { recibo: reciboFech.trim(), processadoEm: processadoEm || undefined } : null,
                 arquivos: anexos,
             });

@@ -31,7 +31,7 @@ import {
     type ManifestarPendentesResult, type TipoManifestacao,
     type ElegivelManifestacao,
 } from '../services/manifestoService';
-import { instrucoesMigracaoCofre } from '../services/cofreInstrucoes';
+import { instrucoesMigracaoCofre, EMAIL_COFRE_XML } from '../services/cofreInstrucoes';
 // 🚨 De quem é a falha — do serviço ou do cadastro de cada empresa (30/08).
 import { deQuemEhAFalha } from '../services/falhaDeQuem';
 
@@ -367,7 +367,7 @@ const CardCaptura: React.FC<{
                         )}
                         <div className="text-[10px] opacity-70 pt-1 border-t">
                             A saída entra por DOIS trilhos automáticos: cliente aponta o emissor pro cofre
-                            (<span className="font-mono">xml@spassessoriacontabil.com.br</span>) OU põe o CNPJ
+                            (<span className="font-mono">{EMAIL_COFRE_XML}</span>) OU põe o CNPJ
                             44.388.152/0001-89 no autXML da nota. Prova por empresa e lista de quem falta:
                             {' '}<strong>Cobertura de Saída</strong>.
                         </div>

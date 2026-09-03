@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Proxy backend (SharePoint XML sync) for Consultor Fiscal Inteligente",
   "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"

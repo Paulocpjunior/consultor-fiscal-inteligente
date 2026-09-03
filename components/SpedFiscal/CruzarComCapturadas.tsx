@@ -55,6 +55,9 @@ const CruzarComCapturadas: React.FC<Props> = ({ currentUser }) => {
         if (!currentUser) return;
         getEmpresasDisponiveis(currentUser).then(list => {
             setEmpresas(list);
+        }).catch((e: any) => {
+            // Lista vazia sem causa se lê como "não há empresas"; a falha vai DITA.
+            setErro(`Não deu para listar as empresas: ${e?.message || 'falha desconhecida'}`);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);

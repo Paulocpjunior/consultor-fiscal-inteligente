@@ -1,4 +1,5 @@
 import express from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -27,6 +28,23 @@ function fa() {
     return admin;
 }
 
+/**
+ * Compara o token compartilhado em TEMPO CONSTANTE.
+ *
+ * `token === PROXY_SHARED_TOKEN` para no primeiro byte diferente — num serviço
+ * `--allow-unauthenticated` isso vaza, pelo tempo de resposta, quantos bytes
+ * do prefixo o atacante já acertou. `timingSafeEqual` exige buffers do MESMO
+ * tamanho; tamanho diferente devolve false direto (o comprimento do segredo
+ * não é o segredo — é o conteúdo que a comparação protege).
+ */
+function tokenConfere(recebido, esperado) {
+    if (!esperado || typeof recebido !== 'string') return false;
+    const a = Buffer.from(recebido, 'utf8');
+    const b = Buffer.from(esperado, 'utf8');
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+}
+
 async function requireProxyAuth(req, res, next) {
     try {
         const auth = req.headers.authorization || '';
@@ -34,7 +52,7 @@ async function requireProxyAuth(req, res, next) {
         if (!m) return res.status(401).json({ error: 'Token ausente' });
 
         const token = m[1].trim();
-        if (PROXY_SHARED_TOKEN && token === PROXY_SHARED_TOKEN) {
+        if (tokenConfere(token, PROXY_SHARED_TOKEN)) {
             req.user = { source: 'shared-token', role: 'service' };
             return next();
         }
@@ -54,7 +72,15 @@ async function requireProxyAuth(req, res, next) {
 
 // ─── Segurança ────────────────────────────────────────────────────────────────
 app.use(helmet());
-app.use(express.json({ limit: '50mb' })); // Limita payload (increased for XML sync)
+// Corpo JSON PEQUENO por padrão. O `50mb` global vinha ANTES da autenticação,
+// num serviço `--allow-unauthenticated`: qualquer um na internet fazia o proxy
+// alocar até 50 MB por requisição sem token nenhum. Só o /upload (que recebe o
+// arquivo em base64) precisa do teto alto — e ele é montado NA ROTA, depois do
+// `requireProxyAuth`. O parser pequeno PULA essa rota: se corresse antes, um
+// upload de 5 MB levaria 413 do global antes de chegar ao parser de 50 MB.
+const ROTA_UPLOAD = '/api/sharepoint/upload';
+const jsonPequeno = express.json({ limit: '100kb' });
+app.use((req, res, next) => (req.path === ROTA_UPLOAD ? next() : jsonPequeno(req, res, next)));
 
 // CORS: aceita apenas origens conhecidas; chamadas server-to-server sem Origin passam.
 const ALLOWED_ORIGINS = [
@@ -225,7 +251,10 @@ app.post('/api/sharepoint/sites', async (req, res) => {
 });
 
 // ─── SharePoint: Upload de um XML para a pasta do cliente ───────────────────
-app.post('/api/sharepoint/upload', async (req, res) => {
+// O parser de 50 MB entra SÓ aqui, depois do `app.use('/api/sharepoint',
+// requireProxyAuth)` acima — corpo grande só de quem provou quem é. A auth lê
+// o header, não o corpo, então nada é alocado antes dela.
+app.post(ROTA_UPLOAD, express.json({ limit: '50mb' }), async (req, res) => {
     const { folderPath, filename, contentBase64, mimeType } = req.body || {};
     if (!folderPath || !filename || !contentBase64) {
         return res.status(400).json({ error: 'Campos "folderPath", "filename" e "contentBase64" são obrigatórios.' });

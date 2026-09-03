@@ -62,7 +62,9 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
             const u = getAuth().currentUser;
             const token = await u?.getIdToken();
             const r = await fetch('/api/admin/gemini/versao', { headers: { Authorization: `Bearer ${token}` } });
-            setGeminiVersao(await r.json());
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { setGeminiVersao({ ok: false, error: j?.error || `HTTP ${r.status}` }); return; }
+            setGeminiVersao(j);
         } catch (e: any) {
             setGeminiVersao({ ok: false, error: e?.message || 'falha na sonda' });
         } finally { setSondandoGemini(false); }

@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import type { User, SimplesNacionalEmpresa, NbsCodigo } from '../../types';
 import { emitirNfse, getNbsCodigos, formatBRL } from '../../services/nfseNacionalService';
 import { useConfirm } from '../dialog/DialogProvider';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 interface Props {
     empresa: SimplesNacionalEmpresa;
@@ -44,8 +45,14 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
         }
     }, [codigoNbs, nbsCodigos]);
 
-    const valorNum = parseFloat(valor.replace(',', '.')) || 0;
-    const aliquotaNum = parseFloat(aliquotaIss.replace(',', '.')) || 0;
+    // O número sai do DONO da pergunta "que número a pessoa digitou?". Com
+    // `parseFloat(valor.replace(',', '.'))`, "1.500,00" virava 1.5 e a NFS-e
+    // era EMITIDA por R$ 1,50 — documento fiscal, não se desfaz. Ilegível é
+    // null e a emissão RECUSA nomeando o campo; nunca zero de conveniência.
+    const valorLido = parseValorMoeda(valor);
+    const aliquotaLida = parseValorMoeda(aliquotaIss);
+    const valorNum = valorLido ?? 0;
+    const aliquotaNum = aliquotaLida ?? 0;
     const issCalculado = +(valorNum * aliquotaNum / 100).toFixed(2);
     const issRetidoValor = issRetido ? issCalculado : 0;
     const liquido = +(valorNum - issRetidoValor).toFixed(2);
@@ -53,6 +60,8 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
     const handleEmitir = async () => {
         if (!tomadorDoc || !tomadorNome) return onShowToast('Preencha CNPJ/CPF e nome do tomador');
         if (!descricao) return onShowToast('Preencha a descrição do serviço');
+        if (valor.trim() && valorLido === null) return onShowToast(`Não entendi o valor do serviço "${valor}" — use 1234,56. Nada foi emitido.`);
+        if (aliquotaIss.trim() && aliquotaLida === null) return onShowToast(`Não entendi a alíquota do ISS "${aliquotaIss}" — use 5 ou 2,5. Nada foi emitido.`);
         if (valorNum <= 0) return onShowToast('Valor deve ser maior que zero');
 
         // Validacao fiscal de aliquota ISS (LC 116/03 art. 8º II + EC 37/02 art. 88)
@@ -256,7 +265,7 @@ const EmitirModal: React.FC<Props> = ({ empresa, currentUser, onClose, onShowToa
                     </button>
                     <button
                         onClick={handleEmitir}
-                        disabled={emitindo || valorNum <= 0 || !tomadorDoc || !tomadorNome || !descricao}
+                        disabled={emitindo || (valorLido === null ? !valor.trim() : valorLido <= 0) || !tomadorDoc || !tomadorNome || !descricao}
                         className="btn-press px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
                         {emitindo ? '⏳ Emitindo...' : '📑 Emitir NFSe'}

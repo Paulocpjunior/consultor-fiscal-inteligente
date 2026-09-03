@@ -148,3 +148,31 @@ describe('🚨 a regra do Storage é IMPLANTADA, não só escrita', () => {
         expect(workflow()).toMatch(/paths:[\s\S]*?- storage\.rules/);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 `{file}` CASA UM SEGMENTO — `xmls/{empresa}/eventos/…` caía no deny.
+//
+// O importer do backend grava o XML do EVENTO (cancelamento, CC-e) numa
+// subpasta, pelo Admin SDK (que não passa por rules), então a gravação nunca
+// doeu; a LEITURA pelo navegador é que voltava `storage/unauthorized` sem
+// diagnóstico (a razão escrita em xmlStorageService.downloadXmlText, 31/07).
+// Só READ é aberto na recursão — escrita recursiva a qualquer logado não tem
+// teto de tamanho/tipo.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 subpastas de /xmls/{empresaId}/ têm LEITURA', () => {
+    const rules = readFileSync(join(RAIZ, 'storage.rules'), 'utf8');
+    const bloco = rules.match(/match \/xmls\/\{empresaId\}\/\{[A-Za-z]+\}\/\{allPaths=\*\*\}\s*\{([\s\S]*?)\n\s*\}/);
+
+    it('existe o match recursivo abaixo de xmls/{empresaId}/', () => {
+        expect(bloco).not.toBeNull();
+    });
+
+    it('ele libera leitura a quem está logado — e NÃO libera escrita', () => {
+        expect(bloco![1]).toMatch(/allow read: if request\.auth != null/);
+        expect(bloco![1]).not.toMatch(/allow (write|create|update|delete)/);
+    });
+
+    it('a regra de um segmento (com teto de tamanho e tipo) continua de pé', () => {
+        expect(rules).toMatch(/match \/xmls\/\{empresaId\}\/\{file\}\s*\{[\s\S]*?request\.resource\.size < 10/);
+    });
+});

@@ -30,11 +30,15 @@ const REQUIRED = [
     'VITE_FIREBASE_API_KEY',
     'VITE_FIREBASE_AUTH_DOMAIN',
     'VITE_FIREBASE_PROJECT_ID',
+    // 🚨 O BUCKET É OBRIGATÓRIO (03/09): era "opcional" e, vazio, o
+    // firebaseConfig.ts deixa `storage = null` — TODO upload (XML manual,
+    // PDF de NFS-e) morre com "Firebase nao configurado" sem nenhum erro no
+    // build. Build que passa verde sem o bucket é build que quebra no clique.
+    'VITE_FIREBASE_STORAGE_BUCKET',
     'VITE_FIREBASE_MESSAGING_SENDER_ID',
     'VITE_FIREBASE_APP_ID',
 ];
 const OPTIONAL = [
-    'VITE_FIREBASE_STORAGE_BUCKET',
     'VITE_FIREBASE_VAPID_KEY',
     'VITE_SENTRY_DSN',
     'VITE_SENTRY_ENV',

@@ -29,7 +29,7 @@ import * as authService from './services/authService';
 import { InfoIcon, SearchIcon, CalculatorIcon } from './components/Icons';
 import { MENU_GRUPOS, searchDescriptions } from './config/menuConfig';
 import { getFriendlyErrorMessage } from './services/errorTranslation';
-// (FiscalObligationsDashboard, Tarefas, CalendarioFiscal agora dentro de ObrigacoesETarefas)
+// (FiscalObligationsDashboard, Tarefas, CalendarioFiscal vivem no VencimentosHub)
 import { runInitialSync } from './services/cloudSyncService';
 import { requestNotificationPermission } from './services/notificacoesService';
 import { safeStorage } from './services/safeStorage';
@@ -629,9 +629,14 @@ const App: React.FC = () => {
                 dataAbertura: dataAbertura || undefined,
             };
 
-            await simplesService.updateEmpresa(simplesEmpresaToEdit.id, dataToUpdate);
-            setSimplesEmpresas(prev => prev.map(e => e.id === simplesEmpresaToEdit.id ? { ...e, ...dataToUpdate } : e));
-            setToastMessage("Empresa atualizada com sucesso!");
+            try {
+                await simplesService.updateEmpresa(simplesEmpresaToEdit.id, dataToUpdate);
+                setSimplesEmpresas(prev => prev.map(e => e.id === simplesEmpresaToEdit.id ? { ...e, ...dataToUpdate } : e));
+                setToastMessage("Empresa atualizada com sucesso!");
+            } catch (err: any) {
+                setToastMessage(`Erro ao atualizar empresa: ${err?.message || 'falha desconhecida'}. Nada foi gravado.`);
+                throw err; // o formulário fica aberto e sabe que não gravou
+            }
         } else {
             try {
                 const newEmpresa = await simplesService.saveEmpresa(nome, cnpj, cnae, anexo, atividadesSecundarias || [], currentUser.id, dataAbertura);
@@ -677,8 +682,15 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUpdateFolha12 = (empresaId: string, val: number) => {
-        simplesService.updateFolha12(empresaId, val);
+    const handleUpdateFolha12 = async (empresaId: string, val: number) => {
+        // A gravação vem ANTES do estado e do toast: "atualizada" sobre write
+        // que falhou deixava a tela com um número que o banco não tem.
+        try {
+            await simplesService.updateFolha12(empresaId, val);
+        } catch (err: any) {
+            setToastMessage(`Erro ao salvar a folha de salários: ${err?.message || 'falha desconhecida'}. O valor NÃO foi gravado.`);
+            return null;
+        }
         const updated = simplesEmpresas.map(e => e.id === empresaId ? { ...e, folha12: val } : e);
         setSimplesEmpresas(updated);
         setToastMessage("Folha de salários atualizada!");
@@ -686,7 +698,14 @@ const App: React.FC = () => {
     };
 
     const handleSaveFaturamentoManual = async (empresaId: string, faturamento: any, faturamentoDetalhado?: any) => {
-        await simplesService.saveFaturamentoManual(empresaId, faturamento, faturamentoDetalhado);
+        // Falha aqui PROPAGA: quem chama (o detalhe do Simples) mostra o erro e
+        // mantém o modal aberto — o estado local só muda depois do write.
+        try {
+            await simplesService.saveFaturamentoManual(empresaId, faturamento, faturamentoDetalhado);
+        } catch (err: any) {
+            setToastMessage(`Erro ao salvar o faturamento: ${err?.message || 'falha desconhecida'}. Os valores NÃO foram gravados.`);
+            throw err;
+        }
         const updated = simplesEmpresas.map(e => e.id === empresaId ? {
             ...e,
             faturamentoManual: faturamento,
@@ -708,9 +727,12 @@ const App: React.FC = () => {
     };
 
     const handleUpdateEmpresa = async (empresaId: string, data: Partial<SimplesNacionalEmpresa>) => {
+        // O write vem ANTES do estado: aplicar o otimista e falhar deixava a
+        // tela com dados que o banco recusou. Falha PROPAGA (quem chama já
+        // mostra o erro) e o estado antigo fica de pé.
+        await simplesService.updateEmpresa(empresaId, data);
         const updatedList = simplesEmpresas.map(e => e.id === empresaId ? { ...e, ...data } : e);
         setSimplesEmpresas(updatedList);
-        await simplesService.updateEmpresa(empresaId, data);
         setToastMessage("Dados da empresa salvos no banco de dados!");
         return updatedList.find(e => e.id === empresaId) || null;
     }

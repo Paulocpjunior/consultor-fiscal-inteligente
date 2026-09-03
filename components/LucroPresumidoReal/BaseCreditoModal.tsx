@@ -5,6 +5,7 @@ import {
     type BaseCreditoResposta,
     type BackfillResposta,
 } from '../../services/pisCofinsCreditoService';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 /**
  * Conferência da BASE DE CRÉDITO de PIS/COFINS contra os documentos.
@@ -52,15 +53,24 @@ export const BaseCreditoModal: React.FC<Props> = ({ empresaId, empresaNome, comp
         finally { setCarregando(false); }
     };
 
+    // Base usada é opcional (vazio = não comparar); preenchida e ilegível é
+    // RECUSA — o `rodar` mostra o erro. `Number("1234.56".replace(/\./g,''))`
+    // comparava contra cem vezes a base.
+    const baseDigitada = (): number | undefined => {
+        if (!baseUsada.trim()) return undefined;
+        const n = parseValorMoeda(baseUsada);
+        if (n === null) throw new Error(`Não entendi a base usada "${baseUsada}" — use 1234,56.`);
+        return n;
+    };
+
     const conferir = () => rodar(async () => {
-        const n = baseUsada.trim() ? Number(baseUsada.replace(/\./g, '').replace(',', '.')) : undefined;
-        setDados(await consultarBaseCredito(empresaId, competencia, n));
+        setDados(await consultarBaseCredito(empresaId, competencia, baseDigitada()));
     });
 
     const reprocessar = () => rodar(async () => {
+        const n = baseDigitada();
         setBackfill(await reprocessarCst(empresaId, [competencia]));
-        setDados(await consultarBaseCredito(empresaId, competencia,
-            baseUsada.trim() ? Number(baseUsada.replace(/\./g, '').replace(',', '.')) : undefined));
+        setDados(await consultarBaseCredito(empresaId, competencia, n));
     });
 
     return (

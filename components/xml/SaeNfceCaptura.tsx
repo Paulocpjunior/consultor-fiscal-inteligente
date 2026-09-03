@@ -19,7 +19,7 @@ import {
 const MAX_RODADAS = 80; // teto defensivo (cada rodada ~2 min)
 
 const SaeNfceCaptura: React.FC = () => {
-    const [cnpj, setCnpj] = useState('32602701000197'); // Vinatex (piloto — emite mod 65)
+    const [cnpj, setCnpj] = useState(''); // nasce VAZIO — CNPJ de piloto cravado virava captura na empresa errada
     const [dataInicial, setDataInicial] = useState('');
     const [dataFinal, setDataFinal] = useState('');
     const [loading, setLoading] = useState(false);

@@ -101,3 +101,32 @@ describe('🚨 toda VITE_* que o código lê chega no build', () => {
         expect(faltas).toEqual([]);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 BUCKET "OPCIONAL" É BUILD QUE PASSA VERDE E UPLOAD QUE MORRE NO CLIQUE.
+//
+// `scripts/extract-prod-frontend-config.mjs` tratava VITE_FIREBASE_STORAGE_
+// BUCKET como opcional: sem ele o build seguia, `firebaseConfig.ts` deixava
+// `storage = null` e TODO upload (XML manual, PDF de NFS-e) respondia
+// "Firebase nao configurado" — sem nenhum erro na esteira (03/09).
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 o bucket do Storage é OBRIGATÓRIO na resolução da config', () => {
+    const extrator = readFileSync(join(raiz, 'scripts/extract-prod-frontend-config.mjs'), 'utf8');
+    const lista = (nome: string) =>
+        (extrator.match(new RegExp(`const ${nome} = \\[([\\s\\S]*?)\\];`))?.[1].match(/'(VITE_[A-Z0-9_]+)'/g) || [])
+            .map((x) => x.replace(/'/g, ''));
+
+    it('VITE_FIREBASE_STORAGE_BUCKET está em REQUIRED, não em OPTIONAL', () => {
+        expect(lista('REQUIRED')).toContain('VITE_FIREBASE_STORAGE_BUCKET');
+        expect(lista('OPTIONAL')).not.toContain('VITE_FIREBASE_STORAGE_BUCKET');
+    });
+
+    it('e o firebaseConfig ainda é quem decide pela ausência (a exceção continua nomeada)', () => {
+        // firebaseConfig.ts captura `import.meta.env` INTEIRO (é assim que o
+        // extrator acha os valores no bundle), então o nome não aparece na
+        // varredura por `import.meta.env.VITE_*` — a prova aqui é o guard.
+        const cfg = readFileSync(join(raiz, 'services/firebaseConfig.ts'), 'utf8');
+        expect(cfg).toMatch(/isFirebaseStorageConfigured/);
+        expect(cfg).toMatch(/VITE_FIREBASE_STORAGE_BUCKET/);
+    });
+});

@@ -8,6 +8,7 @@ import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
 import { paraEmpresaOption } from '../services/empresaOption';
 import SimplesBaseVarreduraModal from './SimplesBaseVarreduraModal';
 import { empresaBateBusca, prefixoCodCliente } from '../services/buscaEmpresa';
+import { ehAdminMaster } from '../services/adminMaster';
 
 interface SimplesNacionalDashboardProps {
     empresas: SimplesNacionalEmpresa[];
@@ -80,7 +81,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
         >—</span>
     );
 
-    const isAdminView = currentUser?.role === 'admin' || currentUser?.email === 'junior@spassessoriacontabil.com.br';
+    const isAdminView = currentUser?.role === 'admin' || ehAdminMaster(currentUser?.email);
 
     // Duplicatas por CNPJ NORMALIZADO — mesmo padrão do painel Lucro: mesma
     // empresa cadastrada 2+ vezes (em formatos diferentes o olho não pega).

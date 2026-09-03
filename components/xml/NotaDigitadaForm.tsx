@@ -16,8 +16,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../../services/firebaseConfig';
 import {
     validarNotaDigitada, montarNotaDigitada, idNotaDigitada, podeGravarSobre,
-    type ItemDigitado, type ServicoDigitado,
-} from '../../services/notaDigitada';
+    type ItemDigitado, type ServicoDigitado, createdByParaRegravar } from '../../services/notaDigitada';
 import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitado';
 import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
@@ -133,7 +132,14 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             const pode = podeGravarSobre(atual.exists() ? (atual.data() as any) : null);
             if (!pode.ok) { setErros([pode.motivo!]); return; }
             const regravando = atual.exists();
-            await setDoc(ref, JSON.parse(JSON.stringify(montarNotaDigitada(input as any))));
+            // Regravar mantém o DONO do doc: as rules recusam UPDATE que troca
+            // `createdBy`, e a colega corrigindo a digitação de outra pessoa
+            // levava permission-denied. Quem decide é `createdByParaRegravar`.
+            const createdByUid = createdByParaRegravar(
+                atual.exists() ? (atual.data() as any) : null,
+                input.createdByUid,
+            );
+            await setDoc(ref, JSON.parse(JSON.stringify(montarNotaDigitada({ ...input, createdByUid } as any))));
             setSalva(regravando
                 ? `Nota nº ${numero} REGRAVADA (corrigiu a digitação anterior).`
                 : `Nota nº ${numero} lançada. Ela já conta em livros, DIPAM e relatórios — e se o XML chegar depois, ele assume o lugar.`);

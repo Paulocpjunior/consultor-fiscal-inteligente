@@ -18,11 +18,13 @@ import {
     getDocs, deleteDoc, query, orderBy, limit as fbLimit, where
 } from 'firebase/firestore';
 
+import { EMAIL_ADMIN_MASTER } from './adminMaster';
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STORAGE_KEY_SESSION  = 'app_current_session';   // cache local (fallback offline)
 const STORAGE_KEY_LOGS     = 'app_access_logs';        // cache local de logs
 const REQUIRED_DOMAIN      = '@spassessoriacontabil.com.br';
-const MASTER_ADMIN_EMAIL   = 'junior@spassessoriacontabil.com.br';
+const MASTER_ADMIN_EMAIL   = EMAIL_ADMIN_MASTER;
 
 // Modo local (somente dev, sem Firebase configurado). Em prod, isFirebaseConfigured
 // eh sempre true (envs obrigatorias - vide firebaseConfig.ts), entao esse caminho

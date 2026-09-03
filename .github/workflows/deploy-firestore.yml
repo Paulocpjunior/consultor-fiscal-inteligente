@@ -22,10 +22,18 @@ concurrency:
   group: deploy-firestore
   cancel-in-progress: false
 
+# Run vermelho num painel que ninguém abre não é aviso. Issue é (13/08).
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   deploy:
     name: Deploy rules & indexes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,3 +77,58 @@ jobs:
             --only firestore:rules,firestore:indexes,storage \
             --project consultorfiscalapp \
             --non-interactive
+
+  # ═══ REDE DE SEGURANÇA — o MESMO desenho do deploy-app.yml ═══════════════
+  # "Toda workflow que a casa depende nasce com o `if: failure()` que vira
+  # issue" (17/08). Job PRÓPRIO com `needs`, e ZERO `uses:`: em 17/08 o
+  # deploy 566 caiu em "Prepare all required actions" (o GitHub devolveu
+  # 429/503 ao baixar uma action) e NENHUM passo do job rodou — inclusive o
+  # avisador, que morava dentro dele. O `gh` já vem no runner.
+  # Dispara em falha E em cancelamento (cota da conta cancela aos 15m sem
+  # executar nada, e isso é tão invisível quanto falha).
+  avisar-falha:
+    needs: deploy
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Deploy falhou — abrir/atualizar issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Dado de fora entra por `env:`, nunca por `${{ }}` dentro do
+          # script — a mensagem do commit vira CÓDIGO no bash (13/08, deploy 470).
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          RESULTADO: ${{ needs.deploy.result }}
+        run: |
+          TITULO="🚨 Deploy do Firestore/Storage (rules + índices) FALHOU — regra escrita não é regra implantada"
+          # Só a PRIMEIRA linha da mensagem: squash é um muro de texto.
+          RESUMO=$(printf '%s' "$COMMIT_MSG" | head -n 1)
+          {
+            printf 'O workflow terminou em **%s**.\n\n' "$RESULTADO"
+            printf '**As regras/índices mesclados NÃO estão em produção.** O `firestore.rules`, o `storage.rules` e o `firestore.indexes.json` do repositório são o que DEVERIA valer — a produção continua com a versão anterior.\n\n'
+            printf 'Consequência típica: a correção de regra existe no repo e o colaborador leva o MESMO `permission-denied` / `storage/unauthorized` no dia seguinte (foi assim em 01/09 com o `nfse_pdfs/`); índice composto novo ausente faz a consulta responder `failed-precondition`, e a tela engole como lista vazia.\n\n'
+            printf '| | |\n| --- | --- |\n'
+            printf '| Commit | `%s` |\n' "$COMMIT_SHA"
+            printf '| Mensagem | %s |\n' "$RESUMO"
+            printf '| Resultado | %s |\n' "$RESULTADO"
+            printf '| Run | %s |\n\n' "$RUN_URL"
+            printf '**O que fazer**\n'
+            printf '1. Abrir o run e ver QUAL passo caiu (o log diz).\n'
+            printf '2. Permissão da service account (`firebaserules.admin` / `datastore.indexAdmin`): conceder e reexecutar.\n'
+            printf '3. Regra inválida: o `firebase deploy` aponta a linha — corrigir e mesclar de novo.\n'
+            printf '4. Infraestrutura (download de action, runner, cota): reexecutar o run.\n'
+            printf '   Saída de emergência: `npx firebase-tools deploy --only firestore:rules,firestore:indexes,storage --project consultorfiscalapp` na máquina de alguém autenticado.\n'
+            printf '\n_Esta issue é fechada à mão quando o deploy voltar a passar._\n'
+          } > /tmp/corpo-issue.md
+          EXISTE=$(gh issue list --repo "$REPO" --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTE" ]; then
+            # Uma issue por incidente: falhar de novo COMENTA.
+            gh issue comment "$EXISTE" --repo "$REPO" --body-file /tmp/corpo-issue.md
+          else
+            gh issue create --repo "$REPO" --title "$TITULO" --body-file /tmp/corpo-issue.md
+          fi

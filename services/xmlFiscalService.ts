@@ -49,6 +49,7 @@ import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
 import { formasDaCompetencia } from '../sefaz-backend/competencia.js';
+import { EMAIL_ADMIN_MASTER } from './adminMaster';
 import {
     podeVerDocumentoPorCarteira,
     podeVerEmpresaPorCarteira,
@@ -69,7 +70,7 @@ import type {
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
-const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
+const MASTER_ADMIN_EMAIL = EMAIL_ADMIN_MASTER;
 const COLLECTIONS = {
     DOCUMENTOS: 'documentos_fiscais',
     CAPTURAS: 'xml_capturas',

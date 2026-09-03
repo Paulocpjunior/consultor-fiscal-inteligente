@@ -5,6 +5,128 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔍 AUDITORIA COMPLETA DE 03/09 — quatro varreduras, ~90 achados, e o que
+  elas ensinaram sobre o RITO** (Paulo: *"rode uma auditoria completa no
+  consultor fiscal, encontre erros, gaps, melhorias, relacione e corrija"*).
+  Backend, núcleo fiscal, frontend e infra varridos em paralelo; cada achado
+  foi CONFERIDO no código antes de virar correção (a triagem tirou ~15% de
+  alarme sobre código certo); tudo entrou com teste de trava. O gate ficou
+  verde (lint · 498 suítes · build) e a entrega foi em três commits na branch.
+  🚨 **O MAIOR ACHADO ERA DE SEGURANÇA, e estava em QUATRO routers com o mesmo
+  desenho**: a guarda "admin do CFI OU app irmão" era montada à mão — tentava
+  o `requireAdmin` com um `res` de MENTIRA (`engolir`) e, na recusa, caía num
+  `crossProjectAuth([...])` cuja lista incluía o PRÓPRIO projeto do CFI. Como o
+  cross-project só olha issuer, domínio e e-mail verificado (nunca o papel),
+  **qualquer colaborador logado transmitia EFD-Reinf em PRODUÇÃO pelo gateway,
+  lia o cadastro central (inclusive a lista de usuários com papéis) e mandava
+  WhatsApp ao cliente** — e a trava de HORÁRIO do `requireAuth` era engolida do
+  mesmo jeito: o bloqueio ficava GRAVADO como prova e a requisição passava.
+  ✂️ `guardaLocalOuIrmao(guardaLocal, irmãos)` em `require-cross-project-auth.js`:
+  o **issuer do token decide** — token de irmão permitido vai ao cross-project;
+  qualquer outro (o próprio projeto, sem token, torto) vai à guarda LOCAL, cujo
+  veredito é FINAL e chega com a mensagem DELA. `PROJETO.fiscal` **nunca** entra
+  na lista de irmãos (o helper recusa), e a varredura barra o `engolir` de
+  voltar. ⚠️ O que isso NÃO muda: o atendente do SP Connect (não-admin) segue
+  entrando onde a guarda local era `requireAuth`.
+  🔴 **E UM CAMPO QUE NUNCA EXISTIU TRANCAVA A REABERTURA DO MÊS**: o
+  `/reabrir` lia `req.user?.admin === true`, e o `requireAuth` grava `role`, não
+  `admin` — `ehAdmin` era sempre false e **nenhum admin reabria competência**,
+  com o 403 dizendo *"só um administrador reabre"* para o próprio administrador
+  (o comentário da rota documentava a guarda como se existisse — regra escrita
+  não é regra travada, pela enésima vez).
+  📌 **O RESTO DO BACKEND, cada um com a causa**: `/api/dp-integration/*`
+  devolvia dado SERPRO de QUALQUER CNPJ do Brasil para qualquer token de app
+  irmão (agora só de CNPJ cadastrado como cliente — o escopo por carteira não
+  serve ali porque o uid é de outro projeto); 6 rotas `/status` e a tabela NBS
+  (2.000 leituras por chamada) sem guarda nenhuma; o token do bridge do plano
+  de contas era o ÚNICO segredo ainda comparado com `!==` (o `cron-secret.js`
+  existe para isso) e o `/status` dele dizia a anônimo se o token está
+  configurado; a chave do limiter geral era o header `Authorization` — quem
+  varia um header por requisição abre um balde novo de 600/min cada vez
+  (entrou um TETO por IP antes, 3.000/min, sem tirar o balde por token: o
+  escritório sai por um NAT); o limiter anti-enumeração do CNPJ era montado
+  ANTES do `requireAuth`, então `req.user` nunca existia e a chave por usuário
+  nunca ativou; `/ready` (público) devolvia a mensagem crua do firebase-admin,
+  que carrega caminho de secret; dois `setImmediate` de backfill e três laços
+  do webhook do WhatsApp rodavam `await` sem try/catch **num processo sem
+  `unhandledRejection`** (Node 20 DERRUBA o contêiner — com a resposta
+  "iniciado em background" já entregue como sucesso); a auditoria do gateway
+  lia `req.user.projeto` (o campo é `projectId`) e carimbava TODO lote do
+  Contábil como `cfi`.
+  🧾 **NO NÚCLEO FISCAL, as classes que este arquivo já nomeia — vivas em
+  lugares novos**: (1) a alíquota interestadual do DIFAL estava escrita TRÊS
+  vezes (painel do Simples, C197 do Lucro, 426-A), com a tabela de UF/origem
+  copiada como literal em cada uma — virou dono único em `difal-itens.js`, e a
+  base do C197 passou a descontar o `vDesc` ao cair no `vProd`; (2) `Number(null)
+  === 0` em QUATRO módulos: na Rotina do Mês a ficha com imposto NÃO lançado
+  virava *"apuração de R$ 0,00"* e o fim de mês conferia documentos contra zero
+  rotulado "A apuração" (o `!= null` do fechamento estava certo e era derrotado
+  um módulo acima); débito sem valor gravado como R$ 0,00 na trava do débito
+  repetido; carimbo sem contagem lido como "zero documentos"; (3) a NFS-e
+  Nacional (ADN) fazia `?? 0` no valor ANTES de a gravação e as lacunas olharem
+  — `Number.isFinite(0)` é true, a lacuna nunca saía e a nota entrava valendo
+  zero no faturamento e na base do PIS/COFINS (o comentário ao lado prometia
+  o contrário; ausência agora viaja `null`); (4) leitores de UMA forma: a UF da
+  tese de ISS da recuperação tributária (a tese respondia "sem oportunidade"
+  sobre notas que nunca comparou — a mesma linha tinha sido corrigida para o
+  ISS e não para a UF), a base do F600 (três de seis formas; nota importada
+  pelo navegador caía em `semBase` com o valor escrito), o valor da
+  DIPAM/FUNRURAL e da varredura de DIFAL (com as formas faltando também na
+  PROJEÇÃO), o emitente da cobertura de saída; (5) a "meia trava": o 0200 do
+  EFD-Contribuições ainda gravava a unidade sem `toUpperCase` (o do ICMS/IPI
+  já tinha sido corrigido), e o H010 inventava `UN` contra a decisão escrita
+  em `sped-selecao-documentos.js`; (6) o catálogo de obrigações reescrevia o
+  laço de dia útil com outro vocabulário de modo (`'antecipa'` × `'antecipar'`)
+  — passou a chamar o `ajustarDiaUtil` do DARF. E 30 exportações que o `.js`
+  entregava e o `.d.ts` não declarava (importador TS não enxergava o símbolo).
+  🖥️ **NO FRONTEND, três famílias que já custaram caso real**: valor DIGITADO
+  passando por `parseFloat(x.replace(',', '.'))` ou por `replace(/\./g, '')` em
+  NOVE telas (emissão de NFS-e Nacional — `1.500,00` virava **R$ 1,50 e
+  EMITIA**; DARF — `1234.56` virava **123.456**; DARE → NaN; totalizador do
+  R-2099 → zero calado; simulador, base de crédito, detalhe do Simples) — todos
+  no `parseValorMoeda`, e ilegível RECUSA nomeando o campo; "salvo com sucesso"
+  antes de o write resolver (cadastro do Simples, folha 12m, faturamento
+  manual, análise do NFP — inclusive estado otimista aplicado ANTES de um write
+  que podia falhar, a gravação fantasma que o service tinha tirado e o caller
+  trouxe de volta); `setBusy(false)` fora do `finally` em oito handlers (botão
+  girando para sempre quando a rede cai); `res.ok` não conferido em sete
+  telas (a tela de consulta por chave dizia *"certificado inválido"* sobre um
+  403); o e-mail do admin-master cravado em SETE arquivos (virou
+  `services/adminMaster.ts`, com varredura). ⚠️ Os cinco `index.tsx` que a
+  varredura apontou como MORTOS estão VIVOS (os Hubs os importam com `lazy`)
+  — alarme de varredura se tria, pela oitava vez.
+  🏗️ **NA INFRA, o par "regra do banco × consulta do cliente"**: a lista de
+  contadores e a de parâmetros do cérebro do CFOP eram consultas SEM limite
+  numa regra que exige `request.query.limit` — o Firestore RECUSA a consulta
+  inteira, e o `catch { return [] }` mostrava VAZIO como se não houvesse
+  cadastro (o pior tipo: sem erro, resposta errada); SETE índices compostos
+  faltavam (log de captura, erros de importação e histórico de SPED VAZIOS
+  para quem não é admin); regravar nota digitada reescrevia `createdBy` e o
+  colega levava `permission-denied`; `deploy-firestore.yml` e
+  `deploy-proxy.yml` sem o job `avisar-falha` (o próprio cabeçalho do primeiro
+  conta o incidente que ele existe para evitar) e o do robô de auditoria era
+  um STEP no mesmo job (a lição de 17/08 escrita e não aplicada);
+  `@google-cloud/storage` importado por seis módulos e só resolvendo como
+  dependência OPCIONAL do firebase-admin; `zod` sem uso; o bucket do Storage
+  OPCIONAL no build (uploads morrendo calados com a env vazia); no proxy,
+  `express.json` de 50 MB global ANTES da auth num serviço `--allow-unauthenticated`
+  e o token comparado com `===`.
+  📌 **REGRAS QUE FICAM**: (1) **guarda composta não se monta com resposta de
+  mentira** — quem decide a guarda é o ISSUER do token, e o veredito da guarda
+  escolhida é final; (2) **campo do `req.user` se lê do middleware que o
+  grava, nunca do comentário** (`role`, `projectId`); (3) **auditoria se faz em
+  varreduras paralelas por área, e todo alarme passa por triagem no código
+  antes de virar correção** — foi assim que cinco "componentes mortos" e o
+  `pICMS` fantasma do C197 não viraram estrago; (4) trabalho em background
+  nasce com try/catch NO LAÇO e o processo tem a rede do `unhandledRejection`.
+  🚩 **O QUE FICOU NOMEADO E NÃO ENTROU** (não ressuscitar como defeito sem
+  medir): `modeloDoDoc` reescrito em nove módulos e a normalização de CNPJ em
+  44 (cópias idênticas hoje, risco baixo); 89 exports sem consumidor no
+  backend (triar por risco, como em 22/08); blob do XML órfão no Storage quando
+  não-admin apaga o documento (a regra nega o delete e o `.catch(() => {})`
+  esconde); quatro listagens com `limit(500)` sem dizer "mostrando X de N";
+  `SpConnect/index.tsx` com 4.800 linhas e ~40 handlers sem try/catch.
+
 - **🏦 A DeRE NÃO É "DECLARAÇÃO DE RETENÇÕES" — é a Declaração Eletrônica de
   REGIMES ESPECÍFICOS de IBS/CBS, e o CFI passou a saber QUEM, QUANDO e O QUÊ**
   (02/09, Paulo: *"analise este link, preciso que crie uma nova função capaz de

@@ -166,37 +166,76 @@
       "collectionGroup": "documentos_fiscais",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
-        { "fieldPath": "fonte", "order": "ASCENDING" },
-        { "fieldPath": "dhEmi", "order": "DESCENDING" }
+        {
+          "fieldPath": "tipoDoc",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fonte",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dhEmi",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "documentos_fiscais",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
-        { "fieldPath": "fonte", "order": "ASCENDING" },
-        { "fieldPath": "direcao", "order": "ASCENDING" },
-        { "fieldPath": "dhEmi", "order": "DESCENDING" }
+        {
+          "fieldPath": "tipoDoc",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fonte",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "direcao",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dhEmi",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "documentos_fiscais",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
-        { "fieldPath": "fonte", "order": "ASCENDING" },
-        { "fieldPath": "prestadorCnpj", "order": "ASCENDING" }
+        {
+          "fieldPath": "tipoDoc",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fonte",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prestadorCnpj",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "documentos_fiscais",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
-        { "fieldPath": "fonte", "order": "ASCENDING" },
-        { "fieldPath": "tomadorCnpj", "order": "ASCENDING" }
+        {
+          "fieldPath": "tipoDoc",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fonte",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tomadorCnpj",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
@@ -210,6 +249,104 @@
         {
           "fieldPath": "timestamp",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "xml_capturas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "usuarioId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "xml_erros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "usuarioId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sped_arquivos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "importadoPorUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "importadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "access_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "empresaCnpj",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dhEmi",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cnpjDest",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dhEmi",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cnpjEmit",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dhEmi",
+          "order": "ASCENDING"
         }
       ]
     }

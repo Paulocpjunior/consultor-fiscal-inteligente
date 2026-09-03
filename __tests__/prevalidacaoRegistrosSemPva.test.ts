@@ -20,7 +20,6 @@
 // `Campo de preenchimento obrigatório` garantida.
 // ============================================================================
 import { prevalidarSpedFiscal } from '../sefaz-backend/sped-prevalidacao.js';
-// @ts-expect-error — módulo .js puro
 import { montarLinhasStBlocoE, mesRefDoPeriodo } from '../sefaz-backend/sped-bloco-e-st.js';
 
 const L = (...campos: (string | number)[]) => `|${campos.join('|')}|`;

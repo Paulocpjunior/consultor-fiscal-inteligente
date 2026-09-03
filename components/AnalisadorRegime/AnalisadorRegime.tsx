@@ -32,7 +32,8 @@ const AnalisadorRegime:React.FC = () => {
     const prompt = `Voce e um especialista tributario brasileiro. Analise estes resultados e forneca consultoria objetiva (max 220 palavras):\n\nEmpresa: ${ATIV_LABELS[ent.atividade]}\nReceita Mensal: ${fmt(ent.receitaBrutaMensal)}\nReceita 12m: ${fmt(ent.receitaBrutaAcumulada12)}\nFolha: ${fmt(ent.folhaPagamentoMensal)}\n\nResultados:\n${res.resultados.map(r=>`- ${r.label}: ${fmt(r.impostoMensal)}/mes (${fmtP(r.aliquotaEfetiva)})${r.recomendado?' <- MENOR CARGA':''}`).join('\n')}\n\nEconomia potencial: ${fmt(res.economiaAnual)}/ano\n\nForneca: 1) Confirmacao ou ressalvas sobre o regime recomendado 2) Riscos especificos 3) Oportunidades de planejamento 4) Impacto da Reforma Tributaria CBS/IBS`;
     try {
       const r = await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
-      const d = await r.json();
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setIa(`A IA não respondeu: ${d?.error || `HTTP ${r.status}`}`); return; }
       setIa(d.candidates?.[0]?.content?.parts?.[0]?.text || d.text || d.response || 'Sem resposta da IA.');
     } catch { setIa('Erro ao conectar com a IA.'); }
     finally { setIaLoad(false); }

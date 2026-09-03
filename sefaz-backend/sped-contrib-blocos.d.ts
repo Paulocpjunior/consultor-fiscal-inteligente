@@ -23,6 +23,6 @@ export function buildBloco9_Contrib(linhasAnteriores: string[]): string[];
 
 // 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
 // importador TypeScript não enxergava o símbolo (erro de compilação).
-export function coletarRetencoesF600(notas: unknown[], warnings?: string[]): { eventos: Array<{ data: string | null; base: number; pis: number; cofins: number; cnpjFonte: string; numero: string }> } | any;
+export function coletarRetencoesF600(notas: unknown[], warnings?: string[] | null): { eventos: Array<{ data: string | null; base: number; pis: number; cofins: number; cnpjFonte: string; numero: string }> } | any;
 export function filtrarNotasBlocoA(notas: unknown[]): unknown[];
 export const COD_ITEM_SERVICO_GENERICO: string;

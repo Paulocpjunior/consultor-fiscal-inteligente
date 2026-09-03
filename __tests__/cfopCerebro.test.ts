@@ -176,8 +176,14 @@ describe('🚨 a gravação valida e o desligar não apaga', () => {
         expect(fonte).not.toMatch(/deleteDoc\(/);
     });
 
-    it('falha de leitura devolve [] — o cérebro é palpite, não trava', () => {
-        expect(fonte).toMatch(/catch \{\s*\n\s*return \[\];/);
+    it('falha de leitura devolve [] — o cérebro é palpite, não trava — mas DIZ que falhou', () => {
+        // 03/09: a asserção antiga exigia `catch { return []; }` — ela DESCREVIA
+        // o silêncio que deixou a lista negada (query sem `limit`, rules com cap
+        // 2000) passar por "zero parâmetros". A intenção (não derrubar a tela)
+        // fica; o que não pode é a recusa sumir sem nome.
+        const fn = fonte.slice(fonte.indexOf('export async function lerParametrosCfop'));
+        expect(fn).toMatch(/catch \(e: any\) \{[\s\S]*?console\.warn\([\s\S]*?return \[\];/);
+        expect(fn).toMatch(/fbLimit\(TETO_LISTA_PARAMETROS\)/);
     });
 
     it('a coleção está no catálogo do banco e nas rules', () => {

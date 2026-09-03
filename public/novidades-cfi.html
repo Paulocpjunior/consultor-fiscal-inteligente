@@ -68,14 +68,66 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 02/09/2026 · leitura de 16 minutos</p>
+            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 18 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (02/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (03/09) — leia esta parte primeiro</h2>
+
+    <p>Rodou uma <strong>auditoria completa</strong> do app (segurança, cálculo fiscal, telas e
+    infraestrutura). A maior parte do que mudou é por baixo; o que você vai <strong>sentir</strong>
+    está aqui.</p>
+
+    <h3>1. 🔓 <strong>Reabrir competência fechada voltou a funcionar</strong> (admin)</h3>
+    <p>O botão de reabrir respondia <em>"Só um administrador reabre competência fechada"</em>
+    <strong>para o próprio administrador</strong>: a guarda lia um campo que não existia. Não era
+    permissão sua — era defeito do app.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → bloco <strong>Dar fim de mês</strong> →
+    <strong>Reabrir</strong> (continua exigindo o motivo escrito, com 15 caracteres ou mais).</div>
+
+    <h3>2. 💰 <strong>Valor digitado com ponto de milhar</strong> não vira outro número</h3>
+    <p>Em alguns campos de valor (emissão de NFS-e Nacional, DARF, DARE, totalizador do
+    fechamento da Reinf, simulador da reforma, base de crédito), <code>1.500,00</code> podia
+    virar <strong>1,50</strong> ou <strong>150.000</strong> antes de gerar a guia. Agora todos leem o
+    número do jeito que você digita (com ou sem milhar) e, se não der para ler, <strong>recusam
+    dizendo qual campo</strong> — nunca gravam zero por conta própria.</p>
+    <div class="onde">📍 <strong>Onde:</strong> os mesmos campos de sempre. Se aparecer
+    <em>"valor ilegível"</em>, confira o que está escrito no campo — o app não vai adivinhar.</div>
+
+    <h3>3. ✅ <strong>"Salvo com sucesso" só aparece quando salvou</strong></h3>
+    <p>Em várias telas (cadastro de empresa do Simples, folha de 12 meses, histórico de
+    faturamento, análise do NFP) o aviso verde saía <strong>antes</strong> de o banco responder.
+    Agora, se a gravação falhar, a tela diz que <strong>não gravou</strong> — e o botão não fica
+    travado girando para sempre quando a rede cai.</p>
+
+    <h3>4. 🧠 <strong>CFOP por fornecedor e cadastro de contadores</strong> voltam a listar</h3>
+    <p>A lista de parâmetros do cérebro do CFOP e a lista de contadores eram <strong>recusadas
+    pelo banco</strong> (consulta sem limite numa regra que exige limite), e a tela mostrava
+    <strong>vazio como se não houvesse nada cadastrado</strong>. Nada foi perdido: os cadastros
+    estavam lá o tempo todo.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → ✏️ CFOP por nota → 🧠 Por fornecedor;
+    e o seletor de contador nos Dados Fiscais.</div>
+
+    <h3>5. 📜 <strong>Histórico e erros de captura para quem não é admin</strong></h3>
+    <p>O log de XMLs capturados, o de erros de importação e o histórico de SPED apareciam
+    <strong>vazios</strong> para colaboradores (faltava índice no banco). Passam a aparecer depois
+    do próximo deploy das regras.</p>
+
+    <h3>6. 🧾 <strong>Notas e valores que entravam como R$ 0,00</strong></h3>
+    <p>Para quem confere números: NFS-e do <strong>Padrão Nacional</strong> cujo valor o app não
+    conseguia ler entrava valendo zero no faturamento — agora fica <strong>nomeada na lacuna</strong>;
+    o F600 (retenção sofrida), a base do FUNRURAL/DIPAM e a varredura de DIFAL passaram a ler o
+    valor da nota importada pelo navegador (antes somava zero); a alíquota interestadual do DIFAL
+    passou a ter <strong>um cálculo só</strong> para o painel e para o SPED.</p>
+    <div class="alerta">⚠️ Nenhum arquivo já entregue muda sozinho. Se um mês antigo tiver o
+    número diferente ao regerar, é este ajuste — confira antes de retificar.</div>
+</section>
+
+<section>
+    <h2>🗓 O que mudou em 02/09</h2>
 
     <h3>1. 🚫 <strong>NFC-e cancelada aparecendo com valor</strong> — agora tem como perguntar à SEFAZ</h3>
     <p>A captura de NFC-e pergunta <strong>uma vez por nota</strong>, e o cancelamento acontece

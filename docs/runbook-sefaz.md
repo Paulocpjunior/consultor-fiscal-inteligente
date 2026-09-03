@@ -312,7 +312,10 @@ gcloud config set project consultorfiscalapp
 cd ~/consultor-fiscal-inteligente
 npm run build                                            # validar build local
 git add -A && git commit -m "..." && git push origin xml-refactor-on-prod-base
-bash ~/Downloads/sefaz-fase1/scripts/03-deploy.sh        # deploy automatizado
+# Deploy normal: merge na main dispara .github/workflows/deploy-app.yml.
+# Saída de EMERGÊNCIA (Actions fora): scripts/deploy-manual.sh — Cloud Build +
+# health check antes de rotear; NÃO roda o gate (só depois do gate verde local).
+bash scripts/deploy-manual.sh
 ```
 
 Health check pós-deploy:

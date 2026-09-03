@@ -20,6 +20,7 @@ import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
 import { montarChamadoSerpro } from '../services/chamadoSerpro';
 import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
+import { parseValorMoeda } from '../services/valorDigitado';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -49,6 +50,17 @@ const formatCnpj = (cnpj: string): string => {
     const d = String(cnpj || '').replace(/\D/g, '').padStart(14, '0').slice(0, 14);
     return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12, 14)}`;
 };
+
+/**
+ * Os campos de faturamento por CNAE guardam TEXTO pt-BR (o CurrencyInput
+ * formata a cada tecla) e o número sai do DONO da régua. Vazio é 0 (o campo é
+ * opcional — CNAE sem receita no mês); ilegível é null, e quem GRAVA recusa
+ * nomeando o CNAE. `parseFloat(texto.replace(/\./g,'').replace(',','.'))` era
+ * a segunda cópia — e apagava o ponto decimal da forma JS.
+ */
+const numeroDoCampoFaturamento = (texto: string): number | null => (
+    String(texto ?? '').trim() ? parseValorMoeda(texto) : 0
+);
 
 const CurrencyInput: React.FC<{ value: number; onChange: (val: number) => void; className?: string; placeholder?: string; label?: string }> = ({ value, onChange, className, placeholder, label }) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,8 +257,10 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             const cnaeCode = parts.length >= 3 ? parts[2] : key;
             const anexoCode = parts.length >= 4 ? parts[3] : empresa.anexo;
             
-            const val = parseFloat(state.valor.replace(/\./g, '').replace(',', '.') || '0');
-            
+            const val = numeroDoCampoFaturamento(state.valor);
+            // Ilegível não entra no resumo em tempo real; a gravação RECUSA e diz qual CNAE.
+            if (val === null) return;
+
             itensCalculo.push({
                 cnae: cnaeCode,
                 anexo: anexoCode as any,
@@ -720,7 +734,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 competencia,
                 filiais: Object.keys(filiaisReceita || {}),
                 receitaLancada: Object.values(faturamentoPorCnae).reduce(
-                    (t, v: any) => t + (parseFloat(String(v?.valor ?? '0').replace(/\./g, '').replace(',', '.')) || 0), 0),
+                    (t, v: any) => t + (numeroDoCampoFaturamento(String(v?.valor ?? '')) ?? 0), 0),
                 notasCapturadas: notasDoMes.length,
                 // A saúde da captura é decidida no backend; o front manda o que
                 // OBSERVA. Mandar `true` daqui seria o navegador atestando algo
@@ -832,12 +846,20 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
             const detalheMes: Record<string, SimplesDetalheItem> = {};
             let totalMes: number = 0;
 
+            // Ilegível é RECUSA com o CNAE nomeado — antes `isNaN(val) ? 0 : val`
+            // gravava ZERO calado num campo que alimenta o DAS.
+            const ilegiveis = Object.entries(faturamentoPorCnae)
+                .filter(([, value]) => numeroDoCampoFaturamento((value as CnaeInputState).valor) === null)
+                .map(([key, value]) => `${key.split('::')[2] || key} ("${(value as CnaeInputState).valor}")`);
+            if (ilegiveis.length) {
+                onShowToast(`Não entendi o faturamento em ${ilegiveis.join(', ')} — use 1234,56. Os valores NÃO foram gravados.`);
+                return;
+            }
+
             // 1. Processa Itens Normais e Extras
             Object.entries(faturamentoPorCnae).forEach(([key, value]) => {
                 const state = value as CnaeInputState;
-                const valString = state.valor.replace(/\./g, '').replace(',', '.') || '0';
-                const val = parseFloat(valString);
-                const safeVal = isNaN(val) ? 0 : val;
+                const safeVal = numeroDoCampoFaturamento(state.valor) ?? 0;
                 
                 totalMes += safeVal;
                 
@@ -977,9 +999,16 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     };
 
     const handleSaveHistory = async () => {
-        await onSaveFaturamentoManual(empresa.id, manualRbtHistory);
-        setIsHistoryModalOpen(false);
-        onShowToast("Histórico de faturamento atualizado!");
+        try {
+            await onSaveFaturamentoManual(empresa.id, manualRbtHistory);
+            setIsHistoryModalOpen(false);
+            onShowToast("Histórico de faturamento atualizado!");
+        } catch (error: any) {
+            console.error(error);
+            // O modal FICA aberto: fechar com "atualizado" sobre gravação que falhou
+            // é a promessa que a tela não cumpre.
+            onShowToast(`Erro ao salvar o histórico: ${error?.message || 'falha desconhecida'}. Os valores NÃO foram gravados.`);
+        }
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1242,7 +1271,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                     <p className="text-xl font-mono font-bold text-slate-900 dark:text-white">
                                         R$ {(Object.values(faturamentoPorCnae).reduce((acc: number, curr) => {
                                             const state = curr as CnaeInputState;
-                                            return acc + parseFloat(state.valor.replace(/\./g,'').replace(',','.') || '0');
+                                            return acc + (numeroDoCampoFaturamento(state.valor) ?? 0);
                                         }, 0) + (filialComercio || 0) + (filialIndustria || 0) + (filialServico || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
@@ -1300,7 +1329,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                             </div>
                                             <div className="w-full md:w-48">
                                                 <CurrencyInput 
-                                                    value={parseFloat(state.valor.replace(/\./g,'').replace(',','.') || '0')} 
+                                                    value={numeroDoCampoFaturamento(state.valor) ?? 0} 
                                                     onChange={(val) => handleFaturamentoChange(key, (val * 100).toFixed(0))}
                                                     className="w-full"
                                                 />

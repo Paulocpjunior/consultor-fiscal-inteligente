@@ -7,11 +7,8 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-// @ts-expect-error módulo JS sem .d.ts para esta assinatura
 import { aliqInterestadualDoItem as donoAliq } from '../sefaz-backend/difal-itens.js';
-// @ts-expect-error idem
 import { aliqInterestadualDoItem as reexportado } from '../sefaz-backend/difal-aquisicao.js';
-// @ts-expect-error idem
 import { aliqInterestadual as doC197 } from '../sefaz-backend/sped-difal-c197.js';
 // @ts-expect-error idem
 import { acharApuracaoDaCompetencia } from '../sefaz-backend/rotina-fiscal.js';
@@ -19,17 +16,12 @@ import { acharApuracaoDaCompetencia } from '../sefaz-backend/rotina-fiscal.js';
 import { documentoDaNfseNacional, lacunasDaNfseNacional } from '../sefaz-backend/nfse-nacional-gravacao.js';
 // @ts-expect-error idem
 import { planejarBlocoH } from '../sefaz-backend/sped-bloco-h.js';
-// @ts-expect-error idem
 import { coletarRetencoesF600 } from '../sefaz-backend/sped-contrib-blocos.js';
-// @ts-expect-error idem
 import { calcularVencimento } from '../sefaz-backend/catalogo-obrigacoes.js';
 // @ts-expect-error idem
 import { ajustarDiaUtil } from '../sefaz-backend/calendario-obrigacoes.js';
-// @ts-expect-error idem
 import { conferirDebitosJaEnviados } from '../sefaz-backend/debito-ja-enviado.js';
-// @ts-expect-error idem
 import { ALIQ_LEGAL } from '../sefaz-backend/retencao-pj-ajuste.js';
-// @ts-expect-error idem
 import { ALIQ } from '../sefaz-backend/retencao-federal-coerencia.js';
 
 const BACKEND = path.join(__dirname, '..', 'sefaz-backend');

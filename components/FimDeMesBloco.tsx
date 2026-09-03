@@ -84,25 +84,36 @@ const FimDeMesBloco: React.FC<Props> = ({
             + 'contabilidade importa. Só um administrador reabre.',
         )) return;
         setOcupado(true); setErro(null); setBloqueiosDaRecusa([]);
-        const r = await darFimDeMes(empresaId, competencia);
-        setOcupado(false);
-        if (!r.ok) {
-            setErro(r.erro || 'Não foi possível fechar.');
-            setBloqueiosDaRecusa(r.bloqueios || []);
-            return;
+        try {
+            const r = await darFimDeMes(empresaId, competencia);
+            if (!r.ok) {
+                setErro(r.erro || 'Não foi possível fechar.');
+                setBloqueiosDaRecusa(r.bloqueios || []);
+                return;
+            }
+            // Quem recarrega é o PAINEL — uma leitura para a tela toda. Recarregar
+            // aqui seria a leitura por empresa voltando pela porta de trás.
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Não foi possível fechar.');
+        } finally {
+            // Rede que cai no meio não pode deixar o botão girando para sempre.
+            setOcupado(false);
         }
-        // Quem recarrega é o PAINEL — uma leitura para a tela toda. Recarregar
-        // aqui seria a leitura por empresa voltando pela porta de trás.
-        onMudou?.();
     };
 
     const reabrir = async () => {
         setOcupado(true); setErro(null);
-        const r = await reabrirCompetencia(empresaId, competencia, motivo);
-        setOcupado(false);
-        if (!r.ok) { setErro(r.erro || 'Não foi possível reabrir.'); return; }
-        setPedindoMotivo(false); setMotivo('');
-        onMudou?.();
+        try {
+            const r = await reabrirCompetencia(empresaId, competencia, motivo);
+            if (!r.ok) { setErro(r.erro || 'Não foi possível reabrir.'); return; }
+            setPedindoMotivo(false); setMotivo('');
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Não foi possível reabrir.');
+        } finally {
+            setOcupado(false);
+        }
     };
 
     // 📋 A porta do envio declarado, montada UMA vez e passada aos três ramos.

@@ -15,6 +15,7 @@ import {
 } from '../../services/dareSpService';
 import { enviarPorEmailDoColaborador, enviarGuiaPeloServidor, mensagemEnvioServidor, enviarGuiaPorWhatsapp, mensagemEnvioWhatsapp, GESTOR_EMAIL, mensagemComposicao, type ModoComposicao } from '../../services/envioImpostoService';
 import { nomeArquivoGuia } from '../../sefaz-backend/nome-arquivo-guia.js';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 interface Props {
     cnpj: string;
@@ -99,12 +100,22 @@ const DareSpModal: React.FC<Props> = ({ cnpj, razaoSocial, empresaId, competenci
     // #293) — antes o colaborador tinha de baixar do portal e anexar à mão.
     const [pdfEmitido, setPdfEmitido] = useState<{ base64: string; ambiente: AmbienteDare } | null>(null);
 
-    const inputAtual = () => ({
-        cnpj, razaoSocial, empresaId, codigoServico, chaveDocumento,
-        referencia: competencia,
-        valor: Number(String(valor).replace(',', '.')),
-        vencimento,
-    });
+    // O valor digitado passa pelo DONO: `Number("1.234,56".replace(',', '.'))`
+    // dava NaN e a guia seguia com valor nenhum. Ilegível RECUSA com o campo
+    // nomeado — os três chamadores (conferir, registrar, emitir) já capturam
+    // o erro e o mostram na tela.
+    const inputAtual = () => {
+        const valorLido = parseValorMoeda(String(valor));
+        if (valorLido === null) {
+            throw new Error(`Não entendi o valor "${valor}" — use 1234,56. Nada foi validado nem emitido.`);
+        }
+        return {
+            cnpj, razaoSocial, empresaId, codigoServico, chaveDocumento,
+            referencia: competencia,
+            valor: valorLido,
+            vencimento,
+        };
+    };
 
     const conferir = async () => {
         setOcupado(true); setErro(null); setPreview(null); setLinhaTxt(null);

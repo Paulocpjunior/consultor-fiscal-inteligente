@@ -23,7 +23,7 @@ interface Props {
     analise: NfpAnaliseEmpresa;
     activeEmpresaId: string;
     setAnalise: (a: NfpAnaliseEmpresa) => void;
-    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<void>;
+    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<{ ok: boolean }>;
 }
 
 export const TIPO_APONTAMENTO_LABEL: Record<NfpTipoApontamentoTrabalhista, string> = {

@@ -5,7 +5,6 @@
  * nunca chuta código de receita.
  */
 import {
-    // @ts-expect-error — const de módulo .js
     FAMILIAS,
     extrairModeloDebitosMit, montarDebitosMit, maiorIdDebitoMit, mesclarDebitosMit,
 } from '../sefaz-backend/mit-debitos-builder';

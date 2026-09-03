@@ -69,7 +69,18 @@ export async function getCertEscritorioInfo(): Promise<CertEscritorioInfo> {
     const res = await fetch('/api/admin/sefaz/cert-escritorio-info', {
         headers: { Authorization: `Bearer ${token}` },
     });
-    return res.json();
+    // HTTP fora do 2xx NÃO é resposta sobre o certificado: 401/403 é a porta
+    // (sessão/permissão), 5xx é o servidor. Devolver o JSON cru fazia a tela
+    // ler `valido: undefined` como "certificado inválido" — a primeira parada
+    // errada. Sai como falha NOMEADA, com o motivo que o backend deu.
+    const corpo: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const motivo = corpo?.error || corpo?.erro || `HTTP ${res.status}`;
+        throw new Error(res.status === 401 || res.status === 403
+            ? `Não autorizado a ler o certificado do escritório (${motivo}) — entre de novo ou peça acesso de admin.`
+            : `Falha ao consultar o certificado do escritório (${motivo}).`);
+    }
+    return corpo as CertEscritorioInfo;
 }
 
 export async function consultarNFePorChave(chave: string, importar = false): Promise<NFeChaveResposta> {

@@ -879,10 +879,15 @@ const CpfTitularProdutor: React.FC<{ doc: string; nome: string; onSalvo: () => v
             return;
         }
         setSalvando(true); setErro(null);
-        const r = await salvarProdutorRural({ doc, nome, cpfTitular: limpo } as any);
-        setSalvando(false);
-        if (!r.ok) { setErro(r.error || 'Falha ao gravar.'); return; }
-        onSalvo();
+        try {
+            const r = await salvarProdutorRural({ doc, nome, cpfTitular: limpo } as any);
+            if (!r.ok) { setErro(r.error || 'Falha ao gravar.'); return; }
+            onSalvo();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao gravar.');
+        } finally {
+            setSalvando(false);
+        }
     };
 
     return (
@@ -920,10 +925,15 @@ const ConfirmarProdutor: React.FC<{ doc: string; nome: string; onSalvo: () => vo
     const marcar = async (natureza: 'produtor_rural_pf' | 'pessoa_juridica', seguradoEspecial = false) => {
         setSalvando(true);
         setErro(null);
-        const r = await salvarProdutorRural({ doc, nome, natureza, seguradoEspecial });
-        setSalvando(false);
-        if (!r.ok) { setErro(r.error || 'Falha ao gravar.'); return; }
-        onSalvo();
+        try {
+            const r = await salvarProdutorRural({ doc, nome, natureza, seguradoEspecial });
+            if (!r.ok) { setErro(r.error || 'Falha ao gravar.'); return; }
+            onSalvo();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao gravar.');
+        } finally {
+            setSalvando(false);
+        }
     };
 
     return (

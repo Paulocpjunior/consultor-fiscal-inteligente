@@ -7,6 +7,9 @@
  *  - CapturaDiagnosticoPanel: card "Saída mod 55 — Cofre" (versão genérica) —
  *    o Paulo não achava o comunicado enterrado na aba Importação Manual.
  */
+/** A caixa do cofre — UMA constante; o texto nas telas lê daqui, não de literal repetido. */
+export const EMAIL_COFRE_XML = 'xml@spassessoriacontabil.com.br';
+
 export function instrucoesMigracaoCofre(nomeEmpresa?: string): string {
     const alvo = nomeEmpresa?.trim() ? nomeEmpresa.trim() : 'sua empresa';
     return [
@@ -17,7 +20,7 @@ export function instrucoesMigracaoCofre(nomeEmpresa?: string): string {
         '1. Acesse as configurações do seu sistema emissor (a tela de "envio de XML por e-mail" — a mesma onde hoje pode estar o e-mail da SIEG).',
         '2. Cadastre/substitua o e-mail de envio automático dos XMLs por:',
         '',
-        '   xml@spassessoriacontabil.com.br',
+        `   ${EMAIL_COFRE_XML}`,
         '',
         '3. Se o sistema pedir "quantidade de notas por e-mail" ou periodicidade, pode manter o padrão — nosso sistema processa qualquer volume.',
         '',

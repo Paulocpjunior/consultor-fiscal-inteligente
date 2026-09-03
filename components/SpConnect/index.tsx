@@ -712,12 +712,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [igEstadoLido, setIgEstadoLido] = useState(false);
     const [igLigando, setIgLigando] = useState(false);
     const [igLigarErro, setIgLigarErro] = useState<string | null>(null);
+    const [igEstadoErro, setIgEstadoErro] = useState<string | null>(null);
     useEffect(() => {
         if (!cfgAberta || cfgAba !== 'instagram' || igEstadoLido) return;
         (async () => {
             const r = await estadoInstagram();
-            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgVerificacao(r.verificacao ?? null); setIgPostRecusado(r.postRecusado ?? null); setIgEnvs(r.envs ?? null); setIgEstadoLido(true); }
-        })();
+            if (r.ok) { setIgEstado(r.estado || null); setIgEventos(r.eventos ?? null); setIgAssinaturas(r.assinaturas ?? null); setIgVerificacao(r.verificacao ?? null); setIgPostRecusado(r.postRecusado ?? null); setIgEnvs(r.envs ?? null); setIgEstadoLido(true); setIgEstadoErro(null); }
+            else setIgEstadoErro(r.error || 'Falha ao ler o estado do Instagram.');
+        })().catch((e: any) => setIgEstadoErro(e?.message || 'Falha ao ler o estado do Instagram.'));
+        // Falha aqui NÃO pode passar por "desligado": o painel diria que a DM não
+        // entra quando a resposta é que ele não conseguiu perguntar.
     }, [cfgAberta, cfgAba, igEstadoLido]);
     const ligarIg = async () => {
         setIgLigando(true); setIgLigarErro(null);
@@ -3068,6 +3072,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         {igLigando ? 'Assinando na Meta…' : igEstado ? '📡 Religar (re-afirmar assinatura)' : '📡 Ligar recebimento das DMs'}
                                     </button>
                                     {igLigarErro && <p className="text-[11px] text-red-600 dark:text-red-400">{igLigarErro}</p>}
+                                    {igEstadoErro && <p className="text-[11px] text-red-600 dark:text-red-400">Não deu para ler o estado do recebimento: {igEstadoErro}</p>}
 
                                     {/* 📨 A entrega tem DUAS metades e este bloco diz em qual
                                         o problema está: os eventos CRUS são gravados ANTES de

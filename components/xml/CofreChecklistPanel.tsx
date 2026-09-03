@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { getAuth } from 'firebase/auth';
-import { instrucoesMigracaoCofre } from '../../services/cofreInstrucoes';
+import { instrucoesMigracaoCofre, EMAIL_COFRE_XML } from '../../services/cofreInstrucoes';
 
 interface Linha {
     empresaId: string; cnpj: string; nome: string; regime: string;
@@ -112,7 +112,7 @@ const CofreChecklistPanel: React.FC = () => {
                     ✅ Checklist de migração da saída (mod 55) — cofre + autXML
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Quem já recebe saída por um trilho automático — cofre (<b>xml@spassessoriacontabil.com.br</b>)
+                    Quem já recebe saída por um trilho automático — cofre (<b>{EMAIL_COFRE_XML}</b>)
                     ou <b>autXML</b> (CNPJ 44.388.152/0001-89 na nota) — × quem ainda depende da SIEG.
                     <b> Falta migrar</b> = tem saída histórica e nunca chegou nada sozinho: configure
                     UMA das duas ligações no emissor do cliente.

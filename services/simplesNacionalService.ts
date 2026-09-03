@@ -10,6 +10,8 @@ import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
+import { EMAIL_ADMIN_MASTER } from './adminMaster';
+import { safeStorage } from './safeStorage';
 import {
     collection, getDocs, doc, setDoc, getDoc,
     query, where, limit as fbLimit
@@ -18,7 +20,7 @@ import {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STORAGE_KEY_EMPRESAS  = 'simples_nacional_empresas';
 const STORAGE_KEY_NOTAS     = 'simples_nacional_notas';
-const MASTER_ADMIN_EMAIL    = 'junior@spassessoriacontabil.com.br';
+const MASTER_ADMIN_EMAIL    = EMAIL_ADMIN_MASTER;
 
 // ─── TABELAS (tipadas - LC 123/2006 com LC 155/2016 e LC 192/2022) ────────────
 
@@ -498,8 +500,9 @@ export const parseAndSaveNotas = async (
     }
 
     // ── Local cache ──
-    const stored  = localStorage.getItem(STORAGE_KEY_NOTAS);
-    const notasMap = stored ? JSON.parse(stored) : {};
+    // Cache corrompido não pode derrubar a importação que JÁ gravou na nuvem:
+    // parse que falha vira mapa vazio, nunca exceção depois do setDoc.
+    const notasMap: Record<string, SimplesNacionalNota[]> = safeStorage.getJSON(STORAGE_KEY_NOTAS, {});
     if (!notasMap[empresaId]) notasMap[empresaId] = [];
     notasMap[empresaId].push(...newNotes);
     localStorage.setItem(STORAGE_KEY_NOTAS, JSON.stringify(notasMap));

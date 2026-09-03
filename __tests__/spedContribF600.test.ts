@@ -10,7 +10,6 @@
  * de lá, o M200 |0|0|0|0|0|0|0|114,4|114,4|0|0|0| e o M600 idem com 528 são o
  * gabarito destes testes. Regra da casa: arquivo aceito > leiaute deduzido.
  */
-// @ts-ignore — módulo JS do backend
 import { buildBlocoF, buildBlocoM, coletarRetencoesF600 } from '../sefaz-backend/sped-contrib-blocos.js';
 
 const campos = (l: string) => l.split('|');

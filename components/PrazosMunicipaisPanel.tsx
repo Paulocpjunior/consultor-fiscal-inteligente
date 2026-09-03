@@ -68,7 +68,10 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
         setCarregando(true);
         try {
             const r = await fetch('/api/admin/prazos-municipais', { headers: { Authorization: `Bearer ${await token()}` } });
-            setDados(await r.json());
+            const j = await r.json().catch(() => ({}));
+            // HTTP fora do 2xx não é lista: é a porta (401/403) ou o servidor (5xx).
+            if (!r.ok) { setDados({ ok: false, error: j?.error || `HTTP ${r.status}` }); return; }
+            setDados(j);
         } catch (e: any) {
             setDados({ ok: false, error: e?.message || 'falha ao carregar' });
         } finally { setCarregando(false); }
@@ -83,7 +86,9 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                 headers: { Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ codMunIBGE: m.codMunIBGE, municipioNome: m.municipioNome, obrigacao: 'ISS' }),
             });
-            setProposta({ ...(await r.json()), municipio: m });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { setProposta({ ok: false, motivo: j?.error || j?.motivo || `HTTP ${r.status}`, municipio: m }); return; }
+            setProposta({ ...j, municipio: m });
         } catch (e: any) {
             setProposta({ ok: false, motivo: e?.message || 'falha na consulta', municipio: m });
         } finally { setConsultando(null); }

@@ -176,7 +176,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                 headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ cnpj: empresa.cnpj, ccm: ccmDiag, anoMes: competencia }),
             });
-            setSonda(await r.json());
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { setSonda({ ok: false, erro: j?.error || j?.erro || `HTTP ${r.status}` }); return; }
+            setSonda(j);
         } catch (e: any) {
             setSonda({ ok: false, erro: String(e?.message || e) });
         } finally {
@@ -196,7 +198,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ cnpj: empresa.cnpj, ccm: ccmDiag, anoMes: competencia }),
             });
-            setDiagWs(await r.json());
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { setDiagWs({ ok: false, erro: j?.error || j?.erro || `HTTP ${r.status}` }); return; }
+            setDiagWs(j);
         } catch (e: any) {
             setDiagWs({ ok: false, erro: String(e?.message || e) });
         } finally {

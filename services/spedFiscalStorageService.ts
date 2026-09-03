@@ -16,6 +16,7 @@ import {
     limit as fbLimit,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebaseConfig';
+import { ehAdminMaster } from './adminMaster';
 import type { SpedFiscalArquivo, SpedFiscalParseResult, User } from '../types';
 
 const COL_SPED_ARQUIVOS = 'sped_arquivos';
@@ -67,7 +68,7 @@ export async function listarSpedArquivos(
     max = 50,
 ): Promise<SpedFiscalArquivo[]> {
     const database = ensureDb();
-    const isMaster = user.role === 'admin' || user.email?.toLowerCase() === 'junior@spassessoriacontabil.com.br';
+    const isMaster = user.role === 'admin' || ehAdminMaster(user.email);
 
     const constraints = isMaster
         ? [orderBy('importadoEm', 'desc'), fbLimit(max)]

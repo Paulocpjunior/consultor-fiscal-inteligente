@@ -90,6 +90,9 @@ export function padData(dataIso: string | null | undefined): string {
 }
 
 const SN = (b: boolean): string => (b ? 'S' : 'N');
+// Mensagem lida por gente: "R$ 1.234,56", nunca "R$ 1234.56" (o ponto lido como
+// milhar transforma o valor em mil vezes o que é).
+const brlMensagem = (n: number): string => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
  * Registro Principal A0 — 1031 posições.
@@ -240,10 +243,10 @@ export function montarArquivoGiaSt(
             throw new GiaStExportError(`${rotulo}: resolva as ${guia.inconsistencias.length} inconsistência(s) antes de gerar o arquivo.`);
         }
         if (Math.round(guia.c14IcmsDevolucao * 100) !== somaCentavos(anexoI)) {
-            throw new GiaStExportError(`${rotulo}: campo 14 (devoluções) = R$ ${guia.c14IcmsDevolucao.toFixed(2)} difere da soma do Anexo I. Detalhe as notas de devolução.`);
+            throw new GiaStExportError(`${rotulo}: campo 14 (devoluções) = R$ ${brlMensagem(guia.c14IcmsDevolucao)} difere da soma do Anexo I. Detalhe as notas de devolução.`);
         }
         if (Math.round(guia.c15IcmsRessarcimentos * 100) !== somaCentavos(anexoII)) {
-            throw new GiaStExportError(`${rotulo}: campo 15 (ressarcimentos) = R$ ${guia.c15IcmsRessarcimentos.toFixed(2)} difere da soma do Anexo II. Detalhe as notas de ressarcimento.`);
+            throw new GiaStExportError(`${rotulo}: campo 15 (ressarcimentos) = R$ ${brlMensagem(guia.c15IcmsRessarcimentos)} difere da soma do Anexo II. Detalhe as notas de ressarcimento.`);
         }
         linhas.push(montarRegistroA0(guia, declarante, {
             anexoI: anexoI.length, anexoII: anexoII.length, anexoIII: anexoIII.length,

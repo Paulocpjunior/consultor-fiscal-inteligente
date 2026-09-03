@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getApp } from 'firebase/app';
-import { ref as storageRef, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../../services/firebaseConfig';
+import { auth, db, storage, isFirebaseStorageConfigured } from '../../services/firebaseConfig';
 import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
@@ -19,7 +18,11 @@ type EmpresaXmlOption = {
     createdBy?: string;
 };
 
-const storage = (() => { try { return getStorage(getApp()); } catch { return null as any; } })();
+// O Storage vem do firebaseConfig (dono único), NUNCA de `getStorage(getApp())`
+// local: a cópia local ignorava `isFirebaseStorageConfigured`, então com o
+// VITE_FIREBASE_STORAGE_BUCKET vazio o SDK subia apontando pra bucket nenhum
+// e o upload morria com um erro genérico — a CAUSA (bucket ausente no build)
+// ficava sem nome. Agora ela é DITA na tela (03/09).
 
 interface Props {
     currentUser: User | null;
@@ -111,7 +114,12 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     const handleSalvar = async () => {
         if (!parsed || !file || !empresaSelecionada || !currentUser) return;
         if (!auth?.currentUser?.uid) { setError('Sessao expirada. Faca login novamente.'); return; }
-        if (!db || !storage) { setError('Firebase nao configurado.'); return; }
+        if (!db) { setError('Firebase nao configurado.'); return; }
+        if (!isFirebaseStorageConfigured || !storage) {
+            setError('Firebase Storage não configurado neste build (VITE_FIREBASE_STORAGE_BUCKET vazio) — '
+                + 'o PDF não tem onde ser guardado. Não é problema do arquivo nem do cadastro: é do deploy.');
+            return;
+        }
 
         setSaving(true);
         setError(null);

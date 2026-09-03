@@ -16,7 +16,6 @@
  * do A170 percorria `nota.itens`, e a NFS-e do portal de SP entra SEM itens (ela
  * grava `valorTotal`). O laço nunca rodava — 37 A100 órfãos.
  */
-// @ts-ignore — módulo JS do backend
 import { buildBlocoA, filtrarNotasBlocoA } from '../sefaz-backend/sped-contrib-blocos.js';
 // @ts-ignore
 import { buildBloco0Contrib, ieDoArquivo } from '../sefaz-backend/sped-contrib-bloco0.js';

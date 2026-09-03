@@ -105,7 +105,7 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                     'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700'
                 }`}>
                     {certInfo.error ? (
-                        <span className="text-red-700 dark:text-red-300"><strong>Falha lendo cert do escritório:</strong> {certInfo.error}</span>
+                        <span className="text-red-700 dark:text-red-300"><strong>Não foi possível conferir o certificado do escritório:</strong> {certInfo.error} <em>(isto não diz que o certificado é inválido — a consulta é que não respondeu)</em></span>
                     ) : certInfo.mismatchBase ? (
                         <div>
                             <div className="font-bold text-red-700 dark:text-red-300 mb-1">

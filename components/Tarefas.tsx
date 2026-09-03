@@ -173,8 +173,14 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     const moverPara = async (t: Tarefa, novoStatus: StatusTarefa) => {
         if (t.status === novoStatus) return;
         setAtualizandoStatus(t.id);
-        const r = await atualizarStatus(t.id, novoStatus);
-        setAtualizandoStatus(null);
+        let r: { ok: boolean; error?: string };
+        try {
+            r = await atualizarStatus(t.id, novoStatus);
+        } catch (e: any) {
+            r = { ok: false, error: e?.message || 'Erro ao mover tarefa' };
+        } finally {
+            setAtualizandoStatus(null);
+        }
         if (r.ok) {
             setVersao(v => v + 1);
             setTarefaParaMover(null);

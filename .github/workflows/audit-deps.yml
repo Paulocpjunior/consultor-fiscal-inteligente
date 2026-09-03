@@ -220,24 +220,41 @@ jobs:
             gh issue create --title "$TITULO" --body "$CORPO"
           fi
 
-      # ═══ REDE DE SEGURANÇA ═══════════════════════════════════════════════
-      # O robô caiu por um motivo que ele mesmo não previu (git, rede, cota)?
-      # Então NADA acima abriu issue, e o run vermelho fica num painel que
-      # ninguém abre — que é a definição de aviso que não avisa.
-      #
-      # Foi o que aconteceu de 14 a 17/08: o push era rejeitado, o step morria
-      # com exit 1 ANTES do passo que abre issue, e o robô de SEGURANÇA ficou
-      # três dias quebrado sem ninguém saber. Só apareceu porque o Paulo olhou
-      # a lista de runs.
+  # ═══ REDE DE SEGURANÇA — JOB PRÓPRIO, não um passo do mesmo job ═════════
+  # O robô caiu por um motivo que ele mesmo não previu (git, rede, cota)?
+  # Então NADA acima abriu issue, e o run vermelho fica num painel que
+  # ninguém abre — que é a definição de aviso que não avisa.
+  #
+  # Foi o que aconteceu de 14 a 17/08: o push era rejeitado, o step morria
+  # com exit 1 ANTES do passo que abre issue, e o robô de SEGURANÇA ficou
+  # três dias quebrado sem ninguém saber. Só apareceu porque o Paulo olhou
+  # a lista de runs.
+  #
+  # 🚨 E ATÉ 03/09 ESTE AVISO ERA UM PASSO DENTRO DO MESMO JOB — o modo de
+  # falha que ele denuncia. Se o job morre ANTES de qualquer passo rodar
+  # ("Prepare all required actions" com 429/503 do GitHub ao baixar
+  # `actions/checkout`, o deploy 566 de 17/08), ou é CANCELADO pela cota da
+  # conta, o passo `if: failure()` nem executa. Job separado com `needs` roda
+  # de qualquer jeito; sem `uses:` porque é justamente o download de action
+  # que falha; `gh` já vem no runner. É o mesmo desenho do deploy-app.yml.
+  avisar-falha:
+    needs: auditar
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
       - name: Robô falhou por outro motivo — abrir/atualizar issue
-        if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULTADO: ${{ needs.auditar.result }}
+          REPO: ${{ github.repository }}
         run: |
           TITULO="Robô de auditoria de dependências falhou"
           CORPO=$(cat <<CORPO
-          O robô diário caiu **antes** de concluir, então nenhum dos avisos dele
-          rodou — e o advisory que ele ia corrigir continua de pé.
+          O robô diário terminou em **${RESULTADO}** antes de concluir, então nenhum
+          dos avisos dele rodou — e o advisory que ele ia corrigir continua de pé.
 
           · Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           · Commit: ${GITHUB_SHA}
@@ -249,14 +266,15 @@ jobs:
           2. O repositório não permite que o Actions abra pull request
              (Settings → Actions → General → Workflow permissions).
           3. Falha de rede/cota do runner — costuma passar sozinha no dia seguinte.
+             Cancelado aos 15m00s sem passo executado = cota da conta (06/08).
 
           ⚠️ Enquanto esta issue estiver aberta, **o robô não está protegendo
           nada**: a correção de advisory depende de alguém rodar à mão.
           CORPO
           )
-          EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          EXISTE=$(gh issue list --repo "$REPO" --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTE" ]; then
-            gh issue comment "$EXISTE" --body "$CORPO"
+            gh issue comment "$EXISTE" --repo "$REPO" --body "$CORPO"
           else
-            gh issue create --title "$TITULO" --body "$CORPO"
+            gh issue create --repo "$REPO" --title "$TITULO" --body "$CORPO"
           fi

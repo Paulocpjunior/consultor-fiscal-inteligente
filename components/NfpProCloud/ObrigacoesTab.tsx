@@ -15,7 +15,7 @@ interface Props {
     activeUf?: string;
     activeMunicipio?: string;
     updateAnalise: (patch: Partial<NfpAnaliseEmpresa>) => void;
-    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<void>;
+    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<{ ok: boolean }>;
     renderEsferaSectionHeader: (esf: NfpEsfera, sublabel?: string) => React.ReactNode;
 }
 

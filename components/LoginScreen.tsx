@@ -6,6 +6,7 @@ import { isFirebaseConfigured } from '../services/firebaseConfig';
 import { GlobeIcon, ShieldIcon } from './Icons';
 import { APP_RELEASE, APP_BUILD_TIME, formatBuildDate, rotuloVersao } from '../version';
 import { validarEmailParaRedefinicao, type ResultadoRedefinicao } from '../services/redefinirSenha';
+import { EMAIL_ADMIN_MASTER } from '../services/adminMaster';
 
 interface LoginScreenProps {
     onLoginSuccess: (user: User) => void;
@@ -73,7 +74,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
             let msg = err.message || "Ocorreu um erro.";
             
             // UX para Master Admin
-            if (email.toLowerCase().includes('junior@spassessoriacontabil.com.br') && msg.includes('Senha incorreta')) {
+            if (email.toLowerCase().includes(EMAIL_ADMIN_MASTER) && msg.includes('Senha incorreta')) {
                 msg += " (Dica: Se for o primeiro acesso, a senha padrão é 123456)";
             }
 

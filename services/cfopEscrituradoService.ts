@@ -24,6 +24,7 @@
  */
 import {
     doc, updateDoc, deleteField, collection, addDoc, getDocs, query, where, orderBy,
+    limit as fbLimit,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
@@ -98,17 +99,45 @@ export interface ParametroCfopDoc {
     criadoEm?: string | null;
 }
 
+/** Teto que as `firestore.rules` impõem à lista de /cfop_parametros
+ *  (`request.query.limit <= 2000`). Query SEM limite não satisfaz a regra e
+ *  é NEGADA inteira — não é "traz tudo", é "não traz nada". */
+const TETO_LISTA_PARAMETROS = 2000;
+
 /** Os parâmetros ATIVOS da empresa. Falha de leitura devolve [] — o cérebro é
- *  um palpite melhor, não uma trava: sem ele a régua automática segue valendo. */
+ *  um palpite melhor, não uma trava: sem ele a régua automática segue valendo.
+ *
+ *  🚨 DUAS CORREÇÕES DE 03/09, e a segunda é a que ensina:
+ *  (1) a query saía SEM `limit`, e as rules exigem `<= 2000` — a lista era
+ *      `permission-denied` para TODA empresa; o cérebro nunca respondeu nada.
+ *  (2) o `catch {}` engolia essa recusa em silêncio: "zero parâmetros" e
+ *      "não consegui ler" saíam IGUAIS. É o silêncio falso que esta casa
+ *      persegue desde 22/08 — a falha de permissão só apareceu porque alguém
+ *      leu as rules, não porque a tela acusou.
+ *
+ *  Por que `console.warn` + `[]` e NÃO rethrow: quem chama é a tela de CFOP
+ *  por nota e o Livro — derrubá-los por causa do cérebro trocaria uma lacuna
+ *  de sugestão por uma tela em branco, e o próprio contrato desta função diz
+ *  que sem ele a régua automática vale. O que muda é que a recusa agora
+ *  fica NOMEADA no console (código + mensagem), então "cérebro vazio" com
+ *  `permission-denied` ao lado deixa de ser indistinguível de "ninguém
+ *  cadastrou". Rethrow só de permission-denied foi considerado e descartado:
+ *  seria a mesma tela em branco, só que em um caso. */
 export async function lerParametrosCfop(empresaId: string): Promise<ParametroCfopDoc[]> {
     if (!empresaId) return [];
     try {
         const snap = await getDocs(query(
             collection(db, COLECAO_PARAMETROS),
             where('empresaId', '==', empresaId),
+            fbLimit(TETO_LISTA_PARAMETROS),
         ));
         return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroCfopDoc[];
-    } catch {
+    } catch (e: any) {
+        console.warn(
+            `[cfopCerebro] não foi possível ler os parâmetros da empresa ${empresaId} — `
+            + 'a régua automática segue valendo, mas o cérebro NÃO está respondendo: '
+            + `${e?.code || 'erro'}: ${e?.message || e}`,
+        );
         return [];
     }
 }

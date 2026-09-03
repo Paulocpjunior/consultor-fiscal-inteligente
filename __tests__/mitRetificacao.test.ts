@@ -18,7 +18,6 @@ jest.mock('../sefaz-backend/serpro-client.js', () => ({
     invokeIntegraContador: mockInvokeIntegraContador,
 }));
 
-// @ts-expect-error — modulo .js puro
 import { montarDebitosRetificacaoMit, extrairModeloDebitosMit } from '../sefaz-backend/mit-debitos-builder.js';
 // @ts-expect-error — modulo .js puro
 import { retificarMit } from '../sefaz-backend/dctfweb-orchestrator.js';

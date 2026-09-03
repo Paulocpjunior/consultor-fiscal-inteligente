@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { colherAutXml, coberturaSaida, provaSaida, type AutXmlHarvestResultado, type CoberturaSaidaResultado, type ProvaSaidaResultado } from '../../services/saeNfceService';
+import { EMAIL_COFRE_XML } from '../../services/cofreInstrucoes';
 
 /**
  * AutXmlHarvest — dispara a colheita de SAÍDA (mod 55) via tag <autXML>.
@@ -166,7 +167,7 @@ const AutXmlHarvest: React.FC = () => {
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
                             Lista os clientes <strong>sem nenhuma saída (mod 55)</strong> capturada nos últimos 90 dias. São duas ligações
                             possíveis, qualquer uma resolve: <strong>(1)</strong> o emissor manda o XML para{' '}
-                            <code>xml@spassessoriacontabil.com.br</code> (cofre) ou <strong>(2)</strong> o CNPJ do escritório entra na
+                            <code>{EMAIL_COFRE_XML}</code> (cofre) ou <strong>(2)</strong> o CNPJ do escritório entra na
                             tag <code>autXML</code> da nota.
                         </p>
                     </div>

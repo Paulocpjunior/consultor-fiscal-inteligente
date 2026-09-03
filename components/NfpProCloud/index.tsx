@@ -297,8 +297,10 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
         });
     }, []);
 
-    const saveAnalise = useCallback(async (a: NfpAnaliseEmpresa) => {
-        if (!currentUser) return;
+    // Devolve {ok}: quem chama decide se pode dizer "gerada" e navegar —
+    // toast de sucesso sobre gravação que falhou é o farol desonesto.
+    const saveAnalise = useCallback(async (a: NfpAnaliseEmpresa): Promise<{ ok: boolean }> => {
+        if (!currentUser) return { ok: false };
         try {
             // O serviço mescla com a versão do servidor antes de gravar —
             // lançamentos de outros colaboradores (departamentos) não são
@@ -307,8 +309,10 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             analiseBaselineRef.current = salva;
             setAnalise(salva);
             onShowToast?.('Análise salva com sucesso');
+            return { ok: true };
         } catch (e: any) {
             onShowToast?.('Erro ao salvar: ' + (e?.message || 'desconhecido'));
+            return { ok: false };
         }
     }, [currentUser, onShowToast]);
 
@@ -518,7 +522,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             uid,
         });
         setAnalise(nova);
-        await saveAnalise(nova);
+        const salvou = await saveAnalise(nova);
+        if (!salvou.ok) return; // o erro já foi dito; não navega nem promete
         onShowToast?.(`Análise manual gerada com ${nova.planoAcao.length} item(ns) no plano de ação.`);
         setTab('dashboard');
     }, [activeEmpresaId, createEmptyAnalise, currentUser, prospectMode, saveAnalise, onShowToast]);
@@ -556,7 +561,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             });
             updated.planoAcao = mesclarPlanoAcao(updated.planoAcao || [], planoGerado);
             setAnalise(updated);
-            await saveAnalise(updated);
+            const salvou = await saveAnalise(updated);
+            if (!salvou.ok) return;
             onShowToast?.(isMock
                 ? 'Análise concluída com DADOS SIMULADOS (SERPRO em modo teste)'
                 : `Varredura automática concluída — ${updated.planoAcao.length} item(ns) no plano de ação`);
@@ -580,7 +586,8 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             });
             const atualizada = { ...completa, analiseIA: bloco };
             setAnalise(atualizada);
-            await saveAnalise(atualizada);
+            const salvou = await saveAnalise(atualizada);
+            if (!salvou.ok) return;
             onShowToast?.('Análise da IA gerada com sucesso');
         } catch (e: any) {
             onShowToast?.('Erro ao gerar análise da IA: ' + (e?.message || 'desconhecido'));

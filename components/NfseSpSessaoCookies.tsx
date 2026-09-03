@@ -58,7 +58,9 @@ const NfseSpSessaoCookies: React.FC<Props> = ({ currentUser }) => {
             const r = await fetch('/api/admin/sefaz/nfsesp-portal-session', {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            const d = await r.json();
+            const d = await r.json().catch(() => ({}));
+            // 401/403/5xx não descrevem a sessão do portal — dizem que a consulta falhou.
+            if (!r.ok) { setStatus({ valida: false, motivo: `Não deu para consultar a sessão: ${d?.error || `HTTP ${r.status}`}` }); return; }
             setStatus(d);
         } catch (e: any) {
             setStatus({ valida: false, motivo: e.message });

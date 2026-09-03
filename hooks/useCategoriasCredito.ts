@@ -66,8 +66,16 @@ export function useCategoriasCredito(
         else novo.add(categoria);
         setCategoriasNaoCreditaveis(novo);  // otimista
         setSalvandoCategoriaCredito(categoria);
-        const r = await salvarCreditConfig(empresaId, Array.from(novo));
-        setSalvandoCategoriaCredito(null);
+        let r: { ok: boolean; error?: string };
+        try {
+            r = await salvarCreditConfig(empresaId, Array.from(novo));
+        } catch (e: any) {
+            // Rede que cai também é falha: sem isto o toggle otimista ficava
+            // de pé com o spinner preso.
+            r = { ok: false, error: e?.message || 'desconhecido' };
+        } finally {
+            setSalvandoCategoriaCredito(null);
+        }
         if (!r.ok) {
             // rollback em caso de falha
             setCategoriasNaoCreditaveis(categoriasNaoCreditaveis);

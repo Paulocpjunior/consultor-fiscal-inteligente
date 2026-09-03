@@ -3,7 +3,6 @@
  * (prints do Paulo, 24/07/2026). "Não pode haver erros": cada código/descrição
  * aqui foi conferido no documento oficial, não chutado.
  */
-// @ts-expect-error — módulo .js puro
 import { CODIGOS_DARE_ICMS, montarDare, normalizarReferencia, derivacoesDisponiveis, PORTAL_DARE_URL } from '../sefaz-backend/dare-sp.js';
 
 describe('CODIGOS_DARE_ICMS — conferidos nos DAREs reais', () => {
@@ -127,7 +126,6 @@ describe('dare-recon: extrairEstrutura (parser puro do reconhecimento)', () => {
     });
 });
 
-// @ts-expect-error — módulo .js puro
 import { CONVERSAO_GNRE_DARE_SP, codigoGnreParaDareSp } from '../sefaz-backend/dare-sp.js';
 
 describe('Conversão GNRE→DARE-SP (tabela oficial do portal GnreLote, 24/07/2026)', () => {
@@ -154,7 +152,6 @@ describe('Conversão GNRE→DARE-SP (tabela oficial do portal GnreLote, 24/07/20
     });
 });
 
-// @ts-expect-error — módulo .js puro
 import { montarLinhaLoteTxt, montarLoteTxt, SERVICOS_BLOQUEADOS_LOTE, MAX_DOCS_LOTE_DARE } from '../sefaz-backend/dare-sp.js';
 
 describe('Dare em Lote (TXT) — formato oficial da página DareLote (24/07/2026)', () => {

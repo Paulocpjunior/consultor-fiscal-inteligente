@@ -48,7 +48,8 @@ const ModalInvoiceManual: React.FC<ModalInvoiceManualProps> = ({
       return;
     }
     setSalvando(true);
-    const r = await adicionarInvoice({
+    try {
+      const r = await adicionarInvoice({
       empresaId,
       periodo: periodoNormalizado,
       emissao: emissao.trim(),
@@ -61,13 +62,17 @@ const ModalInvoiceManual: React.FC<ModalInvoiceManualProps> = ({
       aliquota: parseBR(aliquota),
       valorIss: parseBR(valorIss),
       issRetido: parseBR(issRetido),
-    });
-    setSalvando(false);
-    if (r.ok) {
-      onSalvo();
-      onFechar();
-    } else {
-      setErroLocal('Erro ao salvar: ' + (r.error || 'desconhecido'));
+      });
+      if (r.ok) {
+        onSalvo();
+        onFechar();
+      } else {
+        setErroLocal('Erro ao salvar: ' + (r.error || 'desconhecido'));
+      }
+    } catch (e: any) {
+      setErroLocal('Erro ao salvar: ' + (e?.message || 'desconhecido'));
+    } finally {
+      setSalvando(false);
     }
   };
 

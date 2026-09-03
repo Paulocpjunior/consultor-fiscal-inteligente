@@ -20,7 +20,7 @@ interface Props {
     setTaxaSelic: (v: number) => void;
     setAnalise: (a: NfpAnaliseEmpresa) => void;
     updateAnalise: (patch: Partial<NfpAnaliseEmpresa>) => void;
-    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<void>;
+    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<{ ok: boolean }>;
     renderEsferaSectionHeader: (esf: NfpEsfera, sublabel?: string) => React.ReactNode;
 }
 

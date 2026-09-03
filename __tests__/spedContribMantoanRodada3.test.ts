@@ -23,7 +23,6 @@
  *     DIREÇÃO do documento, não o CST. NAT_BC_CRED continua só com crédito —
  *     o PVA não acusou ele nestas linhas.
  */
-// @ts-ignore — módulo JS do backend
 import { buildBlocoA, COD_ITEM_SERVICO_GENERICO } from '../sefaz-backend/sped-contrib-blocos.js';
 // @ts-ignore
 import { camposDaLinha } from '../sefaz-backend/sped-contrib-campos.js';

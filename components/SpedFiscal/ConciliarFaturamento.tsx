@@ -15,6 +15,7 @@ import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { auth } from '../../services/firebaseConfig';
 import { formatCnpjCpf } from '../../services/xmlParserService';
 import { parseSped, conciliarFaturamento, type ConciliacaoFaturamento } from '../../services/spedFiscalExcelEditor';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 interface Props { currentUser: User | null; }
 
@@ -44,6 +45,9 @@ const ConciliarFaturamento: React.FC<Props> = ({ currentUser }) => {
         if (!currentUser) return;
         getEmpresasDisponiveis(currentUser).then(list => {
             setEmpresas(list);
+        }).catch((e: any) => {
+            // Lista vazia sem causa se lê como "não há empresas"; a falha vai DITA.
+            setErro(`Não deu para listar as empresas: ${e?.message || 'falha desconhecida'}`);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
@@ -57,8 +61,15 @@ const ConciliarFaturamento: React.FC<Props> = ({ currentUser }) => {
             if (!token) throw new Error('Sessão expirada');
 
             // 1. Busca o declarado se o admin não informou override
-            let declarado = parseFloat((declaradoOverride || '0').replace(/\./g, '').replace(',', '.'));
-            if (!declaradoOverride) {
+            // Override digitado passa pelo dono; ilegível RECUSA (cai no catch
+            // e vira o erro da tela) em vez de conciliar contra NaN.
+            let declarado = 0;
+            if (declaradoOverride.trim()) {
+                const lido = parseValorMoeda(declaradoOverride);
+                if (lido === null) throw new Error(`Não entendi o declarado informado "${declaradoOverride}" — use 1234,56.`);
+                declarado = lido;
+            }
+            if (!declaradoOverride.trim()) {
                 const qs = new URLSearchParams({ empresaId, competencia });
                 const resp = await fetch(`/api/admin/sped-fiscal/faturamento-declarado?${qs}`, {
                     headers: { Authorization: `Bearer ${token}` },

@@ -355,6 +355,32 @@ function montarNfseDigitada(i: NotaDigitadaInput): DocumentoFiscal {
  * · lá está um doc COM XML → RECUSA com o estado dito: o documento vence o
  *   retrato, e a recusa aponta a saída (conferir/editar não é digitar de novo).
  */
+/**
+ * 🚨 REGRAVAR NÃO TROCA O DONO DO DOCUMENTO.
+ *
+ * As `firestore.rules` de /documentos_fiscais só aceitam UPDATE quando
+ * `createdBy` fica igual ao gravado (ou quem grava é admin). A tela montava
+ * a nota com `createdByUid = uid de quem está logado`, então a COLEGA que
+ * corrigia a digitação de outra pessoa levava `permission-denied` — e o
+ * erro dizia "Missing or insufficient permissions", que manda procurar
+ * problema de permissão onde o problema é de AUTORIA (03/09).
+ *
+ * Régua: doc existente ⇒ mantém o `createdBy` dele; doc novo ⇒ o uid atual.
+ * Existente SEM `createdBy` (gravado por cron/admin antigo) cai no uid atual,
+ * porque a regra compara `request.resource.data.createdBy == resource.data.
+ * createdBy` e `null == null` passa — mas `undefined` some do JSON e faria a
+ * comparação falhar; o `?? uidAtual` evita gravar chave ausente. É o mesmo
+ * desenho do `payloadFinal` da importação de NFS-e em PDF.
+ */
+export function createdByParaRegravar(
+    existente: { createdBy?: string | null } | null | undefined,
+    uidAtual: string,
+): string {
+    if (!existente) return uidAtual;
+    const dono = existente.createdBy;
+    return (typeof dono === 'string' && dono) ? dono : uidAtual;
+}
+
 export function podeGravarSobre(existente: { origem?: string; xmlHash?: string } | null | undefined):
     { ok: boolean; motivo?: string } {
     if (!existente) return { ok: true };

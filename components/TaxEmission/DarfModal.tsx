@@ -13,6 +13,7 @@ import { emitirDarf, sugerirCodigoReceita } from '../../services/darfService';
 import { sugerirValorDarf, formatBRL } from '../../services/taxEmissionService';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 import { paraEmpresaOptions } from '../../services/empresaOption';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 interface Props {
     currentUser: User | null;
@@ -88,8 +89,12 @@ const DarfModal: React.FC<Props> = ({ currentUser, empresas, onClose, onEmitido,
 
     const handleEmitir = async () => {
         if (!empresa) return onShowToast?.('Selecione uma empresa');
-        const v = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
-        if (!v || v < 10) return onShowToast?.('Valor mínimo R$ 10,00');
+        // `replace(/\./g, '')` antes da vírgula fazia "1234.56" virar 123456 —
+        // DARF cem vezes maior, aceito pelo SICALC. O dono lê as três formas e
+        // devolve null no ilegível: recusa NOMEADA, nunca zero nem chute.
+        const v = parseValorMoeda(valor);
+        if (v === null) return onShowToast?.(`Não entendi o valor "${valor}" — use 1234,56. Nada foi emitido.`);
+        if (v < 10) return onShowToast?.('Valor mínimo R$ 10,00');
 
         setEmitindo(true);
         try {
@@ -277,7 +282,7 @@ const DarfModal: React.FC<Props> = ({ currentUser, empresas, onClose, onEmitido,
                             <div className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
                                 <div>Empresa: <span className="font-medium">{empresa.nome}</span></div>
                                 <div>{DARF_TRIBUTO_LABELS[tributo]} {regime} — competência {competencia}</div>
-                                <div>Código {codigoReceita || '—'} — valor principal {formatBRL(parseFloat(valor.replace(/\./g,'').replace(',','.')) || 0)}</div>
+                                <div>Código {codigoReceita || '—'} — valor principal {parseValorMoeda(valor) === null ? 'não entendi este valor — use 1234,56' : formatBRL(parseValorMoeda(valor) as number)}</div>
                             </div>
                         </div>
                     )}

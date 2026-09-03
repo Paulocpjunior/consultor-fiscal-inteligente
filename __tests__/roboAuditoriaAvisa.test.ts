@@ -25,6 +25,47 @@ import { join } from 'path';
 
 const yml = readFileSync(join(__dirname, '..', '.github/workflows/audit-deps.yml'), 'utf8');
 
+// ────────────────────────────────────────────────────────────────────────────
+// 🚨 03/09: O AVISO ERA UM PASSO DENTRO DO MESMO JOB — o modo de falha que ele
+// denuncia. Se o job morre antes de qualquer passo rodar ("Prepare all
+// required actions", o deploy 566 de 17/08) ou é CANCELADO pela cota, o
+// `if: failure()` de um passo nem executa. Job próprio com `needs`, sem
+// `uses:` — o mesmo desenho que o deploy-app.yml ganhou em 17/08.
+// ────────────────────────────────────────────────────────────────────────────
+describe('🚨 o aviso vive num JOB SEPARADO do robô', () => {
+    const doc = (require('js-yaml') as any).load(yml);
+
+    it('existe o job avisar-falha com `needs: auditar`', () => {
+        expect(doc.jobs['avisar-falha']).toBeTruthy();
+        expect(doc.jobs['avisar-falha'].needs).toBe('auditar');
+    });
+
+    it('dispara em falha E em cancelamento', () => {
+        const cond = String(doc.jobs['avisar-falha'].if);
+        expect(cond).toMatch(/failure\(\)/);
+        expect(cond).toMatch(/cancelled\(\)/);
+    });
+
+    it('NÃO usa action nenhuma, e tem a própria permissão de issue', () => {
+        const job = doc.jobs['avisar-falha'];
+        expect((job.steps || []).length).toBeGreaterThan(0);
+        for (const s of job.steps) expect(s.uses).toBeUndefined();
+        expect(job.permissions?.issues).toBe('write');
+    });
+
+    it('o job do robô não tem mais o passo de aviso dentro dele', () => {
+        const passos: any[] = doc.jobs.auditar.steps;
+        expect(passos.some((s) => /outro motivo/.test(String(s.name || '')))).toBe(false);
+        expect(passos.some((s) => /failure\(\)/.test(String(s.if || '')))).toBe(false);
+    });
+
+    it('sem checkout, o gh leva --repo explícito', () => {
+        const trecho = yml.slice(yml.indexOf('avisar-falha:'));
+        expect(trecho).toMatch(/gh issue list --repo "\$REPO"/);
+        expect(trecho).toMatch(/gh issue create --repo "\$REPO"/);
+    });
+});
+
 describe('🚨 o robô avisa quando ELE MESMO falha', () => {
     it('tem permissão de abrir issue — sem isso o aviso falha calado', () => {
         expect(yml).toMatch(/issues:\s*write/);

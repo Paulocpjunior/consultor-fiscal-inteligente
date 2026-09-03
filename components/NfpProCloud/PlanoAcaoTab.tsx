@@ -13,7 +13,7 @@ interface Props {
     analise: NfpAnaliseEmpresa;
     selectedEmpresaId: string;
     updateAnalise: (patch: Partial<NfpAnaliseEmpresa>) => void;
-    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<void>;
+    saveAnalise: (a: NfpAnaliseEmpresa) => Promise<{ ok: boolean }>;
 }
 
 const PlanoAcaoTab: React.FC<Props> = ({ analise, selectedEmpresaId, updateAnalise, saveAnalise }) => {

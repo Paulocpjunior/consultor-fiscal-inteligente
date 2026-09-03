@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import type { User, SimulacaoReforma, SimuladorIaResponse, RegimeReforma } from '../../types';
 import { simular, explicarSimulacao, formatBRL } from '../../services/simuladorReformaService';
 import SafeMarkdown from '../SafeMarkdown';
+import { parseValorMoeda } from '../../services/valorDigitado';
 
 interface Props {
     currentUser: User | null;
@@ -23,9 +24,12 @@ const SimuladorReforma: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [loadingIa, setLoadingIa] = useState(false);
 
     const handleSimular = async () => {
-        const fat = parseFloat(faturamentoStr.replace(/\./g, '').replace(',', '.'));
-        if (!fat || fat <= 0) { onShowToast?.('Faturamento inválido'); return; }
-        const das = parseFloat(dasAnualStr.replace(/\./g, '').replace(',', '.')) || 0;
+        const fat = parseValorMoeda(faturamentoStr);
+        if (fat === null) { onShowToast?.(`Não entendi o faturamento "${faturamentoStr}" — use 1234,56.`); return; }
+        if (fat <= 0) { onShowToast?.('Faturamento inválido'); return; }
+        // DAS anual é opcional: vazio é 0; preenchido e ilegível é RECUSA.
+        const das = dasAnualStr.trim() ? parseValorMoeda(dasAnualStr) : 0;
+        if (das === null) { onShowToast?.(`Não entendi o DAS anual "${dasAnualStr}" — use 1234,56.`); return; }
 
         setLoading(true);
         setAnalise(null);

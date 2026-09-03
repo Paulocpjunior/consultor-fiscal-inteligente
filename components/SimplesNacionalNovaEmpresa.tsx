@@ -17,7 +17,7 @@ interface SimplesNacionalNovaEmpresaProps {
         anexo: SimplesNacionalAnexo | 'auto',
         atividadesSecundarias?: SimplesNacionalAtividade[],
         dataAbertura?: string
-    ) => void;
+    ) => void | Promise<void>;
     onCancel: () => void;
     onShowToast?: (message: string) => void;
     initialData?: SimplesNacionalEmpresa | null;
@@ -154,7 +154,7 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!nome.trim() || !cnpj.trim() || !cnae.trim()) {
             setError('Todos os campos são obrigatórios.');
@@ -174,9 +174,15 @@ const SimplesNacionalNovaEmpresa: React.FC<SimplesNacionalNovaEmpresaProps> = ({
             });
         }
 
-        onSave(nome, cnpj, cnae, anexo, atividadesParaSalvar, dataAbertura || undefined);
-
-        if (onShowToast && !initialData) onShowToast("Empresa salva com sucesso!");
+        // O toast só sai DEPOIS de a gravação resolver: "salva com sucesso" antes
+        // do write era a promessa que a tela não cumpre. Falha fica escrita no
+        // formulário (que continua aberto) — quem gravou diz o motivo.
+        try {
+            await onSave(nome, cnpj, cnae, anexo, atividadesParaSalvar, dataAbertura || undefined);
+            if (onShowToast && !initialData) onShowToast("Empresa salva com sucesso!");
+        } catch (err: any) {
+            setError(`Não foi possível salvar: ${err?.message || 'falha desconhecida'}. A empresa NÃO foi gravada.`);
+        }
     };
 
     const handleCnpjVerification = async () => {
