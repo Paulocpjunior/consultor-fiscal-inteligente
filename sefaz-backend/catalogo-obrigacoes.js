@@ -75,6 +75,7 @@
 // ============================================================================
 
 import { ehDiaUtil } from './feriados-nacionais.js';
+import { ajustarDiaUtil } from './calendario-obrigacoes.js';
 import { resolverPrazoMunicipal, resolverPrazoEstadual } from './prazos-municipais.js';
 import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
 // 🏦 DeRE — "esta empresa está em regime específico de IBS/CBS?" tem dono
@@ -490,10 +491,13 @@ export function calcularVencimento(competencia, regra) {
         return d;
     }
 
-    const d = new Date(anoAlvo, mesAlvo, regra.diaVencimento);
-    const passo = regra.ajusteDiaNaoUtil === 'antecipa' ? -1 : 1;
-    while (!ehDiaUtil(d)) d.setDate(d.getDate() + passo);
-    return d;
+    // O ajuste de dia não útil tem DONO (`ajustarDiaUtil`, o mesmo do DARF):
+    // esta era a segunda cópia, com outro vocabulário de modo ('antecipa' aqui,
+    // 'antecipar' lá) — a política da casa é ANTECIPAR (Paulo, 11/08), e o
+    // campo da obrigação continua decidindo.
+    const modo = regra.ajusteDiaNaoUtil === 'antecipa' ? 'antecipar' : 'postergar';
+    const [y, m, dd] = ajustarDiaUtil(anoAlvo, mesAlvo + 1, Number(regra.diaVencimento), modo).split('-').map(Number);
+    return new Date(y, m - 1, dd);
 }
 
 /**

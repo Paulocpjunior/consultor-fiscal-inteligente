@@ -27,7 +27,7 @@ import { Router } from 'express';
 import https from 'https';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
-import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
+import { guardaLocalOuIrmao, PROJETO } from './require-cross-project-auth.js';
 import { loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import {
     assinarEventoReinf, extrairEvento, extrairPemDoPfx, montarLote,
@@ -45,16 +45,10 @@ function getDb() {
     return admin.firestore();
 }
 
-// Só o Contábil (e o próprio CFI) — transmitir EFD-Reinf não é pra qualquer
-// módulo; DP e Financeiro não entram de lambuja.
-const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil]);
-async function autorizar(req, res, next) {
-    let passou = false;
-    const engolir = { status() { return engolir; }, json() { return engolir; } };
-    await requireAdmin(req, engolir, () => { passou = true; });
-    if (passou) return next();
-    return doIrmao(req, res, next);
-}
+// Só o Contábil chega pelo túnel — transmitir EFD-Reinf não é pra qualquer
+// módulo; DP e Financeiro não entram de lambuja. Token do PRÓPRIO CFI é julgado
+// pelo requireAdmin, e o veredito dele é final (ver guardaLocalOuIrmao).
+const autorizar = guardaLocalOuIrmao(requireAdmin, [PROJETO.contabil]);
 
 /** mTLS com a Receita — a chave abre a conexão DAQUI, e é esse o ponto. */
 function requisicaoMtls({ url, method, body, pfxBuffer, password }) {
@@ -121,7 +115,9 @@ router.post('/transmitir', autorizar, async (req, res) => {
         await getDb().collection('reinf_gateway_lotes').add({
             em: admin.firestore.FieldValue.serverTimestamp(),
             por: req.user?.email || null,
-            projetoOrigem: req.user?.projeto || 'cfi',
+            // `projectId` é o campo que o crossProjectAuth grava (era `projeto`, que
+            // não existe — todo lote do Contábil saía carimbado 'cfi').
+            projetoOrigem: req.user?.projectId || 'cfi',
             declarante: String(contribuinte?.nrInsc || '').replace(/\D/g, ''),
             tpAmb: amb.tpAmb,
             eventos: assinados.map((x) => extrairEvento(x).id),

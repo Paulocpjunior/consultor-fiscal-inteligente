@@ -44,3 +44,13 @@ export function montarLinhaLoteTxt(input: {
     valor: number;
     vencimento: string;
 }): string;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function montarLoteTxt(...args: any[]): any;
+export function codigoGnreParaDareSp(codigo: unknown): any;
+export function normalizarReferencia(v: unknown): string;
+export const CONVERSAO_GNRE_DARE_SP: Record<string, any>;
+export const MAX_DOCS_LOTE_DARE: number;
+export const PORTAL_DARE_URL: string;
+export const SERVICOS_BLOQUEADOS_LOTE: readonly string[];

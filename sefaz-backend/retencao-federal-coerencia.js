@@ -27,7 +27,8 @@
 // CONTORNO.
 // ============================================================================
 
-const ALIQ = { pis: 0.65, cofins: 3.00, csll: 1.00 };
+/** As três alíquotas da CSRF (Lei 10.833/2003, art. 30) — DONO ÚNICO. */
+export const ALIQ = { pis: 0.65, cofins: 3.00, csll: 1.00 };
 
 /**
  * Alíquotas do PIS/COFINS **do prestador** no regime NÃO-CUMULATIVO. Não são

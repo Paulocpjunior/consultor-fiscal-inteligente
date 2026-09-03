@@ -3,6 +3,7 @@ import { getDasMode } from './das-provider.js';
 import { getDctfwebMode } from './dctfweb-provider.js';
 import { getProviderMode as getCaixaPostalMode } from './caixa-postal-provider.js';
 import { consultarPagamentosTributarios } from './fiscal-payments-connector.js';
+import { secretsMatch } from './cron-secret.js';
 
 const router = express.Router();
 const BRIDGE_TOKEN = String(process.env.FISCAL_GATEWAY_TOKEN || process.env.PLANO_CONTAS_INTERNAL_TOKEN || '').trim();
@@ -20,7 +21,9 @@ function requireBridgeToken(req, res, next) {
             error: 'FISCAL_GATEWAY_TOKEN nao configurado no app fiscal',
         });
     }
-    if (tokenDaRequisicao(req) !== BRIDGE_TOKEN) {
+    // Comparação em tempo constante — era o ÚNICO segredo do backend ainda
+    // comparado com `!==` (o cron-secret.js existe justamente para isso).
+    if (!secretsMatch(tokenDaRequisicao(req), BRIDGE_TOKEN)) {
         return res.status(403).json({ ok: false, error: 'token interno invalido' });
     }
     next();
@@ -30,7 +33,9 @@ function cnpjLimpo(v) {
     return String(v || '').replace(/\D/g, '');
 }
 
-router.get('/status', (_req, res) => {
+// requireBridgeToken também aqui: sem guarda o /status dizia a qualquer um se o
+// token está configurado e em qual modo cada provider roda.
+router.get('/status', requireBridgeToken, (_req, res) => {
     res.json({
         ok: true,
         bridge: !!BRIDGE_TOKEN,

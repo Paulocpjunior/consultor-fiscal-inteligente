@@ -786,9 +786,13 @@ router.get('/status', async (req, res) => {
         const m = authHeader.match(/^Bearer\s+(.+)$/i);
         if (!m) return res.status(401).json({ error: 'Token ausente' });
 
-        await fa().auth().verifyIdToken(m[1]);
+        const decoded = await fa().auth().verifyIdToken(m[1]);
 
         const db = fa().firestore();
+        // Mesma régua dos vizinhos /config e /auto-sync: o histórico do sync e a
+        // lista de empresas ligadas são de ADMIN, não de qualquer token válido.
+        const uDoc = await db.collection('users').doc(decoded.uid).get();
+        if ((uDoc.data() || {}).role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
 
         const lastLogSnap = await db.collection('sharepoint_sync_log')
             .orderBy('timestamp', 'desc')

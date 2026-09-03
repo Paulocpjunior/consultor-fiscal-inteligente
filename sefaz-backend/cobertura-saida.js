@@ -16,6 +16,8 @@
 // nunca entrega ao proprio emissor as notas que ele mesmo emitiu.
 // ============================================================================
 
+import { cnpjEmitente } from './participante-doc-helper.js';
+
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /** Modelo do DFe = posicoes 21-22 da chave de 44 digitos ('55'=NF-e, '65'=NFC-e). */
@@ -163,7 +165,9 @@ export function analisarCoberturaSaida({ empresas, docs, hojeMs, janelaDias = 90
     // Atribui pelo empresaId gravado; fallback pela raiz do emitente.
     let rec = d.empresaId ? porId.get(d.empresaId) : null;
     if (!rec) {
-      const cEmit = String(d.cnpjEmit || d.empresaCnpj || '').replace(/\D/g, '');
+      // Emitente pelo DONO (achatado E aninhado): a nota importada por XML
+      // grava `emitente.cnpjCpf`, e lendo só `cnpjEmit` ela nunca casava.
+      const cEmit = String(cnpjEmitente(d) || d.empresaCnpj || '').replace(/\D/g, '');
       if (cEmit.length === 14) rec = porRaiz.get(cEmit.slice(0, 8));
     }
     if (!rec) continue;

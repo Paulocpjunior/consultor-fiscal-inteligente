@@ -16,7 +16,7 @@ function modeloPro(req) {
 }
 
 // GET /status — modo atual
-router.get('/status', (_req, res) => {
+router.get('/status', requireAuth, (_req, res) => {
     res.json({ mode: 'ativo', teses: getCatalogoTeses().length });
 });
 

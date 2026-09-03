@@ -272,6 +272,19 @@ const rateLimitKey = (req) => {
     const auth = req.headers.authorization || '';
     return auth ? `auth:${auth.slice(-48)}` : req.ip;
 };
+// 🚨 A chave acima é CONTROLADA por quem chama: trocar o header Authorization a
+// cada requisição abre um balde novo de 600/min por vez — o limite geral não
+// limitava nada para quem variasse um header, e cada token falso ainda custa
+// um verifyIdToken + leitura de `users`. Este TETO é por IP e vem ANTES: ele
+// não substitui o balde por token (o escritório inteiro sai por um NAT e 600
+// seria pouco para todo mundo), só fecha a rotação. 3000/min por IP é muito
+// acima do uso humano de um escritório e muito abaixo de uma inundação.
+const ipCeilingLimiter = rateLimit({
+    windowMs: 60_000, max: Number(process.env.RATE_LIMIT_TETO_POR_IP || 3000),
+    standardHeaders: false, legacyHeaders: false,
+    skip: (req) => isCronRequest(req),
+    message: { error: 'Muitas requisições deste endereço em pouco tempo. Aguarde um momento.' },
+});
 // Limite geral anti-flood em toda a API.
 const apiLimiter = rateLimit({
     windowMs: 60_000, max: 600,
@@ -330,10 +343,12 @@ const sefazWindowLimiter = rateLimit({
 });
 app.use('/api/admin/cert-empresa', certEmpresaLimiter);
 app.use('/api/admin/sefaz/window', sefazWindowLimiter);
+app.use('/api/', ipCeilingLimiter);
 app.use('/api/', apiLimiter);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
-app.use('/api/admin/cnpj-lookup', cnpjLookupLimiter);
+// (cnpjLookupLimiter entra NA ROTA, depois do requireAuth — montado aqui
+// ele rodava antes de `req.user` existir e a chave por usuário nunca ativava.)
 app.use('/api/agent', agentLimiter);
 
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
@@ -594,7 +609,10 @@ app.get('/ready', async (_req, res) => {
     } catch (e) {
         out.status = 'not_ready';
         out.firestore = 'error';
-        out.motivo = String(e && e.message || e).slice(0, 200);
+        // /ready é público (é o canário do deploy): a mensagem crua do
+        // firebase-admin carrega caminho de secret e id de projeto — passa
+        // pelo mesmo sanitizador dos 500.
+        out.motivo = sanitizeError(e).error;
         return res.status(503).json(out);
     }
 });
@@ -849,7 +867,7 @@ Use **negrito** nos pontos-chave. Direto, sem rodeios.`;
 });
 
 // ─── Consulta CNPJ via BrasilAPI (proxy para CSP) ────────────────────────
-app.get('/api/admin/cnpj-lookup/:cnpj', requireAuth, async (req, res) => {
+app.get('/api/admin/cnpj-lookup/:cnpj', requireAuth, cnpjLookupLimiter, async (req, res) => {
     const cnpj = (req.params.cnpj || '').replace(/\D/g, '');
     if (!cnpj || cnpj.length !== 14) return res.status(400).json({ error: 'CNPJ inválido' });
 
@@ -3213,6 +3231,14 @@ app.post('/api/tarefas/gerar-empresa', express.json(), async (req, res) => {
 // throws sincronos em handlers (Express 5). Sanitiza msg antes de devolver
 // ao cliente. PRECISA ser o ultimo middleware registrado.
 app.use(errorMiddleware);
+
+// Rede para promise rejeitada fora de handler (setImmediate de backfill, laço
+// de webhook): no Node 20 o padrão é DERRUBAR o processo — e o Cloud Run mata a
+// instância no meio de uma captura por causa de um Firestore que piscou. Loga
+// e segue; quem precisava de resposta já a teve.
+process.on('unhandledRejection', (reason) => {
+    console.error('[server] unhandledRejection:', reason && reason.stack || reason);
+});
 
 app.listen(PORT, () => {
     console.log('Servidor rodando na porta ' + PORT);

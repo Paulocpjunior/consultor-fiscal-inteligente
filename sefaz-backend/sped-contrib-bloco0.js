@@ -32,7 +32,7 @@ import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
 import { montar0500ContaReceita } from './receita-aplicacao-financeira.js';
 // TIPO_ITEM/NCM do item de serviço — régua única, a mesma que os dois
 // orquestradores usam para classificar o item.
-import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-documentos.js';
+import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA, normalizarUnidade } from './sped-selecao-documentos.js';
 // A natureza da PJ (IND_NAT_PJ) sai do CADASTRO — nunca do regime, que é outro
 // eixo. Aqui só se lê o regime para SABER quando o '00' é uma afirmação falsa.
 import { regimeDaEmpresa, semFinsLucrativos } from './regime-tributario.js';
@@ -354,7 +354,10 @@ function build0200(item) {
         fmt.sanitizeString(item.descricao, 255),
         fmt.sanitizeString(item.codBarra || '', 14),
         '',  // COD_ANT_ITEM
-        fmt.sanitizeString(item.unidade || 'UN', 6),
+        // Mesma normalização do 0190 (trim + maiúscula): 'un' no cadastro não
+        // casava com o 'UN' da tabela — a correção do EFD ICMS/IPI não tinha
+        // entrado aqui (a "meia trava" de sempre).
+        normalizarUnidade(item.unidade) || 'UN',
         item.tipo || TIPO_ITEM_MERCADORIA_REVENDA,
         ehServico ? '' : fmt.sanitizeString(item.ncm || '00000000', 8),
         '',  // EX_IPI

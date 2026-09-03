@@ -49,6 +49,68 @@ export const PROJETO = {
 
 const DOMINIO_PERMITIDO = '@spassessoriacontabil.com.br';
 
+const ISSUER_PREFIXO = 'https://securetoken.google.com/';
+
+/**
+ * Projeto Firebase que EMITIU o token — lido do `iss`, SEM verificar assinatura.
+ *
+ * Serve só para ROTEAR a guarda (local × app irmão); quem verifica assinatura,
+ * audience e validade é a guarda escolhida. Token ausente, malformado ou de
+ * issuer que não é do Firebase devolve null.
+ */
+export function projetoDoToken(req) {
+    const auth = (req && req.headers && req.headers.authorization) || '';
+    const m = String(auth).match(/^Bearer\s+(.+)$/i);
+    if (!m) return null;
+    const parts = m[1].split('.');
+    if (parts.length !== 3) return null;
+    try {
+        const payload = JSON.parse(base64UrlDecode(parts[1]));
+        const iss = String(payload.iss || '');
+        return iss.startsWith(ISSUER_PREFIXO) ? iss.slice(ISSUER_PREFIXO.length) : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Guarda "admin/usuário do CFI OU app irmão pelo túnel" — a composição que
+ * quatro routers escreviam à mão com uma resposta de MENTIRA (`engolir`).
+ *
+ * 🚨 O desenho antigo era: tenta `requireAdmin` com um `res` falso; se ele
+ * recusar, cai no `crossProjectAuth([...])`. Como a lista dos irmãos incluía o
+ * PRÓPRIO projeto do CFI, um colaborador comum recusado pelo requireAdmin (403)
+ * era ACEITO na segunda tentativa — o cross-project só olha issuer, domínio e
+ * e-mail verificado, não o papel. Ou seja: transmitir EFD-Reinf em produção,
+ * ler o cadastro central e mandar WhatsApp ao cliente exigiam só "estar
+ * logado". E a trava de HORÁRIO do requireAuth era engolida do mesmo jeito:
+ * o bloqueio ficava gravado como prova e a requisição passava.
+ *
+ * Aqui quem decide é o ISSUER do token: token de app IRMÃO permitido vai para
+ * o cross-project; qualquer outro (este projeto, sem token, torto) vai para a
+ * guarda LOCAL, cujo veredito — 401, 403, horário — é FINAL e chega ao
+ * cliente com a mensagem dela. O projeto do CFI NUNCA entra na lista dos
+ * irmãos: a guarda local é quem julga o próprio token.
+ *
+ * @param {Function} guardaLocal  requireAdmin / requireAuth (ou wrapper)
+ * @param {string[]} projetosIrmaos ids `PROJETO.*` dos apps irmãos aceitos
+ */
+export function guardaLocalOuIrmao(guardaLocal, projetosIrmaos) {
+    const irmaos = (projetosIrmaos || []).filter(Boolean);
+    if (irmaos.includes(PROJETO.fiscal)) {
+        throw new Error('guardaLocalOuIrmao: o projeto do CFI não entra na lista de irmãos — quem julga o token local é a guarda local');
+    }
+    if (!irmaos.length) throw new Error('guardaLocalOuIrmao exige ao menos um app irmão');
+    const doIrmao = crossProjectAuth(irmaos);
+    return async function middleware(req, res, next) {
+        const projeto = projetoDoToken(req);
+        if (projeto && projeto !== PROJETO.fiscal && irmaos.includes(projeto)) {
+            return doIrmao(req, res, next);
+        }
+        return guardaLocal(req, res, next);
+    };
+}
+
 // Cache das chaves públicas do Google (auto-refresh a cada hora)
 let _publicKeysCache = { keys: null, fetchedAt: 0 };
 const KEYS_TTL_MS = 60 * 60 * 1000;
@@ -171,8 +233,10 @@ export function crossProjectAuth(projetos) {
             req.user = decoded;
             next();
         } catch (e) {
+            // O detalhe (issuer/audience/e-mail recusado) fica no log: devolvê-lo
+            // entregava a quem sonda a semântica da allowlist e confirmava e-mails.
             console.error('[require-cross-project-auth]', e.message);
-            return res.status(401).json({ error: 'Token inválido: ' + e.message });
+            return res.status(401).json({ error: 'Token inválido ou não autorizado para este túnel.' });
         }
     };
 }

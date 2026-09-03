@@ -36,7 +36,7 @@ import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
-import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
+import { guardaLocalOuIrmao, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
 import { validarAjusteRetencao } from './retencao-pj-ajuste.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
@@ -95,25 +95,15 @@ function getDb() {
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 const COMPETENCIA = /^\d{4}-\d{2}$/;
 
-const doContabil = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil]);
-
 /**
  * Admin do CFI OU usuário do Consultor Contábil.
  *
- * Tenta o admin primeiro (é quem abre a tela daqui) e, se o token não for
- * deste projeto, cai no cross-project. A resposta de erro é a do SEGUNDO —
- * "token de outro projeto" seria uma mensagem que não ajuda ninguém a agir.
+ * O issuer do token decide a guarda: token do Contábil vai ao cross-project,
+ * token do próprio CFI vai ao requireAdmin — e o veredito dele é FINAL. O
+ * desenho antigo engolia a recusa do requireAdmin e caía num cross-project que
+ * aceitava o PRÓPRIO projeto, ou seja qualquer colaborador logado passava.
  */
-async function autorizar(req, res, next) {
-    // Resposta de mentira: o requireAdmin responde 401/403 quando recusa, e
-    // recusar aqui é normal (token do outro app). Engolimos a resposta dele
-    // pra que só a segunda tentativa fale com o cliente.
-    let passou = false;
-    const engolir = { status() { return engolir; }, json() { return engolir; } };
-    await requireAdmin(req, engolir, () => { passou = true; });
-    if (passou) return next();
-    return doContabil(req, res, next);
-}
+const autorizar = guardaLocalOuIrmao(requireAdmin, [PROJETO.contabil]);
 
 // ────────────────────────────────────────────────────────────────────────────
 // ✍️ AJUSTE DE RETENÇÃO — 1 doc por EMPRESA × COMPETÊNCIA, com um mapa por

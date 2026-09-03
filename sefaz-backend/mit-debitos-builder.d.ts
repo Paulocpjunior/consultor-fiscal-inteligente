@@ -24,3 +24,10 @@ export function montarDebitosMit(
 export function maiorIdDebitoMit(debitos: any): number;
 
 export function mesclarDebitosMit(existentes: any, novos: any): Record<string, { ListaDebitos: any[] }>;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function montarDebitosRetificacaoMit(...args: any[]): any;
+export const ORDEM_DEBITOS_MIT: readonly string[];
+export const FAMILIAS: Record<string, any>;
+export function sufixoEstabelecimento(...args: any[]): string;

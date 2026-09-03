@@ -28,7 +28,7 @@ const router = express.Router();
 // requireEmissao/requireAuth vem do middleware compartilhado (verifyIdToken).
 // Emissao: admin OU colaborador com permissao 'Central de Emissões' liberada.
 
-router.get('/status', (_req, res) => {
+router.get('/status', requireAuth, (_req, res) => {
     res.json({ mode: getDasMode(), ok: true });
 });
 

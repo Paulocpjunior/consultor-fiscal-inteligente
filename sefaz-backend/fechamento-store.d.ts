@@ -33,3 +33,7 @@ export function idDoFechamento(empresaId: unknown, competencia: unknown): string
 export function lerFechamentoDaCompetencia(
     db: unknown, empresaId: unknown, competencia: unknown,
 ): Promise<any | null>;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function lerFechamentosDaCompetencia(db: unknown, competencia: string): Promise<Map<string, any>>;

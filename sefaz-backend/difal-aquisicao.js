@@ -20,7 +20,7 @@
 import {
     cnpjEmitente, nomeEmitente, ufEmitente, modeloDoDoc,
 } from './participante-doc-helper.js';
-import { classificarItensDifal } from './difal-itens.js';
+import { classificarItensDifal, aliqInterestadualDoItem } from './difal-itens.js';
 
 // Régua única do cancelamento (status + cStat + evento 110111).
 import { docCancelado } from './xml-metadata-helper.js';
@@ -28,20 +28,12 @@ const so = (v) => String(v || '').replace(/\D/g, '');
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-/** UFs cuja saída para SP é 12% (Sul/Sudeste, exceto ES). */
-const UF_INTER_12 = new Set(['SP', 'RJ', 'MG', 'RS', 'SC', 'PR']);
-/** Origem do produto que força 4% (importado/conteúdo importação >40%). */
-const ORIG_4PCT = new Set(['1', '2', '3', '8']);
-
 export const ALIQ_INTERNA_PADRAO_SP = 18;
 
-/** Alíquota interestadual do item: destacada na nota vence; senão deriva. */
-export function aliqInterestadualDoItem(item, ufOrigem) {
-    const destacada = Number(item?.aliqIcms) || 0;
-    if (destacada > 0) return { aliq: destacada, derivada: false };
-    if (ORIG_4PCT.has(String(item?.orig ?? ''))) return { aliq: 4, derivada: true };
-    return { aliq: UF_INTER_12.has(String(ufOrigem || '').toUpperCase()) ? 12 : 7, derivada: true };
-}
+// A alíquota interestadual do item tem DONO ÚNICO em `difal-itens.js` (era a
+// terceira cópia da mesma tabela — ver o comentário lá). Re-exportada porque
+// as rotas e os testes já a importam daqui.
+export { aliqInterestadualDoItem };
 
 /**
  * Apuração mensal consolidada do DIFAL de aquisição (cliente do Simples).

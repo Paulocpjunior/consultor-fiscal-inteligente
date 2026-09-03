@@ -5,7 +5,7 @@
 // ============================================================================
 
 import express from 'express';
-import { requireEmissao } from './require-admin.js';
+import { requireAuth, requireEmissao } from './require-admin.js';
 import {
     emitirDarf, listarDarfs, getResumoDarf,
     marcarPago, processarVencimentos,
@@ -25,7 +25,7 @@ async function cnpjsPermitidos(user) {
     return cnpjs ? new Set(cnpjs) : null;
 }
 
-router.get('/status', (_req, res) => {
+router.get('/status', requireAuth, (_req, res) => {
     res.json({ mode: getDarfMode(), ok: true });
 });
 

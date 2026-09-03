@@ -188,7 +188,7 @@ router.get('/varredura', requireAuth, async (req, res) => {
                     // dispara — a nota importada pelo navegador (que grava SÓ
                     // `totais.vNF`) entrava valendo ZERO na base do FUNRURAL.
                     'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'emitente', 'destinatario', 'tpNF',
-                    'valorTotal', 'totais.vNF', 'totais.vProd',
+                    'valorTotal', 'totais.vNF', 'totais.vProd', 'totais.vServ', 'valores.total', 'valor', 'vNF', 'totalNota',
                     'cnpjEmit', 'xNomeEmit', 'ufEmit', 'codMunEmit',
                     'cnpjDest', 'xNomeDest', 'ieDest', 'ufDest', 'codMunDest',
                 ),

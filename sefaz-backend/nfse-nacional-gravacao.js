@@ -87,7 +87,8 @@ export function documentoDaNfseNacional(meta, empresaCnpj) {
     const m = meta || {};
     const direcao = direcaoDaNfseNacional(m, empresaCnpj);
     const competencia = competenciaDaEmissao(m.dataEmissao);
-    const valor = Number(m.valorServico);
+    // `Number(null)` é 0 e passaria por valor real: ausência fica NaN.
+    const valor = (m.valorServico == null || m.valorServico === '') ? NaN : Number(m.valorServico);
 
     const out = {
         // O app inteiro pergunta `tipo === 'NFSe'`; `tipoDoc` guarda o trilho,
@@ -140,7 +141,7 @@ export function lacunasDaNfseNacional(meta, empresaCnpj) {
     if (!competenciaDaEmissao(meta?.dataEmissao)) {
         faltas.push('competência (data de emissão ilegível)');
     }
-    if (!Number.isFinite(Number(meta?.valorServico))) {
+    if (meta?.valorServico == null || meta?.valorServico === '' || !Number.isFinite(Number(meta?.valorServico))) {
         faltas.push('valor do serviço');
     }
     return faltas;

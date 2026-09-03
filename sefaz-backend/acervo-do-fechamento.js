@@ -130,8 +130,10 @@ export function recortarPeloFechamento(documentos, fechamento) {
         foraDoCorte: fora,
         semCarimboDeChegada: semCarimbo,
         corte,
-        documentosNoCarimbo: Number.isFinite(Number(fechamento?.corte?.documentos?.total))
-            ? Number(fechamento.corte.documentos.total) : null,
+        // `Number(null)` é 0 — carimbo sem contagem virava "zero documentos".
+        documentosNoCarimbo: (fechamento?.corte?.documentos?.total == null)
+            ? null
+            : (Number.isFinite(Number(fechamento.corte.documentos.total)) ? Number(fechamento.corte.documentos.total) : null),
     };
 }
 

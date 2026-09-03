@@ -25,7 +25,7 @@ const router = express.Router();
 // Auth básica — só admin
 // requireAdmin agora vem do middleware compartilhado (verifyIdToken)
 
-router.get('/status', (_req, res) => {
+router.get('/status', requireAuth, (_req, res) => {
     res.json({ mode: getProviderMode(), ok: true });
 });
 

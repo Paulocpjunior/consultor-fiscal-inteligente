@@ -115,3 +115,9 @@ export function notaForaDoFunruralPorDecisao(
     cadastro: unknown,
     chave: string | null | undefined,
 ): boolean;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function ehCfopCompraProducao(cfop: unknown): boolean;
+export function percentualFunruralVigente(competencia: string, opts?: any): any;
+export function tipoSocietarioNoNome(nome: unknown): string | null;

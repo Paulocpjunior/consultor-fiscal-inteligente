@@ -116,12 +116,14 @@ function extrairMetadadosNfse(xml) {
             ? tomador.cnpjCpf : undefined,
         tomadorCpf: (tomador.cnpjCpf && tomador.cnpjCpf.length === 11)
             ? tomador.cnpjCpf : undefined,
-        // ⚠️ Aqui o `?? 0` é do CONTRATO ANTIGO desta função (a gravação já
-        // trata o zero), mas a AUSÊNCIA vai DITA em `lacunas` — que é o que o
-        // `lacunasDaNfseNacional` existe para carregar.
-        valorServico: lida.valores.servico ?? 0,
-        valorIss: lida.valores.iss ?? 0,
-        aliquotaIss: lida.valores.aliquotaIss ?? 0,
+        // 🚨 AUSÊNCIA NÃO VIRA ZERO (03/09): o `?? 0` que morava aqui colapsava
+        // "não li o valor" em "vale R$ 0,00" ANTES de a gravação e as lacunas
+        // olharem — `Number.isFinite(0)` é true, então a lacuna nunca saía e a
+        // nota entrava valendo zero no faturamento e na base do PIS/COFINS.
+        // Presença desconhecida viaja como null; quem grava decide.
+        valorServico: lida.valores.servico ?? null,
+        valorIss: lida.valores.iss ?? null,
+        aliquotaIss: lida.valores.aliquotaIss ?? null,
         lacunasLeitura: lida.lacunas,
     };
 }

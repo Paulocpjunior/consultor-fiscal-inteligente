@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { issDoDocumento } from './xml-metadata-helper.js';
+import { ufDoDestinatarioDoc, ufEmitente } from './participante-doc-helper.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -328,8 +329,12 @@ async function analisarIssLocal(empresaId, empresa) {
 
     porId.forEach(doc => {
         if (doc._merged_into || doc._deleted) return; // ignora docs marcados como duplicata
-        const tomadorUf = doc.tomador?.uf || doc.destinatario?.uf || '';
-        const prestadorUf = doc.prestador?.uf || doc.emitente?.uf || '';
+        // 🚨 As UFs nas DUAS formas (o importer grava `ufDest`/`ufEmit`
+        // ACHATADOS): lendo só o bloco aninhado, toda NFS-e do portal/ABRASF/ADN
+        // vinha com UF vazia e a tese respondia "sem oportunidade" sobre notas
+        // que ela nunca comparou — o mesmo defeito do `issValor` logo abaixo.
+        const tomadorUf = String(doc.tomador?.uf || ufDoDestinatarioDoc(doc) || '').toUpperCase();
+        const prestadorUf = String(doc.prestador?.uf || ufEmitente(doc) || '').toUpperCase();
         // 🚨 `doc.valores?.iss` é a forma que SÓ o import pelo navegador grava.
         // Lendo uma só, `issValor` era 0 em toda nota do portal/ABRASF/ADN e o
         // `> 0` abaixo descartava tudo — a tese afirmava "sem oportunidade"

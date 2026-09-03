@@ -68,7 +68,7 @@ router.get('/xml-bruto', requireAuth, async (req, res) => {
         if (!existe) {
             return res.status(404).json({
                 ok: false,
-                error: `O XML não está no Storage (${d.storagePath}). O registro existe no banco, mas o arquivo se perdeu — `
+                error: 'O XML não está no Storage. O registro existe no banco, mas o arquivo se perdeu — '
                     + 'recapture a nota (Consulta por chave) ou importe o arquivo do cliente.',
             });
         }

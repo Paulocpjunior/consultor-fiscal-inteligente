@@ -105,7 +105,10 @@ export function planejarBlocoH({ itens, exigido, motInv } = {}) {
         const indProp = String(it.indPropInventario || '0');
         return {
             codItem: it.codItem,
-            unidade: it.unidade || 'UN',
+            // SEM default: inventar a unidade do inventário muda a leitura da
+            // QUANTIDADE (a decisão está em sped-selecao-documentos.js). Vazio
+            // sai vazio, e o PVA acusa — CX contado como UN ele não acusa.
+            unidade: it.unidade || '',
             qtd,
             vlUnit,
             vlItem: Math.round(qtd * vlUnit * 100) / 100,

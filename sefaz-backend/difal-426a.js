@@ -30,6 +30,8 @@
 // Índice de Portaria não se adivinha (mesma regra do código de tributo).
 // ============================================================================
 
+import { aliqInterestadualDoItem } from './difal-itens.js';
+
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
@@ -222,9 +224,7 @@ export function apurarAntecipacoes426APorItem(linhasComSt, ivaPorItem = {}, aliq
         for (const it of nota?.itens || []) {
             const p = ivaPorItem[`${nota.chave}|${it.nItem}`] || {};
             const aliqInterna = num(p.aliqInterna) > 0 ? p.aliqInterna : num(nota.aliqInterna) || aliqInternaPadrao;
-            const aliqInter = num(it.aliqIcms) > 0
-                ? num(it.aliqIcms)
-                : aliqInterestadualDerivada(it.orig, nota.ufOrigem);
+            const aliqInter = aliqInterestadualDoItem(it, nota.ufOrigem).aliq;
 
             const r = calcularAntecipacao426A(
                 {
@@ -290,8 +290,5 @@ export function apurarAntecipacoes426APorItem(linhasComSt, ivaPorItem = {}, aliq
     };
 }
 
-/** Interestadual derivada quando o item não destaca pICMS. */
-function aliqInterestadualDerivada(orig, ufOrigem) {
-    if (['1', '2', '3', '8'].includes(String(orig ?? ''))) return 4;
-    return ['SP', 'RJ', 'MG', 'RS', 'SC', 'PR'].includes(String(ufOrigem || '').toUpperCase()) ? 12 : 7;
-}
+// A alíquota interestadual do item tem DONO ÚNICO em `difal-itens.js` — a
+// tabela abaixo estava copiada aqui como literal (terceira cópia).

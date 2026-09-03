@@ -62,3 +62,7 @@ export function montarProntidaoMigracao(
  * empresas de serviço de Brasília). Lê a forma achatada e a aninhada.
  */
 export function contribuinteIcms(empresa: unknown): boolean;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function entregaEfdIcms(empresa: unknown): boolean;

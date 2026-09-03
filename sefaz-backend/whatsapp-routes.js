@@ -22,7 +22,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { requireAdmin, requireAuth } from './require-admin.js';
-import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
+import { guardaLocalOuIrmao, PROJETO } from './require-cross-project-auth.js';
 import {
     validarTemplate, resolverTemplate, montarVariaveisPorSchema,
     DEPARTAMENTOS_WHATSAPP, validarNovoTemplateMeta,
@@ -88,26 +88,19 @@ function getDb() {
     return admin.firestore();
 }
 
-// Admin do CFI OU app irmão (os 5) com e-mail verificado do domínio.
-const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil, PROJETO.dpFolha, PROJETO.financeiro]);
-async function autorizar(req, res, next) {
-    let passou = false;
-    const engolir = { status() { return engolir; }, json() { return engolir; } };
-    await requireAdmin(req, engolir, () => { passou = true; });
-    if (passou) { req._ehAdmin = true; return next(); }
-    return doIrmao(req, res, next);
-}
+// Admin do CFI OU app irmão (Contábil, DP, Financeiro) com e-mail verificado
+// do domínio. Token do próprio CFI é julgado pela guarda LOCAL, e o veredito
+// dela é FINAL — inclusive a trava de horário (ver guardaLocalOuIrmao).
+const IRMAOS = [PROJETO.contabil, PROJETO.dpFolha, PROJETO.financeiro];
+const autorizar = guardaLocalOuIrmao(
+    (req, res, next) => requireAdmin(req, res, () => { req._ehAdmin = true; next(); }),
+    IRMAOS,
+);
 
 // LEITURA do cadastro de templates: qualquer usuário logado (o atendente do
 // SP Connect escolhe template pra iniciar conversa) OU app irmão pelo túnel.
 // Gravação continua requireAdmin — atendente usa, não define.
-async function autorizarLeitura(req, res, next) {
-    let passou = false;
-    const engolir = { status() { return engolir; }, json() { return engolir; } };
-    await requireAuth(req, engolir, () => { passou = true; });
-    if (passou) return next();
-    return doIrmao(req, res, next);
-}
+const autorizarLeitura = guardaLocalOuIrmao(requireAuth, IRMAOS);
 
 async function lerCadastro(departamento) {
     const db = getDb();

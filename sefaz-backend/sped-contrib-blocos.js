@@ -1000,7 +1000,10 @@ export function coletarRetencoesF600(notas, warnings) {
         if (pis + cofins <= 0) continue;   // sem retenção federal gravada — caso normal
 
         const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
-        const base = parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorServicos) || parseFloat(notaCrua.valorTotal) || 0;
+        // Base do F600: a declarada, senão o VALOR do documento pelo dono (seis
+        // formas — o import pelo navegador grava só `totais.vNF`, e lendo três
+        // a nota caía em `semBase` com o valor escrito no documento).
+        const base = parseFloat(v.baseCalculo) || valorDoDocumentoServico(notaCrua) || 0;
         const diag = conferirRetencaoFederal({ base, pis, cofins, csll: fed.csllOuTotal, ir: fed.ir, inss: fed.inss });
         if (diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
         if (!base) { semBase.push(rotulo); continue; }

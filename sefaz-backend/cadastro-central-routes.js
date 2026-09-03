@@ -31,7 +31,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
-import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
+import { guardaLocalOuIrmao, PROJETO } from './require-cross-project-auth.js';
 import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horario-acesso.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { triarCarteira } from './triagem-terceiro-setor.js';
@@ -68,16 +68,11 @@ function getDb() {
 // O DP entra AQUI (cadastro/gate de departamento) e continua FORA de
 // qualquer outra rota — é exatamente o que a lista por rota existe pra
 // permitir.
-const doIrmao = crossProjectAuth([PROJETO.fiscal, PROJETO.contabil, PROJETO.dpFolha, PROJETO.financeiro]);
-
-/** Admin do CFI OU usuário de um app irmão com e-mail verificado do domínio. */
-async function autorizar(req, res, next) {
-    let passou = false;
-    const engolir = { status() { return engolir; }, json() { return engolir; } };
-    await requireAdmin(req, engolir, () => { passou = true; });
-    if (passou) return next();
-    return doIrmao(req, res, next);
-}
+// Admin do CFI OU app irmão (Contábil, DP, Financeiro) com e-mail verificado
+// do domínio. Token do próprio CFI é julgado pelo requireAdmin, e o veredito
+// dele é FINAL — o desenho antigo deixava o colaborador comum entrar pela
+// segunda tentativa (ver guardaLocalOuIrmao).
+const autorizar = guardaLocalOuIrmao(requireAdmin, [PROJETO.contabil, PROJETO.dpFolha, PROJETO.financeiro]);
 
 async function lerCadastro(db) {
     const fontes = [];

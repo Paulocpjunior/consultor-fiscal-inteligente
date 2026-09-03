@@ -54,3 +54,7 @@ export function montarLinhasStBlocoE(p: {
     dtFin: string;
     obrigacoesPorUf?: Record<string, { dtVcto?: string; codRec?: string }>;
 }): { linhas: string[][]; apuracoes: ApuracaoStUf[]; avisos: string[] };
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function mesRefDoPeriodo(dtIni: unknown): string;

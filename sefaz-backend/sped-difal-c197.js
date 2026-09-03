@@ -37,6 +37,7 @@ import * as fmt from './sped-fiscal-format.js';
 import { ufEmitente, cfopNaOticaDeEntrada } from './participante-doc-helper.js';
 // Régua única do cancelamento (status + cStat + evento 110111) e da direção.
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { aliqInterestadualDoItem } from './difal-itens.js';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -56,9 +57,6 @@ export const CFOPS_DIFAL_AQUISICAO = new Set([
     '2557', // transferência de material de uso ou consumo
 ]);
 
-/** UFs cuja saída para SP/Sul-Sudeste é 12%; demais, 7%. */
-const UF_INTER_12 = new Set(['SP', 'RJ', 'MG', 'RS', 'SC', 'PR']);
-const ORIG_4PCT = new Set(['1', '2', '3', '8']);
 
 // O XML traz o CFOP do EMITENTE (venda interestadual = 6xxx); pra quem
 // RECEBE, a mesma operação é 2xxx. Comparar direto com o CFOP do XML não
@@ -81,12 +79,13 @@ export function notaGeraDifalAquisicao(nota, ufEmpresa) {
     return (nota.itens || []).some((i) => CFOPS_DIFAL_AQUISICAO.has(cfopDoItem(i)));
 }
 
-/** Alíquota interestadual do item: a destacada vence; senão deriva da UF/origem. */
+/**
+ * Alíquota interestadual do item — DELEGA ao dono único (`difal-itens.js`).
+ * O painel do Simples e este C197 liam a MESMA tabela em duas cópias; a guia
+ * e o arquivo não podem divergir sobre a mesma nota.
+ */
 export function aliqInterestadual(item, ufOrigem) {
-    const destacada = num(item?.aliqIcms) || num(item?.pICMS);
-    if (destacada > 0) return { aliq: destacada, derivada: false };
-    if (ORIG_4PCT.has(String(item?.orig ?? ''))) return { aliq: 4, derivada: true };
-    return { aliq: UF_INTER_12.has(String(ufOrigem || '').toUpperCase()) ? 12 : 7, derivada: true };
+    return aliqInterestadualDoItem(item, ufOrigem);
 }
 
 /**
@@ -110,7 +109,9 @@ export function calcularDifalDaNota(nota, { aliqInterna, ufEmpresa }) {
     for (const item of (nota?.itens || [])) {
         if (!CFOPS_DIFAL_AQUISICAO.has(cfopDoItem(item))) continue;
         // Base do DIFAL = valor da operação daquele item (o que foi cobrado).
-        const vItem = num(item?.vBC) || num(item?.vProd);
+        // A `vBC` já vem líquida; caindo no `vProd`, o desconto sai — é o
+        // mesmo `vProd − vDesc` que o painel do Simples usa (`difal-itens.js`).
+        const vItem = num(item?.vBC) || Math.max(0, num(item?.vProd) - num(item?.vDesc));
         if (vItem <= 0) continue;
 
         const { aliq: inter, derivada: dv } = aliqInterestadual(item, ufOrigem);

@@ -26,6 +26,8 @@
 //     anos pode ser exatamente isto, e não perda de captura.
 // ============================================================================
 
+import { modeloComItens } from './gravacao-nfe-regua.js';
+
 const DIA_MS = 24 * 3600 * 1000;
 export const JANELA_DISTDFE_DIAS = 90;
 
@@ -34,7 +36,7 @@ const num = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFi
 
 const cancelado = (d) => ['cancelado', 'cancelada', 'denegado', 'inutilizado'].includes(d?.status);
 
-const modeloComItens = (chave) => { const m = String(chave || '').slice(20, 22); return m === '55' || m === '65'; };
+// `modeloComItens` vem do dono (`gravacao-nfe-regua.js`) — estava recopiado aqui.
 
 /** Resumo (resNFe) — nota que existe mas ainda sem o XML completo. */
 export function ehResumo(d) {

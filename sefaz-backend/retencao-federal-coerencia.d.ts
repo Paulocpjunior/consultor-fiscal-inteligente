@@ -35,3 +35,7 @@ export function conferirRetencaoFederal(n: {
 
 // `any` de propósito: os consumidores existentes acessam o resumo livremente.
 export function varrerRetencaoFederal(notas: unknown[]): any;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export const ALIQ: { pis: number; cofins: number; csll: number };

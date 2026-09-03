@@ -56,7 +56,9 @@ export function canalProvaEnvio(canal) {
     return CANAL_COM_PROVA.has(String(canal || '').trim());
 }
 
-const dinheiro = (n) => (Number.isFinite(Number(n)) ? Number(n) : null);
+// `Number(null)` é 0: débito SEM valor ficava gravado como R$ 0,00 na trava do
+// débito repetido. Ausência é null.
+const dinheiro = (n) => ((n == null || n === '') ? null : (Number.isFinite(Number(n)) ? Number(n) : null));
 
 /**
  * Cruza a guia que está prestes a sair com o que JÁ foi enviado.

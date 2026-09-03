@@ -14,3 +14,8 @@ export function classificarUrgencia(dias: number | null | undefined): Urgencia;
 export const URGENCIAS: Urgencia[];
 export const URGENCIA_LABEL: Record<Urgencia, string>;
 export const URGENCIA_FAROL: Record<Urgencia, string>;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function diasAteVencimento(vencimento: unknown, hoje?: unknown): number | null;
+export function urgenciaDominante(urgencias: unknown[]): any;

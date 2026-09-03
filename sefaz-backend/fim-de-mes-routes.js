@@ -211,7 +211,7 @@ router.post('/fechar', requireAuth, async (req, res) => {
             apuracao,
             corte: montarCorte({ agoraIso, state: cursor, documentos: contagem }),
             lastro,
-            quem: { uid: req.user?.uid || null, email: req.user?.email || null, nome: req.user?.name || null },
+            quem: { uid: req.user?.uid || null, email: req.user?.email || null, nome: null /* requireAuth não carrega nome; o e-mail identifica */ },
             agoraIso,
             anterior: r.fechamento,
         });
@@ -234,7 +234,10 @@ router.post('/fechar', requireAuth, async (req, res) => {
 
 // 🚨 REABRIR É SÓ ADMIN (decisão do Paulo, 26/08) — o número já pode ter sido
 // importado pela contabilidade, e reabrir não é "desfazer": é RETIFICAÇÃO.
-// A guarda é dupla de propósito: o `req.user.admin` aqui e a régua pura
+// A guarda é dupla de propósito: o `req.user.role === 'admin'` aqui e a régua pura
+// (🐛 03/09: estava `req.user.admin`, campo que o requireAuth NUNCA preenche —
+// `ehAdmin` saía sempre false e NENHUM admin conseguia reabrir; o 403 mandava
+// procurar um problema de permissão que não existia)
 // `conferirReabertura`, que também exige o motivo escrito.
 router.post('/reabrir', requireAuth, async (req, res) => {
     try {
@@ -244,7 +247,7 @@ router.post('/reabrir', requireAuth, async (req, res) => {
         if (r.erro) return res.status(r.status || 400).json({ ok: false, erro: r.erro });
 
         const conferido = conferirReabertura({
-            fechamento: r.fechamento, motivo: String(motivo || ''), ehAdmin: req.user?.admin === true,
+            fechamento: r.fechamento, motivo: String(motivo || ''), ehAdmin: req.user?.role === 'admin',
         });
         if (!conferido.pode) return res.status(403).json({ ok: false, erro: conferido.erro });
 

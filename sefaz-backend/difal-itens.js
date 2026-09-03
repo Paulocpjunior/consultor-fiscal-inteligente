@@ -138,3 +138,28 @@ export function classificarItensDifal(nota) {
     const semSt = itens.filter((i) => !i.temSt);
     return { itens, comSt, semSt, mista: comSt.length > 0 && semSt.length > 0 };
 }
+
+// ─── Alíquota interestadual do item — DONO ÚNICO ────────────────────────────
+// 🚨 03/09 (auditoria): esta régua estava escrita TRÊS vezes — aqui no painel
+// do Simples (`difal-aquisicao.js`), no C197 do Lucro (`sped-difal-c197.js`) e
+// no 426-A (`difal-426a.js`), com os dois conjuntos abaixo copiados como
+// literais em cada uma. A guia e o arquivo bebendo de réguas diferentes é o
+// defeito que esta casa mais paga; e o ORIG_4PCT/UF_INTER_12 é tabela oficial
+// (Res. SF 13/2012 e EC 87/2015), que muda num lugar só.
+
+/** UFs cuja saída para SP/Sul/Sudeste (exceto ES) é 12%; demais, 7%. */
+export const UF_INTER_12 = new Set(['SP', 'RJ', 'MG', 'RS', 'SC', 'PR']);
+/** Origem do produto que força 4% (importado / conteúdo de importação > 40%). */
+export const ORIG_4PCT = new Set(['1', '2', '3', '8']);
+
+/**
+ * Alíquota interestadual do item: a DESTACADA na nota vence (`aliqIcms`, que é
+ * como o importer grava o `pICMS`); senão deriva da origem do produto e da UF
+ * de origem, e sai CARIMBADA como derivada.
+ */
+export function aliqInterestadualDoItem(item, ufOrigem) {
+    const destacada = num(item?.aliqIcms) || num(item?.pICMS);
+    if (destacada > 0) return { aliq: destacada, derivada: false };
+    if (ORIG_4PCT.has(String(item?.orig ?? ''))) return { aliq: 4, derivada: true };
+    return { aliq: UF_INTER_12.has(String(ufOrigem || '').toUpperCase()) ? 12 : 7, derivada: true };
+}

@@ -9,7 +9,9 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import { requireCrossProjectAuth } from './require-cross-project-auth.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import {
     consultarFgtsDigital,
     consultarESocial,
@@ -23,10 +25,30 @@ router.use(express.json());
 
 // ─── Validação ──────────────────────────────────────────────────────────────
 
-function validarCnpj(req, res) {
+function getDb() {
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    return admin.firestore();
+}
+
+/**
+ * CNPJ válido E CLIENTE do escritório.
+ *
+ * 🚨 Estas rotas devolvem dado SERPRO (FGTS, eSocial, DCTFWeb, CRF) e o token
+ * aceito é o de qualquer usuário dos apps irmãos — sem esta trava, qualquer
+ * colaborador logado enumerava a situação de QUALQUER CNPJ do Brasil. O
+ * escopo por carteira não serve aqui (o uid do DP é de outro projeto), então
+ * a fronteira é o CADASTRO: só quem é cliente responde. A recusa DIZ isso,
+ * senão a primeira parada seria "o SERPRO está fora".
+ */
+async function validarCnpj(req, res) {
     const cnpj = (req.body?.cnpj || req.query?.cnpj || '').replace(/\D/g, '');
     if (!cnpj || cnpj.length !== 14) {
         res.status(400).json({ error: 'CNPJ inválido — informe 14 dígitos.' });
+        return null;
+    }
+    const cadastrada = await acharEmpresaCadastrada(getDb(), cnpj);
+    if (!cadastrada) {
+        res.status(403).json({ error: `CNPJ ${cnpj} não é cliente cadastrado no CFI — a consulta SERPRO só responde por empresa da carteira.` });
         return null;
     }
     return cnpj;
@@ -38,7 +60,7 @@ function validarCnpj(req, res) {
 // POST /api/dp-integration/fgts/recolhimento
 // Body: { cnpj, competencia: 'YYYY-MM' }
 router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
     if (!competencia || !/^\d{4}-\d{2}$/.test(competencia)) {
@@ -58,7 +80,7 @@ router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
 // POST /api/dp-integration/fgts/crf
 // Body: { cnpj }
 router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     let result;
     try {
@@ -85,7 +107,7 @@ router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
 // POST /api/dp-integration/esocial/status
 // Body: { cnpj, competencia: 'YYYY-MM' }
 router.post('/esocial/status', requireCrossProjectAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
     if (!competencia) return res.status(400).json({ error: 'competencia obrigatória' });
@@ -102,7 +124,7 @@ router.post('/esocial/status', requireCrossProjectAuth, async (req, res) => {
 // POST /api/dp-integration/dctfweb/status
 // Body: { cnpj, competencia: 'YYYY-MM' }
 router.post('/dctfweb/status', requireCrossProjectAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia;
     if (!competencia) return res.status(400).json({ error: 'competencia obrigatória' });
@@ -119,7 +141,7 @@ router.post('/dctfweb/status', requireCrossProjectAuth, async (req, res) => {
 // POST /api/dp-integration/empresa-completo
 // Body: { cnpj, competencia: 'YYYY-MM' }
 router.post('/empresa-completo', requireCrossProjectAuth, async (req, res) => {
-    const cnpj = validarCnpj(req, res);
+    const cnpj = await validarCnpj(req, res);
     if (!cnpj) return;
     const competencia = req.body.competencia || new Date().toISOString().slice(0, 7);
 

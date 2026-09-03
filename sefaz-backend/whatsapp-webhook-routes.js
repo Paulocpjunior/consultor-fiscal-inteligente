@@ -781,7 +781,9 @@ router.post('/webhook', async (req, res) => {
             if (gravadas.length) {
                 setImmediate(async () => {
                     for (const g of gravadas) {
-                        if (g.contatoNovo) await preencherPerfilInstagram(db, g.m.conversaId, g.m.igsid);
+                        try {
+                            if (g.contatoNovo) await preencherPerfilInstagram(db, g.m.conversaId, g.m.igsid);
+                        } catch (e) { console.warn('[instagram] perfil não preenchido:', e.message); }
                     }
                     for (const g of entradas) {
                         try {
@@ -848,7 +850,10 @@ router.post('/webhook', async (req, res) => {
         const comMidia = ev.mensagens.filter((m) => m.midia?.metaMediaId);
         if (comMidia.length) {
             setImmediate(async () => {
-                for (const m of comMidia) await baixarMidiaRecebida(db, m);
+                for (const m of comMidia) {
+                    try { await baixarMidiaRecebida(db, m); }
+                    catch (e) { console.warn('[whatsapp] mídia não baixada:', e.message); }
+                }
             });
         }
 
@@ -860,10 +865,17 @@ router.post('/webhook', async (req, res) => {
                 for (const msg of ev.mensagens) {
                     // A avaliação vem ANTES do bot: se a mensagem for a nota
                     // da pesquisa, ela não pode virar gatilho de triagem.
-                    const foiNota = await capturarAvaliacao(db, msg);
-                    // `req.app` viaja porque é dele que sai o cliente do
-                    // Gemini e o resolvedor de modelo (a IA de triagem).
-                    if (!foiNota) await rodarBot(db, msg, { app: req.app });
+                    // try/catch por MENSAGEM: um throw aqui derrubaria o processo
+                    // (não há handler de unhandledRejection) por causa de uma
+                    // mensagem que um terceiro mandou — e o 200 já foi dado à Meta.
+                    try {
+                        const foiNota = await capturarAvaliacao(db, msg);
+                        // `req.app` viaja porque é dele que sai o cliente do
+                        // Gemini e o resolvedor de modelo (a IA de triagem).
+                        if (!foiNota) await rodarBot(db, msg, { app: req.app });
+                    } catch (e) {
+                        console.warn('[whatsapp/bot] falhou (mensagem já gravada):', e.message);
+                    }
                     // 🔔 Push no celular (a régua de QUEM recebe é a mesma
                     // fila do inbox). Best-effort: a mensagem já está salva.
                     try {

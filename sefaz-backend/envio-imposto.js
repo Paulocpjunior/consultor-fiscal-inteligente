@@ -32,6 +32,9 @@ import { caminhoImpostos } from './caminho-sharepoint.js';
 // Dono único de "qual é a pasta desta empresa?" — ver sharepoint-pastas.js.
 import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 
+/** Ausência (null/undefined/'') é null — `Number(null)` é 0 e passaria por valor. */
+const dinheiroOuNull = (n) => ((n == null || n === '') ? null : (Number.isFinite(Number(n)) ? Number(n) : null));
+
 export const GESTOR_EMAIL = process.env.ENVIO_IMPOSTO_GESTOR
     || 'alexandre@spassessoriacontabil.com.br';
 
@@ -310,7 +313,7 @@ export async function executarRitoEnvioImposto(p) {
             declaracao: p.declaracao || null,
             para: p.para || null,
             copiaPara: [...new Set([GESTOR_EMAIL, ...(p.copiaPara || [])])],
-            valor: Number.isFinite(Number(p.valor)) ? Number(p.valor) : null,
+            valor: dinheiroOuNull(p.valor),
             // 🚨 A COMPOSIÇÃO DA GUIA — é o que permite barrar o SEGUNDO envio do
             // mesmo débito (Paulo, 17/08, depois do caso HYPE). Sem isto a
             // auditoria sabe que "um DARF foi enviado" e não sabe O QUE ele
@@ -321,7 +324,7 @@ export async function executarRitoEnvioImposto(p) {
                     codigo: String(d?.codigo || d?.codReceita || '').replace(/\D/g, ''),
                     extensao: String(d?.extensao ?? '').replace(/\D/g, '') || null,
                     descricao: String(d?.descricao || '').trim() || null,
-                    valor: Number.isFinite(Number(d?.valor)) ? Number(d.valor) : null,
+                    valor: dinheiroOuNull(d?.valor),
                     departamento: d?.departamento || null,
                 })).filter((d) => d.codigo)
                 : null,

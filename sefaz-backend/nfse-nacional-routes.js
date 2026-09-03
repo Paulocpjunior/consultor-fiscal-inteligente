@@ -46,7 +46,9 @@ router.get('/listar', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/nbs', async (_req, res) => {
+// requireAuth: sem guarda era uma leitura de até 2000 documentos do Firestore
+// por chamada ANÔNIMA — custo cobrado, sem ninguém logado.
+router.get('/nbs', requireAuth, async (_req, res) => {
     // Se houver tabela oficial importada via /import-nbs-csv, usa ela.
     // Senao, retorna a tabela curada hardcoded.
     try {

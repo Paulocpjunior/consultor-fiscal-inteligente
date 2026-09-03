@@ -40,7 +40,7 @@
 // "Evento não é nota" mora no helper de metadados, junto de `docCancelado` e
 // `direcaoEfetivaDoc` — as outras duas réguas que decidem na LEITURA o que o
 // campo gravado não conta direito. Reescrever aqui seria a segunda cópia.
-import { ehRegistroDeEvento, ehNotaPropriaDeEntrada, docCancelado } from './xml-metadata-helper.js';
+import { ehRegistroDeEvento, ehNotaPropriaDeEntrada, docCancelado, valorDoDocumento } from './xml-metadata-helper.js';
 
 /**
  * Rótulo de cada causa que segura nota fora do total.
@@ -612,7 +612,10 @@ export function classificarNota(doc, opts = {}) {
 
     const cfops = Array.from(new Set((d.itens || []).map((i) => soDigitos(i.cfop)).filter(Boolean)));
     const cfopPrincipal = cfops[0] || '';
-    const valor = round2(num(d.valorTotal ?? d.totais?.vNF ?? d.totais?.vProd));
+    // O valor pelo DONO (seis formas) — a leitura de três formas deixava a nota
+    // gravada em `valores.total`/`vNF` entrar na base valendo zero, calada.
+    const vDoc = valorDoDocumento(d);
+    const valor = round2(num(Number.isFinite(vDoc) ? vDoc : d.totais?.vProd));
     const natureza = identificarNaturezaFornecedor(contraparte, cadastro);
 
     const base = {

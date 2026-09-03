@@ -1329,7 +1329,10 @@ router.post('/auto-preencher-uf', requireAuth, async (req, res) => {
         }
         res.json({ ok: true, motivo: 'Auto-preenchimento iniciado em background' });
 
-        setImmediate(async () => {
+        // ⚠️ try/catch envolvendo o laço INTEIRO: sem handler de unhandledRejection
+        // no processo, um throw aqui (Firestore piscando) derruba o contêiner —
+        // com a resposta 'iniciado em background' já entregue como sucesso.
+        setImmediate(async () => { try {
             const db = fa().firestore();
             const t0 = Date.now();
             let preenchidas = 0, jaTinham = 0, naoEncontradas = 0, erros = 0, total = 0;
@@ -1376,9 +1379,10 @@ router.post('/auto-preencher-uf', requireAuth, async (req, res) => {
                 fonte: req.user.email,
             });
             console.log(`[auto-preencher-uf] FIM — total=${total} preenchidas=${preenchidas} jaTinham=${jaTinham} naoEncontradas=${naoEncontradas} erros=${erros} (${duracaoMs}ms)`);
-        });
+        } catch (e) { console.error('[auto-preencher-uf] falhou em background:', e); } });
     } catch (e) {
         console.error('[auto-preencher-uf] erro:', e);
+        if (res.headersSent) return;
         return res.status(500).json({ error: e.message });
     }
 });
@@ -1396,7 +1400,10 @@ router.post('/auto-preencher-municipio', requireAuth, async (req, res) => {
         }
         res.json({ ok: true, motivo: 'Auto-preenchimento de município iniciado em background' });
 
-        setImmediate(async () => {
+        // ⚠️ try/catch envolvendo o laço INTEIRO: sem handler de unhandledRejection
+        // no processo, um throw aqui (Firestore piscando) derruba o contêiner —
+        // com a resposta 'iniciado em background' já entregue como sucesso.
+        setImmediate(async () => { try {
             const db = fa().firestore();
             const t0 = Date.now();
             let preenchidas = 0, jaTinham = 0, naoEncontradas = 0, erros = 0, total = 0;
@@ -1444,9 +1451,10 @@ router.post('/auto-preencher-municipio', requireAuth, async (req, res) => {
                 fonte: req.user.email,
             });
             console.log(`[auto-preencher-municipio] FIM — total=${total} preenchidas=${preenchidas} jaTinham=${jaTinham} naoEncontradas=${naoEncontradas} erros=${erros} (${duracaoMs}ms)`);
-        });
+        } catch (e) { console.error('[auto-preencher-municipio] falhou em background:', e); } });
     } catch (e) {
         console.error('[auto-preencher-municipio] erro:', e);
+        if (res.headersSent) return;
         return res.status(500).json({ error: e.message });
     }
 });

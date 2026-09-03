@@ -116,3 +116,8 @@ export function issDoDocumento(doc: unknown): number;
 export function issRetidoDoDocumento(doc: unknown): number;
 /** O documento DECLARA retenção de ISS (inclui o booleano do portal). */
 export function issRetidoDeclarado(doc: unknown): boolean;
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function chaveDaNotaDoEvento(d: unknown): string | null;
+export function ehRegistroDeEvento(d: unknown): boolean;

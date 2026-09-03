@@ -38,6 +38,9 @@ import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
 
+/** Número quando há número; ausência (null/undefined/'') é null, nunca 0. */
+const numeroOuNull = (v) => ((v == null || v === '') ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
+
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
     { id: 'validacao',  ordem: 2, nome: 'Validar as notas',      onde: 'Central de XMLs → XMLs (Entrada/Saída)' },
@@ -150,8 +153,11 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
     if (ficha) {
         return {
             fonte: 'lucro',
-            totalImpostos: Number.isFinite(Number(ficha.totalImpostos)) ? Number(ficha.totalImpostos) : null,
-            receita: Number.isFinite(Number(ficha.faturamentoMesTotal)) ? Number(ficha.faturamentoMesTotal) : null,
+            // `Number(null)` é 0 e `isFinite(0)` é true: sem o `== null` primeiro,
+            // ficha com o imposto NÃO lançado virava "apuração de R$ 0,00" e o
+            // fim de mês conferia os documentos contra zero rotulado "A apuração".
+            totalImpostos: numeroOuNull(ficha.totalImpostos),
+            receita: numeroOuNull(ficha.faturamentoMesTotal),
             // 🏠 A RECEITA DE LOCAÇÃO viaja junto (27/08, caso AC MASON): ela é
             // receita SEM DOCUMENTO, então a etapa de captura não pode cobrar
             // nota de saída de quem só tem aluguel. Sem este campo a Rotina não

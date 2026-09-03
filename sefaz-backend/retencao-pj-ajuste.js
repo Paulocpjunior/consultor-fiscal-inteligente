@@ -45,14 +45,14 @@
 // mais paga.
 // ============================================================================
 
-import { ALIQ_CSRF, aliquotaEfetiva } from './retencao-federal-coerencia.js';
+import { ALIQ_CSRF, ALIQ, aliquotaEfetiva } from './retencao-federal-coerencia.js';
 
 /**
  * As três alíquotas da retenção na fonte de PJ para PJ.
  * 📖 Lei 10.833/2003, art. 30: *"o valor correspondente à soma das alíquotas de
  * 1% (CSLL), 3% (COFINS) e 0,65% (PIS/PASEP)"*.
  */
-export const ALIQ_LEGAL = { pis: 0.65, cofins: 3, csll: 1 };
+export const ALIQ_LEGAL = ALIQ;
 
 /** Piso do motivo escrito — o mesmo da T3 da DCTFWeb e da reabertura do mês. */
 export const MIN_MOTIVO = 15;

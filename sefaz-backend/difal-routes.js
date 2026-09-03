@@ -24,7 +24,7 @@ import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper
 import { COLECAO_NCM, sugerirIvaPorItem } from './ncm-parametros.js';
 
 // Régua única do cancelamento (status + cStat + evento 110111).
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, valorDoDocumento } from './xml-metadata-helper.js';
 const router = Router();
 
 function getDb() {
@@ -87,7 +87,8 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 // cancelamento chega por EVENTO com o `status` ainda
                 // 'autorizado'. Sem eles, o DIFAL de aquisição é apurado sobre
                 // compra que não existiu — imposto A PAGAR, a direção cara.
-                .select('empresaId', 'empresaCnpj', 'status', 'cStat', 'eventos', 'modelo', 'tpNF', 'valorTotal', 'chave',
+                .select('empresaId', 'empresaCnpj', 'status', 'cStat', 'eventos', 'modelo', 'tpNF', 'chave',
+                    'valorTotal', 'totais.vNF', 'totais.vServ', 'valores.total', 'valor', 'vNF', 'totalNota',
                     'emitente.cnpjCpf', 'emitente.uf', 'cnpjEmit', 'ufEmit', 'codMunEmit',
                     'totais.vST', 'totais.vBCST'),
             { label: `difal varredura ${competencia}`, maxDocs: 80000 },
@@ -107,7 +108,10 @@ router.get('/varredura', requireAuth, async (req, res) => {
             if (!emp.uf) emp.semUfCadastrada = true;
             else if (ufOrig === emp.uf) continue;
             emp.notasInterestaduais++;
-            emp.baseAproximada = Math.round((emp.baseAproximada + (Number(d.valorTotal) || 0)) * 100) / 100;
+            // Valor pelo DONO (seis formas): a nota importada pelo navegador grava
+            // só `totais.vNF` e somava ZERO na base — número que parecia real.
+            const vDoc = valorDoDocumento(d);
+            emp.baseAproximada = Math.round((emp.baseAproximada + (Number.isFinite(vDoc) ? vDoc : 0)) * 100) / 100;
             if ((Number(d.totais?.vST) || 0) > 0 || (Number(d.totais?.vBCST) || 0) > 0) emp.notasComSt++;
         }
 

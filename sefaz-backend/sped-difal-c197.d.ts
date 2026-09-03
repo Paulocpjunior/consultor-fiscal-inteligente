@@ -34,3 +34,8 @@ export function montarC197Difal(p: {
     avisos: string[];
     totalDifal: number;
 };
+
+// 03/09 (auditoria): exportações que o .js já entregava e o .d.ts não declarava —
+// importador TypeScript não enxergava o símbolo (erro de compilação).
+export function montarRegistro0460(...args: any[]): any;
+export const TXT_OBS_DIFAL: string;
