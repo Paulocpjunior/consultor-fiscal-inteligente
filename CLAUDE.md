@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TELA SOMAVA AS DUAS PROVAS NUM NÚMERO SÓ — "20 não canceladas" sobre
+  20 notas que a SEFAZ RECUSOU** (03/09, Paulo na MV LIDER 0639 · 08/2026:
+  *"ainda sobre NFS canceladas veja o erro que não estão sendo
+  relacionadas"*).
+  📖 A linha mais alta da caixa dizia **`20 consultada(s) · 0 cancelada(s) · 20
+  não cancelada(s) · 0 indeterminada(s)`** — e dois parágrafos abaixo, no aviso
+  do backend, **"20 nota(s) a SEFAZ recusou por PERMISSÃO (cStat 640)"**. As
+  MESMAS 20.
+  🔴 **A CAUSA É DE SOMA, e ela era da TELA**: `naoCanceladas +
+  naoCanceladasPorRecusa`. O núcleo separa as duas desde 20/08, e o comentário
+  de lá diz por quê — *"lá a prova é POSITIVA (ela entregou o documento e não há
+  evento), aqui é NEGATIVA (ela não disse 653), e fundir as duas apagaria a
+  diferença justo onde importa"*. **O núcleo separou e a tela fundiu.**
+  🚨 **E O CUSTO É MÁXIMO JUSTO NESTA EMPRESA**: a MV LIDER **não tem A1
+  próprio**, então a rodada inteira volta por recusa — o veredito lia "conferi
+  20 e estão boas" sobre 20 notas cujo documento a SEFAZ **não entregou**. É a
+  família do farol honesto: ausência de alarme indistinguível de "está tudo
+  certo".
+  ⚠️ **E A CORREÇÃO NÃO É CHAMAR O 640 DE "SEM RESPOSTA"**: **recusa é
+  RESPOSTA** (a régua de 20/08, provada na PRÓPRIA MV LIDER — nota cancelada
+  volta 653 mesmo a quem não é parte do documento). Rebaixá-lo reintroduziria o
+  defeito pelo outro lado. O que muda é a tela **parar de somar**, e um teste
+  proíbe a expressão "sem resposta" na frase.
+  ✂️ **E AS DE PROVA NEGATIVA SAEM NOMEADAS** (`numerosPorRecusa`, teto de 30
+  com o "+N" à vista): esconder foi metade do *"não estão sendo relacionadas"*.
+  Uma linha compacta, **não 20** — 20 linhas dizendo o mesmo é o que faz
+  ninguém ler as que importam; o que faltava era saber QUAIS dependem da prova
+  fraca, porque são justamente essas que um A1 próprio conferiria pelo XML.
+  🚩 **E A OUTRA METADE DO "NÃO ESTÃO SENDO RELACIONADAS" NÃO É DEFEITO — É
+  LIMITE, e agora vai DITO**: nota **CANCELADA que nunca chegou ao app** aparece
+  como **FALTANTE**, não na coluna Canceladas, e o botão **Reconferir NÃO a
+  alcança** — ele pergunta pela **CHAVE**, e nota que não chegou não tem chave
+  aqui: o `cNF` (8 dígitos) é **aleatório** e não se deriva de série+número.
+  Quem responde por esses números é o portal da SEFAZ ou o ERP do cliente.
+  Deixar a tela calada ali fazia esperar do botão uma resposta que ele não pode
+  dar.
+  📌 **REGRA QUE FICA: quando o núcleo separa dois números de propósito, a tela
+  NÃO os soma.** Toda separação que existe por causa da FORÇA DA PROVA morre no
+  primeiro `a + b` da camada de cima — e morre em silêncio, porque a soma
+  continua "certa" na aritmética. A régua da tela é a mesma do núcleo: se as
+  ações são diferentes, os números são diferentes.
+
 - **🚨 A COMPETÊNCIA DA NFS-e É A INCIDÊNCIA, NÃO A DATA DE EMISSÃO — e o dado
   chegava nos QUATRO trilhos** (03/09, Paulo com o painel **NFS-e RECEBIDAS**
   da Prefeitura de SP, CASA DA CRIANCA BETINHO, filtro `Período: Incidência
