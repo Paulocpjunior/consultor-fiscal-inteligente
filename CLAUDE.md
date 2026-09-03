@@ -5,6 +5,116 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A COMPETÊNCIA DA NFS-e É A INCIDÊNCIA, NÃO A DATA DE EMISSÃO — e o dado
+  chegava nos QUATRO trilhos** (03/09, Paulo com o painel **NFS-e RECEBIDAS**
+  da Prefeitura de SP, CASA DA CRIANCA BETINHO, filtro `Período: Incidência
+  08/2026`: *"em SP eu posso emitir uma nota com data de 31/08 até o dia 10/09;
+  se ela tiver retido, até o dia 05/09"*).
+  📖 **A LINHA DO PRINT É A PROVA**: `S&P ASSESSORIA CONTABIL · Emissão
+  **02/09/2026** 08:36:34 · Data Fato Gerador **31/08/2026**` — listada pelo
+  próprio portal dentro de **agosto**. A NFS-e paulistana tem DUAS datas, e
+  quem decide o mês é o **FATO GERADOR**; o portal chama isso de INCIDÊNCIA.
+  🔴 **QUATRO TRILHOS, e nos quatro o dado CHEGAVA e era DESCARTADO**:
+  · `nfse-sp-importer.js` (WS/XML) recortava `dhEmi` com o `DataFatoGeradorNFe`
+  lido **na linha de cima** e jogado fora; · `nfse-sp-csv-importer.js` (o CSV do
+  portal, o trilho principal hoje) fazia `dataHoraEmissao.slice(0, 7)` com o
+  `dataFatoGerador` (coluna 8 do layout) **parseado e ignorado**;
+  · `nfse-nacional-gravacao.js` (ADN) usava `competenciaDaEmissao` com o
+  **`dCompet`** já lido pelo leitor do ADN; · e `xmlParserService.ts` (ABRASF
+  pelo navegador) tinha a forma mais crua de todas —
+  `const competenciaTag = getTextContent(infNfse, 'Competencia')` e a variável
+  **nunca usada em lugar nenhum**.
+  🚨 **O CUSTO É A AUSÊNCIA PLAUSÍVEL, a mais cara desta casa**: a nota é
+  gravada em `2026-09` e **sai de TODO recorte de agosto** — lista, Livro de
+  Serviços, ISS da competência, bloco A do EFD-Contribuições — e entra em
+  setembro, onde não deveria estar. **Não há erro nenhum na tela**: há um livro
+  a MENOS num mês e a MAIS no outro. É o defeito de 01/09 (ZAMBOLIN) pela outra
+  ponta: lá a competência saía numa FORMA que nenhum filtro casava; aqui ela sai
+  na forma certa e **no mês errado**.
+  ✂️ `competencia-da-nfse.js` (PURO) é o dono, com a precedência **campo
+  DECLARADO (`<Competencia>` / `dCompet`) > FATO GERADOR > EMISSÃO** — o mais
+  específico vence, e a FORMA continua no dono dela (`normalizarCompetencia`,
+  que já conhece as cinco). Duas perguntas, dois donos.
+  ⚠️ **A DIVERGÊNCIA NÃO É ALARME, é EXPLICAÇÃO**: emitir no mês seguinte é
+  LEGAL em SP, então acender ali seria alarme sobre nota correta. O que sai é a
+  frase dizendo por que a nota aparece num mês diferente do da emissão — que é
+  exatamente a pergunta de quem olha as duas colunas do portal lado a lado.
+  ⚠️ **A ORIGEM VIAJA CARIMBADA** (`competenciaOrigem`): número derivado não se
+  apresenta como lido. E o `dataFatoGerador` **cru** é passado ao dono separado
+  do que já tem fallback para `dhEmi` — presença ≠ preenchido (a régua do
+  `csllOuTotalPresente`), senão a origem afirmaria "fato-gerador" sobre uma data
+  de emissão.
+  ⚠️ **E A LACUNA DO ADN PERGUNTOU AO MESMO DONO**: ela conferia só a data de
+  emissão e passaria a acusar "falta competência" em nota que declara `dCompet`
+  — a lista de lacunas mentindo sobre documento completo.
+  ⚠️ **TRIAGEM ANTES DE CORREÇÃO, e ela poupou dois arquivos**: a varredura
+  apontou `xml-importer.js` e `sharepoint-auto-sync.js`, e os dois estão
+  CERTOS — medido: nenhum dos dois lê `InfNfse`/`infNFSe`, eles só produzem
+  NF-e e CT-e, e nesses documentos a emissão É a competência. O
+  `nfsePdfRecorte.ts` também fica FORA, declarado: ele já honra a precedência e
+  sua leitura de data é deliberadamente mais ESTRITA — delegar ali trocaria o
+  `impedimento` (que manda preencher à mão) por competência CHUTADA.
+  🚩 **O QUE ISTO NÃO CONSERTA, e vai dito**: o **ACERVO**. Nota já gravada com
+  a competência da emissão continua no mês errado — e o `dataFatoGerador` ESTÁ
+  no banco, então o app TEM como listar e corrigir. Mudar o mês de uma nota
+  mexe em livro que pode já ter sido entregue, então isso é **decisão do dono,
+  caso a caso, nunca automática** (a régua de 11/08).
+  📌 **REGRA QUE FICA: quando o documento traz DUAS datas, a que recorta o mês é
+  a do FATO, nunca a do papel.** E o sintoma desta classe nunca é erro: é a nota
+  que existe, está gravada e não aparece no mês a que pertence.
+
+- **🚨 SERVIÇO TOMADO SEM COD_PART BARRA O ARQUIVO INTEIRO NO PVA** (03/09,
+  INSTITUTO HAYAY CIENCIA E FE · 08/2026, recibo do Paulo:
+  `Total de Erros 1 — "Campo obrigatório na entrada." · Linha 16 · Campo
+  4 - COD_PART · Registro A100`).
+  📖 A linha, literal: `|A100|0|1||00|||23||25082026|25082026|3000,00|0||3000,00|
+  19,50|3000,00|90,00||||` — `IND_OPER=0` (serviço TOMADO) e o **COD_PART
+  VAZIO**. A NFS-e entrou pelo importador de PDF no leiaute **DANFSe** que o
+  leitor não sabe nomear (o caso RADIO E TV SUL AMERICANA, 02/09 — *"o PDF veio
+  com prestador e tomador VAZIOS"*) e o gerador emitiu a linha assim mesmo.
+  🚨 **O CUSTO É O MAIOR DE TODOS: o PVA não IMPORTA o arquivo.** Não é recusa
+  de um registro que se conserta e reenvia — é o arquivo inteiro barrado na
+  porta por causa de UMA nota, e nada avisava antes.
+  ✂️ `sped-a100-declaravel.js` (PURO) decide, e a nota fica **FORA e NOMEADA**
+  (prestador + número), com a ação certa: reimportar o PDF com o CNPJ do
+  prestador e **"↻ Substituir os que já estão no banco"**. ⚠️ Ela **não** manda
+  conferir o cadastro do cliente — o cadastro está certo; é o documento que
+  entrou sem o prestador (a lição de 02/09: dizer a falha errada manda procurar
+  no lugar errado).
+  🚨 **E A EXCLUSÃO SUSTENTA O 0200 — medido, não deduzido.** Tirar o A100 tira
+  o A170, e o A170 do documento SEM `itens[]` é o **único** que referencia o
+  item sintético `SERV-GENERICO`: se o coletor do 0200 continuasse a declará-lo,
+  o arquivo trocaria esta recusa pela do **item ÓRFÃO** (a que a PWR pagou em
+  19/08). É a régua de 24/08 — **antes de tirar um registro, medir o que ele
+  SUSTENTA** —, e é por isso que a decisão mora num DONO só, lido pelo bloco A
+  **e** pelo coletor do 0200.
+  ⚠️ **SÓ A ENTRADA ACUSA, e é a recusa que diz isso**: a mensagem é literal
+  (*"na entrada"*), e na SAÍDA o campo sai vazio há meses em arquivos que o PVA
+  **ACEITOU** (MANTOAN 07/2026, HS 05/2026). Acusar ali seria alarme sobre
+  arquivo correto — o jeito conhecido de a equipe desligar a prevalidação.
+  ⚠️ **O REGIME MUDA O QUE SE PERDE, então muda a frase**: no CUMULATIVO a
+  aquisição não gera crédito (o A170 sai com CST 70 e zeros), então tirar a nota
+  **não muda um centavo** — o que muda é o arquivo passar. No NÃO-cumulativo ela
+  geraria crédito, e aí a exclusão declara **a MAIOR**: isso vai DITO, senão o
+  crédito some em silêncio.
+  ⚠️ **E O AVISO ENTRA ANTES DO EARLY RETURN**: competência em que TODAS as
+  notas caem aqui sairia com o bloco vazio e **sem uma palavra**.
+  🚦 **A recusa virou REGRA no MESMO PR** (`conferirCodPartDoA100`, com a recusa
+  literal como fonte), lendo as LINHAS do arquivo gerado e nascendo **VERDE**
+  sobre o gerador corrigido.
+  📌 **E O RECORTE DO COD_PART TINHA QUATRO CÓPIAS** — `cnpjCpf || cnpj ||
+  CNPJ` escrito à mão no A100, no C100 e no D100, e é este número que o **0150
+  cadastra**. Virou `codPartDoDocumento` no dono das leituras de participante.
+  ⚠️ A do bloco D **não tinha defeito hoje** (o `nota` dela já passa pelo
+  normalizador) e mesmo assim saiu: é justamente aí que a cópia é perigosa — a
+  próxima correção entraria numa só, e o D100 passaria a referenciar
+  participante diferente do que o 0150 declara, como o `getContadorPadrao` e o
+  `UNIDADES_PADRAO` já divergiram **nesta mesma dupla de arquivos**.
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: ela prendia o TEXTO
+  `filtrarNotasBlocoA(notas).some(...)` no orquestrador — e essa forma **virou o
+  defeito**, porque declarava o item sintético de uma nota que o bloco A já não
+  emite. Travar a forma antiga impede a correção que a régua manda fazer.
+
 - **🏦 A DeRE NÃO É "DECLARAÇÃO DE RETENÇÕES" — é a Declaração Eletrônica de
   REGIMES ESPECÍFICOS de IBS/CBS, e o CFI passou a saber QUEM, QUANDO e O QUÊ**
   (02/09, Paulo: *"analise este link, preciso que crie uma nova função capaz de

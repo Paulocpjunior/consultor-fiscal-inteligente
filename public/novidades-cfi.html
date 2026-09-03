@@ -68,14 +68,49 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 02/09/2026 · leitura de 16 minutos</p>
+            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 17 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (02/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (03/09) — leia esta parte primeiro</h2>
+
+    <h3>1. 📅 <strong>NFS-e de SP: o mês da nota é o do FATO GERADOR, não o da emissão</strong></h3>
+    <p>Em São Paulo a nota de <strong>31/08</strong> pode ser emitida até o <strong>dia 10/09</strong>
+    (até <strong>05/09</strong> quando há retenção). O portal da Prefeitura lista essa nota dentro de
+    <strong>agosto</strong> — ele filtra por <strong>“Incidência”</strong>, que é a
+    <strong>Data do Fato Gerador</strong>.</p>
+    <div class="alerta">⚠️ <strong>O app recortava o mês pela data de EMISSÃO.</strong> Nota emitida em
+    setembro com fato gerador em agosto era gravada em <strong>09/2026</strong> e
+    <strong>desaparecia de tudo que é de agosto</strong> — lista, Livro de Serviços, ISS da competência
+    e SPED — aparecendo em setembro. <strong>Sem erro nenhum na tela.</strong></div>
+    <div class="onde">📍 <strong>Onde:</strong> vale para os quatro caminhos por onde a NFS-e entra —
+    <strong>CSV do portal de SP</strong>, consulta pelo <strong>web service</strong>,
+    <strong>Padrão Nacional (ADN)</strong> e <strong>XML importado no navegador</strong>. Nada muda na
+    sua rotina: o app passou a gravar a competência certa sozinho.</div>
+    <p>Quando a emissão e a competência caem em meses diferentes, a nota traz a
+    <strong>explicação</strong> do porquê — não é erro, é como SP funciona.</p>
+    <div class="alerta">🚩 <strong>O que ainda NÃO se conserta sozinho:</strong> nota que <em>já estava
+    gravada</em> continua no mês da emissão. Se ao fechar o mês faltar uma NFS-e emitida no mês
+    seguinte, <strong>fale com o Junior antes de lançar à mão</strong> — mudar o mês de uma nota mexe em
+    livro que pode já ter sido entregue.</div>
+
+    <h3>2. 🧾 <strong>EFD-Contribuições recusado inteiro por causa de UMA nota de serviço tomado</strong></h3>
+    <p>O PVA respondia <strong>“Campo obrigatório na entrada · COD_PART”</strong> e
+    <strong>não importava o arquivo</strong> — o arquivo todo barrado por uma nota só.</p>
+    <p>A causa: uma <strong>NFS-e tomada</strong> que entrou pelo <strong>PDF</strong> sem o
+    <strong>CNPJ do prestador</strong> (acontece no leiaute que o app não consegue ler sozinho).</p>
+    <div class="onde">📍 <strong>Onde:</strong> agora o app <strong>tira essa nota do arquivo</strong> e
+    <strong>diz qual é</strong> (prestador + número) no aviso da geração. Para trazê-la de volta:
+    Central de XMLs → <strong>Importar</strong> → <strong>NFS-e (PDF)</strong>, preencha o
+    <strong>CNPJ do prestador</strong> e marque <strong>“↻ Substituir os que já estão no banco”</strong>.
+    Depois gere o SPED de novo.</div>
+    <div class="alerta">⚠️ <strong>Não é problema no cadastro do cliente</strong> — é o documento que
+    entrou sem o prestador. Conferir o cadastro não resolve.</div>
+
+    <h2>O que mudou em 02/09</h2>
 
     <h3>1. 🚫 <strong>NFC-e cancelada aparecendo com valor</strong> — agora tem como perguntar à SEFAZ</h3>
     <p>A captura de NFC-e pergunta <strong>uma vez por nota</strong>, e o cancelamento acontece
