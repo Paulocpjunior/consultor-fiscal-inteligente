@@ -12,6 +12,8 @@
 import { DOMParser } from '@xmldom/xmldom';
 import { validarXmlSeguro } from './xml-seguranca.js';
 import { idDocumentoNfseSp, patchSubstituiuDigitada } from './nfse-identidade.js';
+// 🚨 A competência da NFS-e de SP é a INCIDÊNCIA (fato gerador), não a emissão.
+import { competenciaDaNfse } from './competencia-da-nfse.js';
 
 const text = (parent, tag) => parent.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
 const num = (parent, tag) => {
@@ -45,14 +47,23 @@ export function parseNfseSpXml(xmlString) {
     const cnpjTomador = tomadorNode ? text(tomadorNode, 'CNPJ') || text(tomadorNode, 'CPF') : '';
 
     const dhEmi = text(nfeNode, 'DataEmissaoNFe');
-    const dataFatoGerador = text(nfeNode, 'DataFatoGeradorNFe') || dhEmi;
+    // ⚠️ O CRU viaja separado: `dataFatoGerador` já cai no `dhEmi` quando o
+    // campo não vem, e passar o valor JÁ com fallback faria a origem afirmar
+    // "fato-gerador" sobre uma data de emissão — presença ≠ preenchido (a régua
+    // do `csllOuTotalPresente`, 02/09).
+    const fatoGeradorCru = text(nfeNode, 'DataFatoGeradorNFe');
+    const dataFatoGerador = fatoGeradorCru || dhEmi;
     const statusBruto = text(nfeNode, 'StatusNFe');
     const cancelado = statusBruto === 'C';
 
-    const competencia = (() => {
-        const m = dhEmi.match(/^(\d{4})-(\d{2})/);
-        return m ? `${m[1]}-${m[2]}` : '';
-    })();
+    // 🚨 A COMPETÊNCIA É A INCIDÊNCIA (o FATO GERADOR), NÃO A EMISSÃO (03/09).
+    // Este recorte saía do `dhEmi` com o `DataFatoGeradorNFe` lido na linha de
+    // cima e jogado fora — e em SP a nota de 31/08 pode ser emitida até 10/09
+    // (05/09 com retenção): ela caía em setembro e saía de TODO recorte de
+    // agosto, sem erro nenhum na tela. Régua no dono, lida também pelo trilho
+    // do CSV — duas leituras do mês fariam os dois trilhos discordarem.
+    const incidencia = competenciaDaNfse({ dataFatoGerador: fatoGeradorCru, dataEmissao: dhEmi });
+    const competencia = incidencia.competencia || '';
 
     return {
         chave: `${inscricaoPrestador}-${numero}-${codigoVerificacao || 'sn'}`,
@@ -72,6 +83,10 @@ export function parseNfseSpXml(xmlString) {
         dhEmi,
         dataFatoGerador,
         competencia,
+        // A ORIGEM viaja: número derivado não se apresenta como lido, e é ela que
+        // explica a nota aparecer num mês diferente do da emissão.
+        competenciaOrigem: incidencia.origem,
+        competenciaDivergeDaEmissao: incidencia.diverge,
         cancelado,
         dataCancelamento: text(nfeNode, 'DataCancelamento'),
 
@@ -130,6 +145,8 @@ export async function salvarNfseSpRecebida(db, nfeXmlString, empresaCtx) {
         dhEmi: parsed.dhEmi,
         dataFatoGerador: parsed.dataFatoGerador,
         competencia: parsed.competencia,
+        competenciaOrigem: parsed.competenciaOrigem,
+        competenciaDivergeDaEmissao: parsed.competenciaDivergeDaEmissao,
 
         direcao: 'entrada',
         status: parsed.cancelado ? 'cancelado' : 'autorizado',

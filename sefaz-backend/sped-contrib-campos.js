@@ -400,6 +400,51 @@ export function conferirCodItemDosItens(linhas) {
 }
 
 /**
+ * COD_PART vazio em A100 de ENTRADA — o campo que barra o ARQUIVO INTEIRO.
+ *
+ * FONTE: PVA do INSTITUTO HAYAY CIENCIA E FE · 08/2026 (03/09) —
+ * `Total de Erros 1 · "Campo obrigatório na entrada." · Linha 16 · Campo
+ * "4 - COD_PART" · Registro A100`, sobre a linha
+ * `|A100|0|1||00|||23||25082026|25082026|3000,00|0||3000,00|19,50|...`.
+ *
+ * A NFS-e era um serviço TOMADO que entrou pelo importador de PDF no leiaute
+ * DANFSe que o leitor não sabe nomear (o caso RADIO E TV SUL AMERICANA, 02/09
+ * — *"o PDF veio com prestador e tomador VAZIOS"*), e o gerador emitiu a linha
+ * assim mesmo. **O PVA não importa o arquivo** — não é recusa de um registro
+ * que se conserta e reenvia.
+ *
+ * ⚠️ **SÓ A ENTRADA ACUSA, e é a recusa que diz isso**: a mensagem é literal
+ * (*"Campo obrigatório **na entrada**"*). Na SAÍDA o campo sai vazio há meses
+ * em arquivos ACEITOS (MANTOAN 07/2026, HS 05/2026) — acusar ali seria alarme
+ * sobre arquivo correto, o jeito conhecido de a equipe desligar a
+ * prevalidação.
+ *
+ * 📌 Ela nasce **VERDE** sobre o gerador de hoje: `separarDeclaraveisNoBlocoA`
+ * tira essas notas antes de o A100 sair, NOMEADAS no aviso da geração. A regra
+ * é a rede — se alguém religar o caminho, o arquivo acusa aqui em vez de no PVA.
+ */
+export function conferirCodPartDoA100(linhas) {
+    const erros = [];
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        if (String(campos[0] || '').trim() !== 'A100') return;
+        if (!ehDocumentoDeEntrada(campos)) return;
+        if (String(campos[3] || '').trim()) return;
+        erros.push({
+            registro: 'A100', linha: i + 1,
+            fonte: 'PVA: "Campo obrigatório na entrada · 4 - COD_PART" '
+                + '(INSTITUTO HAYAY CIENCIA E FE · 08/2026, 03/09).',
+            mensagem: `A100 na linha ${i + 1} é um documento de ENTRADA (serviço TOMADO) e está sem `
+                + 'COD_PART. O PVA recusa o ARQUIVO INTEIRO — com esta linha ele nem importa. Não é falta '
+                + 'de cadastro do cliente: é o documento que entrou sem o CNPJ do PRESTADOR. Reimporte o '
+                + 'PDF da NFS-e preenchendo o CNPJ do prestador (Central de XMLs → Importar → NFS-e (PDF), '
+                + 'com "↻ Substituir os que já estão no banco") e gere de novo.',
+        });
+    });
+    return { erros };
+}
+
+/**
  * IND_ORIG_CRED vazio em A170 de documento de ENTRADA.
  *
  * FONTE: PVA da MANTOAN (18/08) — *"Campo obrigatório PARA NOTAS FISCAIS DE
@@ -1413,6 +1458,8 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirSomaDosItensContrib(linhas).erros,
         ...conferirCadastrosOrfaosContrib(linhas).erros,
         ...conferirCodItemDosItens(linhas).erros,
+        // 🚨 O campo que barra o ARQUIVO INTEIRO (INSTITUTO HAYAY, 03/09).
+        ...conferirCodPartDoA100(linhas).erros,
         ...conferirIndOrigCredDasEntradas(linhas).erros,
         ...conferirRetencaoDoBlocoM(linhas).erros,
         ...conferirCstPisCofins(linhas).erros,

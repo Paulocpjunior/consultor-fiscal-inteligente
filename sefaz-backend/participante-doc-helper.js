@@ -113,6 +113,25 @@ export function participanteDoDocumento(d, empresaCnpj) {
 }
 
 /**
+ * O **COD_PART** do documento — o CNPJ/CPF da contraparte, só dígitos.
+ *
+ * 📌 Existe porque o recorte "`cnpjCpf || cnpj || CNPJ` + `replace(/\D/g,'')`"
+ * estava escrito à mão no C100 **e** no A100 do EFD-Contribuições, e é este
+ * número que o 0150 cadastra. Três leituras do mesmo campo é como o registro
+ * passa a referenciar um participante que a Tabela de Cadastro não declara.
+ *
+ * ⚠️ Devolve **''** quando o documento não traz o lado — e o vazio é a
+ * RESPOSTA, não um default: na ENTRADA o PVA recusa o arquivo por ele
+ * (*"Campo obrigatório na entrada · 4 - COD_PART"*), e quem decide o que fazer
+ * com a ausência é quem monta o bloco. Inventar participante é o `PARTSEM`.
+ */
+export function codPartDoDocumento(d, empresaCnpj) {
+    const p = participanteDoDocumento(d, empresaCnpj);
+    if (!p) return '';
+    return String(p.cnpjCpf || p.cnpj || p.CNPJ || p.cpf || '').replace(/\D/g, '');
+}
+
+/**
  * EM QUAL LADO do documento está a contraparte — `'emitente'` ou
  * `'destinatario'`.
  *

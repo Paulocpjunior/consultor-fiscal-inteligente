@@ -20,6 +20,7 @@ import {
     buildBlocoF, buildBlocoM, buildBloco1_Contrib, buildBloco9_Contrib,
     filtrarNotasBlocoA, COD_ITEM_SERVICO_GENERICO,
 } from './sped-contrib-blocos.js';
+import { separarDeclaraveisNoBlocoA } from './sped-a100-declaravel.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A receita de aluguel não tem documento — ela entra pelo F550.
@@ -288,8 +289,15 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // `valorTotal` em vez de `itens[]`) vira UM item sintético no A170 — cod
     // `COD_ITEM_SERVICO_GENERICO` — e ele precisa constar do 0200, senão o
     // A170 aponta pra um item que a Tabela de Identificação não cadastrou.
+    // 🚨 E ELE CONCORDA COM O BLOCO A PELO DONO (03/09, INSTITUTO HAYAY): a nota
+    // de serviço TOMADO sem COD_PART não sai no A100 (o PVA recusa o arquivo
+    // inteiro), então o A170 dela também não — e se este coletor continuasse a
+    // declarar o `SERV-GENERICO`, o arquivo trocaria aquela recusa pela do item
+    // ÓRFÃO. Duas leituras de "quais notas o bloco A declara" divergiriam no
+    // primeiro caso novo; é a régua de 24/08 (medir o que o registro SUSTENTA).
     if (!itensMap.has(COD_ITEM_SERVICO_GENERICO)
-        && filtrarNotasBlocoA(notas).some(n => !(n.itens || []).length)) {
+        && separarDeclaraveisNoBlocoA(filtrarNotasBlocoA(notas), empresa?.cnpj)
+            .declaraveis.some(n => !(n.itens || []).length)) {
         itensMap.set(COD_ITEM_SERVICO_GENERICO, {
             codItem: COD_ITEM_SERVICO_GENERICO,
             descricao: 'Prestação de serviços sem discriminação de itens no documento',
