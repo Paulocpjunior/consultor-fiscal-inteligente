@@ -5,6 +5,55 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A NOTA ENTROU NA EMPRESA ERRADA E NÃO HAVIA COMO TIRAR** (03/09, Paulo:
+  *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o consultor não
+  deu nenhum erro avisando de que eu estava importando na empresa errada, e eu
+  não me atentei tbm. **Como resolver?**"*).
+  📌 **A resposta era: NÃO TINHA COMO — e isso foi MEDIDO.** `deleteDocumento`
+  existe em `xmlFiscalService` desde sempre e **NENHUMA tela o chamava**: a
+  "rota sem botão" de 13/08, código morto com cara de entrega. O documento
+  entrou no livro do cliente errado e não havia caminho nenhum para tirá-lo.
+  🚨 **E O CUSTO É DOS DOIS LADOS, sem nenhum validador acusar**: a nota INFLA
+  o serviço tomado de quem não a tomou (lista, competência, Livro de Serviços,
+  bloco A do EFD-Contribuições) e **SOME** do livro de quem tomou. O documento é
+  legítimo e o cadastro das DUAS empresas está certo — não há o que acender.
+  ⚠️ **E `deleteDocumento` NÃO SERVIA**: ele apaga de VERDADE (`deleteDoc` + o
+  arquivo no Storage), levando junto a prova de que a nota esteve ali, quem a
+  pôs e quando. Aqui é **LÁPIDE** (a régua do WALDESA, 24/07): `_deleted` já é
+  filtrado por toda a listagem, o documento fica, e `_deleted: false` traz de
+  volta. Um teste recorta a função e prova que não há `deleteDoc` nela.
+  🚨 **A LINHA QUE IMPEDE O LIVRO A MENOS: tirar de uma NÃO põe na outra** — e
+  a tela DIZ isso, antes e depois do clique. Sem ela, quem tira acha que
+  resolveu e a nota fica faltando nas **DUAS**, que é o erro caro.
+  ⚠️ **MOTIVO ESCRITO (≥15) E AUTOR OBRIGATÓRIOS**, o piso da T3 da DCTFWeb e
+  da reabertura do fim de mês: tirar nota de livro é decisão, e daqui a um mês
+  ninguém lembra por que ela saiu. E **retirar duas vezes é recusado** —
+  repetir sobrescreveria o autor e o motivo originais pelos de agora.
+  🔴 **E O "NÃO DEU NENHUM ERRO" TINHA UMA CAUSA MEDIDA no importador de PDF**:
+  `matchNfseEmpresa` roda no **DROP** — e os campos de prestador e tomador
+  daquela tela são **EDITÁVEIS depois dele**. Entre a conferência e a gravação o
+  CNPJ pode virar outro, e **nada reconferia**. *Conferência que roda antes da
+  edição não protege o que foi editado.* `conferirPosseDaNfsePdf` reconfere no
+  SALVAR, **antes do upload** (bloquear depois deixaria PDF órfão no Storage).
+  ⚠️ **E ELA USA A RAIZ, não o CNPJ inteiro**: matriz e filial são a mesma
+  empresa no resto do app (a régua do certificado e a do lote de XML).
+  ⚠️ **LADO ILEGÍVEL NÃO BLOQUEIA** — a DANFSe v2.0 de Brasília chega com
+  prestador e tomador VAZIOS (02/09, RADIO E TV SUL AMERICANA), e acusar ali
+  seria dizer *"é de outra empresa"* sobre um PDF que o app não conseguiu LER,
+  fechando a única porta que aquela nota tem. Vira aviso mandando preencher o
+  CNPJ, **com a consequência**: COD_PART vazio barra o EFD-Contribuições
+  INTEIRO (a recusa do INSTITUTO HAYAY, no mesmo dia).
+  🚩 **O QUE ISTO NÃO ALCANÇA, e vai dito**: o **✍️ Lançar nota sem XML**. Ali a
+  empresa é um dos lados **por construção** — a pessoa escolhe o cliente e
+  digita só a contraparte —, então nada no documento contradiz a escolha e o app
+  não tem como saber. A saída (tirar a nota) vale para ele igual; a prevenção,
+  não.
+  📌 **REGRA QUE FICA: toda tela que GRAVA documento no cliente precisa da
+  saída para tirá-lo do cliente errado.** Prevenir é metade — a outra metade é o
+  que se faz depois que passou, e sem ela a resposta ao dono é um beco. E
+  *"deleteDocumento existe"* não é a saída: função sem botão não é entrega, e
+  exclusão física não é a operação certa para dado fiscal.
+
 - **🚨 "PASSOU O MATA-BURRO NÃO VOLTA ATRÁS" — a MESMA classe pela QUARTA vez,
   agora com a empresa do lado do TOMADOR** (03/09, Paulo, GOLDLOG ARMAZENS
   GERAIS 17.390.490/0001-82: *"o CFI voltou a não reconhecer as notas de
