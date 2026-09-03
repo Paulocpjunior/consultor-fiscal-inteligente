@@ -301,3 +301,134 @@ describe('🚨 arquivo ilegível não vira acusação', () => {
         expect(misto.semIdentificacao).toBe(1);
     });
 });
+
+// ============================================================================
+// 🚨 QUARTA VEZ DA MESMA CLASSE — e desta vez a empresa era a TOMADORA.
+//
+// 03/09, Paulo (GOLDLOG ARMAZENS GERAIS, 17.390.490/0001-82): *"o CFI voltou a
+// não reconhecer as notas de serviços tomados, pois está considerando o CNPJ do
+// prestador em vez do CNPJ da empresa como tomadora"*. O modal dizia **"Nenhum
+// dos 4 XMLs é desta empresa — são do CNPJ 33.105.122/0001-00, que NÃO está
+// cadastrado"**, e o botão Importar nem existia.
+//
+// 🔴 No leiaute NACIONAL o tomador é `<toma>`, e esta leitura conhecia `<dest>`,
+// `<rem>` e os blocos do ABRASF — nenhum deles. Como o nacional TAMBÉM traz
+// `<emit>`, o `emit` saía preenchido (o PRESTADOR) e o `dest` VAZIO: a tela via
+// só o prestador e acusava o arquivo. É o CT-e (19/08) e o ABRASF (31/08) no
+// leiaute que entrou em 01/09 — três correções pontuais, e a quarta forma ficou
+// de fora.
+//
+// ✂️ Por isso ela DELEGA ao dono (`nfse-nacional-leitura.js`), o mesmo que o
+// `xmlParserService` usa: corrigir a tag fecharia a INSTÂNCIA e deixaria a
+// classe aberta pela quinta vez.
+// ============================================================================
+describe('🚨 NFS-e NACIONAL — a empresa como TOMADORA', () => {
+    const CNPJ_GOLDLOG = '17390490000182';
+    const CNPJ_PRESTADOR = '33105122000100';
+
+    /**
+     * A chave do padrão nacional tem **50** caracteres, e a repartição é a do
+     * arquivo REAL do caso (o nome dos XMLs no print):
+     * `3550308` município · `1` ambiente · `2` tipo de inscrição · 14 do CNPJ
+     * do PRESTADOR · 27 do resto. É por isso que o CNPJ da chave nunca
+     * responderia "de quem é a nota" num serviço TOMADO — ele é do emitente.
+     */
+    const chaveNac = (prest: string) => `3550308${'1'}${'2'}${prest}000000001897826086334682523`;
+
+    /** Forma REAL do leiaute (a mesma fixture do `nfseNacionalLeitura.test.ts`,
+     *  que sai do `nfse-nacional-dps-builder.js` deste repo). */
+    const nfseNacional = (prest: string, toma: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
+  <infNFSe Id="NFS${chaveNac(prest)}">
+    <nNFSe>18978</nNFSe>
+    <cLocIncid>3550308</cLocIncid>
+    <dhProc>2026-08-28T10:32:00-03:00</dhProc>
+    <emit><CNPJ>${prest}</CNPJ><xNome>PRESTADOR DE SERVICO LTDA</xNome></emit>
+    <DPS><infDPS Id="DPS3550308"><nDPS>18978</nDPS>
+      <emit><CNPJ>${prest}</CNPJ><xNome>PRESTADOR DE SERVICO LTDA</xNome></emit>
+      <toma><CNPJ>${toma}</CNPJ><xNome>GOLDLOG ARMAZENS GERAIS E LOGISTICA LTDA</xNome></toma>
+      <valores><vServPrest><vServ>1000.00</vServ></vServPrest></valores>
+    </infDPS></DPS>
+  </infNFSe>
+</NFSe>`;
+
+    it('lê o TOMADOR — antes o `dest` saía vazio e o prestador virava o dono', () => {
+        const d = extrairDadosXml(nfseNacional(CNPJ_PRESTADOR, CNPJ_GOLDLOG));
+        expect(d.emit).toBe(CNPJ_PRESTADOR);
+        expect(d.dest).toBe(CNPJ_GOLDLOG);
+    });
+
+    // 🚨 O CASO DO PRINT: 4 XMLs de serviços TOMADOS, três prestadores
+    // diferentes. Antes: "0 desta empresa · 4 de outro CNPJ", bloqueado.
+    it('o lote de serviços TOMADOS deixa de ser acusado', () => {
+        const lote = [
+            nfseNacional(CNPJ_PRESTADOR, CNPJ_GOLDLOG),
+            nfseNacional(CNPJ_PRESTADOR, CNPJ_GOLDLOG),
+            nfseNacional('63023253000109', CNPJ_GOLDLOG),
+            nfseNacional('32076813000151', CNPJ_GOLDLOG),
+        ];
+        const v = validarLoteParaEmpresa(
+            resumirLoteXmls(lote), CNPJ_GOLDLOG,
+            [{ id: 'g', nome: 'GOLDLOG ARMAZENS GERAIS E LOGISTICA LTDA', cnpj: CNPJ_GOLDLOG }],
+        );
+        expect(v.compativeis).toBe(4);
+        expect(v.comoDestinatario).toBe(4);
+        expect(v.bloquear).toBe(false);
+        expect(v.mensagem).toMatch(/entrada \(ela recebeu\)/);
+        // 🔴 A frase do print, que era FALSA sobre um arquivo que é dela.
+        expect(v.mensagem).not.toMatch(/Nenhum dos/);
+        // ⚠️ E o prestador NÃO vira "dono provável": ele é a contraparte.
+        expect(v.donosProvaveis).toHaveLength(0);
+    });
+
+    // ⚠️ O bloqueio de VERDADE continua: NFS-e nacional de outro tomador, com o
+    // dono NOMEADO — é para isto que esta tela existe.
+    it('NFS-e nacional de OUTRO tomador continua bloqueada', () => {
+        const v = validarLoteParaEmpresa(
+            resumirLoteXmls([nfseNacional(CNPJ_PRESTADOR, '99999999000199')]), CNPJ_GOLDLOG, empresas,
+        );
+        expect(v.bloquear).toBe(true);
+        expect(v.naoConferido).toBe(false);
+    });
+
+    // ⚠️ A chave do nacional tem 50 caracteres — recortá-la em 44 daria uma
+    // chave que não existe.
+    it('a chave sai como o dono a lê, com 50 caracteres', () => {
+        const d = extrairDadosXml(nfseNacional(CNPJ_PRESTADOR, CNPJ_GOLDLOG));
+        expect(d.chave).toHaveLength(50);
+        expect(d.chave?.slice(0, 7)).toBe('3550308');
+    });
+
+    // ⚠️ NADA REGRIDE: o nacional é detectado por `<infNFSe>`/`<infDPS>`, e o
+    // ABRASF escreve `<InfNfse>` — a diferença é a CAIXA das letras.
+    it('o ABRASF e a NF-e continuam pelo caminho antigo', () => {
+        expect(extrairDadosXml(nfseAbrasfV2(CNPJ_ZAMBOLIN, CNPJ_TOMADOR_NFSE)).emit).toBe(CNPJ_ZAMBOLIN);
+        expect(extrairDadosXml(nfe(CNPJ_GUARANI, CNPJ_OUTRO)).dest).toBe(CNPJ_OUTRO);
+    });
+});
+
+// ============================================================================
+// 🔗 A CLASSE, não a instância: a tela DELEGA ao dono do leiaute nacional.
+//
+// Se ela voltar a ler `<toma>` por conta própria, a próxima tag que o dono
+// aprender fica de fora — e o defeito volta calado, como voltou três vezes.
+// ============================================================================
+describe('a tela não tem leitura própria do leiaute nacional', () => {
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+    const fonte = readFileSync(join(__dirname, '../services/xmlLoteValidacao.ts'), 'utf8');
+    // ⚠️ Varredura lê CÓDIGO, nunca a prosa que o explica (a mordida do ISS,
+    // 22/08) — os comentários citam `<toma>` justamente para explicar a causa.
+    const codigo = fonte.split('\n').filter((l: string) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+
+    it('importa e chama o dono', () => {
+        expect(codigo).toMatch(/from '\.\.\/sefaz-backend\/nfse-nacional-leitura\.js'/);
+        expect(codigo).toMatch(/if \(ehNfseNacional\(txt\)\)/);
+        expect(codigo).toMatch(/lerNfseNacional\(txt\)/);
+    });
+
+    it('e não rola uma leitura própria de `toma`', () => {
+        expect(codigo).not.toMatch(/'toma'/);
+        expect(codigo).not.toMatch(/<toma/);
+    });
+});

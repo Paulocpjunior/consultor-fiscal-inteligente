@@ -5,6 +5,98 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "PASSOU O MATA-BURRO NÃO VOLTA ATRÁS" — a MESMA classe pela QUARTA vez,
+  agora com a empresa do lado do TOMADOR** (03/09, Paulo, GOLDLOG ARMAZENS
+  GERAIS 17.390.490/0001-82: *"o CFI voltou a não reconhecer as notas de
+  serviços tomados, pois está considerando o CNPJ do prestador em vez do CNPJ
+  da empresa como tomadora"*).
+  📖 O modal, literal: **`4 XML(s) · 0 desta empresa · 4 de outro CNPJ`**, com
+  três prestadores nomeados (33.105.122/0001-00 · 63.023.253/0001-09 ·
+  32.076.813/0001-51) e **só o botão Cancelar** — o Importar nem existia.
+  🔴 **A CAUSA É UMA TAG, e ela estava MEDIDA no nome dos próprios arquivos**:
+  as chaves têm **50** caracteres (`3550308` município · `1` ambiente · `2`
+  tipo de inscrição · 14 do CNPJ do PRESTADOR · 27 do resto), ou seja são
+  NFS-e do **padrão NACIONAL** — e ali o tomador é **`<toma>`**. A leitura da
+  TELA (`extrairDadosXml`) conhecia `<dest>`, `<rem>` e os blocos do ABRASF;
+  nenhum deles. E como o nacional **também** traz `<emit>`, o `emit` saía
+  preenchido com o PRESTADOR e o `dest` VAZIO: a tela via um lado só e concluiu
+  que o arquivo era de outra empresa.
+  🚨 **É A TERCEIRA CORREÇÃO PONTUAL DA MESMA SEGUNDA LEITURA**: o CT-e (19/08,
+  `<rem>`), o ABRASF (31/08, `<PrestadorServico>`) e o nacional que entrou em
+  01/09. Nas três eu **acrescentei a tag que faltava** — e a quarta forma ficou
+  de fora, porque acrescentar tag fecha a INSTÂNCIA e deixa a classe aberta.
+  ✂️ **Ela deixou de ser leitura própria e passou a DELEGAR**: `ehNfseNacional`
+  + `lerNfseNacional` (o dono, `nfse-nacional-leitura.js`) — o MESMO que o
+  `xmlParserService` usa desde 01/09, e que já sabe `<emit>`/`<toma>`/chave de
+  50. Agora a tela aprende JUNTO com o importador, que é a única forma de as
+  duas pararem de divergir.
+  ⚠️ **E A CHAVE SAI COM 50, não recortada em 44** — recortar daria uma chave
+  que não existe.
+  ⚠️ **NADA REGRIDE, e o que separa os dois leiautes é a CAIXA DAS LETRAS**: o
+  ABRASF escreve `<InfNfse>` e o nacional `<infNFSe>`; a detecção do dono é
+  case-sensitive de propósito (a lição de 01/09, em que a flag `i` engoliu o
+  ABRASF inteiro).
+  ✅ **E O IMPORTADOR JÁ ACEITAVA — medido antes de mexer**: `parseNFSeNacional`
+  preenche o destinatário a partir do `<toma>` e `matchCompanyAndDirection` lê
+  `parsed.destinatario.cnpjCpf`. Ou seja o botão que faltava levava a uma
+  importação que funciona — era só a tela recusando o que o servidor aceita, o
+  defeito do CT-e da A CASTELLANO na íntegra.
+  📌 **REGRA QUE FICA: quando a MESMA correção acontece pela terceira vez no
+  mesmo lugar, a correção certa não é a quarta tag — é DELEGAR ao dono.** Tag
+  acrescentada à mão só cobre o leiaute que alguém lembrou, e envelhece em
+  SILÊNCIO: o sintoma não é erro, é a tela AFIRMANDO que o arquivo é de outra
+  empresa — o que manda conferir o cadastro do cliente, que está certo.
+  Travado por varredura (a tela não pode citar `toma` no CÓDIGO) mais o caso
+  real do print, e provado desligando a delegação: 4 testes caem.
+
+- **🚨 A NFTS NUNCA VIRAVA DOCUMENTO — o módulo só CRUZAVA** (03/09, Paulo:
+  *"Referente a NFTS, ela não aparece pra mim no consultor, o PDF ele não
+  aceita e o CSV por causa do layout"*).
+  📌 **O "não aparece" era POR CONSTRUÇÃO, e isso foi MEDIDO**: o
+  `nfts-routes.js` tinha UMA rota (`/cruzamento`), que **LÊ**
+  `documentos_fiscais` para conferir e **nunca escreve**. A NFTS não existia em
+  recorte nenhum — nem no Livro de Serviços tomados, nem na competência, nem no
+  bloco A. **Não era defeito de captura: era ausência de trilho.**
+  🚨 **E O QUE FICAVA DE FORA É O QUE CARREGA O IMPOSTO**: a NFTS é o documento
+  em que o TOMADOR declara o serviço de quem não emite NFS-e paulistana — é
+  nela que mora o **ISS RETIDO** que o cliente recolhe.
+  ⚠️ **A COMPETÊNCIA É A DA PRESTAÇÃO, e quem responde é o MESMO dono da
+  NFS-e** (`competenciaDaNfse`): o print traz `Emissão 03/09/2026 · Data
+  Prestação Serv. 31/08/2026` e o portal lista sob `Período: Incidência
+  08/2026`. Duas leituras da mesma pergunta fariam a NFTS e a NFS-e do MESMO
+  mês caírem em competências diferentes.
+  ⚠️ **DIREÇÃO É ENTRADA POR DEFINIÇÃO** (quem emite é o cliente, o serviço é
+  tomado) e o **rótulo é PRÓPRIO** (`tipo: 'NFTS'`): confundi-la com NFS-e
+  faria a mesma prestação ser declarada duas vezes no dia em que o prestador
+  também emitir.
+  ⚠️ **`issRetido` É BOOLEANO no portal** ("Sim"/"Não") e o VALOR mora em
+  `valorIss` — somar o booleano declararia retenção de R$ 1,00. Os dois viajam
+  SEPARADOS (`issRetidoDeclarado` × `valorIssRetido`), que é a régua do
+  `csllOuTotalPresente`.
+  ⚠️ **ID DETERMINÍSTICO** (`ccm do tomador + número`): sem ele, reimportar o
+  MESMO CSV criaria uma segunda NFTS e o serviço contaria duas vezes no livro
+  (o `Date.now()` de 01/09). E a gravação é **MERGE** — reimportar não pode
+  apagar o que outro trilho gravou.
+  ⚠️ **GRAVAR É OPT-IN**: a rota é uma CONFERÊNCIA, e conferência que escreve
+  no banco sem ninguém pedir é a tela decidindo pela pessoa. Quem grava é o
+  clique.
+  🔴 **E A RECUSA DE LAYOUT AFIRMAVA SOBRE A POSSE DO ARQUIVO**: ela dizia
+  *"este arquivo não parece o export de NFTS do portal"* — o que manda procurar
+  no portal um export que **já está certo**. O portal tem **VERSÕES** de
+  leiaute (o print traz `Layout V. 003`, e o de NFS-e RECEBIDAS traz V. 004), e
+  quem não conhece a coluna é o APP. Agora a recusa diz quantas colunas o
+  arquivo tem, quantas o app reconheceu, e **entrega o cabeçalho LIDO** para
+  copiar — é a régua do `xmlOndeEstaOCnpj` (02/09): antes de pedir o arquivo ao
+  dono, perguntar se o app não tem a resposta. **Só NOMES de coluna saem daí,
+  nunca linha de nota.**
+  🚩 **O PDF CONTINUA FORA, e vai DITO**: o trilho de PDF daquele módulo existe
+  para **EMITIR** a NFTS (lê a nota do prestador e monta o TXT do lote da
+  PMSP), não para importar uma NFTS já emitida. Ele não "não aceita" — ele faz
+  outra coisa.
+  📌 **REGRA QUE FICA: módulo que só CONFERE não faz o documento existir.** O
+  sintoma desta classe nunca é erro — é a pessoa procurando no app um documento
+  que o app nunca gravou, e concluindo que a captura falhou.
+
 - **🚨 A TELA SOMAVA AS DUAS PROVAS NUM NÚMERO SÓ — "20 não canceladas" sobre
   20 notas que a SEFAZ RECUSOU** (03/09, Paulo na MV LIDER 0639 · 08/2026:
   *"ainda sobre NFS canceladas veja o erro que não estão sendo
