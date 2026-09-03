@@ -110,6 +110,38 @@
     <div class="alerta">⚠️ <strong>Não é problema no cadastro do cliente</strong> — é o documento que
     entrou sem o prestador. Conferir o cadastro não resolve.</div>
 
+    <h3>3. ⛔ <strong>“Arquivo não é desta empresa”</strong> em nota de serviço TOMADO</h3>
+    <p>Arrastando os XMLs de <strong>serviços tomados</strong>, a tela dizia
+    <strong>“0 desta empresa · 4 de outro CNPJ”</strong> e nomeava o <strong>prestador</strong> como
+    dono do arquivo — e o botão <strong>Importar nem aparecia</strong>, só o Cancelar.</p>
+    <p>A causa: na <strong>NFS-e do Padrão Nacional</strong> o tomador vem numa etiqueta que a tela de
+    conferência ainda não conhecia. Ela lia só o <strong>prestador</strong> e concluía que a nota era de
+    outra empresa.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → <strong>Importar</strong>
+    (avulso ou ZIP). <strong>Nada muda na sua rotina</strong> — a tela passou a reconhecer a empresa
+    como tomadora e o botão Importar volta a aparecer.</div>
+    <div class="alerta">⚠️ <strong>O bloqueio de verdade continua:</strong> XML que é mesmo de outro
+    cliente segue barrado, com o dono nomeado. O que saiu foi a acusação falsa.</div>
+
+    <h3>4. 🧾 <strong>NFTS agora entra no consultor</strong> (serviço tomado, com o ISS retido)</h3>
+    <p>A NFTS aparecia só na conferência e <strong>nunca virava documento</strong>: não estava na lista
+    de XMLs, nem no Livro de Serviços tomados, nem na competência. Não era falha de captura —
+    <strong>faltava o caminho de importar</strong>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> NFTS → <strong>Conferência NFTS</strong>. Além do
+    <strong>🔎 Conferir (não grava)</strong>, existe agora o
+    <strong>⬇ Conferir e IMPORTAR as NFTS</strong>. Exporte o CSV no portal da Prefeitura, escolha a
+    empresa e a competência, e clique no verde.</div>
+    <div class="alerta">📅 <strong>A competência é a da DATA DA PRESTAÇÃO</strong>, não a da emissão —
+    a NFTS emitida em setembro por um serviço de 31/08 entra em <strong>agosto</strong>. A tela diz em
+    qual competência cada nota entrou; procure por ela em XMLs.</div>
+    <div class="alerta">⚠️ <strong>Reimportar o mesmo arquivo NÃO duplica</strong> — a nota cai por cima
+    dela mesma. E a NFTS que o app não conseguir gravar aparece <strong>nomeada</strong>, com o motivo.</div>
+    <div class="alerta">🚩 <strong>Se o arquivo for recusado por “layout”:</strong> o portal exporta em
+    versões, e a tela agora mostra o <strong>cabeçalho que o app leu</strong> numa caixa para copiar.
+    <strong>Copie e mande ao Junior</strong> — não precisa mandar o arquivo do cliente. E o
+    <strong>PDF não serve para importar NFTS</strong>: ali o PDF é usado para <em>emitir</em> a NFTS no
+    portal, que é outra coisa.</div>
+
     <h2>O que mudou em 02/09</h2>
 
     <h3>1. 🚫 <strong>NFC-e cancelada aparecendo com valor</strong> — agora tem como perguntar à SEFAZ</h3>

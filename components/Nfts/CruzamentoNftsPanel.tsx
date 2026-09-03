@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type { RecusaLayoutNfts } from '../../services/nftsCruzamentoService';
 import { cruzarNfts, type CruzamentoNftsResposta } from '../../services/nftsCruzamentoService';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 import type { EmpresaXmlOption } from '../../services/xmlFiscalService';
@@ -32,12 +33,20 @@ export const CruzamentoNftsPanel: React.FC<Props> = ({ empresas, onClose }) => {
     const [dados, setDados] = useState<CruzamentoNftsResposta | null>(null);
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
+    // 📌 O CABEÇALHO QUE O APP LEU, quando o layout não casa: é ele que mapeia
+    // a versão nova sem precisar do arquivo do cliente (a régua do
+    // `xmlOndeEstaOCnpj`, 02/09 — antes de pedir um arquivo ao dono, perguntar
+    // se o APP não tem a resposta).
+    const [detalheLayout, setDetalheLayout] = useState<RecusaLayoutNfts | null>(null);
 
-    const rodar = async () => {
+    const rodar = async (importar = false) => {
         if (!empresaId || !arquivo) { setErro('Escolha a empresa e o arquivo exportado do portal.'); return; }
-        setCarregando(true); setErro(null);
-        try { setDados(await cruzarNfts(empresaId, competencia, arquivo)); }
-        catch (e: any) { setErro(e?.message || 'Falha inesperada'); }
+        setCarregando(true); setErro(null); setDetalheLayout(null);
+        try { setDados(await cruzarNfts(empresaId, competencia, arquivo, importar)); }
+        catch (e: any) {
+            setErro(e?.message || 'Falha inesperada');
+            if (e?.detalhe?.cabecalhoLido) setDetalheLayout(e.detalhe);
+        }
         finally { setCarregando(false); }
     };
 
@@ -86,23 +95,110 @@ export const CruzamentoNftsPanel: React.FC<Props> = ({ empresas, onClose }) => {
                     </div>
                 </div>
 
-                <button
-                    onClick={rodar}
-                    disabled={carregando}
-                    className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                    {carregando ? 'Conferindo…' : '🔎 Conferir'}
-                </button>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={() => rodar(false)}
+                        disabled={carregando}
+                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 btn-press whitespace-nowrap"
+                    >
+                        {carregando ? 'Conferindo…' : '🔎 Conferir (não grava)'}
+                    </button>
+                    {/* 🚨 O QUE FAZ A NFTS APARECER NO CONSULTOR (03/09, Paulo:
+                        *"ela não aparece pra mim"*). Até aqui este módulo só
+                        CRUZAVA — lia os documentos e nunca escrevia, então a
+                        NFTS não existia em recorte nenhum. É OPT-IN porque
+                        gravar por padrão faria uma conferência escrever no
+                        banco sem ninguém pedir. */}
+                    <button
+                        onClick={() => rodar(true)}
+                        disabled={carregando}
+                        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 btn-press whitespace-nowrap"
+                        title="Grava as NFTS do arquivo como documento de serviço TOMADO, na competência da DATA DA PRESTAÇÃO. Reimportar cai por cima da mesma nota."
+                    >
+                        {carregando ? 'Importando…' : '⬇ Conferir e IMPORTAR as NFTS'}
+                    </button>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    A NFTS entra como <strong>serviço tomado</strong>, na competência da{' '}
+                    <strong>data da prestação</strong> — em SP a nota de 31/08 pode ser emitida até 10/09
+                    (05/09 com retenção), e quem recorta o mês é a <strong>incidência</strong>, nunca a emissão.
+                </p>
 
                 {erro && (
                     <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
                         {erro}
+                        {detalheLayout?.acao && <p className="mt-2 font-semibold">{detalheLayout.acao}</p>}
+                    </div>
+                )}
+                {/* 📌 O app responde o que SÓ ELE sabe: as colunas que o arquivo
+                    trouxe. Sem isto a única saída era mandar o arquivo do
+                    cliente — que é justamente o que a régua evita. */}
+                {!!detalheLayout?.cabecalhoLido?.length && (
+                    <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                            Cabeçalho que o app leu neste arquivo ({detalheLayout.cabecalhoLido.length} colunas)
+                        </p>
+                        <textarea
+                            readOnly
+                            value={detalheLayout.cabecalhoLido.join(';')}
+                            className="mt-2 w-full h-24 rounded border border-amber-300 bg-white dark:bg-slate-800 p-2 font-mono text-[10px]"
+                        />
+                        <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                            Copie e mande ao time. São só <strong>nomes de coluna</strong> — nenhuma linha de
+                            nota do cliente sai daqui.
+                        </p>
                     </div>
                 )}
             </div>
 
             {dados && (
                 <>
+                    {/* 🚨 O RESULTADO DA IMPORTAÇÃO APARECE — importar e não
+                        DIZER o que entrou é a flag que ninguém lê, e aqui ela
+                        seria a pior: a pessoa continuaria achando que a NFTS
+                        "não aparece no consultor". */}
+                    {!!dados.importacao && (
+                        <div className="rounded-xl border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 p-4">
+                            <h4 className="font-bold text-emerald-800 dark:text-emerald-300 text-sm">
+                                ⬇ {dados.importacao.gravadas} NFTS importada(s)
+                                {dados.importacao.atualizadas > 0 && ` · ${dados.importacao.atualizadas} atualizada(s)`}
+                                {dados.importacao.canceladas > 0 && ` · ${dados.importacao.canceladas} cancelada(s)`}
+                            </h4>
+                            {/* ⚠️ A COMPETÊNCIA VAI DITA: ela sai da DATA DA
+                                PRESTAÇÃO, então pode não ser o mês da emissão —
+                                e é justamente essa a pergunta de quem depois
+                                procura a nota e não acha (a lição de 01/09). */}
+                            {!!Object.keys(dados.importacao.competencias).length && (
+                                <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                                    Procure em XMLs pela competência{' '}
+                                    <strong>
+                                        {Object.entries(dados.importacao.competencias)
+                                            .map(([c, n]) => `${c} (${n})`).join(' · ')}
+                                    </strong>{' '}
+                                    — a competência é a da <strong>prestação</strong>, não a da emissão.
+                                </p>
+                            )}
+                            {/* 🚨 O QUE NÃO ENTROU SAI NOMEADO: "3 importadas"
+                                sem dizer que 2 ficaram de fora é o que faz
+                                alguém achar que declarou tudo. */}
+                            {!!dados.importacao.foras.length && (
+                                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-2">
+                                    <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                                        {dados.importacao.foras.length} NFTS ficaram de FORA:
+                                    </p>
+                                    <ul className="mt-1 space-y-1 text-[11px] text-amber-800 dark:text-amber-300">
+                                        {dados.importacao.foras.map((f) => (
+                                            <li key={`${f.numero}-${f.prestador}`}>
+                                                NFTS <strong>{f.numero}</strong> ({f.prestador}) —{' '}
+                                                {f.lacunas.join(' · ')}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* DUPLICIDADE — achado do arquivo, independe do cruzamento. */}
                     {!!dados.arquivo.duplicadas?.length && (
                         <div className="rounded-xl border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-4">
