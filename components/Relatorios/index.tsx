@@ -36,7 +36,7 @@ import {
     contraparteDoc, docValido, lerFaltantes,
 } from '../../services/relatoriosAgregacoes';
 import { reconferirCancelamento } from '../../services/reconferirCancelamentoService';
-import { drenarReconferencia, fraseDaDrenagem } from '../../services/reconferenciaEncadeada';
+import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa } from '../../services/reconferenciaEncadeada';
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
 import { relerNotasVazias } from '../../services/ipiVarreduraService';
@@ -1274,6 +1274,13 @@ const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificac
 
 const RESSALVAS_NUMERACAO = [
     'Buraco NÃO é sempre nota perdida: numeração INUTILIZADA na SEFAZ não gera XML e aparece aqui como faltante — confira a inutilização no portal antes de concluir.',
+    // 🚨 03/09, Paulo na MV LIDER: *"veja o erro que não estão sendo
+    // relacionadas"*. Nota CANCELADA que nunca chegou ao app cai aqui como
+    // FALTANTE, e a reconferência NÃO a alcança — ela pergunta pela CHAVE, e a
+    // chave de uma nota que não chegou não existe do nosso lado: o `cNF` (8
+    // dígitos) é aleatório e não se deriva de série+número. Dizer isso é o que
+    // impede alguém de esperar do "Reconferir" uma resposta que ele não pode dar.
+    'Nota CANCELADA que nunca chegou ao app aparece aqui como FALTANTE, não na coluna Canceladas — e o botão "Reconferir na SEFAZ" NÃO a alcança: ele pergunta pela chave de acesso, e nota que não chegou não tem chave aqui (o código numérico dela é aleatório). Quem responde por esses números é o portal da SEFAZ ou o ERP do cliente.',
     'A sequência atravessa o mês: buraco entre o fim do mês anterior e a 1ª nota do mês não aparece neste recorte.',
     'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Cobertura de Saída.',
 ];
@@ -1542,12 +1549,32 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                             <p className="font-semibold">
                                 {reconf.simulado
                                     ? `${reconf.selecao?.aConsultar} de ${reconf.selecao?.total} nota(s) de saída seriam consultadas`
-                                    : `${reconf.resumo?.consultadas} consultada(s) · ${reconf.resumo?.canceladas} cancelada(s) · `
-                                      + `${(reconf.resumo?.naoCanceladas || 0) + (reconf.resumo?.naoCanceladasPorRecusa || 0)} não cancelada(s) · `
-                                      + `${reconf.resumo?.indeterminadas} indeterminada(s)`}
-                                {reconf.selecao?.jaCanceladas ? ` · ${reconf.selecao.jaCanceladas} já constavam canceladas` : ''}
-                                {reconf.selecao?.naoMod55 ? ` · ${reconf.selecao.naoMod55} fora (não é NF-e mod 55)` : ''}
+                                      + (reconf.selecao?.jaCanceladas ? ` · ${reconf.selecao.jaCanceladas} já constavam canceladas` : '')
+                                      + (reconf.selecao?.naoMod55 ? ` · ${reconf.selecao.naoMod55} fora (não é NF-e mod 55)` : '')
+                                    // 🚨 AS DUAS PROVAS NÃO SE SOMAM (03/09): a tela
+                                    // fundia `naoCanceladas + naoCanceladasPorRecusa`
+                                    // e dizia "20 não canceladas" sobre 20 notas que
+                                    // a SEFAZ RECUSOU — o núcleo as separa desde
+                                    // 20/08 justamente porque uma prova é positiva e
+                                    // a outra negativa.
+                                    : fraseDoVeredito(reconf.resumo, reconf.selecao)}
                             </p>
+                            {/* 📌 E as de prova NEGATIVA saem NOMEADAS: sumir de vez
+                                foi o "não estão sendo relacionadas". Uma linha
+                                compacta, não 20 — quem confere precisa saber QUAIS
+                                dependem da prova fraca. */}
+                            {(() => {
+                                const { numeros, restantes } = numerosPorRecusa(reconf.resultados || []);
+                                if (!numeros.length) return null;
+                                return (
+                                    <p className="text-slate-600 dark:text-slate-400">
+                                        <strong>Não canceladas por RECUSA (640)</strong> — a prova é negativa (a SEFAZ
+                                        não disse 653), então elas dependem de um A1 próprio para serem conferidas pelo
+                                        XML: nº {numeros.join(', ')}
+                                        {restantes ? ` e mais ${restantes}` : ''}.
+                                    </p>
+                                );
+                            })()}
                             {(reconf.resumo?.avisos || []).map((a: string, i: number) => (
                                 <p key={i} className="text-amber-700 dark:text-amber-400">{a}</p>
                             ))}

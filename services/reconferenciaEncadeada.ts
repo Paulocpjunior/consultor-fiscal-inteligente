@@ -94,6 +94,61 @@ export async function drenarReconferencia(opts: {
 }
 
 /**
+ * A linha do VEREDITO — e ela NÃO funde as duas provas.
+ *
+ * 🚨 03/09, Paulo na MV LIDER 0639 · 08/2026: *"ainda sobre NFS canceladas veja
+ * o erro que não estão sendo relacionadas"*. A tela dizia, na linha mais alta
+ * da caixa, **"20 consultada(s) · 0 cancelada(s) · 20 não cancelada(s)"** — e
+ * dois parágrafos abaixo, no aviso do backend, **"20 nota(s) a SEFAZ recusou
+ * por PERMISSÃO (cStat 640)"**. As mesmas 20.
+ *
+ * 🔴 A causa era de SOMA, na tela: `naoCanceladas + naoCanceladasPorRecusa`. O
+ * núcleo separa as duas de propósito desde 20/08 — *"lá a prova é POSITIVA (ela
+ * entregou o documento e não há evento), aqui é NEGATIVA (ela não disse 653), e
+ * fundir as duas apagaria a diferença justo onde importa"* — e era exatamente a
+ * tela que apagava. Nesta empresa, que **não tem A1 próprio**, a rodada inteira
+ * volta por recusa: o veredito lia "conferi 20 e estão boas" sobre 20 notas em
+ * que a SEFAZ não entregou documento nenhum.
+ *
+ * ⚠️ E a correção NÃO é chamar o 640 de "sem resposta": **recusa é resposta**
+ * (a régua de 20/08, provada na própria MV LIDER — nota cancelada volta 653
+ * mesmo a quem não é parte). O que muda é a tela parar de somar as duas provas
+ * num número só.
+ */
+export function fraseDoVeredito(resumo: any, selecao: any): string {
+    const n = (v: unknown) => Number(v) || 0;
+    const partes = [
+        `${n(resumo?.consultadas)} consultada(s)`,
+        `${n(resumo?.canceladas)} cancelada(s)`,
+        `${n(resumo?.naoCanceladas)} não cancelada(s) pelo XML`,
+        `${n(resumo?.naoCanceladasPorRecusa)} não cancelada(s) por recusa (640)`,
+        `${n(resumo?.indeterminadas)} indeterminada(s)`,
+    ];
+    if (n(resumo?.cancelamentoNaoConfirmado)) {
+        partes.push(`${n(resumo.cancelamentoNaoConfirmado)} com cancelamento NÃO confirmado`);
+    }
+    if (n(selecao?.jaCanceladas)) partes.push(`${n(selecao.jaCanceladas)} já constavam canceladas`);
+    if (n(selecao?.naoMod55)) partes.push(`${n(selecao.naoMod55)} fora (não é NF-e mod 55)`);
+    return partes.join(' · ');
+}
+
+/**
+ * Os NÚMEROS das notas em que a prova é NEGATIVA — as que voltaram 640.
+ *
+ * 📌 Elas não aparecem linha a linha de propósito (20 linhas dizendo o mesmo é
+ * o que faz ninguém ler as que importam), mas sumir de vez foi o que produziu o
+ * *"não estão sendo relacionadas"*: quem confere o mês precisa saber QUAIS
+ * dependem de prova fraca, porque são justamente essas que um A1 próprio
+ * responderia melhor.
+ */
+export function numerosPorRecusa(resultados: any[], teto = 30): { numeros: string[]; restantes: number } {
+    const todos = (resultados || [])
+        .filter((r) => r?.situacao === 'nao-cancelada-por-recusa')
+        .map((r) => String(r?.numero ?? '—'));
+    return { numeros: todos.slice(0, teto), restantes: Math.max(0, todos.length - teto) };
+}
+
+/**
  * A frase do fim da drenagem — cada motivo tem uma AÇÃO diferente, e uma frase
  * só para todos seria "vá procurar" com mais passos.
  */
