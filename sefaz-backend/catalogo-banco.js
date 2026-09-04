@@ -72,6 +72,7 @@ export const CATALOGO_BANCO = [
     { colecao: 'pgdas_atividades_codigos', grupo: 'Simples · DAS', funcionalidade: 'Código oficial de atividade do PGDAS-D cadastrado pelo admin (ISS fixo/SUP)' },
     { colecao: 'ncm_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Cadastro de NCM: alíquota interna, IVA-ST (com Portaria e vigência), CEST e redução de base' },
     { colecao: 'cfop_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'CÉREBRO do CFOP: o que alguém corrigiu numa nota vira parâmetro do FORNECEDOR para as próximas competências (não retroage)' },
+    { colecao: 'retencao_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Parâmetro de RETENÇÃO por prestador: alíquota + base legal que SUGEREM a retenção nas próximas competências (não retroage; sugestão nunca grava sozinha)' },
     { colecao: 'das_envios_cliente', grupo: 'Simples · DAS', funcionalidade: 'Envios de DAS ao cliente' },
     { colecao: 'das_cron_logs', grupo: 'Simples · DAS', funcionalidade: 'Execuções do cron de DAS/vencimentos' },
 

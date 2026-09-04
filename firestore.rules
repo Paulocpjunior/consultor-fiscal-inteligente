@@ -514,6 +514,27 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // retencao_parametros: o MESMO desenho do cerebro do CFOP, para a RETENCAO
+    // federal (Paulo, 04/09 — J.P. PISSATO e 923 MONACO, CT-e OS com IRRF de
+    // 1% todo mes). Guarda a REGRA (aliquota + base legal), nunca o valor: o
+    // que vale e o que o documento declara, e a sugestao so preenche campo
+    // vazio na tela.
+    //
+    // ESCRITA por qualquer logado, pelo mesmo motivo do CFOP: quem digita a
+    // nota e o colaborador da carteira, e exigir admin faria o parametro morrer
+    // na fila do dono. O rastro e o freio — criadoPor/criadoEm, e desligar NAO
+    // apaga, porque o parametro explica as competencias que ja datou.
+    match /retencao_parametros/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit <= 2000;
+      allow create: if isSignedIn() && request.resource.data.criadoPor == request.auth.token.email;
+      // UPDATE so para DESLIGAR — vigencia nova e doc novo.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['ativo', 'desligadoPor', 'desligadoEm']);
+      allow delete: if isAdmin();
+    }
+
     match /ncm_parametros/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;

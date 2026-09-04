@@ -11,13 +11,16 @@
  * depois, ele substitui o lançamento; e uma digitada nunca sobrescreve um
  * documento que tem XML.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../../services/firebaseConfig';
 import {
     validarNotaDigitada, montarNotaDigitada, idNotaDigitada, podeGravarSobre,
-    type ItemDigitado, type ServicoDigitado,
+    type ItemDigitado, type ServicoDigitado, type TransporteDigitado,
 } from '../../services/notaDigitada';
+import { ecoDaRetencaoDigitada } from '../../services/retencaoFederalDigitada';
+import { lerParametrosRetencao } from '../../services/retencaoParametroService';
+import { sugerirRetencoes, explicarSugestao } from '../../sefaz-backend/retencao-parametros.js';
 import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitado';
 import { useEmpresaAtiva } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../EmpresaAtivaFixa';
@@ -47,8 +50,20 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     // DUAS ESPÉCIES porque são dois documentos: serviço não tem CFOP nem NCM,
     // e forçar tudo num formulário só faria a pessoa inventar um CFOP para
     // conseguir salvar — CFOP inventado entra no livro.
-    const [especie, setEspecie] = useState<'mercadoria' | 'servico'>('mercadoria');
+    const [especie, setEspecie] = useState<'mercadoria' | 'servico' | 'transporte'>('mercadoria');
     const [servico, setServico] = useState<ServicoDigitado>({ discriminacao: '' });
+    // CT-e / CT-e OS: o MODELO é escolha da pessoa (57 e 67 são documentos
+    // diferentes com a mesma cara no papel) e decide o bloco do SPED.
+    const [transporte, setTransporte] = useState<TransporteDigitado>({ modelo: '67', cfop: '' });
+    const [vBcTexto, setVBcTexto] = useState('');
+    const [aliqIcmsTexto, setAliqIcmsTexto] = useState('');
+    const [vIcmsTexto, setVIcmsTexto] = useState('');
+    // Retenção federal — vale para as TRÊS espécies. Texto, nunca número: o
+    // round-trip do campo controlado come a vírgula (caso APATEL).
+    const [ret, setRet] = useState<Record<'ir' | 'inss' | 'csll' | 'pis' | 'cofins', string>>(
+        { ir: '', inss: '', csll: '', pis: '', cofins: '' },
+    );
+    const [parametros, setParametros] = useState<any[]>([]);
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const [numero, setNumero] = useState('');
     const [serie, setSerie] = useState('1');
@@ -66,6 +81,28 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const [erros, setErros] = useState<string[]>([]);
     const [salvando, setSalvando] = useState(false);
     const [salva, setSalva] = useState<string | null>(null);
+
+    // 🚨 OS HOOKS VÊM ANTES DO EARLY RETURN. Hook depois de um `return`
+    // condicional é hook CONDICIONAL, e o React derruba a tela inteira com
+    // "Rendered more hooks than during the previous render" (29/08).
+    const empresaId = empresa?.id || '';
+    useEffect(() => {
+        let vivo = true;
+        lerParametrosRetencao(empresaId).then(p => { if (vivo) setParametros(p); });
+        return () => { vivo = false; };
+    }, [empresaId]);
+
+    /**
+     * A SUGESTÃO do parâmetro daquele prestador, na competência da nota.
+     *
+     * ⚠️ Ela é MOSTRADA, nunca aplicada sozinha — no caso medido a conta dá
+     * 39,01 e o documento diz 39,02. Quem manda é o papel.
+     */
+    const sugestoes = useMemo(() => sugerirRetencoes(parametros, {
+        cnpjPrestador: direcao === 'entrada' ? participanteDoc : (empresa?.cnpj || ''),
+        competencia: String(dhEmi || '').slice(0, 7),
+        base: parseValorMoeda(valorTotal),
+    }), [parametros, direcao, participanteDoc, empresa?.cnpj, dhEmi, valorTotal]);
 
     if (!empresa) return <EmpresaAtivaFixa rotulo="Lançar nota" />;
 
@@ -85,13 +122,21 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 fora.push(`${rotulo}: não entendi "${texto}". Use o formato 1234,56 (ou deixe vazio).`);
             }
         };
-        conferir(especie === 'servico' ? 'Valor dos serviços' : 'Valor total da nota', valorTotal);
+        conferir(especie === 'servico' ? 'Valor dos serviços'
+            : especie === 'transporte' ? 'Valor da prestação' : 'Valor total da nota', valorTotal);
         if (especie === 'servico') {
             conferir('Alíquota do ISS', aliquotaTexto);
             conferir('ISS devido', valorIssTexto);
+        } else if (especie === 'transporte') {
+            conferir('Base de cálculo do ICMS', vBcTexto);
+            conferir('Alíquota do ICMS', aliqIcmsTexto);
+            conferir('ICMS destacado', vIcmsTexto);
         } else {
             itens.forEach((it, idx) => conferir(`Item ${idx + 1} — valor`, it.vProdTexto));
         }
+        // A retenção passa pelo MESMO conferidor: ilegível é recusa com o campo
+        // nomeado, nunca zero — zero aqui AFIRMA que não houve retenção.
+        (Object.keys(ret) as Array<keyof typeof ret>).forEach(k => conferir(`${k.toUpperCase()} retido`, ret[k]));
         return fora;
     };
 
@@ -106,6 +151,16 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 aliquota: parseValorMoeda(aliquotaTexto),
                 valorIss: parseValorMoeda(valorIssTexto),
             },
+            transporte: {
+                ...transporte,
+                vBC: parseValorMoeda(vBcTexto),
+                aliqIcms: parseValorMoeda(aliqIcmsTexto),
+                vICMS: parseValorMoeda(vIcmsTexto),
+            },
+            // Texto cru: quem decide o que é ausência e o que é zero é o dono
+            // (`camposDaRetencaoDigitada`), e ele deixa o ausente FORA do
+            // objeto — `undefined` viraria `null`, que o relatório lê como 0,00.
+            retencao: ret,
             empresaId: empresa.id,
             empresaCnpj: empresa.cnpj,
             empresaNome: empresa.nome,
@@ -142,6 +197,9 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             setNumero(''); setChave(''); setValorTotal(''); setItens([itemVazio()]);
             setParticipanteNome(''); setParticipanteDoc(''); setParticipanteUf('');
             setServico({ discriminacao: '' }); setAliquotaTexto(''); setValorIssTexto('');
+            setTransporte(t => ({ modelo: t.modelo, cfop: '' }));
+            setVBcTexto(''); setAliqIcmsTexto(''); setVIcmsTexto('');
+            setRet({ ir: '', inss: '', csll: '', pis: '', cofins: '' });
         } catch (e: any) {
             setErros([`Falha ao gravar: ${e?.message || 'erro desconhecido'}.`]);
         } finally {
@@ -180,23 +238,37 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
 
             <EmpresaAtivaFixa rotulo="Lançando na empresa" semTrocar />
 
-            <div className="flex gap-2">
-                {(['mercadoria', 'servico'] as const).map(e => (
+            {/* flex-wrap: três botões numa fileira sem wrap transbordam a
+                viewport e empurram o cabeçalho (a lição de 13/08). */}
+            <div className="flex flex-wrap gap-2">
+                {(['mercadoria', 'servico', 'transporte'] as const).map(e => (
                     <button key={e} onClick={() => setEspecie(e)}
                         className={`btn-press px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${especie === e
                             ? 'bg-emerald-600 text-white'
                             : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                        {e === 'mercadoria' ? '📦 Mercadoria (NF-e)' : '🧰 Serviço (NFS-e)'}
+                        {e === 'mercadoria' ? '📦 Mercadoria (NF-e)'
+                            : e === 'servico' ? '🧰 Serviço (NFS-e)'
+                                : '🚚 Transporte (CT-e / CT-e OS)'}
                     </button>
                 ))}
             </div>
+
+            {especie === 'transporte' && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 rounded-lg p-2">
+                    O CT-e OS (modelo 67) <strong>não é NF-e nem NFS-e</strong>: ele vai ao <strong>bloco D</strong> do
+                    SPED e tem <strong>ICMS destacado</strong>. Lançá-lo como serviço o mandaria para o bloco A e faria
+                    o ICMS sumir da apuração. Use esta espécie quando o cliente só manda o <strong>PDF do DACTE-OS</strong>.
+                </p>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                     <label className={rotulo}>Direção</label>
                     <select value={direcao} onChange={e => setDirecao(e.target.value as any)} className={campo}>
-                        <option value="entrada">{especie === 'servico' ? 'Entrada (serviço tomado)' : 'Entrada (compra)'}</option>
-                        <option value="saida">{especie === 'servico' ? 'Saída (serviço prestado)' : 'Saída (venda)'}</option>
+                        <option value="entrada">{especie === 'servico' ? 'Entrada (serviço tomado)'
+                            : especie === 'transporte' ? 'Entrada (frete contratado)' : 'Entrada (compra)'}</option>
+                        <option value="saida">{especie === 'servico' ? 'Saída (serviço prestado)'
+                            : especie === 'transporte' ? 'Saída (frete prestado)' : 'Saída (venda)'}</option>
                     </select>
                 </div>
                 <div>
@@ -213,11 +285,13 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 </div>
             </div>
 
-            {especie === 'mercadoria' ? (
+            {especie === 'mercadoria' || especie === 'transporte' ? (
                 <div>
                     <label className={rotulo}>Chave de acesso (44 dígitos — opcional, mas recomendada)</label>
                     <input value={chave} onChange={e => setChave(e.target.value)} className={`${campo} font-mono`}
-                        placeholder="com a chave, o XML capturado depois cai NO MESMO documento" />
+                        placeholder={especie === 'transporte'
+                            ? 'está impressa no DACTE, acima do código de barras'
+                            : 'com a chave, o XML capturado depois cai NO MESMO documento'} />
                 </div>
             ) : (
                 // A NFS-e do portal NÃO tem chave de 44 dígitos, e isso é
@@ -235,7 +309,9 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 <div>
                     <label className={rotulo}>{especie === 'servico'
                         ? (direcao === 'entrada' ? 'Prestador do serviço' : 'Tomador (cliente)')
-                        : (direcao === 'entrada' ? 'Fornecedor' : 'Cliente (destinatário)')}</label>
+                        : especie === 'transporte'
+                            ? (direcao === 'entrada' ? 'Transportador (emitente)' : 'Tomador do frete')
+                            : (direcao === 'entrada' ? 'Fornecedor' : 'Cliente (destinatário)')}</label>
                     <input value={participanteNome} onChange={e => setParticipanteNome(e.target.value)} className={campo} />
                 </div>
                 <div>
@@ -247,6 +323,66 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     <input value={participanteUf} onChange={e => setParticipanteUf(e.target.value)} className={campo} maxLength={2} placeholder="SP" />
                 </div>
             </div>
+
+            {especie === 'transporte' && (
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                            <label className={rotulo}>Modelo do documento</label>
+                            <select value={transporte.modelo}
+                                onChange={e => setTransporte(t => ({ ...t, modelo: e.target.value as '57' | '67' }))}
+                                className={campo}>
+                                <option value="67">67 — CT-e OS (DACTE-OS)</option>
+                                <option value="57">57 — CT-e</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className={rotulo}>CFOP da prestação</label>
+                            <input value={transporte.cfop}
+                                onChange={e => setTransporte(t => ({ ...t, cfop: e.target.value }))}
+                                className={`${campo} font-mono`} maxLength={4} placeholder="—" />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className={rotulo}>Descrição da prestação</label>
+                            <input value={transporte.descricao || ''}
+                                onChange={e => setTransporte(t => ({ ...t, descricao: e.target.value }))}
+                                className={campo} placeholder="ex.: Transporte de Valores" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                            <label className={rotulo}>CST do ICMS</label>
+                            <input value={transporte.cst || ''}
+                                onChange={e => setTransporte(t => ({ ...t, cst: e.target.value }))}
+                                className={`${campo} font-mono`} maxLength={3} placeholder="ex.: 00" />
+                        </div>
+                        <div>
+                            <label className={rotulo}>Base do ICMS (R$)</label>
+                            <input value={vBcTexto} onChange={e => setVBcTexto(e.target.value)}
+                                className={campo} placeholder="vazio ≠ zero" />
+                            <Eco texto={vBcTexto} />
+                        </div>
+                        <div>
+                            <label className={rotulo}>Alíquota ICMS (%)</label>
+                            <input value={aliqIcmsTexto} onChange={e => setAliqIcmsTexto(e.target.value)}
+                                className={campo} placeholder="vazio ≠ zero" />
+                            <Eco texto={aliqIcmsTexto} sufixo="%" />
+                        </div>
+                        <div>
+                            <label className={rotulo}>ICMS destacado (R$)</label>
+                            <input value={vIcmsTexto} onChange={e => setVIcmsTexto(e.target.value)}
+                                className={campo} placeholder="vazio ≠ zero" />
+                            <Eco texto={vIcmsTexto} />
+                        </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Na <strong>entrada</strong> se lança o CFOP da <strong>escrituração</strong>: o
+                        <span className="font-mono"> 5357</span> do transportador vira
+                        <span className="font-mono"> 1357</span> aqui. O ICMS <strong>não é recalculado</strong> —
+                        o CT-e pode ter redução de base, e refazer a conta acusaria documento correto.
+                    </p>
+                </div>
+            )}
 
             {especie === 'servico' ? (
                 <div className="space-y-3">
@@ -292,7 +428,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                         diferentes e levam a ações diferentes.
                     </p>
                 </div>
-            ) : (
+            ) : especie === 'transporte' ? null : (
             <div>
                 <div className="flex items-center justify-between mb-1">
                     <label className={rotulo}>Itens (CFOP da ESCRITURAÇÃO: {direcao === 'entrada' ? '1xxx/2xxx/3xxx' : '5xxx/6xxx/7xxx'})</label>
@@ -323,9 +459,56 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             </div>
             )}
 
+            {/* ═══ RETENÇÃO FEDERAL — vale para as TRÊS espécies ═══════════
+                O CT-e OS de transporte de valores retém IRRF de 1% (art. 55 da
+                Lei 7.713/1988) e não tem ISS nenhum; a NFS-e tomada tem os dois.
+                Sem estes campos, `retencoesFederaisGravadas` fica false e o
+                Relatório de Retenções imprime "?" numa nota que DIZ o valor
+                retido no corpo — o caso da J.P. PISSATO. */}
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <label className={rotulo}>Retenção federal declarada no documento</label>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {(['ir', 'inss', 'csll', 'pis', 'cofins'] as const).map(k => (
+                        <div key={k}>
+                            <label className="text-[10px] font-bold block mb-1 text-slate-500 dark:text-slate-400">
+                                {k === 'ir' ? 'IRRF' : k.toUpperCase()} (R$)
+                            </label>
+                            <input value={ret[k]} onChange={e => setRet(r => ({ ...r, [k]: e.target.value }))}
+                                className={campo} placeholder="vazio ≠ zero" />
+                            <Eco texto={ret[k]} />
+                            {!ret[k] && !!sugestoes[k] && (
+                                <p className="text-[10px] mt-0.5 text-sky-700 dark:text-sky-300">
+                                    {explicarSugestao(k, sugestoes[k])}{' '}
+                                    <button
+                                        onClick={() => setRet(r => ({
+                                            ...r,
+                                            [k]: String(sugestoes[k]!.valor).replace('.', ','),
+                                        }))}
+                                        className="btn-press underline font-bold whitespace-nowrap">usar</button>
+                                </p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+                {/* O eco do que VAI GRAVAR, antes do clique — a mesma régua do
+                    campo de valor: quem digita precisa ver o que o app entendeu,
+                    e aqui isto vira evento da EFD-Reinf. */}
+                {ecoDaRetencaoDigitada(ret, parseValorMoeda(valorTotal)) ? (
+                    <p className="text-[11px] mt-2 text-slate-600 dark:text-slate-300">
+                        {ecoDaRetencaoDigitada(ret, parseValorMoeda(valorTotal))}
+                    </p>
+                ) : (
+                    <p className="text-[11px] mt-2 text-amber-700 dark:text-amber-400">
+                        ⚠ Nada preenchido: a nota vai sair com <strong>“?”</strong> na coluna de retenções, e não
+                        com 0,00. Vazio é “falta conferir”; zero é “o documento diz que não houve retenção”.
+                    </p>
+                )}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
                 <div>
-                    <label className={rotulo}>{especie === 'servico' ? 'Valor dos serviços' : 'Valor total da nota'}</label>
+                    <label className={rotulo}>{especie === 'servico' ? 'Valor dos serviços'
+                        : especie === 'transporte' ? 'Valor da prestação' : 'Valor total da nota'}</label>
                     <input value={valorTotal} onChange={e => setValorTotal(e.target.value)} className={campo} placeholder="0,00" />
                     <Eco texto={valorTotal} />
                 </div>

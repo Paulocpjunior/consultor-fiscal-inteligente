@@ -68,14 +68,54 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 03/09/2026 · leitura de 17 minutos</p>
+            <p>Departamento Fiscal · atualizado em 04/09/2026 · leitura de 18 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (03/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (04/09) — leia esta parte primeiro</h2>
+
+    <h3>1. 🚚 <strong>Dá para lançar CT-e / CT-e OS (DACTE-OS) — e informar o IR retido</strong></h3>
+    <p>Tem cliente que recebe <strong>CT-e OS modelo 67</strong> (transporte de valores, segurança) e o
+    transportador só manda o <strong>PDF do DACTE-OS</strong>. Esse documento costuma ter
+    <strong>IRRF de 1%</strong> retido — está escrito nas Observações da própria nota, com a lei ao lado.</p>
+    <div class="alerta">⚠️ <strong>O “Lançar nota sem XML” não tinha onde receber essa retenção.</strong>
+    A nota entrava, aparecia no <strong>Relatório de Retenções</strong>… e a coluna do <strong>IR</strong>
+    saía com <strong>“?”</strong>, porque ninguém tinha como informar o valor.</div>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → <strong>✍️ Lançar nota sem XML</strong>.
+    Agora são <strong>três espécies</strong>: 📦 Mercadoria, 🧰 Serviço e a nova
+    <strong>🚚 Transporte (CT-e / CT-e OS)</strong>. E o bloco
+    <strong>“Retenção federal declarada no documento”</strong> (IRRF, INSS, CSLL, PIS, COFINS) aparece
+    nas <strong>três</strong>.</div>
+    <p><strong>Por que a espécie própria importa:</strong> o CT-e OS <strong>não é</strong> NF-e nem NFS-e.
+    Ele vai ao <strong>bloco D</strong> do SPED e tem <strong>ICMS destacado</strong>. Lançá-lo como
+    serviço o mandaria para o bloco A e <strong>faria o ICMS sumir da apuração</strong>.</p>
+    <div class="alerta">⚠️ <strong>Campo em branco NÃO vira zero.</strong> Deixar vazio é
+    “falta conferir” (sai <strong>“?”</strong>); digitar <strong>0</strong> é
+    “o documento diz que não houve retenção”. São coisas diferentes e a tela avisa antes de gravar.</div>
+
+    <h3>2. 🧠 <strong>Parâmetro de retenção por prestador — o app passa a lembrar por você</strong></h3>
+    <p>Se o mesmo transportador retém <strong>1% de IRRF todo mês</strong>, dá para cadastrar isso uma vez:
+    <strong>alíquota + a lei</strong>, valendo <strong>daquela competência em diante</strong>. Nas próximas
+    notas dele o app <strong>sugere</strong> o valor ao lado do campo, com a norma escrita.</p>
+    <div class="alerta">🚨 <strong>É sugestão, e você confere contra o papel.</strong> No caso real que
+    originou isto, 1% de R$ 3.901,37 dá <strong>39,01</strong> e o documento declara <strong>39,02</strong> —
+    o emitente arredondou para cima. <strong>Quem manda é a nota</strong>: o app nunca grava a conta dele
+    por cima do que o documento diz.</div>
+    <div class="onde">📍 <strong>Onde:</strong> a sugestão aparece sozinha no campo da retenção, quando há
+    parâmetro cadastrado para aquele prestador naquela competência. Ela <strong>não retroage</strong> —
+    competência anterior já foi entregue com outro número.</div>
+
+    <h3>3. 📋 <strong>O Relatório de Retenções passou a mostrar o CT-e</strong></h3>
+    <p>Conhecimento de transporte <strong>com retenção</strong> agora aparece na aba
+    <strong>Retenções</strong> junto das NFS-e. Sem isso, lançar o CT-e OS do jeito certo faria a nota
+    <strong>sumir</strong> do relatório.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → <strong>Retenções</strong>. Frete
+    <strong>sem</strong> retenção continua fora — senão a aba encheria de “?” sobre documento correto.</div>
+
+    <h2>O que mudou em 03/09</h2>
 
     <h3>1. 📅 <strong>NFS-e de SP: o mês da nota é o do FATO GERADOR, não o da emissão</strong></h3>
     <p>Em São Paulo a nota de <strong>31/08</strong> pode ser emitida até o <strong>dia 10/09</strong>
