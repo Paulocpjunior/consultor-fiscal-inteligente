@@ -51,9 +51,37 @@
  * distingue "alíquota AUSENTE" (buraco, pede conferência) de "zerado com a nota
  * dizendo que tributa" (inconsistente). Gravar 0 por comodidade fabricaria uma
  * pendência falsa de inconsistência em toda nota lançada à mão.
+ *
+ * ═══ E A TERCEIRA: CONHECIMENTO DE TRANSPORTE (CT-e 57 / CT-e OS 67) ════════
+ *
+ * Paulo, 04/09, J.P. PISSATO: *"essa empresa tem uma particularidade… ela não é
+ * formato 55, 65 e sim 67 DACTE-OS, com isso o cliente só envia o PDF"* — e o
+ * mesmo caso na 923 MONACO. Com A3 no cadastro não há captura automática, então
+ * a digitação É a cobertura daquele documento.
+ *
+ * 🚨 **CT-e OS não é NF-e nem NFS-e, e forçá-lo numa das duas move o documento
+ * de BLOCO.** Lançado como serviço (modelo 99) ele entra no **bloco A** do
+ * EFD-Contribuições e no Livro de Serviços; lançado como mercadoria, vira C100.
+ * O lugar dele é o **bloco D** — e o CT-e OS tem **ICMS destacado** (o DACTE-OS
+ * medido traz CST 00, base 3.901,37, 12%, ICMS 468,16), que a NFS-e não tem:
+ * pelo caminho errado esses 468,16 sumiriam do débito/crédito do E110.
+ *
+ * ✅ E o resto do app **já sabia**: `ehConhecimentoDeTransporte` reconhece
+ * 57/67 (e o rótulo `CTe`) desde sempre, e `sped-fiscal-blocoD` lê `nota.cfop`
+ * na RAIZ, `nota.aliqIcms` e `totais.vBC/vICMS`. Esta espécie grava NESSES
+ * campos — não há régua nova, havia uma porta que não produzia o documento.
+ *
+ * ⚠️ **O MODELO É ESCOLHA DA PESSOA, nunca dedução.** 57 (CT-e) e 67 (CT-e OS)
+ * são documentos diferentes com a mesma cara no papel; carimbar um deles pelo
+ * app seria inventar o modelo de um documento fiscal — a família do `1405`.
  */
 import type { DocumentoFiscal } from '../types';
 import { idDocumentoNfseSp } from '../sefaz-backend/nfse-identidade.js';
+import {
+    camposDaRetencaoDigitada,
+    validarRetencaoDigitada,
+    type RetencaoFederalDigitadaInput,
+} from './retencaoFederalDigitada';
 
 export interface ItemDigitado {
     cfop: string;
@@ -81,10 +109,45 @@ export interface ServicoDigitado {
     issRetido?: boolean;
 }
 
+/**
+ * O que a pessoa digita quando o documento é CT-e (57) ou CT-e OS (67).
+ *
+ * O CT-e não tem itens de produto: tem a PRESTAÇÃO, com um CFOP no cabeçalho
+ * (o DACTE-OS medido traz `5357 - Prestação de serviço`) e o ICMS destacado.
+ */
+export interface TransporteDigitado {
+    /** '57' = CT-e · '67' = CT-e OS. Escolha da pessoa — o app não deduz. */
+    modelo: '57' | '67';
+    /** CFOP da prestação, do cabeçalho do CT-e. */
+    cfop: string;
+    /** Descrição da prestação — é ela que aparece nos relatórios. */
+    descricao?: string;
+    /** CST do ICMS (ex.: '00'). */
+    cst?: string;
+    /** Base de cálculo do ICMS. AUSENTE ≠ ZERO. */
+    vBC?: number | null;
+    /** Alíquota do ICMS em %. AUSENTE ≠ ZERO. */
+    aliqIcms?: number | null;
+    /** ICMS destacado em R$. AUSENTE ≠ ZERO. */
+    vICMS?: number | null;
+}
+
 export interface NotaDigitadaInput {
-    /** 'mercadoria' = NF-e (CFOP, itens) · 'servico' = NFS-e (ISS, sem CFOP). */
-    especie?: 'mercadoria' | 'servico';
+    /**
+     * 'mercadoria' = NF-e (CFOP, itens) · 'servico' = NFS-e (ISS, sem CFOP)
+     * · 'transporte' = CT-e / CT-e OS (bloco D, ICMS destacado).
+     */
+    especie?: 'mercadoria' | 'servico' | 'transporte';
     servico?: ServicoDigitado;
+    transporte?: TransporteDigitado;
+    /**
+     * Retenção federal declarada no documento — vale para as TRÊS espécies.
+     *
+     * Sem isto, `retencoesFederaisGravadas` responde false e o Relatório de
+     * Retenções imprime **"?"** na coluna do IR sobre uma nota que DIZ o valor
+     * retido no corpo. Era o caso da J.P. PISSATO.
+     */
+    retencao?: RetencaoFederalDigitadaInput;
     empresaId: string;
     empresaCnpj: string;
     empresaNome: string;
@@ -116,8 +179,13 @@ export interface NotaDigitadaInput {
 }
 
 /** Espécie efetiva — o padrão é mercadoria (como a porta nasceu). */
-export const especieDe = (i: { especie?: string }): 'mercadoria' | 'servico' =>
-    i.especie === 'servico' ? 'servico' : 'mercadoria';
+export const especieDe = (i: { especie?: string }): 'mercadoria' | 'servico' | 'transporte' =>
+    i.especie === 'servico' ? 'servico'
+        : i.especie === 'transporte' ? 'transporte'
+            : 'mercadoria';
+
+/** Os modelos que a espécie transporte admite — Tabela 4.1.1 do SPED. */
+export const MODELOS_TRANSPORTE = ['57', '67'] as const;
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -151,6 +219,10 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
             ? 'Informe o FORNECEDOR — sem ele a nota cai em "fornecedor indefinido" na DIPAM e nos relatórios.'
             : 'Informe o CLIENTE (destinatário).');
     }
+    // A retenção federal vale para as TRÊS espécies — o CT-e OS do caso J.P.
+    // PISSATO tem IRRF e nenhum ISS; a NFS-e tomada tem os dois.
+    erros.push(...validarRetencaoDigitada(i.retencao, i.valorTotal));
+
     if (especieDe(i) === 'servico') {
         // SERVIÇO não tem CFOP nem itens: o que identifica a operação é a
         // discriminação e o código do município.
@@ -160,6 +232,38 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
         const al = i.servico?.aliquota;
         if (al !== null && al !== undefined && !(Number(al) >= 0 && Number(al) <= 100)) {
             erros.push('Alíquota do ISS deve ficar entre 0 e 100%. Se não souber, deixe VAZIO — vazio é diferente de zero.');
+        }
+        return erros;
+    }
+
+    if (especieDe(i) === 'transporte') {
+        const t = i.transporte;
+        // O MODELO decide o bloco e o leiaute — o app não escolhe por ninguém.
+        if (!MODELOS_TRANSPORTE.includes(String(t?.modelo || '') as any)) {
+            erros.push('Escolha o modelo do documento: 57 (CT-e) ou 67 (CT-e OS). '
+                + 'É o modelo que diz à escrituração qual documento é este — o app não deduz.');
+        }
+        const cfop = soDigitos(t?.cfop);
+        if (cfop.length !== 4) {
+            erros.push('Informe o CFOP da prestação (4 dígitos) — ele está no cabeçalho do CT-e, ao lado da natureza da operação.');
+        } else {
+            const iniciaisValidas = i.direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
+            if (!iniciaisValidas.includes(cfop[0])) {
+                erros.push(i.direcao === 'entrada'
+                    ? `CFOP ${cfop} é de SAÍDA. Na entrada se lança o CFOP da ESCRITURAÇÃO — o 5357 do transportador vira 1357 aqui.`
+                    : `CFOP ${cfop} é de ENTRADA — numa saída o CFOP é 5xxx/6xxx/7xxx.`);
+            }
+        }
+        const al = t?.aliqIcms;
+        if (al !== null && al !== undefined && !(Number(al) >= 0 && Number(al) <= 100)) {
+            erros.push('Alíquota do ICMS deve ficar entre 0 e 100%. Se não souber, deixe VAZIO — vazio é diferente de zero.');
+        }
+        // ⚠️ O ICMS não é conferido CONTRA a conta base × alíquota: o CT-e pode
+        // ter redução de base, e recalcular aqui acusaria documento correto.
+        // O que se recusa é o impossível — ICMS maior que a própria prestação.
+        const icms = t?.vICMS;
+        if (icms !== null && icms !== undefined && Number(i.valorTotal) > 0 && Number(icms) > Number(i.valorTotal)) {
+            erros.push(`ICMS de R$ ${Number(icms).toFixed(2)} é MAIOR que o valor da prestação — confira a vírgula.`);
         }
         return erros;
     }
@@ -210,6 +314,7 @@ export function idNotaDigitada(i: NotaDigitadaInput): string {
 /** Monta o documento na MESMA forma que o importer grava. */
 export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
     if (especieDe(i) === 'servico') return montarNfseDigitada(i);
+    if (especieDe(i) === 'transporte') return montarCteDigitado(i);
     const chave = soDigitos(i.chave);
     const empresaCnpj = soDigitos(i.empresaCnpj);
     const partDoc = soDigitos(i.participanteDoc);
@@ -265,6 +370,104 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
             vICMS: it.vICMS !== undefined ? Number(it.vICMS) : undefined,
             vIPI: it.vIPI !== undefined ? Number(it.vIPI) : undefined,
         })),
+        // Só os tributos PREENCHIDOS entram — ver `retencaoFederalDigitada`.
+        ...camposDaRetencaoDigitada(i.retencao),
+        origem: 'digitada',
+        createdBy: i.createdByUid || null,
+        digitadaPorEmail: i.digitadaPorEmail,
+        digitadaEm: new Date().toISOString(),
+        importadoPorEmail: i.digitadaPorEmail,
+    } as unknown as DocumentoFiscal;
+}
+
+/**
+ * CT-e / CT-e OS digitado — nos MESMOS campos que `sped-fiscal-blocoD` LÊ.
+ *
+ * Medido no gerador antes de escrever: ele lê `nota.cfop` na **RAIZ** (nunca só
+ * no item), `nota.aliqIcms`, `totais.vBC`/`totais.vICMS`, mais os donos
+ * `valorDoDocumento`, `serieDoDocumento`, `codSitDoDocumento` e
+ * `participanteDoDocumento`. É o mesmo lugar em que o `xml-importer` grava o
+ * CFOP de cabeçalho do CT-e capturado (`...(meta.cfopCabecalho ? { cfop } : {})`).
+ *
+ * 🚨 **O RÓTULO É `CTe`, e é ele que liga o bloco D.**
+ * `ehConhecimentoDeTransporte` casa `/CTe/i` no rótulo ANTES de olhar o modelo,
+ * e `ehNotaDeServico` devolve false para ele — então este documento sai do
+ * bloco A e do Livro de Serviços por construção, sem uma linha de régua nova.
+ */
+function montarCteDigitado(i: NotaDigitadaInput): DocumentoFiscal {
+    const chave = soDigitos(i.chave);
+    const empresaCnpj = soDigitos(i.empresaCnpj);
+    const partDoc = soDigitos(i.participanteDoc);
+    const competencia = String(i.dhEmi).slice(0, 7);
+    const t = i.transporte || ({} as TransporteDigitado);
+
+    // AUSENTE ≠ ZERO — mesma régua do ISS: o que a pessoa não soube dizer fica
+    // UNDEFINED, e o D190 sai sem afirmar base/alíquota que ninguém informou.
+    const num = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v));
+
+    // Na entrada quem emitiu foi o TRANSPORTADOR (a contraparte); na saída, a
+    // própria empresa transportadora. Igual à espécie mercadoria.
+    const emitente = i.direcao === 'entrada'
+        ? { cnpjCpf: partDoc, nome: i.participanteNome, uf: (i.participanteUf || '').toUpperCase() }
+        : { cnpjCpf: empresaCnpj, nome: i.empresaNome, uf: '' };
+    const destinatario = i.direcao === 'entrada'
+        ? { cnpjCpf: empresaCnpj, nome: i.empresaNome, uf: '' }
+        : { cnpjCpf: partDoc, nome: i.participanteNome, uf: (i.participanteUf || '').toUpperCase() };
+
+    return {
+        id: idNotaDigitada(i),
+        chave: chave.length === 44 ? chave : '',
+        xmlHash: '',
+        // O rótulo que `ehConhecimentoDeTransporte` lê.
+        tipo: 'CTe',
+        tipoDoc: 'CTe',
+        modelo: t.modelo,
+        serie: String(i.serie || '1').trim(),
+        numero: String(i.numero).trim(),
+        dhEmi: i.dhEmi,
+        competencia,
+        direcao: i.direcao,
+        status: 'autorizado',
+        empresaId: i.empresaId,
+        empresaCnpj,
+        empresaNome: i.empresaNome,
+        emitente,
+        destinatario,
+        cnpjEmit: emitente.cnpjCpf,
+        xNomeEmit: emitente.nome,
+        ufEmit: emitente.uf,
+        cnpjDest: destinatario.cnpjCpf,
+        xNomeDest: destinatario.nome,
+        ufDest: destinatario.uf,
+
+        // 🚨 O CFOP na RAIZ é o que `cfopDoCte` lê primeiro.
+        cfop: soDigitos(t.cfop),
+        cstIcms: t.cst || undefined,
+        aliqIcms: num(t.aliqIcms),
+        natOp: t.descricao || 'Prestação de serviço de transporte',
+        descricao: t.descricao,
+
+        totais: {
+            vNF: Number(i.valorTotal),
+            vPrest: Number(i.valorTotal),
+            vBC: num(t.vBC),
+            vICMS: num(t.vICMS),
+        },
+        valorTotal: Number(i.valorTotal),
+        // O CT-e não tem itens de produto — tem a prestação. O item único
+        // carrega o CFOP para os leitores que agregam por item.
+        itens: [{
+            nItem: '1',
+            cfop: soDigitos(t.cfop),
+            xProd: t.descricao || 'Prestação de serviço de transporte',
+            vProd: Number(i.valorTotal),
+            cst: t.cst || undefined,
+            vBC: num(t.vBC),
+            vICMS: num(t.vICMS),
+        }],
+        // Só os tributos PREENCHIDOS entram — ver `retencaoFederalDigitada`.
+        ...camposDaRetencaoDigitada(i.retencao),
+
         origem: 'digitada',
         createdBy: i.createdByUid || null,
         digitadaPorEmail: i.digitadaPorEmail,
@@ -338,6 +541,8 @@ function montarNfseDigitada(i: NotaDigitadaInput): DocumentoFiscal {
         descricao: sv.discriminacao,
         discriminacaoServicos: sv.discriminacao,
         totais: { vNF: Number(i.valorTotal), vServ: Number(i.valorTotal), vISS: num(sv.valorIss) },
+        // Só os tributos PREENCHIDOS entram — ver `retencaoFederalDigitada`.
+        ...camposDaRetencaoDigitada(i.retencao),
 
         origem: 'digitada',
         createdBy: i.createdByUid || null,

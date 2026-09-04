@@ -25,7 +25,7 @@
  * Agora `__tests__/novidadesService.test.ts` compara esta constante com o
  * "atualizado em" da página e derruba o build quando as duas divergem.
  */
-export const NOVIDADES_VERSAO = '2026-09-03';
+export const NOVIDADES_VERSAO = '2026-09-04';
 
 export const NOVIDADES_URL = '/novidades-cfi.html';
 

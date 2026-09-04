@@ -5,6 +5,80 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O DOCUMENTO DIZIA A RETENÇÃO E O APP NÃO TINHA ONDE RECEBÊ-LA** (04/09,
+  Paulo, J.P. PISSATO LOTERIAS: *"essa empresa tem uma particularidade na nota
+  de retenção, ela não é formato 55, 65 e sim 67 DACTE-OS, com isso o cliente só
+  envia o PDF da mesma… quando gero o relatório de retenções ela puxa a NF porém
+  os campos que deveriam estar informados, que é o IR, não está"* — e *"tenho a
+  mesma particularidade da empresa 923 MONACO"*).
+  📖 **O PDF DIZ TUDO, POR EXTENSO** (CT-e OS 114.924, PROTEGE PROTEÇÃO E
+  TRANSPORTE DE VALORES → JP PISSATO): prestação **3.901,37**, ICMS destacado
+  **468,16** (CST 00, 12%), e em Observações *"SUJEITO A RETENÇÃO DE 1,0% IRRF,
+  ARTIGO 55, LEI 7713 DE 22/12/1988 — **R$ 39,02**"*, com "valor a receber"
+  **3.862,35**. A conta fecha ao centavo: 3.901,37 − 39,02 = 3.862,35.
+  🔴 **A CAUSA É DE PORTA, e foi MEDIDA: o ✍️ Lançar nota sem XML não tem campo
+  de retenção federal NENHUM** — nem IR, nem INSS, nem CSLL, nem PIS/COFINS. Só
+  ISS. Com A3 no cadastro não há captura automática, e o cliente só manda PDF:
+  a digitação É a cobertura daquele documento, e ela não recebia o número que o
+  papel declara. `retencoesFederaisGravadas` responde false e a coluna sai
+  **"?"** — que é o farol honesto funcionando sobre um buraco de ENTRADA.
+  🚨 **E O CT-e OS NÃO É NF-e NEM NFS-e — forçá-lo numa das duas MOVE O
+  DOCUMENTO DE BLOCO.** Lançado como serviço (modelo 99) ele entra no **bloco A**
+  do EFD-Contribuições e no Livro de Serviços; como mercadoria, vira C100. O
+  lugar dele é o **bloco D** — e ali estão os **468,16 de ICMS**, que a NFS-e não
+  tem: pelo caminho errado esse valor **some do débito/crédito do E110**.
+  ✅ **E O RESTO DO APP JÁ SABIA — medido antes de escrever régua nova**:
+  `ehConhecimentoDeTransporte` reconhece 57/67 (e o rótulo `CTe`) desde sempre, e
+  `sped-fiscal-blocoD` lê `nota.cfop` na **RAIZ**, `nota.aliqIcms` e
+  `totais.vBC/vICMS`. Não faltava régua: faltava uma porta que produzisse o
+  documento. A espécie `transporte` grava NESSES campos.
+  🚨 **E CONSERTAR SÓ ISSO ESCONDERIA A NOTA** — o achado que mudou o desenho:
+  `ehNotaDeServico` devolve **false** para conhecimento de transporte (de
+  propósito), e a aba **Retenções** saía de `linhasServicos`. Ou seja, lançar com
+  o modelo CERTO faria a nota **SUMIR** do relatório: trocaria campo vazio por
+  nota invisível, que é pior. É a régua de 22/08 — *trocar alarme falso por
+  silêncio falso não é correção*. `linhasRetencoes` passou a ter seleção PRÓPRIA
+  (serviço **ou** conhecimento de transporte COM retenção gravada).
+  ⚠️ **SÓ O CT-e COM RETENÇÃO ENTRA, e a diferença importa**: a NFS-e entra mesmo
+  sem os campos (é o "?" que denuncia captura incompleta — *ausente ≠ zero
+  retido*), mas frete SEM retenção é o caso NORMAL. Trazer todos encheria a aba
+  de "?" sobre documento correto, que é o jeito conhecido de a equipe parar de
+  ler a lista.
+  ⚠️ **AUSENTE ≠ ZERO, e aqui isso é a regra inteira**: campo em branco fica
+  **FORA DO OBJETO**, nunca com `undefined` dentro dele — a gravação transforma
+  `undefined` em **`null`**, e `null !== undefined` é **true**: a nota passaria a
+  imprimir **0,00**, que é a AFIRMAÇÃO de que não houve retenção (o defeito de
+  01/09). **Zero DIGITADO entra**, porque "conferi e não houve" é um fato.
+  🧠 **E O PARÂMETRO É O PEDIDO LITERAL** (*"criação de parâmetro p/ um caso
+  específico"*), no MESMO desenho do cérebro do CFOP: guardado por **PRESTADOR**,
+  com alíquota + **base legal obrigatória** e **vigência que não retroage**.
+  🚨 **MAS ELE SUGERE, NUNCA GRAVA — e o motivo está MEDIDO no documento**: 1% de
+  3.901,37 é **39,01**, e o papel diz **39,02** (o emitente arredondou para cima,
+  e é o 39,02 que fecha o líquido impresso). Se o parâmetro gravasse, a EFD-Reinf
+  declararia **um centavo a menos do que foi retido** — e a Receita não devolve.
+  A sugestão preenche campo VAZIO na tela, a pessoa confere contra o papel, e o
+  **documento vence a conta**. É a régua do R-2055: *a ressalva PROÍBE recalcular
+  do outro lado.*
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: ela cravava `toBe(2)` nas
+  ocorrências do `createdBy` (mercadoria e serviço) — travava a FORMA de um mundo
+  com duas espécies, e caiu sobre código certo quando nasceu a terceira. Agora
+  ela exige que **toda montagem** leve o campo (sem ele o Firestore recusa o
+  CREATE com "Missing or insufficient permissions", o defeito de 17/08), e não
+  envelhece na próxima espécie. Provada removendo o `createdBy` só do CT-e.
+  🐛 **E O TESTE PEGOU UM DEFEITO MEU NO ECO**: o percentual saía com **PONTO**
+  (`IR R$ 39,02 (1.00%)`) ao lado de um valor com vírgula, na mesma frase em
+  português — quem lê "1.00" numa tela em pt-BR lê **mil**. Formato misturado na
+  mesma linha é a família do `R$ 308.07` do extrato do R-2099 (13/08).
+  🚩 **O QUE ISTO NÃO FAZ, e vai dito**: **não lê o PDF do DACTE-OS**. O
+  importador de PDF é de NFS-e; aqui a pessoa digita olhando o papel, e o app
+  ecoa o que entendeu antes de gravar. Ler o DACTE-OS por coordenada é outro
+  trabalho, com a disciplina do parser do e-Fiscal (régua PURA e testável) — e
+  só vale a pena se o volume justificar.
+  📌 **REGRA QUE FICA: quando o documento DECLARA um número, a porta de entrada
+  precisa ter onde recebê-lo — e o app nunca recalcula o que o papel afirma.**
+  O "?" do relatório estava certo o tempo todo: ele denunciava que ninguém tinha
+  informado. O buraco não era de leitura, era de CAMPO.
+
 - **🚨 A NOTA ENTROU NA EMPRESA ERRADA E NÃO HAVIA COMO TIRAR** (03/09, Paulo:
   *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o consultor não
   deu nenhum erro avisando de que eu estava importando na empresa errada, e eu

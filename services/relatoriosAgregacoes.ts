@@ -42,7 +42,7 @@ import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coere
 // cru, esses documentos sumiam de TRÊS relatórios de uma vez — ISS destacado,
 // Serviços tomados/prestados e **Retenções**. É o achado (2) de 21/08, que
 // fechou no bloco A do EFD-Contribuições e ficou vivo aqui.
-import { ehNotaDeServico } from '../sefaz-backend/sped-selecao-documentos.js';
+import { ehNotaDeServico, ehConhecimentoDeTransporte } from '../sefaz-backend/sped-selecao-documentos.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -284,11 +284,31 @@ export interface LinhaServico {
 }
 
 export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
+    return linhasDe(docs, direcao, ehNotaDeServico);
+}
+
+/**
+ * O documento tem retenção federal GRAVADA? (ausente ≠ zero)
+ *
+ * Mesma pergunta que `retencoesFederaisGravadas` responde por linha — aqui ela
+ * decide a SELEÇÃO, e por isso lê o dono, nunca os campos crus.
+ */
+function temRetencaoFederalGravada(d: DocumentoFiscal): boolean {
+    const fed = lerRetencoesFederaisDoDoc(d);
+    return fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined
+        || fed.pis !== undefined || fed.cofins !== undefined;
+}
+
+function linhasDe(
+    docs: DocumentoFiscal[],
+    direcao: 'entrada' | 'saida',
+    incluir: (d: DocumentoFiscal) => boolean,
+): LinhaServico[] {
     return docs
         // 🔴 Era `d.tipo === 'NFSe'`: a NFS-e do ADN (`tipo: 'nfseNacional'`)
         // sumia das TRÊS abas que saem daqui — Serviços tomados, prestados e
         // **Retenções**, que é a que alimenta a conferência do R-4020.
-        .filter(d => docValido(d) && ehNotaDeServico(d) && direcaoDoc(d) === direcao)
+        .filter(d => docValido(d) && incluir(d) && direcaoDoc(d) === direcao)
         .map(d => {
             // 🚨 ERA A SEGUNDA CÓPIA DA CONTRAPARTE — e ela lia SÓ o bloco
             // ANINHADO (28/08, Paulo: *"veja a diferença de um mês para o
@@ -442,8 +462,30 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
  * Só fica de fora quem tem os campos GRAVADOS e a soma deu zero — aí "sem
  * retenção" é fato, não lacuna de captura.
  */
+/**
+ * A aba **Retenções** — e ela NÃO é a aba de serviços filtrada.
+ *
+ * 🚨 **CONHECIMENTO DE TRANSPORTE COM RETENÇÃO ENTRA AQUI** (04/09, J.P.
+ * PISSATO). O CT-e OS de transporte de valores retém **IRRF de 1%** (art. 55 da
+ * Lei 7.713/1988 — o próprio DACTE-OS diz isso em Observações), e
+ * `ehNotaDeServico` devolve **false** para ele de propósito: o lugar dele no
+ * SPED é o bloco D, não o A.
+ *
+ * Ou seja: enquanto isto saía de `linhasServicos`, lançar o CT-e OS com o
+ * modelo CERTO (67) fazia a nota **SUMIR** do relatório — trocaria um campo
+ * vazio por uma nota invisível, que é pior. É a régua de 22/08: *trocar alarme
+ * falso por silêncio falso não é correção.*
+ *
+ * ⚠️ **Só entra o CT-e que TEM retenção gravada**, e a diferença importa: as
+ * NFS-e entram mesmo sem os campos (é o "?" que denuncia captura incompleta —
+ * *ausente ≠ zero retido*), mas conhecimento de transporte sem retenção é o
+ * caso NORMAL. Trazê-los todos encheria a aba de "?" em cima de frete que não
+ * tem retenção nenhuma — o alarme sobre documento correto que ensina a equipe a
+ * ignorar a lista.
+ */
 export function linhasRetencoes(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
-    return linhasServicos(docs, direcao)
+    return linhasDe(docs, direcao, d =>
+        ehNotaDeServico(d) || (ehConhecimentoDeTransporte(d) && temRetencaoFederalGravada(d)))
         // csrfSemRateio conta como retenção: a nota da ATLAS tem 158,72 retidos
         // num campo só — sumir da lista porque as colunas individuais zeraram
         // seria esconder justamente a retenção que existe.
