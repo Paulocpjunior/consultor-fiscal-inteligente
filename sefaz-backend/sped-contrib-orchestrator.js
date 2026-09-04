@@ -348,6 +348,48 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // SPED em 20/08.
     const retencaoDaFicha = montarF600DaFicha({ notas, ficha: fichaDaComp });
     warnings.push(...retencaoDaFicha.avisos);
+
+    // 🚨 OS AJUSTES DECLARADOS VIAJAM ATÉ O F600 (04/09, caso FRONTINI).
+    //
+    // Gerador que lê um campo que NENHUM orquestrador passa foi o defeito do
+    // `saldoCredorIpiAnterior` (19/08, PWR): o E520 saía 0,00 para sempre e
+    // nada acusava. O `coletarRetencoesF600` passou a aceitar os ajustes — é
+    // AQUI que eles chegam.
+    //
+    // ⚠️ Falha de leitura NÃO vira "não há ajuste": isso devolveria o valor do
+    // documento, que é justamente o número errado que o ajuste corrigiu, e o
+    // arquivo sairia declarando a recolher A MAIOR sem ninguém saber. Ela vira
+    // AVISO, e o número fica DITO como o do documento.
+    let retencoesAjustadas = {};
+    try {
+        const snapAj = await db.collection('reinf_retencoes_ajustadas')
+            .doc(`${String(empresa?.cnpj || '').replace(/\D/g, '')}_${String(competencia).replace(/\D/g, '')}`)
+            .get();
+        retencoesAjustadas = snapAj.exists ? (snapAj.data()?.ajustes || {}) : {};
+    } catch (e) {
+        console.error('[sped-contrib] leitura dos ajustes de retenção falhou', e);
+        warnings.push(
+            'Não consegui ler os ajustes de retenção desta competência — o F600 saiu com a retenção do '
+            + 'DOCUMENTO. Se alguma nota teve a retenção informada à mão, o abatimento do M200/M600 está '
+            + 'a MENOR neste arquivo: gere de novo antes de transmitir.',
+        );
+    }
+
+    // 🚨 A FICHA E O AJUSTE NÃO SE MISTURAM, e o app NÃO escolhe entre eles.
+    //
+    // A ficha declara o TOTAL da competência (é dela que sai a GUIA) e o F600
+    // rateia esse total pelas notas; o ajuste é POR NOTA, com autor e motivo.
+    // Aplicar os dois faria a soma do arquivo não fechar com a guia paga — dois
+    // números para o mesmo fato, que é o pior defeito de um arquivo fiscal.
+    // Então a ficha continua mandando (é o dinheiro que saiu) e o ajuste sai
+    // DITO, para uma pessoa decidir.
+    if (retencaoDaFicha.aplicou && Object.keys(retencoesAjustadas).length) {
+        warnings.push(
+            `F600: esta competência tem ${Object.keys(retencoesAjustadas).length} nota(s) com retenção `
+            + 'AJUSTADA à mão, mas o F600 saiu da FICHA (que declara o total e é a base da guia). Os dois '
+            + 'não se somam — confira qual dos dois está certo antes de transmitir.',
+        );
+    }
     if (entradasForaDaConsolidada > 0) {
         warnings.push(
             `${entradasForaDaConsolidada} documento(s) de ENTRADA (serviço tomado/aquisição) ficaram FORA da `
@@ -462,6 +504,10 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
                 totalCofins: retencaoDaFicha.totalCofins,
             }
             : null,
+        // Sem a ficha, quem responde é o documento — e o AJUSTE declarado vence
+        // o documento (o caso FRONTINI: a nota foi capturada com retenção zero
+        // porque o cliente esqueceu de informá-la ao emitir).
+        retencoesAjustadas,
         warnings,
     };
 }
