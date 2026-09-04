@@ -25,6 +25,9 @@
  */
 
 import { getAuth } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebaseConfig';
+import { idAjustesDaCompetencia } from '../sefaz-backend/retencao-pj-ajuste.js';
 
 async function authHeader(): Promise<Record<string, string>> {
     const u = getAuth().currentUser;
@@ -80,5 +83,38 @@ export async function removerAjusteRetencao(
     const j = await r.json().catch(() => ({}));
     if (!r.ok || j?.ok === false) {
         throw new Error(j?.error || `Falha ao desfazer o ajuste (HTTP ${r.status}).`);
+    }
+}
+
+/**
+ * 🚨 O QUE FOI INFORMADO NESTA COMPETÊNCIA — a leitura que faltava.
+ *
+ * O CASO (04/09, FRONTINI ENGENHEIROS, notas 794 e 795): o painel da nota só
+ * GRAVAVA. Quem informava a retenção reabria a nota, via os campos vazios e o
+ * Relatório de Retenções mostrando o zero do documento — e concluía, com toda
+ * razão, que *"não ficou salvo"*. O ajuste ESTAVA gravado; o que não existia
+ * era quem o lesse de volta.
+ *
+ * É a família do `saldoCredorIpiAnterior` (19/08) — régua que só escreve, ou
+ * campo que um lado grava e nenhum lado lê.
+ *
+ * ⚠️ **FALHA DE LEITURA NÃO VIRA "NÃO HÁ AJUSTE"**: devolver `{}` mostraria o
+ * valor do DOCUMENTO — justamente o número errado que o ajuste corrigiu. Ela
+ * LANÇA, e quem chama tem de dizer isso na tela. É a mesma régua que o
+ * orquestrador do F600 já aplica.
+ */
+export async function lerAjustesDaCompetencia(
+    cnpj: string,
+    competencia: string,
+): Promise<Record<string, any>> {
+    const id = idAjustesDaCompetencia(cnpj, competencia);
+    if (!/^\d{14}_\d{6}$/.test(id)) return {};
+    try {
+        const snap = await getDoc(doc(db, 'reinf_retencoes_ajustadas', id));
+        return snap.exists() ? ((snap.data() as any)?.ajustes || {}) : {};
+    } catch (e: any) {
+        throw new Error('Não consegui ler as retenções informadas desta competência. '
+            + 'Sem elas a lista mostraria o valor do documento, que pode ser o errado — '
+            + 'recarregue antes de conferir ou transmitir.');
     }
 }

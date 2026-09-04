@@ -38,7 +38,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
-import { validarAjusteRetencao } from './retencao-pj-ajuste.js';
+import { validarAjusteRetencao, idAjustesDaCompetencia } from './retencao-pj-ajuste.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
@@ -124,7 +124,9 @@ async function autorizar(req, res, next) {
 // sobrescreveriam e o primeiro voltaria ao valor do documento SOZINHO — que é
 // exatamente o "total que muda sozinho" que este trilho existe para não ter.
 // ────────────────────────────────────────────────────────────────────────────
-const idAjustes = (cnpj, competencia) => `${cnpj}_${String(competencia).replace(/\D/g, '')}`;
+// O id mora no dono (`retencao-pj-ajuste.js`): três lados o montam agora, e
+// forma diferente lê SEMPRE vazio — indistinguível de "não há ajuste".
+const idAjustes = idAjustesDaCompetencia;
 
 async function lerAjustesDeRetencao(db, cnpj, competencia) {
     try {

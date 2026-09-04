@@ -128,3 +128,65 @@ describe('🔌 a tela usa as duas', () => {
         expect(tela).toMatch(/ressalvaDuplicatas\(duplicatasNasLinhas\(/);
     });
 });
+
+/**
+ * 🚨 MATA-BURRO: ARGUMENTO QUE NINGUÉM PASSA NÃO QUEBRA NADA — ELE RESPONDE
+ * SOBRE O CASO VAZIO, TODO DIA, COM TODA CONFIANÇA.
+ *
+ * O CASO (04/09, FRONTINI ENGENHEIROS, notas 794 e 795): ele informou as duas
+ * retenções, escreveu a justificativa, e o Relatório de Retenções continuou sem
+ * elas — *"não ficou salvo, nem constando nas retenções"*.
+ *
+ * O ajuste ESTAVA gravado. O que faltava eram as DUAS leituras:
+ *
+ * · `linhasRetencoes(docs, direcao, ajustes)` ganhou o 3º argumento de manhã e
+ *   a tela chamava `linhasRetencoes(docs, direcao)`. É o defeito do
+ *   `saldoCredorIpiAnterior` (19/08) e do `obrigacoesStPorUf` (29/08).
+ * · O painel da nota só GRAVAVA — reabri-lo mostrava os campos vazios, que é
+ *   indistinguível de "não salvou".
+ *
+ * Régua que só escreve é régua que ninguém lê. Estas travas obrigam as duas
+ * pontas a existir.
+ */
+describe('🔌 a retenção informada CHEGA nas duas telas', () => {
+    const semComentarios = (src: string) => src
+        .split('\n').filter(l => !/^\s*(\/\/|\*|\/\*|\{\/\*)/.test(l)).join('\n');
+
+    const relatorio = semComentarios(
+        readFileSync(join(__dirname, '..', 'components/Relatorios/index.tsx'), 'utf8'));
+    const painel = semComentarios(
+        readFileSync(join(__dirname, '..', 'components/xml/XmlDocumentoDetalhe.tsx'), 'utf8'));
+
+    it('o Relatório PASSA os ajustes — chamar sem eles mostra o zero do documento', () => {
+        expect(relatorio).toMatch(/linhasRetencoes\(docs,\s*direcao,\s*ajustesRet\)/);
+        // A forma antiga não pode voltar.
+        expect(relatorio).not.toMatch(/linhasRetencoes\(docs,\s*direcao\)/);
+    });
+
+    it('o Relatório BUSCA os ajustes da competência', () => {
+        expect(relatorio).toMatch(/lerAjustesDaCompetencia\(/);
+    });
+
+    it('falha ao ler NÃO vira "não há ajuste" — a tela diz', () => {
+        expect(relatorio).toMatch(/erroAjustes/);
+        expect(painel).toMatch(/erroLerAjuste/);
+    });
+
+    it('o painel da nota RELÊ o que foi informado — senão parece que não salvou', () => {
+        expect(painel).toMatch(/lerAjustesDaCompetencia\(/);
+        expect(painel).toMatch(/ajusteAtual/);
+    });
+
+    it('o id do documento de ajustes tem UM dono — três lados o montam', () => {
+        // `${cnpj}_2026-08` e `${cnpj}_202608` são documentos DIFERENTES, e o
+        // lado que errasse a forma leria SEMPRE vazio.
+        const rota = semComentarios(
+            readFileSync(join(__dirname, '..', 'sefaz-backend/reinf-retencoes-pj-routes.js'), 'utf8'));
+        const servico = semComentarios(
+            readFileSync(join(__dirname, '..', 'services/retencaoAjusteService.ts'), 'utf8'));
+        expect(rota).toMatch(/idAjustesDaCompetencia/);
+        expect(servico).toMatch(/idAjustesDaCompetencia\(/);
+        // Ninguém monta o id à mão.
+        expect(rota).not.toMatch(/`\$\{cnpj\}_\$\{String\(competencia\)/);
+    });
+});
