@@ -31,7 +31,10 @@ import {
 // objeto do XML): o CSV do portal grava `valorIr`/`valorInss`/`valorCsll` na
 // RAIZ, e este relatório só lia `valores.*` — 67 notas da CLUDE com IR/INSS
 // gravados imprimiam "?" (19/08). Quem lê é o dono, nunca uma segunda cópia.
-import { lerRetencoesFederaisDoDoc } from '../sefaz-backend/reinf-retencoes-pj.js';
+import {
+    lerRetencoesFederaisDoDoc,
+    documentoEntraEmRetencoes,
+} from '../sefaz-backend/reinf-retencoes-pj.js';
 // A assinatura de alíquota decide o que o campo É: "CSLL" que vale 4,65% da
 // base é o TOTAL das três (CSRF); PIS 1,65% + COFINS 7,60% é o tributo da
 // OPERAÇÃO do prestador, não retenção (casos CLINIPAR e ATLAS, 07/08).
@@ -42,7 +45,9 @@ import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coere
 // cru, esses documentos sumiam de TRÊS relatórios de uma vez — ISS destacado,
 // Serviços tomados/prestados e **Retenções**. É o achado (2) de 21/08, que
 // fechou no bloco A do EFD-Contribuições e ficou vivo aqui.
-import { ehNotaDeServico, ehConhecimentoDeTransporte } from '../sefaz-backend/sped-selecao-documentos.js';
+// (o conhecimento de transporte saiu daqui: quem junta as duas espécies é
+// `documentoEntraEmRetencoes`, no dono — ver a aba Retenções abaixo)
+import { ehNotaDeServico } from '../sefaz-backend/sped-selecao-documentos.js';
 // 🚨 O DONO de "quanto esta nota reteve, de verdade" (31/08). O ajuste
 // declarado (autor + motivo) VENCE o documento — sem isto, quem informa a
 // retenção à mão continua vendo o zero do documento na tela e conclui que o
@@ -268,7 +273,13 @@ export interface LinhaServico {
     inss: number;
     csll: number;
     liquido: number;
-    /** Doc gravado antes de 01/08 não tem IR/INSS/CSLL — ausente ≠ zero retido. */
+    /**
+     * O documento NÃO TRAZ os campos de IR/INSS/CSLL — ausente ≠ zero retido.
+     *
+     * ⚠️ Ela não diz QUANDO a nota entrou: vale para nota antiga, para nota
+     * digitada sem preencher e para trilho que não traz o dado (o CT-e OS que
+     * chega só em PDF). A ressalva que fala por ela é `ressalvaSemRetencaoGravada`.
+     */
     retencoesFederaisGravadas: boolean;
     /** O número saiu de um ajuste declarado, não do documento. */
     retencaoAjustada?: boolean;
@@ -294,18 +305,6 @@ export interface LinhaServico {
 
 export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
     return linhasDe(docs, direcao, ehNotaDeServico);
-}
-
-/**
- * O documento tem retenção federal GRAVADA? (ausente ≠ zero)
- *
- * Mesma pergunta que `retencoesFederaisGravadas` responde por linha — aqui ela
- * decide a SELEÇÃO, e por isso lê o dono, nunca os campos crus.
- */
-function temRetencaoFederalGravada(d: DocumentoFiscal): boolean {
-    const fed = lerRetencoesFederaisDoDoc(d);
-    return fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined
-        || fed.pis !== undefined || fed.cofins !== undefined;
 }
 
 function linhasDe(
@@ -514,14 +513,22 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
  * caso NORMAL. Trazê-los todos encheria a aba de "?" em cima de frete que não
  * tem retenção nenhuma — o alarme sobre documento correto que ensina a equipe a
  * ignorar a lista.
+ *
+ * 🚨 **E A SELEÇÃO DEIXOU DE SER ESCRITA AQUI** (04/09, à tarde): ela era uma
+ * SEGUNDA CÓPIA da régua que a rota do R-4020 usa, e as duas divergiram no
+ * mesmo dia — esta aceitava o CT-e e a de lá continuava com `/NFSe/i`, então a
+ * nota aparecia neste relatório e o Consultor Contábil dizia "nenhum
+ * beneficiário". Quem responde é `documentoEntraEmRetencoes`, no dono.
  */
 export function linhasRetencoes(
     docs: DocumentoFiscal[],
     direcao: 'entrada' | 'saida',
     ajustes?: Record<string, any> | null,
 ): LinhaServico[] {
-    return linhasDe(docs, direcao, d =>
-        ehNotaDeServico(d) || (ehConhecimentoDeTransporte(d) && temRetencaoFederalGravada(d)), ajustes)
+    const mapa = ajustes && typeof ajustes === 'object' ? ajustes : {};
+    return linhasDe(docs, direcao, d => documentoEntraEmRetencoes(d, {
+        temAjuste: !!mapa[chaveDoAjuste(d as unknown as Record<string, unknown>)],
+    }), ajustes)
         // csrfSemRateio conta como retenção: a nota da ATLAS tem 158,72 retidos
         // num campo só — sumir da lista porque as colunas individuais zeraram
         // seria esconder justamente a retenção que existe.
@@ -892,4 +899,93 @@ export function resumoPorUf(docs: DocumentoFiscal[]): LinhaUf[] {
     }
     return Array.from(mapa.values()).sort((a, b) =>
         (b.saidasValor + b.entradasValor) - (a.saidasValor + a.entradasValor));
+}
+
+// ─── Ressalvas das abas de serviço/retenção ─────────────────────────────────
+
+/**
+ * 🚨 A RESSALVA NÃO PODE AFIRMAR UMA DATA QUE NINGUÉM MEDIU.
+ *
+ * Ela dizia: *"N nota(s) **importadas antes de 01/08/2026** não têm IR/INSS/CSLL
+ * gravados — ausência NÃO significa zero retido; **reimporte o XML** para
+ * completar."* Duas coisas erradas, e a segunda é a cara:
+ *
+ * · **A data.** O que o app mede é `retencoesFederaisGravadas` — o documento
+ *   não TRAZ os campos. Isso vale para nota antiga, para nota digitada sem
+ *   preencher e para trilho que não traz o dado. Afirmar quando ela foi
+ *   importada é o `csllOuTotal` com outra roupa: quem lê acredita.
+ *
+ * · **A AÇÃO.** *"Reimporte o XML"* é impossível onde não existe XML — e é
+ *   exatamente o caso que trouxe isto (04/09, J.P. PISSATO LOTERIAS e 923
+ *   MONACO): o CT-e OS chega **só em PDF**, a empresa usa certificado A3 e não
+ *   há captura automática. É o achado 18 (21/08) na forma cara — a pessoa
+ *   procura o XML, não acha, e conclui que o app está quebrado.
+ *
+ * A ação que SEMPRE funciona é informar a retenção na própria nota (a porta que
+ * nasceu em 04/09). O XML fica como alternativa, e DITO como alternativa.
+ */
+export function ressalvaSemRetencaoGravada(quantas: number): string {
+    return `${quantas} nota(s) não têm IR/INSS/CSLL gravados — ausência NÃO significa `
+        + `zero retido. Informe a retenção na própria nota (✍️ Informar retenção, no `
+        + `detalhe do documento) ou, havendo XML da nota, reimporte-o para completar.`;
+}
+
+export interface DuplicataServico {
+    numero: string;
+    participante: string;
+    base: number;
+    vezes: number;
+}
+
+/**
+ * 🚨 A MESMA NOTA DUAS VEZES — e nenhum validador acusa.
+ *
+ * O CASO (04/09, J.P. PISSATO · 08/2026): o CT-e OS 114.924 da PROTEGE foi
+ * lançado à mão com o modelo certo, e o documento ANTIGO da mesma nota continuou
+ * na base. O relatório somou **7.802,74** onde o papel diz **3.901,37** — e a
+ * duplicata infla o Livro de Serviços tomados, a competência, o bloco A do
+ * EFD-Contribuições e a base do R-4020.
+ *
+ * O único jeito de perceber era alguém reparar que o total estava dobrado. Este
+ * é o erro que sai do escritório: o PVA aceita, a tela não acende, e ele só
+ * aparece na fiscalização.
+ *
+ * ⚠️ **O APP NÃO ESCOLHE QUAL REMOVER** — qual documento está certo é decisão de
+ * quem olha (a espécie, a origem, quem lançou). Ele DENUNCIA, e a saída já
+ * existe: 🚫 retirar do cliente, no detalhe do documento.
+ *
+ * ⚠️ **NOTA SEM NÚMERO FICA DE FORA**: várias notas legítimas chegam sem ele, e
+ * agrupá-las acusaria documento correto — o alarme sobre o que está certo é o
+ * jeito conhecido de a equipe desligar a conferência.
+ *
+ * ⚠️ **E A CHAVE INCLUI O VALOR**: mesmo prestador e mesmo número com valores
+ * diferentes é reemissão, não cópia.
+ */
+export function duplicatasNasLinhas(linhas: LinhaServico[]): DuplicataServico[] {
+    const mapa = new Map<string, DuplicataServico>();
+    for (const l of linhas) {
+        const numero = String(l.numero || '').trim();
+        if (!numero) continue;
+        const participante = String(l.participante || '').trim();
+        const base = r2(Number(l.base) || 0);
+        const chave = `${numero}|${participante.toUpperCase()}|${base}`;
+        const atual = mapa.get(chave);
+        if (atual) atual.vezes += 1;
+        else mapa.set(chave, { numero, participante, base, vezes: 1 });
+    }
+    return [...mapa.values()].filter(d => d.vezes > 1);
+}
+
+/** A frase da denúncia — com a nota NOMEADA e a ação, nunca só um contador. */
+export function ressalvaDuplicatas(dups: DuplicataServico[]): string | null {
+    if (!dups.length) return null;
+    const nomes = dups.slice(0, 5)
+        .map(d => `nº ${d.numero} · ${d.participante} · ${d.base.toFixed(2)} (${d.vezes}×)`)
+        .join(' · ');
+    const resto = dups.length > 5 ? ` e mais ${dups.length - 5}` : '';
+    return `⚠️ ${dups.length} nota(s) aparecem MAIS DE UMA VEZ (mesmo prestador, número e `
+        + `valor) — a base deste relatório está somando em dobro, e o mesmo vale para o `
+        + `Livro de Serviços e o bloco A do EFD-Contribuições: ${nomes}${resto}. `
+        + `Confira qual documento está certo e retire o outro (🚫 Retirar do cliente, no `
+        + `detalhe do documento) — o app não escolhe por você.`;
 }

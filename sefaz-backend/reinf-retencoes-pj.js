@@ -41,6 +41,9 @@ import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
 // ajuste que valesse só para o R-4020 faria o SPED e o REINF declararem
 // números diferentes sobre a mesma nota.
 import { retencaoEfetivaDaNota, chaveDoAjuste, resumirRetencoesEfetivas } from './retencao-pj-ajuste.js';
+// Espécie do documento: quem responde é o dono, nunca um regex de `tipo` aqui
+// dentro — foi um `/NFSe/i` escrito à mão que escondeu o CT-e OS do R-4020.
+import { ehNotaDeServico, ehConhecimentoDeTransporte } from './sped-selecao-documentos.js';
 
 const num = (v) => {
     if (v === undefined || v === null || v === '') return undefined;
@@ -152,6 +155,53 @@ export function normalizarNotaTomada(d) {
 const temRetencao = (n) => !!(n.ir || n.pis || n.cofins || n.csllOuTotal);
 
 /**
+ * O documento tem retenção federal GRAVADA? (ausente ≠ zero)
+ *
+ * Ela responde sobre a PRESENÇA do campo, nunca sobre o valor: zero DIGITADO
+ * é uma afirmação ("conferi e não houve") e conta; campo que nunca existiu,
+ * não.
+ */
+export function temRetencaoFederalGravada(d) {
+    const fed = lerRetencoesFederaisDoDoc(d);
+    return fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined
+        || fed.pis !== undefined || fed.cofins !== undefined;
+}
+
+/**
+ * 🚨 QUE ESPÉCIE DE DOCUMENTO PODE CARREGAR RETENÇÃO FEDERAL?
+ *
+ * O CASO (04/09, J.P. PISSATO LOTERIAS): o CT-e OS 114.924 da PROTEGE foi
+ * lançado com o modelo CERTO (67) e a retenção do papel (IRRF 39,02, art. 55
+ * da Lei 7.713/88) — apareceu no Relatório de Retenções e **o Consultor
+ * Contábil continuou dizendo "Nenhum beneficiário PJ com retenção nesta
+ * competência"**.
+ *
+ * A causa era UMA LINHA nesta rota: `if (!/NFSe/i.test(tipoDoc||tipo)) continue`.
+ * O CT-e é `tipo: 'CTe'` e caía fora. Ou seja: em 04/09 eu corrigi o RELATÓRIO
+ * e deixei a rota que alimenta o R-4020 com a régua antiga — instância fechada,
+ * classe aberta, que é o vício que este projeto persegue desde 12/08.
+ *
+ * ⚠️ E o custo era o pior: a tela do Contábil **manda procurar no lugar
+ * errado** — *"o problema é de CAPTURA no Consultor Fiscal"* — sobre um
+ * documento que estava capturado, com a retenção gravada, visível no relatório
+ * ao lado.
+ *
+ * ⚠️ **FRETE SEM RETENÇÃO É O CASO NORMAL**, e por isso o conhecimento de
+ * transporte só entra quando TEM retenção (ou ajuste declarado): trazer todos
+ * encheria a contagem de "sem retenção" com documento correto, que é o jeito
+ * conhecido de a equipe parar de ler a lista. A NFS-e continua entrando mesmo
+ * sem os campos — lá a ausência é suspeita de captura incompleta.
+ *
+ * ⚠️ **O AJUSTE TRAZ A NOTA DE VOLTA**, aqui igual ao resto: quem tem prova de
+ * que houve retenção declara, e a declaração vence o documento.
+ */
+export function documentoEntraEmRetencoes(d, { temAjuste = false } = {}) {
+    if (ehNotaDeServico(d)) return true;
+    if (!ehConhecimentoDeTransporte(d)) return false;
+    return temRetencaoFederalGravada(d) || !!temAjuste;
+}
+
+/**
  * Payload do R-4020 para UMA empresa numa competência.
  *
  * @param {object} p
@@ -169,7 +219,6 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
     let dePessoaFisica = 0;
 
     for (const d of documentos || []) {
-        if (!/NFSe/i.test(texto(d?.tipoDoc || d?.tipo))) continue;
         if (CANCELADOS.has(texto(d?.status).toLowerCase())) continue;
         // TOMADAS: o cliente é o tomador, não o prestador.
         if (d?.direcao !== 'entrada') continue;
@@ -181,6 +230,14 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
         // declarar que houve — e o ajuste ficaria gravado sem efeito, que é a
         // "flag que ninguém lê" na pior forma possível (a retenção some).
         const ajuste = ajustes?.[chaveDoAjuste(n)] || null;
+
+        // A ESPÉCIE DECIDE DEPOIS DO AJUSTE, de propósito: um conhecimento de
+        // transporte cujo documento não trouxe retenção mas que alguém DECLAROU
+        // precisa entrar, e a régua da espécie precisa saber disso para não
+        // barrá-lo antes. Ler `tipo` com regex aqui foi o que escondeu o CT-e
+        // OS da J.P. PISSATO do R-4020 em 04/09.
+        if (!documentoEntraEmRetencoes(d, { temAjuste: !!ajuste })) continue;
+
         if (!temRetencao(n) && !ajuste) { semRetencao += 1; continue; }
         // Prestador PESSOA FÍSICA é R-4010, outro evento. Não some em silêncio:
         // vira contagem, porque some da lista é o que faz alguém achar que

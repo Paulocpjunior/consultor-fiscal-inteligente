@@ -10,6 +10,8 @@
  * O que este teste protege acima de tudo: NOME DE CAMPO QUE MENTE é pior que
  * campo faltando — o outro lado usa e ninguém descobre até a declaração.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { montarPayloadReinfPJ, normalizarNotaTomada } from '../sefaz-backend/reinf-retencoes-pj';
 
 const TOMADOR = '51227692000146';
@@ -250,5 +252,166 @@ describe('🚫 nota que o documento declara sem retenção', () => {
         });
         expect(p.notas).toHaveLength(1);
         expect(p.resumo.semRetencaoDeclarada).toBe(0);
+    });
+});
+
+/**
+ * 🚨 O CT-e OS COM RETENÇÃO É BENEFICIÁRIO DO R-4020 — e a rota o descartava.
+ *
+ * O CASO (04/09, J.P. PISSATO LOTERIAS · 08/2026): o CT-e OS 114.924 da PROTEGE
+ * foi lançado com o modelo CERTO (67) e a retenção que o papel declara — IRRF
+ * de 1%, art. 55 da Lei 7.713/1988. Ele apareceu no Relatório de Retenções do
+ * CFI, com IR 39,02… e o Consultor Contábil respondeu **"Nenhum beneficiário PJ
+ * com retenção nesta competência"**.
+ *
+ * A causa era UMA linha: `if (!/NFSe/i.test(tipoDoc || tipo)) continue`. O CT-e
+ * é `tipo: 'CTe'` e caía fora. Ou seja: em 04/09 de manhã eu corrigi o
+ * RELATÓRIO e deixei a rota que alimenta o R-4020 com a régua antiga —
+ * instância fechada, classe aberta.
+ *
+ * E o custo não era só a ausência: a tela do Contábil MANDAVA PROCURAR NO LUGAR
+ * ERRADO — *"o problema é de CAPTURA no Consultor Fiscal"* — sobre um documento
+ * capturado, com a retenção gravada, visível no relatório ao lado.
+ *
+ * Os números são os do DACTE-OS: prestação 3.901,37 e IRRF 39,02 (o emitente
+ * arredondou para cima; 1% dá 39,01, e é o 39,02 que fecha o líquido 3.862,35).
+ */
+describe('🚚 CT-e OS com retenção entra no R-4020', () => {
+    const PISSATO = '00593774000173';
+
+    const cte = (over: any = {}) => ({
+        tipo: 'CTe', tipoDoc: 'CTe', modelo: '67',
+        direcao: 'entrada', status: 'autorizado', competencia: '2026-08',
+        numero: '114924', dhEmi: '2026-08-31T10:00:00-03:00',
+        cnpjEmit: '17.428.731/0001-50', xNomeEmit: 'PROTEGE PROTECAO E TRANSPORTE DE VALORES LTDA',
+        cnpjDest: PISSATO, xNomeDest: 'J.P. PISSATO LOTERIAS LTDA',
+        valorTotal: 3901.37,
+        valorIr: 39.02,
+        ...over,
+    });
+
+    it('o beneficiário aparece — era isto que o Contábil não via', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08', documentos: [cte()],
+        });
+        expect(p.notas).toHaveLength(1);
+        expect(p.notas[0].prestadorNome).toMatch(/PROTEGE/);
+        expect(p.notas[0].prestadorCnpj).toBe('17428731000150');
+        expect(p.notas[0].numero).toBe('114924');
+    });
+
+    it('a base e o IR são os do documento — o app não recalcula o papel', () => {
+        // 1% de 3.901,37 é 39,01 e o DACTE-OS diz 39,02. Recalcular declararia
+        // um centavo A MENOS do que foi retido, e a Receita não devolve.
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08', documentos: [cte()],
+        });
+        expect(p.notas[0].base).toBe(3901.37);
+        expect(p.notas[0].ir).toBe(39.02);
+    });
+
+    // ⚠️ FRETE SEM RETENÇÃO É O CASO NORMAL. Se ele entrasse, a contagem de
+    // "sem retenção" encheria de documento CORRETO — o alarme que ensina a
+    // equipe a ignorar a lista.
+    it('CT-e SEM retenção não entra e NÃO vira contagem de "sem retenção"', () => {
+        const semIr = cte();
+        delete (semIr as any).valorIr;
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08', documentos: [semIr],
+        });
+        expect(p.notas).toHaveLength(0);
+        expect(p.resumo.semRetencao).toBe(0);
+    });
+
+    // ⚠️ ZERO DIGITADO É RESPOSTA ("conferi e não houve"), e é diferente de
+    // campo que nunca existiu. Ele entra na seleção e cai em `semRetencao`,
+    // onde a pessoa o vê — não some.
+    it('zero DIGITADO no CT-e é afirmação, e não some da conta', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08', documentos: [cte({ valorIr: 0 })],
+        });
+        expect(p.notas).toHaveLength(0);
+        expect(p.resumo.semRetencao).toBe(1);
+    });
+
+    // ⚠️ O AJUSTE TRAZ A NOTA DE VOLTA, aqui igual ao resto: por isso a espécie
+    // decide DEPOIS de o ajuste ser lido — barrá-la antes deixaria o ajuste
+    // gravado sem efeito, que é a "flag que ninguém lê" na pior forma.
+    it('CT-e sem retenção no documento volta pelo ajuste declarado', () => {
+        const semIr = cte({ chave: 'CTE-114924' });
+        delete (semIr as any).valorIr;
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08', documentos: [semIr],
+            ajustes: {
+                'CTE-114924': {
+                    ir: 39.02, autor: 'priscila.lopes',
+                    motivo: 'IRRF art 55 declarado no DACTE-OS',
+                },
+            },
+        });
+        expect(p.notas).toHaveLength(1);
+        expect(p.notas[0].retencao.ir).toBe(39.02);
+    });
+
+    it('NF-e de MERCADORIA continua de fora — ela não carrega retenção federal', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08',
+            documentos: [{ ...cte(), tipo: 'NFe', tipoDoc: 'NFe', modelo: '55' }],
+        });
+        expect(p.notas).toHaveLength(0);
+    });
+
+    // NADA REGRIDE: a NFS-e sem retenção continua contada, porque lá a ausência
+    // é suspeita de captura incompleta — não é o caso normal.
+    it('NFS-e sem retenção segue caindo em "sem retenção"', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: PISSATO, competencia: '2026-08',
+            documentos: [{
+                tipoDoc: 'NFSe', direcao: 'entrada', status: 'autorizado',
+                competencia: '2026-08', numero: '10',
+                prestadorCnpj: '17428731000150', prestadorNome: 'X LTDA',
+                tomadorCnpj: PISSATO, valorServicos: 100,
+            }],
+        });
+        expect(p.notas).toHaveLength(0);
+        expect(p.resumo.semRetencao).toBe(1);
+    });
+});
+
+/**
+ * 🔒 A CLASSE, não a instância.
+ *
+ * Corrigir a linha fecha o caso da J.P. PISSATO; o que impede a próxima é a
+ * régua da espécie ter UM dono. Ela já nasceu duplicada — o relatório aceitava
+ * o CT-e e esta rota continuava com `/NFSe/i`, e as duas telas contaram
+ * histórias diferentes sobre o MESMO documento no mesmo dia.
+ *
+ * A varredura lê CÓDIGO, nunca a prosa que o explica (a mordida do ISS, 22/08):
+ * os comentários deste módulo citam `NFSe` justamente para contar o defeito.
+ */
+describe('🔒 a espécie de documento tem UM dono', () => {
+    const semComentarios = (src: string) => src
+        .split('\n')
+        .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
+        .join('\n');
+
+    const rota = semComentarios(
+        readFileSync(join(__dirname, '..', 'sefaz-backend/reinf-retencoes-pj.js'), 'utf8'));
+    const relatorio = semComentarios(
+        readFileSync(join(__dirname, '..', 'services/relatoriosAgregacoes.ts'), 'utf8'));
+
+    it('a rota do R-4020 não decide a espécie com regex de `tipo`', () => {
+        // Era exatamente isto: `if (!/NFSe/i.test(texto(d?.tipoDoc || d?.tipo)))`.
+        expect(rota).not.toMatch(/\/NFSe\/i\s*\.test/);
+    });
+
+    it('a rota delega ao dono', () => {
+        expect(rota).toMatch(/documentoEntraEmRetencoes\(d,\s*\{\s*temAjuste/);
+    });
+
+    it('o relatório NÃO reimplementa a união das duas espécies', () => {
+        // A cópia era `ehNotaDeServico(d) || (ehConhecimentoDeTransporte(d) && …)`.
+        expect(relatorio).not.toMatch(/ehConhecimentoDeTransporte/);
+        expect(relatorio).toMatch(/documentoEntraEmRetencoes/);
     });
 });

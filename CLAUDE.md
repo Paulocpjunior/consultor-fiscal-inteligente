@@ -66,6 +66,59 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fica como veio (é a prova do que a fonte disse), o número que vale sai
   carimbado com quem afirmou e por quê, e há caminho de volta.
 
+- **🚨 CORRIGI O RELATÓRIO E DEIXEI A ROTA DO R-4020 COM A RÉGUA ANTIGA — no
+  MESMO dia** (04/09, à tarde, Paulo: *"lancei a nota manual como no passo a
+  passo e deu certo, porém quando fui fazer a reinf apareceu aquele erro de que
+  não tem nenhum beneficiário"*).
+  🔴 **A CAUSA É UMA LINHA, e ela estava MEDIDA**: `reinf-retencoes-pj.js:172`
+  fazia `if (!/NFSe/i.test(texto(d?.tipoDoc || d?.tipo))) continue` — e o CT-e é
+  **`tipo: 'CTe'`**. De manhã eu ensinei o RELATÓRIO a aceitar conhecimento de
+  transporte e **não toquei na rota que alimenta o Contábil**: instância
+  fechada, classe aberta, que é o vício que este projeto persegue desde 12/08.
+  🚨 **E O CUSTO NÃO ERA A AUSÊNCIA — ERA A TELA MANDAR PROCURAR NO LUGAR
+  ERRADO**: o CCI dizia *"Nenhum beneficiário PJ com retenção nesta competência.
+  Se este cliente contrata serviços com retenção, **o problema é de CAPTURA no
+  Consultor Fiscal**"* — sobre um documento capturado, com a retenção gravada,
+  visível no relatório ao lado. É o achado 18 na forma mais cara: o aviso está
+  certo em existir e aponta o lugar de OUTRO problema.
+  ✂️ `documentoEntraEmRetencoes` (no dono, `reinf-retencoes-pj.js`, que já é a
+  casa de `lerRetencoesFederaisDoDoc`) responde *"que espécie pode carregar
+  retenção federal?"* — e o relatório passou a IMPORTAR em vez de manter a
+  cópia. As duas divergiram no mesmo dia; a varredura proíbe a terceira.
+  ⚠️ **A ESPÉCIE DECIDE DEPOIS DO AJUSTE, e isso é régua**: um CT-e cujo
+  documento não trouxe retenção mas que alguém DECLAROU tem de entrar — barrá-lo
+  antes deixaria o ajuste gravado sem efeito, a "flag que ninguém lê" na pior
+  forma (a retenção some).
+  ⚠️ **FRETE SEM RETENÇÃO É O CASO NORMAL** e nem vira contagem de "sem
+  retenção": enchê-la de documento correto é o jeito conhecido de a equipe parar
+  de ler a lista. A NFS-e continua entrando sem os campos — lá a ausência é
+  suspeita de captura incompleta. ⚠️ E **zero DIGITADO entra**, porque "conferi e
+  não houve" é um fato.
+  🔴 **E O MESMO PRINT TRAZIA MAIS DOIS, os dois medidos na imagem**:
+  · **A MESMA NOTA DUAS VEZES** — `TOTAIS (2) 7.802,74` sobre um papel de
+  **3.901,37**. Ele lançou o CT-e à mão e o documento ANTIGO da mesma nota ficou
+  na base (um como serviço, outro como CT-e). **Nenhum validador acusa**: o PVA
+  aceita, a tela não acende, e a duplicata infla o Livro de Serviços tomados, a
+  competência, o bloco A e a base do R-4020. Só se percebe reparando que o total
+  dobrou. `duplicatasNasLinhas` DENUNCIA (mesmo prestador + número + valor), com
+  a nota NOMEADA e a ação — e **o app NÃO escolhe qual remover**, porque qual
+  documento está certo é decisão de quem olha. ⚠️ Nota **sem número** fica de
+  fora (muitas legítimas chegam assim) e **valor diferente é reemissão**, não
+  cópia — alarme sobre documento correto desliga a conferência.
+  · **A RESSALVA MANDAVA REIMPORTAR UM XML QUE NÃO EXISTE**: *"N nota(s)
+  **importadas antes de 01/08/2026** … **reimporte o XML** para completar"*.
+  Duas coisas erradas — a **data** nunca foi medida (o que o app mede é
+  `retencoesFederaisGravadas`, ou seja *o documento não traz os campos*, o que
+  vale para nota antiga, digitada sem preencher ou trilho que não traz), e a
+  **ação é impossível** justamente aqui, onde o cliente só manda PDF. A 1ª ação
+  virou *informar na própria nota*; o XML ficou como alternativa DITA como
+  alternativa. E a frase estava escrita **duas vezes na tela** — virou dono.
+  📌 **REGRA QUE FICA: quando uma régua de SELEÇÃO muda, ela muda em TODOS os
+  consumidores no MESMO PR — e a lista de consumidores se MEDE, não se lembra.**
+  Aqui eram dois (relatório e rota do R-4020) e eu só vi um; o sintoma foi a
+  mesma nota existindo numa tela e não existindo na outra, com a segunda
+  culpando a captura. Provado revertendo a régua velha: 4 testes caem.
+
 - **🚨 O DOCUMENTO DIZIA A RETENÇÃO E O APP NÃO TINHA ONDE RECEBÊ-LA** (04/09,
   Paulo, J.P. PISSATO LOTERIAS: *"essa empresa tem uma particularidade na nota
   de retenção, ela não é formato 55, 65 e sim 67 DACTE-OS, com isso o cliente só
