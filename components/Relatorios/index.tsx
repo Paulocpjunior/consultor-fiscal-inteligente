@@ -32,6 +32,11 @@ import { direcaoEfetivaDoc, docCancelado } from '../../sefaz-backend/xml-metadat
 import { modeloDoDoc } from '../../sefaz-backend/participante-doc-helper.js';
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, diagnosticoRetencoes, resumoPorUf, servicosPorCodigo,
+    // A ressalva do "?" e a denúncia da nota repetida moram no núcleo PURO:
+    // frase de régua escrita na tela é a segunda cópia de sempre — esta já
+    // estava escrita DUAS vezes aqui, e as duas afirmavam uma data de
+    // importação que o app nunca mediu.
+    ressalvaSemRetencaoGravada, duplicatasNasLinhas, ressalvaDuplicatas,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
     contraparteDoc, docValido, lerFaltantes,
 } from '../../services/relatoriosAgregacoes';
@@ -1942,9 +1947,10 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
         totais: ['', '', `TOTAIS (${linhas.length})`, tot.base, tot.iss, tot.issRetido, tot.pis, tot.cofins, tot.ir, tot.inss, tot.csll, tot.liquido],
         identificacao,
         observacoes: [
-            ...(semRetGravada > 0 ? [`${semRetGravada} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
+            ...(semRetGravada > 0 ? [ressalvaSemRetencaoGravada(semRetGravada)] : []),
             ...(comCsrf > 0 ? [`† ${comCsrf} nota(s) trazem as três contribuições retidas num campo só (CSRF 4,65% — assinatura da alíquota): o valor aparece na coluna CSLL marcado com † e NÃO entra na soma da coluna, porque somá-lo como CSLL contaria PIS e COFINS em dobro. Retenção CSRF sem rateio no período: ${tot.csrf.toFixed(2)}. O rateio individual não está no documento.`] : []),
             ...(comOperacao > 0 ? [`${comOperacao} nota(s) com PIS/COFINS nas alíquotas do regime não-cumulativo (1,65% / 7,60%) — é o tributo da OPERAÇÃO do prestador, não retenção; ficou fora das colunas e dos totais (soma: ${tot.operacao.toFixed(2)}).`] : []),
+            ...(ressalvaDuplicatas(duplicatasNasLinhas(linhas)) ? [ressalvaDuplicatas(duplicatasNasLinhas(linhas))!] : []),
             ...(modo === 'retencoes' ? [diag.mensagem] : []),
         ],
         fileName: `${modo}-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
@@ -2044,7 +2050,7 @@ const AbaServicosPorCodigo: React.FC<AbaDocsProps> = ({ docs, empresa, competenc
             `Total geral dos impostos retidos: ${fmtBRL(tot.totalRetido)} (ISS retido + IRRF + PIS + COFINS + CSLL + INSS).`,
             'A descrição é a discriminação mais frequente das notas do grupo — não existe tabela oficial código→descrição no app.',
             ...(semCodigo ? [`${semCodigo.notas} nota(s) sem código de serviço gravado (trilho ADN/nota antiga) agrupadas em "Sem código" — elas contam nos totais.`] : []),
-            ...(diag.semCamposGravados > 0 ? [`${diag.semCamposGravados} nota(s) importadas antes de 01/08/2026 não têm IR/INSS/CSLL gravados — ausência NÃO significa zero retido; reimporte o XML para completar.`] : []),
+            ...(diag.semCamposGravados > 0 ? [ressalvaSemRetencaoGravada(diag.semCamposGravados)] : []),
         ],
         fileName: `servicos-por-codigo-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
     }));
