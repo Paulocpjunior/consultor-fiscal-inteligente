@@ -9038,6 +9038,40 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   aqui como "o advisory esperando" já nem existe — hoje são `@xmldom/xmldom`
   e `qs`, os DOIS de **produção**. Carimbar advisory antigo como o de hoje é o
   "0/388" com outra roupa.
+  🚨 **E O QUE FEZ OS 27 DIAS PASSAREM NÃO FOI FALTA DE ALARME — FOI O VERDE**
+  (04/09, Paulo: *"isso pq eu peço p vc auditar todo dia, como resolver"*).
+  **Medido**: sem advisory, o robô sai limpo no PRIMEIRO step e **nunca chega
+  ao `gh pr create`**. Ou seja, entre 08/08 e 03/09 ele rodou VERDE dizendo
+  *"auditei"* — e nunca *"eu conseguiria entregar a correção"*. Ausência de
+  alarme indistinguível de "está tudo certo", a doença que esta casa mais paga,
+  agora dentro do próprio robô de segurança.
+  ✂️ **A SONDA MEDE O QUE A TELA DE SETTINGS NÃO RESPONDE**: no dia sem
+  advisory, o robô abre um PR **de verdade** (commit VAZIO, draft) e fecha no
+  mesmo run. Verde ali é a prova; caixa marcada não é. É o desenho do
+  `✉️ Testar credencial do e-mail` e do `forma-do-segredo` (02/09) — **um botão
+  que MEDE em vez de um campo que afirma** — e ela dá o caminho de conferir sem
+  esperar o próximo advisory (Actions → **Run workflow**).
+  ⚠️ **SÓ RODA QUANDO NÃO HÁ CORREÇÃO A ENTREGAR**: havendo, o caminho real já
+  mede (foi o que aconteceu hoje), e rodar as duas daria dois PRs e dois
+  alarmes para o mesmo fato.
+  ⚠️ **BRANCH PRÓPRIA, COMMIT VAZIO, LIMPEZA ARMADA ANTES** (`trap ... EXIT`):
+  reusar a `chore/audit-deps` destruiria uma correção real esperando merge — ela
+  é a MINA que travou o robô 3 dias em 17/08 —, e sonda que deixa rastro vira o
+  problema que veio medir. Com commit vazio, o que sobrar não muda uma linha.
+  ⚠️ **E A ISSUE DELA NÃO MANDA PROCURAR CORREÇÃO PARADA**: no dia da sonda não
+  há nenhuma. O caminho real diz *"a correção existe e está parada"*; dizer isso
+  aqui mandaria procurar o que não existe.
+  🔕 **UM FATO, UM ALARME — e isso a sonda AGRAVARIA se não fosse junto**: a
+  rede de segurança dispara em `failure()` e não distinguia falha PREVISTA (já
+  avisada com a causa nomeada) de IMPREVISTA. Em 04/09 o mesmo fato abriu
+  **DUAS** issues (#777 específica, #778 genérica), e com a sonda o #778 ganharia
+  comentário **todo dia útil**. Os passos que avisam carimbam `avisado=true` e a
+  rede sai de cena. ⚠️ **Passo que nunca rodou devolve string VAZIA**, então ela
+  continua cobrindo o imprevisto — que é a razão de existir. Travado nos DOIS
+  sentidos e provado revertendo cada um.
+  📌 **REGRA QUE FICA: trava cujo caso de teste só aparece de vez em quando
+  precisa de uma SONDA que o produza sob demanda.** Senão o verde dela mede a
+  ausência do caso, não a saúde da trava — e o silêncio dura até o dia caro.
   🚩 **A BRANCH DO ROBÔ ENVELHECE**: `chore/audit-deps` é recortada da main no
   momento do run (`checkout -B`), então ela se auto-corrige no run seguinte —
   mas enquanto está parada ela é uma MINA. A de 07/08 (9h53) ficou um dia de
