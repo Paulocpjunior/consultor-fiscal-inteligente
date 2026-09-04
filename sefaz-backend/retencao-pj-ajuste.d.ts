@@ -59,3 +59,5 @@ export function resumirRetencoesEfetivas(linhas?: Array<{ retencao?: RetencaoEfe
     csllDerivada: number;
     exigemAjuste: number;
 };
+
+export function idAjustesDaCompetencia(cnpj: unknown, competencia: unknown): string;

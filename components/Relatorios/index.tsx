@@ -40,6 +40,9 @@ import {
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
     contraparteDoc, docValido, lerFaltantes,
 } from '../../services/relatoriosAgregacoes';
+// A retenção INFORMADA à mão (04/09). Sem esta leitura a aba mostra o zero do
+// documento — o número que o ajuste existe para corrigir.
+import { lerAjustesDaCompetencia } from '../../services/retencaoAjusteService';
 import { reconferirCancelamento } from '../../services/reconferirCancelamentoService';
 import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa } from '../../services/reconferenciaEncadeada';
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
@@ -1889,9 +1892,36 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
     const { gerando, rodar } = usePdf();
     const [dirRet, setDirRet] = useState<'entrada' | 'saida'>('entrada');
     const direcao = modo === 'serv-prestados' ? 'saida' : modo === 'serv-tomados' ? 'entrada' : dirRet;
+
+    // 🚨 AS RETENÇÕES INFORMADAS À MÃO — o argumento que ninguém passava.
+    //
+    // `linhasRetencoes` recebe `ajustes` desde 04/09 de manhã e esta tela
+    // chamava `linhasRetencoes(docs, direcao)`, sem o terceiro argumento: quem
+    // informava a retenção continuava vendo o ZERO do documento e concluía que
+    // o app não tinha salvo (FRONTINI, notas 794 e 795). É o defeito do
+    // `saldoCredorIpiAnterior` (19/08) — função que lê um campo que nenhum
+    // chamador entrega, e que não quebra nada: só responde sobre o caso vazio,
+    // todo dia, com toda confiança.
+    const [ajustesRet, setAjustesRet] = useState<Record<string, any>>({});
+    const [erroAjustes, setErroAjustes] = useState<string | null>(null);
+    useEffect(() => {
+        let vivo = true;
+        const cnpj = String(empresa?.cnpj || '').replace(/\D/g, '');
+        if (!cnpj || !competencia) { setAjustesRet({}); return; }
+        lerAjustesDaCompetencia(cnpj, competencia)
+            .then(m => { if (vivo) { setAjustesRet(m || {}); setErroAjustes(null); } })
+            // ⚠️ FALHA DE LEITURA NÃO VIRA "não há ajuste": devolver {} calado
+            // mostraria o valor do DOCUMENTO — o número errado que o ajuste
+            // corrigiu — e ninguém saberia. A tela DIZ.
+            .catch(e => { if (vivo) { setAjustesRet({}); setErroAjustes(e?.message || 'Não consegui ler as retenções informadas.'); } });
+        return () => { vivo = false; };
+    }, [empresa?.cnpj, competencia]);
+
     const linhas = useMemo(
-        () => (modo === 'retencoes' ? linhasRetencoes(docs, direcao) : linhasServicos(docs, direcao)),
-        [docs, direcao, modo],
+        () => (modo === 'retencoes'
+            ? linhasRetencoes(docs, direcao, ajustesRet)
+            : linhasServicos(docs, direcao)),
+        [docs, direcao, modo, ajustesRet],
     );
     // O diagnóstico olha TODAS as NFS-e do recorte, não a lista já filtrada:
     // na aba Retenções `linhas` só traz notas COM retenção, então contar o
@@ -1950,6 +1980,7 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
             ...(semRetGravada > 0 ? [ressalvaSemRetencaoGravada(semRetGravada)] : []),
             ...(comCsrf > 0 ? [`† ${comCsrf} nota(s) trazem as três contribuições retidas num campo só (CSRF 4,65% — assinatura da alíquota): o valor aparece na coluna CSLL marcado com † e NÃO entra na soma da coluna, porque somá-lo como CSLL contaria PIS e COFINS em dobro. Retenção CSRF sem rateio no período: ${tot.csrf.toFixed(2)}. O rateio individual não está no documento.`] : []),
             ...(comOperacao > 0 ? [`${comOperacao} nota(s) com PIS/COFINS nas alíquotas do regime não-cumulativo (1,65% / 7,60%) — é o tributo da OPERAÇÃO do prestador, não retenção; ficou fora das colunas e dos totais (soma: ${tot.operacao.toFixed(2)}).`] : []),
+            ...(erroAjustes ? [`⚠ ${erroAjustes}`] : []),
             ...(ressalvaDuplicatas(duplicatasNasLinhas(linhas)) ? [ressalvaDuplicatas(duplicatasNasLinhas(linhas))!] : []),
             ...(modo === 'retencoes' ? [diag.mensagem] : []),
         ],
@@ -1986,6 +2017,19 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
             {comOperacao > 0 && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
                     ⚠ {comOperacao} nota(s) com PIS/COFINS nas alíquotas da OPERAÇÃO do prestador (1,65% / 7,60% — não é retenção): {fmtBRL(tot.operacao)} fora dos totais.
+                </p>
+            )}
+            {/* Falha ao ler as retenções INFORMADAS. Ela some do PDF e da tela
+                seria o pior desfecho: a lista mostraria o valor do documento,
+                que é justamente o número que o ajuste corrige. */}
+            {erroAjustes && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {erroAjustes}</p>
+            )}
+            {/* A mesma nota duas vezes — a base soma em dobro e nenhum
+                validador acusa (04/09, J.P. PISSATO: TOTAIS (2) 7.802,74). */}
+            {ressalvaDuplicatas(duplicatasNasLinhas(linhas)) && (
+                <p className="text-[11px] text-rose-700 dark:text-rose-400">
+                    {ressalvaDuplicatas(duplicatasNasLinhas(linhas))}
                 </p>
             )}
             {linhas.length === 0 && (

@@ -478,8 +478,21 @@ service cloud.firestore {
     // que o documento diz — entao escrita pelo navegador tornaria contornavel
     // a validacao inteira (autor, motivo escrito, retencao maior que a base).
     // So o backend, que valida e carimba a fonte da autoria.
+    //
+    // LEITURA aberta ao logado desde 04/09, e a razao e o defeito que ela
+    // corrigiu: o painel da nota so GRAVAVA e o Relatorio de Retencoes nao
+    // recebia os ajustes. Quem informava a retencao reabria a nota, via os
+    // campos VAZIOS e o relatorio mostrando o zero do documento — e concluia,
+    // com toda razao, que o app nao tinha salvo (04/09, FRONTINI, notas
+    // 794/795). Regua que so escreve e regua que ninguem le.
+    //
+    // O motivo escrito acima e sobre a ESCRITA — ela continua so no backend,
+    // que valida autor, motivo e retencao maior que a base. A leitura e da
+    // mesma classe de `documentos_fiscais`, que ja e `get: isSignedIn()`.
+    // `list` fica fechado: os dois consumidores sabem o docId exato.
     match /reinf_retencoes_ajustadas/{docId} {
-      allow read, write: if false;
+      allow get: if isSignedIn();
+      allow list, write: if false;
     }
 
     // dare_codigos_servico: codigo de servico DARE que nao e tabela fixa —

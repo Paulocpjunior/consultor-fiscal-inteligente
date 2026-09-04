@@ -290,6 +290,19 @@ export function retencaoEfetivaDaNota({ nota, coerencia, ajuste } = {}) {
  * ⚠️ E sem chave não se ajusta nada — afirmar sobre documento que não se pode
  * casar mudaria o valor de uma declaração sem ninguém saber qual nota mudou.
  */
+/**
+ * 🚨 O ID DO DOCUMENTO DE AJUSTES — régua ÚNICA.
+ *
+ * Ele mora aqui, junto de `chaveDoAjuste`, porque agora TRÊS lados o montam: a
+ * rota que grava, o painel da nota que relê o que foi informado e o Relatório
+ * de Retenções. `${cnpj}_2026-08` e `${cnpj}_202608` são documentos DIFERENTES
+ * — e o lado que errasse a forma leria SEMPRE vazio, que é indistinguível de
+ * "não há ajuste" (a lição do `idDoFechamento`, 26/08).
+ */
+export function idAjustesDaCompetencia(cnpj, competencia) {
+    return `${String(cnpj || '').replace(/\D/g, '')}_${String(competencia || '').replace(/\D/g, '')}`;
+}
+
 export function chaveDoAjuste(nota) {
     const c = texto(nota?.chave);
     if (c) return c;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getView } from '../../services/xmlDocumentoView';
 import type { DocumentoFiscal, User } from '../../types';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
@@ -11,7 +11,9 @@ import { tirarDocumentoDaEmpresa } from '../../services/xmlFiscalService';
 // 🚨 A PORTA PARA A RETENÇÃO QUE O CLIENTE ESQUECEU DE INFORMAR (04/09,
 // FRONTINI ENGENHEIROS): a nota já está capturada com retenção ZERO, e
 // corrigi-la no portal não muda o que o CFI capturou.
-import { gravarAjusteRetencao, removerAjusteRetencao } from '../../services/retencaoAjusteService';
+import {
+    gravarAjusteRetencao, removerAjusteRetencao, lerAjustesDaCompetencia,
+} from '../../services/retencaoAjusteService';
 import { chaveDoAjuste, MIN_MOTIVO } from '../../sefaz-backend/retencao-pj-ajuste.js';
 import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitado';
 
@@ -38,6 +40,11 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const [gravandoRet, setGravandoRet] = useState(false);
     const [erroRet, setErroRet] = useState<string | null>(null);
     const [okRet, setOkRet] = useState<string | null>(null);
+    // 🚨 O QUE JÁ FOI INFORMADO. Sem isto o painel só GRAVAVA: quem informava a
+    // retenção reabria a nota, via os campos vazios e concluía — com toda razão
+    // — que "não ficou salvo" (04/09, FRONTINI, notas 794 e 795).
+    const [ajusteAtual, setAjusteAtual] = useState<any | null>(null);
+    const [erroLerAjuste, setErroLerAjuste] = useState<string | null>(null);
     const jaRetirada = explicarRetirada(d as any);
 
     const tirar = async () => {
@@ -72,6 +79,22 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const chaveAjuste = chaveDoAjuste(d as any);
     const competenciaDoc = String((d as any).competencia || String(d.dhEmi || '').slice(0, 7));
 
+    // Carrega o que já foi informado — ANTES de a pessoa digitar de novo. Ela
+    // roda no MOUNT, não no clique: o carimbo ("informado por X") precisa
+    // aparecer mesmo com o painel fechado, senão a nota parece intocada.
+    useEffect(() => {
+        let vivo = true;
+        const cnpj = String((d as any).empresaCnpj || '').replace(/\D/g, '');
+        if (!cnpj || !chaveAjuste) { setAjusteAtual(null); return; }
+        lerAjustesDaCompetencia(cnpj, competenciaDoc)
+            .then(mapa => { if (vivo) { setAjusteAtual(mapa?.[chaveAjuste] || null); setErroLerAjuste(null); } })
+            // ⚠️ FALHA DE LEITURA NÃO VIRA "não há ajuste": mostrar o zero do
+            // documento aqui faria a pessoa informar de novo por cima de um
+            // ajuste que já existe.
+            .catch(e => { if (vivo) { setAjusteAtual(null); setErroLerAjuste(e?.message || 'Não consegui ler o ajuste desta nota.'); } });
+        return () => { vivo = false; };
+    }, [(d as any).empresaCnpj, competenciaDoc, chaveAjuste, okRet]);
+
     const gravarRet = async (remover = false) => {
         setGravandoRet(true); setErroRet(null); setOkRet(null);
         try {
@@ -97,6 +120,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                 onShowToast?.(`Retenção da nota ${d.numero} informada.`);
             }
             setAbrirRet(false);
+            setMotivoRet('');
             onRetirado?.();
         } catch (e: any) {
             setErroRet(e?.message || 'Falha ao gravar o ajuste.');
@@ -284,6 +308,32 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                     Este documento <strong>não traz nenhuma retenção</strong> — no Relatório de
                                     Retenções ele aparece com <strong>“?”</strong>, que é “falta conferir”, não “não houve”.
                                 </p>
+                            )}
+                            {/* 🚨 O CARIMBO DO QUE JÁ FOI INFORMADO. Sem ele o painel só
+                                gravava, e quem reabria a nota via os campos vazios e
+                                concluía que "não ficou salvo" (04/09, FRONTINI 794/795). */}
+                            {ajusteAtual && (
+                                <div className="mt-2 rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-2">
+                                    <p className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                                        ✍️ Retenção INFORMADA nesta nota — ela vence o documento
+                                    </p>
+                                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
+                                        {(['ir', 'inss', 'csll', 'pis', 'cofins'] as const)
+                                            .filter(k => ajusteAtual[k] !== undefined && ajusteAtual[k] !== null)
+                                            .map(k => `${k === 'ir' ? 'IRRF' : k.toUpperCase()} ${formatCurrency(Number(ajusteAtual[k]))}`)
+                                            .join(' · ') || 'sem valores'}
+                                    </p>
+                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                                        por {ajusteAtual.autor || 'autor não informado'}
+                                        {ajusteAtual.em ? ` em ${String(ajusteAtual.em).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                                        {ajusteAtual.motivo ? ` — “${ajusteAtual.motivo}”` : ''}
+                                    </p>
+                                </div>
+                            )}
+                            {/* Falha de leitura NÃO vira "não há ajuste": informar de novo
+                                por cima de um ajuste existente é o que se evita aqui. */}
+                            {erroLerAjuste && (
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">⚠ {erroLerAjuste}</p>
                             )}
                             {okRet && <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">✓ {okRet}</p>}
                         </div>

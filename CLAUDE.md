@@ -66,6 +66,45 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fica como veio (é a prova do que a fonte disse), o número que vale sai
   carimbado com quem afirmou e por quê, e há caminho de volta.
 
+- **🚨 EU ESCREVI A GRAVAÇÃO E NENHUMA DAS DUAS LEITURAS — "informei, mas não
+  ficou salvo"** (04/09, Paulo, FRONTINI ENGENHEIROS · NFS-e 794 e 795: *"informei
+  as retenções nos campos corretos, fiz a justificativa, mas não ficou salvo, nem
+  constando nas retenções"*).
+  📌 **O AJUSTE ESTAVA GRAVADO — medido, não deduzido**: o painel manda
+  `empresaCnpj` (certo para o F600), a `chaveDoAjuste` sai válida
+  (`09246389000124-795`, porque o trilho do portal grava `prestadorCnpj`), e a
+  rota aceita. **O que não existia era quem lesse de volta.**
+  🔴 **A PRIMEIRA É O DEFEITO DO `saldoCredorIpiAnterior` (19/08), COMETIDO POR
+  MIM NO MESMO DIA**: `linhasRetencoes(docs, direcao, ajustes)` ganhou o 3º
+  argumento de manhã e a tela chamava **`linhasRetencoes(docs, direcao)`**.
+  Argumento que ninguém passa não quebra nada — ele responde sobre o caso VAZIO,
+  todo dia, com toda confiança. E eu tinha feito a varredura para as TRÊS
+  chamadas do F600 e deixado o relatório de fora: **a trava cobriu um consumidor
+  e não o outro.**
+  🔴 **A SEGUNDA É PIOR PORQUE É A QUE ELE VÊ**: o painel da nota **só
+  GRAVAVA**. Reabrir a nota mostrava os cinco campos vazios e `0/15` no motivo —
+  indistinguível de *"não salvou"*. Régua que só escreve é a "flag que ninguém
+  lê" pela ponta da ENTRADA: a pessoa informa de novo, por cima de um ajuste que
+  já existe.
+  ✂️ As duas leituras entraram: o painel **relê e CARIMBA** (valores, quem
+  informou, quando e o motivo, visível com o painel fechado), e o relatório
+  **busca os ajustes da competência** e os passa. ⚠️ **Falha de leitura NÃO vira
+  "não há ajuste"** em nenhuma das duas — devolver `{}` calado mostraria o valor
+  do DOCUMENTO, o número errado que o ajuste corrigiu.
+  🔒 **E A COLEÇÃO ESTAVA FECHADA AO NAVEGADOR** (`allow read, write: if false`).
+  O motivo escrito ali é sobre a **ESCRITA** — que continua só no backend, onde
+  autor, motivo e teto da base são validados; a leitura tinha sido fechada por
+  SIMETRIA, não por razão. Abriu-se **só o `get`** (a mesma classe de
+  `documentos_fiscais`), com `list` fechado: os dois consumidores sabem o docId.
+  ⚠️ **E O ID VIROU DONO** (`idAjustesDaCompetencia`): agora TRÊS lados o montam,
+  e `${cnpj}_2026-08` × `${cnpj}_202608` são documentos DIFERENTES — quem
+  errasse a forma leria SEMPRE vazio, que é justamente o sintoma deste dia (a
+  lição do `idDoFechamento`, 26/08).
+  📌 **REGRA QUE FICA: régua que só ESCREVE não é entrega — a leitura entra no
+  MESMO PR, e a lista de quem lê se MEDE.** Aqui eu criei um parâmetro e um
+  carimbo e não liguei nenhum dos dois; o sintoma não foi erro nenhum, foi a
+  pessoa fazendo o trabalho certo duas vezes e concluindo que o app não gravou.
+
 - **🚨 CORRIGI O RELATÓRIO E DEIXEI A ROTA DO R-4020 COM A RÉGUA ANTIGA — no
   MESMO dia** (04/09, à tarde, Paulo: *"lancei a nota manual como no passo a
   passo e deu certo, porém quando fui fazer a reinf apareceu aquele erro de que
