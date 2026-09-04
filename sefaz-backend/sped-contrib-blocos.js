@@ -23,6 +23,11 @@ import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 // A leitura das retenções federais nas DUAS formas (achatada × objeto) é do
 // DONO — o mesmo leitor que alimenta o R-4020. Segunda cópia divergiria.
 import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
+// 🚨 O DONO de "quanto esta nota reteve, de verdade" (31/08). O F600 lia só o
+// documento — a pendência que ficou nomeada naquele dia e que o caso FRONTINI
+// (04/09) veio cobrar. Segunda cópia aqui faria o SPED e o REINF declararem
+// números diferentes sobre a MESMA nota.
+import { retencaoEfetivaDaNota, chaveDoAjuste } from './retencao-pj-ajuste.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
@@ -375,7 +380,7 @@ export function buildBlocoA(dados) {
     // toda saída retida). Uma segunda leitura aqui faria o A100 e o F600
     // contarem retenções diferentes no MESMO arquivo. Warnings mudos: quem
     // nomeia o que ficou de fora é o bloco F, uma vez só.
-    const retF600 = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null);
+    const retF600 = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null, dados.retencoesAjustadas);
     const retPorNota = new Map((retF600.eventos || []).map(e => [String(e.numero), e]));
 
     for (const notaCrua of notasA) {
@@ -991,12 +996,14 @@ function empilharAvisosDoBlocoD(dados, foraPorMotivo, valorZeroD) {
  * @param {Array|null} warnings  onde nomear o que ficou de fora (null = mudo,
  *                               para releitura idempotente pelo bloco M)
  */
-export function coletarRetencoesF600(notas, warnings) {
+export function coletarRetencoesF600(notas, warnings, ajustes) {
     const eventos = [];
     const daOperacao = [];
     const semBase = [];
     const semCnpjFonte = [];
     const foraDaAliquota = [];
+    const porAjuste = [];
+    const mapaAjustes = ajustes && typeof ajustes === 'object' ? ajustes : {};
 
     for (const notaCrua of (notas || [])) {
         if (docCancelado(notaCrua) || notaCrua.status === 'denegado') continue;
@@ -1014,16 +1021,46 @@ export function coletarRetencoesF600(notas, warnings) {
         // é o DONO da régua (o mesmo leitor do R-4020), nunca uma cópia.
         const v = notaCrua.valores || {};
         const fed = lerRetencoesFederaisDoDoc(notaCrua);
-        const pis = fed.pis ?? 0;
-        const cofins = fed.cofins ?? 0;
+        const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
+
+        // 🚨 O AJUSTE DECLARADO VENCE O DOCUMENTO — a pendência que ficou
+        // NOMEADA em 31/08 (*"o F600 continua com a régua antiga… vale rever
+        // com medição própria"*), e o caso que a pediu chegou em 04/09:
+        //
+        // > FRONTINI ENGENHEIROS, NFS-e emitidas 08/2026: *"ele esqueceu de
+        // > informar as retenções de 2 notas… como eu faço agora no consultor?"*
+        //
+        // A nota já está capturada do portal, com retenção ZERO. Corrigi-la no
+        // portal (carta de correção) não muda o que o CFI capturou: o abatimento
+        // do M200/M600 continuaria a MENOR — a empresa recolheria PIS/COFINS que
+        // já foram retidos na fonte.
+        //
+        // ⚠️ SÓ O AJUSTE DECLARADO ENTRA AQUI, de propósito. `retencaoEfetivaDaNota`
+        // também sabe DECOMPOR a CSRF, e ligar isso junto mudaria o valor do
+        // arquivo em notas que hoje ficam de fora (o `daOperacao` abaixo) — a
+        // régua de 31/08 é literal: *ligá-las ao mesmo dono muda VALOR de arquivo
+        // fiscal, e vale rever com medição própria, nunca de carona*. O dono
+        // continua ÚNICO; o que se restringe é qual origem este bloco aceita.
+        const ajuste = mapaAjustes[chaveDoAjuste(notaCrua)];
+        const efetiva = retencaoEfetivaDaNota({
+            nota: { ...fed, csllOuTotal: fed.csllOuTotal, base: parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorServicos) || parseFloat(notaCrua.valorTotal) || 0 },
+            ajuste,
+        });
+        const declarada = efetiva.origem === 'ajuste-declarado';
+
+        const pis = declarada ? efetiva.pis : (fed.pis ?? 0);
+        const cofins = declarada ? efetiva.cofins : (fed.cofins ?? 0);
         if (pis + cofins <= 0) continue;   // sem retenção federal gravada — caso normal
 
-        const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
         const base = parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorServicos) || parseFloat(notaCrua.valorTotal) || 0;
         const diag = conferirRetencaoFederal({ base, pis, cofins, csll: fed.csllOuTotal, ir: fed.ir, inss: fed.inss });
-        if (diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
+        // ⚠️ A assinatura da OPERAÇÃO fala do que o DOCUMENTO traz. Havendo
+        // ajuste, alguém já disse qual é a retenção de verdade — barrar a nota
+        // aqui devolveria o problema que o ajuste acabou de resolver.
+        if (!declarada && diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
         if (!base) { semBase.push(rotulo); continue; }
-        if (diag.situacao === 'aliquota-fora') foraDaAliquota.push(rotulo);
+        if (!declarada && diag.situacao === 'aliquota-fora') foraDaAliquota.push(rotulo);
+        if (declarada) porAjuste.push(`${rotulo} (${efetiva.ajustadoPor || 'autor não informado'})`);
 
         // A fonte pagadora é o TOMADOR — mesma leitura das duas formas do
         // documento que o 0150 usa (portal grava achatado, XML aninhado).
@@ -1068,6 +1105,17 @@ export function coletarRetencoesF600(notas, warnings) {
                 + '(pode ser base com dedução ou digitação).',
             );
         }
+        // 🚨 NÚMERO QUE MUDA POR DECLARAÇÃO HUMANA VAI DITO. O F600 abate o
+        // M200/M600, então a retenção informada à mão muda o valor a recolher —
+        // e quem conferir o arquivo daqui a três meses tem de saber que aquele
+        // número não saiu do documento.
+        if (porAjuste.length) {
+            warnings.push(
+                `F600: ${porAjuste.length} nota(s) entraram com a retenção AJUSTADA à mão, não com a do `
+                + `documento — nº ${porAjuste.slice(0, 8).join(', ')}. O abatimento do M200/M600 muda por `
+                + 'causa disso; confira contra o comprovante de retenção antes de transmitir.',
+            );
+        }
     }
 
     const totalPis = eventos.reduce((t, e) => t + e.pis, 0);
@@ -1090,7 +1138,7 @@ function contaDeclaradaNo0500(dados) {
 }
 
 export function buildBlocoF(dados) {
-    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings);
+    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings, dados.retencoesAjustadas);
     const eventos = ret.eventos || [];
     const aliq = getAliquotas(dados.regimeApuracao || '2');
     // 🚨 A RECEITA SEM DOCUMENTO (aluguel) — sem ela o M200/M600 sai ZERADO
@@ -1429,7 +1477,7 @@ export function buildBlocoM(dados) {
     // duas vezes é ruído). Os totais têm que fechar com os F600 emitidos: no
     // arquivo aceito da HS (05/2026), Σ VL_RET_PIS = 114,40 = VL_RET_CUM do
     // M200 e Σ VL_RET_COFINS = 528,00 = VL_RET_CUM do M600, centavo a centavo.
-    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null);
+    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null, dados.retencoesAjustadas);
     const retPis = ret.totalPis || 0;
     const retCofins = ret.totalCofins || 0;
 

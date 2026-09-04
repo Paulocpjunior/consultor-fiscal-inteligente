@@ -10,7 +10,8 @@
  * de lá, o M200 |0|0|0|0|0|0|0|114,4|114,4|0|0|0| e o M600 idem com 528 são o
  * gabarito destes testes. Regra da casa: arquivo aceito > leiaute deduzido.
  */
-// @ts-ignore — módulo JS do backend
+// Sem `@ts-ignore`: o `.d.ts` passou a declarar `coletarRetencoesF600` (04/09),
+// e silenciar aqui devolveria o módulo inteiro a `any` — o defeito do deploy 799.
 import { buildBlocoF, buildBlocoM, coletarRetencoesF600 } from '../sefaz-backend/sped-contrib-blocos.js';
 
 const campos = (l: string) => l.split('|');

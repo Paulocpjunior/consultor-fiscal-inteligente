@@ -43,6 +43,11 @@ import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coere
 // Serviços tomados/prestados e **Retenções**. É o achado (2) de 21/08, que
 // fechou no bloco A do EFD-Contribuições e ficou vivo aqui.
 import { ehNotaDeServico, ehConhecimentoDeTransporte } from '../sefaz-backend/sped-selecao-documentos.js';
+// 🚨 O DONO de "quanto esta nota reteve, de verdade" (31/08). O ajuste
+// declarado (autor + motivo) VENCE o documento — sem isto, quem informa a
+// retenção à mão continua vendo o zero do documento na tela e conclui que o
+// app não gravou (04/09, FRONTINI ENGENHEIROS).
+import { retencaoEfetivaDaNota, chaveDoAjuste } from '../sefaz-backend/retencao-pj-ajuste.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -265,6 +270,10 @@ export interface LinhaServico {
     liquido: number;
     /** Doc gravado antes de 01/08 não tem IR/INSS/CSLL — ausente ≠ zero retido. */
     retencoesFederaisGravadas: boolean;
+    /** O número saiu de um ajuste declarado, não do documento. */
+    retencaoAjustada?: boolean;
+    retencaoAjustadaPor?: string | null;
+    retencaoAjustadaMotivo?: string | null;
     /**
      * As três contribuições retidas NUM CAMPO SÓ (assinatura CSRF 4,65%) — o
      * documento não traz o rateio. Fica FORA da coluna CSLL e dos totais por
@@ -303,7 +312,9 @@ function linhasDe(
     docs: DocumentoFiscal[],
     direcao: 'entrada' | 'saida',
     incluir: (d: DocumentoFiscal) => boolean,
+    ajustes?: Record<string, any> | null,
 ): LinhaServico[] {
+    const mapaAjustes = ajustes && typeof ajustes === 'object' ? ajustes : {};
     return docs
         // 🔴 Era `d.tipo === 'NFSe'`: a NFS-e do ADN (`tipo: 'nfseNacional'`)
         // sumia das TRÊS abas que saem daqui — Serviços tomados, prestados e
@@ -330,7 +341,22 @@ function linhasDe(
             const v = d.valores || {};
             const base = v.baseCalculo ?? d.valorTotal ?? 0;
             // As duas formas de gravação, lidas pelo DONO da régua.
-            const fed = lerRetencoesFederaisDoDoc(d);
+            const bruto = lerRetencoesFederaisDoDoc(d);
+            // 🚨 O AJUSTE DECLARADO VENCE O DOCUMENTO, e a tela tem de mostrar
+            // isso (04/09, FRONTINI): quem informa a retenção à mão e continua
+            // vendo o zero do documento conclui que o app não gravou.
+            //
+            // ⚠️ SÓ o ajuste — a decomposição da CSRF continua sendo assunto do
+            // R-4020, e trazê-la aqui mudaria número em nota que hoje aparece
+            // com a ressalva do † (a régua de 31/08: não de carona).
+            const efetiva = retencaoEfetivaDaNota({
+                nota: { ...bruto, base },
+                ajuste: mapaAjustes[chaveDoAjuste(d as unknown as Record<string, unknown>)],
+            });
+            const ajustada = efetiva.origem === 'ajuste-declarado';
+            const fed = ajustada
+                ? { ir: efetiva.ir, pis: efetiva.pis, cofins: efetiva.cofins, csllOuTotal: efetiva.csll, inss: efetiva.inss }
+                : bruto;
             // A assinatura de alíquota separa o que o campo É: CSLL de verdade,
             // total CSRF sem rateio, ou tributo da operação do prestador.
             const coer = conferirRetencaoFederal({ base, pis: fed.pis, cofins: fed.cofins, csll: fed.csllOuTotal });
@@ -358,8 +384,14 @@ function linhasDe(
                 // como CSLL contaria PIS e COFINS em dobro (caso CLINIPAR).
                 csll: (csllEhTotal || daOperacao) ? 0 : (fed.csllOuTotal ?? 0),
                 liquido: v.liquido ?? d.valorTotal ?? 0,
-                retencoesFederaisGravadas:
-                    fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined,
+                // Nota ajustada TEM retenção informada por construção — é o
+                // que tira o "?" da coluna depois que alguém declarou.
+                retencoesFederaisGravadas: ajustada
+                    || fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined,
+                // Número que não saiu do documento se apresenta CARIMBADO.
+                retencaoAjustada: ajustada,
+                retencaoAjustadaPor: ajustada ? (efetiva.ajustadoPor || null) : null,
+                retencaoAjustadaMotivo: ajustada ? (efetiva.motivo || null) : null,
                 csrfSemRateio: (csllEhTotal || daOperacao) ? (fed.csllOuTotal ?? 0) : 0,
                 pisCofinsOperacao: daOperacao ? r2((fed.pis ?? 0) + (fed.cofins ?? 0)) : 0,
                 codigoServico: String((d as any).codigoServico || '').trim(),
@@ -483,9 +515,13 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
  * tem retenção nenhuma — o alarme sobre documento correto que ensina a equipe a
  * ignorar a lista.
  */
-export function linhasRetencoes(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
+export function linhasRetencoes(
+    docs: DocumentoFiscal[],
+    direcao: 'entrada' | 'saida',
+    ajustes?: Record<string, any> | null,
+): LinhaServico[] {
     return linhasDe(docs, direcao, d =>
-        ehNotaDeServico(d) || (ehConhecimentoDeTransporte(d) && temRetencaoFederalGravada(d)))
+        ehNotaDeServico(d) || (ehConhecimentoDeTransporte(d) && temRetencaoFederalGravada(d)), ajustes)
         // csrfSemRateio conta como retenção: a nota da ATLAS tem 158,72 retidos
         // num campo só — sumir da lista porque as colunas individuais zeraram
         // seria esconder justamente a retenção que existe.

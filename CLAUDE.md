@@ -5,6 +5,67 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CLIENTE ESQUECEU DE INFORMAR A RETENÇÃO E O F600 NÃO TINHA COMO SABER**
+  (04/09, Paulo, FRONTINI ENGENHEIROS · NFS-e EMITIDAS 08/2026: *"ele esqueceu
+  de informar as retenções de 2 notas, já informei que tem que fazer a carta de
+  correção, **como eu faço agora no consultor? incluir um campo para informar
+  manual?**"* — notas 00000795 · 750,00 e 00000794 · 4.200,00, capturadas com
+  retenção ZERO).
+  📌 **A PERGUNTA DELE ERA A RESPOSTA CERTA, e a casa já tinha metade dela**: o
+  ajuste declarado existe desde 31/08 (`retencao-pj-ajuste.js`, caso ATLAS), com
+  autor, motivo escrito e origem carimbada. **O que faltava era a PORTA** — a
+  tela do ajuste é a do R-4020, que lista serviços **TOMADOS**, e aqui a empresa
+  é a **PRESTADORA**.
+  🚨 **E FALTAVA O LEITOR — a pendência que ficou NOMEADA naquele mesmo dia**:
+  *"o F600 do EFD-Contribuições (a retenção SOFRIDA, que é de nota de SAÍDA)
+  continua com a régua antiga… vale rever com medição própria, nunca de
+  carona."* O caso real chegou, e o custo é dinheiro: sem a retenção o F600 sai
+  a MENOS, o M200/M600 não abate, e **a empresa recolhe PIS/COFINS que já foram
+  retidos na fonte** — num arquivo que o PVA ACEITA.
+  🔴 **E CORRIGIR NO PORTAL NÃO RESOLVE O LADO DO CFI**: a nota já foi capturada
+  com zero. Seja carta de correção, seja cancelamento e reemissão, o que o app
+  tem gravado continua sendo o zero até alguém informar — por isso o campo é a
+  entrega, não um contorno.
+  ⚠️ **SÓ O AJUSTE DECLARADO ENTROU NO F600, e isso é decisão**: o mesmo dono
+  também sabe **DECOMPOR a CSRF**, e ligar isso junto mudaria o valor do arquivo
+  em notas que hoje ficam de FORA (a assinatura 1,65%+7,60% do tributo da
+  operação, caso ATLAS). A régua de 31/08 é literal — *não de carona*. O dono
+  continua ÚNICO; o que se restringe é qual ORIGEM este bloco aceita.
+  ⚠️ **A CSLL AJUSTADA NÃO ENTRA NO F600** — o registro leva só PIS e COFINS
+  (régua provada pelo EFD assinado da HS PROJETOS, 19/08). Somá-la declararia
+  retenção a maior.
+  ⚠️ **FICHA E AJUSTE NÃO SE SOMAM, e o app NÃO escolhe**: a ficha declara o
+  TOTAL da competência (é dela que sai a GUIA) e o F600 rateia; o ajuste é POR
+  NOTA. Aplicar os dois faria a soma do arquivo não fechar com a guia paga —
+  dois números para o mesmo fato. A ficha continua mandando e o ajuste sai DITO.
+  ⚠️ **E FALHA DE LEITURA DOS AJUSTES VIRA AVISO, nunca "não há ajuste"**:
+  devolver `{}` daria o valor do DOCUMENTO — justamente o número errado que o
+  ajuste corrigiu — e o arquivo sairia a MAIOR sem ninguém saber.
+  📌 **O NÚMERO QUE VEM DE DECLARAÇÃO HUMANA SAI DITO NA GERAÇÃO**, com a nota,
+  quem declarou e a consequência (*"o abatimento do M200/M600 muda"*) — quem
+  conferir o arquivo daqui a três meses precisa saber que aquele número não saiu
+  do documento.
+  📌 **E A TELA TINHA DE MOSTRAR, senão informar não serve para nada**: o
+  Relatório de Retenções lia só o documento, então quem informasse continuaria
+  vendo o zero e concluiria que o app não gravou. Ele passou a honrar o ajuste,
+  **carimbado** com quem declarou e o motivo — e o "?" só some por declaração,
+  nunca por default.
+  🚦 **A LIGAÇÃO É TRAVADA POR VARREDURA** (o defeito do `saldoCredorIpiAnterior`,
+  19/08: gerador que lê campo que NENHUM orquestrador passa): o orquestrador tem
+  de ler a coleção e **as TRÊS chamadas** de `coletarRetencoesF600` têm de
+  receber o mapa. 🐛 E ela nasceu LARGA, acusando a **DECLARAÇÃO** da função —
+  código certo; estreitada para casar só a CHAMADA.
+  🚩 **O QUE ESTE PR NÃO DECIDE, e vai dito**: se **carta de correção** serve
+  para incluir retenção. A CC-e do Ajuste SINIEF 07/05 é de NF-e/CT-e e **não
+  corrige valores** (cl. 14-A §1º — a régua que o `cce-escrituracao.js` já
+  aplica desde 07/08), mas NFS-e é MUNICIPAL e o instrumento é outro. O que o
+  app faz é o mesmo nos dois caminhos; qual deles usar no portal é decisão dele,
+  com a prefeitura.
+  📌 **REGRA QUE FICA: quando o documento chega errado da fonte, a correção é
+  uma DECLARAÇÃO sobre ele — nunca uma reescrita do documento.** O documento
+  fica como veio (é a prova do que a fonte disse), o número que vale sai
+  carimbado com quem afirmou e por quê, e há caminho de volta.
+
 - **🚨 O DOCUMENTO DIZIA A RETENÇÃO E O APP NÃO TINHA ONDE RECEBÊ-LA** (04/09,
   Paulo, J.P. PISSATO LOTERIAS: *"essa empresa tem uma particularidade na nota
   de retenção, ela não é formato 55, 65 e sim 67 DACTE-OS, com isso o cliente só
