@@ -9013,12 +9013,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Agora a falha vira ISSUE com a configuração exata (Settings → Actions →
   General → Workflow permissions → *Allow GitHub Actions to create and approve
   pull requests*) e o link de compare. O run segue VERMELHO de propósito: a
-  correção não foi entregue. **CAIXA MARCADA pelo Paulo em 08/08** — falta a
-  PROVA, que é a regra da casa: configuração salva não é robô funcionando. O
-  próximo run com advisory é que prova, e há um esperando (`nanoid`, high, só
-  de DESENVOLVIMENTO — `npm audit --omit=dev` dá 0, mas a auditoria do robô
-  roda sem `--omit`, então ele morde). NÃO corrigir esse advisory à mão antes
-  do run: seria tirar do robô justamente o caso que o valida.
+  correção não foi entregue.
+  ❌ **A PROVA CHEGOU EM 04/09 E DIZ *NÃO* — a caixa marcada em 08/08 NÃO está
+  em vigor.** Ficou escrito aqui *"CAIXA MARCADA pelo Paulo em 08/08 — falta a
+  PROVA… o próximo run com advisory é que prova"*. Ele veio (runs 23 e 24,
+  03 e 04/09) e o log é LITERAL: *"pull request create failed: GraphQL:
+  **GitHub Actions is not permitted to create or approve pull requests**
+  (createPullRequest)"* — a MESMA recusa de 07/08, 27 dias depois. É a primeira
+  regra permanente deste projeto na forma mais limpa: **configuração salva é
+  STATUS; quem responde é o RESULTADO**, e por 27 dias este arquivo carregou o
+  status como se fosse resposta.
+  ⚠️ **E o que fez a medição valer foi a rede de 17/08**: o `if: failure()`
+  comentou nas issues **#777** (o caminho manual, com o link de compare) e
+  **#778** (o robô caiu). Sem ela, os dois runs seriam mais dois vermelhos num
+  painel que ninguém abre — exatamente os 3 dias mudos de 14-17/08.
+  ✂️ **E A CORREÇÃO SAIU PELA PORTA QUE FUNCIONA: eu abro o PR.** A recusa é
+  contra o **GitHub Actions**, não contra quem trabalha no repo — então o
+  `npm audit fix` sobre a main de HOJE (nunca a branch do robô, que envelhece)
+  + gate + PR entrega o que o robô ia entregar. Isso **não conserta o robô** e
+  não fecha a issue: enquanto a permissão não mudar, ele continua achando,
+  corrigindo, validando e morrendo no `gh pr create` todo dia útil.
+  📌 **REGRA QUE FICA: pendência de configuração que só o dono resolve se
+  RE-MEDE antes de virar linha deste arquivo.** O `nanoid` que estava escrito
+  aqui como "o advisory esperando" já nem existe — hoje são `@xmldom/xmldom`
+  e `qs`, os DOIS de **produção**. Carimbar advisory antigo como o de hoje é o
+  "0/388" com outra roupa.
   🚩 **A BRANCH DO ROBÔ ENVELHECE**: `chore/audit-deps` é recortada da main no
   momento do run (`checkout -B`), então ela se auto-corrige no run seguinte —
   mas enquanto está parada ela é uma MINA. A de 07/08 (9h53) ficou um dia de
