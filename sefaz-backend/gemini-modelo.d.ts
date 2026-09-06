@@ -8,7 +8,7 @@ export const ALIAS_FLASH: string;
 
 export function normalizarNomeModelo(nome: string | null | undefined): string;
 
-/** `gemini-3.7-flash` → 3.7 · sem versão no nome → null. */
+/** `gemini-3.8-flash` → 3.8 · sem versão no nome → null. */
 export function versaoDoModelo(nome: string | null | undefined): number | null;
 
 export function escolherModeloDaFamilia(
