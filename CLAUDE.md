@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🤖 O MOTOR DO GEMINI SUBIU PARA A FAMÍLIA 3.8 — EM TODOS OS APPS, e cada
+  app subiu do jeito que o DESENHO dele permite** (06/09, Paulo: *"precisamos
+  alterar nosso motor em todos os apps, do gemini, 3.7 para 3.8 em todos"*).
+  📌 **O que estava em vigor NÃO era "3.7 em todos" — e isso vai dito**: o CFI
+  pina PERGUNTANDO à conta (família 3.7 como piso, desde 15/08); o Contábil
+  tinha `gemini-3.7-flash` CRAVADO em quatro lugares (server, index, deploy e
+  teste); o Legalização estava no alias `gemini-pro-latest` (que a conta
+  resolvia em 3.1 Pro, print de 16/08); o DP estava em **2.5** (`-flash` e
+  `-pro`, escrito nove vezes em dois serviços); e o Financeiro em
+  `gemini-3-flash-preview`, um build que a Google retira sem aviso. **Cinco
+  apps, cinco versões** — o pedido era um só e a resposta teve de ser cinco.
+  ✂️ **CFI**: só o PISO mudou (`FAMILIA_ALVO_GEMINI = '3.8'`); o ID continua
+  saindo do que a conta LISTA, e se a 3.8 não aparecer o app pina no mais novo
+  que existe e a tela DIZ que a linha está atrás (a régua de 16/08). E o
+  fallback `'3.7'` escrito à mão na tela do ⚙️ Config Admin era a **segunda
+  cópia** da família — passou a IMPORTAR a constante do dono.
+  ✂️ **Contábil**: o nome pinado subiu para `gemini-3.8-flash` nos quatro
+  lugares — e o deploy dele conferia o nome **contra si mesmo** (`gemini_model`
+  do `/api/health` era o env ecoado, STATUS). Nome pinado à mão que a conta não
+  tem derruba a IA **calada** no deploy (a lição de 15/08). Agora o servidor
+  PERGUNTA à Google se o modelo existe (`gemini_model_conferido`) e o deploy
+  **recusa tráfego** em `nao-encontrado`; `indeterminado` LIBERA e vai dito —
+  rede que piscou não é veredito (a régua dos gates de departamento).
+  ✂️ **Legalização, DP e Financeiro**: pinados em `gemini-3.8-flash`, cada um
+  com o ID num lugar SÓ (o DP tinha nove cópias). No Legalização o 404 do NOME
+  cai no alias e o e-mail ao gestor diz qual modelo respondeu — só o 404;
+  quota, chave e documento grande continuam com a frase própria.
+  ⚠️ **A LINHA É A FLASH, de propósito, inclusive onde havia Pro** (Legalização
+  e o AuditAI do DP): é na Flash que a Google publica as versões novas (a Pro
+  ficou em 3.1), e o Paulo já decidiu em 16/08 *"continuar no Flash desde que
+  seja a última versão"*. Voltar a dois degraus é uma constante em cada app,
+  ou o env `LEGALIZACAO_AI_MODEL`.
+  🚩 **O QUE NÃO ESTÁ PROVADO, e vai dito**: **eu não consigo perguntar à
+  conta daqui** — este ambiente não tem a chave nem alcança a API. Quem prova
+  que `gemini-3.8-flash` existe é (a) o deploy do Contábil, que agora só roteia
+  com a resposta da Google na mão, e (b) o botão **🔎 Repinar e conferir a
+  versão** no CFI, que mostra qual modelo RESPONDEU. Nome de modelo é a família
+  do ID de tabela oficial: vem da FONTE, nunca da memória.
+  📌 **REGRA QUE FICA: "trocar a versão do motor" não é trocar uma string — é
+  achar QUANTAS cópias da string existem em cada app e deixar UMA.** O DP tinha
+  nove e o Financeiro três; a próxima troca é uma linha por app.
+
 - **🚨 O CLIENTE ESQUECEU DE INFORMAR A RETENÇÃO E O F600 NÃO TINHA COMO SABER**
   (04/09, Paulo, FRONTINI ENGENHEIROS · NFS-e EMITIDAS 08/2026: *"ele esqueceu
   de informar as retenções de 2 notas, já informei que tem que fazer a carta de

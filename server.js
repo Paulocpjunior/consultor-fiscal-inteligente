@@ -441,8 +441,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // payload do PGDAS-D e do codigo 9 do ISS fixo).
 //
 // Precedencia: env do Cloud Run (pino humano) > familia alvo listada pela API
-// > alias -latest. Enquanto a 3.7 nao aparecer para a conta, o app segue no
-// alias FUNCIONANDO e a tela diz que o alvo nao foi encontrado.
+// > alias -latest. Enquanto a familia alvo (FAMILIA_ALVO_GEMINI — 3.8 desde
+// 06/09, pedido do Paulo) nao aparecer para a conta, o app pina no mais novo
+// que existe e a tela diz que a linha esta atras.
 let GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || ALIAS_PRO;
 let GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || ALIAS_FLASH;
 let geminiResolucao = {
@@ -2313,7 +2314,7 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
 });
 
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
-// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE — e REPINAR na 3.7 ─────────────
+// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE — e REPINAR na família alvo ─────
 //
 // Paulo, 15/08: *"pedi para você atualizar p a versão 3.7"*.
 //

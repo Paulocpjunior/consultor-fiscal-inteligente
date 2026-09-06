@@ -19,6 +19,9 @@ import PrazosMunicipaisPanel from './PrazosMunicipaisPanel';
 import TriagemTerceiroSetorPanel from './TriagemTerceiroSetorPanel';
 import DerePanel from './DerePanel';
 import { tenhoAcessoAuditoria } from '../services/auditoriaDonoService';
+// A família alvo mora no backend (dono único) — o fallback da tela era a
+// segunda cópia, e ficou em '3.7' escrito à mão quando o piso subiu (06/09).
+import { FAMILIA_ALVO_GEMINI } from '../sefaz-backend/gemini-modelo.js';
 
 // Lazy: quem não é dono nunca baixa o painel.
 const AuditoriaDono = lazy(() => import('./AuditoriaDono'));
@@ -319,7 +322,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                             🤖 Motor de IA (Gemini)
                         </h4>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                            O app é <strong>pinado na família {geminiVersao?.familiaAlvo || '3.7'}</strong>. O ID não é escrito à
+                            O app é <strong>pinado na família {geminiVersao?.familiaAlvo || FAMILIA_ALVO_GEMINI}</strong>. O ID não é escrito à
                             mão no código: o servidor <strong>pergunta à conta</strong> quais modelos existem e escolhe o melhor
                             da família — se ela ainda não estiver liberada, o app segue no alias funcionando e diz isso aqui.
                             Depois a sonda pergunta qual versão <strong>concreta</strong> respondeu.
