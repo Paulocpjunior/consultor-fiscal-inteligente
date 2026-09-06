@@ -37,12 +37,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ficou em 3.1), e o Paulo já decidiu em 16/08 *"continuar no Flash desde que
   seja a última versão"*. Voltar a dois degraus é uma constante em cada app,
   ou o env `LEGALIZACAO_AI_MODEL`.
-  🚩 **O QUE NÃO ESTÁ PROVADO, e vai dito**: **eu não consigo perguntar à
-  conta daqui** — este ambiente não tem a chave nem alcança a API. Quem prova
-  que `gemini-3.8-flash` existe é (a) o deploy do Contábil, que agora só roteia
-  com a resposta da Google na mão, e (b) o botão **🔎 Repinar e conferir a
-  versão** no CFI, que mostra qual modelo RESPONDEU. Nome de modelo é a família
-  do ID de tabela oficial: vem da FONTE, nunca da memória.
+  ✅ **PROVADO NO MESMO DIA, pelo deploy do Contábil (run 139, 22:04 UTC)**:
+  `gemini_model_conferido: confirmado — a conta lista gemini-3.8-flash`, na
+  candidata E em produção (v3.4.259, 100% do tráfego). A chave é a MESMA nos
+  cinco apps (espelhada do CFI), então a resposta vale para todos. Eu não
+  alcanço a API daqui (CONNECT 403 até para o Cloud Run) — quem respondeu foi a
+  Google, no log do deploy, que é o único instrumento que este ambiente lê.
+  🐛 **E A PRIMEIRA RODADA NÃO PROVOU NADA (run 138)**: 10s de sonda num
+  contêiner frio estourou e o health foi lido 14s depois do boot — o deploy
+  passou por "indeterminado LIBERA" (certo) SEM a resposta. Sonda com 25s,
+  repergunta a partir de 15s e o deploy ESPERANDO a sonda antes de julgar.
+  **Sonda que o deploy não espera é status com outra roupa.** No CFI o mesmo
+  fato se confere pelo botão **🔎 Repinar e conferir a versão** (qual modelo
+  RESPONDEU). Nome de modelo é a família do ID de tabela oficial: vem da
+  FONTE, nunca da memória.
   📌 **REGRA QUE FICA: "trocar a versão do motor" não é trocar uma string — é
   achar QUANTAS cópias da string existem em cada app e deixar UMA.** O DP tinha
   nove e o Financeiro três; a próxima troca é uma linha por app.
