@@ -1,6 +1,12 @@
 import { User, UserRole, AccessLog } from '../types';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+// 🚨 A "ROTA SEM BOTÃO" DO SENTRY (achado da auditoria de 04/09): `setUser`
+// existia em services/sentry.ts desde o PR #56 e NINGUÉM a chamava. O Sentry
+// recebia todo erro do app e nenhum chegava identificado — quando um aparecia,
+// não dava para saber QUEM o viu nem em qual escritório. Função pronta sem
+// quem a ligue é código morto com cara de entrega (13/08).
+import { setUser as setSentryUser } from './sentry';
 import {
     validarEmailParaRedefinicao, mensagemDaRedefinicao, type ResultadoRedefinicao,
 } from './redefinirSenha';
@@ -71,10 +77,16 @@ export const subscribeAuthState = (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
         if (!firebaseUser) {
             clearLocalSession();
+            // Logout: o próximo erro não pode sair carimbado com o usuário anterior.
+            void setSentryUser(null);
             callback(null);
             return;
         }
         const user = await syncUserFromAuth(firebaseUser);
+        // Só UID + domínio + hash do local-part vão para a rede (LGPD-safe —
+        // ver o comentário do próprio `setUser`). Erro ao carimbar nunca
+        // derruba o login: o `setUser` engole por dentro.
+        void setSentryUser({ id: user.id, email: user.email });
         callback(user);
     });
 };
