@@ -116,6 +116,42 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fica como veio (é a prova do que a fonte disse), o número que vale sai
   carimbado com quem afirmou e por quê, e há caminho de volta.
 
+- **🔬 A LIÇÃO DO DIA VIROU TRAVA GENÉRICA — e a auditoria achou mais uma "rota
+  sem botão"** (04/09, à noite, Paulo: *"começa pela sua parte e me atualiza no
+  final"*).
+  📌 **Em 04/09 eu repeti a MESMA classe três vezes** — criei uma régua e liguei
+  só parte dos consumidores (a rota do R-4020, o argumento `ajustes` do
+  relatório, as duas leituras do painel). Nas três, nada quebrou: a função
+  respondeu sobre o caso VAZIO com toda confiança, e quem pagou foi o dono,
+  fazendo o trabalho certo duas vezes. As três viraram varreduras ESPECÍFICAS;
+  faltava a GENÉRICA.
+  ✂️ `consumidoresMedidos.test.ts`: um registro de réguas cujo argumento é
+  OBRIGATÓRIO para todo consumidor (`linhasRetencoes` ≥3, `coletarRetencoesF600`
+  ≥3), e a varredura acha CADA chamada no código de produção, conta os
+  argumentos com aninhamento e string, e acusa com **arquivo:linha**. Provada
+  recriando os dois defeitos do dia: a tela com 2 argumentos e o F600 sem o
+  mapa caem, nomeados.
+  ⚠️ **É OPT-IN de propósito**: varrer TODO parâmetro opcional acusaria default
+  legítimo em centenas de funções — alarme sobre código certo é o que faz a
+  equipe desligar a trava. O que se registra é a régua em que passar a MENOS não
+  é "usar o default": é ler o caso vazio como resposta. **Régua nova com
+  argumento que todo mundo tem de passar entra no registro no MESMO PR.**
+  🔴 **E A AUDITORIA DOS PRs VELHOS ACHOU O `setUser` DO SENTRY SEM NINGUÉM
+  CHAMANDO**: existia em `services/sentry.ts` desde o PR #56 (junho), LGPD-safe,
+  com o comentário *"chamar após login"* — e **nenhuma chamada no repo**. O
+  Sentry recebia todo erro e nenhum chegava identificado: não dava para saber
+  QUEM viu nem em qual escritório, e a única saída era pedir print. Ligado no
+  `onAuthStateChanged` (login carimba, logout limpa), travado por varredura.
+  📌 **REGRA QUE FICA: PR velho se fecha CONFERINDO se a intenção foi entregue,
+  não por idade.** Dos 7 fechados, 5 estavam entregues por outro caminho e o #56
+  tinha a função pronta e desligada — fechar sem olhar teria enterrado o achado.
+  📏 **O BACKLOG DE JUNHO FOI MEDIDO, não começado**: #101 (`noUncheckedIndexedAccess`)
+  dá **1.031 erros**; #100 tem **11 componentes > 800 linhas** (o `SpConnect/
+  index.tsx` com 4.836 é o outro app, separação planejada pós-corte); #99 o
+  `App.tsx` **cresceu** para 1.636 linhas / 44 estados. São refactors de dias
+  num app fiscal em produção — começar à noite é regressão silenciosa. Ficam
+  nomeados com o número, para a decisão ser do dono.
+
 - **🚨 EU ESCREVI A GRAVAÇÃO E NENHUMA DAS DUAS LEITURAS — "informei, mas não
   ficou salvo"** (04/09, Paulo, FRONTINI ENGENHEIROS · NFS-e 794 e 795: *"informei
   as retenções nos campos corretos, fiz a justificativa, mas não ficou salvo, nem
