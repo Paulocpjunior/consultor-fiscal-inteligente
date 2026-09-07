@@ -116,8 +116,62 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fica como veio (é a prova do que a fonte disse), o número que vale sai
   carimbado com quem afirmou e por quê, e há caminho de volta.
 
+- **🧠 O CÉREBRO DO CFOP SÓ CHEGAVA A UMA ABA — o arquivo saía pela régua
+  automática num fornecedor que a pessoa já tinha ENSINADO** (07/09, feriado,
+  Paulo: *"termina a sua parte"* — achado da varredura de argumentos opcionais,
+  a classe FRONTINI aplicada ao repo inteiro).
+  📌 **MEDIDO, não deduzido**: `parametrosCfop` (o cérebro de 18/08) era
+  entregue à régua `cfopDoLancamento` em **UM** lugar — o `ctx` da aba
+  ✏️ CFOP por nota. O SPED (`convertCfopParaEntrada` → C170, C190 e E510, nas
+  DUAS famílias), o Exportar SAGE (.FML, preflight e conferência de
+  correlação), o Livro de Entradas, o Resumo por CFOP e o Por produto montavam
+  o contexto com `naturezaAtividade` + `cfopOverrides` e **sem o cérebro**. O
+  backend **nunca leu `cfop_parametros`**.
+  🚨 **O SINTOMA NÃO ERA ERRO — era a tela onde a pessoa CONFIRMA mostrando um
+  CFOP e o livro gravando outro.** Ela corrigia a nota, clicava "aprender",
+  via o parâmetro na ✏️… e o .FML e o SPED saíam com 1102 onde ela tinha
+  ensinado 1556. É a *"conferência que promete número diferente do arquivo"*
+  (12/08) e a *"régua que só escreve"* (04/09) na mesma linha — e o pedido de
+  18/08 era literal: *"criando um parâmetro para os PRÓXIMOS MESES"*, ou
+  seja, para o LIVRO.
+  ✂️ `cfop-parametros-store.js` (a leitura pelo admin SDK, UMA por geração) →
+  `dados.parametrosCfop` nos dois orquestradores → `convertCfopParaEntrada`.
+  No front, o Exportar SAGE carrega os parâmetros JUNTO do cadastro (um
+  contexto para .FML, preflight e conferência), e em Relatórios o PAI carrega
+  uma vez e passa às quatro abas — a ✏️ grava e o que ela grava SOBE, senão o
+  Livro ao lado seguiria com a lista velha.
+  ⚠️ **FALHA DE LEITURA VIRA AVISO NA GERAÇÃO, nunca `[]` calado**: devolver
+  vazio faria o arquivo sair pela régua automática — o CFOP que a pessoa
+  corrigiu de propósito — sem ninguém saber. O cérebro continua palpite melhor,
+  não trava; o que não pode é o silêncio.
+  ✂️ **E A CONFERÊNCIA DE CORRELAÇÃO CHAMAVA A RÉGUA SEM O DOCUMENTO**
+  (`cfopParaEscriturar(origem, 'entrada', ctx)`): nem a NF informada nem o
+  cérebro chegavam a ela — a tabela que diz "o arquivo vai gravar ISTO"
+  prometia a régua automática numa nota já decidida. Passou a receber o `d`
+  e a NOMEAR o motivo (`nota` · `cerebro`), e `cfopParaEscriturar` entrou no
+  registro `consumidoresMedidos` com **4 argumentos obrigatórios**.
+  🐛 **E O `.d.ts` ESTAVA ATRÁS DO `.js` desde 18/08**: `origemDoCfopLancamento`
+  devolve `'cerebro'` no JS e o tipo declarava só `'nota' | 'empresa' |
+  'regra'` — o `tsc` acusou na primeira comparação. É a armadilha do `.d.ts`
+  à mão (20/08) pela enésima vez.
+  🔬 **A VARREDURA QUE ACHOU ISTO TEVE 50 CANDIDATOS E 3 REAIS** — o resto era
+  default legítimo (`fetchAllDocs`, `listDocumentos`, lazy singleton), colisão
+  de nome entre módulos (`sincronizarEmpresa` ×3, `diasAteVencimento` ×2) ou
+  decisão declarada (a Rotina conta produtor rural *"com prova na própria
+  nota"* de propósito). Os outros dois reais: o **mock** do DARF resolvia o
+  código de receita e não o passava ao vencimento (o caminho real passa —
+  duas datas para a mesma guia conforme o modo), e a `cfopConferencia` acima.
+  Triar antes de corrigir custou uma leitura; corrigir os 50 teria mexido em
+  47 lugares certos.
+  📌 **REGRA QUE FICA: parâmetro que muda ARQUIVO nasce com a lista de
+  consumidores MEDIDA no mesmo PR — e "a régua é única" não basta quando o
+  que falta é quem a ALIMENTA.** A trava é por varredura
+  (`cerebroCfopTodosOsLeitores`): todo literal com `cfopOverrides:` leva
+  `parametrosCfop`, exceção só com motivo; provada revertendo duas ligações
+  (3 testes caem, nomeados).
+
 - **🔬 A LIÇÃO DO DIA VIROU TRAVA GENÉRICA — e a auditoria achou mais uma "rota
-  sem botão"** (04/09, à noite, Paulo: *"começa pela sua parte e me atualiza no
+  sem botão"** (07/09, Paulo: *"começa pela sua parte e me atualiza no
   final"*).
   📌 **Em 04/09 eu repeti a MESMA classe três vezes** — criei uma régua e liguei
   só parte dos consumidores (a rota do R-4020, o argumento `ajustes` do

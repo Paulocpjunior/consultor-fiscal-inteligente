@@ -60,8 +60,8 @@ export const PARES_DEVOLUCAO_RECEBIDA: Record<string, { producao: string; tercei
 
 /**
  * O CFOP que vai para o LANÇAMENTO, com o documento na mão.
- * Precedência: `doc.cfopEscriturado` (por NF) > `ctx.cfopOverrides` (empresa)
- * > `correlacionarCfop` (régua automática).
+ * Precedência: `doc.cfopEscriturado` (por NF) > `ctx.parametrosCfop` (🧠 cérebro,
+ * por fornecedor) > `ctx.cfopOverrides` (empresa) > `correlacionarCfop` (régua).
  */
 export function cfopDoLancamento(
     doc: any,
@@ -76,7 +76,7 @@ export function origemDoCfopLancamento(
     cfopDoItem: string | undefined,
     direcao: DirecaoCfop,
     ctx?: CorrelacaoCtx,
-): { origem: 'nota' | 'empresa' | 'regra'; rotulo: string; por: string | null; em: string | null };
+): { origem: 'nota' | 'cerebro' | 'empresa' | 'regra'; rotulo: string; por: string | null; em: string | null };
 
 /** Os CFOPs distintos que a nota teria SEM o override — o que o carimbo colapsa. */
 export function cfopsDistintosDaNota(doc: any, direcao: DirecaoCfop, ctx?: CorrelacaoCtx): string[];

@@ -139,6 +139,11 @@ export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
     return cfopDoLancamento(doc, rawCfop, direcao, {
         naturezaAtividade: derivarNaturezaAtividade(empresa),
         cfopOverrides: df.cfopOverrides,
+        // 🧠 O cérebro (07/09): o orquestrador lê `cfop_parametros` UMA vez e
+        // entrega aqui. Sem esta linha o arquivo ignorava o que a pessoa já
+        // tinha ensinado para o fornecedor — a aba ✏️ mostrava um CFOP e o
+        // C170/C190 gravava outro.
+        parametrosCfop: dados?.parametrosCfop || null,
     });
 }
 

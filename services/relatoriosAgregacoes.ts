@@ -128,6 +128,9 @@ export function contraparteDoc(d: DocumentoFiscal): any {
 export interface CtxCorrelacao {
     naturezaAtividade?: string;
     cfopOverrides?: Record<string, string>;
+    /** 🧠 Parâmetros do cérebro (por fornecedor) — sem eles o Resumo por CFOP e o
+     *  Por produto mostravam a régua automática num fornecedor já ensinado. */
+    parametrosCfop?: import('../sefaz-backend/cfop-cerebro.js').ParametroCfop[] | null;
 }
 
 export interface LinhaCfop {

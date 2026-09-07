@@ -35,8 +35,14 @@ import { cfopParaEscriturar, type CfopCtx } from './iobSageExportService';
  */
 import { SUFIXOS_COMPRA_PRODUTO as SUFIXOS_COMPRA, SUFIXOS_ST_VENDA } from '../sefaz-backend/cfop-correlacao.js';
 import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+import { origemDoCfopLancamento } from '../sefaz-backend/cfop-correlacao.js';
 
-export type MotivoCorrelacao = 'override' | 'natureza' | 'natureza-st' | 'espelho' | 'sem-conversao';
+/**
+ * `nota` e `cerebro` (07/09): a conferência é a tela que diz "o arquivo vai
+ * gravar ISTO" — e o arquivo honra o CFOP informado na NF e o parâmetro do
+ * fornecedor. Sem os dois aqui, ela prometia um número e o .FML gravava outro.
+ */
+export type MotivoCorrelacao = 'nota' | 'cerebro' | 'override' | 'natureza' | 'natureza-st' | 'espelho' | 'sem-conversao';
 
 export interface LinhaCorrelacao {
     origem: string;
@@ -87,7 +93,10 @@ export function conferirCorrelacaoCfop(
         for (const it of d.itens || []) {
             const origem = String(it.cfop || '').trim();
             if (origem.length !== 4) continue;
-            const destino = cfopParaEscriturar(origem, 'entrada', ctx);
+            // O DOCUMENTO vai junto: é dele que sai o CFOP informado na NF (✏️) e o
+            // fornecedor que o cérebro procura. Chamar sem ele era prometer a régua
+            // automática numa nota que a pessoa já tinha decidido.
+            const destino = cfopParaEscriturar(origem, 'entrada', ctx, d);
             const chave = `${origem}->${destino}`;
 
             let motivo: MotivoCorrelacao;
@@ -95,8 +104,15 @@ export function conferirCorrelacaoCfop(
             let conferir = false;
             const sufixo = origem.slice(1);
             const ehCompra = SUFIXOS_COMPRA.includes(sufixo);
+            const origemDecisao = origemDoCfopLancamento(d, origem, 'entrada', ctx || {});
 
-            if (overrides[origem]) {
+            if (origemDecisao.origem === 'nota') {
+                motivo = 'nota';
+                explicacao = `CFOP informado nesta NF (✏️ CFOP por nota${origemDecisao.por ? `, por ${origemDecisao.por}` : ''}) — vence o override e a régua automática.`;
+            } else if (origemDecisao.origem === 'cerebro') {
+                motivo = 'cerebro';
+                explicacao = `🧠 ${origemDecisao.rotulo} — o que alguém já decidiu para este fornecedor, aplicado às notas seguintes.`;
+            } else if (overrides[origem]) {
                 motivo = 'override';
                 explicacao = 'Definido manualmente na tela Correlação CFOP.';
             } else if (!['5', '6', '7'].includes(origem[0]!)) {

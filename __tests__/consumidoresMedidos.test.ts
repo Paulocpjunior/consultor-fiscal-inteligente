@@ -52,6 +52,12 @@ const REGUAS: ReguaVigiada[] = [
         argumento: 'ajustes (o mapa de reinf_retencoes_ajustadas)',
         motivo: '04/09 — o F600 lia o mapa que nenhum orquestrador passava; o M200/M600 saía sem o abatimento',
     },
+    {
+        fn: 'cfopParaEscriturar',
+        minArgs: 4,
+        argumento: 'doc (o DOCUMENTO — é dele que saem o CFOP informado na NF e o fornecedor do cérebro)',
+        motivo: '07/09 — a conferência de correlação chamava com 3 argumentos e prometia a régua automática numa nota já decidida',
+    },
 ];
 
 const RAIZ = join(__dirname, '..');

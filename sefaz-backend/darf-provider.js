@@ -70,8 +70,11 @@ class MockProvider {
 
         const codigoReceita = resolverCodigoReceita(req);
         const periodoAAAAMM = String(competencia).replace(/\D/g, '').slice(0, 6);
+        // O código de receita resolvido acima decide dia 20/25/trimestral
+        // quando o `tributo` é genérico — o caminho REAL (montarPayloadDarfSerpro)
+        // já passa; o mock passava só 3 argumentos e vencia noutro dia.
         const vencimento = req.vencimento
-            || calcularVencimentoDarf(competencia, req.tributo, req.periodicidade);
+            || calcularVencimentoDarf(competencia, req.tributo, req.periodicidade, codigoReceita);
 
         const acrescimos = req.dataPagamento
             ? calcularAcrescimos(valor, vencimento, req.dataPagamento)
