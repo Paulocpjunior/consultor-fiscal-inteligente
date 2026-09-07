@@ -8,6 +8,7 @@ import { buildFile, buildRecord, LAYOUT_VERSION } from './iobSageLayout';
 import { LAYOUT } from './iobSageLayoutData';
 // MESMA regra de correlação do backend — CFOP de entrada não se duplica aqui.
 import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
+import type { ParametroCfop } from '../sefaz-backend/cfop-cerebro.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
 import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
@@ -282,6 +283,13 @@ export function serieDaNota(d: DocumentoFiscal): string {
 export interface CfopCtx {
     naturezaAtividade?: string | null;
     cfopOverrides?: Record<string, string> | null;
+    /**
+     * 🧠 Parâmetros do cérebro (por fornecedor). Entram entre a decisão da NF e
+     * o override da empresa — sem eles aqui, o .FML e o preflight gravavam o
+     * CFOP da régua automática num fornecedor que a pessoa já tinha ensinado
+     * (07/09: só a aba ✏️ CFOP por nota os passava).
+     */
+    parametrosCfop?: ParametroCfop[] | null;
 }
 
 export function cfopParaEscriturar(
@@ -292,6 +300,7 @@ export function cfopParaEscriturar(
     return cfopDoLancamento(doc, cfop || '', direcao === 'entrada' ? 'entrada' : 'saida', {
         naturezaAtividade: ctx?.naturezaAtividade ?? null,
         cfopOverrides: ctx?.cfopOverrides ?? null,
+        parametrosCfop: ctx?.parametrosCfop ?? null,
     });
 }
 

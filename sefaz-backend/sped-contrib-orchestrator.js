@@ -49,6 +49,9 @@ import { participanteDoDocumento } from './participante-doc-helper.js';
 // recortes diferentes fariam os dois arquivos do mesmo mês discordarem.
 import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+// 🧠 O cérebro do CFOP entra no ARQUIVO (07/09) — o C170 deste arquivo lê a
+// MESMA `convertCfopParaEntrada` do EFD ICMS/IPI, e ela precisa do contexto.
+import { lerParametrosCfopDaEmpresa, avisoParametrosCfop } from './cfop-parametros-store.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -83,6 +86,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         throw err;
     }
     const empresa = { id: empresaId, ...empresaSnap.data(), _regime: regime };
+    // 🧠 Parâmetros de CFOP por fornecedor — ver o orquestrador do EFD ICMS/IPI.
+    const { parametros: parametrosCfop, erro: erroParametrosCfop } = await lerParametrosCfopDaEmpresa(db, empresaId);
 
     // Validacao critica
     if (!empresa.dadosFiscais || !empresa.dadosFiscais.uf || !empresa.dadosFiscais.codMunIBGE) {
@@ -334,6 +339,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
     // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
     // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
@@ -471,6 +477,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         // some calado seria o arquivo declarando um profissional que não
         // existe, num campo que a fiscalização lê.
         contador: contadorDoArquivo,
+        // 🧠 Lido pelo C170 do bloco C (`convertCfopParaEntrada`).
+        parametrosCfop,
         competencia,
         competenciaInicio: competencia,
         competenciaFim: competencia,

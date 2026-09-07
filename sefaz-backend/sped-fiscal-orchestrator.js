@@ -42,6 +42,9 @@ import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './par
 // já estava aqui quando o mês foi fechado?".
 import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+// 🧠 O cérebro do CFOP entra no ARQUIVO (07/09): sem esta leitura o C170/C190
+// saíam pela régua automática num fornecedor que a pessoa já tinha ensinado.
+import { lerParametrosCfopDaEmpresa, avisoParametrosCfop } from './cfop-parametros-store.js';
 // RÉGUA ÚNICA da leitura da ficha por competência (mesReferencia tem 3 formas).
 import { acharFichaCompetencia } from './ipi-varredura.js';
 
@@ -90,6 +93,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         throw err;
     }
     const empresa = { id: empresaId, ...empresaSnap.data(), _regime: regime };
+    // 🧠 Parâmetros de CFOP por fornecedor — lidos UMA vez por geração e
+    // entregues ao bloco C (`dados.parametrosCfop`). Falha de leitura vira
+    // AVISO, nunca "não há parâmetro": o arquivo sairia pela régua automática
+    // justamente no CFOP que alguém corrigiu de propósito.
+    const { parametros: parametrosCfop, erro: erroParametrosCfop } = await lerParametrosCfopDaEmpresa(db, empresaId);
 
     // Validacao critica: precisa ter dadosFiscais
     if (!empresa.dadosFiscais || !empresa.dadosFiscais.uf || !empresa.dadosFiscais.codMunIBGE) {
@@ -297,6 +305,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
     // erro é quem lê o livro, e é por isso que ela tem de sair DITA.
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
@@ -647,6 +656,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         // some calado seria o arquivo declarando um profissional que não
         // existe, num campo que a fiscalização lê.
         contador: contadorDoArquivo,
+        // 🧠 Lido pelo bloco C (`convertCfopParaEntrada`) — C170, C190 e E510.
+        parametrosCfop,
         competenciaInicio: periodoInicio,
         competenciaFim: periodoFim,
         notas,

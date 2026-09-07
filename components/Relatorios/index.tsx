@@ -176,6 +176,11 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
     // natureza da atividade e os overrides de CFOP, que a correlação de entrada
     // precisa (`correlacionarCfop`).
     const [cadastroFiscal, setCadastroFiscal] = useState<any>(null);
+    // 🧠 Os parâmetros do cérebro do CFOP, lidos UMA vez por recorte e passados
+    // a TODAS as abas que escrituram (Livro, Resumo por CFOP, Por produto e a
+    // ✏️ CFOP por nota). Até 07/09 só a ✏️ os lia: a pessoa ensinava o
+    // fornecedor, via o parâmetro lá — e o Livro ao lado mostrava outro CFOP.
+    const [parametrosCfop, setParametrosCfop] = useState<ParametroCfopDoc[]>([]);
 
     React.useEffect(() => {
         let alive = true;
@@ -204,14 +209,16 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             // buscar a competência INTEIRA pra filtrar uma empresa no navegador
             // era pagar a leitura da carteira toda a cada relatório — e num mês
             // cheio ainda batia no teto e truncava o recorte.
-            const [todos, dadosFiscais] = await Promise.all([
+            const [todos, dadosFiscais, parametros] = await Promise.all([
                 listDocumentos(currentUser, {
                     competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj,
                 }, meta),
                 getIdentificacaoEmpresa(alvo),
+                lerParametrosCfop(alvo.id),
             ]);
             setIdentificacao(montarIdentificacao(dadosFiscais));
             setCadastroFiscal(dadosFiscais || null);
+            setParametrosCfop(parametros);
             setTruncado(!!meta.truncado);
             const cnpj = alvo.cnpj.replace(/\D/g, '');
             setDocs(todos
@@ -309,10 +316,10 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             )}
 
             {aba === 'livro' && docsRecorte && empresa && (
-                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
+                <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
             {aba === 'cfop' && docsRecorte && empresa && (
-                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
+                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
             {aba === 'impostos-resumo' && docsRecorte && empresa && (
                 <AbaImpostosResumo docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
@@ -322,6 +329,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             )}
             {aba === 'cfop-nota' && docsRecorte && empresa && (
                 <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast}
+                    parametrosCfop={parametrosCfop} onParametrosMudou={setParametrosCfop}
                     onRebuscar={() => buscar(empresa.id)} />
             )}
             {aba === 'canceladas' && docsRecorte && empresa && (
@@ -332,7 +340,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {aba === 'produto' && docsRecorte && empresa && (
-                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
+                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
             {aba === 'participante' && docsRecorte && empresa && (
                 <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
@@ -387,7 +395,14 @@ interface AbaDocsProps {
     identificacao?: IdentificacaoPdf;
     /** `dadosFiscais` da empresa — natureza da atividade + overrides de CFOP. */
     cadastroFiscal?: any;
+    /** 🧠 Parâmetros do cérebro (por fornecedor) — a régua do CFOP precisa deles. */
+    parametrosCfop?: ParametroCfopDoc[];
+    /** A ✏️ grava parâmetro; as outras abas precisam ver o novo sem rebuscar. */
+    onParametrosMudou?: (ps: ParametroCfopDoc[]) => void;
 }
+
+/** Só os ligados decidem — desligar não apaga, mas desligado não escritura. */
+const cerebroAtivo = (ps?: ParametroCfopDoc[]) => (ps || []).filter(p => p.ativo !== false);
 
 /** De onde veio a natureza da atividade — o papel tem que dizer. */
 const ORIGEM_NATUREZA: Record<string, string> = {
@@ -402,7 +417,7 @@ const obsTruncado = (truncado?: boolean) => truncado
 
 // ─── 1. Livro de Entradas/Saídas ────────────────────────────────────────────
 
-const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal }) => {
+const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal, parametrosCfop }) => {
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const { gerando, rodar } = usePdf();
 
@@ -452,6 +467,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     .map((c: string) => String(cfopDoLancamento(d, c, direcao, {
                         naturezaAtividade: natureza.natureza,
                         cfopOverrides: cadastroFiscal?.cfopOverrides,
+                        parametrosCfop: cerebroAtivo(parametrosCfop),
                     }) || c)),
             ));
             return {
@@ -570,6 +586,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
  */
 const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?: (m: string, t?: any) => void; onRebuscar?: () => void }> = ({
     docs, empresa, competencia, truncado, identificacao, cadastroFiscal, currentUser, onShowToast, onRebuscar,
+    parametrosCfop, onParametrosMudou,
 }) => {
     const { gerando, rodar } = usePdf();
     const [salvando, setSalvando] = useState<string | null>(null);
@@ -578,7 +595,11 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
     const [resultadoReler, setResultadoReler] = useState<string | null>(null);
     const [rascunho, setRascunho] = useState<Record<string, string>>({});
     /** 🧠 Parâmetros do cérebro — o palpite melhor, entre a NF e o override. */
-    const [parametros, setParametros] = useState<ParametroCfopDoc[]>([]);
+    // O pai carrega os parâmetros junto do recorte e os entrega às outras abas
+    // (Livro, Resumo, Por produto). Esta aba GRAVA — e o que ela grava sobe
+    // para o pai, senão o Livro ao lado seguiria com a lista velha.
+    const parametros = parametrosCfop || [];
+    const setParametros = (ps: ParametroCfopDoc[]) => onParametrosMudou?.(ps);
     const [sugestao, setSugestao] = useState<any>(null);
     const [verParametros, setVerParametros] = useState(false);
     /** Gravado nesta sessão — o recorte não é relido a cada tecla. */
@@ -601,12 +622,6 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         }),
         [natureza, cadastroFiscal, parametros],
     );
-
-    React.useEffect(() => {
-        let vivo = true;
-        void lerParametrosCfop(empresa.id).then(ps => { if (vivo) setParametros(ps); });
-        return () => { vivo = false; };
-    }, [empresa.id]);
 
     const linhas = useMemo(() => {
         return docs
@@ -1104,7 +1119,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
 
 // ─── 2. Resumo por CFOP ─────────────────────────────────────────────────────
 
-const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal }) => {
+const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal, parametrosCfop }) => {
     const { gerando, rodar } = usePdf();
     const natureza = useMemo(
         () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
@@ -1113,9 +1128,9 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
     const linhas = useMemo(
         () => resumoPorCfop(
             docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo)),
-            { naturezaAtividade: natureza.natureza, cfopOverrides: cadastroFiscal?.cfopOverrides },
+            { naturezaAtividade: natureza.natureza, cfopOverrides: cadastroFiscal?.cfopOverrides, parametrosCfop: cerebroAtivo(parametrosCfop) },
         ),
-        [docs, natureza, cadastroFiscal],
+        [docs, natureza, cadastroFiscal, parametrosCfop],
     );
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
@@ -1736,7 +1751,7 @@ const AbaAliquota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunc
 
 const LIMITE_TELA = 50;
 
-const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal }) => {
+const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal, parametrosCfop }) => {
     const { gerando, rodar } = usePdf();
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
     const natureza = useMemo(
@@ -1747,8 +1762,9 @@ const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunca
         () => resumoPorProduto(docs, direcao, {
             naturezaAtividade: natureza.natureza,
             cfopOverrides: cadastroFiscal?.cfopOverrides,
+            parametrosCfop: cerebroAtivo(parametrosCfop),
         }),
-        [docs, direcao, natureza, cadastroFiscal],
+        [docs, direcao, natureza, cadastroFiscal, parametrosCfop],
     );
 
     const pdf = () => rodar(() => gerarRelatorioPdf({

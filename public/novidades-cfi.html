@@ -68,14 +68,65 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 06/09/2026 · leitura de 20 minutos</p>
+            <p>Departamento Fiscal · atualizado em 07/09/2026 · leitura de 20 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (06/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (07/09) — leia esta parte primeiro</h2>
+
+    <h3>1. 🧠 <strong>O CFOP que você ensinou para um fornecedor agora vale em TODO lugar</strong></h3>
+    <p>Quando você corrige o CFOP de uma nota e aceita “aprender”, o app grava um <strong>parâmetro do
+    fornecedor</strong> para as competências seguintes. Até agora esse parâmetro só aparecia na aba
+    <strong>✏️ CFOP por nota</strong> — o <strong>Livro de Entradas</strong>, o <strong>Resumo por CFOP</strong>,
+    o <strong>Por produto</strong>, o <strong>Exportar SAGE</strong> e o <strong>SPED</strong> continuavam
+    gravando o CFOP da régua automática. A tela dizia um número e o arquivo saía com outro.</p>
+    <div class="onde">📍 <strong>Onde:</strong> nada muda no jeito de ensinar — Relatórios →
+    <strong>✏️ CFOP por nota</strong> → <strong>🧠 Parâmetros</strong>, ou o modal 🔗 Correlação de CFOP →
+    aba <strong>🧠 Por fornecedor</strong>. O que muda é que o parâmetro passa a valer no
+    <strong>Livro de Entradas</strong>, no <strong>Resumo por CFOP</strong>, no <strong>Por produto</strong>,
+    no <strong>Exportar SAGE</strong> (o .FML, a conferência antes de gerar e a tabela de correlação — que
+    agora mostra <em>“🧠 parâmetro do fornecedor”</em> ou <em>“informado nesta NF”</em> como motivo) e nos
+    <strong>dois SPED</strong> (EFD ICMS/IPI e EFD-Contribuições).</div>
+    <div class="alerta">🚨 <strong>Se você ensinou um fornecedor e já gerou o .FML ou o SPED daquela
+    competência, gere de novo</strong> — o arquivo antigo saiu pela régua automática. A vigência do
+    parâmetro <strong>não retroage</strong>: ele vale da competência em que foi criado em diante, então
+    competência anterior continua com o CFOP que valia nela.</div>
+    <div class="alerta">⚠️ Se a geração do SPED avisar que <em>“os parâmetros de CFOP por fornecedor NÃO
+    puderam ser lidos”</em>, o arquivo saiu <strong>sem</strong> o que você ensinou. Gere de novo antes de
+    transmitir — o aviso existe justamente para isso não passar calado.</div>
+
+    <h3>2. ✍️ <strong>A retenção que você informou na nota agora APARECE — no painel e no relatório</strong></h3>
+    <p>Quem informou a retenção pela nota (o ✍️ de 04/09) reabria a nota e via os campos
+    <strong>vazios</strong>, e o Relatório de Retenções continuava com o valor do documento. O ajuste
+    <strong>estava gravado</strong> — faltava quem o lesse de volta.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → abra a nota: o bloco
+    <strong>“✍️ Retenção informada”</strong> mostra os valores, <strong>quem informou, quando e o
+    motivo</strong> — mesmo com o painel fechado. E em Relatórios → <strong>Retenções</strong> (e Serviços
+    tomados/prestados) a linha sai com o valor informado, marcada como ajustada.</div>
+    <div class="alerta">⚠️ <strong>Não informe de novo por cima.</strong> Se a nota já mostra o carimbo, a
+    retenção está gravada. Se o relatório disser que <em>não conseguiu ler os ajustes</em>, é falha de
+    leitura — não é “não há ajuste”: tente de novo antes de concluir qualquer coisa.</div>
+
+    <h3>3. 🚚 <strong>CT-e OS com IR retido entra no R-4020 — e nota duplicada agora é DENUNCIADA</strong></h3>
+    <p>A nota de transporte lançada à mão com o IRRF informado <strong>não chegava</strong> ao R-4020 do
+    Consultor Contábil (a tela lá dizia <em>“nenhum beneficiário PJ”</em> e mandava procurar defeito na
+    captura). Agora o CT-e / CT-e OS <strong>com retenção</strong> entra como beneficiário. Frete sem
+    retenção continua fora — é o caso normal.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Consultor Contábil → R-4020 → <em>Buscar no Consultor
+    Fiscal</em>. No CFI, Relatórios → <strong>Retenções</strong>.</div>
+    <div class="alerta">🚫 <strong>A mesma nota duas vezes:</strong> se o mesmo prestador, número e valor
+    aparecem em dois documentos (por exemplo, a nota antiga capturada como serviço e a nova lançada como
+    transporte), o Relatório de Retenções acende um aviso em vermelho <strong>nomeando a nota</strong>.
+    O app <strong>não escolhe</strong> qual remover: abra cada documento e use
+    <strong>“🚫 Retirar do cliente”</strong> no que está errado. Deixar as duas infla o Livro de Serviços,
+    a competência, o bloco A e a base do R-4020.</div>
+</section>
+
+<section>
+    <h2>O que mudou em 06/09</h2>
 
     <h3>1. 🤖 <strong>O motor de IA passou para a família Gemini 3.8 — em todos os apps</strong></h3>
     <p>O CFI (e o SP Connect, que mora dentro dele), o Consultor Contábil, o Legalização, o DP/Folha e o

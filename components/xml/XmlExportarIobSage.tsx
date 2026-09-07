@@ -5,6 +5,7 @@ import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type Em
 import { exportarParaIobSage, downloadBlob, participanteDoDoc } from '../../services/iobSageExportService';
 import { conferirAntesDeGerar, type ResultadoPreflight } from '../../services/iobSagePreflight';
 import { conferirCorrelacaoCfop } from '../../services/cfopConferencia';
+import { lerParametrosCfop } from '../../services/cfopEscrituradoService';
 import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
@@ -155,8 +156,14 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     useEffect(() => {
         let alive = true;
         if (!empresaSelecionada) { setCfopCtx(undefined); setCodigoConsumidor(''); setConsumidorSalvo(''); return; }
-        getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id)
-            .then(df => {
+        // 🧠 Os parâmetros do cérebro vêm JUNTO do cadastro (07/09): o .FML, o
+        // preflight e a conferência de correlação leem o MESMO contexto, e sem
+        // eles aqui o arquivo ignorava o CFOP ensinado para o fornecedor.
+        Promise.all([
+            getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id),
+            lerParametrosCfop(empresaSelecionada.id),
+        ])
+            .then(([df, parametros]) => {
                 if (!alive) return;
                 // Parametriza pelo CADASTRO (Paulo, 05/08): natureza declarada,
                 // senão o indicador de atividade, senão o padrão — a MESMA
@@ -165,7 +172,11 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 // parâmetro nenhum.
                 const nat = resolverNaturezaAtividade(df || {});
                 setNaturezaOrigem(nat.origem);
-                setCfopCtx({ naturezaAtividade: nat.natureza, cfopOverrides: df?.cfopOverrides });
+                setCfopCtx({
+                    naturezaAtividade: nat.natureza,
+                    cfopOverrides: df?.cfopOverrides,
+                    parametrosCfop: parametros.filter(p => p.ativo !== false),
+                });
                 const cod = String(df?.codigoParticipanteConsumidor || '');
                 setCodigoConsumidor(cod);
                 setConsumidorSalvo(cod);

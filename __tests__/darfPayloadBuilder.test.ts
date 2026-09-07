@@ -186,3 +186,22 @@ describe('correções da varredura 09/07/2026', () => {
         expect(calcularVencimentoDarf('2026-05', 'IRRF', 'mensal')).toBe('2026-06-19');
     });
 });
+
+// ═══ O MOCK E O CAMINHO REAL PASSAM O MESMO ARGUMENTO ═══════════════════════
+// `calcularVencimentoDarf` decide dia 20/25/trimestral pelo CÓDIGO DE RECEITA
+// quando o `tributo` é genérico. O caminho real (`montarPayloadDarfSerpro`)
+// passava; o mock (`darf-provider.js`) resolvia o código e não o passava —
+// duas datas para a mesma guia conforme o modo. Varredura de 07/09.
+describe('calcularVencimentoDarf recebe o código de receita nos dois caminhos', () => {
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+    it.each([
+        'sefaz-backend/darf-provider.js',
+        'sefaz-backend/darf-payload-builder.js',
+    ])('%s passa `codigoReceita` como 4º argumento', (rel: string) => {
+        const f = readFileSync(join(__dirname, '..', rel), 'utf8')
+            .split('\n').filter((l: string) => !/^\s*\/\//.test(l)).join('\n');
+        expect(f).toMatch(/calcularVencimentoDarf\(competencia, req\.tributo, req\.periodicidade, codigoReceita\)/);
+        expect(f).not.toMatch(/calcularVencimentoDarf\(competencia, req\.tributo, req\.periodicidade\)/);
+    });
+});
