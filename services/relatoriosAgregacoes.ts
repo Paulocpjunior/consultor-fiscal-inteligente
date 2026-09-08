@@ -1,3 +1,4 @@
+import { federaisDoRelatorio } from '../sefaz-backend/federais-relatorio.js';
 /**
  * relatoriosAgregacoes.ts — PURO (testável). As contas dos relatórios do menu
  * Relatórios que agregam documentos fiscais (lista do Paulo, 01/08: resumo
@@ -38,7 +39,6 @@ import {
 // A assinatura de alíquota decide o que o campo É: "CSLL" que vale 4,65% da
 // base é o TOTAL das três (CSRF); PIS 1,65% + COFINS 7,60% é o tributo da
 // OPERAÇÃO do prestador, não retenção (casos CLINIPAR e ATLAS, 07/08).
-import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coerencia.js';
 // 🚨 "É NOTA DE SERVIÇO?" — o rótulo `tipo === 'NFSe'` é a forma MAIS RARA.
 // A NFS-e do **ADN** (NFS-e Nacional) grava `tipo: 'nfseNacional'` e a do
 // portal por CSV/TXT grava `prestador`/`tomador`. Perguntando pelo rótulo
@@ -52,7 +52,7 @@ import { ehNotaDeServico } from '../sefaz-backend/sped-selecao-documentos.js';
 // declarado (autor + motivo) VENCE o documento — sem isto, quem informa a
 // retenção à mão continua vendo o zero do documento na tela e conclui que o
 // app não gravou (04/09, FRONTINI ENGENHEIROS).
-import { retencaoEfetivaDaNota, chaveDoAjuste } from '../sefaz-backend/retencao-pj-ajuste.js';
+import { chaveDoAjuste } from '../sefaz-backend/retencao-pj-ajuste.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -343,27 +343,9 @@ function linhasDe(
             const v = d.valores || {};
             const base = v.baseCalculo ?? d.valorTotal ?? 0;
             // As duas formas de gravação, lidas pelo DONO da régua.
-            const bruto = lerRetencoesFederaisDoDoc(d);
-            // 🚨 O AJUSTE DECLARADO VENCE O DOCUMENTO, e a tela tem de mostrar
-            // isso (04/09, FRONTINI): quem informa a retenção à mão e continua
-            // vendo o zero do documento conclui que o app não gravou.
-            //
-            // ⚠️ SÓ o ajuste — a decomposição da CSRF continua sendo assunto do
-            // R-4020, e trazê-la aqui mudaria número em nota que hoje aparece
-            // com a ressalva do † (a régua de 31/08: não de carona).
-            const efetiva = retencaoEfetivaDaNota({
-                nota: { ...bruto, base },
-                ajuste: mapaAjustes[chaveDoAjuste(d as unknown as Record<string, unknown>)],
-            });
-            const ajustada = efetiva.origem === 'ajuste-declarado';
-            const fed = ajustada
-                ? { ir: efetiva.ir, pis: efetiva.pis, cofins: efetiva.cofins, csllOuTotal: efetiva.csll, inss: efetiva.inss }
-                : bruto;
-            // A assinatura de alíquota separa o que o campo É: CSLL de verdade,
-            // total CSRF sem rateio, ou tributo da operação do prestador.
-            const coer = conferirRetencaoFederal({ base, pis: fed.pis, cofins: fed.cofins, csll: fed.csllOuTotal });
-            const csllEhTotal = coer.situacao === 'csll-e-o-total';
-            const daOperacao = coer.situacao === 'campos-sao-totais-da-operacao';
+            const { fed, efetiva, ajustada, daOperacao, valores: federais } = federaisDoRelatorio(
+                d, base, mapaAjustes[chaveDoAjuste(d as unknown as Record<string, unknown>)],
+            );
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                 numero: d.numero || '—',
@@ -378,13 +360,13 @@ function linhasDe(
                 // PIS/COFINS da OPERAÇÃO não são retenção: fora das colunas e
                 // dos totais, mostrados à parte (senão o relatório afirma
                 // retenção que ninguém reteve — o erro que o R-4020 já barra).
-                pis: daOperacao ? 0 : (fed.pis ?? 0),
-                cofins: daOperacao ? 0 : (fed.cofins ?? 0),
+                pis: federais.pis,
+                cofins: federais.cofins,
                 ir: fed.ir ?? 0,
                 inss: fed.inss ?? 0,
                 // "CSLL" com assinatura de 4,65% é o TOTAL das três — somar
                 // como CSLL contaria PIS e COFINS em dobro (caso CLINIPAR).
-                csll: (csllEhTotal || daOperacao) ? 0 : (fed.csllOuTotal ?? 0),
+                csll: federais.csll,
                 liquido: v.liquido ?? d.valorTotal ?? 0,
                 // Nota ajustada TEM retenção informada por construção — é o
                 // que tira o "?" da coluna depois que alguém declarou.
@@ -394,7 +376,7 @@ function linhasDe(
                 retencaoAjustada: ajustada,
                 retencaoAjustadaPor: ajustada ? (efetiva.ajustadoPor || null) : null,
                 retencaoAjustadaMotivo: ajustada ? (efetiva.motivo || null) : null,
-                csrfSemRateio: (csllEhTotal || daOperacao) ? (fed.csllOuTotal ?? 0) : 0,
+                csrfSemRateio: federais.pccAgregado,
                 pisCofinsOperacao: daOperacao ? r2((fed.pis ?? 0) + (fed.cofins ?? 0)) : 0,
                 codigoServico: String((d as any).codigoServico || '').trim(),
                 descricaoNota: String((d as any).discriminacao || (d as any).descricao || '').trim(),

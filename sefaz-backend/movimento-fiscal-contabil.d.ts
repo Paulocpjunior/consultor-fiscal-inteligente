@@ -7,6 +7,7 @@ export interface MovimentoFiscalCfiNota {
     valor: number;
     baseCalculoIss: number;
     aliquotaIss: number;
+    federaisRelatorio: ReturnType<typeof import('./federais-relatorio.js').federaisDoRelatorio>['valores'];
     valorIss: number;
     issRetido: number;
     pisRetido: number;
