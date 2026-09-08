@@ -20,6 +20,7 @@
 // ============================================================================
 import { normalizarNotaTomada } from '../sefaz-backend/reinf-retencoes-pj.js';
 import { normalizarServicoTomado } from '../sefaz-backend/reinf-servicos-tomados.js';
+import { normalizarServicoPrestado } from '../sefaz-backend/reinf-servicos-prestados.js';
 import { normalizarAquisicao } from '../sefaz-backend/reinf-aquisicao-rural.js';
 
 describe('R-4020 — dtFG sai em AAAA-MM-DD, venha o documento como vier', () => {
@@ -59,6 +60,14 @@ describe('R-2010 — a mesma correção, no mesmo dia', () => {
         expect(normalizarServicoTomado({ dhEmi: '2026-08-14T08:35:36-03:00' }).dtEmissao).toBe('2026-08-14');
         expect(normalizarServicoTomado({ dhEmi: '11/05/2026 14:31:31' }).dtEmissao).toBe('2026-05-11');
         expect(normalizarServicoTomado({ dhEmi: 'lixo' }).dtEmissao).toBeNull();
+    });
+});
+
+describe('R-2020 — o espelho nasce pelo dono (08/09)', () => {
+    it('dtEmissao sai em AAAA-MM-DD nas três formas', () => {
+        expect(normalizarServicoPrestado({ dhEmi: '2026-07-23T08:35:36-03:00' }).dtEmissao).toBe('2026-07-23');
+        expect(normalizarServicoPrestado({ dhEmi: '23/07/2026 14:31:31' }).dtEmissao).toBe('2026-07-23');
+        expect(normalizarServicoPrestado({ dhEmi: 'lixo' }).dtEmissao).toBeNull();
     });
 });
 
