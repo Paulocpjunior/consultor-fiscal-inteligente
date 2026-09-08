@@ -1,3 +1,4 @@
+import { federaisDoRelatorio } from './federais-relatorio.js';
 // Movimento fiscal normalizado para o Consultor Contabil (CCI).
 //
 // O CFI e o dono das varias formas em que uma NFS-e e gravada. Esta fronteira
@@ -90,6 +91,7 @@ function normalizarDocumento(d, empresaCnpj, movimento, lacunas) {
         aliquotaIss: r2(primeiroNumero(v.aliquotaIss, d.aliquotaIss, d.aliquota)),
         valorIss: Number.isFinite(iss) ? r2(iss) : 0,
         issRetido: Number.isFinite(issRetido) ? r2(issRetido) : 0,
+        federaisRelatorio: federaisDoRelatorio(d, v.baseCalculo ?? d.valorTotal ?? 0).valores,
         pisRetido: r2(fed.pis ?? 0),
         cofinsRetido: r2(fed.cofins ?? 0),
         irRetido: r2(fed.ir ?? 0),
