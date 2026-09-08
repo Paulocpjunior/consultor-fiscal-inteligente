@@ -1,3 +1,5 @@
+import { reconhecerCfiServicosPdf, completarCfiServicosPdf, type RecorteCfiPdf } from './cfiServicosPdfCredito';
+import type { DocumentoFiscal } from '../types';
 /**
  * services/efiscalPdfParserService.ts
  *
@@ -53,6 +55,7 @@ export interface EfiscalFornecedorAgrupado {
 }
 
 export interface EfiscalPdfParsed {
+    origem?: 'CFI_PDF_CONFERIDO_DOCUMENTOS';
     empresaCodigo: string;
     empresaNome: string;
     empresaCnpj: string;
@@ -116,7 +119,7 @@ async function extrairLinhas(file: File): Promise<{ linhas: LinhaPdf[]; rawLen: 
     return { linhas, rawLen };
 }
 
-export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
+export async function parseEfiscalPdf(file: File, carregarDocumentosCfi?: (recorte: RecorteCfiPdf) => Promise<DocumentoFiscal[]>): Promise<EfiscalPdfParsed> {
     const { linhas, rawLen } = await extrairLinhas(file);
     if (rawLen < 100) {
         // AQUI "consiga outro arquivo" É a solução, e a mensagem tem de dizer:
@@ -127,6 +130,12 @@ export async function parseEfiscalPdf(file: File): Promise<EfiscalPdfParsed> {
             'Este PDF não tem texto — é uma digitalização (imagem). Volte ao E-Fiscal e exporte o relatório '
             + 'em PDF pela própria tela de impressão, em vez de escanear o papel. Com o arquivo exportado o CFI lê.',
         );
+    }
+
+    const recorteCfi = reconhecerCfiServicosPdf(linhas);
+    if (recorteCfi) {
+        if (!carregarDocumentosCfi) throw new EfiscalPdfParseError('Selecione a empresa para conferir o PDF com os documentos do CFI.');
+        return completarCfiServicosPdf(recorteCfi, await carregarDocumentosCfi(recorteCfi), rawLen);
     }
 
     const textoTodo = linhas.flatMap(l => l.tokens.map(t => t.str)).join(' ');
