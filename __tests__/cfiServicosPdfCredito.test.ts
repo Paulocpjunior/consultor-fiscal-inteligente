@@ -35,3 +35,13 @@ testeReal('PDF CLUDE real, extraido com pdf.js: 68 notas e totais exatos em 3 pa
  expect(r.notas.find(n=>n.numero==='143875904')?.data).toBe('02/09/2026');
  expect(r.notas.filter(n=>n.base===0)).toHaveLength(3);
 });
+
+test('NF 1666: PDF compacta os espacos do prestador sem alterar os valores', () => {
+ const r = reconhecerCfiServicosPdf(linhas(texto))!;
+ r.notas[0] = { ...r.notas[0]!, numero:'1666', nome:'EVOPE TIMES INTEGRADOS LTDA', base:2880, iss:83.52, liquido:2880 };
+ r.totais = {base:2880,iss:83.52,retido:0};
+ const origem: any = {...doc, numero:'1666', prestadorNome:'EVOPE  TIMES INTEGRADOS LTDA', valorTotal:2880, valores:{baseCalculo:2880}, valorIss:83.52};
+ expect(completarCfiServicosPdf(r,[origem],200).notas[0]).toMatchObject({numero:'1666',valorNf:2880,valorIss:83.52});
+ expect(() => completarCfiServicosPdf(r,[{...origem,valorIss:83.53}],200)).toThrow(/não localizada/);
+ expect(() => completarCfiServicosPdf(r,[origem,{...origem,prestadorNome:'EVOPE TIMES INTEGRADOS LTDA'}],200)).toThrow(/ambígua/);
+});
