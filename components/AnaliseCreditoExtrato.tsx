@@ -1,3 +1,4 @@
+import { listDocumentos } from '../services/xmlFiscalService';
 // components/AnaliseCreditoExtrato.tsx
 // Análise de Crédito PIS/COFINS a partir da planilha de conciliação financeira
 // (layout SP Contábil — extrato Itaú pós-conciliação, separador ';' em CSV).
@@ -309,7 +310,15 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     setErro(null);
     setEfiscalCarregando(true);
     try {
-      const parsed = await parseEfiscalPdf(file);
+      const parsed = await parseEfiscalPdf(file, async recorte => {
+        if (!empresaSel || empresaSel.cnpj.replace(/\D/g, '') !== recorte.empresaCnpj.replace(/\D/g, '')) {
+          throw new Error('Selecione a empresa do PDF antes de importar o relatório CFI.');
+        }
+        const meta: { truncado?: boolean } = {};
+        const docs = await listDocumentos(currentUser, { empresaId: empresaSel.id, empresaCnpj: empresaSel.cnpj, competencia: recorte.competencia }, meta);
+        if (meta.truncado) throw new Error('Consulta de documentos CFI incompleta. A análise permanece bloqueada.');
+        return docs.filter(d => d.empresaId === empresaSel.id || String(d.empresaCnpj || '').replace(/\D/g, '') === recorte.empresaCnpj.replace(/\D/g, ''));
+      });
       setEfiscal(parsed);
       // O credito e o aviso de CNPJ sao calculados reativamente
       // (useMemo abaixo) — recalculam quando o PDF OU a empresa mudam.
@@ -355,7 +364,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
     } finally {
       setEfiscalCarregando(false);
     }
-  }, []);
+  }, [empresaSel, currentUser]);
 
   const onFileEfiscal = (f: File | null) => {
     setArquivo(f);
@@ -502,7 +511,7 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
           onClick={() => { setModo('efiscal'); setErro(null); }}
           className={`px-4 py-2 rounded-xl text-sm font-semibold ${modo==='efiscal'?'bg-teal-600 text-white':'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600'}`}
         >
-          📄 PDF E-Fiscal (Serviços Tomados)
+          📄 PDF CFI / E-Fiscal (Serviços Tomados)
         </button>
         <button
           onClick={() => { setModo('nfsesp'); setErro(null); }}
@@ -512,6 +521,9 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
         </button>
       </div>
 
+      {efiscal?.origem === 'CFI_PDF_CONFERIDO_DOCUMENTOS' && (
+        <p className="text-sm text-teal-700 dark:text-teal-300 p-3">Relatório CFI conferido com os documentos da empresa e competência. Base e ISS vieram do PDF; CNPJ/CPF, nome completo e valor bruto das notas vieram dos documentos do CFI.</p>
+      )}
       {modo === 'nfsesp' && <AnaliseRetencoesNfseSP currentUser={currentUser} />}
 
       {/* ─── Upload CSV ───────────────────────────────────────────────── */}
@@ -580,10 +592,10 @@ const AnaliseCreditoExtrato: React.FC<AnaliseCreditoExtratoProps> = ({
         >
           <div className="text-3xl mb-1">📄</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {arquivo ? arquivo.name : 'Clique ou arraste o PDF "Relação de NFs de Serviços Tomados" (Sistema E-Fiscal)'}
+            {arquivo ? arquivo.name : 'Clique ou arraste o relatório de Serviços Tomados do CFI ou E-Fiscal'}
           </p>
           <p className="text-[11px] text-gray-400 mt-1">
-            Layout fixo do E-Fiscal — extração por coordenada, validada contra o total do relatório.
+            CFI: confere o PDF com os documentos da empresa e competência. E-Fiscal: confere as colunas e os totais do relatório.
           </p>
         </div>
         <input
