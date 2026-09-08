@@ -98,7 +98,16 @@ export function lerRetencoesFederaisDoDoc(d) {
  */
 export function normalizarNotaTomada(d) {
     const v = d?.valores || {};
-    const base = primeiro(d?.valorServicos, v.valorServicos, d?.valorTotal);
+    // 🚨 O BRUTO TEM UMA QUARTA FORMA (08/09, PREVERMED × LEGACY): a NFS-e
+    // importada de PDF grava `valores.servicos` e `totais.vProd`, e nenhuma
+    // das três lidas aqui — a nota chegava ao Contábil com BRUTO 0,00 e a
+    // Receita recusava o evento (MS1042 ×3, "o valor informado deve ser
+    // maior que zero"), com as retenções certas do lado. Ler só as formas
+    // que se lembra é a armadilha de sempre; o acervo já gravado lê daqui.
+    const base = primeiro(
+        d?.valorServicos, v.valorServicos, v.servicos,
+        d?.totais?.vServ, d?.totais?.vProd, d?.valorTotal,
+    );
     const fed = lerRetencoesFederaisDoDoc(d);
     return {
         numero: texto(d?.numero) || null,

@@ -36,7 +36,11 @@ interface MunicipioFaltando {
     total: number;
     /** % dos clientes pendentes cobertos até esta linha, na ordem da fila. */
     coberturaAcumuladaPct?: number;
-    clientes: Array<{ id: string | null; nome: string; cnpj: string }>;
+    clientes: Array<{ id: string | null; nome: string; cnpj: string; municipioNome?: string | null }>;
+    /** Nomes de município que os clientes desta linha têm no cadastro. */
+    nomesNoCadastro?: string[];
+    /** Mesmo código IBGE, nomes diferentes — o código está errado em alguém. */
+    divergencia?: boolean;
 }
 
 const FORM_VAZIO = {
@@ -168,12 +172,21 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                                     className="flex items-center justify-between gap-2 text-[11px] p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                                     <span className="text-amber-800 dark:text-amber-300">
                                         <strong>{m.municipioNome || `IBGE ${m.codMunIBGE}`}</strong>
+                                        <span className="opacity-70"> · IBGE {m.codMunIBGE}</span>
                                         {' · '}{m.total} cliente(s)
                                         {typeof m.coberturaAcumuladaPct === 'number' && (
                                             <span className="opacity-70"> · acumulado {m.coberturaAcumuladaPct}%</span>
                                         )}
-                                        {': '}{m.clientes.slice(0, 3).map((c) => c.nome).join(', ')}
+                                        {': '}{m.clientes.slice(0, 3).map((c) => (m.divergencia && c.municipioNome ? `${c.nome} (cadastro: ${c.municipioNome})` : c.nome)).join(', ')}
                                         {m.clientes.length > 3 && ` +${m.clientes.length - 3}`}
+                                        {m.divergencia && (
+                                            <span className="block mt-1 text-rose-700 dark:text-rose-400 font-semibold">
+                                                ⚠ Estes clientes têm o MESMO código IBGE ({m.codMunIBGE}) e nomes de município diferentes
+                                                ({(m.nomesNoCadastro || []).join(' · ')}). A fila agrupa pelo CÓDIGO, não pelo nome: o
+                                                "Código Município IBGE" está errado em pelo menos um deles — corrija em Empresas → Dados Fiscais
+                                                e clique Atualizar. Cadastrar o calendário aqui NÃO resolve.
+                                            </span>
+                                        )}
                                     </span>
                                     <span className="flex gap-1 whitespace-nowrap">
                                         <button

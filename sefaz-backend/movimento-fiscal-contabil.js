@@ -10,7 +10,7 @@ import {
     direcaoEfetivaDoc,
     docCancelado,
     issDoDocumento,
-    issRetidoDoDocumento,
+    issRetidoEfetivoDoc,
     valorDoDocumento,
 } from './xml-metadata-helper.js';
 import { ehNotaDeServico } from './sped-selecao-documentos.js';
@@ -68,7 +68,13 @@ function normalizarDocumento(d, empresaCnpj, movimento, lacunas) {
     if (!(valor > 0)) { lacunas?.semValor.push(texto(d.numero) || texto(d.id)); return null; }
     const fed = lerRetencoesFederaisDoDoc(d);
     const iss = issDoDocumento(d);
-    const issRetido = issRetidoDoDocumento(d);
+    // 🚨 O RETIDO SAÍA 0 EM NOTA DO PORTAL COM "ISS Retido: Sim" (08/09, CLUDE ·
+    // tomados 08/2026): o portal grava o BOOLEANO e o ISS da nota, nunca um
+    // valor retido separado — e a leitura antiga só respondia com valor
+    // separado. O Contábil lançava "ISS retido: R$ 0,00" sobre nota retida.
+    // Quem responde agora é o dono `issRetidoEfetivoDoc`, com a ORIGEM
+    // carimbada: número derivado não se apresenta como lido do documento.
+    const retido = issRetidoEfetivoDoc(d);
     // ⚠️ Quem responde "que dia este documento declara" é o DONO, que lê o
     // TEXTO sem conversão de fuso — `new Date('11/05/2026')` é 5 de NOVEMBRO.
     const data = dataDeclaradaDoDocumento(
@@ -89,7 +95,11 @@ function normalizarDocumento(d, empresaCnpj, movimento, lacunas) {
         baseCalculoIss: r2(primeiroNumero(v.baseCalculo, d.baseCalculo, valor)),
         aliquotaIss: r2(primeiroNumero(v.aliquotaIss, d.aliquotaIss, d.aliquota)),
         valorIss: Number.isFinite(iss) ? r2(iss) : 0,
-        issRetido: Number.isFinite(issRetido) ? r2(issRetido) : 0,
+        issRetido: retido.valor == null ? 0 : r2(retido.valor),
+        // 'documento' (valor separado lido) · 'declarado-iss-integral' (o portal
+        // declarou a retenção e o retido é o ISS da nota) · null (não declarado —
+        // aí o 0 acima é "não houve", não "não achei").
+        issRetidoOrigem: retido.origem,
         pisRetido: r2(fed.pis ?? 0),
         cofinsRetido: r2(fed.cofins ?? 0),
         irRetido: r2(fed.ir ?? 0),
@@ -117,6 +127,8 @@ export function montarMovimentoFiscalContabil({ cnpjEmpresa, competencia, movime
         .sort((a, b) => a.data.localeCompare(b.data) || String(a.numero).localeCompare(String(b.numero), 'pt-BR', { numeric: true }));
     const total = r2(notas.reduce((soma, nota) => soma + nota.valor, 0));
     const semDocumentoContraparte = notas.filter((nota) => !nota.participanteDocumento).length;
+    const retidasPeloIssDaNota = notas.filter((nota) => nota.issRetidoOrigem === 'declarado-iss-integral');
+    const issRetidoTotal = r2(notas.reduce((soma, nota) => soma + nota.issRetido, 0));
 
     return {
         contrato: 'movimento_fiscal_cfi_v1',
@@ -132,6 +144,13 @@ export function montarMovimentoFiscalContabil({ cnpjEmpresa, competencia, movime
             // é a resposta ("nada ficou de fora"), não o default de quem não
             // olhou — a contagem é sempre produzida.
             foraPorLacuna: lacunas.semValor.length + lacunas.semData.length,
+            // Σ do ISS retido das notas entregues — é o número que o Contábil
+            // lança como retenção (tomados: ISS a recolher; prestados: a menos
+            // a receber). Sai sempre, porque zero aqui é resposta.
+            issRetidoTotal,
+            // Quantas dessas retenções vieram do BOOLEANO do portal (valor =
+            // ISS da nota), para o outro lado saber que o número é derivado.
+            issRetidoPeloIssDaNota: retidasPeloIssDaNota.length,
         },
         // ⚠️ O que ficou de fora vai NOMEADO (número da nota), porque a ação é
         // procurar AQUELA nota — "3 notas ficaram de fora" manda varrer o mês.
@@ -151,6 +170,11 @@ export function montarMovimentoFiscalContabil({ cnpjEmpresa, competencia, movime
                 : []),
             ...(lacunas.semData.length
                 ? [`${lacunas.semData.length} nota(s) ficaram FORA deste movimento por nao trazerem data legivel na captura (${lacunas.semData.join(', ')}); sem data nao da para dizer a competencia, e chutar a de hoje lancaria no mes errado.`]
+                : []),
+            // O número derivado vai DITO: quem conferir o lançamento precisa
+            // saber que o retido não saiu de um campo "valor retido" da nota.
+            ...(retidasPeloIssDaNota.length
+                ? [`${retidasPeloIssDaNota.length} nota(s) com ISS RETIDO declarado pelo portal sem valor separado (${retidasPeloIssDaNota.map((n) => n.numero || n.idOrigem).join(', ')}): o valor retido e o ISS da propria nota (na NFS-e paulistana a retencao e integral) — total R$ ${r2(retidasPeloIssDaNota.reduce((s, n) => s + n.issRetido, 0)).toFixed(2).replace('.', ',')}.`]
                 : []),
         ],
     };

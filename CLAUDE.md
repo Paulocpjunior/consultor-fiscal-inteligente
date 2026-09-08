@@ -116,6 +116,101 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   fica como veio (é a prova do que a fonte disse), o número que vale sai
   carimbado com quem afirmou e por quê, e há caminho de volta.
 
+- **🚨 O PDF DA NFS-e SUBIA "APENAS COM VALORES" — e o R-4020 chegava ao Contábil
+  com BRUTO 0,00** (08/09, Paulo, dois prints e o relatório em PDF: *"quando
+  importamos NFS em PDF ele sobe sem CNPJ do prestador e tomador, apenas com
+  valores… fui entregar essa REINF e está dando os erros abaixo, e o valor está
+  informado"* — LEGACY 0360 com sete notas em `— -`, PREVERMED com **BRUTO
+  R$ 0,00** e a Receita recusando **MS1042 ×3**; e *"este relatório está
+  trazendo as informações sem CNPJ e com nomes abreviados"*).
+  📌 **QUATRO DEFEITOS NUM DIA, e três são a MESMA classe — a armadilha das duas
+  formas, cada um numa fronteira**:
+  🔴 **(1) O R-4020 lia `valorServicos`/`valores.valorServicos`/`valorTotal` e o
+  importador de PDF grava `valores.servicos` + `totais.vProd`** — nenhuma das
+  três. A nota chegava com BRUTO 0,00 e PIS/COFINS certos do lado, e a Receita
+  recusava o evento inteiro. O acervo já gravado lê da forma nova (a rota ganhou
+  a quarta e a quinta forma), e o importador passou a gravar TAMBÉM
+  `valorServicos`/`valorTotal` — as formas que todo leitor conhece. ⚠️ E o
+  `totais.vNF` era o **LÍQUIDO** depois das retenções: `valorDoDocumento` lê
+  daí, então o A100 do EFD-Contribuições declararia VL_DOC a MENOR em toda nota
+  com retenção. vNF é o BRUTO; o líquido tem campo próprio.
+  🔴 **(2) A DANFSe do padrão nacional não nomeia prestador nem tomador em
+  bloco que o leitor conheça — e A CHAVE JÁ RESPONDIA O PRESTADOR.** A chave de
+  50 dígitos é `cMun(7) · ambiente(1) · tpInsc(1) · inscrição(14) · número(15)
+  · …` — a inscrição é de quem EMITIU. `nfsePdfChaveNacional.ts` completa só o
+  que está VAZIO (o papel vence), carimba a origem (`chave-nacional`) e, quando
+  o prestador da chave NÃO é a empresa selecionada, preenche o tomador com ela
+  carimbado `empresa-selecionada` — dedução a partir da escolha do combo, dita
+  na tela para conferir no papel, nunca apresentada como lida. É a régua do
+  `xmlOndeEstaOCnpj` (02/09): antes de pedir o dado ao dono, perguntar se o app
+  não o tem. ⚠️ Chave de 44 (NF-e) devolve null — foi o `\d{14}` casando o
+  começo da chave que carimbou direção errada em 02/09.
+  🔴 **(3) O MESMO PDF SUBIA COM "Serviços 0,00 · base 1,74 · ISS 1,74 ·
+  desconto 60,00 · líquido 60,00"** — o leitor por rótulo errou o leiaute e a
+  tela de conferência oferecia "Confirmar e salvar (R$ 60,00)". Erro de parser
+  se calibra com o PDF na mão; o que não pode é passar CALADO pela tela que
+  existe para a pessoa olhar o papel. `nfsePdfValores.ts` BLOQUEIA serviço
+  zero com líquido positivo (nota de serviço sem valor não se escritura — a
+  família do `VL_ITEM` zero) e DIZ o resto (base > serviço, ISS > base,
+  desconto ≥ serviço). Zero com líquido zero continua sendo resposta.
+  🔴 **(4) O RELATÓRIO DE SERVIÇOS imprimia só o NOME, cortado pela largura, e
+  nunca o CNPJ que a linha já carregava (`l.doc`)** — e é por esse papel que a
+  equipe confere o R-4020. O corte honesto (`…(+N)`) é certo numa lista de
+  notas e ERRADO num nome de prestador: `ColunaPdf.quebra` faz a célula quebrar
+  linha (nome inteiro + CNPJ embaixo), e a altura da linha passou a ser a da
+  célula mais alta — inclusive na quebra de página.
+  🐛 **E O PDF TINHA 24 MB PARA 8 LINHAS**: o logo é um PNG de 2.456 px que o
+  jsPDF guarda DECODIFICADO uma vez por página, num arquivo sem Flate. Reduzido
+  a 320 px no navegador (ele é desenhado com 11 mm) + `compress: true`.
+  🏛️ **(5) E A FILA DE MUNICÍPIOS SEM CALENDÁRIO ESCONDIA A DIVERGÊNCIA QUE
+  ELA MESMA PRODUZIA** (Paulo: *"sabe Deus por que essas duas não saem de
+  BELÉM, e ambas estão cadastradas como Caxias do Sul"*). A fila agrupa pelo
+  CÓDIGO IBGE e o nome é o texto do primeiro cliente — as três tinham o código
+  de Belém gravado, e a linha dizia só "BELEM · 3 clientes". Agora ela mostra o
+  código, cada cliente leva o nome DELE, e código igual com nomes diferentes
+  sai em vermelho apontando os Dados Fiscais. E o CEP do modal, que MANTINHA o
+  código antigo quando a resposta não trazia IBGE, passou a DIZER isso — foi
+  assim que o endereço virou Caxias e o código ficou Belém.
+  📌 **REGRA QUE FICA: trilho novo que GRAVA documento grava nas formas que os
+  leitores já leem — e o leitor de fronteira (o túnel do R-4020) lê TODAS as
+  formas gravadas, medidas com `grep`, não lembradas.** O importador de PDF
+  nasceu com vocabulário próprio (`valores.servicos`) e nenhum leitor o
+  conhecia; o sintoma foi a nota existindo na tela e chegando zerada na Receita.
+
+- **🚨 O ISS RETIDO ATRAVESSAVA O TÚNEL DO CONTÁBIL COMO ZERO — em nota que o
+  portal declara RETIDA** (08/09, Paulo, CLUDE · serviços TOMADOS 08/2026:
+  *"estou subindo os serviços tomados e não está indo o ISS… o 'importar ISS
+  destacado' é só para prestados e não tem para tomados, e tenho 2 notas com
+  retenção de ISS"* — o resumo do CCI dizia `ISS no CFI: R$ 12,56 · ISS retido:
+  R$ 0,00`, com PRESENCA 5,56 e EMBRATOP 7,00 na tabela do Fiscal ao lado).
+  🔴 **A CAUSA É DE FORMA, pela enésima vez**: o portal de SP grava o retido como
+  BOOLEANO (`issRetido: true`) e o ISS da nota em `valorIss` — **nunca um valor
+  retido separado** (a coluna do CSV é S/N). O túnel mandava
+  `issRetidoDoDocumento`, que só responde com valor separado ⇒ `issRetido: 0`
+  sobre nota retida. É o `0` que a régua de 22/08 proibia de SOMAR, agora
+  atravessando a fronteira como se fosse o retido — e o Contábil lançando
+  "ISS retido: R$ 0,00" sem nada acusar.
+  ✂️ `issRetidoEfetivoDoc` (no dono, `xml-metadata-helper.js`): valor separado
+  vence (`origem: 'documento'`); declarado sem valor, **o retido é o ISS da nota
+  — na NFS-e paulistana a retenção é INTEGRAL** ("ISS Retido: Sim" = o tomador
+  responde pelo ISS impresso) — e sai CARIMBADO (`'declarado-iss-integral'`),
+  porque número derivado não se apresenta como lido. Sem declaração: `null`,
+  nunca zero. O túnel leva `issRetidoOrigem` por nota, `issRetidoTotal` e
+  `issRetidoPeloIssDaNota` no resumo, e a ressalva NOMEIA as notas derivadas.
+  ⚠️ `issRetidoDoDocumento` **não mudou**: ela continua respondendo só com valor
+  — a régua de 22/08 vale para quem SOMA. O que nasceu é o dono da pergunta
+  *"quanto lançar como retido?"*, que é outra pergunta.
+  🔴 **E O CCI SÓ LANÇAVA ISS RETIDO EM PRESTADOS** (`if (prestado &&
+  issRetido > 0)`), e o resumo mandava *"marque a opção acima"* (o Importar ISS
+  DESTACADO — serviços prestados) para um movimento em que a opção não se
+  aplica — o achado 18 de novo. Corrigido no repo do Contábil no MESMO dia:
+  tomados ganharam a linha de ISS retido (a recolher, mesmo desenho das
+  retenções federais de tomados) e o resumo DIZ que destacado não se aplica.
+  📌 **REGRA QUE FICA: flag de fato ("houve retenção") sem campo de valor
+  precisa de um dono que responda QUANTO — e ele responde com a régua do
+  documento, carimbada, nunca com zero.** Zero é a afirmação mais cara que
+  atravessa uma fronteira, porque do outro lado ele parece conferido.
+
 - **🧠 O CÉREBRO DO CFOP SÓ CHEGAVA A UMA ABA — o arquivo saía pela régua
   automática num fornecedor que a pessoa já tinha ENSINADO** (07/09, feriado,
   Paulo: *"termina a sua parte"* — achado da varredura de argumentos opcionais,

@@ -145,7 +145,14 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                 uf: end.uf || prev.uf,
                 codMunIBGE: end.codMunIBGE || prev.codMunIBGE,
             }));
-            setCepInfo(`✓ ${end.municipio}/${end.uf}${end.codMunIBGE ? ` · IBGE ${end.codMunIBGE}` : ''} — endereço preenchido.`);
+            // ⚠️ Sem o código IBGE na resposta, o campo FICA como estava — e isso
+            // tem de ser DITO: foi assim que um cadastro trocou o endereço para
+            // Caxias do Sul e continuou com o código de Belém (08/09).
+            const anterior = String(dados.codMunIBGE || '').replace(/\D/g, '');
+            setCepInfo(end.codMunIBGE
+                ? `✓ ${end.municipio}/${end.uf} · IBGE ${end.codMunIBGE} — endereço preenchido.`
+                : `⚠ ${end.municipio}/${end.uf} — o CEP NÃO trouxe o código IBGE, e o campo "Código Município IBGE" `
+                    + (anterior ? `ficou como estava (${anterior}). Confira se esse código é de ${end.municipio}.` : 'está vazio — preencha.'));
             setAvisoUfVazia(false);
         } finally {
             setBuscandoCep(false);

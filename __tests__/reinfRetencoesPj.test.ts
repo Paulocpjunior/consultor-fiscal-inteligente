@@ -52,6 +52,29 @@ describe('lê as DUAS formas do documento', () => {
         expect(n.base).toBe(590.10);
         expect(n.csllOuTotal).toBe(5.90);
     });
+
+    // 🚨 08/09: a NFS-e importada de PDF grava `valores.servicos` e
+    // `totais.vProd` — nenhuma das formas lidas até então. A nota chegava ao
+    // Contábil com BRUTO 0,00 e a Receita recusava o R-4020 (MS1042 ×3,
+    // "o valor informado deve ser maior que zero") com PIS e COFINS certos.
+    it('forma da importação em PDF (`valores.servicos` / `totais.vProd`) tem BRUTO', () => {
+        const pdf = {
+            tipo: 'nfse', origem: 'manual', direcao: 'entrada', status: 'autorizado', competencia: '2026-08',
+            numero: '14911', dhEmi: '2026-08-06',
+            prestador: { cnpj: '60532082000147', nome: 'CLINIPAR SERVICOS MEDICOS LTDA' },
+            tomador: { cnpj: TOMADOR },
+            totais: { vProd: 308.68, vNF: 308.68, vPIS: 2.01, vCOFINS: 9.26 },
+            valores: { servicos: 308.68, pis: 2.01, cofins: 9.26, csll: 0, irrf: 0 },
+        };
+        const n = normalizarNotaTomada(pdf);
+        expect(n.base).toBe(308.68);
+        expect(n.pis).toBe(2.01);
+        expect(n.cofins).toBe(9.26);
+        // Só `totais.vProd`, sem `valores.servicos`, também responde.
+        expect(normalizarNotaTomada({ ...pdf, valores: { pis: 2.01, cofins: 9.26 } }).base).toBe(308.68);
+        // E ausência continua sendo null, nunca zero.
+        expect(normalizarNotaTomada({ ...pdf, valores: {}, totais: {} }).base).toBeNull();
+    });
 });
 
 describe('nome de campo não pode mentir', () => {

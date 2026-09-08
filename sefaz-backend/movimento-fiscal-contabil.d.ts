@@ -9,6 +9,8 @@ export interface MovimentoFiscalCfiNota {
     aliquotaIss: number;
     valorIss: number;
     issRetido: number;
+    /** De onde saiu o retido: valor lido, ISS da nota (portal declarou sem valor separado) ou não declarado. */
+    issRetidoOrigem: 'documento' | 'declarado-iss-integral' | null;
     pisRetido: number;
     cofinsRetido: number;
     irRetido: number;
@@ -36,6 +38,10 @@ export interface MovimentoFiscalCfiPayload {
          * recebia um mês menor do que houve.
          */
         foraPorLacuna: number;
+        /** Σ do ISS retido das notas entregues — o que o Contábil lança como retenção. */
+        issRetidoTotal: number;
+        /** Quantas retenções vieram do booleano do portal (valor = ISS da nota). */
+        issRetidoPeloIssDaNota: number;
     };
     /** O que ficou de fora, NOMEADO pelo número da nota — a ação é procurar AQUELA nota. */
     lacunas: { semValor: string[]; semData: string[] };
