@@ -23,13 +23,14 @@ const IpiVarreduraPanel = lazy(() => import('./IpiVarreduraPanel'));
 const FechamentoReinfPanel = lazy(() => import('../EfdReinf/FechamentoReinfPanel'));
 const QuotasDoMesPanel = lazy(() => import('./QuotasDoMesPanel'));
 const ServicosTomadosPanel = lazy(() => import('../EfdReinf/ServicosTomadosPanel'));
+const ServicosPrestadosPanel = lazy(() => import('../EfdReinf/ServicosPrestadosPanel'));
 
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'painel' | 'trimestrais' | 'quotas' | 'cobertura' | 'ipi' | 'reinf' | 'servicos-tomados' | 'fechamento';
+type SubTab = 'painel' | 'trimestrais' | 'quotas' | 'cobertura' | 'ipi' | 'reinf' | 'servicos-tomados' | 'servicos-prestados' | 'fechamento';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'painel', label: '📊 Painel DCTFWeb' },
@@ -39,6 +40,7 @@ const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'ipi', label: '🏭 Varredura IPI' },
     { id: 'reinf', label: '🔀 EFD-Reinf × DCTFWeb' },
     { id: 'servicos-tomados', label: '🧰 R-2010 serviços tomados' },
+    { id: 'servicos-prestados', label: '🛠️ R-2020 serviços prestados' },
     { id: 'fechamento', label: '🧾 Fechamento EFD-Reinf' },
 ];
 
@@ -91,6 +93,7 @@ const DctfwebHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     {sub === 'ipi' && <IpiVarreduraPanel onShowToast={onShowToast} />}
                     {sub === 'reinf' && <ConferirReinfDctfweb onShowToast={onShowToast} />}
                     {sub === 'servicos-tomados' && <ServicosTomadosPanel onShowToast={onShowToast} />}
+                    {sub === 'servicos-prestados' && <ServicosPrestadosPanel onShowToast={onShowToast} />}
                     {sub === 'fechamento' && <FechamentoReinfPanel onShowToast={onShowToast} />}
                 </Suspense>
             </ErrorBoundary>

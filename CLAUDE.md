@@ -5,6 +5,56 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🛠️ O R-2020 NASCEU NAS DUAS CASAS — e nasceu do XML ACEITO, não do R-2010
+  espelhado de memória** (08/09, Paulo: *"preciso gerar a REINF de INSS de
+  serviços prestados e não está habilitado, pode liberar"*, com o print do
+  card **"A homologar"** e o `evtServPrest` de 07/2026 transmitido pelo
+  REINF.Web e ACEITO em produção).
+  📖 **O QUE O ARQUIVO PROVOU, campo a campo**: namespace
+  `evtPrestadorServicos/v2_01_02`; `infoServPrest > ideEstabPrest(tpInscEstabPrest,
+  nrInscEstabPrest) > ideTomador(tpInscTomador, nrInscTomador, indObra,
+  vlrTotalBruto, vlrTotalBaseRet, vlrTotalRetPrinc, vlrTotalRetAdic,
+  vlrTotalNRetPrinc, vlrTotalNRetAdic, nfs*)`; `nfs(serie, numDocto,
+  dtEmissaoNF, vlrBruto, infoTpServ(tpServico, vlrBaseRet, vlrRetencao))`;
+  bruto = base = 9.105,95 e retenção 1.001,65 (11%); série **`E`** (alfanumérica).
+  🚨 **E O QUE ELE DESMENTIU do espelho ingênuo: o R-2020 NÃO TEM `indCPRB`**
+  — a desoneração do PRESTADOR (que aqui é o próprio cliente) mora no R-1000
+  (`indDesoneracao`), não neste evento. E o `infoTpServ` aceito traz SÓ os três
+  campos (sem os `vlrRetSub`/`vlrNRetPrinc`/… zerados que o R-2010 emite) — o
+  gerador do Contábil emite só o que foi provado.
+  ✂️ **CFI**: `reinf-servicos-prestados.js` (PURO) + rota
+  `GET /api/admin/reinf/servicos-prestados?cnpj=&competencia=` + aba
+  **🛠️ R-2020 serviços prestados** no DCTFWeb. O eixo INVERTE junto: direção
+  **saída** pelo dono (`direcaoEfetivaDoc`), cancelamento pelo dono
+  (`docCancelado` — o R-2010 lia `status` cru com exceção declarada; aqui não
+  precisou), agrupado por **TOMADOR**, e `nrInscEstabPrest` é a empresa. A
+  BASE se prova pela MESMA `conferirBaseRetencaoInss` (IMPORTADA do R-2010,
+  nunca copiada). Tomador PF fica fora contado (a retenção do art. 31 é entre
+  PJ), tomador ilegível idem — nomeado, com a ação.
+  ✍️ **E O AJUSTE DECLARADO ENTRA — é a nota de SAÍDA, o caso FRONTINI**: a
+  rota LÊ `reinf_retencoes_ajustadas` (falha lança, nunca `{}`) e o `inss`
+  declarado VENCE o documento, carimbado `inssOrigem: 'ajuste-declarado'` com
+  autor e motivo na tela e na ressalva. Sem este leitor o INSS informado à mão
+  ficaria gravado e o R-2020 sairia com o zero do documento — a "régua que só
+  escreve" pela enésima vez. Travado por varredura da chamada na rota.
+  ⚠️ **AJUSTE ZERO SAI DA LISTA CONTADO** ("conferi e não houve" é fato), e
+  base derivada continua NÃO indo à declaração.
+  📌 **Contábil (v3.4.266)**: `gerar-r2020.js` (reproduz o aceito campo a
+  campo, com CNPJs FICTÍCIOS no teste — dado de cliente não entra no repo),
+  `servicos-prestados-apuracao.js` (cadastro por TOMADOR: tpServico, indObra,
+  base por nota; **um tomador por evento**, a régua MS0030 do R-2055), rotas
+  `/servicos-prestados/*`, tela na série R-2000 e card **"Tela no ar"**. O log
+  grava `transmitir_r2020`, que o R-2099 já mapeava desde 13/08.
+  🚩 **O QUE NÃO ESTÁ PROVADO, e vai dito**: nenhuma transmissão pelo NOSSO
+  gerador aconteceu ainda — o aceito é do REINF.Web. O caminho é o de sempre:
+  🧪 produção restrita primeiro, e o `tpServico`/`indObra` são cadastrados por
+  tomador ANTES (a nota não os traz).
+  📌 **REGRA QUE FICA: evento-espelho se calibra no arquivo aceito do PRÓPRIO
+  evento, nunca no do irmão.** O R-2010 tem `indCPRB` e sete zeros no
+  `infoTpServ`; o R-2020 não tem nenhum dos dois. Espelhar de memória teria
+  produzido XML que o XSD recusa — ou pior, que aceita declarando campo que o
+  evento não possui.
+
 - **🤖 O MOTOR DO GEMINI SUBIU PARA A FAMÍLIA 3.8 — EM TODOS OS APPS, e cada
   app subiu do jeito que o DESENHO dele permite** (06/09, Paulo: *"precisamos
   alterar nosso motor em todos os apps, do gemini, 3.7 para 3.8 em todos"*).

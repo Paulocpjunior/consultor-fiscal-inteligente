@@ -42,6 +42,7 @@ import { validarAjusteRetencao, idAjustesDaCompetencia } from './retencao-pj-aju
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
+import { montarPayloadR2020 } from './reinf-servicos-prestados.js';
 import { montarMovimentoFiscalContabil } from './movimento-fiscal-contabil.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
@@ -371,6 +372,58 @@ router.get('/servicos-tomados', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-servicos-tomados]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/reinf/servicos-prestados?cnpj=...&competencia=AAAA-MM
+//
+// As NFS-e PRESTADAS com RETENÇÃO PREVIDENCIÁRIA SOFRIDA (11% do art. 31 da
+// Lei 8.212/91), prontas para o **R-2020** do EFD-Reinf — o espelho do R-2010.
+//
+// A régua vive em `reinf-servicos-prestados.js`, calibrada contra um
+// `evtServPrest` REAL aceito em produção (07/2026, mandado pelo Paulo em 08/09).
+//
+// 🚨 OS AJUSTES DECLARADOS ENTRAM AQUI (e é por isso que a leitura deles vem
+// ANTES da montagem): na nota de SAÍDA a retenção que o cliente esqueceu de
+// informar é corrigida por declaração (caso FRONTINI, 04/09), e o campo `inss`
+// dessa declaração é o que o R-2020 tem de honrar. Falha de leitura NÃO vira
+// "não há ajuste" — `lerAjustesDeRetencao` lança.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/servicos-prestados', autorizar, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        const cnpj = soDigitos(req.query.cnpj);
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ do PRESTADOR (14 dígitos) — é ele quem declara o R-2020.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não está cadastrado no CFI. Sem cadastro não há captura, e a ausência `
+                    + 'de notas aqui não prova ausência de retenção sofrida.',
+            });
+        }
+
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const ajustes = await lerAjustesDeRetencao(db, cnpj, competencia);
+        const payload = montarPayloadR2020({ cnpjPrestador: cnpj, competencia, documentos, ajustes });
+
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
+            documentosLidos: documentos.length,
+            ...payload,
+        });
+    } catch (e) {
+        console.error('[reinf-servicos-prestados]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
