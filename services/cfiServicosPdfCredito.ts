@@ -10,6 +10,7 @@ export interface RecorteCfiPdf {
     totais: { base: number; iss: number; retido: number };
     paginas: number;
 }
+const normalizarEspacos = (s: string) => s.replace(/\s+/g, ' ').trim();
 const cent = (v: number) => Math.round(v * 100);
 const numeroBR = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'));
 const moeda = '(?:[0-9.]+,[0-9]{2}|[0-9]+\\.[0-9]{2}†|\\?)';
@@ -61,9 +62,9 @@ export function completarCfiServicosPdf(recorte: RecorteCfiPdf, documentos: Docu
     const candidatos = documentos.flatMap(d => linhasServicos([d], recorte.direcao).map(linha => ({ d, linha })));
     const usados = new Set<number>();
     const notas: EfiscalNf[] = recorte.notas.map(n => {
-        const nome = n.nome.split('…')[0]!.trim();
+        const nome = normalizarEspacos(n.nome.split('…')[0]!);
         const matches = candidatos.map((c, i) => ({ ...c, i })).filter(c => !usados.has(c.i)
-            && c.linha.numero === n.numero && c.linha.data === n.data && c.linha.participante.startsWith(nome)
+            && c.linha.numero === n.numero && c.linha.data === n.data && normalizarEspacos(c.linha.participante).startsWith(nome)
             && cent(c.linha.base) === cent(n.base) && cent(c.linha.iss) === cent(n.iss) && cent(c.linha.issRetido) === cent(n.retido) && cent(c.linha.liquido) === cent(n.liquido));
         if (matches.length !== 1) throw new Error(`NF ${n.numero}: ${matches.length ? 'correspondência ambígua' : 'não localizada com os mesmos dados'} no CFI. Confira a empresa, competência e eventual alteração após gerar o PDF.`);
         const { d, linha, i } = matches[0]!;
