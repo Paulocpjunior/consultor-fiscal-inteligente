@@ -7,6 +7,7 @@ export interface MovimentoFiscalCfiNota {
     valor: number;
     baseCalculoIss: number;
     aliquotaIss: number;
+    federaisRelatorio: ReturnType<typeof import('./federais-relatorio.js').federaisDoRelatorio>['valores'];
     valorIss: number;
     issRetido: number;
     /** De onde saiu o retido: valor lido, ISS da nota (portal declarou sem valor separado) ou não declarado. */
