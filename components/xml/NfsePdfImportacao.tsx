@@ -11,6 +11,13 @@ import { recorteDaNfsePdf, idDaNfsePdf } from '../../services/nfsePdfRecorte';
 // "Este PDF é MESMO da empresa escolhida?" — reconferido no SALVAR, porque os
 // campos de prestador/tomador desta tela são editáveis depois do drop.
 import { conferirPosseDaNfsePdf } from '../../services/nfsePdfPosse';
+// 📌 A CHAVE NACIONAL carrega o PRESTADOR — e o PDF que não nomeia os dois
+// lados subia "apenas com valores" (08/09, LEGACY). O que a chave e a
+// empresa selecionada respondem entra CARIMBADO com a origem.
+import { completarParticipantesDaNfsePdf, type ParticipantesCompletados } from '../../services/nfsePdfChaveNacional';
+// Serviço 0,00 com líquido positivo não se escritura — o leitor errou o
+// leiaute e a tela tem de DIZER antes do clique, não gravar zero calada.
+import { conferirValoresDaNfsePdf } from '../../services/nfsePdfValores';
 import type { NfsePdfParsed } from '../../services/nfsePdfParserService';
 import type { User } from '../../types';
 
@@ -47,6 +54,8 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     // ⚠️ A direção saiu da POSIÇÃO no texto, não de um campo nomeado pelo
     // documento: ela é palpite, e a tela pede confirmação em vez de afirmar.
     const [direcaoDerivada, setDirecaoDerivada] = useState(false);
+    /** De onde saiu cada participante (documento · chave · empresa selecionada). */
+    const [origens, setOrigens] = useState<ParticipantesCompletados | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -76,11 +85,28 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
         setFile(f);
         setLoading(true);
         try {
-            const result = await parseNfsePdf(f);
+            const lido = await parseNfsePdf(f);
+            // O que o papel não nomeou, a CHAVE e a empresa respondem — só o
+            // que está VAZIO, nunca por cima do que foi lido.
+            const comp = completarParticipantesDaNfsePdf({
+                prestadorCnpj: lido.prestador.cnpj,
+                tomadorCnpj: lido.tomador.cnpj,
+                tomadorNome: lido.tomador.nome,
+                chaveAcesso: lido.chaveAcesso,
+                empresaCnpj: empresaSelecionada.cnpj,
+                empresaNome: empresaSelecionada.nome,
+            });
+            const result: NfsePdfParsed = {
+                ...lido,
+                prestador: { ...lido.prestador, cnpj: comp.prestadorCnpj || lido.prestador.cnpj },
+                tomador: { ...lido.tomador, cnpj: comp.tomadorCnpj || lido.tomador.cnpj, nome: comp.tomadorNome || lido.tomador.nome },
+            };
             const match = matchNfseEmpresa(result, empresaSelecionada.cnpj);
             if (!match.ok) throw new Error(match.motivo || 'CNPJ nao bate com a empresa.');
-            setDirecao(match.direcao);
-            setDirecaoDerivada(Boolean(match.derivada));
+            // Direção que a chave permite AFIRMAR vence o palpite por posição.
+            setDirecao(comp.direcao || match.direcao);
+            setDirecaoDerivada(comp.direcao ? false : Boolean(match.derivada));
+            setOrigens(comp);
             setParsed(result);
         } catch (err: any) {
             const msg = err instanceof NfsePdfParseError ? err.message : (err?.message || 'Erro ao extrair PDF.');
@@ -126,6 +152,12 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             // no banco e fora de todo recorte de mês (caso 0257, 01/09).
             const recorte = recorteDaNfsePdf(parsed);
             if (recorte.impedimento) { setError(recorte.impedimento); setSaving(false); return; }
+
+            // 🚨 Serviço 0,00 com líquido positivo NÃO grava (08/09, LEGACY
+            // 41943): o leitor errou o leiaute e a nota entraria no livro, no
+            // SPED e no R-4020 valendo zero. Quem digita o valor é quem lê o papel.
+            const valores = conferirValoresDaNfsePdf(parsed);
+            if (valores.bloquear) { setError(valores.motivo); setSaving(false); return; }
 
             // 🚨 A CONFERÊNCIA DE POSSE SE REFAZ NO SALVAR (03/09, Paulo:
             // *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o
@@ -182,7 +214,12 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 vFCPST: 0, vProd: parsed.valorServicos || 0, vFrete: 0, vSeg: 0,
                 vDesc: (parsed.valorDescIncondicional || 0) + (parsed.valorDescCondicional || 0),
                 vII: 0, vIPI: 0, vIPIDevol: 0, vPIS: parsed.valorPis || 0,
-                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorLiquido || 0,
+                // 🚨 vNF é o valor do DOCUMENTO (o bruto do serviço), não o
+                // líquido depois das retenções — `valorDoDocumento` lê daqui, e
+                // com o líquido o A100 do EFD-Contribuições declararia VL_DOC a
+                // MENOR em toda nota com retenção. O líquido tem campo próprio.
+                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorServicos || 0,
+                vServ: parsed.valorServicos || 0,
             };
 
             const payload = {
@@ -215,11 +252,31 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 empresaNome: empresaSelecionada.nome,
                 prestador: parsed.prestador,
                 tomador: parsed.tomador,
+                // As formas ACHATADAS que os leitores de participante leem
+                // (`contraparteDoc`, o R-4020, o 0150) — o aninhado acima é o
+                // que a tela mostra; sem estas o relatório saía com "—".
+                prestadorCnpj: parsed.prestador.cnpj || '',
+                prestadorNome: parsed.prestador.nome || '',
+                tomadorCnpj: parsed.tomador.cnpj || '',
+                tomadorNome: parsed.tomador.nome || '',
+                // Origem carimbada: o que veio da chave ou da empresa selecionada
+                // não se apresenta como lido do papel.
+                participantesOrigem: {
+                    prestador: origens?.prestadorOrigem || (parsed.prestador.cnpj ? 'documento' : null),
+                    tomador: origens?.tomadorOrigem || (parsed.tomador.cnpj ? 'documento' : null),
+                },
+                // 🚨 O BRUTO DO SERVIÇO nas formas que a apuração lê: o R-4020 lia
+                // `valorServicos`/`valorTotal` e este payload só gravava
+                // `valores.servicos` — a nota chegava ao Contábil com BRUTO 0,00 e
+                // a Receita recusava o evento (MS1042, 08/09, PREVERMED).
+                valorServicos: parsed.valorServicos,
+                valorTotal: parsed.valorServicos,
                 codigoServico: parsed.codigoServico,
                 discriminacao: parsed.discriminacao,
                 naturezaOperacao: parsed.naturezaOperacao,
                 valores: {
                     servicos: parsed.valorServicos,
+                    valorServicos: parsed.valorServicos,
                     baseCalculo: parsed.baseCalculo,
                     aliquotaIss: parsed.aliquotaIss,
                     iss: parsed.valorIss,
@@ -274,7 +331,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
         }
     };
 
-    const handleCancel = () => { setParsed(null); setFile(null); setError(null); };
+    const handleCancel = () => { setParsed(null); setFile(null); setError(null); setOrigens(null); };
 
     if (!currentUser) {
         return <p className="text-center text-xs text-slate-400 py-6">Faca login para importar NFSe.</p>;
@@ -376,8 +433,8 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Prestador</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            <Field label="CNPJ" value={parsed.prestador.cnpj} onChange={v => updateField('prestador', { ...parsed.prestador, cnpj: v })} />
-                            <Field label="Nome" value={parsed.prestador.nome} fullCol onChange={v => updateField('prestador', { ...parsed.prestador, nome: v })} />
+                            <Field label={origens?.prestadorOrigem === 'chave-nacional' ? 'CNPJ (da chave nacional)' : 'CNPJ'} value={parsed.prestador.cnpj} onChange={v => updateField('prestador', { ...parsed.prestador, cnpj: v })} />
+                            <Field label={origens?.prestadorOrigem === 'chave-nacional' && !parsed.prestador.nome ? 'Nome (digite do papel — a chave não traz)' : 'Nome'} value={parsed.prestador.nome} fullCol onChange={v => updateField('prestador', { ...parsed.prestador, nome: v })} />
                             <Field label="Insc. Municipal" value={parsed.prestador.inscricaoMunicipal} onChange={v => updateField('prestador', { ...parsed.prestador, inscricaoMunicipal: v })} />
                             <Field label="Municipio" value={parsed.prestador.municipio} onChange={v => updateField('prestador', { ...parsed.prestador, municipio: v })} />
                             <Field label="UF" value={parsed.prestador.uf} onChange={v => updateField('prestador', { ...parsed.prestador, uf: v })} />
@@ -387,12 +444,18 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Tomador</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            <Field label="CNPJ/CPF" value={parsed.tomador.cnpj} onChange={v => updateField('tomador', { ...parsed.tomador, cnpj: v })} />
-                            <Field label="Nome" value={parsed.tomador.nome} fullCol onChange={v => updateField('tomador', { ...parsed.tomador, nome: v })} />
+                            <Field label={origens?.tomadorOrigem === 'empresa-selecionada' ? 'CNPJ/CPF (empresa selecionada — confira)' : 'CNPJ/CPF'} value={parsed.tomador.cnpj} onChange={v => updateField('tomador', { ...parsed.tomador, cnpj: v })} />
+                            <Field label={origens?.tomadorOrigem === 'empresa-selecionada' ? 'Nome (empresa selecionada — confira)' : 'Nome'} value={parsed.tomador.nome} fullCol onChange={v => updateField('tomador', { ...parsed.tomador, nome: v })} />
                             <Field label="Municipio" value={parsed.tomador.municipio} onChange={v => updateField('tomador', { ...parsed.tomador, municipio: v })} />
                             <Field label="UF" value={parsed.tomador.uf} onChange={v => updateField('tomador', { ...parsed.tomador, uf: v })} />
                         </div>
                     </div>
+
+                    {origens && origens.avisos.length > 0 && (
+                        <ul className="text-[11px] text-amber-700 dark:text-amber-400 space-y-0.5">
+                            {origens.avisos.map((a, i) => <li key={i}>⚠ {a}</li>)}
+                        </ul>
+                    )}
 
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Discriminacao</p>
@@ -418,14 +481,26 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                             <NumField label="Desc. cond." value={parsed.valorDescCondicional} onChange={v => updateNumber('valorDescCondicional', v)} />
                             <NumField label="Valor liquido" value={parsed.valorLiquido} onChange={v => updateNumber('valorLiquido', v)} highlight />
                         </div>
+                        {(() => {
+                            const c = conferirValoresDaNfsePdf(parsed);
+                            if (!c.bloquear && c.avisos.length === 0) return null;
+                            return (
+                                <ul className={`mt-2 text-[11px] space-y-0.5 ${c.bloquear ? 'text-rose-700 dark:text-rose-400 font-semibold' : 'text-amber-700 dark:text-amber-400'}`}>
+                                    {c.bloquear && <li>⛔ {c.motivo}</li>}
+                                    {c.avisos.map((a, i) => <li key={i}>⚠ {a}</li>)}
+                                </ul>
+                            );
+                        })()}
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
                         <p className="text-xs text-slate-500">Arquivo: <code>{file?.name}</code> ({((file?.size || 0) / 1024).toFixed(1)} KB)</p>
                         <div className="flex gap-2">
                             <button onClick={handleCancel} disabled={saving} className="text-xs px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
-                            <button onClick={handleSalvar} disabled={saving} className="text-xs px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50">
-                                {saving ? 'Salvando...' : `Confirmar e salvar (${fmtBRL(parsed.valorLiquido)})`}
+                            <button onClick={handleSalvar} disabled={saving || conferirValoresDaNfsePdf(parsed).bloquear}
+                                title={conferirValoresDaNfsePdf(parsed).bloquear ? 'Digite o valor dos serviços do papel antes de salvar.' : undefined}
+                                className="text-xs px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50">
+                                {saving ? 'Salvando...' : `Confirmar e salvar (serviços ${fmtBRL(parsed.valorServicos)} · líquido ${fmtBRL(parsed.valorLiquido)})`}
                             </button>
                         </div>
                     </div>

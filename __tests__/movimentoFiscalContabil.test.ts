@@ -19,8 +19,11 @@ describe('movimento_fiscal_cfi_v1', () => {
         // ou seja descrevia o mundo em que nota derrubada por captura incompleta
         // sumia calada. Zero aqui é a RESPOSTA ("nada ficou de fora"), e é por
         // isso que o campo sai sempre.
+        // ⚠️ E `issRetidoTotal`/`issRetidoPeloIssDaNota` (08/09) saem SEMPRE pelo
+        // mesmo motivo: zero é "nenhuma retenção", não o default de quem não olhou.
         expect(r.resumo).toEqual({
             notas: 1, total: 1889.07, semDocumentoContraparte: 0, foraPorLacuna: 0,
+            issRetidoTotal: 0, issRetidoPeloIssDaNota: 0,
         });
         expect(r.notas[0]).toMatchObject({
             idOrigem: 'nfse-300', numero: '300', data: '2026-06-26', valor: 1889.07,
@@ -114,5 +117,70 @@ describe('movimento_fiscal_cfi_v1', () => {
         expect(r.resumo.notas).toBe(1);
         expect(r.resumo.foraPorLacuna).toBe(0);
         expect(r.ressalvas).toEqual([]);
+    });
+
+    // ========================================================================
+    // 🚨 O ISS RETIDO ATRAVESSAVA O TÚNEL COMO ZERO — em nota que o portal
+    // declara RETIDA (08/09, CLUDE · serviços TOMADOS 08/2026)
+    //
+    // O portal de SP grava `issRetido: true` (booleano) e o ISS da nota em
+    // `valorIss`; nunca um "valor retido" separado. A leitura antiga só
+    // respondia com valor separado, então o CCI recebia `issRetido: 0` sobre
+    // duas notas com "ISS Retido: Sim" (5,56 e 7,00) e mostrava "ISS retido:
+    // R$ 0,00". Na NFS-e paulistana a retenção é INTEGRAL: o retido é o ISS
+    // da nota — e sai CARIMBADO, porque é derivado.
+    // ========================================================================
+    describe('ISS retido em servicos TOMADOS — a forma do portal de SP', () => {
+        const tomada = {
+            id: 'nfse-10353', tipoDoc: 'NFSe', direcao: 'entrada', competencia: '2026-08',
+            numero: '10353', dhEmi: '01/08/2026 09:00:00', valorTotal: 278.03, valorServicos: 278.03,
+            prestadorNome: 'PRESENCA TECNOLOGIA & SEGURANCA LTDA', prestadorCnpj: '11222333000181',
+            cnpjEmit: '11222333000181', xNomeEmit: 'PRESENCA TECNOLOGIA & SEGURANCA LTDA',
+            tomadorCnpj: cnpj, cnpjDest: cnpj, empresaCnpj: cnpj,
+            valorIss: 5.56, issDevido: 5.56, issRetido: true,
+        };
+        const montar = (docs: unknown[]) => montarMovimentoFiscalContabil({
+            cnpjEmpresa: cnpj, competencia: '2026-08', movimento: 'servicos_tomados', documentos: docs,
+        });
+
+        it('booleano do portal + ISS da nota ⇒ retido = ISS da nota, CARIMBADO', () => {
+            const r = montar([tomada]);
+            expect(r.notas).toHaveLength(1);
+            expect(r.notas[0].valorIss).toBe(5.56);
+            expect(r.notas[0].issRetido).toBe(5.56);
+            expect(r.notas[0].issRetidoOrigem).toBe('declarado-iss-integral');
+            expect(r.resumo.issRetidoTotal).toBe(5.56);
+            expect(r.resumo.issRetidoPeloIssDaNota).toBe(1);
+            // O número derivado vai DITO, com a nota nomeada.
+            expect(r.ressalvas.join(' ')).toMatch(/10353/);
+            expect(r.ressalvas.join(' ')).toMatch(/ISS RETIDO declarado/);
+        });
+
+        it('valor retido SEPARADO vence o derivado', () => {
+            const r = montar([{ ...tomada, valorIssRetido: 5.5 }]);
+            expect(r.notas[0].issRetido).toBe(5.5);
+            expect(r.notas[0].issRetidoOrigem).toBe('documento');
+            expect(r.resumo.issRetidoPeloIssDaNota).toBe(0);
+            expect(r.ressalvas).toEqual([]);
+        });
+
+        it('sem declaracao o retido e 0 com origem NULA — "nao houve", nao "nao achei"', () => {
+            const r = montar([{ ...tomada, id: 'n8370', numero: '8370', valorIss: 0, issDevido: 0, issRetido: false }]);
+            expect(r.notas[0].issRetido).toBe(0);
+            expect(r.notas[0].issRetidoOrigem).toBeNull();
+            expect(r.resumo.issRetidoTotal).toBe(0);
+        });
+
+        it('duas retidas e sete sem retencao somam 12,56 — o caso do print', () => {
+            const semRet = Array.from({ length: 7 }, (_, i) => ({
+                ...tomada, id: `mx-${i}`, numero: String(8370 + i), valorIss: 0, issDevido: 0, issRetido: false,
+                valorTotal: 44, valorServicos: 44,
+            }));
+            const embratop = { ...tomada, id: 'nfse-22243', numero: '22243', valorTotal: 140, valorServicos: 140, valorIss: 7, issDevido: 7 };
+            const r = montar([tomada, embratop, ...semRet]);
+            expect(r.resumo.notas).toBe(9);
+            expect(r.resumo.issRetidoTotal).toBe(12.56);
+            expect(r.resumo.issRetidoPeloIssDaNota).toBe(2);
+        });
     });
 });

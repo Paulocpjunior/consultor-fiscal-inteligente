@@ -469,3 +469,37 @@ export function issRetidoDeclarado(doc) {
     const v = issRetidoDoDocumento(d);
     return Number.isFinite(v) && v > 0;
 }
+
+/**
+ * QUANTO de ISS o tomador reteve nesta nota — o número que vai para o
+ * LANÇAMENTO (o túnel do Contábil, o R-4020 não; ISS é municipal).
+ *
+ * 🚨 O CASO (08/09, CLUDE · serviços TOMADOS 08/2026): o CCI recebia
+ * `issRetido: 0` em duas notas do portal de SP com **ISS Retido: Sim** (5,56 e
+ * 7,00), porque `issRetidoDoDocumento` só responde quando existe VALOR
+ * separado — e o portal não grava valor separado: grava o BOOLEANO
+ * (`issRetido: true`) e o ISS da nota em `valorIss`. O Contábil lançava
+ * "ISS retido: R$ 0,00" sobre duas notas retidas — o mesmo `0` que a régua de
+ * 22/08 proibia de SOMAR, agora atravessando o túnel como se fosse o retido.
+ *
+ * 📌 NA NFS-e PAULISTANA A RETENÇÃO É INTEGRAL: "ISS Retido: Sim" significa que
+ * o tomador é o responsável pelo ISS DA NOTA — o "Valor do ISS" impresso É o
+ * que ele recolhe (não há retenção parcial nesse leiaute; a coluna do CSV é
+ * S/N, sem valor próprio). Por isso, declarado sem valor separado, o retido é
+ * o ISS da nota — e sai CARIMBADO (`origem: 'declarado-iss-integral'`),
+ * porque número derivado não se apresenta como lido do documento.
+ *
+ * ⚠️ VALOR EXPLÍCITO VENCE (`origem: 'documento'`); sem declaração nenhuma o
+ * retido é `null`, nunca zero — "não houve" e "não achei" continuam sendo
+ * fatos diferentes, e quem consome decide o que fazer com o null.
+ */
+export function issRetidoEfetivoDoc(doc) {
+    const d = doc || {};
+    const explicito = issRetidoDoDocumento(d);
+    if (Number.isFinite(explicito)) return { valor: explicito, origem: 'documento' };
+    if (d.issRetido === true || d.valores?.issRetido === true) {
+        const iss = issDoDocumento(d);
+        if (Number.isFinite(iss)) return { valor: iss, origem: 'declarado-iss-integral' };
+    }
+    return { valor: null, origem: null };
+}

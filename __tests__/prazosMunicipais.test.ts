@@ -138,6 +138,39 @@ describe('a fila de cadastro é POR MUNICÍPIO — não 157 linhas de cliente', 
         expect(r.municipios[0].municipioNome).toBe('BRASILIA');
     });
 
+    // 🚨 08/09, Paulo: *"sabe Deus por que essas duas não saem de BELÉM, e
+    // ambas estão cadastradas como Caxias do Sul"*. Estavam — no NOME. A fila
+    // agrupa pelo CÓDIGO IBGE, e o código gravado era o de Belém nas três.
+    // A linha dizia só "BELEM · 3 clientes" e escondia a divergência.
+    it('🚨 mesmo código IBGE com nomes de município diferentes sai NOMEADO como divergência', () => {
+        const r = municipiosSemCalendario([
+            { id: 'a', nome: 'IGREJA BELEM', cnpj: '1', codMunIBGE: '1501402', regime: 'lucro', municipioNome: 'BELEM' },
+            { id: 'b', nome: 'IGREJA SERRA', cnpj: '2', codMunIBGE: '1501402', regime: 'lucro', municipioNome: 'Caxias do Sul' },
+            { id: 'c', nome: 'IGREJA CAXIAS', cnpj: '3', codMunIBGE: '1501402', regime: 'lucro', municipioNome: 'CAXIAS DO SUL' },
+        ], [], { competencia: '2026-09' });
+        const linha = r.municipios[0];
+        expect(linha.divergencia).toBe(true);
+        expect(linha.nomesNoCadastro).toEqual(['BELEM', 'CAXIAS DO SUL']);
+        // Cada cliente leva o nome DELE — é assim que a pessoa acha qual está errado.
+        expect(linha.clientes.map((c: any) => c.municipioNome)).toEqual(['BELEM', 'Caxias do Sul', 'CAXIAS DO SUL']);
+    });
+
+    it('nomes iguais (ou só um cliente) NÃO é divergência — alarme sobre cadastro certo desliga a fila', () => {
+        const r = municipiosSemCalendario([
+            { id: 'a', nome: 'A', cnpj: '1', codMunIBGE: '5300108', regime: 'lucro', municipioNome: 'Brasilia' },
+            { id: 'b', nome: 'B', cnpj: '2', codMunIBGE: '5300108', regime: 'lucro', municipioNome: 'BRASILIA' },
+            { id: 'c', nome: 'C', cnpj: '3', codMunIBGE: '5300108', regime: 'lucro' },
+        ], [], { competencia: '2026-09' });
+        expect(r.municipios[0].divergencia).toBe(false);
+    });
+
+    it('🔌 o painel mostra o código IBGE na linha e a divergência em destaque', () => {
+        const f = readFileSync(join(__dirname, '..', 'components', 'PrazosMunicipaisPanel.tsx'), 'utf8');
+        expect(f).toMatch(/IBGE \{m\.codMunIBGE\}/);
+        expect(f).toMatch(/m\.divergencia && \(/);
+        expect(f).toMatch(/A fila agrupa pelo CÓDIGO, não pelo nome/);
+    });
+
     it('cidade que NENHUM cliente nomeia continua sem nome — não se inventa', () => {
         // Sem o dado em lugar nenhum, a linha fica com o código. Deduzir o nome
         // a partir do IBGE seria uma tabela no código para envelhecer sozinha.

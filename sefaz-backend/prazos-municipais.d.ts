@@ -44,7 +44,12 @@ export function municipiosSemCalendario(
 ): {
     municipios: Array<{
         codMunIBGE: string; municipioNome: string | null; situacao: string;
-        total: number; clientes: Array<{ id: string | null; nome: string; cnpj: string }>;
+        total: number;
+        clientes: Array<{ id: string | null; nome: string; cnpj: string; municipioNome?: string | null }>;
+        /** Nomes de município DISTINTOS que os clientes desta linha carregam no cadastro. */
+        nomesNoCadastro: string[];
+        /** true quando o MESMO código IBGE aparece com nomes diferentes — cadastro torto, não fila. */
+        divergencia: boolean;
         /** Clientes cobertos até esta linha, na ordem da fila. */
         acumulado: number;
         coberturaAcumuladaPct: number;

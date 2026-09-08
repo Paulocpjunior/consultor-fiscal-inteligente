@@ -1967,7 +1967,10 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
         subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} NFS-e`,
         colunas: [
             { titulo: 'Data', largura: 7 }, { titulo: 'Nº', largura: 7 },
-            { titulo: direcao === 'entrada' ? 'Prestador' : 'Tomador', largura: 22 },
+            // Nome INTEIRO e CNPJ, quebrando linha — o relatório saía com o nome
+            // abreviado e sem documento (08/09, CLUDE tomados), e é por esse
+            // papel que a equipe confere o R-4020.
+            { titulo: direcao === 'entrada' ? 'Prestador' : 'Tomador', largura: 28, quebra: true },
             { titulo: 'Base', largura: 9, alinhamento: 'direita' },
             { titulo: 'ISS', largura: 7, alinhamento: 'direita' },
             { titulo: 'ISS ret.', largura: 7, alinhamento: 'direita' },
@@ -1982,7 +1985,9 @@ const AbaServicos: React.FC<AbaDocsProps & { modo: 'serv-tomados' | 'serv-presta
         // 0,00 na coluna leria como "confirmado sem retenção" linha a linha,
         // desmentindo o próprio aviso do rodapé (ausência ≠ zero retido).
         linhas: linhas.map(l => [
-            l.data, l.numero, l.participante, l.base, l.iss, l.issRetido, l.pis, l.cofins,
+            l.data, l.numero,
+            `${l.participante}\n${l.doc ? (fmtCnpj(l.doc) || l.doc) : 'CNPJ não gravado'}`,
+            l.base, l.iss, l.issRetido, l.pis, l.cofins,
             l.retencoesFederaisGravadas ? l.ir : '?',
             l.retencoesFederaisGravadas ? l.inss : '?',
             // CSRF sem rateio: o valor É retenção, mas somá-lo como CSLL

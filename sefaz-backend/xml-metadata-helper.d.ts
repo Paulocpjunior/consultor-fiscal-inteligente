@@ -116,3 +116,12 @@ export function issDoDocumento(doc: unknown): number;
 export function issRetidoDoDocumento(doc: unknown): number;
 /** O documento DECLARA retenção de ISS (inclui o booleano do portal). */
 export function issRetidoDeclarado(doc: unknown): boolean;
+/**
+ * Quanto o tomador reteve — valor explícito ('documento') ou, declarado sem
+ * valor separado (portal de SP), o ISS da nota ('declarado-iss-integral').
+ * Sem declaração: `valor: null`, nunca zero.
+ */
+export function issRetidoEfetivoDoc(doc: unknown): {
+    valor: number | null;
+    origem: 'documento' | 'declarado-iss-integral' | null;
+};

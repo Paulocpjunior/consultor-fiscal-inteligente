@@ -345,7 +345,28 @@ export function municipiosSemCalendario(clientes, cadastros, { obrigacao = 'ISS'
         // dizer QUAL cidade é manda o colaborador procurar o que o cadastro já
         // tem — e o dado está ali, no cliente seguinte.
         if (!linha.municipioNome) linha.municipioNome = String(c?.municipioNome || '').trim() || null;
-        linha.clientes.push({ id: c?.id || null, nome: c?.nome || '—', cnpj: soDigitos(c?.cnpj) });
+        linha.clientes.push({
+            id: c?.id || null, nome: c?.nome || '—', cnpj: soDigitos(c?.cnpj),
+            // O nome que ESTE cliente tem no cadastro — é por ele que a pessoa
+            // percebe que o CÓDIGO está errado (ver `divergencia` abaixo).
+            municipioNome: String(c?.municipioNome || '').trim() || null,
+        });
+    }
+
+    // 🚨 A FILA AGRUPA PELO CÓDIGO IBGE, e o nome é só o texto do primeiro
+    // cliente (08/09, Paulo: *"sabe Deus por que essas duas não saem de
+    // BELÉM, e ambas estão cadastradas como Caxias do Sul"*). Estavam: no
+    // NOME. O código gravado nos Dados Fiscais era o de Belém nas três — e a
+    // linha, dizendo só "BELEM · 3 clientes", escondia exatamente a
+    // divergência. Agora cada cliente vai com o nome DELE, e a linha DIZ
+    // quando os nomes não concordam entre si: código igual com nomes
+    // diferentes é cadastro errado em pelo menos um deles.
+    for (const linha of faltando.values()) {
+        const nomes = [...new Set(linha.clientes
+            .map((c) => String(c.municipioNome || '').trim().toUpperCase())
+            .filter(Boolean))];
+        linha.nomesNoCadastro = nomes;
+        linha.divergencia = nomes.length > 1;
     }
 
     const lista = [...faltando.values()]
