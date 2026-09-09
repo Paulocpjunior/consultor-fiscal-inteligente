@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O IRRF INFORMADO À MÃO NÃO ATRAVESSAVA O TÚNEL DO R-4020 — o dono
+  responde CINCO tributos e o outro lado lia TRÊS** (09/09, Paulo, J.N.
+  VINATEX · 08/2026: *"estou entregando essa REINF, porém percebi que o IR não
+  subiu e mesmo estando informado na nota, são duas notas 1 com retenção e
+  outra que o valor não alcança a retenção de IR"*, com o print do painel do
+  Contábil e o do Relatório de Retenções lado a lado).
+  📖 **OS DOIS PRINTS FECHAM A CONTA AO CENTAVO**: BOA VISTA SERVIÇOS, 2 notas
+  — 1004413 (base 346,15 · PIS 2,25 · COFINS 10,38 · CSLL 3,46 · **IR 0,00**, o
+  valor não alcança a retenção) e 1008360 (base 1.615,84 · PIS 10,50 · COFINS
+  48,48 · CSLL 16,16 · **IR 24,24**, 1,5%). O relatório totaliza **IR 113,93** e
+  o painel do R-4020 dizia **IRRF R$ 89,69** — a diferença é EXATAMENTE os
+  24,24. E PIS, COFINS e CSLL batiam ao centavo nas duas telas, que é o que
+  fazia o defeito parecer de captura.
+  🔴 **A CAUSA MORA NO LEITOR, e o CFI a alimentava pela metade**: o valor
+  24,24 foi **informado à mão** (ajuste declarado, `retencao-pj-ajuste.js`), e o
+  ajuste só existe no bloco `retencao` que o túnel entrega por nota — os campos
+  `ir`/`pis`/`cofins`/`csllOuTotal` continuam sendo o **DOCUMENTO**, de
+  propósito, porque é contra eles que se confere. O Contábil já consumia o
+  bloco para PIS/COFINS/CSLL e lia o **IR do campo cru**. Corrigido lá
+  (`reinf/retencao-pj-apuracao.js`, v3.4.269), com varredura: `num(n.ir)` só
+  pode aparecer uma vez, em `doDocumento`.
+  🚨 **E O RESUMO DAQUI TINHA O MESMO DEFEITO, dentro do MESMO objeto**:
+  `resumo.totalIr` somava `n.ir` (o documento) enquanto o
+  `totalRetencaoDeclarada`, **duas linhas abaixo**, já somava o bloco efetivo —
+  e o comentário dele diz, palavra por palavra, *"o TOTAL QUE SE DECLARA sai do
+  bloco EFETIVO, nunca dos campos crus — senão o resumo desmente as linhas que
+  ele resume"*. O IR era a linha que não seguia a própria regra escrita ao lado.
+  Agora ele sai do efetivo, e o do documento vai à parte
+  (`totalIrDoDocumento`), porque conferir precisa dos dois números.
+  ⚠️ **AUSENTE ≠ ZERO na travessia**: bloco sem `ir` não zera o IR do
+  documento — devolveria *"não houve retenção"* sobre nota que reteve.
+  🚩 **O QUE ISTO NÃO ALCANÇA, e vai dito**: a rota `/servicos-tomados`
+  (**R-2010**) **não carrega os ajustes** — só o R-4020 e o R-2020 chamam
+  `lerAjustesDeRetencao`. Então **INSS informado à mão não chega ao R-2010**. É
+  a mesma classe no evento vizinho, e fica NOMEADA em vez de corrigida de
+  carona: ligar sem caso real muda VALOR de evento por analogia.
+  📌 **REGRA QUE FICA: campo que o app deixa o humano DECLARAR precisa
+  atravessar a fronteira nos DOIS formatos — o do documento e o efetivo — e o
+  leitor do outro lado lê TODOS os campos do bloco, não os que ele lembrou.**
+  O sintoma nunca é erro: é um número plausível a MENOS num evento que a
+  Receita ACEITA, e a diferença só aparece no cruzamento.
+
 - **🚨 O LIVRO CREDITAVA ICMS DE OPTANTE DO SIMPLES — e o campo que tiraria o
   crédito não chegava nele** (09/09, Paulo fechando a MV LIDER, comércio do
   SIMPLES · 08/2026: *"Como faço para editar esses CFOPs que sobem com base e

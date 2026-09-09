@@ -314,7 +314,15 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
             comIncoerencia: comProblema,
             camposDaOperacao,
             totalBase: r2(notas.reduce((t, n) => t + (n.base || 0), 0)),
-            totalIr: r2(notas.reduce((t, n) => t + n.ir, 0)),
+            // 🚨 O IR TAMBÉM SAI DO BLOCO EFETIVO (09/09, J.N. VINATEX ·
+            // BOA VISTA SERVIÇOS): somar `n.ir` aqui é somar o DOCUMENTO,
+            // enquanto as linhas ao lado já dizem o valor DECLARADO — o mesmo
+            // resumo desmentia as linhas que ele resume. O Relatório de
+            // Retenções do CFI mostrava 24,24 e este total dizia 0,00.
+            totalIr: r2(notas.reduce((t, n) => t + n.retencao.ir, 0)),
+            // O que o DOCUMENTO traz continua saindo, à parte: é contra ele
+            // que se confere o que foi informado à mão.
+            totalIrDoDocumento: r2(notas.reduce((t, n) => t + n.ir, 0)),
             // 🚨 O TOTAL QUE SE DECLARA sai do bloco EFETIVO, nunca dos campos
             // crus — senão o resumo desmente as linhas que ele resume.
             totalRetencaoDeclarada: r2(notas.reduce(
