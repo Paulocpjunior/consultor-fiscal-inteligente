@@ -14,7 +14,7 @@
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import {
-    entradaGeraCreditoIcms, colunaDoCstInformado,
+    entradaGeraCreditoIcms, entradaGeraCreditoIpi, ICMS_ST_NAO_E_CREDITO, colunaDoCstInformado,
 } from '../sefaz-backend/credito-icms-entrada.js';
 import { ctxAlocacaoDoDoc, alocarTributacaoIcms } from '../services/iobSageExportService';
 
@@ -204,5 +204,105 @@ describe('MV LIDER 634934 — ponta a ponta', () => {
         );
         expect(a.icms).toBe(0);
         expect(a.outras).toBeCloseTo(964.99, 2);
+    });
+});
+
+// ═══ O IPI E O ICMS ST — a segunda metade do mesmo caso (09/09) ═════════════
+//
+// Paulo, com o livro já sem base e sem ICMS: *"deu certo, excluiu a BASE e o
+// ICMS, mas está puxando esses valores de IPI"*, e a pergunta que nomeia a
+// incoerência: *"Se é só para questão de informativo porque ele puxa IPI e não
+// puxa ICMS ST? … vão achar que é crédito. Antigamente no Folhamatic esses 2
+// impostos entravam direto como custo (pq a empresa não se credita)"*.
+//
+// Números do print: MV LIDER 08/2026, IPI 705,80 na coluna; NF 21.040 da SW
+// MATERIAIS ELETRICOS com IPI 700,14 e ICMS ST 132,40.
+describe('IPI e ICMS ST no Livro de Entradas', () => {
+    it('optante do Simples não se credita de IPI, com a base legal', () => {
+        const r = entradaGeraCreditoIpi({ regime: 'SIMPLES', direcao: 'entrada' });
+        expect(r.credita).toBe(false);
+        expect(r.motivo).toMatch(/CUSTO/);
+        expect(r.baseLegal).toMatch(/LC 123\/2006/);
+    });
+
+    it('fora do Simples nada muda — ligar sem caso real seria analogia', () => {
+        for (const regime of ['LUCRO_PRESUMIDO', 'LUCRO_REAL', 'IMUNE', 'ISENTA']) {
+            expect(entradaGeraCreditoIpi({ regime, direcao: 'entrada' }).credita).toBe(true);
+        }
+    });
+
+    it('ausência não é prova, e a SAÍDA fica fora — igual à irmã do ICMS', () => {
+        expect(entradaGeraCreditoIpi({ regime: '', direcao: 'entrada' }).credita).toBe(true);
+        expect(entradaGeraCreditoIpi({ regime: null as any, direcao: 'entrada' }).credita).toBe(true);
+        expect(entradaGeraCreditoIpi({ regime: 'SIMPLES', direcao: 'saida' }).credita).toBe(true);
+    });
+
+    it('o ICMS ST nunca é crédito — não há parâmetro de regime porque não há exceção', () => {
+        const r = ICMS_ST_NAO_E_CREDITO();
+        expect(r.credita).toBe(false);
+        expect(r.motivo).toMatch(/CUSTO/);
+        expect(r.baseLegal).toBeTruthy();
+    });
+
+    // 🚨 O NÚMERO NÃO MUDA DE TOTAL — os dois já estavam em Outras. O que muda
+    // é a coluna IPI parar de AFIRMAR crédito e o ST parar de ser invisível.
+    describe('a alocação: NF 21.040 (IPI 700,14 · ST 132,40)', () => {
+        const nota = () => ({
+            id: 'sw', tipo: 'NFe', tpNF: '0', direcao: 'entrada',
+            // Contábil inclui mercadoria + IPI + ST, como toda NF-e com ST.
+            totais: { vNF: 5000 + 700.14 + 132.40 },
+            itens: [{ vProd: 5000, vICMS: 0, vIPI: 700.14, vICMSST: 132.40, cst: '60' }],
+        });
+
+        it('no SIMPLES a coluna IPI sai ZERADA e o valor vai dito como custo', () => {
+            const a = alocarTributacaoIcms(
+                nota().itens as any, 5832.54,
+                ctxAlocacaoDoDoc(nota(), { regimeTributario: 'SIMPLES' }),
+            );
+            expect(a.ipi).toBe(0);
+            expect(a.ipiCusto).toBeCloseTo(700.14, 2);
+            expect(a.st).toBeCloseTo(132.40, 2);
+            // Nenhum total muda: o contábil continua fechando em Outras.
+            expect(a.outras).toBeCloseTo(5832.54, 2);
+            expect(a.base + a.icms).toBe(0);
+        });
+
+        it('fora do Simples a coluna IPI continua cheia — nada regride', () => {
+            const a = alocarTributacaoIcms(
+                nota().itens as any, 5832.54,
+                ctxAlocacaoDoDoc(nota(), { regimeTributario: 'LUCRO_PRESUMIDO' }),
+            );
+            expect(a.ipi).toBeCloseTo(700.14, 2);
+            expect(a.ipiCusto).toBe(0);
+            // ⚠️ O ST aparece em TODO regime: ele nunca é crédito, e a coluna
+            // existe para ele parar de ficar invisível dentro de Outras.
+            expect(a.st).toBeCloseTo(132.40, 2);
+            expect(a.outras).toBeCloseTo(5832.54, 2);
+        });
+
+        it('o ST sai por ITEM, não do total — nota mista tem itens com e sem ST', () => {
+            const a = alocarTributacaoIcms(
+                [
+                    { vProd: 1000, vICMS: 0, vIPI: 0, vICMSST: 100, cst: '60' },
+                    { vProd: 1000, vBC: 1000, vICMS: 180, vIPI: 0, cst: '00' },
+                ] as any,
+                2100,
+                ctxAlocacaoDoDoc({ id: 'x', direcao: 'entrada' }, { regimeTributario: 'LUCRO_PRESUMIDO' }),
+            );
+            expect(a.st).toBeCloseTo(100, 2);
+            expect(a.icms).toBeCloseTo(180, 2);
+        });
+    });
+
+    // A régua é ÚNICA: a tela não pode ter um `if` próprio, senão o Livro e o
+    // .FML respondem diferente sobre a mesma nota.
+    it('os leitores chamam o DONO, nunca um if de tela', () => {
+        const ler = (rel: string) => readFileSync(resolve(join(__dirname, '..'), rel), 'utf8');
+        const semComentario = (t: string) => t.split('\n')
+            .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        for (const a of ['services/iobSageExportService.ts', 'components/Relatorios/index.tsx']) {
+            const fonte = semComentario(ler(a));
+            expect(fonte).toMatch(/entradaGeraCreditoIpi\(|ICMS_ST_NAO_E_CREDITO\(/);
+        }
     });
 });

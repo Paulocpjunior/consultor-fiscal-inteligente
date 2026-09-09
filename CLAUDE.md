@@ -5,6 +5,57 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O LIVRO CREDITAVA IPI DE OPTANTE E ESCONDIA O ICMS ST — a segunda
+  metade do mesmo caso** (09/09, Paulo, MV LIDER · comércio do Simples ·
+  08/2026, com o livro já sem base e sem ICMS: *"deu certo, excluiu a BASE e o
+  ICMS, **mas está puxando esses valores de IPI**"*, e a pergunta que nomeia a
+  incoerência: *"**Se é só para questão de informativo porque ele puxa IPI e não
+  puxa ICMS ST?** Estamos pensando no CONTÁBIL, porque eles vão ver esses
+  valores lá, **vão achar que é crédito**. Antigamente no Folhamatic esses 2
+  impostos entravam direto como **custo** (pq a empresa não se credita)"*. E,
+  perguntado se a empresa de fato tem IPI: *"**Tem sim, para o SIMPLES mesmo
+  esquema do ICMS**"*).
+  📖 **A MEDIÇÃO ESTAVA NOS PRINTS**: Livro de Entradas 08/2026 com **IPI
+  705,80** na coluna, e as DANFE da **SW MATERIAIS ELETRICOS** (NF 21.040, IPI
+  **700,14** e ICMS ST **132,40**) e da COFEMA (IPI **5,66**) circuladas.
+  🔴 **SÃO DOIS DEFEITOS DIFERENTES, e a pergunta dele os separa**:
+  · **o IPI tinha COLUNA** — e coluna de IPI no Livro de Entradas é **IPI
+  CREDITADO**. Numa optante aquilo é a MESMA afirmação falsa que a base e o
+  ICMS faziam de manhã: **o Simples não se credita de IPI** (LC 123/2006 art.
+  13, II põe o IPI no recolhimento único e o art. 23 veda a apropriação).
+  · **o ICMS ST não tinha coluna nenhuma** — e ele **nunca é crédito, em regime
+  NENHUM**: é imposto já recolhido por substituição, custo da mercadoria. Não
+  aparecer não é neutro; é a pergunta *"cadê?"* que ele fez, com o valor
+  invisível dentro de Outras.
+  ⚠️ **E NENHUM TOTAL MUDA — os dois JÁ estavam em Outras**: o contábil da nota
+  inclui IPI e ST, e a alocação joga o resto lá. O que muda é o livro **parar de
+  afirmar crédito de IPI** e passar a **NOMEAR os dois como custo**, que é
+  literalmente o que ele descreveu do Folhamatic.
+  ✂️ `entradaGeraCreditoIpi` nasce ao lado da irmã do ICMS, no MESMO dono, e
+  `ICMS_ST_NAO_E_CREDITO` **não tem parâmetro de regime porque não há exceção**.
+  A alocação passa a devolver `ipiCusto` e `st`, e os **TRÊS leitores** (Livro,
+  Resumo por CFOP, Exportar SAGE) entraram no MESMO PR.
+  ⚠️ **FORA DO SIMPLES NADA MUDA NO IPI, e isso é decisão**: quem se credita é o
+  **contribuinte do IPI** (RIPI, Dec. 7.212/2010) — régua que já existe no
+  cadastro e decide o E500/E520 —, e ligá-la aqui mudaria o livro de todo
+  comércio do Lucro **por analogia**. O caso real é o Simples.
+  ⚠️ **O ST APARECE EM TODO REGIME**, e é o que responde a pergunta: ele nunca
+  credita, então a coluna é informativa em qualquer livro — o que ela conserta é
+  a invisibilidade, não um crédito.
+  ⚠️ **E O `.FML` SEGUE O E201, NÃO O E222**: o `VALOR DO IPI` do E201 é
+  escrituração e zera; o E222 descreve o **DOCUMENTO** e continua com o
+  destacado — a mesma assimetria que o ICMS já tinha desde a correção da manhã.
+  ⚠️ **O ST SAI POR ITEM (`vICMSST`), nunca do total**: nota mista tem item com
+  ST e item sem, e ler `totais.vST` jogaria o ST inteiro no grupo errado do
+  Resumo por CFOP.
+  📌 **REGRA QUE FICA: quando uma régua tira uma coluna de crédito, as colunas
+  VIZINHAS da mesma família se MEDEM no mesmo PR.** O ICMS foi corrigido de
+  manhã e o IPI ficou ao lado dele afirmando crédito a tarde inteira — e quem
+  achou não foi varredura, foi o dono olhando o mesmo papel de novo. E a
+  pergunta que ele fez (*"por que puxa um e não o outro?"*) é a forma mais
+  barata de achar incoerência: **duas colunas do mesmo livro tratando o mesmo
+  fato de jeitos diferentes é defeito, mesmo quando cada uma parece certa.**
+
 - **✍️ O AJUSTE DECLARADO CHEGOU AO R-2010 — a lacuna que ficou NOMEADA no
   mesmo dia** (09/09, Paulo: *"corrige o r-2010 também"*). Horas antes, ao
   fechar o IRRF do R-4020, ficou escrito aqui que *"a rota `/servicos-tomados`

@@ -30,7 +30,10 @@ import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from '../../services/iobSageEx
 // Optante do Simples não se credita de ICMS (LC 123 art. 23) — quem responde
 // pelo regime é o dono, nunca a coleção lida na tela.
 import { regimeDaEmpresa } from '../../sefaz-backend/regime-tributario.js';
-import { entradaGeraCreditoIcms } from '../../sefaz-backend/credito-icms-entrada.js';
+import { entradaGeraCreditoIcms, entradaGeraCreditoIpi, ICMS_ST_NAO_E_CREDITO } from '../../sefaz-backend/credito-icms-entrada.js';
+/** O ST não muda com o regime: é constante, então se resolve UMA vez. */
+const ST_NAO_CREDITA = ICMS_ST_NAO_E_CREDITO() as
+    { credita: boolean; motivo: string; baseLegal: string };
 import { direcaoEfetivaDoc, docCancelado, ehEntradaDoEmitente } from '../../sefaz-backend/xml-metadata-helper.js';
 // O modelo vem da RÉGUA (mora na chave), nunca do campo cru `modelo`.
 import { modeloDoDoc } from '../../sefaz-backend/participante-doc-helper.js';
@@ -496,6 +499,13 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             { credita: boolean; motivo: string | null; baseLegal: string | null },
         [regimeEscrituracao, direcao],
     );
+    // A irmã do IPI: mesma pergunta, mesmo dono. Um `if` de tela para uma
+    // delas seria a divergência de sempre.
+    const semCreditoIpi = useMemo(
+        () => entradaGeraCreditoIpi({ regime: regimeEscrituracao, direcao }) as
+            { credita: boolean; motivo: string | null; baseLegal: string | null },
+        [regimeEscrituracao, direcao],
+    );
 
     const { linhas, excluidas } = useMemo(() => {
         // 🚨 O LIVRO FILTRAVA PELO CAMPO CRU (22/08). A nota PRÓPRIA DE ENTRADA
@@ -560,7 +570,8 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
     const tot = useMemo(() => linhas.reduce((t: any, l: any) => ({
         contabil: t.contabil + l.contabil, base: t.base + l.base, icms: t.icms + l.icms,
         isentos: t.isentos + l.isentos, outras: t.outras + l.outras, ipi: t.ipi + l.ipi,
-    }), { contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0 }), [linhas]);
+        ipiCusto: t.ipiCusto + (l.ipiCusto || 0), st: t.st + (l.st || 0),
+    }), { contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0, ipiCusto: 0, st: 0 }), [linhas]);
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `Livro de ${direcao === 'entrada' ? 'Entradas' : 'Saídas'} — ${fmtComp(competencia)}`,
@@ -575,9 +586,14 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             { titulo: 'Isentas', largura: 10, alinhamento: 'direita' },
             { titulo: 'Outras', largura: 10, alinhamento: 'direita' },
             { titulo: 'IPI', largura: 7, alinhamento: 'direita' },
+            // 🚨 O ST GANHOU COLUNA (09/09) — Paulo: *"por que ele puxa IPI e
+            // não puxa ICMS ST?"*. Ele nunca é crédito, em regime nenhum, e
+            // ficava INVISÍVEL dentro de Outras. Informativo, e a observação
+            // abaixo diz que é custo.
+            { titulo: 'ICMS ST', largura: 8, alinhamento: 'direita' },
         ],
-        linhas: linhas.map((l: any) => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
-        totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', tot.contabil, tot.base, tot.icms, tot.isentos, tot.outras, tot.ipi],
+        linhas: linhas.map((l: any) => [l.data, l.numero, l.participante, l.cfops, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st || 0]),
+        totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', tot.contabil, tot.base, tot.icms, tot.isentos, tot.outras, tot.ipi, tot.st],
         identificacao,
         observacoes: [
             'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
@@ -588,6 +604,22 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 `ICMS destacado nas entradas foi para a coluna OUTRAS: ${semCredito.motivo} `
                 + `(${semCredito.baseLegal}). O destaque no XML é da operação do FORNECEDOR.`,
             ]),
+            // 🚨 O IPI SAI DITO COMO CUSTO (09/09) — Paulo: *"vão achar que é
+            // crédito. Antigamente no Folhamatic esses 2 impostos entravam
+            // direto como custo"*. A coluna IPI é de IPI CREDITADO, então numa
+            // optante ela sai zerada — e sem esta linha alguém compararia com o
+            // livro antigo e concluiria que faltou captura.
+            ...(semCreditoIpi.credita || !tot.ipiCusto ? [] : [
+                `IPI destacado nas entradas: ${fmtBRL(tot.ipiCusto)} — ${semCreditoIpi.motivo} `
+                + `(${semCreditoIpi.baseLegal}). A coluna IPI é de IPI CREDITADO, por isso sai ZERADA; `
+                + 'o valor já está dentro de Outras e o valor contábil fecha igual.',
+            ]),
+            // O ST nunca é crédito, em regime NENHUM — a coluna existe para ele
+            // parar de ficar invisível dentro de Outras, não para creditar.
+            ...(tot.st ? [
+                `ICMS ST retido pelo fornecedor: ${fmtBRL(tot.st)} — ${ST_NAO_CREDITA.motivo} `
+                + `(${ST_NAO_CREDITA.baseLegal}). Ele já está dentro de Outras: a coluna só o NOMEIA.`,
+            ] : []),
             ...(direcao === 'entrada' ? [
                 'CFOP: o XML da compra traz o CFOP do FORNECEDOR (saída). Aqui está o CFOP DE ENTRADA correlacionado — '
                 + `natureza da atividade "${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}). `
@@ -645,6 +677,25 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     ICMS destacado nas entradas vai para <strong>Outras</strong>:{' '}
                     {semCredito.motivo} ({semCredito.baseLegal}). O destaque no XML é da
                     operação do <strong>fornecedor</strong>.
+                </p>
+            )}
+            {/* 🚨 IPI E ICMS ST SÃO CUSTO NO SIMPLES (09/09, MV LIDER) — Paulo:
+                *"vão achar que é crédito. Antigamente no Folhamatic esses 2
+                impostos entravam direto como custo"*. Os dois JÁ estavam em
+                Outras; o que faltava era o livro DIZER, e a coluna IPI parar de
+                afirmar crédito. */}
+            {!semCreditoIpi.credita && tot.ipiCusto > 0 && (
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    IPI destacado nas entradas — <strong>{fmtBRL(tot.ipiCusto)}</strong> —{' '}
+                    {semCreditoIpi.motivo} ({semCreditoIpi.baseLegal}). A coluna IPI é de{' '}
+                    <strong>IPI creditado</strong>, por isso sai zerada; o valor contábil fecha igual.
+                </p>
+            )}
+            {tot.st > 0 && (
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    ICMS ST retido pelo fornecedor — <strong>{fmtBRL(tot.st)}</strong> —{' '}
+                    {ST_NAO_CREDITA.motivo} ({ST_NAO_CREDITA.baseLegal}). Ele já está dentro de{' '}
+                    <strong>Outras</strong>: a coluna do PDF só o <strong>nomeia</strong>.
                 </p>
             )}
             {/* 🚨 O QUE SAI DO LIVRO SAI NOMEADO, E AGRUPADO POR CAUSA. Eram
@@ -1247,6 +1298,10 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         ),
         [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao],
     );
+    const totCfop = useMemo(() => linhas.reduce(
+        (t, l) => ({ ipiCusto: t.ipiCusto + (l.ipiCusto || 0), st: t.st + (l.st || 0) }),
+        { ipiCusto: 0, st: 0 },
+    ), [linhas]);
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
         titulo: `Resumo por CFOP — ${fmtComp(competencia)}`,
@@ -1261,13 +1316,26 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             { titulo: 'Isentas', largura: 12, alinhamento: 'direita' },
             { titulo: 'Outras', largura: 12, alinhamento: 'direita' },
             { titulo: 'IPI', largura: 8, alinhamento: 'direita' },
+            // Mesma coluna que o Livro ganhou em 09/09: o ST nunca é crédito e
+            // ficava invisível dentro de Outras. Os dois recortes leem a MESMA
+            // alocação, então eles não podem mostrar colunas diferentes.
+            { titulo: 'ICMS ST', largura: 9, alinhamento: 'direita' },
         ],
-        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi]),
+        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st]),
         identificacao,
         observacoes: [
             'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
             'Nas ENTRADAS o CFOP é o CORRELACIONADO (o XML da compra traz o do fornecedor) — natureza da atividade '
             + `"${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
+            ...(totCfop.ipiCusto ? [
+                `IPI destacado nas entradas: ${fmtBRL(totCfop.ipiCusto)} — optante do Simples Nacional não se `
+                + 'credita de IPI (LC 123/2006, art. 13, II e art. 23). A coluna IPI é de IPI CREDITADO, por '
+                + 'isso sai ZERADA; o valor já está dentro de Outras.',
+            ] : []),
+            ...(totCfop.st ? [
+                `ICMS ST retido pelo fornecedor: ${fmtBRL(totCfop.st)} — ${ST_NAO_CREDITA.motivo} `
+                + `(${ST_NAO_CREDITA.baseLegal}). Ele já está dentro de Outras: a coluna só o NOMEIA.`,
+            ] : []),
             ...obsTruncado(truncado),
         ],
         fileName: `resumo-cfop-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
