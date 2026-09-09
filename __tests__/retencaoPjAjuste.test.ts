@@ -378,6 +378,29 @@ describe('🚨 o payload do R-4020 entrega a retenção EFETIVA', () => {
         expect(p.ressalvas.join(' ')).toMatch(/SEM valor confiável/);
     });
 
+    // 🚨 O IRRF AJUSTADO ENTRA NO TOTAL (09/09, J.N. VINATEX · BOA VISTA
+    // SERVIÇOS): o Relatório de Retenções imprimia IR 24,24 na nota e o resumo
+    // do túnel somava 0,00, porque `totalIr` lia o campo CRU enquanto o
+    // `totalRetencaoDeclarada`, duas linhas abaixo, já lia o bloco efetivo.
+    // Um resumo que soma o documento desmente as linhas que ele resume.
+    it('o total de IR sai do bloco efetivo, e o do documento vai à parte', () => {
+        const p = montarPayloadReinfPJ({
+            cnpjTomador: CNPJ_TOMADOR, competencia: '2026-08',
+            documentos: [docAtlas({ valorCsll: 0, valorIr: 0 })],
+            ajustes: {
+                'NFSE-377235': {
+                    ir: 24.24, pis: 22.19, cofins: 102.40, csll: 34.13,
+                    autor: 'paulo@spassessoriacontabil.com.br', motivo: 'x'.repeat(20),
+                },
+            },
+        });
+        expect(p.notas[0].retencao.ir).toBe(24.24);
+        expect(p.resumo.totalIr).toBe(24.24);
+        // O campo CRU continua ao lado — é contra ele que se confere.
+        expect(p.notas[0].ir).toBe(0);
+        expect(p.resumo.totalIrDoDocumento).toBe(0);
+    });
+
     it('o resumo conta as origens separadamente', () => {
         const r = resumirRetencoesEfetivas([
             { retencao: { origem: 'ajuste-declarado', exigeAjuste: false } as never },
