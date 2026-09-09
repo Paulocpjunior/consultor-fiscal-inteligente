@@ -200,6 +200,82 @@ export function ehNotaPropriaDeEntrada(d, empresaCnpj) {
     return { sim: true, prova: 'tpNF' };
 }
 
+/**
+ * O ESPELHO: a entrada declarada neste documento é do **EMITENTE**, não nossa.
+ *
+ * 🚨 CASO REAL (09/09, Paulo, MV LIDER · comércio do SIMPLES · 08/2026):
+ * *"como não escriturar essas notas que são de devolução do próprio
+ * fornecedor? que não entra na escrituração?"* — com os dois XMLs anexos, que
+ * respondem sozinhos:
+ *
+ *   · **NF 640644 · FERA ATAC → MV LIDER** — `tpNF 0` · `finNFe 4` · CFOP
+ *     **1411** · natOp *"Dev vda merc terc suj reg ST"* · `refNFe` da NF
+ *     **636428 da PRÓPRIA FERA** · infCpl *"NF. DE ENTRADA REFERENTE A NOSSA
+ *     NF. 636428"*.
+ *   · **NF 1138363 · LPS COMPANY (SC) → MV LIDER** — `tpNF 0` · `finNFe 4` ·
+ *     CFOP **2202** · natOp *"DEVOL. VENDAS"* · `refNFe` da NF **1131980 da
+ *     PRÓPRIA LPS"* · **vBC 199,59 · vICMS 7,98**, que é o número que ele
+ *     circulou subindo no Livro de Entradas dela.
+ *
+ * Nas duas o emitente é o FORNECEDOR e o `tpNF` é **0**. Ou seja: é o
+ * fornecedor emitindo a nota de entrada DELE para dar entrada no estoque dele
+ * da mercadoria que a MV LIDER devolveu (RICMS/SP art. 136 — a mesma régua da
+ * nota própria de entrada, do outro lado do balcão). A MV LIDER só ocupa o
+ * bloco `<dest>` porque o leiaute exige um contra-lado.
+ *
+ * ═══ POR QUE ISTO É FATO DO DOCUMENTO, E NÃO INTERPRETAÇÃO ══════════════════
+ *
+ * `tpNF=0` significa *"operação de ENTRADA"* na perspectiva de QUEM EMITIU. Se
+ * a mercadoria está entrando no emitente, ela está SAINDO de quem está no
+ * `<dest>` — nunca entrando. Não existe hipótese em que uma nota `tpNF=0` de
+ * TERCEIRO seja entrada do destinatário: devolução recebida, retorno de
+ * industrialização, conserto, comodato — em todas a mercadoria volta para o
+ * emitente. Escriturá-la como entrada nossa é escriturar a operação DELE, que
+ * é a classe de defeito que este arquivo já pagou três vezes (o CST de
+ * PIS/COFINS da entrada, o CST 00→90 do caso KALUNGA e o crédito de ICMS de
+ * optante do Simples, todos "o documento é do fornecedor").
+ *
+ * 🚨 **E O CUSTO É NAS DUAS PONTAS.** Se o cliente emitiu a nota de devolução
+ * dele (o normal — contribuinte de ICMS emite), a saída DELE já está no livro
+ * e a nota do fornecedor entrando nas entradas conta a MESMA devolução duas
+ * vezes: é a dedup do art. 136 (11/08, DAMIÃO × EDUARDO GUERRA) espelhada. Se
+ * ele não emitiu, não houve entrada nenhuma — a mercadoria saiu. Nos dois
+ * casos a nota não pertence ao livro de ENTRADAS dele.
+ *
+ * ⚠️ **AUSÊNCIA NÃO É PROVA, e aqui isso decide o LADO do erro.** Sem `tpNF`
+ * legível, sem saber quem é a empresa ou sem o emitente, a resposta é **não** —
+ * a nota FICA no livro. Tirar nota legítima é livro a MENOS, que é o erro que
+ * não se confere depois; deixar uma a mais aparece no total.
+ *
+ * ⚠️ E ela DELEGA ao dono da pergunta oposta: o que é nota própria NOSSA nunca
+ * é entrada do emitente. Duas perguntas, dois donos — reescrever o laço aqui
+ * seria a segunda cópia que este projeto mais paga.
+ *
+ * @returns {{ sim: boolean, prova: 'tpNF'|null }}
+ */
+export const MOTIVO_ENTRADA_DO_EMITENTE =
+    'Nota de ENTRADA DO FORNECEDOR (tpNF=0 emitido por ele) — devolução recebida ou retorno. '
+    + 'A mercadoria entrou no estoque DELE, então esta não é entrada da sua empresa. '
+    + 'Se houve devolução, o documento que se escritura é a nota de SAÍDA que a sua empresa emite.';
+
+export function ehEntradaDoEmitente(d, empresaCnpj) {
+    const nao = { sim: false, prova: null };
+    if (!d) return nao;
+    if (String(d.tpNF ?? '').trim() !== '0') return nao;
+    // A NOSSA nota própria de entrada (art. 136) é o caso oposto — quem
+    // responde por ela é o dono dela, nunca uma condição repetida aqui.
+    if (ehNotaPropriaDeEntrada(d, empresaCnpj).sim) return nao;
+
+    const norm = (c) => String(c || '').replace(/\D/g, '');
+    const emp = norm(empresaCnpj || d.empresaCnpj);
+    const emi = norm(d.cnpjEmit || d.emitente?.cnpjCpf || d.emitente?.cnpj);
+    // Sem os dois lados o app NÃO afirma: dizer "não é sua" no escuro tira do
+    // livro uma entrada que pode ser legítima.
+    if (!emp || !emi || emi === emp) return nao;
+
+    return { sim: true, prova: 'tpNF' };
+}
+
 // ── Cancelamento EFETIVO — mesma lição da direção: o campo gravado pode mentir ──
 // Duas formas de o status ficar torto (bug 11/08, MV LIDER 639 — cancelada
 // contada no Livro de Saídas e no fechamento):

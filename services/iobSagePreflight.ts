@@ -77,6 +77,12 @@ export function conferirAntesDeGerar(
     documentos: DocumentoFiscal[],
     opts: {
         numeroEmpresaEfiscal: number;
+        /**
+         * Quem ESCRITURA — o preflight roda a geração REAL, então ele precisa
+         * ver o MESMO que ela: sem o CNPJ, a nota de entrada do FORNECEDOR
+         * (`tpNF=0` dele) apareceria na conferência e não no arquivo.
+         */
+        empresaCnpj?: string;
         tipoInventario?: string;
         cfopCtx?: CfopCtx;
         /** Código do "Consumidor" no E-Fiscal do cliente (NFC-e sem comprador). */

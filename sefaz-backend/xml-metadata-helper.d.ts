@@ -43,6 +43,23 @@ export function ehNotaPropriaDeEntrada(
 ): { sim: boolean; prova: 'tpNF' | null };
 
 /**
+ * Por que a nota de entrada do EMITENTE fica fora da escrituração — a MESMA
+ * frase no Livro, no `.FML` e no SPED. Cada tela escrevendo a sua é o começo
+ * de duas respostas divergentes sobre o mesmo fato.
+ */
+export const MOTIVO_ENTRADA_DO_EMITENTE: string;
+
+/**
+ * O espelho: a entrada declarada no documento é do EMITENTE (terceiro), não da
+ * empresa — devolução recebida pelo fornecedor, retorno de industrialização.
+ * Ela NÃO se escritura no livro de entradas de quem está no `<dest>`.
+ */
+export function ehEntradaDoEmitente(
+    d: DocParaDirecao | null | undefined,
+    empresaCnpj?: string | null,
+): { sim: boolean; prova: 'tpNF' | null };
+
+/**
  * Cancelamento EFETIVO do documento — mesma lição da direção: o status gravado
  * pode mentir (evento 155 não virava o status; merge stub→nota ressuscitava a
  * cancelada). Decide na LEITURA pelo status, pelo cStat legado da própria nota

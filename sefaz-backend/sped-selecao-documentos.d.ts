@@ -39,15 +39,25 @@ export interface SelecaoBlocoC<T = any> {
     semItens: string[];
     /** NFC-e marcadas como entrada — o Guia Prático proíbe escriturá-las. */
     nfceEmEntrada: string[];
+    /**
+     * `tpNF=0` de TERCEIRO: a entrada é do EMITENTE (devolução recebida pelo
+     * fornecedor, retorno). Não é operação desta empresa — ver
+     * `ehEntradaDoEmitente`.
+     */
+    entradaDoEmitente: string[];
 }
 
-export function selecionarNotasBlocoC<T = any>(notas: T[] | null | undefined): SelecaoBlocoC<T>;
+export function selecionarNotasBlocoC<T = any>(
+    notas: T[] | null | undefined,
+    empresaCnpj: string | null | undefined,
+): SelecaoBlocoC<T>;
 
 export function selecionarCtesBlocoD<T = any>(notas: T[] | null | undefined): T[];
 
 /** O que ficou de fora do arquivo, dito com a ação — nunca calado. */
 export function avisosDaSelecao(p?: {
     soResumo?: string[]; semItens?: string[]; nfceEmEntrada?: string[];
+    entradaDoEmitente?: string[];
 }): string[];
 
 /** NFS-e — o que vai ao bloco A do EFD-Contribuições (CT-e fica de fora: é do D). */

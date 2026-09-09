@@ -155,7 +155,7 @@ export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
  */
 export function buildBlocoC(dados) {
     const linhas = [];
-    const selecao = selecionarNotasBlocoC(dados.notas);
+    const selecao = selecionarNotasBlocoC(dados.notas, dados.empresa?.cnpj);
     const notas = selecao.notas;
     // O que NÃO entrou sai NOMEADO: nota que some do arquivo sem ninguém saber
     // é livro a menor — foi o defeito que a PS VIDROS denunciou.

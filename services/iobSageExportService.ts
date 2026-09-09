@@ -11,7 +11,10 @@ import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
 import type { ParametroCfop } from '../sefaz-backend/cfop-cerebro.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
-import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+import {
+    docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento,
+    ehEntradaDoEmitente, MOTIVO_ENTRADA_DO_EMITENTE,
+} from '../sefaz-backend/xml-metadata-helper.js';
 // O LADO da contraparte tem dono — ver o comentário em `participanteDoDoc`.
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // 🚨 O livro creditava ICMS de optante do Simples e ignorava o CST informado
@@ -156,6 +159,18 @@ function codigoProduto(cProd: string): string {
 interface ExportarParams {
     /** Documentos a exportar. */
     documentos: DocumentoFiscal[];
+    /**
+     * CNPJ de quem ESCRITURA — é ele que separa a nota própria de entrada
+     * NOSSA (art. 136) da nota de entrada do FORNECEDOR (`tpNF=0` dele), que
+     * não é operação desta empresa e não vai ao `.FML`.
+     *
+     * Opcional no tipo só porque a régua tem o fallback do próprio documento
+     * (`d.empresaCnpj`), mas os DOIS caminhos de produção — o botão Exportar e
+     * o preflight — têm de passar: `__tests__/entradaDoEmitente.test.ts` varre
+     * as duas chamadas. Preflight que não passasse prometeria um arquivo
+     * diferente do que sai, que é o defeito de 12/08.
+     */
+    empresaCnpj?: string;
     /**
      * Código do "Tipo para o Inventário" (E020 campo 11) como cadastrado no
      * E-Fiscal do cliente. Vazio (padrão) = não informar.
@@ -964,6 +979,14 @@ export interface ExportarResult {
      * nele estava formalmente correto (caso 28/07: 204 produtos, zero notas).
      */
     falhas: Array<{ documento: string; motivo: string }>;
+    /**
+     * O que ficou de fora por DECISÃO da régua, não por defeito — hoje, a nota
+     * de ENTRADA DO FORNECEDOR (`tpNF=0` dele). Fica separado das `falhas` de
+     * propósito: falha pede conserto (reimportar, cadastrar UF), isto é
+     * escrituração correta, e fundir os dois faria a equipe procurar problema
+     * onde não há.
+     */
+    foraDaEscrituracao: Array<{ documento: string; motivo: string }>;
     /** Conteúdo textual do .FML — permite conferir o arquivo sem baixar/abrir. */
     conteudo: string;
     fileName: string;
@@ -997,7 +1020,23 @@ export function rotuloDocumentoFalha(d: DocumentoFiscal): string {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '', ufPorParticipante } = params;
+    const { documentos: documentosCrus, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '', ufPorParticipante, empresaCnpj } = params;
+    // 🚨 A ENTRADA PODE SER DO EMITENTE, NÃO NOSSA (09/09, MV LIDER · 08/2026).
+    // `tpNF=0` de TERCEIRO é o fornecedor dando entrada no estoque DELE
+    // (devolução recebida, retorno): a mercadoria entra nele, logo SAI de quem
+    // está no `<dest>`. Mandá-la no `.FML` escritura a operação do fornecedor no
+    // livro do cliente — e o E-Fiscal ACEITA, porque a linha é formalmente
+    // correta. Sai NOMEADA, nunca calada: nota que some do arquivo sem ninguém
+    // saber é livro a menor, que é o defeito que a PS VIDROS denunciou.
+    const foraDaEscrituracao: Array<{ documento: string; motivo: string }> = [];
+    const documentos = documentosCrus.filter((d) => {
+        if (!(ehEntradaDoEmitente(d, empresaCnpj) as { sim: boolean }).sim) return true;
+        foraDaEscrituracao.push({
+            documento: rotuloDocumentoFalha(d),
+            motivo: MOTIVO_ENTRADA_DO_EMITENTE,
+        });
+        return false;
+    });
     if (ufPorParticipante) definirUfPorParticipante(ufPorParticipante);
     const codConsumidor = String(codigoParticipanteConsumidor || '').trim().slice(0, 20);
     // UF da empresa: sai da chave de uma nota PRÓPRIA de saída (cUF do
@@ -1006,7 +1045,12 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         ? ufDaChave(documentos.find((d) => d.direcao === 'saida' && d.chave)!.chave)
         : '') || '';
     if (!documentos.length) {
-        throw new Error('Nenhum documento para exportar.');
+        // A causa vai junto: "nenhum documento" sobre um recorte que TINHA
+        // notas manda procurar buraco de captura que não existe.
+        throw new Error(foraDaEscrituracao.length
+            ? `Nenhum documento a exportar: as ${foraDaEscrituracao.length} nota(s) do recorte são de `
+                + 'ENTRADA DO FORNECEDOR (tpNF=0 emitido por ele) e não se escrituram nesta empresa.'
+            : 'Nenhum documento para exportar.');
     }
 
     // 1. E001 (uma vez).
@@ -1135,6 +1179,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         blob,
         conteudo,
         falhas,
+        foraDaEscrituracao,
         fileName,
         totalLinhas: linhas.length,
         estatisticas: {

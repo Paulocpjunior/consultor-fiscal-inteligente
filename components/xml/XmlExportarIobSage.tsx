@@ -61,6 +61,11 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
     // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
     const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
+    // O que ficou fora por DECISÃO da régua, separado das falhas: falha pede
+    // conserto, isto é escrituração correta — fundir os dois faria a equipe
+    // procurar defeito onde não há (e um bloco VERMELHO sobre arquivo certo é
+    // o jeito conhecido de ensinar a ignorar o vermelho que importa).
+    const [foraDaEscrituracao, setForaDaEscrituracao] = useState<Array<{ documento: string; motivo: string }>>([]);
     // Natureza da atividade + overrides da empresa (tela Correlação CFOP).
     // Sem isso, a configuração da equipe não chegava ao arquivo.
     const [cfopCtx, setCfopCtx] = useState<CfopCtx | undefined>(undefined);
@@ -300,6 +305,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         try {
             return conferirAntesDeGerar(filtrados, {
                 numeroEmpresaEfiscal,
+                // O preflight roda a geração REAL: sem o CNPJ ele prometeria um
+                // arquivo diferente do que sai (a nota de entrada do FORNECEDOR
+                // ficaria na conferência e fora do .FML) — o defeito de 12/08.
+                empresaCnpj: empresaSelecionada?.cnpj,
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
                 codigoParticipanteConsumidor: codigoConsumidor.trim(),
@@ -542,6 +551,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         try {
             const result = exportarParaIobSage({
                 documentos: filtrados,
+                empresaCnpj: empresaSelecionada?.cnpj,
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
@@ -554,6 +564,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setUltimoConteudo(result.conteudo);
             const st = result.estatisticas;
             setFalhas(result.falhas);
+            setForaDaEscrituracao(result.foraDaEscrituracao);
             // Só baixa se ALGUMA nota entrou. Arquivo só com produtos importa
             // "com sucesso" no E-Fiscal e não lança nada — pior que erro.
             if (st.notasNoArquivo === 0) {
@@ -690,6 +701,28 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             (o override vale aqui também) ou declare a <strong>natureza da atividade</strong> nos
                             dados fiscais.
                         </p>
+                    )}
+                </div>
+            )}
+
+            {foraDaEscrituracao.length > 0 && (
+                <div className="border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                    <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                        {foraDaEscrituracao.length} nota(s) fora do arquivo — e está CERTO
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                        São notas de <strong>entrada do fornecedor</strong> (tpNF=0 emitido por ele):
+                        devolução recebida ou retorno, em que a mercadoria entrou no estoque DELE.
+                        Não são entradas desta empresa — mandá-las escrituraria a operação do
+                        fornecedor no livro do cliente, e o E-Fiscal aceitaria calado.
+                    </p>
+                    <ul className="mt-1 text-[11px] text-slate-700 dark:text-slate-300 space-y-0.5 max-h-40 overflow-y-auto">
+                        {foraDaEscrituracao.slice(0, 50).map((f, i) => (
+                            <li key={i}><strong>{f.documento}</strong></li>
+                        ))}
+                    </ul>
+                    {foraDaEscrituracao.length > 50 && (
+                        <p className="text-[11px] text-slate-500 mt-1">…e mais {foraDaEscrituracao.length - 50}.</p>
                     )}
                 </div>
             )}
