@@ -19,7 +19,7 @@ import {
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // 🚨 O livro creditava ICMS de optante do Simples e ignorava o CST informado
 // na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
-import { colunaDoCstInformado, entradaGeraCreditoIcms } from '../sefaz-backend/credito-icms-entrada.js';
+import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi } from '../sefaz-backend/credito-icms-entrada.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -604,6 +604,12 @@ export interface CtxAlocacaoIcms {
      * Quem responde é `entradaGeraCreditoIcms`, nunca um `if` de tela.
      */
     semCreditoIcms?: boolean;
+    /**
+     * `true` quando quem escritura NÃO se credita de IPI (optante do Simples).
+     * A coluna IPI do Livro de Entradas é IPI CREDITADO — deixá-la cheia numa
+     * optante é a mesma afirmação falsa que a base e o ICMS faziam.
+     */
+    semCreditoIpi?: boolean;
 }
 
 /**
@@ -615,13 +621,14 @@ export interface CtxAlocacaoIcms {
  * que esta casa mais paga.
  */
 export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocacaoIcms {
-    const credito = entradaGeraCreditoIcms({
-        regime: ctxEmpresa?.regimeTributario ?? null,
-        direcao: direcaoEfetivaDoc(d),
-    });
+    const direcao = direcaoEfetivaDoc(d);
+    const regime = ctxEmpresa?.regimeTributario ?? null;
+    const credito = entradaGeraCreditoIcms({ regime, direcao });
+    const creditoIpi = entradaGeraCreditoIpi({ regime, direcao });
     return {
         cstEscriturado: d?.cstEscriturado ?? null,
         semCreditoIcms: !credito.credita,
+        semCreditoIpi: !creditoIpi.credita,
     };
 }
 
@@ -629,15 +636,30 @@ export function alocarTributacaoIcms(
     itens: DocumentoFiscalItem[],
     contabilAlvo: number,
     ctx: CtxAlocacaoIcms,
-): { base: number; icms: number; aliquota: number; isentos: number; outras: number; ipi: number } {
+): {
+    base: number; icms: number; aliquota: number; isentos: number; outras: number;
+    /** IPI **creditado**. Zero em quem não se credita — a coluna é de crédito. */
+    ipi: number;
+    /** O IPI destacado que virou CUSTO (já dentro de Outras). Só informa. */
+    ipiCusto: number;
+    /**
+     * ICMS-ST retido pelo fornecedor. NUNCA é crédito, em regime nenhum: é
+     * custo, e já está dentro de Outras. Existe para o livro poder DIZER —
+     * antes ele ficava invisível, e foi essa a pergunta do Paulo em 09/09
+     * (*"por que ele puxa IPI e não puxa ICMS ST?"*).
+     */
+    st: number;
+} {
     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     const colunaInformada = colunaDoCstInformado(ctx?.cstEscriturado);
     const semCredito = ctx?.semCreditoIcms === true;
-    let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0;
+    const semCreditoIpi = ctx?.semCreditoIpi === true;
+    let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0, st = 0;
     for (const it of itens) {
         const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
         const cst = String(it.cst || '').replace(/\D/g, '');
         ipi += it.vIPI || 0;
+        st += (it as any).vICMSST || 0;
         // O que a PESSOA informou vence o XML; depois vem o regime de quem
         // escritura; só então o destaque do documento do fornecedor.
         if (colunaInformada === 'isentas') {
@@ -660,7 +682,13 @@ export function alocarTributacaoIcms(
             outras += valorItem;
         }
     }
-    base = r2(base); icms = r2(icms); isentos = r2(isentos); outras = r2(outras); ipi = r2(ipi);
+    base = r2(base); icms = r2(icms); isentos = r2(isentos); outras = r2(outras); ipi = r2(ipi); st = r2(st);
+    // 🚨 A COLUNA IPI DO LIVRO DE ENTRADAS É IPI **CREDITADO** — em quem não se
+    // credita ela sai ZERADA, e o valor vai DITO como custo. Nenhum total muda:
+    // o IPI já está dentro de Outras (o contábil da nota o inclui, e o `resto`
+    // abaixo o joga lá). O que muda é o livro parar de afirmar crédito.
+    const ipiCusto = semCreditoIpi ? ipi : 0;
+    if (semCreditoIpi) ipi = 0;
     // Fecha no contábil: IPI/frete/seguro/despesas/ST entram em OUTRAS.
     const resto = r2(contabilAlvo - (base + isentos + outras));
     if (resto > 0) outras = r2(outras + resto);
@@ -673,7 +701,7 @@ export function alocarTributacaoIcms(
         if (abate > 0) base = r2(Math.max(0, base - abate));
     }
     const aliquota = base > 0 && icms > 0 ? (icms / base) * 100 : 0;
-    return { base, icms, aliquota, isentos, outras, ipi };
+    return { base, icms, aliquota, isentos, outras, ipi, ipiCusto, st };
 }
 
 function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = '') {
@@ -856,6 +884,9 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'ICMS SUBST. TRIB.': 0,
             'BASE SUBST. TRIB.': 0,
             'BC IPI': 0,
+            // 🚨 IPI **CREDITADO** — zero em optante do Simples (09/09). O
+            // valor destacado continua no E222, que descreve o DOCUMENTO; o
+            // E201 é a ESCRITURAÇÃO, e ali o Simples não credita IPI.
             'VALOR DO IPI': a.ipi,
             'ISENTOS DE IPI': 0,
             'OUTRAS DE IPI': 0,

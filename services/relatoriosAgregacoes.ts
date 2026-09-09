@@ -149,7 +149,12 @@ export interface LinhaCfop {
     icms: number;
     isentos: number;
     outras: number;
+    /** IPI **creditado** (zero em quem não se credita — a coluna é de crédito). */
     ipi: number;
+    /** IPI destacado que virou CUSTO, já dentro de Outras. Informativo. */
+    ipiCusto: number;
+    /** ICMS-ST retido pelo fornecedor: nunca é crédito, já está em Outras. */
+    st: number;
 }
 
 /**
@@ -196,7 +201,8 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             const k = `${direcaoDoc(d)}|${cfop}`;
             const linha = mapa.get(k) || {
                 cfop, direcao: direcaoDoc(d),
-                notas: 0, itens: 0, contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0,
+                notas: 0, itens: 0, contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0,
+                ipi: 0, ipiCusto: 0, st: 0,
             };
             linha.notas += 1;
             linha.itens += its.length;
@@ -206,6 +212,8 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             linha.isentos = r2(linha.isentos + a.isentos);
             linha.outras = r2(linha.outras + a.outras);
             linha.ipi = r2(linha.ipi + a.ipi);
+            linha.ipiCusto = r2(linha.ipiCusto + a.ipiCusto);
+            linha.st = r2(linha.st + a.st);
             mapa.set(k, linha);
         });
     }

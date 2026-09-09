@@ -41,6 +41,44 @@
  * analogia seria inventar régua sem caso.
  */
 
+/**
+ * ═══ E O IPI E O ICMS ST VINHAM PELO MESMO BURACO ═══════════════════════════
+ *
+ * Paulo, no mesmo dia, com o livro já sem a base e o ICMS: *"deu certo, excluiu
+ * a BASE e o ICMS, mas está puxando esses valores de IPI"*, e a pergunta que
+ * nomeia a incoerência: *"**Se é só para questão de informativo porque ele puxa
+ * IPI e não puxa ICMS ST?** Estamos pensando no CONTÁBIL, porque eles vão ver
+ * esses valores lá, **vão achar que é crédito**. Antigamente no Folhamatic esses
+ * 2 impostos entravam direto como **custo** (pq a empresa não se credita)"*. E,
+ * ao ser perguntado se a empresa de fato tem IPI: *"Tem sim, para o SIMPLES
+ * mesmo esquema do ICMS"*.
+ *
+ * 📖 A MEDIÇÃO ESTAVA NO PRINT: MV LIDER · 08/2026 · **IPI 705,80** na coluna
+ * do Livro de Entradas, com a NF 21.040 da SW MATERIAIS ELETRICOS trazendo
+ * **IPI 700,14** e **ICMS ST 132,40**.
+ *
+ * 🔴 SÃO DOIS DEFEITOS DIFERENTES, e a pergunta dele separa os dois:
+ *   · **o IPI tinha COLUNA** — e coluna de IPI no Livro de Entradas é IPI
+ *     CREDITADO. Numa optante aquilo é a MESMA afirmação falsa que a base e o
+ *     ICMS faziam até de manhã: **o Simples não se credita de IPI** (LC
+ *     123/2006 art. 13, II põe o IPI dentro do recolhimento único, e o art. 23
+ *     veda a apropriação). Ele é CUSTO.
+ *   · **o ICMS ST não tinha coluna nenhuma** — e ele **nunca é crédito, em
+ *     regime nenhum**: é imposto já recolhido nas etapas seguintes, custo da
+ *     mercadoria. Não aparecer não é neutro: é a pergunta *"cadê?"* que o dono
+ *     fez, e o valor fica invisível dentro de Outras sem ninguém saber.
+ *
+ * ⚠️ E OS DOIS JÁ ESTAVAM EM **OUTRAS**: o valor contábil da nota inclui IPI e
+ * ST, e a alocação joga o resto em Outras. Ou seja **nenhum número muda de
+ * total** — o que muda é o livro parar de AFIRMAR crédito de IPI e passar a
+ * NOMEAR os dois como custo. Foi exatamente isso que o Folhamatic fazia.
+ *
+ * ⚠️ **FORA DO SIMPLES NADA MUDA NO IPI, e isso é decisão**: quem se credita de
+ * IPI é o contribuinte do imposto (RIPI, Dec. 7.212/2010), e ligar essa régua
+ * sem caso real mudaria o livro de todo comércio do Lucro por analogia. O caso
+ * real é o Simples, e é só ele que entra.
+ */
+
 /** Regimes em que a entrada NÃO dá direito a crédito de ICMS. */
 const SEM_CREDITO_ICMS = new Set(['SIMPLES']);
 
@@ -84,6 +122,59 @@ export function entradaGeraCreditoIcms({ regime, direcao } = {}) {
 }
 
 /**
+ * Responde se a ENTRADA gera crédito de IPI para quem escritura.
+ *
+ * Mesma forma da irmã do ICMS, e de propósito: as duas respondem sobre a MESMA
+ * nota, e um `if` de tela para uma delas seria a divergência de sempre.
+ *
+ * ⚠️ Só o SIMPLES entra. Fora dele, quem se credita de IPI é o contribuinte do
+ * imposto — régua que existe no cadastro (`contribuinteIpi`) e que decide o
+ * E500/E520 do SPED. Ligá-la aqui sem caso real mudaria o livro de todo
+ * comércio do Lucro por analogia, que é o que esta casa não faz.
+ *
+ * @param {{regime?: string, direcao?: string}} ctx
+ * @returns {{credita: boolean, motivo: string|null, baseLegal: string|null}}
+ */
+export function entradaGeraCreditoIpi({ regime, direcao } = {}) {
+    if (String(direcao || '') === 'saida') {
+        return { credita: true, motivo: null, baseLegal: null };
+    }
+    const r = String(regime || '').trim().toUpperCase();
+    // AUSÊNCIA NÃO É PROVA — mesma política da irmã.
+    if (!r) return { credita: true, motivo: null, baseLegal: null };
+    if (SEM_CREDITO_ICMS.has(r)) {
+        return {
+            credita: false,
+            motivo: 'optante do Simples Nacional não se credita de IPI — '
+                + 'ele é CUSTO da mercadoria e já está dentro da coluna Outras',
+            baseLegal: 'LC 123/2006, art. 13, II e art. 23',
+        };
+    }
+    return { credita: true, motivo: null, baseLegal: null };
+}
+
+/**
+ * O ICMS-ST retido pelo fornecedor NUNCA é crédito de quem recebe.
+ *
+ * Não há parâmetro de regime porque não há exceção: o ST é imposto já recolhido
+ * por substituição, e para o adquirente ele é CUSTO da mercadoria em qualquer
+ * regime. Ela existe para o livro poder DIZER isso — a pergunta do Paulo
+ * (*"por que puxa IPI e não puxa ICMS ST?"*) é sobre o valor estar invisível,
+ * não sobre ele ser creditável.
+ *
+ * (Ressarcimento de ST em venda interestadual existe, mas é pedido PRÓPRIO, com
+ * trilho próprio — nunca crédito no livro de entradas.)
+ */
+export function ICMS_ST_NAO_E_CREDITO() {
+    return {
+        credita: false,
+        motivo: 'o ICMS-ST retido pelo fornecedor não é crédito de quem recebe — '
+            + 'é imposto já recolhido por substituição, e entra como CUSTO da mercadoria',
+        baseLegal: 'RICMS/SP, art. 268 e seguintes',
+    };
+}
+
+/**
  * O que o CST informado NA NOTA (`cstEscriturado`) faz com a coluna.
  *
  * O campo existe desde 19/08 e chegava só ao SPED (C170/C190) — o LIVRO nunca
@@ -107,4 +198,4 @@ export function colunaDoCstInformado(cst) {
     return null;
 }
 
-export default { entradaGeraCreditoIcms, colunaDoCstInformado };
+export default { entradaGeraCreditoIcms, entradaGeraCreditoIpi, ICMS_ST_NAO_E_CREDITO, colunaDoCstInformado };
