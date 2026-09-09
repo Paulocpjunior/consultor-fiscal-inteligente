@@ -5,6 +5,73 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O LIVRO CREDITAVA ICMS DE OPTANTE DO SIMPLES — e o campo que tiraria o
+  crédito não chegava nele** (09/09, Paulo fechando a MV LIDER, comércio do
+  SIMPLES · 08/2026: *"Como faço para editar esses CFOPs que sobem com base e
+  ICMS destacados? Poderia ter uma opção igual essa das retenções, senão a
+  escrituração fica errada"*).
+  📖 **O QUE O PRINT PROVA, item a item**: NF 634934 da FERA ATAC — três itens
+  CFOP **5405 / CST 60** (ST já recolhida, ICMS 0,00) e UM item **5102 / CST
+  00** com **BC 112,25 · ICMS 20,21**, com *"ICMS RECOLHIDO ANTECIPADAMENTE POR
+  SUBSTITUICAO TRIBUTARIA"* nas informações adicionais. O Livro de Entradas
+  somava **Base 14.773,62 · ICMS 2.623,17** na competência.
+  🔴 **A CAUSA É A DE SEMPRE — O DOCUMENTO É DO FORNECEDOR.** `vICMS` é o
+  destaque da operação de quem VENDEU, e `alocarTributacaoIcms` creditava
+  sempre que o item o trazia. **Optante do Simples não se credita de ICMS**
+  (LC 123/2006 art. 23): no livro dele aquilo é **Outras**. É a TERCEIRA
+  instância da classe — o CST de PIS/COFINS da entrada (20/08, PWR: *"na
+  entrada quem decide é o REGIME de quem escritura"*) e o CST 00→90 do caso
+  KALUNGA (18/08) — agora na COLUNA do livro. ⚠️ **E o PVA/E-Fiscal ACEITA**:
+  as três colunas fecham no contábil; quem vê o erro é a fiscalização.
+  🔴 **E A SEGUNDA METADE É PIOR: o campo que resolveria não chegava lá.** O
+  `cstEscriturado` existe desde 19/08 e valia no **C170/C190** e **não no
+  LIVRO** — `alocarTributacaoIcms(itens, contábil)` recebia **só os ITENS**,
+  então não conhecia nem o documento nem quem escritura. Informar o CST não
+  tirava o crédito da tela em que a pessoa estava olhando: a **"régua que só
+  escreve"**, na família do cérebro do CFOP que só chegava a uma aba (07/09).
+  ✂️ `credito-icms-entrada.js` (PURO) responde as DUAS perguntas —
+  `entradaGeraCreditoIcms` (regime) e `colunaDoCstInformado` (o que a pessoa
+  informou) — e `ctxAlocacaoDoDoc` é o **dono único do contexto**, lido pelos
+  TRÊS leitores das colunas (Livro, Resumo por CFOP, Exportar SAGE). O `ctx`
+  é **obrigatório, sem default**: parâmetro que dá para esquecer volta a
+  creditar em silêncio, e o número fica plausível. O `tsc` provou a lista —
+  só o teste antigo ficou vermelho, os três consumidores foram corrigidos.
+  ⚠️ **PRECEDÊNCIA: o que a PESSOA informou > o REGIME > o destaque do
+  documento.** CST 00 informado mantém o crédito — o campo não é só "tirar".
+  ⚠️ **AUSÊNCIA NÃO É PROVA**: regime desconhecido mantém o comportamento
+  antigo. Tirar crédito de quem talvez tenha direito é o erro caro, e quem
+  cobra o cadastro em branco é o farol de cadastro.
+  ⚠️ **ISENTA NÃO VIRA OUTRAS**: CST 40/41/50 fica na coluna Isentas mesmo no
+  Simples — trocar a coluna por causa do regime apagaria o fato que o CST
+  declara. E a **SAÍDA fica fora, declarado**: ali o destaque é DÉBITO, outro
+  fato; mexer nela por analogia seria inventar régua sem caso.
+  ⚠️ **E O NÚMERO VAI DITO na tela e no PDF**, com a base legal: sem isso quem
+  comparasse com o livro do E-Fiscal veria Base e ICMS zerados e concluiria
+  que faltou captura — justamente quando o certo é não creditar.
+  🚪 **E O CAMPO GANHOU A PORTA ONDE A DÚVIDA NASCE**: **✏️ Informar CFOP e CST
+  desta nota** no detalhe do documento, ao lado do ✍️ retenção — que foi o
+  pedido literal (*"igual essa das retenções"*). Os dois serviços existiam
+  desde 17-19/08 e moravam SÓ em Relatórios → ✏️ CFOP por nota: é a lição de
+  18/08 outra vez — **a tela existia, funcionava, e a única pessoa que sabia
+  onde era, era eu**. A decisão continua por NOTA (Paulo, 17/08: *"é por
+  NF"*), e a tela DIZ quantos CFOPs a nota tem ANTES do clique.
+  🐛 **E A TRAVA DO `.d.ts` MORDEU A MINHA PRÓPRIA PROSA**: ao criar o
+  `regime-tributario.d.ts` os `@ts-ignore` do teste antigo viraram silêncio
+  inútil (a trava fez o trabalho dela) — e, ao explicar isso num comentário,
+  a varredura casou a **MENÇÃO** ao `@ts-ignore` e mandou apagar a explicação
+  para o teste passar. Ela passou a exigir a **DIRETIVA** (o comentário tem de
+  COMEÇAR com ela, que é a única forma que o TypeScript silencia). É a mordida
+  do ISS (22/08) dentro da trava; provada nos dois sentidos.
+  📌 **REGRA QUE FICA: função que decide COLUNA de livro fiscal precisa
+  conhecer QUEM ESCRITURA — o item sozinho só sabe o que o fornecedor fez.**
+  E campo de decisão humana que não chega a TODOS os leitores é meia entrega:
+  a lista de leitores se MEDE no mesmo PR, senão o livro diz uma coisa e o
+  `.FML` diz outra, e a divergência aparece meses depois.
+  🚩 **O QUE ISTO NÃO ALCANÇA, e vai dito**: o **SPED Fiscal** (C170/C190) tem
+  alocação PRÓPRIA (`sped-fiscal-blocoC.js`) e não passou por aqui — optante
+  do Simples em SP não entrega EFD ICMS/IPI, então não havia caso; ligar sem
+  caso seria mexer em valor de arquivo por analogia.
+
 - **🛠️ O R-2020 NASCEU NAS DUAS CASAS — e nasceu do XML ACEITO, não do R-2010
   espelhado de memória** (08/09, Paulo: *"preciso gerar a REINF de INSS de
   serviços prestados e não está habilitado, pode liberar"*, com o print do

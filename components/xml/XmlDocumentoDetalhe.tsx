@@ -16,6 +16,15 @@ import {
 } from '../../services/retencaoAjusteService';
 import { chaveDoAjuste, MIN_MOTIVO } from '../../sefaz-backend/retencao-pj-ajuste.js';
 import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitado';
+// 🚨 A PORTA PARA O CFOP/CST QUE SOBEM COM BASE E ICMS DESTACADOS (09/09,
+// Paulo, MV LIDER — comércio do SIMPLES: *"como faço para editar esses CFOPs
+// que sobem com base e ICMS destacados? Poderia ter uma opção igual essa das
+// retenções"*). Os dois campos existem desde 17-19/08 e moravam SÓ em
+// Relatórios → ✏️ CFOP por nota — a tela existia e ninguém achava.
+import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
+import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
+import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { cfopsDistintosDaNota } from '../../sefaz-backend/cfop-correlacao.js';
 
 interface Props {
     documento: DocumentoFiscal;
@@ -45,7 +54,48 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     // — que "não ficou salvo" (04/09, FRONTINI, notas 794 e 795).
     const [ajusteAtual, setAjusteAtual] = useState<any | null>(null);
     const [erroLerAjuste, setErroLerAjuste] = useState<string | null>(null);
+    // ── CFOP e CST informados NESTA nota (Paulo, 09/09) ─────────────────────
+    const [abrirEscr, setAbrirEscr] = useState(false);
+    const [cfopIn, setCfopIn] = useState('');
+    const [cstIn, setCstIn] = useState('');
+    const [gravandoEscr, setGravandoEscr] = useState(false);
+    const [erroEscr, setErroEscr] = useState<string | null>(null);
+    const [okEscr, setOkEscr] = useState<string | null>(null);
     const jaRetirada = explicarRetirada(d as any);
+
+    // Só documento de MERCADORIA tem CFOP/CST de item — na NFS-e o campo não
+    // existe, e oferecê-lo ali prometeria o que a tela não cumpre.
+    const ehMercadoria = ['NFe', 'NFCe'].includes(String((d as any).tipoDoc || d.tipo));
+    const direcaoDoDoc = direcaoEfetivaDoc(d as any) as 'entrada' | 'saida';
+    const cfopEscriturado = String((d as any).cfopEscriturado || '');
+    const cstEscriturado = String((d as any).cstEscriturado || '');
+    // ⚠️ A decisão é por NOTA (Paulo, 17/08: "é por NF"), então nota com itens
+    // de CFOPs diferentes passa a sair com UM só. A tela DIZ isso ANTES do
+    // clique, em vez de o total mudar sozinho depois.
+    const cfopsDaNota: string[] = ehMercadoria
+        ? (cfopsDistintosDaNota(d as any, direcaoDoDoc, {}) as string[]) || []
+        : [];
+
+    const gravarEscr = async (limpar = false) => {
+        setGravandoEscr(true); setErroEscr(null); setOkEscr(null);
+        try {
+            const email = String(currentUser?.email || '');
+            const alvo = { documentoId: d.id, porEmail: email };
+            await gravarCfopEscriturado({ ...alvo, direcao: direcaoDoDoc, cfop: limpar ? '' : cfopIn });
+            await gravarCstEscriturado({ ...alvo, cst: limpar ? '' : cstIn });
+            setOkEscr(limpar
+                ? 'Nota devolvida à régua automática.'
+                : 'Informado. Vale no Livro, no Resumo por CFOP, no SPED e no Exportar SAGE — '
+                  + 'gere os relatórios de novo.');
+            onShowToast?.(`Escrituração da nota ${d.numero} informada.`);
+            setAbrirEscr(false);
+            onRetirado?.();
+        } catch (e: any) {
+            setErroEscr(e?.message || 'Falha ao gravar.');
+        } finally {
+            setGravandoEscr(false);
+        }
+    };
 
     const tirar = async () => {
         setTirando(true); setErroRetirada(null);
@@ -407,6 +457,130 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                 </button>
                                 <button
                                     onClick={() => { setAbrirRet(false); setErroRet(null); }}
+                                    className="text-xs underline text-slate-500 btn-press">cancelar</button>
+                            </div>
+                        </div>
+                    )
+                )}
+
+                {/* ═══ CFOP E CST DESTA NOTA ═════════════════════════════════
+                    09/09, Paulo, MV LIDER (comércio do SIMPLES): *"como faço
+                    para editar esses CFOPs que sobem com base e ICMS
+                    destacados? Poderia ter uma opção igual essa das retenções,
+                    senão a escrituração fica errada"*.
+
+                    Os dois campos existem desde 17-19/08 e moravam SÓ em
+                    Relatórios → ✏️ CFOP por nota: quem está olhando a nota não
+                    tinha como chegar neles. É a lição de 18/08 outra vez — a
+                    tela existia, funcionava, e a única pessoa que sabia onde
+                    era, era eu. */}
+                {!jaRetirada && ehMercadoria && (
+                    !abrirEscr ? (
+                        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                            <button
+                                onClick={() => {
+                                    setCfopIn(cfopEscriturado);
+                                    setCstIn(cstEscriturado);
+                                    setAbrirEscr(true);
+                                }}
+                                className="text-xs rounded-md border border-indigo-300 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 btn-press whitespace-nowrap"
+                                title="O CFOP e o CST com que ESTA nota entra no livro. O XML de uma compra traz o CFOP do FORNECEDOR."
+                            >
+                                ✏️ Informar CFOP e CST desta nota
+                            </button>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                {direcaoDoDoc === 'entrada'
+                                    ? <>Numa compra o documento é do <strong>fornecedor</strong> e traz o CFOP de saída dele — quem escritura a entrada lança 1xxx/2xxx.</>
+                                    : <>Na saída o documento é seu: o CFOP informado aqui vence a régua automática.</>}
+                            </p>
+                            {(cfopEscriturado || cstEscriturado) && (
+                                <div className="mt-2 rounded-md border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-2">
+                                    <p className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
+                                        ✏️ Escrituração INFORMADA nesta nota — vence a régua automática
+                                    </p>
+                                    <p className="text-[11px] text-indigo-800 dark:text-indigo-300 mt-0.5">
+                                        {cfopEscriturado ? `CFOP ${cfopEscriturado}` : 'CFOP pela régua'}
+                                        {' · '}
+                                        {cstEscriturado ? `CST ${cstEscriturado}` : 'CST pela régua'}
+                                    </p>
+                                    <p className="text-[10px] text-indigo-700 dark:text-indigo-400 mt-0.5">
+                                        por {(d as any).cfopEscrituradoPor || (d as any).cstEscrituradoPor || 'autor não informado'}
+                                    </p>
+                                </div>
+                            )}
+                            {okEscr && <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">✓ {okEscr}</p>}
+                        </div>
+                    ) : (
+                        <div className="mt-3 rounded-md border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-3">
+                            <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">
+                                Escrituração da nota {d.numero} · {direcaoDoDoc === 'entrada' ? 'entrada' : 'saída'}
+                            </p>
+                            {/* A decisão é por NOTA: nota com CFOPs diferentes entre os
+                                itens passa a sair com UM só, e isso vai DITO antes do
+                                clique — total que muda sozinho faz desconfiar do número
+                                certo (a lição do ✕ do FUNRURAL, 30/08). */}
+                            {cfopsDaNota.length > 1 && (
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                                    ⚠ Esta nota tem <strong>{cfopsDaNota.length} CFOPs</strong> pela régua
+                                    ({cfopsDaNota.join(' · ')}). O informado vale para <strong>todos os itens</strong>.
+                                </p>
+                            )}
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-indigo-800 dark:text-indigo-300">CFOP</label>
+                                    <input
+                                        value={cfopIn}
+                                        onChange={e => setCfopIn(e.target.value)}
+                                        placeholder="—"
+                                        inputMode="numeric"
+                                        className="mt-0.5 w-full rounded border border-indigo-300 bg-white dark:bg-slate-800 p-1.5 text-xs"
+                                    />
+                                    <p className="text-[10px] text-slate-500 mt-0.5">
+                                        4 dígitos, faixa {direcaoDoDoc === 'entrada' ? '1/2/3' : '5/6/7'}. Vazio = régua automática.
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-indigo-800 dark:text-indigo-300">CST (tributação)</label>
+                                    <input
+                                        value={cstIn}
+                                        onChange={e => setCstIn(e.target.value)}
+                                        placeholder="—"
+                                        inputMode="numeric"
+                                        className="mt-0.5 w-full rounded border border-indigo-300 bg-white dark:bg-slate-800 p-1.5 text-xs"
+                                    />
+                                    {/* A ORIGEM (1º dígito) é fato da MERCADORIA e continua
+                                        vindo do item: gravar "090" cru faria produto
+                                        IMPORTADO virar NACIONAL dentro do SPED. */}
+                                    <p className="text-[10px] text-slate-500 mt-0.5">
+                                        2 dígitos (00 · 40 · 60 · 90…). A <strong>origem</strong> continua vindo do item.
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-indigo-700 dark:text-indigo-400 mt-2">
+                                Vale no Livro, no Resumo por CFOP, no SPED e no Exportar SAGE — as quatro
+                                telas leem a mesma régua, então elas não divergem.
+                            </p>
+                            {erroEscr && (
+                                <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroEscr}</p>
+                            )}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={() => gravarEscr(false)}
+                                    disabled={gravandoEscr}
+                                    className="text-xs rounded-md bg-indigo-700 text-white px-3 py-1.5 font-bold disabled:opacity-50 btn-press whitespace-nowrap"
+                                >
+                                    {gravandoEscr ? 'gravando…' : '✏️ Gravar escrituração'}
+                                </button>
+                                <button
+                                    onClick={() => gravarEscr(true)}
+                                    disabled={gravandoEscr}
+                                    className="text-xs underline text-slate-600 dark:text-slate-300 btn-press whitespace-nowrap"
+                                    title="Devolve a nota à régua automática (CFOP correlacionado e CST derivado)."
+                                >
+                                    ↩ voltar à régua automática
+                                </button>
+                                <button
+                                    onClick={() => { setAbrirEscr(false); setErroEscr(null); }}
                                     className="text-xs underline text-slate-500 btn-press">cancelar</button>
                             </div>
                         </div>

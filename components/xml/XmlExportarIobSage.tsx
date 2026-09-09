@@ -11,6 +11,7 @@ import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import { resolverNaturezaAtividade } from '../../sefaz-backend/cfop-correlacao.js';
+import { regimeDaEmpresa } from '../../sefaz-backend/regime-tributario.js';
 import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../../services/iobSageLogEfiscal';
 import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
 import { ufValida } from '../../services/ufsBrasil';
@@ -176,6 +177,15 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     naturezaAtividade: nat.natureza,
                     cfopOverrides: df?.cfopOverrides,
                     parametrosCfop: parametros.filter(p => p.ativo !== false),
+                    // Optante do Simples não se credita de ICMS (LC 123 art.
+                    // 23): sem isto o `.FML` mandava base + imposto creditado
+                    // ao E-Fiscal, e o livro dele saía com crédito que não
+                    // existe (09/09, MV LIDER).
+                    regimeTributario: (regimeDaEmpresa({
+                        dadosFiscais: df || {},
+                        colecao: empresaSelecionada.fonte === 'simples'
+                            ? 'simples_empresas' : 'lucro_empresas',
+                    }) as { regime: string }).regime,
                 });
                 const cod = String(df?.codigoParticipanteConsumidor || '');
                 setCodigoConsumidor(cod);
