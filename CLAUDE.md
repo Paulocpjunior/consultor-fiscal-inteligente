@@ -5,6 +5,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✍️ O AJUSTE DECLARADO CHEGOU AO R-2010 — a lacuna que ficou NOMEADA no
+  mesmo dia** (09/09, Paulo: *"corrige o r-2010 também"*). Horas antes, ao
+  fechar o IRRF do R-4020, ficou escrito aqui que *"a rota `/servicos-tomados`
+  **não carrega os ajustes** — só o R-4020 e o R-2020 chamam
+  `lerAjustesDeRetencao`, então INSS informado à mão não chega ao R-2010"*, e a
+  correção foi recusada *de carona* porque ligar sem caso real muda VALOR de
+  evento por analogia. **O caso chegou** — e a lacuna nomeada é o que fez ela
+  ser corrigida em minutos em vez de aparecer num cruzamento daqui a meses.
+  🔴 **O CUSTO ERA O DE SEMPRE, e é o pior**: o INSS que o cliente esqueceu de
+  informar é corrigido por DECLARAÇÃO (com autor e motivo, desde 31/08), fica
+  gravado — e o evento saía com o **ZERO do documento**. A Receita **aceita**:
+  a diferença só aparece no cruzamento. É a "régua que só escreve" (04/09) na
+  ponta da LEITURA, e a terceira rota do trio era a única fora.
+  ✂️ O desenho é o do R-2020, campo a campo: o `inss` declarado VENCE o
+  documento, carimbado `inssOrigem: 'ajuste-declarado'` com autor e motivo na
+  linha e na ressalva, `comAjuste` no resumo, e a rota lê os ajustes **ANTES**
+  da montagem.
+  ⚠️ **O AJUSTE É LIDO ANTES DA SELEÇÃO**: nota cujo documento não trouxe INSS
+  mas que alguém DECLAROU tem de entrar — barrá-la antes deixaria o ajuste
+  gravado sem efeito, que é a retenção sumindo.
+  ⚠️ **AJUSTE ZERO SAI DA LISTA CONTADO** ("conferi e não houve" é fato).
+  🚦 **A TRAVA É POR VARREDURA, e ela cobre AS TRÊS ROTAS**: a do R-2010 lê e
+  passa `ajustes`, e nenhuma das três pode ficar para trás — uma que ficasse
+  voltaria a declarar o número do documento em silêncio. Provada revertendo.
+  🔴 **E MEDIR O ESPELHO ACHOU MAIS QUATRO LEITURAS ATRASADAS, no mesmo
+  arquivo**: o R-2010 julgava **espécie** (`/NFSe/i` no rótulo), **cancelamento**
+  (`status` cru) e **direção** (`d.direcao` cru) na mão, e lia **três** formas do
+  bruto onde o R-2020 lê seis. Cada uma dessas já custou um caso nesta casa — o
+  cancelamento por EVENTO não mexe no `status` (11/08), a direção gravada mente
+  na nota própria de entrada (31/07), o rótulo cru perde a NFS-e que chega com
+  outro nome (19/08) e a importada de PDF grava `valores.servicos`/`totais.vProd`
+  e chegava **ZERADA** (08/09, e a Receita recusava o evento inteiro). As quatro
+  passaram aos donos.
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: ela prendia o TEXTO *"o problema
+  é de CAPTURA"* na ressalva de zero prestador — e essa frase afirmava a causa
+  ERRADA. Zero tem DUAS causas com ações opostas: a nota não chegou (captura) ou
+  ela chegou sem o INSS retido, e aí o caminho é o ajuste — que agora existe. É o
+  achado 18 dentro do próprio teste. A intenção (zero NUNCA é sucesso, e a frase
+  diz o que fazer) continua travada.
+  📌 **REGRA QUE FICA: espelho que responde diferente do espelhado é divergência
+  esperando data.** O R-2020 nasceu do R-2010 em 08/09 e já nasceu com quatro
+  leituras melhores; ninguém voltou para trazê-las. Quando um módulo é declarado
+  "o espelho de", a lista do que os separa se MEDE — senão a correção de um
+  envelhece no outro em silêncio.
+
 - **🚨 O IRRF INFORMADO À MÃO NÃO ATRAVESSAVA O TÚNEL DO R-4020 — o dono
   responde CINCO tributos e o outro lado lia TRÊS** (09/09, Paulo, J.N.
   VINATEX · 08/2026: *"estou entregando essa REINF, porém percebi que o IR não

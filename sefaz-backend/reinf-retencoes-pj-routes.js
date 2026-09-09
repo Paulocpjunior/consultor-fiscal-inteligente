@@ -338,6 +338,14 @@ router.post('/retencoes-pj/ajuste', autorizar, express.json({ limit: '256kb' }),
 // REAL com recibo de SUCESSO da Receita (06/2026) — arquivo aceito vale mais
 // que leiaute deduzido. É de lá que veio o achado que manda no módulo: a BASE
 // de retenção NÃO é o valor bruto quando há dedução de material/insumo.
+//
+// 🚨 OS AJUSTES DECLARADOS ENTRAM AQUI (09/09, Paulo: *"corrige o r-2010
+// também"*), e a leitura vem ANTES da montagem: o INSS que o cliente esqueceu
+// de informar é corrigido por declaração, e é ele que o R-2010 tem de honrar.
+// Esta rota era a ÚNICA das três que não os carregava — a lacuna estava NOMEADA
+// no CLAUDE.md desde 09/09, esperando caso real. Falha de leitura NÃO vira "não
+// há ajuste": `lerAjustesDeRetencao` lança, senão o evento sairia com o zero do
+// documento sem ninguém saber.
 // ────────────────────────────────────────────────────────────────────────────
 router.get('/servicos-tomados', autorizar, async (req, res) => {
     try {
@@ -362,7 +370,8 @@ router.get('/servicos-tomados', autorizar, async (req, res) => {
         }
 
         const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
-        const payload = montarPayloadR2010({ cnpjTomador: cnpj, competencia, documentos });
+        const ajustes = await lerAjustesDeRetencao(db, cnpj, competencia);
+        const payload = montarPayloadR2010({ cnpjTomador: cnpj, competencia, documentos, ajustes });
 
         return res.json({
             ok: true,

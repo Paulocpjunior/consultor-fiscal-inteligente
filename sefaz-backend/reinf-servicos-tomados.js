@@ -39,6 +39,40 @@
 //                             MARCADA como derivada, nunca como a base.
 //   fora disso              ⇒ não é a retenção do art. 31 — pendência.
 //
+// ═══ O AJUSTE DECLARADO ENTRA — e ele foi a lacuna NOMEADA por 5 dias ═══════
+//
+// 09/09, Paulo: *"corrige o r-2010 também"*. Em 09/09 ficou escrito no CLAUDE.md
+// que *"a rota `/servicos-tomados` NÃO carrega os ajustes — só o R-4020 e o
+// R-2020 chamam `lerAjustesDeRetencao`. Então INSS informado à mão não chega ao
+// R-2010"*, e a lacuna foi deixada nomeada de propósito, para não ligar régua
+// sem caso real. O caso chegou.
+//
+// O ajuste declarado (`reinf_retencoes_ajustadas`, com autor e motivo desde
+// 31/08) tem campo `inss`, e aqui ele é honrado: **a declaração vence o
+// documento**, carimbada como `ajuste-declarado`, nunca apresentada como lida.
+// Sem este leitor, INSS informado à mão ficava gravado e o evento saía com o
+// ZERO do documento — a "régua que só escreve" (04/09) pela enésima vez, e num
+// evento que a Receita ACEITA declarando retenção a MENOS.
+//
+// ⚠️ E O AJUSTE É LIDO ANTES DA SELEÇÃO: nota cujo documento não trouxe INSS mas
+// que alguém DECLAROU tem de entrar. Barrá-la antes deixaria o ajuste gravado
+// sem efeito — a flag que ninguém lê na pior forma (a retenção some).
+//
+// ⚠️ AJUSTE ZERO SAI DA LISTA CONTADO: "conferi e não houve" é um fato, e cai no
+// mesmo balde de quem não tem retenção.
+//
+// ═══ E AS TRÊS LEITURAS CRUAS FORAM MEDIDAS NO MESMO PR ═════════════════════
+//
+// Este módulo julgava espécie (`/NFSe/i` no rótulo), cancelamento (`status`) e
+// direção (`d.direcao`) na mão, enquanto o R-2020 — o espelho dele — já
+// delegava aos donos. Cada uma dessas três já custou um caso nesta casa: o
+// cancelamento por EVENTO não mexe no `status` (11/08), a direção gravada mente
+// na nota própria de entrada (31/07) e o rótulo cru perde a NFS-e que chega com
+// outro nome (19/08). E o BRUTO lia três formas onde o R-2020 lê seis — a
+// importada de PDF grava `valores.servicos`/`totais.vProd` e chegava ZERADA
+// (08/09). Espelho que responde diferente do espelhado é a divergência que
+// aparece meses depois.
+//
 // ═══ O QUE ESTA CASCA SE RECUSA A INVENTAR ══════════════════════════════════
 //
 // `tpServico` e `indObra` NÃO estão no documento — nenhum dos dois. São da
@@ -51,7 +85,9 @@
 // 🚨 A data do fato gerador atravessa o túnel na forma que o leiaute aceita
 // (`AAAA-MM-DD`) — o `dhEmi` chega em TRÊS formas neste app, e mandar o texto
 // cru foi o que fez o R-4020 ser recusado do outro lado (02/09).
-import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+import { dataDeclaradaDoDocumento, direcaoEfetivaDoc, docCancelado } from './xml-metadata-helper.js';
+import { ehNotaDeServico } from './sped-selecao-documentos.js';
+import { chaveDoAjuste } from './retencao-pj-ajuste.js';
 
 const num = (v) => {
     if (v === undefined || v === null || v === '') return undefined;
@@ -61,8 +97,6 @@ const num = (v) => {
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const texto = (v) => String(v ?? '').trim();
-
-const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
 
 /** Primeiro valor numérico de verdade. Ausente ≠ zero. */
 const primeiro = (...cands) => {
@@ -174,14 +208,30 @@ export function conferirBaseRetencaoInss({ bruto, retido } = {}) {
 /**
  * Uma NFS-e tomada com INSS retido → uma linha do R-2010.
  *
- * Lê as DUAS formas do documento (achatada do portal de SP e objeto do XML) —
- * é exatamente o que o outro app não teria como saber, e é a armadilha que já
- * mordeu oito vezes neste repo.
+ * Lê as formas do documento que o CFI conhece (achatada do portal de SP, objeto
+ * do XML, e as do importador de PDF) — é o serviço que este túnel presta, e a
+ * armadilha que já mordeu dez vezes neste repo.
+ *
+ * @param {object} d        o documento
+ * @param {object} [ajuste] o ajuste declarado desta nota, se houver
  */
-export function normalizarServicoTomado(d) {
+export function normalizarServicoTomado(d, ajuste) {
     const v = d?.valores || {};
-    const bruto = primeiro(d?.valorServicos, v.valorServicos, d?.valorTotal);
-    const retido = primeiro(d?.valorInss, v.inss);
+    // As MESMAS formas do bruto que o R-4020 e o R-2020 leem (08/09: a NFS-e
+    // importada de PDF grava `valores.servicos` e `totais.vProd`, e chegava
+    // com BRUTO 0,00 — a Receita recusava o evento inteiro).
+    const bruto = primeiro(
+        d?.valorServicos, v.valorServicos, v.servicos,
+        d?.totais?.vServ, d?.totais?.vProd, d?.valorTotal,
+    );
+    const doDocumento = primeiro(d?.valorInss, v.inss);
+
+    // 🚨 A DECLARAÇÃO VENCE O DOCUMENTO — e sai carimbada.
+    const inssDeclarado = num(ajuste?.inss);
+    const retido = inssDeclarado !== undefined ? inssDeclarado : doDocumento;
+    const inssOrigem = inssDeclarado !== undefined ? 'ajuste-declarado'
+        : (doDocumento !== undefined ? 'documento' : null);
+
     const conferencia = conferirBaseRetencaoInss({ bruto, retido });
 
     return {
@@ -201,9 +251,13 @@ export function normalizarServicoTomado(d) {
         tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.tomador?.cnpjCpf || d?.tomador?.cnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
 
         vlrBruto: bruto === undefined ? null : r2(bruto),
-        // O que a NOTA diz que foi retido. Nome honesto: é retenção previdenciária
-        // informada no documento, não "vlrRetencao do leiaute já conferido".
+        // O que foi RETIDO desta nota: do documento, ou da declaração. Nome
+        // honesto: não é "vlrRetencao do leiaute já conferido".
         inssRetido: retido === undefined ? null : r2(retido),
+        inssOrigem,
+        ajuste: inssDeclarado !== undefined
+            ? { autor: texto(ajuste?.autor) || null, motivo: texto(ajuste?.motivo) || null, em: texto(ajuste?.em) || null }
+            : null,
 
         // ── O que a assinatura de alíquota PROVA (ou recusa a afirmar) ──────
         baseRetencao: conferencia.base,
@@ -237,29 +291,41 @@ export function normalizarServicoTomado(d) {
  * @param {string} p.cnpjTomador  o cliente que declara
  * @param {string} p.competencia  'AAAA-MM'
  * @param {Array}  p.documentos   documentos da competência
+ * @param {object} [p.ajustes]    chave da NOTA → ajuste declarado
  */
-export function montarPayloadR2010({ cnpjTomador, competencia, documentos } = {}) {
+export function montarPayloadR2010({ cnpjTomador, competencia, documentos, ajustes = {} } = {}) {
     const alvo = soDigitos(cnpjTomador);
     const porPrestador = new Map();
     let semRetencaoPrevidenciaria = 0;
     let dePessoaFisica = 0;
+    const comAjuste = [];
 
     for (const d of documentos || []) {
-        if (!/NFSe/i.test(texto(d?.tipoDoc || d?.tipo))) continue;
-        if (CANCELADOS.has(texto(d?.status).toLowerCase())) continue;
+        // Espécie, cancelamento e direção vêm dos DONOS — as três leituras
+        // cruas que moravam aqui já custaram um caso cada nesta casa.
+        if (!ehNotaDeServico(d)) continue;
+        if (docCancelado(d)) continue;
         // TOMADAS: o cliente é o tomador, não o prestador.
-        if (d?.direcao !== 'entrada') continue;
+        if (direcaoEfetivaDoc(d) !== 'entrada') continue;
 
-        const n = normalizarServicoTomado(d);
+        const chave = chaveDoAjuste({
+            chave: d?.chave,
+            numero: d?.numero,
+            prestadorCnpj: d?.prestadorCnpj || d?.prestador?.cnpjCpf || d?.prestador?.cnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf,
+        });
+        const n = normalizarServicoTomado(d, chave ? ajustes[chave] : undefined);
         if (alvo && n.tomadorCnpj && n.tomadorCnpj !== alvo) continue;
         // Sem INSS retido não é R-2010. Isso NÃO é ausência de obrigação — a
         // maioria das notas tomadas não tem retenção previdenciária —, então
-        // vira contagem e não pendência.
+        // vira contagem e não pendência. (Zero DECLARADO também cai aqui:
+        // "conferi e não houve" é um fato.)
         if (!n.inssRetido) { semRetencaoPrevidenciaria += 1; continue; }
         // Prestador PESSOA FÍSICA não é R-2010: contribuinte individual entra
         // pelo eSocial. Some da lista é o que faz alguém achar que declarou
         // tudo, então vira contagem.
         if (n.prestadorCnpj.length !== 14) { dePessoaFisica += 1; continue; }
+
+        if (n.inssOrigem === 'ajuste-declarado') comAjuste.push(n);
 
         const acc = porPrestador.get(n.prestadorCnpj) || {
             cnpjPrestador: n.prestadorCnpj,
@@ -275,6 +341,7 @@ export function montarPayloadR2010({ cnpjTomador, competencia, documentos } = {}
             baseCompleta: true,
             vlrTotalRetPrinc: 0,
             comPendencia: 0,
+            comAjuste: 0,
         };
         acc.notas.push(n);
         acc.vlrTotalBruto = r2(acc.vlrTotalBruto + (n.vlrBruto || 0));
@@ -285,6 +352,7 @@ export function montarPayloadR2010({ cnpjTomador, competencia, documentos } = {}
             acc.baseCompleta = false;
         }
         if (n.conferencia.exigeAcao) acc.comPendencia += 1;
+        if (n.inssOrigem === 'ajuste-declarado') acc.comAjuste += 1;
         if (!acc.nome && n.prestadorNome) acc.nome = n.prestadorNome;
         porPrestador.set(n.prestadorCnpj, acc);
     }
@@ -307,15 +375,16 @@ export function montarPayloadR2010({ cnpjTomador, competencia, documentos } = {}
             semRetencaoPrevidenciaria,
             dePessoaFisica,
             comPendencia,
+            comAjuste: comAjuste.length,
             semBaseProvada: prestadores.filter((p) => !p.baseCompleta).length,
             vlrTotalBruto: r2(prestadores.reduce((t, p) => t + p.vlrTotalBruto, 0)),
             vlrTotalRetPrinc: r2(prestadores.reduce((t, p) => t + p.vlrTotalRetPrinc, 0)),
         },
-        ressalvas: ressalvasDoPayload({ prestadores, dePessoaFisica }),
+        ressalvas: ressalvasDoPayload({ prestadores, dePessoaFisica, comAjuste }),
     };
 }
 
-function ressalvasDoPayload({ prestadores, dePessoaFisica }) {
+function ressalvasDoPayload({ prestadores, dePessoaFisica, comAjuste = [] }) {
     const out = [
         'O `tpServico` (tabela 06 da EFD-Reinf, 9 dígitos) e o `indObra` vão NULOS: nenhum dos dois está '
         + 'na NFS-e — nem no XML, nem no export do portal. São informados UMA VEZ por prestador do lado '
@@ -338,15 +407,28 @@ function ressalvasDoPayload({ prestadores, dePessoaFisica }) {
             + 'leituras: desoneração da folha (CPRB) ou 11% sobre base muito deduzida. O app não escolhe: '
             + 'são `indCPRB` diferentes, e errar esse campo declara outra coisa.');
     }
+    if (comAjuste.length) {
+        // O número que vem de DECLARAÇÃO HUMANA sai DITO, com a nota e quem
+        // declarou — quem conferir daqui a três meses precisa saber que aquele
+        // número não saiu do documento.
+        out.push(`✍️ ${comAjuste.length} nota(s) com o INSS retido INFORMADO À MÃO (ajuste declarado, vence o `
+            + `documento): ${comAjuste.map((n) => `nº ${n.numero || '—'} (${n.ajuste?.autor || 'autor não gravado'})`).join(', ')}. `
+            + 'O valor declarado é o que vai ao evento — o documento continua gravado como chegou.');
+    }
     if (dePessoaFisica) {
         out.push(`${dePessoaFisica} nota(s) com prestador PESSOA FÍSICA ficaram de fora — contribuinte `
             + 'individual entra pelo eSocial, não pelo R-2010.');
     }
     if (!prestadores.length) {
-        // Zero nunca é sucesso: pode ser mês sem retenção OU captura faltando.
+        // Zero nunca é sucesso: pode ser mês sem retenção, captura faltando OU
+        // nota que chegou sem a retenção informada. ⚠️ Dizer só "é de CAPTURA"
+        // manda procurar no lugar errado quando o documento está aqui e o que
+        // falta é o número (o achado 18, 21/08).
         out.push('NENHUMA nota tomada com retenção previdenciária nesta competência. Se o cliente contrata '
-            + 'cessão de mão de obra ou empreitada (limpeza, vigilância, conservação), o problema é de '
-            + 'CAPTURA — não é ausência de obrigação.');
+            + 'cessão de mão de obra ou empreitada (limpeza, vigilância, conservação, construção), há dois '
+            + 'caminhos: a nota não foi capturada (é CAPTURA) ou ela chegou sem o INSS retido — e aí o '
+            + 'caminho é informar a retenção na própria nota (✍️ ajuste declarado, em Relatórios → '
+            + 'Retenções). Não é ausência de obrigação.');
     }
     return out;
 }
