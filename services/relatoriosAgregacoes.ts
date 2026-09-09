@@ -8,7 +8,7 @@ import { federaisDoRelatorio } from '../sefaz-backend/federais-relatorio.js';
  * a MESMA alocação do Exportar SAGE e do Livro. Relatório nunca inventa conta.
  */
 import type { DocumentoFiscal } from '../types';
-import { alocarTributacaoIcms } from './iobSageExportService';
+import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from './iobSageExportService';
 // RÉGUA ÚNICA das duas formas de gravação: captura SEFAZ/portal grava
 // ACHATADO (cnpjEmit) e importação de XML grava OBJETO (emitente.cnpjCpf).
 // Ler só o objeto zerava TUDO que depende de "a empresa é a emitente" — foi
@@ -131,6 +131,12 @@ export interface CtxCorrelacao {
     /** 🧠 Parâmetros do cérebro (por fornecedor) — sem eles o Resumo por CFOP e o
      *  Por produto mostravam a régua automática num fornecedor já ensinado. */
     parametrosCfop?: import('../sefaz-backend/cfop-cerebro.js').ParametroCfop[] | null;
+    /**
+     * Regime de quem ESCRITURA — decide o CRÉDITO de ICMS da entrada, não o
+     * CFOP. Ausente mantém o comportamento antigo (`entradaGeraCreditoIcms`
+     * não afirma sem saber): tirar crédito de quem tem direito é o erro caro.
+     */
+    regimeTributario?: string | null;
 }
 
 export interface LinhaCfop {
@@ -186,7 +192,7 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
                 ? r2(contabil - distribuido)
                 : (totalItens > 0 ? r2(contabil * (valorGrupo(its) / totalItens)) : 0);
             distribuido = r2(distribuido + contabilLinha);
-            const a = alocarTributacaoIcms(its, contabilLinha);
+            const a = alocarTributacaoIcms(its, contabilLinha, ctxAlocacaoDoDoc(d, ctx));
             const k = `${direcaoDoc(d)}|${cfop}`;
             const linha = mapa.get(k) || {
                 cfop, direcao: direcaoDoc(d),

@@ -151,7 +151,13 @@ describe('🚨 `.d.ts` não promete o que o `.js` não entrega', () => {
             }
 
             linhas.forEach((linha, i) => {
-                if (!/@ts-(ignore|expect-error)/.test(linha)) return;
+                // ⚠️ A DIRETIVA, NUNCA A MENÇÃO. O TypeScript só silencia quando
+                // o comentário COMEÇA com `@ts-ignore`/`@ts-expect-error`; um
+                // comentário que fala dele ("sem @ts-ignore o tsc confere") é
+                // prosa e não cala nada. A 1ª forma casava a menção e mandava
+                // apagar a explicação para o teste passar — a mordida do ISS
+                // (22/08) dentro da própria trava.
+                if (!/^\s*(\/\/|\/\*)\s*@ts-(ignore|expect-error)\b/.test(linha)) return;
                 // Dentro das chaves de um import multilinha (foi a forma do da
                 // presença) ou logo acima do import que ele guarda.
                 let alvo = imports.find((imp) => imp.ini <= i && i <= imp.fim);

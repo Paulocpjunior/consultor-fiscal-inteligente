@@ -26,7 +26,11 @@ import {
     correlacionarCfop, resolverNaturezaAtividade, cfopDoLancamento,
     origemDoCfopLancamento, cfopsDistintosDaNota, validarCfopEscriturado,
 } from '../../sefaz-backend/cfop-correlacao.js';
-import { alocarTributacaoIcms } from '../../services/iobSageExportService';
+import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from '../../services/iobSageExportService';
+// Optante do Simples não se credita de ICMS (LC 123 art. 23) — quem responde
+// pelo regime é o dono, nunca a coleção lida na tela.
+import { regimeDaEmpresa } from '../../sefaz-backend/regime-tributario.js';
+import { entradaGeraCreditoIcms } from '../../sefaz-backend/credito-icms-entrada.js';
 import { direcaoEfetivaDoc, docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
 // O modelo vem da RÉGUA (mora na chave), nunca do campo cru `modelo`.
 import { modeloDoDoc } from '../../sefaz-backend/participante-doc-helper.js';
@@ -434,6 +438,23 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         [cadastroFiscal],
     );
 
+    // 🚨 O LIVRO CREDITAVA ICMS DE OPTANTE DO SIMPLES (09/09, MV LIDER): o
+    // `vICMS` do item é o destaque da operação do FORNECEDOR, e optante não se
+    // credita (LC 123 art. 23). Quem responde é o DONO do regime — a coleção
+    // fica por último nele, como sempre.
+    const regimeEscrituracao = useMemo(
+        () => (regimeDaEmpresa({
+            dadosFiscais: cadastroFiscal || {},
+            colecao: empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas',
+        }) as { regime: string }).regime,
+        [cadastroFiscal, empresa?.fonte],
+    );
+    const semCredito = useMemo(
+        () => entradaGeraCreditoIcms({ regime: regimeEscrituracao, direcao }) as
+            { credita: boolean; motivo: string | null; baseLegal: string | null },
+        [regimeEscrituracao, direcao],
+    );
+
     const { linhas, excluidas } = useMemo(() => {
         // 🚨 O LIVRO FILTRAVA PELO CAMPO CRU (22/08). A nota PRÓPRIA DE ENTRADA
         // (art. 136) fica gravada como 'saida', então ela NÃO chegava ao Livro
@@ -445,7 +466,12 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo));
         const montar = (d: any) => {
             const contabil = d.totais?.vNF || d.valorTotal || 0;
-            const a = alocarTributacaoIcms(d.itens || [], contabil);
+            const a = alocarTributacaoIcms(d.itens || [], contabil, ctxAlocacaoDoDoc(d, {
+                naturezaAtividade: natureza.natureza,
+                cfopOverrides: cadastroFiscal?.cfopOverrides,
+                parametrosCfop: cerebroAtivo(parametrosCfop),
+                regimeTributario: regimeEscrituracao,
+            }));
             const parte: any = contraparteDoc(d);
             // O CFOP DO LIVRO DE ENTRADAS É O DA ENTRADA — não o do fornecedor.
             //
@@ -512,6 +538,13 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         identificacao,
         observacoes: [
             'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
+            // 🚨 A RÉGUA VAI JUNTO DO NÚMERO. Sem esta linha, quem comparasse
+            // com o livro do E-Fiscal veria Base e ICMS zerados e concluiria
+            // que faltou captura — quando o certo é justamente não creditar.
+            ...(semCredito.credita ? [] : [
+                `ICMS destacado nas entradas foi para a coluna OUTRAS: ${semCredito.motivo} `
+                + `(${semCredito.baseLegal}). O destaque no XML é da operação do FORNECEDOR.`,
+            ]),
             ...(direcao === 'entrada' ? [
                 'CFOP: o XML da compra traz o CFOP do FORNECEDOR (saída). Aqui está o CFOP DE ENTRADA correlacionado — '
                 + `natureza da atividade "${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}). `
@@ -551,6 +584,17 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     CFOP correlacionado do fornecedor para a <strong>entrada</strong> — natureza da atividade{' '}
                     <strong>{natureza.natureza}</strong> ({ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).
                     {natureza.origem === 'padrao' && ' Declare a atividade no cadastro para o sufixo sair certo.'}
+                </p>
+            )}
+            {/* 🚨 O LIVRO CREDITAVA ICMS DE OPTANTE DO SIMPLES (09/09, MV
+                LIDER). Sem esta linha, quem visse Base e ICMS zerados nas
+                entradas concluiria que faltou captura — quando o certo é
+                justamente não creditar. */}
+            {!semCredito.credita && (
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    ICMS destacado nas entradas vai para <strong>Outras</strong>:{' '}
+                    {semCredito.motivo} ({semCredito.baseLegal}). O destaque no XML é da
+                    operação do <strong>fornecedor</strong>.
                 </p>
             )}
             {!!excluidas.length && (
@@ -1125,12 +1169,24 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
         [cadastroFiscal],
     );
+    const regimeEscrituracao = useMemo(
+        () => (regimeDaEmpresa({
+            dadosFiscais: cadastroFiscal || {},
+            colecao: empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas',
+        }) as { regime: string }).regime,
+        [cadastroFiscal, empresa?.fonte],
+    );
     const linhas = useMemo(
         () => resumoPorCfop(
             docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo)),
-            { naturezaAtividade: natureza.natureza, cfopOverrides: cadastroFiscal?.cfopOverrides, parametrosCfop: cerebroAtivo(parametrosCfop) },
+            {
+                naturezaAtividade: natureza.natureza,
+                cfopOverrides: cadastroFiscal?.cfopOverrides,
+                parametrosCfop: cerebroAtivo(parametrosCfop),
+                regimeTributario: regimeEscrituracao,
+            },
         ),
-        [docs, natureza, cadastroFiscal, parametrosCfop],
+        [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao],
     );
 
     const pdf = () => rodar(() => gerarRelatorioPdf({

@@ -14,6 +14,9 @@ import type { ParametroCfop } from '../sefaz-backend/cfop-cerebro.js';
 import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
 // O LADO da contraparte tem dono — ver o comentário em `participanteDoDoc`.
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
+// 🚨 O livro creditava ICMS de optante do Simples e ignorava o CST informado
+// na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
+import { colunaDoCstInformado, entradaGeraCreditoIcms } from '../sefaz-backend/credito-icms-entrada.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -290,6 +293,16 @@ export interface CfopCtx {
      * (07/09: só a aba ✏️ CFOP por nota os passava).
      */
     parametrosCfop?: ParametroCfop[] | null;
+    /**
+     * Regime de quem ESCRITURA (vocabulário de `regime-tributario.js`). Ele não
+     * decide CFOP — decide o CRÉDITO de ICMS da entrada, e por isso viaja no
+     * MESMO contexto: quem monta o ctx da escrituração já tem a empresa na mão,
+     * e um segundo parâmetro seria mais um que dá para esquecer.
+     *
+     * ⚠️ Ausente NÃO é "sem crédito": `entradaGeraCreditoIcms` mantém o
+     * comportamento antigo quando o regime não é conhecido.
+     */
+    regimeTributario?: string | null;
 }
 
 export function cfopParaEscriturar(
@@ -546,18 +559,79 @@ function buildE020(
  *   demais (51/60/90, CSOSN…)   → OUTRAS = valor do item
  * O que sobrar do contábil (IPI, frete, seguro, despesas, ST) vai em OUTRAS —
  * é a regra do livro. Centavo de ajuste fecha na maior coluna.
+ *
+ * ═══ O `ctx` É OBRIGATÓRIO POR CONSTRUÇÃO, E O MOTIVO É CARO ════════════════
+ *
+ * Ela recebia SÓ os itens, então não conhecia nem quem escritura nem a decisão
+ * de quem olhou a nota. Duas consequências, as duas medidas em 09/09 na MV
+ * LIDER (comércio do SIMPLES):
+ *
+ * 1. **Creditava ICMS de optante do Simples.** O `vICMS` do item é o destaque
+ *    da operação do FORNECEDOR; optante não se credita (LC 123 art. 23), e
+ *    aquilo é coluna Outras. O livro dela somava R$ 2.623,17 de crédito que
+ *    não existe — e o PVA/E-Fiscal aceita, porque as três colunas fecham.
+ * 2. **O CST informado por nota (`cstEscriturado`, 19/08) não chegava aqui.**
+ *    Ele valia no C170/C190 e não no LIVRO: informar o CST não tirava o
+ *    crédito da tela em que a pessoa estava olhando — a "régua que só escreve".
+ *
+ * Por isso `ctx` NÃO tem default: parâmetro que dá para esquecer volta a
+ * creditar em silêncio, e o número fica plausível (a mesma razão pela qual
+ * `resumoPorCfop` exige o `ctx` da correlação).
  */
+export interface CtxAlocacaoIcms {
+    /**
+     * CST de tributação informado NAQUELA nota. Vence o CST do item — quem
+     * informou olhou o papel. `null`/vazio = a nota segue o XML.
+     */
+    cstEscriturado?: string | null;
+    /**
+     * `true` quando quem escritura NÃO se credita de ICMS (optante do Simples).
+     * Quem responde é `entradaGeraCreditoIcms`, nunca um `if` de tela.
+     */
+    semCreditoIcms?: boolean;
+}
+
+/**
+ * Monta o `ctx` da alocação a partir do DOCUMENTO e do contexto da empresa.
+ *
+ * Dono único de propósito: os três leitores das colunas (Livro, Resumo por
+ * CFOP e Exportar SAGE) precisam responder IGUAL sobre a mesma nota — se cada
+ * um montar o seu, o livro dirá uma coisa e o `.FML` outra, que é a divergência
+ * que esta casa mais paga.
+ */
+export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocacaoIcms {
+    const credito = entradaGeraCreditoIcms({
+        regime: ctxEmpresa?.regimeTributario ?? null,
+        direcao: direcaoEfetivaDoc(d),
+    });
+    return {
+        cstEscriturado: d?.cstEscriturado ?? null,
+        semCreditoIcms: !credito.credita,
+    };
+}
+
 export function alocarTributacaoIcms(
     itens: DocumentoFiscalItem[],
     contabilAlvo: number,
+    ctx: CtxAlocacaoIcms,
 ): { base: number; icms: number; aliquota: number; isentos: number; outras: number; ipi: number } {
     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const colunaInformada = colunaDoCstInformado(ctx?.cstEscriturado);
+    const semCredito = ctx?.semCreditoIcms === true;
     let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0;
     for (const it of itens) {
         const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
         const cst = String(it.cst || '').replace(/\D/g, '');
         ipi += it.vIPI || 0;
-        if ((it.vICMS || 0) > 0) {
+        // O que a PESSOA informou vence o XML; depois vem o regime de quem
+        // escritura; só então o destaque do documento do fornecedor.
+        if (colunaInformada === 'isentas') {
+            isentos += valorItem;
+        } else if (colunaInformada === 'outras' || (semCredito && (it.vICMS || 0) > 0)) {
+            // ⚠️ O item vai INTEIRO para Outras — não se parte base e resto.
+            // "Sem crédito" é sobre a operação toda, não sobre uma fatia dela.
+            outras += valorItem;
+        } else if ((it.vICMS || 0) > 0) {
             base += (it.vBC || 0) > 0 ? (it.vBC as number) : valorItem;
             icms += it.vICMS || 0;
             // Base reduzida (CST 20/70): a parte fora da base é OUTRAS.
@@ -746,7 +820,7 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             ? r2(contabilNota - contabilDistribuido)
             : (totalItens > 0 ? r2(contabilNota * (valorGrupo(itens) / totalItens)) : 0);
         contabilDistribuido = r2(contabilDistribuido + contabilLinha);
-        const a = alocarTributacaoIcms(itens, contabilLinha);
+        const a = alocarTributacaoIcms(itens, contabilLinha, ctxAlocacaoDoDoc(d, ctxCfop));
 
         linhas.push(buildRecord(L('E201'), {
             'ENTRADAS OU SAÍDAS': c.es,
