@@ -25,6 +25,15 @@ import { somarIcmsPorDirecao } from '../sefaz-backend/sped-fiscal-blocoE.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+/**
+ * Quem ESCRITURA. Desde 09/09 `selecionarNotasBlocoC` exige o CNPJ: é ele que
+ * separa a nota própria de entrada NOSSA (art. 136) da nota de entrada do
+ * FORNECEDOR (`tpNF=0` dele, devolução recebida — caso MV LIDER). Nenhum
+ * documento deste arquivo é desse tipo, então as respostas não mudam; o que
+ * mudou é o contrato — a chamada tem de dizer de quem é o livro.
+ */
+const EMPRESA_CNPJ = '07590894000166';
+
 /** Chave de NFC-e (mod 65) — o modelo está nas posições 21-22. */
 const CHAVE_NFCE = '35260707590894000166650203000007870001234567';
 /** Chave de NF-e (mod 55). */
@@ -45,7 +54,7 @@ describe('o modelo vem da RÉGUA, não do campo cru (caso PS VIDROS 0896)', () =
         const nota = capturada();
         expect((nota as any).modelo).toBeUndefined();   // é assim que o banco está
         expect(ehNotaDeMercadoria(nota)).toBe(true);
-        expect(selecionarNotasBlocoC([nota]).notas).toHaveLength(1);
+        expect(selecionarNotasBlocoC([nota], EMPRESA_CNPJ).notas).toHaveLength(1);
     });
 
     it('NF-e capturada sem modelo idem (o 55 sai da chave)', () => {
@@ -79,7 +88,7 @@ describe('o que NÃO tem como ser escriturado sai NOMEADO, nunca calado', () => 
     it('resumo da SEFAZ fica fora (sem itens não há C190) e é nomeado com a ação', () => {
         const resumo = capturada({ tipoDoc: 'resNFe', schema: 'resNFe_v1.01', itens: [], numero: '999' });
         expect(ehResumoSefaz(resumo)).toBe(true);
-        const sel = selecionarNotasBlocoC([resumo, capturada()]);
+        const sel = selecionarNotasBlocoC([resumo, capturada()], EMPRESA_CNPJ);
         expect(sel.notas).toHaveLength(1);
         expect(sel.soResumo).toEqual(['999']);
         const aviso = avisosDaSelecao(sel).join(' ');
@@ -89,7 +98,7 @@ describe('o que NÃO tem como ser escriturado sai NOMEADO, nunca calado', () => 
     });
 
     it('nota válida sem itens capturados fica fora e é nomeada (C100 sem C190 o PVA recusa)', () => {
-        const sel = selecionarNotasBlocoC([capturada({ itens: [], numero: '404' })]);
+        const sel = selecionarNotasBlocoC([capturada({ itens: [], numero: '404' })], EMPRESA_CNPJ);
         expect(sel.notas).toHaveLength(0);
         expect(sel.semItens).toEqual(['404']);
         expect(avisosDaSelecao(sel).join(' ')).toMatch(/C100 sem C190/);
@@ -97,11 +106,11 @@ describe('o que NÃO tem como ser escriturado sai NOMEADO, nunca calado', () => 
 
     it('CANCELADA entra (Guia Prático: só o C100, sem filhos) mesmo sem itens', () => {
         const cancelada = capturada({ status: 'cancelado', itens: [], numero: '13' });
-        expect(selecionarNotasBlocoC([cancelada]).notas).toHaveLength(1);
+        expect(selecionarNotasBlocoC([cancelada], EMPRESA_CNPJ).notas).toHaveLength(1);
         // e a cancelada por EVENTO — o campo `status` continua 'autorizado'
         const porEvento = capturada({ itens: [], numero: '14', eventos: [{ tpEvento: '110111', cStat: '135' }] });
-        expect(selecionarNotasBlocoC([porEvento]).notas).toHaveLength(1);
-        expect(selecionarNotasBlocoC([porEvento]).semItens).toHaveLength(0);
+        expect(selecionarNotasBlocoC([porEvento], EMPRESA_CNPJ).notas).toHaveLength(1);
+        expect(selecionarNotasBlocoC([porEvento], EMPRESA_CNPJ).semItens).toHaveLength(0);
     });
 });
 
@@ -177,14 +186,14 @@ describe('nota completada por cima do resumo entra — quem decide é o ITEM', (
             tipoDoc: 'resNFe', schema: 'resNFe_v1.01', numero: '34853', direcao: 'entrada',
             itens: [{ cfop: '2101', vProd: 1000, vICMS: 120 }],
         });
-        const sel = selecionarNotasBlocoC([completada]);
+        const sel = selecionarNotasBlocoC([completada], EMPRESA_CNPJ);
         expect(sel.notas).toHaveLength(1);
         expect(sel.soResumo).toHaveLength(0);
     });
 
     it('rótulo resNFe SEM itens continua fora e nomeado (o resumo de verdade)', () => {
         const resumo = capturada({ tipoDoc: 'resNFe', schema: 'resNFe_v1.01', itens: [], numero: '999' });
-        expect(selecionarNotasBlocoC([resumo]).soResumo).toEqual(['999']);
+        expect(selecionarNotasBlocoC([resumo], EMPRESA_CNPJ).soResumo).toEqual(['999']);
     });
 });
 
@@ -249,8 +258,14 @@ describe('C100 — o COD_MOD sai da chave e a NFC-e respeita o leiaute dela', ()
 describe('🚨 o 0150 casa com a régua do bloco C', () => {
     const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/sped-fiscal-orchestrator.js'), 'utf8');
 
+    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (09/09). Ela prendia o TEXTO
+    // `selecionarNotasBlocoC(notas)` — e essa forma VIROU o defeito: desde a MV
+    // LIDER a régua exige o CNPJ de quem escritura (é ele que separa a nota
+    // própria NOSSA da entrada do FORNECEDOR), então travar a chamada antiga
+    // impediria a correção que a régua manda fazer. O que ela protege é a
+    // INTENÇÃO: o 0150 sai da MESMA seleção do bloco C, com a empresa.
     it('a coleta de participantes usa a régua, não varre todas as notas', () => {
-        expect(fonte).toMatch(/selecionarNotasBlocoC\(notas\)/);
+        expect(fonte).toMatch(/selecionarNotasBlocoC\(notas,\s*empresa\.cnpj\)/);
         expect(fonte).toMatch(/modeloDoDoc\(n\) !== '65'/);
         expect(fonte).toMatch(/selecionarCtesBlocoD\(notas\)/);
     });
@@ -268,19 +283,19 @@ describe('🚨 o 0150 casa com a régua do bloco C', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Guia Prático 3.2.3 — NFC-e não se escritura nas entradas', () => {
     it('NFC-e marcada como entrada fica FORA e sai nomeada', () => {
-        const sel = selecionarNotasBlocoC([capturada({ direcao: 'entrada', numero: '55' })]);
+        const sel = selecionarNotasBlocoC([capturada({ direcao: 'entrada', numero: '55' })], EMPRESA_CNPJ);
         expect(sel.notas).toHaveLength(0);
         expect(sel.nfceEmEntrada).toEqual(['55']);
         expect(avisosDaSelecao(sel).join(' ')).toMatch(/não devem ser escrituradas nas entradas/);
     });
 
     it('NFC-e de SAÍDA continua entrando normalmente', () => {
-        expect(selecionarNotasBlocoC([capturada()]).notas).toHaveLength(1);
+        expect(selecionarNotasBlocoC([capturada()], EMPRESA_CNPJ).notas).toHaveLength(1);
     });
 
     it('NF-e de entrada não é afetada', () => {
         const nfe = capturada({ chave: CHAVE_NFE, tipo: 'NFe', tipoDoc: 'NFe', direcao: 'entrada' });
-        expect(selecionarNotasBlocoC([nfe]).notas).toHaveLength(1);
+        expect(selecionarNotasBlocoC([nfe], EMPRESA_CNPJ).notas).toHaveLength(1);
     });
 });
 

@@ -53,6 +53,18 @@ const REGUAS: ReguaVigiada[] = [
         motivo: '04/09 — o F600 lia o mapa que nenhum orquestrador passava; o M200/M600 saía sem o abatimento',
     },
     {
+        fn: 'selecionarNotasBlocoC',
+        minArgs: 2,
+        argumento: 'empresaCnpj (quem ESCRITURA — separa a nota própria NOSSA da entrada do FORNECEDOR)',
+        motivo: '09/09 MV LIDER — sem o CNPJ a régua não afirma, e a nota de entrada de terceiro volta ao bloco C em silêncio',
+    },
+    {
+        fn: 'escrituraveisNoLivroDeEntradas',
+        minArgs: 4,
+        argumento: 'empresaCnpj (quem ESCRITURA)',
+        motivo: '09/09 MV LIDER — sem ele o Livro de Entradas volta a escriturar a devolução recebida pelo fornecedor',
+    },
+    {
         fn: 'cfopParaEscriturar',
         minArgs: 4,
         argumento: 'doc (o DOCUMENTO — é dele que saem o CFOP informado na NF e o fornecedor do cérebro)',

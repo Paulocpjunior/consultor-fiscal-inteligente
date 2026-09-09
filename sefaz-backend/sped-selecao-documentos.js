@@ -43,7 +43,7 @@
 import * as fmt from './sped-fiscal-format.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { isResumoSchema, isResumoTipoDoc } from './gravacao-nfe-regua.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, ehEntradaDoEmitente } from './xml-metadata-helper.js';
 
 /** Rótulos de tipo que NUNCA são mercadoria (bloco C). */
 const RE_NAO_MERCADORIA = /CTe|MDFe|NFSe|NFS-e/i;
@@ -149,15 +149,35 @@ export function levaC170NoContribuicoes(nota) {
  * Separa as notas do bloco C entre as que se escrituram e as que NÃO têm como
  * ser escrituradas — cada grupo com ação própria.
  *
+ * @param notas
+ * @param empresaCnpj  quem ESCRITURA. **Obrigatório e sem default**: é ele que
+ *   separa a nota própria de entrada NOSSA (art. 136, que se escritura) da nota
+ *   de entrada do FORNECEDOR (`tpNF=0` dele, que não é operação nossa). Sem o
+ *   CNPJ a régua não afirma, e a nota de terceiro voltaria ao bloco C em
+ *   silêncio — parâmetro que dá para esquecer é a classe do
+ *   `saldoCredorIpiAnterior`. Registrado em `consumidoresMedidos.test.ts`.
  * @returns {{notas: object[], soResumo: string[], semItens: string[]}}
  */
-export function selecionarNotasBlocoC(notas) {
+export function selecionarNotasBlocoC(notas, empresaCnpj) {
     const escrituradas = [];
     const soResumo = [];
     const semItens = [];
     const nfceEmEntrada = [];
+    const entradaDoEmitente = [];
     for (const n of notas || []) {
         if (!ehNotaDeMercadoria(n)) continue;
+        // 🚨 A ENTRADA É DO EMITENTE, NÃO NOSSA (09/09, MV LIDER · 08/2026).
+        // `tpNF=0` de TERCEIRO é o fornecedor dando entrada no estoque DELE —
+        // devolução recebida, retorno de industrialização. Ver o comentário de
+        // `ehEntradaDoEmitente`: a mercadoria entra nele, logo SAI de quem está
+        // no `<dest>`. Escriturá-la no nosso C100 declara a operação dele, e
+        // ainda conta a mesma devolução duas vezes quando o cliente emitiu a
+        // saída dele. Vem ANTES do cancelamento: cancelada de terceiro também
+        // não é entrada nossa.
+        if (ehEntradaDoEmitente(n, empresaCnpj).sim) {
+            entradaDoEmitente.push(rotuloDoDoc(n));
+            continue;
+        }
         // 📖 Guia Prático 3.2.3, C100: *"As NFC-e (código 65) não devem ser
         // escrituradas nas ENTRADAS"*. Cupom é venda ao consumidor — recebê-lo
         // como documento de entrada não é operação que se escritura no bloco C.
@@ -180,7 +200,7 @@ export function selecionarNotasBlocoC(notas) {
         if (ehResumoSefaz(n)) { soResumo.push(rotuloDoDoc(n)); continue; }
         semItens.push(rotuloDoDoc(n));
     }
-    return { notas: escrituradas, soResumo, semItens, nfceEmEntrada };
+    return { notas: escrituradas, soResumo, semItens, nfceEmEntrada, entradaDoEmitente };
 }
 
 /** CT-e do período (bloco D), sem os resumos. */
@@ -192,8 +212,19 @@ export function selecionarCtesBlocoD(notas) {
  * Avisos do que ficou de FORA do arquivo — nota que some sem ninguém saber é
  * livro a menor, e foi assim que a PS VIDROS perdeu 100 das 131.
  */
-export function avisosDaSelecao({ soResumo = [], semItens = [], nfceEmEntrada = [] } = {}) {
+export function avisosDaSelecao({
+    soResumo = [], semItens = [], nfceEmEntrada = [], entradaDoEmitente = [],
+} = {}) {
     const avisos = [];
+    if (entradaDoEmitente.length) {
+        avisos.push(
+            `SPED: ${entradaDoEmitente.length} nota(s) ficaram FORA do arquivo por serem ENTRADA DO `
+            + `FORNECEDOR (tpNF=0 emitido por ele) — nº ${entradaDoEmitente.slice(0, 8).join(', ')}`
+            + `${entradaDoEmitente.length > 8 ? '…' : ''}. É devolução recebida ou retorno: a mercadoria `
+            + 'entrou no estoque DELE, então não é entrada desta empresa. Se houve devolução, o documento '
+            + 'que se escritura é a nota de SAÍDA que a empresa emite — confira se ela foi capturada.',
+        );
+    }
     if (nfceEmEntrada.length) {
         avisos.push(
             `SPED: ${nfceEmEntrada.length} NFC-e ficaram fora por estarem como ENTRADA — `
