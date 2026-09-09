@@ -77,7 +77,20 @@
 <section>
     <h2>🆕 O que mudou agora (09/09) — leia esta parte primeiro</h2>
 
-    <h3>1. 🧮 <strong>Empresa do Simples parou de creditar ICMS no Livro de Entradas</strong></h3>
+    <h3>1. ✍️ <strong>O INSS informado à mão passou a subir no R-2010 (serviços tomados)</strong></h3>
+    <p>Quando o cliente <strong>esquece de informar a retenção na nota</strong>, você corrige informando o
+    valor na própria nota (o ✍️ ajuste declarado, com o seu nome e o motivo). Esse valor já ia para o
+    <strong>R-4020</strong> e para o <strong>R-2020</strong> — e <strong>não ia para o R-2010</strong>. O
+    evento saía para o Consultor Contábil com o <strong>zero do documento</strong>, e a Receita
+    <strong>aceita</strong> assim: a diferença só aparece no cruzamento.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → <strong>Retenções</strong> → informe o INSS na nota.
+    O valor declarado passa a valer no R-2010, <strong>carimbado</strong> com quem informou e o motivo — na tela
+    do Contábil e na ressalva da geração.</div>
+    <div class="alerta">⚠️ <strong>Informar ZERO também é resposta</strong> (“conferi e não houve retenção”): a
+    nota sai do evento, mas continua <strong>contada</strong>. E o documento continua gravado como chegou —
+    o ajuste é uma declaração sobre ele, não uma reescrita.</div>
+
+    <h3>2. 🧮 <strong>Empresa do Simples parou de creditar ICMS no Livro de Entradas</strong></h3>
     <p>Nas compras, o ICMS destacado no XML é da operação de <strong>quem vendeu</strong>. O livro somava esse
     valor como base e imposto creditado — e <strong>optante do Simples não se credita de ICMS</strong>
     (LC 123/2006, art. 23). Na MV LIDER de 08/2026 isso dava <strong>R$ 2.623,17 de crédito que não
@@ -89,7 +102,7 @@
     <div class="alerta">⚠️ <strong>Base e ICMS zerados nas entradas do Simples é o certo</strong>, não falta de
     captura. O valor continua no livro — ele mudou de coluna, e o valor contábil fecha igual.</div>
 
-    <h3>2. 🔁 <strong>Devolução que o próprio fornecedor emitiu saiu da escrituração</strong></h3>
+    <h3>3. 🔁 <strong>Devolução que o próprio fornecedor emitiu saiu da escrituração</strong></h3>
     <p>Quando o cliente devolve mercadoria, é comum o <strong>fornecedor</strong> emitir a nota de entrada
     <strong>dele</strong> para dar entrada no estoque dele. Essa nota vem com o CNPJ do cliente no campo do
     destinatário — e o app a escriturava como se fosse <strong>compra</strong>. Na MV LIDER de 08/2026 eram
@@ -103,7 +116,7 @@
     <strong>Se houve devolução, o documento que se escritura é a nota de SAÍDA que a sua empresa emite</strong>
     — vale conferir se ela foi emitida e capturada.</div>
 
-    <h3>3. ✏️ <strong>Editar o CFOP e o CST direto na nota — ao lado do “Informar retenção”</strong></h3>
+    <h3>4. ✏️ <strong>Editar o CFOP e o CST direto na nota — ao lado do “Informar retenção”</strong></h3>
     <p>Os dois campos existiam desde agosto e só apareciam em Relatórios → ✏️ CFOP por nota. Quem estava
     <strong>olhando a nota</strong> não tinha como chegar neles.</p>
     <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → clique na nota → <strong>✏️ Informar CFOP e CST
@@ -115,7 +128,7 @@
     E no CST só entram os <strong>2 dígitos da tributação</strong> (00, 40, 60, 90…): a origem continua vindo do
     item, senão produto importado viraria nacional dentro do SPED.</div>
 
-    <h3>4. 📄 <strong>NFS-e em PDF: o prestador sai da chave, e serviço 0,00 não grava mais</strong></h3>
+    <h3>5. 📄 <strong>NFS-e em PDF: o prestador sai da chave, e serviço 0,00 não grava mais</strong></h3>
     <p>Tinha PDF (o modelo nacional da nota, o DANFSe) que subia <strong>sem CNPJ do prestador nem do
     tomador</strong>, só com valores — e a nota ficava com “—” na contraparte, sumia do R-4020 e obrigava
     a lançar tudo de novo à mão.</p>
@@ -131,7 +144,7 @@
     completar, importe o <strong>mesmo PDF</strong> de novo com <strong>“↻ Substituir os que já estão no
     banco”</strong> — o documento cai por cima do mesmo registro.</div>
 
-    <h3>5. 🧾 <strong>R-4020 recusado com “o valor informado deve ser maior que zero”</strong></h3>
+    <h3>6. 🧾 <strong>R-4020 recusado com “o valor informado deve ser maior que zero”</strong></h3>
     <p>Nota tomada importada de PDF chegava ao Contábil com <strong>Bruto R$ 0,00</strong> e as retenções
     certas do lado; a Receita recusava o evento (MS1042). O valor estava gravado — num campo que o R-4020 não
     lia.</p>
@@ -139,7 +152,7 @@
     Fiscal</em>. Basta <strong>buscar de novo</strong>: as notas já importadas passam a vir com o bruto. Não
     precisa reimportar nada para isso.</div>
 
-    <h3>6. 📑 <strong>Relatório de Serviços: nome inteiro e CNPJ do prestador — e o PDF ficou leve</strong></h3>
+    <h3>7. 📑 <strong>Relatório de Serviços: nome inteiro e CNPJ do prestador — e o PDF ficou leve</strong></h3>
     <p>O PDF de Serviços tomados/prestados saía com o nome do prestador <strong>abreviado</strong> e
     <strong>sem CNPJ</strong> — e com 24 MB por causa do logo. Agora a coluna traz o nome completo (quebrando
     linha) e o CNPJ embaixo, e o arquivo cabe em qualquer e-mail.</p>
@@ -147,7 +160,7 @@
     <strong>PDF</strong>. Nota sem CNPJ gravado sai escrita <em>“CNPJ não gravado”</em>, para não passar por
     completa.</div>
 
-    <h3>7. 🏛️ <strong>ISS retido em serviços TOMADOS chegava ao Contábil como R$ 0,00</strong></h3>
+    <h3>8. 🏛️ <strong>ISS retido em serviços TOMADOS chegava ao Contábil como R$ 0,00</strong></h3>
     <p>Nota tomada do portal de SP com <strong>“ISS Retido: Sim”</strong> (o caso das duas notas de 5,56 e
     7,00 da CLUDE) chegava ao Consultor Contábil com <em>ISS retido: R$ 0,00</em>. O portal grava só a marca
     <em>Sim/Não</em> e o valor do ISS da nota; não existe um campo “valor retido” separado — e era esse campo
@@ -163,7 +176,7 @@
     Contábil recebe esse aviso junto do número. Nota que traz o valor retido separado (XML, ADN) continua
     usando o valor dela.</div>
 
-    <h3>8. 🛠️ <strong>R-2020 liberado: a retenção de INSS SOFRIDA em serviços PRESTADOS agora tem trilho</strong></h3>
+    <h3>9. 🛠️ <strong>R-2020 liberado: a retenção de INSS SOFRIDA em serviços PRESTADOS agora tem trilho</strong></h3>
     <p>O card do R-2020 no Consultor Contábil dizia <em>“A homologar”</em> e não havia como gerar o evento de
     quem <strong>presta</strong> serviço com cessão de mão de obra e sofre a retenção dos 11%. O leiaute foi
     homologado com um evento <strong>aceito em produção</strong> (07/2026) e as duas casas passaram a servi-lo:
@@ -181,7 +194,7 @@
     (retido = 11% do bruto). Retenção de ~3,5% é pergunta: ou a empresa está na desoneração da folha (isso é
     do R-1000, o R-2020 não tem esse campo) ou são os 11% sobre base muito deduzida — o app não escolhe.</div>
 
-    <h3>9. 🏛️ <strong>Municípios sem calendário: a fila mostra o código IBGE e denuncia cadastro trocado</strong></h3>
+    <h3>10. 🏛️ <strong>Municípios sem calendário: a fila mostra o código IBGE e denuncia cadastro trocado</strong></h3>
     <p>A fila agrupa pelo <strong>código IBGE</strong> gravado nos Dados Fiscais, não pelo nome da cidade. Duas
     empresas “de Caxias do Sul” apareciam em <em>BELÉM</em> porque o código gravado era o de Belém — e a linha
     não tinha como mostrar isso.</p>

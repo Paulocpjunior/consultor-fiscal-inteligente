@@ -14,6 +14,8 @@
 // base = bruto seria declarar retenção sobre 25% a mais de base.
 // ============================================================================
 // O módulo ganhou `.d.ts` em 14/08, quando a tela do R-2010 passou a importá-lo
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { conferirBaseRetencaoInss, montarPayloadR2010, normalizarServicoTomado, ALIQUOTA_ART31, ALIQUOTA_CPRB } from '../sefaz-backend/reinf-servicos-tomados.js';
 
 const notaTomada = (over: any = {}) => ({
@@ -203,10 +205,140 @@ describe('o que fica de fora NÃO some em silêncio', () => {
         expect(r.prestadores).toHaveLength(0);
     });
 
-    test('zero prestador NÃO é sucesso — pode ser buraco de captura', () => {
+    // 📌 ASSERÇÃO TROCADA PELA INTENÇÃO (09/09): ela prendia o TEXTO
+    // *"o problema é de CAPTURA"* — e essa frase afirmava a causa ERRADA.
+    // Zero prestador tem DUAS causas com ações opostas: a nota não chegou
+    // (captura) ou ela chegou sem o INSS retido, e aí o caminho é o ajuste
+    // declarado, que agora existe. Mandar procurar só na captura é o achado 18.
+    //
+    // A INTENÇÃO que esta seção protege continua travada: zero NUNCA é sucesso,
+    // e a frase diz o que fazer.
+    test('zero prestador NÃO é sucesso — e as DUAS causas saem com a ação', () => {
         const r = montarPayloadR2010({ cnpjTomador: '32602701000197', competencia: '2026-06', documentos: [] });
-        expect(r.ressalvas.join(' ')).toMatch(/problema é de CAPTURA/);
-        expect(r.ressalvas.join(' ')).toMatch(/cessão de mão de obra/);
+        const txt = r.ressalvas.join(' ');
+        expect(txt).toMatch(/NENHUMA nota tomada com retenção previdenciária/);
+        expect(txt).toMatch(/cessão de mão de obra/);
+        expect(txt).toMatch(/CAPTURA/);
+        expect(txt).toMatch(/ajuste declarado/);
+    });
+
+    // ═══ O AJUSTE DECLARADO — 09/09, Paulo: "corrige o r-2010 também" ═══════
+    //
+    // A lacuna estava NOMEADA desde 09/09: esta rota era a única das três que
+    // não carregava `reinf_retencoes_ajustadas`, então INSS informado à mão não
+    // chegava ao R-2010 e o evento saía com o ZERO do documento.
+    describe('o INSS informado à mão vence o documento', () => {
+        // A chave do ajuste é a da NOTA (`prestadorCnpj-numero` quando não há
+        // chave), porque o ajuste é da NOTA — dois serviços do mesmo prestador
+        // podem reter diferente.
+        const CHAVE = '03222111000130-30349';
+
+        test('o valor DECLARADO entra no evento, carimbado', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                // O documento chegou SEM retenção — é o caso que a declaração corrige.
+                documentos: [notaTomada({ valores: {} })],
+                ajustes: { [CHAVE]: { inss: 506.49, autor: 'sandra@exemplo', motivo: 'retenção informada na nota' } },
+            });
+            expect(r.prestadores).toHaveLength(1);
+            const n = r.prestadores[0].notas[0];
+            expect(n.inssRetido).toBe(506.49);
+            expect(n.inssOrigem).toBe('ajuste-declarado');
+            expect(n.ajuste.autor).toBe('sandra@exemplo');
+            expect(r.resumo.comAjuste).toBe(1);
+            expect(r.resumo.vlrTotalRetPrinc).toBe(506.49);
+        });
+
+        test('a declaração vence o documento quando os dois existem', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada({ valores: { inss: 100 } })],
+                ajustes: { [CHAVE]: { inss: 506.49, autor: 'sandra@exemplo', motivo: 'valor corrigido' } },
+            });
+            expect(r.prestadores[0].notas[0].inssRetido).toBe(506.49);
+            expect(r.prestadores[0].notas[0].inssOrigem).toBe('ajuste-declarado');
+        });
+
+        test('sem ajuste, o documento continua mandando — nada regride', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada()],
+                ajustes: {},
+            });
+            expect(r.prestadores[0].notas[0].inssRetido).toBe(506.49);
+            expect(r.prestadores[0].notas[0].inssOrigem).toBe('documento');
+            expect(r.prestadores[0].notas[0].ajuste).toBeNull();
+            expect(r.resumo.comAjuste).toBe(0);
+        });
+
+        // ⚠️ "Conferi e não houve" é um FATO: zero declarado sai da lista, mas
+        // CONTADO — sumir calado é o que faz alguém achar que declarou tudo.
+        test('ajuste ZERO tira a nota do evento, contada', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada()],
+                ajustes: { [CHAVE]: { inss: 0, autor: 'sandra@exemplo', motivo: 'conferi: não houve retenção' } },
+            });
+            expect(r.prestadores).toHaveLength(0);
+            expect(r.resumo.semRetencaoPrevidenciaria).toBe(1);
+        });
+
+        // 🚨 O número que vem de DECLARAÇÃO HUMANA sai DITO na ressalva, com a
+        // nota e quem declarou — quem conferir daqui a três meses precisa saber
+        // que aquele número não saiu do documento.
+        test('a ressalva NOMEIA a nota e quem declarou', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada({ valores: {} })],
+                ajustes: { [CHAVE]: { inss: 506.49, autor: 'sandra@exemplo', motivo: 'retenção informada na nota' } },
+            });
+            const txt = r.ressalvas.join(' ');
+            expect(txt).toMatch(/INFORMADO À MÃO/);
+            expect(txt).toMatch(/30349/);
+            expect(txt).toMatch(/sandra@exemplo/);
+        });
+
+        // ⚠️ O ajuste é lido ANTES da seleção: nota cujo documento não trouxe
+        // INSS mas que alguém DECLAROU tem de entrar. Barrá-la antes deixaria o
+        // ajuste gravado sem efeito — a retenção some.
+        test('ajuste de nota SEM retenção no documento a traz de volta', () => {
+            const semAjuste = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada({ valores: {} })],
+            });
+            expect(semAjuste.resumo.semRetencaoPrevidenciaria).toBe(1);
+            expect(semAjuste.prestadores).toHaveLength(0);
+        });
+    });
+
+    // 🚨 ESPÉCIE, CANCELAMENTO E DIREÇÃO VÊM DOS DONOS (09/09) — as três
+    // leituras cruas que moravam aqui já custaram um caso cada nesta casa.
+    describe('as leituras do documento vêm dos donos', () => {
+        test('cancelamento por EVENTO tira a nota — o `status` continua autorizado', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada({
+                    status: 'autorizado',
+                    eventos: [{ tpEvento: '110111', cStat: '135' }],
+                })],
+            });
+            expect(r.prestadores).toHaveLength(0);
+        });
+
+        test('o BRUTO da NFS-e importada de PDF é lido — ela grava `valores.servicos`', () => {
+            const r = montarPayloadR2010({
+                cnpjTomador: '32602701000197', competencia: '2026-06',
+                documentos: [notaTomada({
+                    valorServicos: undefined, valorTotal: undefined,
+                    valores: { servicos: 5755.54, inss: 506.49 },
+                })],
+            });
+            // O bruto FOI lido — antes ele vinha nulo e a nota caía em
+            // "sem dados". 506,49 sobre 5.755,54 é 8,8%, então a base é a
+            // derivada, como no evento aceito de referência.
+            expect(r.prestadores[0].vlrTotalBruto).toBe(5755.54);
+            expect(r.prestadores[0].notas[0].baseOrigem).toBe('derivada-da-retencao');
+        });
     });
 
     test('a ambiguidade do CPRB sobe como ressalva de primeira classe', () => {
@@ -217,5 +349,34 @@ describe('o que fica de fora NÃO some em silêncio', () => {
         expect(r.ressalvas.join(' ')).toMatch(/DUAS leituras/);
         expect(r.ressalvas.join(' ')).toMatch(/indCPRB/);
         expect(r.resumo.comPendencia).toBe(1);
+    });
+});
+
+// ═══ A LIGAÇÃO É TRAVADA POR VARREDURA ══════════════════════════════════════
+//
+// Régua que só escreve não é entrega (04/09), e esta rota foi a última das três
+// a ligar: em 09/09 a lacuna ficou NOMEADA no CLAUDE.md (*"a rota
+// /servicos-tomados NÃO carrega os ajustes"*), e o efeito era o INSS informado
+// à mão ficar gravado enquanto o R-2010 saía com o zero do documento.
+describe('a rota passa os ajustes à montagem', () => {
+    const rota = readFileSync(join(__dirname, '..', 'sefaz-backend', 'reinf-retencoes-pj-routes.js'), 'utf8');
+
+    it('lê os ajustes ANTES de montar e os entrega ao montarPayloadR2010', () => {
+        const bloco = rota.slice(rota.indexOf("router.get('/servicos-tomados'"));
+        const chamada = bloco.match(/montarPayloadR2010\(\{([^}]*)\}/);
+        expect(chamada).toBeTruthy();
+        expect(chamada![1]).toMatch(/ajustes/);
+        expect(bloco.slice(0, bloco.indexOf('montarPayloadR2010('))).toMatch(/lerAjustesDeRetencao\(db, cnpj, competencia\)/);
+    });
+
+    // ⚠️ E as TRÊS rotas do Reinf que consomem nota lêem o MESMO dono: uma que
+    // ficasse para trás voltaria a declarar o número do documento em silêncio.
+    it('as três rotas do Reinf carregam os ajustes', () => {
+        for (const r of ['/retencoes-pj', '/servicos-tomados', '/servicos-prestados']) {
+            const i = rota.indexOf(`router.get('${r}'`);
+            expect(i).toBeGreaterThan(-1);
+            const bloco = rota.slice(i, i + 4000);
+            expect(bloco).toMatch(/lerAjustesDeRetencao\(db, cnpj, competencia\)/);
+        }
     });
 });
