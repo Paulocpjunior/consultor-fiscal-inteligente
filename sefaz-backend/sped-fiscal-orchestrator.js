@@ -170,7 +170,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // Mesma régua do 0200 logo abaixo, que já fazia isso pelos itens.
     const nfceOuNaoEscriturada = (() => {
         const escrituradas = new Set(
-            selecionarNotasBlocoC(notas)
+            selecionarNotasBlocoC(notas, empresa.cnpj)
                 .notas.filter(n => modeloDoDoc(n) !== '65')
                 .map(n => n.id || n.chave),
         );

@@ -33,7 +33,10 @@
  */
 
 // O DONO da pergunta — a mesma régua que o SPED, o `.FML` e a DIPAM usam.
-import { ehNotaPropriaDeEntrada as ehNotaPropriaDeEntradaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+import {
+    ehNotaPropriaDeEntrada as ehNotaPropriaDeEntradaDoc,
+    ehEntradaDoEmitente, MOTIVO_ENTRADA_DO_EMITENTE,
+} from '../sefaz-backend/xml-metadata-helper.js';
 // O LADO da contraparte tem dono — ver o comentário na função abaixo.
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 
@@ -106,25 +109,48 @@ export interface LivroSemDuplicidade<T> {
 }
 
 /**
- * Tira do livro a NF-e do produtor quando existe a nota própria que a cobre.
+ * O que se escritura no Livro de ENTRADAS desta empresa — e o que ficou fora,
+ * NOMEADO, com a causa de cada um.
  *
- * Pareia por CONTRAPARTE × VALOR: não há refNFe ligando as duas, e o valor é o
- * que a RC 33068/2025 descreve (a nota própria reproduz a operação). Sem valor
- * batendo, não pareia — melhor deixar as duas e o colaborador conferir do que
- * apagar a errada.
+ * ═══ DUAS CAUSAS, e elas são espelhos uma da outra ══════════════════════════
  *
- * @param docs      documentos de ENTRADA da competência
- * @param montar    monta a linha do livro a partir do documento
- * @param valorDe   valor contábil do documento (o mesmo que vai na coluna)
+ * 1. **NF-e do produtor com par** (12/08, VINCENZO): existe a nota PRÓPRIA de
+ *    entrada que a cobre, e escriturar as duas dobra a compra. Pareia por
+ *    CONTRAPARTE × VALOR — não há refNFe ligando as duas, e o valor é o que a
+ *    RC 33068/2025 descreve. Sem valor batendo não pareia: melhor deixar as
+ *    duas e o colaborador conferir do que apagar a errada.
+ *
+ * 2. **Nota de entrada DO EMITENTE** (09/09, MV LIDER): `tpNF=0` de terceiro —
+ *    o fornecedor dando entrada da devolução no estoque dele. Ver o comentário
+ *    de `ehEntradaDoEmitente`: a mercadoria entra NELE, logo sai de quem está
+ *    no `<dest>`; é o art. 136 do outro lado do balcão.
+ *
+ * As duas tiram nota do livro, e por isso as duas saem NOMEADAS: total que
+ * muda sozinho faz desconfiar do número certo.
+ *
+ * @param docs         documentos de ENTRADA da competência
+ * @param montar       monta a linha do livro a partir do documento
+ * @param valorDe      valor contábil do documento (o mesmo que vai na coluna)
+ * @param empresaCnpj  quem ESCRITURA — obrigatório, e sem default de propósito:
+ *                     sem ele a régua da causa 2 não tem como comparar o
+ *                     emitente e devolveria "fica no livro" em silêncio.
  */
-export function livroSemNotaDeProdutorDuplicada<T>(
+export function escrituraveisNoLivroDeEntradas<T>(
     docs: any[],
     montar: (d: any) => T,
     valorDe: (d: any) => number,
+    empresaCnpj: string,
 ): LivroSemDuplicidade<T> {
     const lista = Array.isArray(docs) ? docs : [];
     const centavos = (v: number) => Math.round((Number(v) || 0) * 100);
     const chave = (d: any) => `${contraparteNormalizada(d).doc}|${centavos(valorDe(d))}`;
+    const fora = (d: any, parte: { nome: string; doc: string }, motivo: string): NotaExcluidaDoLivro => ({
+        numero: String(d?.numero ?? '—'),
+        data: String(d?.dhEmi ?? '').slice(0, 10),
+        participante: parte.nome || parte.doc || '—',
+        valor: Number(valorDe(d)) || 0,
+        motivo,
+    });
 
     // Quantas notas PRÓPRIAS de entrada existem por contraparte×valor: é o
     // "orçamento" de exclusão. Cada nota própria cobre UMA nota do produtor.
@@ -141,17 +167,19 @@ export function livroSemNotaDeProdutorDuplicada<T>(
     for (const d of lista) {
         if (ehNotaPropriaDeEntrada(d)) { linhas.push(montar(d)); continue; }
         const parte = contraparteNormalizada(d);
+        // A causa 2 vem ANTES do pareamento: a nota do fornecedor não é
+        // documento de origem de compra nenhuma, então procurar par para ela
+        // gastaria o orçamento de uma nota própria que cobre OUTRA coisa.
+        if ((ehEntradaDoEmitente(d, empresaCnpj) as { sim: boolean }).sim) {
+            excluidas.push(fora(d, parte, MOTIVO_ENTRADA_DO_EMITENTE));
+            continue;
+        }
         const k = chave(d);
         if (parte.doc && (orcamento.get(k) || 0) > 0) {
             orcamento.set(k, (orcamento.get(k) as number) - 1);
-            excluidas.push({
-                numero: String(d?.numero ?? '—'),
-                data: String(d?.dhEmi ?? '').slice(0, 10),
-                participante: parte.nome || parte.doc || '—',
-                valor: Number(valorDe(d)) || 0,
-                motivo: 'NF-e do produtor: documento de ORIGEM. A escriturada é a nota própria de entrada '
-                    + '(RICMS/SP art. 136, I, "a"; RC 33068/2025) — escriturar as duas dobra a entrada.',
-            });
+            excluidas.push(fora(d, parte,
+                'NF-e do produtor: documento de ORIGEM. A escriturada é a nota própria de entrada '
+                + '(RICMS/SP art. 136, I, "a"; RC 33068/2025) — escriturar as duas dobra a entrada.'));
             continue;
         }
         linhas.push(montar(d));

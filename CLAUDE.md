@@ -5,6 +5,96 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A ENTRADA ERA DO EMITENTE E O LIVRO ESCRITURAVA COMO NOSSA — a devolução
+  que o PRÓPRIO FORNECEDOR emitiu** (09/09, Paulo, MV LIDER · comércio do
+  SIMPLES · 08/2026, segunda metade do pedido: *"e como não escriturar essas
+  notas que são de devolução do próprio fornecedor? que não entra na
+  escrituração?"*, com os dois XMLs anexos).
+  📖 **OS ARQUIVOS RESPONDERAM SOZINHOS, e derrubaram as três hipóteses que eu
+  tinha na cabeça** (duplicidade · nota no livro errado · decisão humana de
+  excluir — as três pediam ações opostas, e eu ia PERGUNTAR qual era o caso):
+  · **NF 640644 · FERA ATAC → MV LIDER** — `tpNF 0` · `finNFe 4` · CFOP **1411**
+  · natOp *"Dev vda merc terc suj reg ST"* · `refNFe` da NF **636428 da PRÓPRIA
+  FERA** · infCpl *"NF. DE ENTRADA REFERENTE A NOSSA NF. 636428"*;
+  · **NF 1138363 · LPS COMPANY (SC) → MV LIDER** — `tpNF 0` · `finNFe 4` · CFOP
+  **2202** · *"DEVOL. VENDAS"* · `refNFe` da NF **1131980 da PRÓPRIA LPS** ·
+  **vBC 199,59 · vICMS 7,98**, que é o número que ele circulou.
+  🔴 **NAS DUAS O EMITENTE É O FORNECEDOR E O `tpNF` É 0.** É ele dando entrada
+  no estoque DELE da mercadoria devolvida — o art. 136 do outro lado do balcão.
+  A MV LIDER só ocupa o `<dest>` porque o leiaute exige um contra-lado.
+  🚨 **E ISSO É FATO DO DOCUMENTO, NÃO INTERPRETAÇÃO**: `tpNF=0` é entrada para
+  QUEM EMITIU; se a mercadoria entra nele, ela SAI de quem está no `<dest>` —
+  nunca entra. Devolução recebida, retorno de industrialização, conserto,
+  comodato: em todas ela volta para o emitente. **Não existe hipótese em que
+  `tpNF=0` de TERCEIRO seja entrada do destinatário.**
+  🔴 **A CAUSA ESTAVA MEDIDA EM UMA LINHA**: `decidirDirecaoPorTpNF` faz
+  `if (dest === emp) return 'entrada'` **sem olhar o tpNF** — o comentário ao
+  lado dizia *"tpNF só é lido do lado da EMISSÃO"*, e é justamente essa premissa
+  que os XMLs derrubam. Gravada 'entrada', ela passava por `direcaoEfetivaDoc` e
+  entrava no Livro, no Resumo por CFOP, no C100/C170/C190 das DUAS famílias do
+  SPED e no `.FML`. É a classe *"o documento é do fornecedor"* pela QUARTA vez
+  (o CST de PIS/COFINS da entrada, o CST 00→90 do KALUNGA, o crédito de ICMS do
+  optante — este mesmo dia — e agora o DOCUMENTO INTEIRO).
+  🚨 **O CUSTO É NAS DUAS PONTAS, e por isso a régua vale nos dois casos**: se o
+  cliente emitiu a nota de devolução dele (o normal — contribuinte emite), a
+  saída DELE já está no livro e a nota do fornecedor conta a MESMA devolução
+  duas vezes (é a dedup do art. 136 espelhada); se ele não emitiu, não houve
+  entrada nenhuma — a mercadoria saiu. **Nos dois, fora do livro de entradas.**
+  ✂️ `ehEntradaDoEmitente` (no dono, `xml-metadata-helper.js`) é o ESPELHO de
+  `ehNotaPropriaDeEntrada` e **DELEGA a ela** — duas perguntas, dois donos: o
+  que é nosso nunca é dele, e reescrever o laço aqui seria a segunda cópia.
+  ⚠️ **A DIREÇÃO GRAVADA NÃO MUDA, e isso é decisão**: virá-la para `'saida'`
+  inflaria o faturamento e criaria DÉBITO de ICMS de uma nota que a empresa nem
+  emitiu; um valor NOVO num campo binário (`=== 'saida' ? x : y`, que é como
+  metade dos 30 leitores testa) viraria o ramo `else` em silêncio. Quem responde
+  é a régua da ESCRITURAÇÃO, não a da direção.
+  ⚠️ **AUSÊNCIA NÃO É PROVA, e aqui ela decide o LADO do erro**: sem `tpNF`, sem
+  o CNPJ da empresa ou sem o emitente, a resposta é **não** e a nota FICA. Tirar
+  nota legítima é livro a MENOS, que não se confere depois; deixar uma a mais
+  aparece no total.
+  📌 **A LISTA DE LEITORES FOI MEDIDA, não lembrada** — e o `grep` de
+  `direcaoEfetivaDoc` devolveu ~30 lugares, a maioria de OUTRO domínio. Os
+  quatro que ESCRITURAM: o **Livro** (`escrituraveisNoLivroDeEntradas` —
+  renomeada, porque `livroSemNotaDeProdutorDuplicada` passou a mentir com duas
+  causas), o **SPED das DUAS famílias** (por `selecionarNotasBlocoC`, que é o
+  ponto ÚNICO — os dois orquestradores e os dois blocos C passam por ela), os
+  **demais relatórios** (recorte filtrado no PAI, uma vez) e o **`.FML`**.
+  ⚠️ **E O QUE SAI, SAI NOMEADO nos quatro**: o Livro lista linha a linha na tela
+  E no PDF (agora agrupado por CAUSA — a frase fixa de produtor rural mandaria
+  procurar nota própria de entrada onde o que existe é devolução, o achado 18);
+  o SPED põe em `avisosDaSelecao`; o `.FML` devolve `foraDaEscrituracao`
+  **separado das `falhas`** (falha pede conserto, isto é escrituração correta —
+  e um bloco vermelho sobre arquivo certo ensina a ignorar o vermelho que
+  importa); e o pai dos Relatórios mostra um aviso em TODA aba filtrada.
+  ⚠️ **O Livro e a ✏️ CFOP por nota recebem TUDO, de propósito**: o Livro é o dono
+  da exclusão nomeada (sem os documentos não teria o que nomear), e na ✏️ é onde
+  a pessoa VÊ a nota — sumir dali a faria procurar captura que não falhou.
+  ⚠️ **A régua vem ANTES do pareamento do art. 136**: a nota do fornecedor não é
+  documento de origem de compra nenhuma, e deixá-la entrar no pareamento
+  gastaria o orçamento de uma nota própria que cobre OUTRA coisa — livro a
+  menos. E vem antes do `docCancelado`: cancelada dele continua sendo dele.
+  🚦 **DUAS TRAVAS**: `selecionarNotasBlocoC` e `escrituraveisNoLivroDeEntradas`
+  entraram em `consumidoresMedidos.test.ts` (o `empresaCnpj` é obrigatório —
+  parâmetro que dá para esquecer devolve "fica no livro" em silêncio), e a
+  varredura de `entradaDoEmitente.test.ts` exige que o **Exportar SAGE e o
+  preflight** passem o MESMO CNPJ: preflight que não visse o mesmo prometeria um
+  arquivo diferente do que sai (o defeito de 12/08).
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: ela prendia o TEXTO
+  `selecionarNotasBlocoC(notas)` — e essa forma VIROU o defeito. Travar a chamada
+  antiga impediria a correção que a régua manda fazer.
+  🚩 **O QUE ISTO NÃO ALCANÇA, e vai dito**: o **acervo** continua gravado com
+  `direcao: 'entrada'` (nada foi reescrito no banco — quem responde é a régua da
+  LEITURA, como sempre nesta casa), e o app **não confere se a nota de SAÍDA da
+  devolução existe**. Ele diz que ela é o documento que se escritura; procurar
+  se ela foi emitida e capturada é do colaborador.
+  📌 **REGRA QUE FICA: `tpNF` é o lado da operação de QUEM EMITIU — e o app
+  precisa das DUAS perguntas.** Desde 31/07 existia só *"esta é a NOSSA nota
+  própria de entrada?"*, e o laço do emitente estava lá para a CONTRAPARTE não
+  sair do lado errado. Ninguém tinha perguntado o que fazer com o DOCUMENTO
+  quando a resposta é "é dele". Régua que responde metade da pergunta deixa a
+  outra metade escriturando a operação do fornecedor no livro do cliente — e o
+  PVA e o E-Fiscal ACEITAM, porque a linha é formalmente correta.
+
 - **🚨 O LIVRO CREDITAVA ICMS DE OPTANTE DO SIMPLES — e o campo que tiraria o
   crédito não chegava nele** (09/09, Paulo fechando a MV LIDER, comércio do
   SIMPLES · 08/2026: *"Como faço para editar esses CFOPs que sobem com base e

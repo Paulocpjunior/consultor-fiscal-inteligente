@@ -31,7 +31,7 @@ import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from '../../services/iobSageEx
 // pelo regime é o dono, nunca a coleção lida na tela.
 import { regimeDaEmpresa } from '../../sefaz-backend/regime-tributario.js';
 import { entradaGeraCreditoIcms } from '../../sefaz-backend/credito-icms-entrada.js';
-import { direcaoEfetivaDoc, docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docCancelado, ehEntradaDoEmitente } from '../../sefaz-backend/xml-metadata-helper.js';
 // O modelo vem da RÉGUA (mora na chave), nunca do campo cru `modelo`.
 import { modeloDoDoc } from '../../sefaz-backend/participante-doc-helper.js';
 import {
@@ -83,7 +83,7 @@ export type AbaId =
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
 
-import { livroSemNotaDeProdutorDuplicada } from '../../services/livroNotaProdutor';
+import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
     gravarCfopEscriturado, lerParametrosCfop, gravarParametroCfop, desligarParametroCfop,
     type ParametroCfopDoc,
@@ -236,6 +236,32 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
 
     const docsRecorte = recorteValido ? (docs as DocumentoFiscal[]) : null;
 
+    // 🚨 A ENTRADA DECLARADA PODE SER DO EMITENTE, NÃO NOSSA (09/09, MV LIDER ·
+    // 08/2026). `tpNF=0` de TERCEIRO é o fornecedor dando entrada no estoque
+    // DELE — devolução recebida, retorno. A mercadoria entra nele, logo SAI de
+    // quem está no `<dest>`: não é operação desta empresa, e escriturá-la ainda
+    // conta a mesma devolução duas vezes quando o cliente emitiu a saída dele.
+    //
+    // O recorte é feito AQUI, uma vez, e as abas de ESCRITURAÇÃO recebem o
+    // filtrado — Resumo por CFOP, Por produto, Por participante, Por alíquota,
+    // Por UF e ICMS/IPI/ISS são recortes do mesmo livro, e um deles somando o
+    // que o Livro tirou faria a tela discordar do papel.
+    //
+    // ⚠️ O **Livro** recebe TUDO de propósito: ele é o dono da exclusão
+    // NOMEADA (linha a linha, na tela e no PDF), e sem os documentos não teria
+    // o que nomear. A ✏️ CFOP por nota, as Canceladas e os Serviços também
+    // recebem tudo — na ✏️ é onde a pessoa VÊ a nota e entende por que ela não
+    // está no livro; sumir dali seria fazê-la procurar captura que não falhou.
+    const { escriturados, entradaDoEmitente } = useMemo(() => {
+        const dentro: DocumentoFiscal[] = [];
+        const fora: DocumentoFiscal[] = [];
+        for (const d of docsRecorte || []) {
+            (ehEntradaDoEmitente(d, empresa?.cnpj) as { sim: boolean }).sim
+                ? fora.push(d) : dentro.push(d);
+        }
+        return { escriturados: docsRecorte ? dentro : null, entradaDoEmitente: fora };
+    }, [docsRecorte, empresa?.cnpj]);
+
     return (
         <div className="space-y-4 animate-fade-in">
             <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 rounded-xl text-white flex items-start justify-between gap-3 flex-wrap">
@@ -319,17 +345,33 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 </p>
             )}
 
+            {/* 🚨 O QUE SAIU DA ESCRITURAÇÃO NÃO SOME CALADO. O Livro nomeia
+                linha a linha (tela e PDF); as demais abas recebem o recorte já
+                filtrado, então a causa tem de aparecer onde quer que a pessoa
+                esteja — senão ela compara o total com o E-Fiscal, vê a
+                diferença e conclui que faltou captura. */}
+            {!!entradaDoEmitente.length && aba !== 'livro' && (
+                <div className="rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+                    <strong>{entradaDoEmitente.length} nota(s) fora da escrituração</strong> — são
+                    notas de <strong>entrada do fornecedor</strong> (tpNF=0 emitido por ele): devolução
+                    recebida ou retorno, em que a mercadoria entrou no estoque DELE. Não são entradas
+                    desta empresa. Se houve devolução, o documento que se escritura é a nota de{' '}
+                    <strong>saída</strong> que a empresa emite. Os números e a lista estão no{' '}
+                    <strong>Livro de Entradas</strong>.
+                </div>
+            )}
+
             {aba === 'livro' && docsRecorte && empresa && (
                 <AbaLivro docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
-            {aba === 'cfop' && docsRecorte && empresa && (
-                <AbaCfop docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
+            {aba === 'cfop' && escriturados && empresa && (
+                <AbaCfop docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
-            {aba === 'impostos-resumo' && docsRecorte && empresa && (
-                <AbaImpostosResumo docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
+            {aba === 'impostos-resumo' && escriturados && empresa && (
+                <AbaImpostosResumo docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
-            {aba === 'uf' && docsRecorte && empresa && (
-                <AbaUf docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} />
+            {aba === 'uf' && escriturados && empresa && (
+                <AbaUf docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} />
             )}
             {aba === 'cfop-nota' && docsRecorte && empresa && (
                 <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast}
@@ -340,14 +382,14 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado}
                     onRebuscar={() => buscar(empresa.id)} />
             )}
-            {aba === 'aliquota' && docsRecorte && empresa && (
-                <AbaAliquota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
+            {aba === 'aliquota' && escriturados && empresa && (
+                <AbaAliquota docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
-            {aba === 'produto' && docsRecorte && empresa && (
-                <AbaProduto docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
+            {aba === 'produto' && escriturados && empresa && (
+                <AbaProduto docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
-            {aba === 'participante' && docsRecorte && empresa && (
-                <AbaParticipante docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
+            {aba === 'participante' && escriturados && empresa && (
+                <AbaParticipante docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
             )}
             {(aba === 'serv-tomados' || aba === 'serv-prestados' || aba === 'retencoes') && docsRecorte && empresa && (
                 <AbaServicos docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} modo={aba} />
@@ -505,14 +547,15 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             };
         };
         const r = direcao === 'entrada'
-            ? livroSemNotaDeProdutorDuplicada(filtrados, montar, (d: any) => d.totais?.vNF || d.valorTotal || 0)
+            ? escrituraveisNoLivroDeEntradas(
+                filtrados, montar, (d: any) => d.totais?.vNF || d.valorTotal || 0, empresa.cnpj)
             : { linhas: filtrados.map(montar), excluidas: [] as any[] };
         return {
             linhas: r.linhas.sort((x: any, y: any) => x.data.localeCompare(y.data)
                 || String(x.numero).localeCompare(String(y.numero))),
             excluidas: r.excluidas,
         };
-    }, [docs, direcao, natureza, cadastroFiscal]);
+    }, [docs, direcao, natureza, cadastroFiscal, empresa.cnpj]);
 
     const tot = useMemo(() => linhas.reduce((t: any, l: any) => ({
         contabil: t.contabil + l.contabil, base: t.base + l.base, icms: t.icms + l.icms,
@@ -552,11 +595,18 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             ] : []),
             // Total que muda sozinho faz desconfiar do número certo: o que saiu
             // do livro sai NOMEADO no papel, não só na tela.
-            ...(excluidas.length ? [
-                `${excluidas.length} NF-e de produtor rural FORA do livro (documento de origem; a escriturada é a `
-                + 'nota própria de entrada — RICMS/SP art. 136, I, "a" e RC 33068/2025): '
-                + excluidas.map((e: any) => `nº ${e.numero} ${e.participante} ${fmtBRL(e.valor)}`).join(' · '),
-            ] : []),
+            //
+            // 🚨 E AGRUPADO POR CAUSA (09/09): eram DUAS a partir da MV LIDER
+            // (NF-e do produtor com par × nota de entrada do FORNECEDOR), e a
+            // frase fixa de produtor rural que estava aqui passaria a MENTIR
+            // sobre metade delas — mandando procurar nota própria de entrada
+            // onde o que existe é devolução. O motivo vem de cada exclusão.
+            ...Array.from(
+                excluidas.reduce((m: Map<string, any[]>, e: any) => (
+                    m.set(e.motivo, [...(m.get(e.motivo) || []), e])
+                ), new Map<string, any[]>()),
+            ).map(([motivo, itens]) => `${itens.length} nota(s) FORA do livro — ${motivo} `
+                + `Notas: ${itens.map((e: any) => `nº ${e.numero} ${e.participante} ${fmtBRL(e.valor)}`).join(' · ')}`),
             ...obsTruncado(truncado),
         ],
         fileName: `livro-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
@@ -597,18 +647,27 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     operação do <strong>fornecedor</strong>.
                 </p>
             )}
-            {!!excluidas.length && (
-                <div className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
-                    <strong>{excluidas.length} NF-e de produtor rural fora do livro</strong> — documento de ORIGEM.
-                    A escriturada é a nota própria de entrada (RICMS/SP art. 136, I, "a"; RC 33068/2025);
-                    escriturar as duas dobra a entrada.
+            {/* 🚨 O QUE SAI DO LIVRO SAI NOMEADO, E AGRUPADO POR CAUSA. Eram
+                duas a partir de 09/09 (MV LIDER): NF-e do produtor com par ×
+                nota de entrada do FORNECEDOR. O título fixo de produtor rural
+                que estava aqui mandaria procurar nota própria de entrada onde o
+                que existe é devolução — aviso certo apontando o lugar errado é
+                o achado 18 (21/08). */}
+            {Array.from(
+                excluidas.reduce((m: Map<string, any[]>, e: any) => (
+                    m.set(e.motivo, [...(m.get(e.motivo) || []), e])
+                ), new Map<string, any[]>()),
+            ).map(([motivo, itens]) => (
+                <div key={motivo}
+                    className="mt-3 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+                    <strong>{itens.length} nota(s) fora do livro</strong> — {motivo}
                     <ul className="mt-1 ml-4 list-disc">
-                        {excluidas.map((e: any) => (
+                        {itens.map((e: any) => (
                             <li key={e.numero}>nº {e.numero} · {e.participante} · {fmtBRL(e.valor)}</li>
                         ))}
                     </ul>
                 </div>
-            )}
+            ))}
         </Card>
     );
 };

@@ -555,7 +555,7 @@ export function buildBlocoA(dados) {
 
 export function buildBlocoC_Contrib(dados) {
     const linhas = [];
-    const selecaoC = selecionarNotasBlocoC(dados.notas);
+    const selecaoC = selecionarNotasBlocoC(dados.notas, dados.empresa?.cnpj);
     const notasC = selecaoC.notas;
     if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecaoC));
     const regimeApuracao = dados.regimeApuracao || '2';
