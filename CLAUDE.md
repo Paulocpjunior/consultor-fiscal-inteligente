@@ -5,6 +5,48 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O TEXTO QUE O PRESTADOR DIGITA DERRUBOU O LOTE DO R-2010 — campo de
+  leiaute com MaxLength recebendo texto livre de terceiro** (10/09, Paulo,
+  J.N. VINATEX · 08/2026, logo depois de o IRRF do R-4020 subir: *"O IR deu
+  certo, assumiu e já subi, daí fui transmitir o R-2010 deu esse erro"*).
+  📖 **A RECEITA DISSE O CAMPO POR EXTENSO**: `MS0030 — … o elemento
+  '…/evtTomadorServicos/v2_01_02:obs' é inválido … **The actual length is
+  greater than the MaxLength value**`, com o texto inteiro citado na recusa —
+  a discriminação do serviço da A7, ~340 caracteres (item, horas, insumos,
+  ISS, cada retenção, valor a receber, vencimento, pedido). **O lote foi
+  RECEBIDO e NADA foi aceito**: a competência ficou sem entrega.
+  🔴 **A CAUSA MORA NO CONTÁBIL, e o defeito estava lá desde o começo**: a rota
+  de transmissão fazia `obs: n.discriminacao || ''` — jogava num campo de
+  LEIAUTE com MaxLength um texto **que quem digita é o PRESTADOR**. No evento
+  ACEITO de 06/2026 a mesma discriminação tinha **35 caracteres** e passou; em
+  08/2026 o MESMO prestador detalhou o serviço. Não é caso raro que estourou:
+  é a garantia de estourar no dia em que ele escrever mais.
+  📌 **O QUE ISSO SIGNIFICA DESTE LADO**: o campo `discriminacao` que o CFI
+  entrega em `/servicos-tomados` (de `discriminacaoServicos`) é **insumo de
+  leitura humana** — é dele que sai o `tpServico`, que a nota não traz. Ele
+  **NÃO é a `obs` do evento**, e o comentário ao lado dele agora diz isso, para
+  ninguém religar. Quem decide o que cabe no campo é o **gerador do outro
+  lado**, que é quem conhece o leiaute.
+  ✂️ **Corrigido no Contábil (v3.4.272)**: `obsQueCabe` no `gerar-r2010.js` (o
+  dono do leiaute — a rota parou de conhecer tamanho de campo), observação que
+  não cabe **fica de fora e sai NOMEADA** com o número da nota na resposta e na
+  tela, e **NUNCA recortada** — meia declaração de terceiro (*"…RETENCAO
+  SEG.SOCI"*) é dado com cara de declaração. Nenhum valor muda: bruto, base
+  retida e retenção continuam os da nota.
+  ⚠️ **E O NÚMERO DO TETO É DO APP, dito como tal**: o MaxLength do XSD **não
+  está medido** (o portal SPED é bloqueado por esta rede, como o CONFAZ e o
+  manual da Receita), e só o XSD do **R-4020** está no repo do Contábil — nele
+  o campo IRMÃO `observ` é `maxLength 200`, o que CORROBORA a ordem de grandeza
+  e **não é o número do 2010** (o 1010 tem sete campos num arquivo e nove no
+  outro). O único tamanho PROVADO é 35, então o teto é **80**: errar para baixo
+  omite uma observação informativa, errar para cima devolve o MS0030 e o lote.
+  📌 **REGRA QUE FICA: campo de leiaute com MaxLength não recebe texto que um
+  TERCEIRO digita.** Ou o app conhece o teto e decide o que cabe, ou está
+  apostando que ninguém vai escrever demais — e essa aposta não falha no
+  desenvolvimento: falha na competência do cliente, com o lote inteiro voltando
+  e a causa chegando como erro de *schema*, que se lê como defeito de estrutura
+  do evento, não como "o texto de uma nota é longo".
+
 - **🚨 O LIVRO CREDITAVA IPI DE OPTANTE E ESCONDIA O ICMS ST — a segunda
   metade do mesmo caso** (09/09, Paulo, MV LIDER · comércio do Simples ·
   08/2026, com o livro já sem base e sem ICMS: *"deu certo, excluiu a BASE e o

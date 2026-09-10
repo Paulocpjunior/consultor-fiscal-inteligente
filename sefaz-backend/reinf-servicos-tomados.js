@@ -275,6 +275,13 @@ export function normalizarServicoTomado(d, ajuste) {
 
         // FONTE de apoio: o prestador costuma descrever o serviço aqui, e é
         // disso que sai o tpServico do outro lado.
+        //
+        // ⚠️ ELA NÃO É A `obs` DO EVENTO, e isso custou um lote (10/09, VINATEX
+        // 08/2026): a rota do Contábil fazia `obs: n.discriminacao` e a Receita
+        // recusou o R-2010 inteiro com **MS0030** — o `obs` do `nfs` tem
+        // MaxLength no XSD e este texto quem digita é o PRESTADOR, sem teto
+        // (35 caracteres em 06/2026, 340 em 08/2026). Quem decide o que cabe no
+        // campo é o gerador, lá; aqui ela é insumo de LEITURA humana.
         discriminacao: texto(d?.discriminacaoServicos) || null,
         codigoServicoMunicipal: texto(d?.codigoServico) || null,
     };

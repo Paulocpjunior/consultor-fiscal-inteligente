@@ -37,6 +37,10 @@ const RAIZ = resolve(__dirname, '..');
  */
 const DATAS_SEM_EFEITO_PARA_QUEM_USA: Record<string, string> = {
     // exemplo: '05/09': 'só varredura de teste — nada muda na tela nem no arquivo',
+    '10/09': 'o MS0030 do R-2010 (a discriminação da nota estourando o campo obs do leiaute) '
+        + 'é defeito do Consultor Contábil e foi corrigido LÁ, com novidade própria na v3.4.272. '
+        + 'Deste lado entrou só o comentário no campo `discriminacao` e o mata-burro: nenhuma '
+        + 'tela do CFI muda, e novidade sobre o que não mudou aqui manda procurar no lugar errado.',
 };
 
 /** 'DD/MM' → número comparável. */
