@@ -248,6 +248,25 @@ describe('💰 valor e retenção: ausente NUNCA é zero', () => {
     });
 });
 
+describe('🧬 o merge NÃO pode apagar o que o outro trilho gravou', () => {
+    it('campo que este arquivo não responde não viaja como null', () => {
+        // O documento deste id pode já existir, trazido pelo ADN — é esse o
+        // ponto de o id ser a chave. `merge: true` não protege de `null`
+        // ESCRITO: ele sobrescreve, e o dado some calado.
+        const imp = readFileSync(join(__dirname, '..', 'sefaz-backend', 'nfse-barueri-csv-importer.js'), 'utf8')
+            .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        expect(imp).toMatch(/\.\.\.semVazios\(\{/);
+        expect(imp).not.toMatch(/empresaNome: ctx\.empresaNome \|\| null/);
+    });
+
+    it('o documento montado não carrega chave vazia nem valor nulo à toa', () => {
+        const r = parseCsvNfseBarueri(csvLatin1([{ numero: 39, chave: '', valor: '' }]));
+        const doc = documentoDaNotaBarueri(r.notas[0], { empresaCnpj: PRESTADOR });
+        expect(doc.valorTotal).toBeUndefined();
+        expect(doc.chave).toBeNull(); // vira ausência no payload (semVazios)
+    });
+});
+
 describe('🔌 a régua está LIGADA — régua que ninguém chama é flag que ninguém lê', () => {
     const rota = readFileSync(join(__dirname, '..', 'sefaz-backend', 'nfse-sp-routes.js'), 'utf8')
         .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');

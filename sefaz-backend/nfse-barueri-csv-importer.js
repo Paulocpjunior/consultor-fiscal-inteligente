@@ -36,6 +36,25 @@ const raiz = (v) => so(v).slice(0, 8);
 const num = (v) => (Number.isFinite(v) ? v : null);
 
 /**
+ * 🚨 `merge: true` NÃO protege de `null` ESCRITO — ele sobrescreve.
+ *
+ * O documento deste id pode já existir, gravado pela captura do ADN (é esse o
+ * ponto de o id ser a chave). Mandar `empresaNome: null` ou `chave: ''` porque
+ * ESTE arquivo não tem o campo APAGARIA o que o outro trilho trouxe — e some
+ * calado, que é o pior jeito de perder dado de documento fiscal.
+ *
+ * Campo que este arquivo não responde simplesmente não viaja.
+ */
+function semVazios(obj) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+        if (v === null || v === undefined || v === '') continue;
+        out[k] = v;
+    }
+    return out;
+}
+
+/**
  * De que lado a empresa está — pelos DOCUMENTOS da nota, nunca pelo nome do
  * arquivo. Compara pela RAIZ (matriz e filial são a mesma empresa no resto do
  * app: a régua do certificado e a do lote de XML).
@@ -220,11 +239,13 @@ export async function salvarNotaBarueri(nota, ctx = {}) {
     const empresaCnpj = so(ctx.empresaCnpj) || (doc.direcao === 'entrada' ? doc.tomadorCnpj : doc.prestadorCnpj);
 
     const payload = {
-        id: docId,
-        ...doc,
-        empresaId: ctx.empresaId || null,
-        empresaCnpj: empresaCnpj || null,
-        empresaNome: ctx.empresaNome || null,
+        ...semVazios({
+            id: docId,
+            ...doc,
+            empresaId: ctx.empresaId,
+            empresaCnpj,
+            empresaNome: ctx.empresaNome,
+        }),
         importadoEm: admin.firestore.FieldValue.serverTimestamp(),
         importadoPor: ctx.importadoPor || 'admin',
         atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
