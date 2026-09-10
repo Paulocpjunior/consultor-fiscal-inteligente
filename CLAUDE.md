@@ -5,6 +5,74 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "QUANDO EU INFORMO O CFOP NÃO GRAVA" — e ele GRAVAVA: quem falhava era a
+  LEITURA de volta** (10/09, Paulo, DISTRIBUIDORA DE BANANAS ELS, no modal
+  🔗 Correlação de CFOP → 🧠 Por fornecedor: POSTO BORDO · origem **5656** ·
+  escriturar como **1407** · a partir de agosto/2026).
+  📖 **OS DOIS PRINTS CONTAM A SEQUÊNCIA INTEIRA**: no primeiro o campo tem
+  `1407`, o botão **Criar parâmetro** está aceso e a descrição oficial aparece
+  embaixo (*"Compra de mercadoria para uso ou consumo … sujeita ao regime de
+  substituição tributária"*) — ou seja **estava tudo válido**; no segundo, depois
+  do clique, o campo está VAZIO, a lista continua **"Parâmetros ativos (0)"** e
+  volta o *"Falta preencher 'Escriturar como'"*. **Nenhum erro na tela.**
+  🔴 **A CAUSA É UMA CONSULTA SEM `limit`, e a regra do Firestore NEGA.**
+  `firestore.rules` libera o `list` de `cfop_parametros` com
+  `request.query.limit <= 2000`; `lerParametrosCfop` consultava **sem limite**,
+  a recusa voltava *"Missing or insufficient permissions"* e o
+  `catch { return [] }` a transformava em *"esta empresa não tem parâmetro"*. O
+  `addDoc` passou (o campo só limpa DEPOIS do `gravarParametroCfop`, e a recusa
+  de gravação teria acendido a caixa vermelha) — **o parâmetro está no banco**.
+  📌 **É A "RÉGUA QUE SÓ ESCREVE" PELA PONTA DA LEITURA (04/09, FRONTINI)**: a
+  pessoa faz o trabalho certo, não vê efeito, e a única saída que sobra é clicar
+  de novo — aqui isso deixa o MESMO fornecedor com dois parâmetros.
+  🚨 **E O FATO JÁ ESTAVA ESCRITO NESTA CASA, EM DOIS COMENTÁRIOS**: o
+  `giaStService` diz *"fbLimit(500) obrigatório: firestore.rules só permite list
+  com request.query.limit <= 500 — **sem limit a regra NEGA**"*, e o
+  `firestorePaginate` diz *"a query INTEIRA é negada (permission-denied) e o
+  caller engole no catch → **tela vazia silenciosa**"*, citando o bug *"Empresas
+  elegiveis (0)"*. **Regra escrita não é regra travada** (13/08), pela enésima
+  vez — e desta vez o custo foi o dono clicando e printando duas vezes.
+  🔎 **A VARREDURA ACHOU TRÊS, e o print mostrava UM**: além do
+  `cfop_parametros`, o **`contadores`** (o catálogo do modal Dados Fiscais
+  aparecia vazio, e o caller ainda engolia num `.catch(() => {})`) e o
+  **`retencao_parametros`** — o cérebro da retenção de 04/09, cuja sugestão
+  **nunca apareceu para ninguém**, e ninguém tinha como saber que ela deveria.
+  Corrigir só o que o print mostra fecha a INSTÂNCIA e deixa a classe aberta.
+  ⚠️ **TRIAGEM ANTES DE CORRIGIR, e ela poupou 15 arquivos**: a 1ª versão da
+  varredura olhava a LINHA do `getDocs` e acusou **18** lugares — 15 estão
+  CERTOS, porque o limite quase sempre é passado onde a query é MONTADA
+  (`const q = query(…, fbLimit(500))` ou `constraints.push(fbLimit(max))`). A
+  assinatura passou a resolver a CONSTRUÇÃO (variável e spread, recursivamente);
+  🐛 e ainda assim a 2ª versão acusou duas consultas corretas do
+  `nfseSpCapturadasService`, porque o spread precisa ser resolvido **depois** de
+  resolver a variável. **Alarme sobre código certo é o jeito conhecido de a
+  equipe desligar a trava.**
+  ✂️ **QUEM PASSA O LIMITE É `fetchAllDocs`, nunca um `fbLimit` solto**: ele
+  respeita o teto E pagina — `fbLimit(2000)` sozinho truncaria em silêncio, que
+  é o antipattern que aquele módulo existe para matar. E o teto de cada coleção
+  é conferido **contra o `firestore.rules`** no teste: régua que muda sem o
+  leitor mudar volta a negar.
+  ⚠️ **FALHA DE LEITURA DEIXOU DE SER SILÊNCIO nas duas pontas que doem**: no
+  painel ela vira aviso âmbar dizendo que **o que acabou de ser criado PODE ter
+  sido gravado** (recarregue antes de criar de novo, senão duplica); e no
+  **Exportar SAGE** ela vira o `avisoParametrosCfop` — o `.FML` sai pela régua
+  AUTOMÁTICA, ignorando o CFOP que alguém ensinou de propósito. **O backend já
+  fazia isso desde 07/09 (`lerParametrosCfopDaEmpresa` devolve `{parametros,
+  erro}`) e a metade do FRONT tinha ficado para trás** — meia trava outra vez.
+  ⚠️ **O SPED NÃO ESTAVA AFETADO**, e isso vai dito: ele lê pelo admin SDK, que
+  não passa por rules. O que estava morto era o cérebro no **.FML**, nos
+  **Relatórios** e no **painel** — os três caminhos do navegador.
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: ela prendia o TEXTO
+  `catch { return []; }` — e essa forma **VIROU o defeito**. A intenção que ela
+  protege (o cérebro é palpite, não trava: a leitura não lança e a régua
+  automática segue valendo) continua travada, agora exigindo o erro NOMEADO.
+  📌 **REGRA QUE FICA: consulta de LISTA nasce com o `limit` que a regra exige —
+  e falha de leitura nunca vira "não há".** As duas metades são necessárias: sem
+  o limite a recusa acontece; sem o erro nomeado ela fica indistinguível do caso
+  vazio, que é o silêncio que esta casa mais paga. Travado por VARREDURA
+  (`consultaFirestoreTemLimite.test.ts`), com o teto lido da FONTE, e provado
+  revertendo os três — ela acusa cada um pelo nome do arquivo.
+
 - **🚨 A TELA MORRIA AO ABRIR A NOTA — e o campo vazio era decisão CERTA do
   outro lado** (10/09, Paulo, com o print do banner: *"Erro ao carregar **App**
   · Cannot read properties of undefined (reading 'toLocaleString')"* … *"sempre

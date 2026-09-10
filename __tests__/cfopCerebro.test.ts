@@ -176,8 +176,21 @@ describe('🚨 a gravação valida e o desligar não apaga', () => {
         expect(fonte).not.toMatch(/deleteDoc\(/);
     });
 
-    it('falha de leitura devolve [] — o cérebro é palpite, não trava', () => {
-        expect(fonte).toMatch(/catch \{\s*\n\s*return \[\];/);
+    /**
+     * 📌 ASSERÇÃO TROCADA PELA INTENÇÃO (10/09). Ela prendia o TEXTO
+     * `catch { return []; }` — e essa forma VIROU o defeito: a recusa do banco
+     * (consulta sem `limit`, que a regra nega) saía como "esta empresa não tem
+     * parâmetro", e o Paulo leu "não grava" sobre parâmetro gravado.
+     *
+     * A intenção que ela protege continua de pé, e é a que importa: o cérebro é
+     * palpite, não trava — a leitura NÃO lança, e sem ela a régua automática
+     * segue valendo. O que mudou é o silêncio: o erro sai NOMEADO.
+     */
+    it('falha de leitura não derruba nada — devolve vazio com o erro NOMEADO', () => {
+        expect(fonte).toMatch(/catch \(e: any\) \{[\s\S]{0,200}?erro: e\?\.message/);
+        expect(fonte).toMatch(/parametros: \[\], erro: e\?\.message|erro: e\?\.message \|\| String\(e\)/);
+        // E o limite é o que impede a recusa de acontecer, para começar.
+        expect(fonte).toMatch(/batchSize: LIMITE_LIST_PARAMETROS/);
     });
 
     it('a coleção está no catálogo do banco e nas rules', () => {

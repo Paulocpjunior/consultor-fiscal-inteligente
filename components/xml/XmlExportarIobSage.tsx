@@ -6,6 +6,7 @@ import { exportarParaIobSage, downloadBlob, participanteDoDoc } from '../../serv
 import { conferirAntesDeGerar, type ResultadoPreflight } from '../../services/iobSagePreflight';
 import { conferirCorrelacaoCfop } from '../../services/cfopConferencia';
 import { lerParametrosCfop } from '../../services/cfopEscrituradoService';
+import { avisoParametrosCfop } from '../../sefaz-backend/cfop-parametros-store.js';
 import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
@@ -70,6 +71,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Sem isso, a configuração da equipe não chegava ao arquivo.
     const [cfopCtx, setCfopCtx] = useState<CfopCtx | undefined>(undefined);
     const [naturezaOrigem, setNaturezaOrigem] = useState<'cadastro' | 'indicador' | 'padrao' | null>(null);
+    /** 🧠 Falha ao LER o cérebro — o arquivo sai pela régua AUTOMÁTICA e isso
+     *  vai DITO, nunca em silêncio (a régua de 07/09, que o backend já honrava
+     *  e o front engolia num `catch`). */
+    const [avisoCerebro, setAvisoCerebro] = useState<string | null>(null);
     const [exporting, setExporting] = useState(false);
 
     const [corrigindoEnderecos, setCorrigindoEnderecos] = useState(false);
@@ -161,7 +166,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Configuração de CFOP + código do CONSUMIDOR da empresa escolhida.
     useEffect(() => {
         let alive = true;
-        if (!empresaSelecionada) { setCfopCtx(undefined); setCodigoConsumidor(''); setConsumidorSalvo(''); return; }
+        if (!empresaSelecionada) { setCfopCtx(undefined); setCodigoConsumidor(''); setConsumidorSalvo(''); setAvisoCerebro(null); return; }
         // 🧠 Os parâmetros do cérebro vêm JUNTO do cadastro (07/09): o .FML, o
         // preflight e a conferência de correlação leem o MESMO contexto, e sem
         // eles aqui o arquivo ignorava o CFOP ensinado para o fornecedor.
@@ -169,8 +174,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id),
             lerParametrosCfop(empresaSelecionada.id),
         ])
-            .then(([df, parametros]) => {
+            .then(([df, leituraCerebro]) => {
                 if (!alive) return;
+                const parametros = leituraCerebro.parametros;
+                setAvisoCerebro(avisoParametrosCfop(leituraCerebro.erro));
                 // Parametriza pelo CADASTRO (Paulo, 05/08): natureza declarada,
                 // senão o indicador de atividade, senão o padrão — a MESMA
                 // régua do SPED. Antes lia só `naturezaAtividade` e empresa do
@@ -647,6 +654,16 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-2">
                     🚦 {preflight.resumo}
                 </p>
+            )}
+
+            {/* 🚨 O CÉREBRO NÃO PÔDE SER LIDO — e o `.FML` sai pela régua
+                AUTOMÁTICA. `[]` calado aqui é o arquivo ignorando o CFOP que
+                alguém ensinou de propósito (07/09); a frase é a MESMA do
+                backend, importada, para as duas pontas não divergirem. */}
+            {avisoCerebro && (
+                <div className="rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-300">
+                    {avisoCerebro}
+                </div>
             )}
 
             {correlacao && correlacao.linhas.length > 0 && (
