@@ -26,7 +26,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 
 // Valor do documento em TODAS as formas (o import pelo navegador grava só
 // `totais.vNF`) — régua única.
-import { valorDoDocumento } from './xml-metadata-helper.js';
+import { valorDoDocumento, docContaNoLivro } from './xml-metadata-helper.js';
 // O nome carrega a HORA da geração — dono ÚNICO nas duas famílias, senão o
 // EFD ICMS/IPI continuaria produzindo arquivos indistinguíveis (PWR, 25/08).
 import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
@@ -484,9 +484,17 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
         const nfes = [];
         let descartadas = 0;
         let perdedoresMerge = 0;
+        let retiradasDoAcervo = 0;
         for (const d of snap) {
             const doc = d.data();
             if (doc._merged_into) { perdedoresMerge++; continue; }
+            // 🚨 AQUI A LÁPIDE EVITA O ALARME FALSO, não o número errado: nota
+            // TIRADA do livro não está no arquivo — e é isso que se espera. Sem
+            // este filtro ela voltaria como "capturada e NÃO ENCONTRADA na
+            // escrituração", severidade ERRO, a mensagem mais grave da tela,
+            // com os dois lados CERTOS. Alarme sobre arquivo correto é o jeito
+            // conhecido de a equipe desligar a conferência (22/08).
+            if (!docContaNoLivro(doc)) { retiradasDoAcervo++; continue; }
             const chave = String(doc.chave || doc.chaveAcesso || '').replace(/\D/g, '');
             if (chave.length !== 44) { descartadas++; continue; }
             nfes.push({
@@ -499,7 +507,13 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
                 dataEmissao: doc.dataEmissao || doc.dhEmi || null,
             });
         }
-        return res.json({ empresaId, competencia, total: nfes.length, descartadas, perdedoresMerge, nfes });
+        // Contado À PARTE: "não conferi porque foi tirada do livro" e "não
+        // conferi porque o documento está torto" pedem ações opostas, e um
+        // número só faz as duas parecerem a mesma coisa.
+        return res.json({
+            empresaId, competencia, total: nfes.length,
+            descartadas, perdedoresMerge, retiradasDoAcervo, nfes,
+        });
     } catch (e) {
         return tratarErro(e, res);
     }

@@ -41,6 +41,7 @@ import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './par
 // 🔒 O acervo que o fim de mês congelou — o dono da pergunta "este documento
 // já estava aqui quando o mês foi fechado?".
 import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
+import { docContaNoLivro } from './xml-metadata-helper.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
 // 🧠 O cérebro do CFOP entra no ARQUIVO (07/09): sem esta leitura o C170/C190
 // saíam pela régua automática num fornecedor que a pessoa já tinha ensinado.
@@ -131,8 +132,13 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             .map(d => ({ id: d.id, ...d.data() }))
             .filter(n => n.competencia >= periodoInicio && n.competencia <= periodoFim);
     }
-    // Ignora docs marcados como duplicata (vencedor do merge fica na lista).
-    notas = notas.filter(n => !n._merged_into);
+    // 🚨 A LÁPIDE VALE NO ARQUIVO, não só na listagem (10/09). Este filtro
+    // via só metade dela (`_merged_into`), então a nota TIRADA do livro —
+    // importada na empresa errada (03/09) ou com o número corrigido (10/09) —
+    // continuava saindo no C100/C190 e na apuração. Quem responde é o dono.
+    const totalAntesDaLapide = notas.length;
+    notas = notas.filter(docContaNoLivro);
+    const retiradasDoAcervo = totalAntesDaLapide - notas.length;
 
     // ═══════════════════════════════════════════════════════════════════════
     // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
@@ -316,6 +322,16 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         contribuinteIpi: empresa?.dadosFiscais?.contribuinteIpi,
     });
     if (avisoTipoItem) warnings.push(avisoTipoItem);
+    // O que sai do arquivo sai DITO — mas só quando houve retirada: aviso em
+    // arquivo normal é o que ensina a equipe a ignorar os avisos que importam.
+    if (retiradasDoAcervo > 0) {
+        warnings.push(
+            `${retiradasDoAcervo} documento(s) NAO entraram no arquivo porque foram tirados do livro `
+            + `(nota importada na empresa errada, numero corrigido ou perdedor de merge). `
+            + `O documento continua guardado com o motivo e com quem tirou — confira na Central de `
+            + `Documentos Fiscais se algum deles deveria estar aqui.`,
+        );
+    }
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
     }
@@ -463,7 +479,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                             db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${comp}`).get(),
                         ]);
                         const notasMes = snapNotas.docs.map((d) => ({ id: d.id, ...d.data() }))
-                            .filter((n) => !n._merged_into);
+                            .filter(docContaNoLivro);
                         const cls = classificarAjustes(
                             snapAj.exists ? (snapAj.data().ajustes || []) : [],
                             (empresa.dadosFiscais?.uf || '').toUpperCase(),

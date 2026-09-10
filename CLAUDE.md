@@ -5,6 +5,59 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A LÁPIDE VALIA NA LISTAGEM E **NÃO** NO ARQUIVO FISCAL — a nota tirada
+  do livro continuava saindo no SPED** (10/09, achado ao medir o alcance da
+  correção de número; ninguém reportou).
+  📌 **O MATA-BURRO DE 03/09 DIZ, PALAVRA POR PALAVRA, QUE *"`_deleted` já é
+  filtrado por toda a listagem"* — e isso é VERDADE para a listagem e FALSO
+  para o SPED.** Medido: o `sped-fiscal-orchestrator` filtrava só metade da
+  lápide (`_merged_into`) e o **`sped-contrib-orchestrator` não filtrava
+  NENHUMA das duas**; o crédito de PIS/COFINS também não.
+  🚨 **O CUSTO É O MAIOR QUE ESTA CASA TEM**: a nota que alguém tirou do livro
+  — importada na empresa errada (03/09) ou com o número corrigido (10/09) —
+  **continuava sendo declarada à Receita**. É a "régua que só escreve" (04/09)
+  pela ponta do LIVRO: a pessoa faz o trabalho certo, a tela obedece, e o
+  arquivo diz o contrário. **Nenhum validador acusa** — a linha é formalmente
+  correta.
+  ⚠️ **E ELA SE ESCONDIA ATRÁS DA CORREÇÃO QUE EU ACABARA DE FAZER**: sem esta
+  metade, quem usasse o ✏️ Corrigir o número teria as DUAS notas no SPED — ou
+  seja, eu teria entregue uma correção que resolve na tela e duplica no arquivo.
+  ✂️ `docRetiradoDoAcervo`/`docContaNoLivro` (no dono das leituras de
+  documento, ao lado de `docCancelado` e `direcaoEfetivaDoc`) lê **as DUAS
+  lápides**: `_deleted` é a retirada e `_merged_into` é o perdedor de merge —
+  nos dois o documento fica guardado como prova e **não conta no livro**. Quem
+  lê uma sem a outra deixa metade passar, que é exatamente o que o
+  EFD-Contribuições fazia.
+  ⚠️ **TRIAGEM ANTES DE CORRIGIR, e ela poupou 15 arquivos**: 20 leitores
+  consultam `documentos_fiscais` sem olhar a lápide e **5 eram reais** (os dois
+  SPED, o crédito de PIS/COFINS, a conferência CFI × SPED e a NFTS). Os outros
+  15 são importadores (escrevem) ou perguntam sobre **CAPTURA** — e ali o
+  documento retirado **ainda prova que a captura funcionou**: filtrá-lo faria o
+  cliente parecer descoberto por causa de uma correção de digitação.
+  ⚠️ **NA CONFERÊNCIA CFI × SPED A LÁPIDE EVITA O ALARME FALSO, não o número
+  errado**: a nota tirada voltava como *"capturada e NÃO encontrada na
+  escrituração"*, severidade **ERRO**, com os dois lados CERTOS — o jeito
+  conhecido de a equipe desligar a conferência (22/08). Ela sai contada **À
+  PARTE** (`retiradasDoAcervo`), porque "não conferi porque foi tirada" e "não
+  conferi porque o documento está torto" pedem ações opostas.
+  📌 **E O QUE SAI DO ARQUIVO SAI DITO**: a geração diz quantos documentos
+  ficaram de fora por retirada — e o aviso **só nasce quando houve retirada**,
+  senão seria alarme em todo arquivo normal.
+  🐛 **E A PRÓPRIA TRAVA PEGOU SEIS EXCEÇÕES MINHAS ÓRFÃS na primeira
+  execução**: declarei motivo para seis arquivos que **nem consultam** a coleção
+  (só mencionam a string num comentário). Exceção órfã envelhece dizendo que
+  cobre algo que não existe — é a lição do túnel de datas (02/09), agora dentro
+  da minha varredura.
+  🚩 **PENDÊNCIA DO PAULO, e ela vale dinheiro**: quem tirou nota do livro entre
+  **03/09 e 10/09 e já gerou o SPED daquela competência** entregou o arquivo
+  **com a nota que tirou**. Gerar de novo e conferir — o app não sabe quais
+  competências já foram transmitidas.
+  📌 **REGRA QUE FICA: feature que ESCONDE um documento tem a lista de leitores
+  MEDIDA no mesmo PR — e "a listagem já filtra" não é a mesma coisa que "o
+  livro já filtra".** A retirada nasceu certa na tela e ficou sete dias saindo
+  no arquivo fiscal; o que a achou não foi um relato, foi perguntar *"quem mais
+  lê este documento?"* antes de dar a correção por entregue.
+
 - **🚨 "O CORRETO SERIA 9792" — e RELANÇAR PELO ✍️ NÃO CORRIGE: cria uma
   SEGUNDA nota** (10/09, Paulo, HANAMI EMBALAGENS · NF-e de saída **792/1** de
   R$ 3.545,85 para a ABINAPA, lançada à mão: *"precisava fazer uma correção em

@@ -377,6 +377,48 @@ export function docCancelado(d) {
 
 
 /**
+ * ESTE DOCUMENTO FOI TIRADO DO ACERVO? — a LÁPIDE, lida num lugar só.
+ *
+ * 🚨 POR QUE ISTO EXISTE (10/09, medindo o alcance da correção de número): a
+ * retirada por lápide está no ar desde 03/09 (*"lancei uma nota da J.P. PISSATO
+ * na empresa SILVIO FREIRE … como resolver?"*) e o mata-burro daquele dia diz
+ * que *"`_deleted` já é filtrado por toda a listagem"* — **verdade para a
+ * LISTAGEM, e FALSO para o arquivo fiscal**. A varredura mediu: os DOIS
+ * orquestradores do SPED liam `documentos_fiscais` sem olhar a lápide (o do
+ * EFD-Contribuições não olhava nem o `_merged_into`), e o crédito de PIS/COFINS
+ * também não.
+ *
+ * Ou seja: a nota tirada do livro **continuava saindo no arquivo entregue à
+ * Receita**. É a "régua que só escreve" (04/09) pela ponta do LIVRO — a pessoa
+ * faz o trabalho certo, a tela obedece, e o SPED declara o contrário.
+ *
+ * ⚠️ **DUAS LÁPIDES, UM SÓ FATO**: `_deleted` é a retirada (24/07, caso
+ * WALDESA; 03/09, empresa errada; 10/09, número corrigido) e `_merged_into` é o
+ * PERDEDOR de um merge. Nos dois o documento continua guardado como prova e
+ * **não conta no livro** — quem lê um sem o outro deixa metade passar, que é
+ * exatamente o que o EFD-Contribuições fazia.
+ *
+ * ⚠️ **E ELA NÃO SERVE PARA TUDO, de propósito.** Onde a pergunta é sobre
+ * CAPTURA — a cobertura de saída, a prova de captura, a conferência por chaves,
+ * o diagnóstico — o documento retirado **ainda prova que a captura funcionou**,
+ * e escondê-lo faria o cliente parecer descoberto por causa de uma correção de
+ * digitação. Filtra quem monta LIVRO, ARQUIVO ou IMPOSTO.
+ */
+export const CAMPOS_PARA_DOC_RETIRADO = Object.freeze(['_deleted', '_merged_into']);
+
+export function docRetiradoDoAcervo(d) {
+    if (!d) return false;
+    if (d._deleted === true) return true;
+    return !!String(d._merged_into || '').trim();
+}
+
+/** O contrário, para ler como filtro: `notas.filter(docContaNoLivro)`. */
+export function docContaNoLivro(d) {
+    return !docRetiradoDoAcervo(d);
+}
+
+
+/**
  * QUEM AFIRMOU O CANCELAMENTO — e a resposta tem TRÊS valores, não dois.
  *
  * `'documento'` = a fonte disse (status, cStat ou evento) · `'declarado'` =
