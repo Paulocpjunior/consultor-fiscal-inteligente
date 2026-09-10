@@ -188,6 +188,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
     // ✏️ CFOP por nota). Até 07/09 só a ✏️ os lia: a pessoa ensinava o
     // fornecedor, via o parâmetro lá — e o Livro ao lado mostrava outro CFOP.
     const [parametrosCfop, setParametrosCfop] = useState<ParametroCfopDoc[]>([]);
+    /** Falha de LEITURA do cérebro — lista vazia por recusa do banco não pode
+     *  passar por "esta empresa não tem parâmetro" (10/09, ELS). */
+    const [erroParametrosCfop, setErroParametrosCfop] = useState<string | null>(null);
 
     React.useEffect(() => {
         let alive = true;
@@ -225,7 +228,8 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             ]);
             setIdentificacao(montarIdentificacao(dadosFiscais));
             setCadastroFiscal(dadosFiscais || null);
-            setParametrosCfop(parametros);
+            setParametrosCfop(parametros.parametros);
+            setErroParametrosCfop(parametros.erro);
             setTruncado(!!meta.truncado);
             const cnpj = alvo.cnpj.replace(/\D/g, '');
             setDocs(todos
@@ -379,6 +383,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             {aba === 'cfop-nota' && docsRecorte && empresa && (
                 <AbaCfopPorNota docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} currentUser={currentUser} onShowToast={onShowToast}
                     parametrosCfop={parametrosCfop} onParametrosMudou={setParametrosCfop}
+                    erroParametrosCfop={erroParametrosCfop}
                     onRebuscar={() => buscar(empresa.id)} />
             )}
             {aba === 'canceladas' && docsRecorte && empresa && (
@@ -448,6 +453,8 @@ interface AbaDocsProps {
     parametrosCfop?: ParametroCfopDoc[];
     /** A ✏️ grava parâmetro; as outras abas precisam ver o novo sem rebuscar. */
     onParametrosMudou?: (ps: ParametroCfopDoc[]) => void;
+    /** Falha ao LER o cérebro — a ✏️ diz isso em vez de mostrar lista vazia. */
+    erroParametrosCfop?: string | null;
 }
 
 /** Só os ligados decidem — desligar não apaga, mas desligado não escritura. */
@@ -740,7 +747,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
  */
 const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?: (m: string, t?: any) => void; onRebuscar?: () => void }> = ({
     docs, empresa, competencia, truncado, identificacao, cadastroFiscal, currentUser, onShowToast, onRebuscar,
-    parametrosCfop, onParametrosMudou,
+    parametrosCfop, onParametrosMudou, erroParametrosCfop,
 }) => {
     const { gerando, rodar } = usePdf();
     const [salvando, setSalvando] = useState<string | null>(null);
@@ -754,6 +761,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
     // para o pai, senão o Livro ao lado seguiria com a lista velha.
     const parametros = parametrosCfop || [];
     const setParametros = (ps: ParametroCfopDoc[]) => onParametrosMudou?.(ps);
+    const [erroLeituraCerebro, setErroLeituraCerebro] = useState<string | null>(null);
     const [sugestao, setSugestao] = useState<any>(null);
     const [verParametros, setVerParametros] = useState(false);
     /** Gravado nesta sessão — o recorte não é relido a cada tecla. */
@@ -1061,8 +1069,13 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                                 ...sugestao.parametro,
                                                 porEmail: currentUser?.email || '',
                                             });
-                                            setParametros(await lerParametrosCfop(empresa.id));
-                                            onShowToast?.('Parâmetro criado — vale das próximas notas em diante.', 'success');
+                                            const rel = await lerParametrosCfop(empresa.id);
+                                            setParametros(rel.parametros);
+                                            setErroLeituraCerebro(rel.erro);
+                                            onShowToast?.(rel.erro
+                                                ? 'Parâmetro criado — mas a lista não pôde ser lida; abra 🧠 Ver parâmetros.'
+                                                : 'Parâmetro criado — vale das próximas notas em diante.',
+                                                rel.erro ? 'warning' : 'success');
                                         } catch (e: any) { setErro(e?.message || 'Falha ao criar o parâmetro.'); }
                                         setSugestao(null);
                                     }}
@@ -1116,6 +1129,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                         user={currentUser}
                         fornecedores={fornecedoresDoRecorte}
                         parametros={parametros}
+                        erroLeitura={erroLeituraCerebro ?? erroParametrosCfop}
                         onMudou={setParametros}
                         competenciaPadrao={competencia}
                     />

@@ -9,17 +9,17 @@
 // É a régua de sempre: validação por RESULTADO, não por status.
 // ============================================================================
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // O painel importa o serviço, que puxa firebase — aqui só interessa a TELA.
 jest.mock('../services/cfopEscrituradoService', () => ({
-    lerParametrosCfop: jest.fn(async () => []),
+    lerParametrosCfop: jest.fn(async () => ({ parametros: [], erro: null as string | null })),
     gravarParametroCfop: jest.fn(async () => undefined),
     desligarParametroCfop: jest.fn(async () => undefined),
 }));
 
 import CfopCerebroPainel from '../components/CfopCerebroPainel';
-import { gravarParametroCfop } from '../services/cfopEscrituradoService';
+import { gravarParametroCfop, lerParametrosCfop } from '../services/cfopEscrituradoService';
 
 const FORNECEDORES = [{
     cnpj: '15438711000110',
@@ -119,5 +119,65 @@ describe('o campo vazio DIZ que é de digitação', () => {
             />,
         );
         expect(screen.queryByText(/é campo de digitação/)).toBeNull();
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 "QUANDO EU INFORMO O CFOP NÃO GRAVA" (Paulo, 10/09, DISTRIBUIDORA DE
+// BANANAS ELS — POSTO BORDO, origem 5656, escriturar como 1407).
+//
+// Ele digitava, clicava em Criar parâmetro, o campo LIMPAVA e a lista continuava
+// em "Parâmetros ativos (0)". O parâmetro ERA GRAVADO: quem falhava era a
+// LEITURA de volta — consulta sem `limit`, que a regra do Firestore NEGA, com o
+// `catch { return [] }` transformando a recusa em "esta empresa não tem
+// parâmetro". Duas leituras do mesmo fato, e a que fala mais alto mentia.
+//
+// A prova é por RENDER, clicando: a varredura de fonte nunca acharia isto.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('🚨 gravou e não leu — a tela DIZ, em vez de parecer que não gravou', () => {
+    beforeEach(() => {
+        (lerParametrosCfop as jest.Mock).mockReset();
+        (gravarParametroCfop as jest.Mock).mockReset();
+        (gravarParametroCfop as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('leitura recusada depois de gravar acende o aviso NOMEANDO a causa', async () => {
+        (lerParametrosCfop as jest.Mock).mockResolvedValue({
+            parametros: [],
+            erro: 'Missing or insufficient permissions.',
+        });
+        montar();
+        fireEvent.change(screen.getByLabelText('Fornecedor'), { target: { value: '15438711000110' } });
+        fireEvent.change(campoDestino(), { target: { value: '1407' } });
+        fireEvent.click(botao());
+
+        const aviso = await screen.findByText(/Não deu para/);
+        expect(aviso.textContent).toMatch(/Missing or insufficient permissions/);
+        // E a consequência que ninguém deduz: criar de novo DUPLICA.
+        expect(aviso.textContent).toMatch(/pode ter sido gravado/);
+        expect(aviso.textContent).toMatch(/dois parâmetros/);
+    });
+
+    it('leitura OK não acende aviso nenhum — alarme sobre tela correta desliga a trava', async () => {
+        (lerParametrosCfop as jest.Mock).mockResolvedValue({ parametros: [], erro: null });
+        montar();
+        fireEvent.change(screen.getByLabelText('Fornecedor'), { target: { value: '15438711000110' } });
+        fireEvent.change(campoDestino(), { target: { value: '1407' } });
+        fireEvent.click(botao());
+
+        await waitFor(() => expect(gravarParametroCfop).toHaveBeenCalled());
+        expect(screen.queryByText(/Não deu para/)).toBeNull();
+    });
+
+    it('e o aviso do carregamento do PAI chega pela prop, sem clique nenhum', () => {
+        (lerParametrosCfop as jest.Mock).mockResolvedValue({ parametros: [], erro: null });
+        render(
+            <CfopCerebroPainel
+                empresaId="emp-1" user={null} fornecedores={FORNECEDORES} parametros={[]}
+                erroLeitura="Missing or insufficient permissions."
+                onMudou={() => { /* noop */ }} competenciaPadrao="2026-07"
+            />,
+        );
+        expect(screen.getByText(/Não deu para/)).toBeTruthy();
     });
 });

@@ -6,29 +6,40 @@
  * pode ler: duas leituras da mesma pergunta divergiriam no primeiro ajuste.
  */
 import {
-    collection, query, where, getDocs, addDoc, updateDoc, doc,
+    collection, where, addDoc, updateDoc, doc,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 import {
     validarParametroRetencao,
     type ParametroRetencao,
 } from '../sefaz-backend/retencao-parametros.js';
 
 const COLECAO = 'retencao_parametros';
+/** O teto que `firestore.rules` exige no `list` desta coleção. */
+const LIMITE_LIST = 2000;
 
 /**
  * Os parâmetros da empresa. Falha de leitura devolve `[]` — o parâmetro é um
  * palpite melhor, não uma trava: sem ele a digitação segue funcionando, só sem
  * a sugestão. Derrubar a tela por causa dele seria pior que não tê-lo.
+ *
+ * 🚨 O `limit` NÃO É DETALHE: `firestore.rules` só libera o `list` desta
+ * coleção com `request.query.limit <= 2000`, e consulta SEM limite volta
+ * *"Missing or insufficient permissions"* — que este `catch` transformaria em
+ * "não há parâmetro", em silêncio, para sempre. É o mesmo defeito que o
+ * `cfop_parametros` pagou em 10/09 (ELS); aqui ele nunca doeu porque o efeito é
+ * só a sugestão não aparecer, e ninguém tem como saber que ela deveria.
  */
 export async function lerParametrosRetencao(empresaId: string): Promise<ParametroRetencao[]> {
     if (!empresaId) return [];
     try {
-        const snap = await getDocs(query(
-            collection(db, COLECAO),
-            where('empresaId', '==', empresaId),
-        ));
-        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroRetencao[];
+        const snaps = await fetchAllDocs(
+            COLECAO,
+            [where('empresaId', '==', empresaId)],
+            { batchSize: LIMITE_LIST },
+        );
+        return snaps.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroRetencao[];
     } catch {
         return [];
     }
