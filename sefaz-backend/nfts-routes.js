@@ -24,6 +24,7 @@ import { parseCsvNftsSp } from './nfts-sp-csv-parser.js';
 import { cruzarServicosComNfts } from './nfts-cruzamento.js';
 import {
     dataDeclaradaDoDocumento, docCancelado, direcaoEfetivaDoc, issRetidoDoDocumento,
+    docContaNoLivro,
 } from './xml-metadata-helper.js';
 import { ehNotaDeServico } from './sped-selecao-documentos.js';
 
@@ -52,6 +53,9 @@ async function carregarServicosTomados(db, empresaId, competencia) {
     const out = [];
     snap.forEach((s) => {
         const d = s.data() || {};
+        // Documento TIRADO do livro não se declara na NFTS — e sem isto ele
+        // voltaria como divergência do cruzamento sobre uma decisão correta.
+        if (!docContaNoLivro(d)) return;
         if (docCancelado(d)) return;
         // 🚨 `d.tipo !== 'NFSe'` era a forma MAIS RARA: a NFS-e do ADN grava
         // `tipo: 'nfseNacional'` e sumia da declaração de serviços TOMADOS —

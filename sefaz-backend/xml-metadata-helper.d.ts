@@ -73,6 +73,13 @@ export function ehEntradaDoEmitente(
 export const CAMPOS_PARA_DOC_CANCELADO: readonly string[];
 export function origemDoCancelamento(d: any): 'documento' | 'declarado' | null;
 export function docCancelado(d: unknown): boolean;
+
+/** Campos que a projeção precisa trazer para a LÁPIDE ser lida. */
+export const CAMPOS_PARA_DOC_RETIRADO: readonly string[];
+/** O documento foi tirado do acervo (retirada `_deleted` ou perdedor de merge)? */
+export function docRetiradoDoAcervo(d: unknown): boolean;
+/** O contrário, para ler como filtro: `notas.filter(docContaNoLivro)`. */
+export function docContaNoLivro(d: unknown): boolean;
 export const CSTAT_EVENTO_CANCELAMENTO: Set<string>;
 
 /**

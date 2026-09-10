@@ -23,7 +23,7 @@ import { apurarBaseCredito, compararComBaseUsada, ALIQ_PIS, ALIQ_COFINS } from '
 import { reprocessarCstDosItens } from './backfill-cst-itens.js';
 // docCancelado + direcaoEfetivaDoc: as duas réguas da casa que NÃO se
 // reimplementa aqui — reimplementar filtro é criar a divergência de novo.
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, docContaNoLivro } from './xml-metadata-helper.js';
 
 const router = express.Router();
 
@@ -50,15 +50,19 @@ async function carregarEntradas(db, empresaId, competencia) {
         .get();
 
     const docs = [];
-    let canceladas = 0, semItens = 0;
+    let canceladas = 0, semItens = 0, retiradas = 0;
     snap.forEach((s) => {
         const d = s.data() || {};
+        // A lápide vem ANTES de tudo: documento tirado do acervo não é
+        // "cancelado" nem "sem itens" — ele simplesmente não conta no livro, e
+        // contá-lo nas outras causas mandaria procurar no lugar errado.
+        if (!docContaNoLivro(d)) { retiradas++; return; }
         if (docCancelado(d)) { canceladas++; return; }
         if (direcaoEfetivaDoc(d) !== 'entrada') return;
         if (!Array.isArray(d.itens) || !d.itens.length) { semItens++; return; }
         docs.push(d);
     });
-    return { docs, canceladas, semItens };
+    return { docs, canceladas, semItens, retiradas };
 }
 
 // ── GET base de crédito ─────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ import { acharFichaCompetencia } from './ipi-varredura.js';
 // só via a retenção GRAVADA NO DOCUMENTO. A ficha é a mesma fonte da guia que
 // o cliente paga — calcular aqui faria o DARF e o SPED discordarem.
 import { montarF600DaFicha } from './retencao-f600-da-ficha.js';
-import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docContaNoLivro } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
@@ -108,6 +108,12 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         .where('competencia', '==', competencia);
     const snap = await notasQuery.get();
     let notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // 🚨 ELE NÃO FILTRAVA NEM A LÁPIDE NEM O PERDEDOR DE MERGE (10/09): a nota
+    // tirada do livro continuava saindo no bloco A/C e na apuração de
+    // PIS/COFINS. É a régua da LEITURA — quem responde é o dono.
+    const totalAntesDaLapide = notas.length;
+    notas = notas.filter(docContaNoLivro);
+    const retiradasDoAcervo = totalAntesDaLapide - notas.length;
 
     // ═══════════════════════════════════════════════════════════════════════
     // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
@@ -348,6 +354,16 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         contribuinteIpi: empresa?.dadosFiscais?.contribuinteIpi,
     });
     if (avisoTipoItem) warnings.push(avisoTipoItem);
+    // O que sai do arquivo sai DITO — mas só quando houve retirada: aviso em
+    // arquivo normal é o que ensina a equipe a ignorar os avisos que importam.
+    if (retiradasDoAcervo > 0) {
+        warnings.push(
+            `${retiradasDoAcervo} documento(s) NAO entraram no arquivo porque foram tirados do livro `
+            + `(nota importada na empresa errada, numero corrigido ou perdedor de merge). `
+            + `O documento continua guardado com o motivo e com quem tirou — confira na Central de `
+            + `Documentos Fiscais se algum deles deveria estar aqui.`,
+        );
+    }
 
     // ⚠️ AQUI, e não antes: `warnings` só nasce nesta linha, e empilhar aviso
     // acima dela seria `ReferenceError` — a classe que derrubou a geração do
