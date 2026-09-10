@@ -8,14 +8,20 @@
  * **"— -"**, e a mesma nota no modal com a **chave nacional preenchida** e os
  * dois blocos de participante VAZIOS.
  *
- * 📌 A CHAVE NÃO MENTE, e ela carrega o PRESTADOR: no padrão nacional a chave
- * tem 50 dígitos — `cMun (7) · ambiente (1) · tipo de inscrição (1) ·
- * inscrição federal (14) · número (15) · AAAAMM (4) · código (9)`... o que
- * importa aqui são as três primeiras partes e a inscrição, que é o CNPJ (ou o
- * CPF, com zeros à esquerda) de quem EMITIU — o prestador. É a MESMA leitura
+ * 📌 A CHAVE NÃO MENTE, e ela carrega o PRESTADOR: no padrão nacional ela tem
+ * 50 dígitos, e o que importa aqui é a **inscrição federal** dentro dela — o
+ * CNPJ (ou o CPF, com zeros à esquerda) de quem EMITIU, o prestador. O
+ * leiaute campo a campo está no dono, MEDIDO. É a MESMA leitura
  * que `nfse-nacional-leitura.js` faz do XML (a chave de 50 do `<infNFSe>`),
  * e a mesma disciplina do CT-e da A CASTELLANO: antes de pedir o dado ao
  * dono, perguntar se o app não o tem.
+ *
+ * 🏠 A LEITURA DA CHAVE MUDOU DE CASA (10/09): ela mora no BACKEND
+ * (`sefaz-backend/chave-nfse-nacional.js`), porque o importador de CSV do
+ * portal de **Barueri** também precisa dela e backend não importa TS. Aqui só
+ * se RE-EXPORTA — escrever a leitura de novo lá seria a segunda cópia da régua
+ * que decide de quem é a nota. (Foi na mudança de casa que o `numero` da chave
+ * apareceu ERRADO: eram 13 dígitos, não 15 — medido em 24 chaves reais.)
  *
  * ⚠️ E O TOMADOR NÃO ESTÁ NA CHAVE. O que se sabe é o que o prestador NÃO é:
  * se ele não é a empresa selecionada, a empresa só pode ser a TOMADORA — é a
@@ -30,49 +36,16 @@
  * seria decidir de quem é a nota sem ninguém ver.
  */
 
-export interface ChaveNfseNacional {
-    /** Município emissor (7 dígitos IBGE). */
-    cMun: string;
-    /** 1 = produção · 2 = homologação. */
-    ambiente: string;
-    /** 1 = CPF · 2 = CNPJ. */
-    tpInsc: string;
-    /** CNPJ (14) ou CPF (11), só dígitos — quem EMITIU (o prestador). */
-    inscricaoEmitente: string;
-    /** Número da NFS-e sem os zeros à esquerda. */
-    numero: string;
-}
+// A leitura da chave e o TIPO dela têm DONO ÚNICO no backend — o `.d.ts` ao
+// lado do `.js` é o que faz o TypeScript enxergar. Re-exportado aqui para quem
+// já importava deste módulo continuar funcionando.
+import { lerChaveNfseNacional } from '../sefaz-backend/chave-nfse-nacional.js';
+
+export { lerChaveNfseNacional };
+export type { ChaveNfseNacional } from '../sefaz-backend/chave-nfse-nacional.js';
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 const raiz = (v: unknown) => soDigitos(v).slice(0, 8);
-
-/**
- * Lê a chave de 50 dígitos do padrão nacional. Chave de outro tamanho (44 da
- * NF-e, ou nada) devolve null — nunca um pedaço de outra chave como CNPJ, que
- * foi exatamente o defeito de 02/09 (`\d{14}` casando o começo da chave).
- */
-export function lerChaveNfseNacional(chave: unknown): ChaveNfseNacional | null {
-    const c = soDigitos(chave);
-    // A chave tem 50 dígitos; o nome do arquivo da DANFSe traz 53 (a chave
-    // mais um sufixo), e o leitor captura os 50 primeiros. As posições que
-    // importam são as 38 primeiras, iguais nas duas formas. Chave de 44 (NF-e)
-    // ou menor não é deste padrão.
-    if (c.length < 50 || c.length > 53) return null;
-    const tpInsc = c[8];
-    const insc14 = c.slice(9, 23);
-    let inscricaoEmitente = '';
-    if (tpInsc === '2') inscricaoEmitente = insc14;
-    else if (tpInsc === '1') inscricaoEmitente = insc14.slice(-11);
-    else return null;
-    if (/^0+$/.test(inscricaoEmitente)) return null;
-    return {
-        cMun: c.slice(0, 7),
-        ambiente: c[7],
-        tpInsc,
-        inscricaoEmitente,
-        numero: c.slice(23, 38).replace(/^0+/, '') || '0',
-    };
-}
 
 export type OrigemParticipantePdf = 'documento' | 'chave-nacional' | 'empresa-selecionada' | null;
 

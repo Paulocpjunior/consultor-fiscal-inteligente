@@ -18,8 +18,12 @@ import { conferirValoresDaNfsePdf } from '../services/nfsePdfValores';
 // CNPJs FICTÍCIOS — dado de cliente nunca entra no repositório.
 const PRESTADOR = '11222333000181';
 const EMPRESA = '44555666000177';
-// 7 + 1 + 1 + 14 + 15 + 12 = 50 dígitos (é o que o leitor captura do PDF).
-const CHAVE = `3550308` + `1` + `2` + PRESTADOR + `000000000041943` + `260812345678`;
+// 🐛 FIXTURE TROCADA (10/09): ela cravava o número em **15** dígitos, que era
+// dedução minha de 08/09 — e por isso passava verde sobre a régua errada. As
+// 24 chaves REAIS do CSV do portal de Barueri (07/2026, notas 39 a 62) dão o
+// número em **13**: para a nota 39 a versão antiga devolvia `3926`, comendo o
+// `AA` da emissão. Leiaute medido: 7 + 1 + 1 + 14 + **13** + AAMM(4) + 10 = 50.
+const CHAVE = `3550308` + `1` + `2` + PRESTADOR + `0000000041943` + `2607` + `1933432001`;
 
 describe('a chave nacional responde quem EMITIU', () => {
     it('50 dígitos: município, ambiente, tipo de inscrição, CNPJ do prestador e número', () => {
@@ -37,7 +41,7 @@ describe('a chave nacional responde quem EMITIU', () => {
     });
 
     it('tipo 1 é CPF: os 11 últimos da inscrição de 14', () => {
-        const chaveCpf = `3550308` + `1` + `1` + `00012345678901` + `000000000000001` + `260812345678`;
+        const chaveCpf = `3550308` + `1` + `1` + `00012345678901` + `0000000000001` + `2607` + `1933432001`;
         expect(lerChaveNfseNacional(chaveCpf)!.inscricaoEmitente).toBe('12345678901');
     });
 
@@ -66,7 +70,7 @@ describe('completar prestador/tomador — só o que está VAZIO, carimbado', () 
     });
 
     it('a empresa é quem EMITIU (chave): saída, e o tomador continua vazio — não se inventa', () => {
-        const chaveDaEmpresa = `3550308` + `1` + `2` + EMPRESA + `000000000000007` + `260812345678`;
+        const chaveDaEmpresa = `3550308` + `1` + `2` + EMPRESA + `0000000000007` + `2607` + `1933432001`;
         const r = completarParticipantesDaNfsePdf({ prestadorCnpj: '', tomadorCnpj: '', chaveAcesso: chaveDaEmpresa, empresaCnpj: EMPRESA });
         expect(r.prestadorCnpj).toBe(EMPRESA);
         expect(r.direcao).toBe('saida');

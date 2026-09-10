@@ -11,6 +11,12 @@
  *
  * Funciona pra qualquer empresa cliente do escritório que tenha CCM SP.
  * Não depende do WS (que está dando 1102 desde Reforma Tributária 2026).
+ *
+ * 🏛️ E O CSV DO PORTAL DE **BARUERI** ENTRA PELA MESMA PORTA (10/09). O Paulo
+ * subiu o arquivo de lá nesta tela e ela recusou — *"o modelo de importação
+ * CSV que tem no consultor são para as NFS SP"*. Aba nova seria a tela que só
+ * eu sei onde fica (a lição do card CFOP, 18/08): **quem identifica o leiaute
+ * é o ARQUIVO**, e o backend responde qual município reconheceu.
  */
 
 import React, { useState, useRef } from 'react';
@@ -25,7 +31,14 @@ interface Props {
 
 interface ResultadoImport {
     layout: string;
-    ccmExportado: string;
+    ccmExportado?: string;
+    /** Só no CSV de Barueri — a tela DIZ qual leiaute o backend reconheceu. */
+    municipio?: string;
+    canceladas?: number;
+    /** As que estavam ATIVAS no banco e o município diz que foram canceladas. */
+    viraramCanceladas?: Array<{ numero: string; valor: number | null }>;
+    semValor?: number;
+    colunasLidas?: number;
     totalNotas: number;
     criadas: number;
     atualizadas: number;
@@ -33,8 +46,8 @@ interface ResultadoImport {
     valorTotal: number;
     periodo: { inicio: string | null; fim: string | null };
     duracaoMs: number;
-    contagemBate: boolean;
-    somaBate: boolean;
+    contagemBate?: boolean;
+    somaBate?: boolean;
 }
 
 const formatBRL = (n: number | undefined | null) =>
@@ -59,6 +72,7 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
     const [erro, setErro] = useState<string | null>(null);
     const [resultado, setResultado] = useState<ResultadoImport | null>(null);
     const [ctxRetornado, setCtxRetornado] = useState<any>(null);
+    const [avisos, setAvisos] = useState<string[]>([]);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleUpload = async () => {
@@ -69,6 +83,7 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
         setLoading(true);
         setErro(null);
         setResultado(null);
+        setAvisos([]);
         try {
             const token = await getAuth().currentUser?.getIdToken();
             if (!token) throw new Error('Sessão expirada');
@@ -90,6 +105,8 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
             }
             setResultado(data.resumo);
             setCtxRetornado(data.ctx);
+            setAvisos([...(data.avisos || []), ...(data.avisosRetencao || [])]
+                .filter((a: string) => a && !/Nenhuma incoer/i.test(a)));
             if (onShowToast) onShowToast(`${data.resumo.totalNotas} NFs importadas (${data.resumo.criadas} novas, ${data.resumo.atualizadas} atualizadas)`);
             if (onImported) onImported();
         } catch (e: any) {
@@ -102,9 +119,10 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
     return (
         <div className="space-y-4">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 rounded-lg text-white">
-                <h3 className="text-base font-bold">📥 Importar NFS-e SP via CSV (portal oficial)</h3>
+                <h3 className="text-base font-bold">📥 Importar NFS-e por CSV do portal (São Paulo e Barueri)</h3>
                 <p className="text-xs text-blue-100 mt-1">
-                    Solução para 254 empresas — não depende do WS. Importa em segundos.
+                    Sobe o arquivo que você já baixa do portal do município — o CFI reconhece o leiaute sozinho
+                    e diz qual município leu.
                 </p>
             </div>
 
@@ -118,6 +136,19 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
                     <li>TIPO: <strong>Planilha (CSV)</strong> + LAYOUT: <strong>V.006</strong></li>
                     <li>Clique <strong>EXPORTAR ARQUIVO</strong> e baixe o CSV</li>
                     <li>Sobe aqui ⬇</li>
+                </ol>
+                <p className="font-semibold text-amber-900 mt-3 mb-1">🏛️ Barueri:</p>
+                <ol className="list-decimal list-inside text-xs text-amber-800 space-y-1">
+                    <li>No portal da Prefeitura de Barueri, exporte a consulta de NFS-e em <strong>CSV</strong></li>
+                    <li>Sobe aqui — o CFI reconhece o arquivo pelo cabeçalho, não pelo nome</li>
+                    <li>
+                        A coluna <strong>Nf Ativa</strong> do arquivo diz o que foi cancelado: a nota entra já
+                        cancelada, sem ninguém marcar à mão
+                    </li>
+                    <li>
+                        O <strong>TXT</strong> de lote daquele portal ainda não é lido — use o CSV, que traz as
+                        mesmas notas
+                    </li>
                 </ol>
             </div>
 
@@ -144,7 +175,9 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label className="text-sm font-semibold">Direção (opcional — auto detecta pelo nome do arquivo):</label>
+                        <label className="text-sm font-semibold">
+                            Direção (opcional — em Barueri sai da própria nota e este campo é ignorado):
+                        </label>
                         <select
                             value={direcao}
                             onChange={(e) => setDirecao(e.target.value as any)}
@@ -157,7 +190,9 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
                     </div>
 
                     <div>
-                        <label className="text-sm font-semibold">CNPJ da empresa (opcional — auto detecta por CCM):</label>
+                        <label className="text-sm font-semibold">
+                            CNPJ da empresa (opcional — SP acha pelo CCM, Barueri acha pela chave de acesso):
+                        </label>
                         <input
                             type="text"
                             value={empresaCnpj}
@@ -190,7 +225,8 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
                         <div>
                             <h4 className="font-bold text-green-900">✅ Importação concluída em {resultado.duracaoMs}ms</h4>
                             <p className="text-xs text-green-700">
-                                Layout {resultado.layout} · CCM {resultado.ccmExportado}
+                                {resultado.municipio ? `🏛️ ${resultado.municipio}` : 'São Paulo'} · Layout {resultado.layout}
+                                {resultado.ccmExportado && ` · CCM ${resultado.ccmExportado}`}
                                 {ctxRetornado?.empresaNome && ` · Empresa: ${ctxRetornado.empresaNome}`}
                                 {ctxRetornado?.direcao && ` · ${ctxRetornado.direcao === 'saida' ? '📤 Emitidas' : '📥 Recebidas'}`}
                             </p>
@@ -229,15 +265,63 @@ const XmlNfseSpCsv: React.FC<Props> = ({ currentUser, onImported, onShowToast })
                                 {formatDateBR(resultado.periodo.inicio)} → {formatDateBR(resultado.periodo.fim)}
                             </span>
                         </div>
-                        <div className="flex justify-between text-xs pt-1 border-t">
-                            <span>Contagem CSV bate:</span>
-                            <span>{resultado.contagemBate ? '✅' : '⚠️ divergência'}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                            <span>Soma de valores bate:</span>
-                            <span>{resultado.somaBate ? '✅' : '⚠️ divergência'}</span>
-                        </div>
+                        {typeof resultado.contagemBate === 'boolean' && (
+                            <div className="flex justify-between text-xs pt-1 border-t">
+                                <span>Contagem CSV bate:</span>
+                                <span>{resultado.contagemBate ? '✅' : '⚠️ divergência'}</span>
+                            </div>
+                        )}
+                        {typeof resultado.somaBate === 'boolean' && (
+                            <div className="flex justify-between text-xs">
+                                <span>Soma de valores bate:</span>
+                                <span>{resultado.somaBate ? '✅' : '⚠️ divergência'}</span>
+                            </div>
+                        )}
+                        {typeof resultado.canceladas === 'number' && (
+                            <div className="flex justify-between text-xs pt-1 border-t">
+                                <span className="text-gray-600">🚫 Canceladas no arquivo:</span>
+                                <span className="font-semibold">{resultado.canceladas}</span>
+                            </div>
+                        )}
+                        {typeof resultado.semValor === 'number' && resultado.semValor > 0 && (
+                            <div className="flex justify-between text-xs">
+                                <span className="text-gray-600">Sem valor legível (fora da soma):</span>
+                                <span className="font-semibold text-amber-700">{resultado.semValor}</span>
+                            </div>
+                        )}
                     </div>
+
+                    {/* 🚨 O QUE ESTA IMPORTAÇÃO MUDOU NO QUE JÁ ESTAVA NO BANCO.
+                        É a resposta ao caso de 10/09: a nota subiu ATIVA pelo
+                        Portal Nacional e o município diz que ela foi cancelada.
+                        Sem esta linha, o faturamento muda e ninguém sabe. */}
+                    {!!resultado.viraramCanceladas?.length && (
+                        <div className="p-3 bg-red-50 border border-red-300 rounded text-sm">
+                            <p className="font-semibold text-red-800">
+                                🚫 {resultado.viraramCanceladas.length} nota(s) estavam ATIVAS no CFI e o portal do
+                                município diz que foram CANCELADAS
+                            </p>
+                            <ul className="mt-1 text-xs text-red-700 list-disc list-inside">
+                                {resultado.viraramCanceladas.slice(0, 20).map((n) => (
+                                    <li key={n.numero}>
+                                        NFS-e {n.numero} — {formatBRL(n.valor)}
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="text-xs text-red-700 mt-2">
+                                Elas saíram do faturamento e do Livro de Serviços desta competência. Se o mês já foi
+                                fechado ou entregue, confira os números antes de seguir.
+                            </p>
+                        </div>
+                    )}
+
+                    {!!avisos.length && (
+                        <div className="p-3 bg-amber-50 border border-amber-300 rounded text-xs text-amber-900 space-y-2">
+                            {avisos.map((a, i) => (
+                                <p key={i}>⚠️ {a}</p>
+                            ))}
+                        </div>
+                    )}
 
                     <p className="text-xs text-gray-600 text-center">
                         As NFs já estão no Firestore. Veja na aba <strong>XMLs Capturados</strong>.

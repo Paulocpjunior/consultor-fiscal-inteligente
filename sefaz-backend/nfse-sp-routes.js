@@ -16,6 +16,10 @@ import { interpretarRespostaWs, enxugarParaDiagnostico } from './nfse-sp-ws-leit
 import { parseCsvNfseSp, detectarSeparador, identificarDocumentoDoPortal } from './nfse-sp-csv-parser.js';
 import { varrerRetencaoFederal } from './retencao-federal-coerencia.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
+// 🏛️ BARUERI ENTRA PELA MESMA PORTA — ver o bloco na rota de importação.
+import { parseCsvNfseBarueri, ehCsvNfseBarueri, ehTxtLoteBarueri } from './nfse-barueri-csv-parser.js';
+import { importarCsvNfseBarueri, conferirPosseDoCsvBarueri } from './nfse-barueri-csv-importer.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
@@ -169,9 +173,184 @@ router.post('/nfsesp-cron-now', authUser, json(), async (req, res) => {
 // Endpoint pragmático que destrava NFSe SP enquanto WS legacy retorna 1102.
 // User exporta CSV no portal nfe.prefeitura.sp.gov.br → Exportação de NFS-e →
 // Layout V.006 (CSV). Sobe aqui. Sistema parseia e importa todas as notas.
+/**
+ * O CAMINHO DO CSV DE BARUERI — o que muda em relação ao de SP.
+ *
+ * 1. **A empresa sai do ARQUIVO**, não do CCM: o CSV de Barueri não tem coluna
+ *    de prestador, mas a CHAVE de acesso carrega quem emitiu. Isso também é o
+ *    que permite recusar o arquivo da empresa ERRADA antes de gravar (o caso
+ *    de 03/09, em que uma nota entrou no cliente errado e não havia como tirar).
+ * 2. **O cancelamento vem na fonte** (`Nf Ativa`) — e o resultado DIZ quais
+ *    notas mudaram de ativa para cancelada nesta importação, porque é isso que
+ *    muda o faturamento de quem já tinha fechado a competência.
+ */
+async function importarBarueri(req, res) {
+    let parsed;
+    try {
+        parsed = parseCsvNfseBarueri(req.file.buffer);
+    } catch (e) {
+        return res.status(400).json({ erro: e.message });
+    }
+
+    if (!parsed.notas.length) {
+        // ZERO NUNCA É SUCESSO quando havia conteúdo — a lição do import de SP.
+        if (parsed.linhasComConteudo > 0) {
+            return res.status(400).json({
+                erro: `Li o cabeçalho do CSV de Barueri (${parsed.colunasLidas} colunas) e ${parsed.linhasComConteudo} `
+                    + 'linha(s) com conteúdo, mas NENHUMA virou nota: todas ficaram sem número e sem chave de acesso. '
+                    + 'Mande o arquivo ao Paulo — o leiaute do portal mudou.',
+                recusadas: parsed.recusadas.slice(0, 20),
+            });
+        }
+        return res.json({ ok: true, aviso: 'Arquivo sem nenhuma linha de nota.', resumo: { totalNotas: 0 } });
+    }
+
+    const ctx = {
+        empresaId: req.body?.empresaId || null,
+        empresaCnpj: (req.body?.empresaCnpj || '').replace(/\D/g, '') || null,
+        empresaNome: req.body?.empresaNome || null,
+        importadoPor: req.user?.email || 'admin',
+    };
+
+    // 🚨 POSSE ANTES DE GRAVAR: documento no cliente errado infla o livro de
+    // quem não prestou e SOME do livro de quem prestou, sem nada acusar.
+    const posse = conferirPosseDoCsvBarueri(parsed, ctx.empresaCnpj);
+    if (!posse.ok) return res.status(400).json({ erro: posse.motivo, prestadores: posse.prestadores });
+
+    // A empresa que EMITIU está na chave. Sem escolha no formulário, é ela que
+    // responde — nunca por igualdade de CNPJ (o campo tem duas formas no
+    // cadastro; quem resolve isso é o dono do lookup).
+    const prestador = posse.prestadores[0] || null;
+    if (!ctx.empresaCnpj && prestador) ctx.empresaCnpj = prestador;
+    if (!ctx.empresaId && ctx.empresaCnpj) {
+        try {
+            const db = admin.firestore();
+            const achado = await acharEmpresaCadastrada(db, ctx.empresaCnpj);
+            if (achado) {
+                ctx.empresaId = achado.empresaId;
+                const doc = await db.collection(achado.colecao).doc(achado.empresaId).get();
+                const d = doc.data() || {};
+                ctx.empresaNome = ctx.empresaNome || d.razaoSocial || d.nome || null;
+            }
+        } catch (e) {
+            console.warn('[nfse-barueri-csv] falha achando a empresa:', e.message);
+        }
+    }
+
+    const resultado = await importarCsvNfseBarueri(parsed, ctx);
+
+    // A coerência das retenções federais roda IGUAL à de SP — a régua é a
+    // assinatura de alíquota, não o nome da coluna. (Na amostra de Barueri as
+    // quatro batem: IRRF 1,5% · PIS 0,65% · COFINS 3% · CSLL 1%.)
+    const retencao = varrerRetencaoFederal(parsed.notas.map((n) => ({
+        numero: n.numero,
+        prestador: n.tomadorNome,
+        base: n.valorServicos,
+        pis: n.pisRetido,
+        cofins: n.cofinsRetida,
+        csll: n.csllRetida,
+    })));
+
+    try {
+        await admin.firestore().collection('nfsesp_csv_imports').add({
+            executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+            municipio: 'barueri',
+            importadoPor: ctx.importadoPor,
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            empresaId: ctx.empresaId,
+            empresaCnpj: ctx.empresaCnpj,
+            totalNotas: resultado.totalNotas,
+            criadas: resultado.criadas,
+            atualizadas: resultado.atualizadas,
+            canceladas: resultado.canceladas,
+            viraramCanceladas: resultado.viraramCanceladas,
+            erros: resultado.erros,
+            valorTotal: resultado.valorTotal,
+            periodo: resultado.periodo,
+        });
+    } catch (logErr) {
+        console.warn('[nfse-barueri-csv] log falhou:', logErr.message);
+    }
+
+    const avisos = [...parsed.avisos];
+    if (parsed.recusadas.length) {
+        avisos.push(`${parsed.recusadas.length} linha(s) ficaram de FORA por não ter número nem chave de acesso `
+            + `(linha ${parsed.recusadas.slice(0, 5).map((r) => r.linha).join(', ')}).`);
+    }
+    if (posse.semChave) {
+        avisos.push('Nenhuma nota deste arquivo trouxe chave de acesso legível — o CFI não conferiu de QUEM é o '
+            + 'arquivo, e as notas podem entrar duplicadas se elas também vierem pelo Portal Nacional.');
+    }
+    // ⚠️ O código de ISS retido do portal vai DITO: o app guarda o valor cru e
+    // não afirma retenção nenhuma a partir dele (ver o comentário no importer).
+    const codigos = [...new Set(parsed.notas.map((n) => n.issRetidoBruto).filter(Boolean))];
+    if (codigos.length) {
+        avisos.push(`A coluna "ISSQN Retido" veio como ${codigos.map((c) => `"${c}"`).join(', ')} e o significado `
+            + 'desse código não está provado — o CFI guarda o valor e NÃO afirma retenção de ISS por este arquivo. '
+            + 'Se alguma destas notas teve o ISS retido pelo tomador, informe na própria nota.');
+    }
+
+    return res.json({
+        ok: true,
+        municipio: 'Barueri',
+        ctx: { empresaId: ctx.empresaId, empresaCnpj: ctx.empresaCnpj, empresaNome: ctx.empresaNome, direcao: 'saida' },
+        resumo: {
+            layout: 'CSV do portal de Barueri',
+            municipio: 'Barueri',
+            totalNotas: resultado.totalNotas,
+            criadas: resultado.criadas,
+            atualizadas: resultado.atualizadas,
+            canceladas: resultado.canceladas,
+            viraramCanceladas: resultado.viraramCanceladas,
+            erros: resultado.erros,
+            valorTotal: resultado.valorTotal,
+            semValor: parsed.semValor,
+            periodo: resultado.periodo,
+            duracaoMs: resultado.duracaoMs,
+            colunasLidas: parsed.colunasLidas,
+        },
+        avisos,
+        retencaoFederal: retencao.resumo,
+        avisosRetencao: retencao.avisos,
+    });
+}
+
 router.post('/nfsesp-importar-csv', requireAdmin, uploadCsv.single('csv'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ erro: 'Arquivo CSV obrigatório no campo "csv"' });
+
+        // ═══════════════════════════════════════════════════════════════════
+        // 🏛️ O CSV DO PORTAL DE **BARUERI** ENTRA PELA MESMA PORTA
+        //
+        // 🚨 (10/09, Paulo): *"não consigo importar as notas direto do portal
+        // de Barueri, porque lá só tem opção TXT ou CSV, e o modelo de
+        // importação CSV que tem no consultor são para as NFS SP"*. Ele foi na
+        // porta CERTA e ela recusou — então aba nova seria a tela que só eu
+        // sei onde fica (a lição do card CFOP, 18/08). **Quem identifica o
+        // leiaute é o ARQUIVO**, não a pessoa: cabeçalho nomeado com
+        // "Chave de acesso da NFS-e" é Barueri; linha começando com "2" é SP.
+        // ═══════════════════════════════════════════════════════════════════
+        if (ehTxtLoteBarueri(req.file.buffer)) {
+            // 🚩 O TXT do portal de Barueri é de largura fixa e o CFI **não o
+            // lê** — a amostra tem duas notas e campos cujo significado não
+            // está provado, e leiaute posicional deduzido é a família do
+            // `1405`. Mas recusar sem dizer o que fazer é o beco: o CSV do
+            // MESMO portal traz tudo que decide livro, inclusive o
+            // cancelamento.
+            return res.status(400).json({
+                erro: 'Este é o TXT de lote do portal de Barueri (largura fixa), que o CFI ainda não lê. '
+                    + 'O que fazer agora: no mesmo portal, exporte a consulta em **CSV** — ele traz as mesmas '
+                    + 'notas, com a chave de acesso e a coluna que diz se a nota foi cancelada, e o CFI importa. '
+                    + 'Se você PRECISA que o TXT seja lido, mande o arquivo ao Paulo: o leiaute posicional só se '
+                    + 'calibra com amostra, nunca de memória.',
+                documento: 'txt-lote-barueri',
+            });
+        }
+
+        if (ehCsvNfseBarueri(req.file.buffer)) {
+            return await importarBarueri(req, res);
+        }
 
         // O portal exporta o MESMO layout de 73 colunas em DOIS formatos: CSV
         // com ";" e TXT com TAB. A guarda antiga barrava todo .txt chamando de

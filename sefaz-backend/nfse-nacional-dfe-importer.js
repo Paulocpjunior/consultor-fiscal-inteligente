@@ -28,6 +28,7 @@ import {
     documentoDaNfseNacional, lacunasDaNfseNacional,
     eventoDaNfseNacional, eventoJaRegistrado,
 } from './nfse-nacional-gravacao.js';
+import { idDocumentoNfse } from './nfse-identidade.js';
 // Dono único da FORMA do leiaute nacional — lido também pela importação
 // manual (services/xmlParserService.ts). Ver o cabeçalho do módulo.
 import { ehNfseNacional, lerNfseNacional } from './nfse-nacional-leitura.js';
@@ -173,7 +174,12 @@ export async function importarDfeNfseNacional({ empresaId, empresaCnpj, item, ca
     }
 
     const db = fa().firestore();
-    const docId = meta.chave;
+    // 🔑 O id sai do DONO da identidade da NFS-e — o MESMO que o importador do
+    // CSV do portal de Barueri usa. Dois donos aqui fariam a mesma nota entrar
+    // duas vezes (uma por trilho) e o serviço contaria em dobro no livro. A
+    // chave nacional é só dígitos, então o id NÃO muda para o acervo já
+    // gravado — há teste provando exatamente isso.
+    const docId = idDocumentoNfse({ chave: meta.chave });
     const ref = db.collection(COLLECTION).doc(docId);
 
     // Idempotência: se já existe com mesmo hash, é duplicado
