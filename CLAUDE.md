@@ -5,6 +5,80 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏛️ AS NOTAS DE BARUERI SÓ ENTRAVAM PELO PORTAL NACIONAL — e o CSV do
+  município, que a equipe já baixa, traz o CANCELAMENTO na fonte** (10/09,
+  Paulo, JG SOLUCOES EM TECNOLOGIA · Barueri, mandando os dois arquivos que eu
+  tinha pedido: *"referente as canceladas, com o novo botão de cancelar deu
+  super certo"* — com o print da lista mostrando as NFS-e **76 (R$ 15.004,06)**
+  e **68** em 🔴 Cancelada).
+  ✅ **A DECLARAÇÃO DE 10/09 ESTÁ PROVADA EM PRODUÇÃO** — validação por
+  RESULTADO: não é a tela dizer "gravado", é a nota aparecendo cancelada na
+  lista, que é onde ela sai do faturamento.
+  📌 **E O CSV RESOLVE A MESMA COISA NA FONTE**: ele tem a coluna **`Nf Ativa`**
+  ("Sim" / "Cancelada"), então a nota entra **já cancelada**, sem ninguém marcar
+  à mão. A declaração continua sendo a porta para o que chega pelo ADN e não tem
+  trilho municipal — as duas coisas convivem, e nenhuma substitui a outra.
+  🔑 **O QUE FAZ ISSO NÃO DUPLICAR NADA: o id sai da CHAVE.** O ADN grava o
+  documento com a chave de 50 como id; o CSV do município traz a MESMA chave.
+  Com `idDocumentoNfse` (dono, em `nfse-identidade.js`) o import **cai por cima**
+  da nota que subiu ativa. Com a fórmula por partes (`prestador+tomador+número`)
+  nasceria um SEGUNDO documento e o serviço contaria **duas vezes** no livro, no
+  ISS e no faturamento — a duplicidade do art. 136 com outra roupa. O ADN passou
+  a DELEGAR no mesmo PR, e um teste prova que o id **não muda** para o acervo já
+  gravado (a chave é só dígitos) — delegação que órfã documento é pior que a
+  segunda cópia.
+  🐛 **E A MUDANÇA DE CASA ACHOU UM DEFEITO VIVO NA LEITURA DA CHAVE**: ela
+  nasceu em 08/09 com `número (15)` — **dedução minha** — e devolvia **`3926`**
+  para a nota **39** (os dois dígitos seguintes são o ANO da emissão). As **24
+  chaves reais** do arquivo fecham em **13**, 24 de 24. Ninguém tinha pago
+  porque o único consumidor lia só a `inscricaoEmitente`; o número passa a valer
+  agora, onde ele é a IDENTIDADE. **A fixture do teste descrevia a dedução, não
+  o mundo** — trocada, com a medição escrita ao lado.
+  ⚠️ **O ARQUIVO É ISO-8859-1, e isso não é detalhe de exibição**: lido como
+  UTF-8, `SÃO PAULO` vira `S?O PAULO` e a razão social do tomador — que é o
+  **COD_PART do 0150 do SPED** — entra corrompida no arquivo fiscal, onde
+  ninguém confere a olho.
+  ⚠️ **A COMPETÊNCIA É A `Data Base NF`, NUNCA a `Data NF`** — medido: a nota 40
+  é `Data NF 03/07` com **`Data Base 30/06`**, ou seja pertence a JUNHO. É a
+  régua de 03/09 num município novo, e o campo chega no mesmo dono
+  (`competenciaDaNfse`).
+  ⚠️ **E O PRESTADOR NÃO TEM COLUNA NESTE ARQUIVO — quem responde é a CHAVE.**
+  É ela que também permite RECUSAR o arquivo da empresa errada antes de gravar
+  (o caso de 03/09, em que a nota entrou no cliente errado e não havia como
+  tirar): raiz diferente da empresa escolhida ⇒ recusa NOMEANDO os dois CNPJs;
+  filial da mesma raiz passa. **Nota sem chave não bloqueia** — ausência não é
+  prova —, mas o fato vai DITO, porque sem a chave ela pode entrar duplicada.
+  🚩 **O CÓDIGO DE ISS RETIDO NÃO É LIDO, e vai dito**: a coluna vem `"2"` nas
+  24 notas e o significado **não está provado** (1=Sim/2=Não × o `tpRetISSQN`
+  do padrão nacional, em que 2 é RETIDO, dizem o oposto). Afirmar "não houve"
+  faz o ISS sair a MAIOR se houve; afirmar que houve tira ISS que a empresa
+  deve. O app **guarda o valor cru e não afirma nada**. Fecha com uma nota de
+  Barueri COM ISS retido — aí o código se prova por arquivo, como sempre.
+  🚩 **E O TXT DE LOTE NÃO É LIDO, também dito**: ele é de largura fixa, a
+  amostra tem DUAS notas e há campos cujo significado não está provado (o de 10
+  dígitos depois da data de cancelamento; o segundo total do trailer). Leiaute
+  posicional deduzido é a família do `1405` e do `PARTSEM`. Mas a recusa **não é
+  beco**: ela manda usar o CSV do MESMO portal, que cobre tudo que decide livro.
+  🚪 **E ELE ENTRA PELA MESMA PORTA, de propósito**: o Paulo subiu o arquivo na
+  aba de CSV e ela recusou (*"o modelo de importação CSV que tem no consultor
+  são para as NFS SP"*). Aba nova seria a tela que só eu sei onde fica (a lição
+  do card CFOP, 18/08) — **quem identifica o leiaute é o ARQUIVO** (cabeçalho
+  nomeado × linha começando com "2"), e a tela DIZ qual município reconheceu.
+  🚦 **E AS DUAS TRAVAS DA CASA PEGARAM DEFEITOS MEUS ANTES DE SUBIR**: a
+  varredura do cancelamento (`canceladaReguaUnica`) acusou o meu
+  `antes.status !== 'cancelado'` — e ela estava certa: o campo cru MENTE quando
+  o cancelamento veio por EVENTO (que é justamente como ele chega pelo ADN),
+  então o app anunciaria *"esta nota virou cancelada agora"* sobre nota que já
+  estava cancelada, dizendo que o faturamento mudou quando ele não mudou. Passou
+  a ler `docCancelado(antes)`. E a `reguaUnica` acusou `valorIss`/`issDevido` na
+  mesma linha, a assinatura da régua de LEITURA do ISS.
+  📌 **REGRA QUE FICA: quando um município tem trilho próprio, o CSV dele vence
+  o Portal Nacional — porque o ADN entrega a nota como ela estava na TRANSCRIÇÃO
+  e o portal do município responde HOJE.** Todo fato que nasce depois da captura
+  (cancelamento, substituição) é invisível para quem só pergunta uma vez — e o
+  importador municipal é o caminho de reperguntar, com o id da chave fazendo a
+  resposta nova cair por cima da antiga em vez de ao lado dela.
+
 - **🚨 O TEXTO QUE O PRESTADOR DIGITA DERRUBOU O LOTE DO R-2010 — campo de
   leiaute com MaxLength recebendo texto livre de terceiro** (10/09, Paulo,
   J.N. VINATEX · 08/2026, logo depois de o IRRF do R-4020 subir: *"O IR deu
