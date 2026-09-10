@@ -62,6 +62,47 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   e a causa chegando como erro de *schema*, que se lê como defeito de estrutura
   do evento, não como "o texto de uma nota é longo".
 
+- **🚨 O RECIBO DA RECEITA CHEGAVA E ERA JOGADO FORA — a competência ENTREGUE
+  ficava trancada dentro do app** (10/09, Paulo, J.N. VINATEX · 08/2026, minutos
+  depois de o `obs` ser corrigido e a competência retransmitida:
+  *"retornou com o erro MS1028"*).
+  📖 **A RECEITA DISSE O QUE ERA, por extenso**: *"Não é permitido o envio de
+  mais de um evento para o mesmo contribuinte, num mesmo período de apuração
+  para um mesmo estabelecimento e prestador, **exceto se for para retificação de
+  um evento enviado anteriormente ou se o evento anterior tiver sido
+  excluído**"*.
+  🚨 **MS1028 NÃO DIZ QUE O EVENTO ESTÁ ERRADO — DIZ QUE ELE JÁ EXISTE**, e essa
+  é a leitura mais cara: a tela do Contábil respondia *"há EVENTOS RECUSADOS —
+  **nada foi aceito**"*, frase que se lê como *"a competência está sem
+  entrega"*. Quem lê aquilo transmite de novo — e a Receita devolve exatamente o
+  MESMO MS1028, para sempre. **A competência pode já estar ENTREGUE**, e a única
+  frase honesta é mandar conferir o recibo no e-CAC.
+  🔴 **A CAUSA É DE LEITURA, e é a "régua que só escreve" pela ponta oposta**: a
+  rota de transmissão sempre mandou `indRetif=1` (original) e **nunca guardou o
+  `nrRecArqBase`** que o retorno entrega em TODO evento aceito. O recibo é o
+  ÚNICO caminho de volta — retificar exige o recibo do evento anterior. Ele
+  chegava, e o app descartava: do segundo envio em diante a competência ficava
+  trancada por dentro (original recusado, retificação impossível).
+  ✂️ **Corrigido no Contábil (v3.4.275)**: `recibo-r2010.js` guarda o recibo por
+  **contribuinte + competência + ESTABELECIMENTO + prestador + AMBIENTE** — que
+  é a chave que a própria Receita nomeia no MS1028 —, a transmissão retifica
+  **POR PRESTADOR** e a tela abre o campo de **informar o recibo** quando o app
+  não tem. **O número vem da FONTE (e-CAC), nunca de dedução**, e fica gravado
+  quem digitou.
+  ⚠️ **CHAVEAR POR MENOS SERIA PIOR QUE NÃO TER**: recibo de uma filial
+  retificaria o evento de outra, e o de produção restrita o de produção — e
+  evento retificado contra o recibo ERRADO é **ACEITO**, que é o pior desfecho,
+  porque não volta recusa nenhuma avisando.
+  🚩 **O QUE ISTO NÃO RESPONDE, e vai dito**: **qual** evento a Receita tem
+  registrado de 08/2026. O que está escrito acima — *"o lote foi RECEBIDO e NADA
+  foi aceito"* — é o que EU concluí da recusa MS0030, e o MS1028 contradiz isso.
+  A premissa se **RE-MEDE no e-CAC**, não se herda: só o recibo de lá diz se a
+  competência já está entregue e com quais valores.
+  📌 **REGRA QUE FICA: retorno de órgão que carrega o caminho de volta se GUARDA
+  no mesmo PR em que se transmite.** O recibo não é comprovante para arquivar —
+  é a CHAVE da retificação. Descartá-lo transforma "entregue" em "trancado", e o
+  sintoma chega como recusa que se lê ao contrário do que ela diz.
+
 - **🚨 O LIVRO CREDITAVA IPI DE OPTANTE E ESCONDIA O ICMS ST — a segunda
   metade do mesmo caso** (09/09, Paulo, MV LIDER · comércio do Simples ·
   08/2026, com o livro já sem base e sem ICMS: *"deu certo, excluiu a BASE e o
