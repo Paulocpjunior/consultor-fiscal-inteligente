@@ -350,6 +350,17 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                             </tbody>
                         </table>
                     </div>
+                    {/* 🚨 Uma linha de "—" se lê como CAPTURA QUE FALHOU. O ✍️ Lançar
+                        nota sem XML recebe CFOP, NCM, CST, valor e — opcionais — BC,
+                        ICMS e IPI; unitário, PIS e COFINS só existem no XML. Dizer
+                        isso aqui é o que separa "ninguém informou" de "o app perdeu". */}
+                    {String((d as any).origem || '') === 'digitada' && ((d as any).itens || []).length > 0 && (
+                        <p className="text-[10px] text-slate-500 mt-1.5">
+                            ℹ Nota lançada à mão: o ✍️ recebe CFOP, NCM, CST, valor e, opcionais,
+                            BC/ICMS/IPI — unitário, PIS e COFINS só existem no XML.{' '}
+                            <strong>—</strong> é campo não informado, nunca zero.
+                        </p>
+                    )}
                 </div>
 
                 {d.infAdic && (

@@ -1159,8 +1159,26 @@ export function formatCnpjCpf(val: string): string {
     return val;
 }
 
-export function formatCurrency(val: number | string): string {
+/**
+ * Dinheiro na tela. **AUSENTE ≠ ZERO** — campo que ninguém informou sai `—`,
+ * nunca `R$ 0,00`.
+ *
+ * 🚨 Ela é TOTAL de propósito (10/09, Paulo: *"sempre que eu clico em uma nota
+ * fiscal ele me força a recarregar a página"* — `Cannot read properties of
+ * undefined (reading 'toLocaleString')`). O item do ✍️ Lançar nota sem XML
+ * **não tem** `vUnCom`, `vPIS` nem `vCOFINS`, e deixa `vICMS`/`vIPI` de FORA
+ * do objeto quando ninguém preencheu — decisão CERTA do lado da gravação
+ * (04/09: zero num campo de valor é uma AFIRMAÇÃO). Quem lia é que assumia a
+ * forma, e o `undefined` derrubava a tela inteira.
+ *
+ * ⚠️ E o `—` não é enfeite: imprimir `R$ 0,00` aqui declararia na tela que a
+ * nota não teve ICMS/PIS/COFINS, que é exatamente o que ninguém informou.
+ * Zero DIGITADO continua saindo `R$ 0,00`, porque zero conferido é um fato.
+ */
+export function formatCurrency(val: number | string | null | undefined): string {
+    if (val === undefined || val === null || val === '') return '—';
     const n = typeof val === 'string' ? num(val) : val;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 

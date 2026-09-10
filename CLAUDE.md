@@ -5,6 +5,52 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A TELA MORRIA AO ABRIR A NOTA — e o campo vazio era decisão CERTA do
+  outro lado** (10/09, Paulo, com o print do banner: *"Erro ao carregar **App**
+  · Cannot read properties of undefined (reading 'toLocaleString')"* … *"sempre
+  que eu clico em uma nota fiscal ele me força a recarregar a página"*).
+  🔴 **A CAUSA É A ARMADILHA DAS DUAS FORMAS NO ITEM, e ela nasceu de uma
+  decisão que está CERTA**: o ✍️ Lançar nota sem XML grava
+  `vICMS: it.vICMS !== undefined ? Number(it.vICMS) : undefined` — campo em
+  branco fica **FORA do objeto** porque *ausente ≠ zero* (a régua de 04/09:
+  zero num campo de valor é uma AFIRMAÇÃO). O item digitado **nunca** tem
+  `vUnCom`, `vPIS` nem `vCOFINS`, e o detalhe fazia `formatCurrency(p.vUnCom)`,
+  que é `undefined.toLocaleString(...)`. **Não é defeito da gravação: é o
+  leitor assumindo a forma.**
+  ⚠️ **E O `qCom` DA MESMA LINHA JÁ ESTAVA GUARDADO** (`typeof p.qCom ===
+  'number' ? … : '—'`): alguém pagou este defeito uma vez e guardou **só a
+  coluna que quebrou**. Instância fechada, classe aberta — o vício de 12/08.
+  ✂️ **A CORREÇÃO É NO DONO, nunca `?.` na linha**: `formatCurrency` (o dono de
+  *"como se escreve dinheiro na tela"*, lido por **61** lugares) virou TOTAL —
+  ausente/ilegível devolve **`—`**, e **zero DIGITADO continua `R$ 0,00`**,
+  porque zero conferido é um fato. Imprimir `R$ 0,00` no ausente declararia na
+  tela que a nota não teve ICMS/PIS/COFINS, que é exatamente o que ninguém
+  informou — seria desfazer, na leitura, a decisão certa da gravação.
+  ⚠️ **E A LINHA DE `—` DIZ POR QUÊ**: fileira de traços se lê como *captura
+  falhou*. A nota digitada ganhou a frase (o ✍️ recebe CFOP, NCM, CST, valor e,
+  opcionais, BC/ICMS/IPI — unitário, PIS e COFINS **só existem no XML**), que é
+  a lição de 07/08 do `xmlHash`: campo vazio sem explicação manda procurar
+  problema que não existe.
+  🚨 **E O PRINT ACUSOU UM SEGUNDO DEFEITO, MAIOR QUE O PRIMEIRO: O BANNER
+  DIZIA "App".** A regra de 07/08 — *"erro de tela tem que dizer QUAL tela"* —
+  está escrita no comentário do próprio `ErrorBoundary` (*"sem ele … descobrir
+  QUAL módulo quebrou vira adivinhação"*), e a prop foi criada e preenchida com
+  a string **`"App"` em 26 lugares**, mais um `"."` no boot. Ou seja: a regra
+  virou prop e **entregou exatamente a adivinhação que ela veio impedir** —
+  regra escrita não é regra travada (13/08), agora dentro da própria trava.
+  As 27 passaram a nomear a TELA (*Central de Documentos Fiscais*, *DCTFWeb*,
+  *Rotina do Mês*…), e `errorBoundaryNomeiaATela.test.ts` barra fronteira sem
+  `modulo` e nome genérico. ⚠️ Nome TÉCNICO (`DasHub`) passa — ele é único e
+  leva ao lugar; alarme sobre código certo é o jeito conhecido de a equipe
+  desligar a trava.
+  📌 **REGRA QUE FICA: quando a GRAVAÇÃO deixa o campo de fora de propósito, a
+  LEITURA tem de ser TOTAL — e ela responde `—`, nunca zero.** O sintoma desta
+  classe quase sempre é ausência plausível; aqui ele foi o pior possível: a
+  tela inteira caindo, com a única saída sendo recarregar a página e tentar
+  outra nota. E a prova é por **RENDER, clicando** (20/08) — o teste monta o
+  detalhe com a nota digitada e reproduziu a mensagem do print, palavra por
+  palavra, antes da correção.
+
 - **🏛️ AS NOTAS DE BARUERI SÓ ENTRAVAM PELO PORTAL NACIONAL — e o CSV do
   município, que a equipe já baixa, traz o CANCELAMENTO na fonte** (10/09,
   Paulo, JG SOLUCOES EM TECNOLOGIA · Barueri, mandando os dois arquivos que eu
