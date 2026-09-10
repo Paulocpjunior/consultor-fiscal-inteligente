@@ -45,7 +45,7 @@ import {
     // importação que o app nunca mediu.
     ressalvaSemRetencaoGravada, duplicatasNasLinhas, ressalvaDuplicatas,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
-    contraparteDoc, docValido, lerFaltantes,
+    contraparteDoc, docValido, lerFaltantesPorSerie,
 } from '../../services/relatoriosAgregacoes';
 // A retenção INFORMADA à mão (04/09). Sem esta leitura a aba mostra o zero do
 // documento — o número que o ajuste existe para corrigir.
@@ -1533,7 +1533,13 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
     );
     // Lista de números sozinha é alarme sem ação — caso LAV (759 faltantes
     // contra 137 capturadas: era captura, não numeração).
-    const leitura = useMemo(() => lerFaltantes(linhas), [linhas]);
+    //
+    // 🚨 E a leitura é POR SÉRIE. Somada, a J.N. VINATEX (10/09) somava 102
+    // buracos do modelo 55 (talão bem capturado) com 1073 do modelo 65 (mais
+    // buracos do que notas) e concluía "buraco pontual — confira número a
+    // número" sobre 1175 números, 91% deles NFC-e que o trilho não trouxe.
+    // Trilho de captura é por MODELO, então a causa é da série.
+    const leituras = useMemo(() => lerFaltantesPorSerie(linhas), [linhas]);
 
     // "0 cancelada(s)" NÃO é a SEFAZ dizendo que não houve cancelamento — é o
     // app dizendo que nunca soube de nenhum. Para a saída o evento não chega
@@ -1647,6 +1653,12 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
         ]),
         identificacao,
         observacoes: [
+            // 🚨 A CAUSA VAI NO PAPEL, ANTES DA LISTA. Sem ela o PDF entrega
+            // 1073 números "para conferir" que ninguém tem como conferir — a
+            // tela diria uma coisa e o papel outra, que é a divergência que
+            // esta casa mais paga. Uma frase por SÉRIE, porque o trilho de
+            // captura é por modelo (J.N. VINATEX, 10/09).
+            ...leituras.map(l => `Modelo ${l.modelo} série ${l.serie}: ${l.acao}`),
             // A LISTA COMPLETA vai nas observações, que quebram linha. Na coluna
             // ela era CORTADA pela largura (o "…" do gerador de PDF não diz
             // quanto sobrou), e quem confere numeração precisa da sequência
@@ -1691,18 +1703,21 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
             {/* A CAUSA junto do número. 759 faltantes contra 137 capturadas não
                 é lista para conferir uma a uma — é captura da saída faltando, e
                 a ação é outra (caso LAV, Eunice 12/08). */}
-            {leitura.causa !== 'continua' && (
-                <div className={`rounded-lg border p-2 text-xs ${leitura.causa === 'captura-incompleta'
-                    ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-                    : 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'}`}>
+            {leituras.map((leitura) => (
+                <div
+                    key={`${leitura.modelo}|${leitura.serie}`}
+                    className={`rounded-lg border p-2 text-xs ${leitura.causa === 'captura-incompleta'
+                        ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                        : 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'}`}
+                >
                     <p className="font-bold">
                         {leitura.causa === 'captura-incompleta'
-                            ? '🚩 Isto é buraco de CAPTURA, não de numeração'
-                            : '⚠ Buraco pontual na numeração'}
+                            ? `🚩 Modelo ${leitura.modelo} · série ${leitura.serie} — buraco de CAPTURA, não de numeração`
+                            : `⚠ Modelo ${leitura.modelo} · série ${leitura.serie} — buraco pontual na numeração`}
                     </p>
                     <p className="mt-1">{leitura.acao}</p>
                 </div>
-            )}
+            ))}
 
             {/* "0 cancelada(s)" pode ser o app nunca ter sabido do cancelamento.
                 Para a saída o evento não chega sozinho — então se PERGUNTA. */}

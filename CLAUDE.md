@@ -5,6 +5,53 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "PEDE PARA EU CONFERIR 1327 NOTAS DE 1 EM 1 HORA" — a régua SOMAVA dois
+  talões com causas OPOSTAS** (10/09, Paulo fechando a J.N. VINATEX · 08/2026,
+  com o print circulado em vermelho: *"quando eu vou verificar as canceladas se
+  estão ok, me dá tudo isso de faltante"*).
+  📖 **OS NÚMEROS DA TELA FECHAM AO ÚLTIMO DÍGITO, e é isso que prova o
+  defeito**: `55 · série 10` de 11194 a 12712 (1519 números) com 1368
+  autorizadas + 49 canceladas = **1417 capturadas e 102 faltantes**;
+  `65 · série 10` de 11745 a 13399 (1655 números) com 582 capturadas =
+  **1073 faltantes**. Somados: 1175 contra 1999 — exatamente o que a tela
+  dizia, inclusive o *"e mais 573"* (500 listados + 573 = 1073).
+  🔴 **A CAUSA É A SOMA, e ela derruba a premissa que estava escrita no teste**:
+  `lerFaltantes` fazia `reduce` das séries e decidia UMA causa para a empresa —
+  o teste se chamava, literalmente, *"soma as séries antes de decidir — a causa
+  é da EMPRESA, não da série"*. Com 1175 < 1999 ela respondia **`buraco-pontual`
+  ⇒ "aqui vale conferir número a número"**. Ou seja: mandava conferir 1175
+  números, e **1073 deles (91%) são NFC-e que o trilho não trouxe**.
+  🚨 **A SÉRIE QUE PRECISAVA DO ALARME FICOU ESCONDIDA ATRÁS DA SÉRIE BOA.**
+  Sozinho, o modelo 65 tem **mais buraco do que nota** (1073 × 582) — é o caso
+  `captura-incompleta`, que o módulo já sabia gritar desde o caso LAV (12/08) e
+  que a soma engolia. A régua criada para impedir "759 faltantes contra 137
+  capturadas" foi derrotada por um talão vizinho bem capturado.
+  📌 **E O MOTIVO É ESTRUTURAL, NÃO ARITMÉTICO: o trilho de captura é por
+  MODELO.** A NF-e chega pelo cofre/autXML (a SEFAZ não entrega a saída ao
+  emitente, Rej. 641); a NFC-e chega pelo **SAE-NFC-e**, que exige o A1 do
+  PRÓPRIO emitente — com A3 quem traz é o Agente A3. Trilhos diferentes falham
+  por motivos diferentes e pedem **ações OPOSTAS**, então os números não se
+  somam. É a régua de 03/09 (*"quando o núcleo separa dois números de propósito,
+  a tela NÃO os soma"*) — só que aqui **quem somava era o NÚCLEO**.
+  ⚠️ **E A AÇÃO PASSOU A NOMEAR O TRILHO DAQUELE MODELO**: mandar a NFC-e para a
+  **Cobertura de Saída** seria o achado 18 (21/08) — aviso apontando o lugar de
+  OUTRO problema, porque o cofre/autXML é o trilho da NF-e e a NFC-e nem passa
+  por ele. A frase do 65 cita o cofre só para dizer que ela **não vem** por ali.
+  ⚠️ **E A CAUSA FOI JUNTO PARA O PDF**, antes da lista: sem ela o papel entrega
+  1073 números "para conferir" e a tela diz o contrário — a divergência que esta
+  casa mais paga, agora entre a tela e o que se imprime.
+  ✅ **O "1327 não conferida(s) na SEFAZ" ESTAVA CERTO — medido, não deduzido**:
+  ele já filtra `modeloDoDoc === '55'`, e a fila da reconferência exclui NFC-e
+  antes de consultar (o `NFeDistribuicaoDFe` recusa modelo 65 com cStat 618).
+  São 1327 NF-e de saída que ninguém perguntou, a 60 por rodada = **23 rodadas
+  encadeadas pelo app** — um clique drena. O que a tela **não** diz é isso
+  ANTES do clique: o *"você clica uma vez só"* mora na prévia.
+  📌 **REGRA QUE FICA: número que vira AÇÃO não se soma entre eixos que têm
+  ações diferentes — e "por empresa" não é o eixo quando o trilho é por
+  modelo.** O sintoma desta classe nunca é erro: é uma lista enorme e plausível
+  mandando conferir à mão o que nenhum humano tem como conferir. Provado
+  revertendo a soma: a trava grita exatamente no caso da VINATEX.
+
 - **🚨 A LÁPIDE VALIA NA LISTAGEM E **NÃO** NO ARQUIVO FISCAL — a nota tirada
   do livro continuava saindo no SPED** (10/09, achado ao medir o alcance da
   correção de número; ninguém reportou).
