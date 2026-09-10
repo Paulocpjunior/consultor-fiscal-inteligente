@@ -27,6 +27,7 @@ jest.mock('../services/xmlFiscalService', () => ({
     tirarDocumentoDaEmpresa: jest.fn(),
     marcarNotaCancelada: jest.fn(),
     desmarcarNotaCancelada: jest.fn(),
+    corrigirNumeroDaNota: jest.fn(),
 }));
 jest.mock('../services/retencaoAjusteService', () => ({
     gravarAjusteRetencao: jest.fn(),

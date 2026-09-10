@@ -71,6 +71,21 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A IDENTIDADE da nota digitada — o id que carrega número, série e competência',
+        dono: 'services/notaDigitada.ts',
+        comoUsar: "import { idDigitadaSemChave } from 'services/notaDigitada'",
+        porque: '10/09, Paulo, HANAMI: *"O correto seria 9792, oq eu posso fazer nesse caso?"* — a nota estava '
+            + 'digitada como 792. O id de uma nota sem chave é `digitada_{empresa}_{número}_{série}_{AAAA-MM}`, '
+            + 'ou seja o NÚMERO é a identidade: quem monta essa string em outro lugar e diverge um caractere faz '
+            + 'a mesma nota existir com DOIS ids, e a venda conta duas vezes no livro, na competência e no SPED — '
+            + 'sem nenhum validador acusar, porque os dois documentos são formalmente corretos. É a duplicidade '
+            + 'do art. 136 com outra roupa, agora pela porta da digitação.',
+        assinaturas: [
+            // A fórmula escrita à mão fora do dono.
+            /`digitada_\$\{/,
+        ],
+    },
+    {
         nome: 'A DeRE — em qual regime ESPECÍFICO de IBS/CBS a empresa fornece',
         dono: 'sefaz-backend/dere-regimes.js',
         comoUsar: "import { REGIMES_ESPECIFICOS_IBS_CBS, decidirDereNoCadastro } from 'sefaz-backend/dere-regimes.js'",

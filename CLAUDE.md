@@ -5,6 +5,71 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "O CORRETO SERIA 9792" — e RELANÇAR PELO ✍️ NÃO CORRIGE: cria uma
+  SEGUNDA nota** (10/09, Paulo, HANAMI EMBALAGENS · NF-e de saída **792/1** de
+  R$ 3.545,85 para a ABINAPA, lançada à mão: *"precisava fazer uma correção em
+  uma nota q eu lancei manualmente … **O correto seria 9792, oq eu posso fazer
+  nesse caso?**"*).
+  🔴 **A CAUSA É A IDENTIDADE DO DOCUMENTO, e ela estava PROMETIDA ao contrário
+  na própria tela**: o ✍️ Lançar nota sem XML tem id determinístico e responde,
+  ao regravar, *"Nota nº X REGRAVADA (**corrigiu a digitação anterior**)"*. Isso
+  é verdade para todo campo **MENOS os três que FORMAM o id** —
+  `digitada_{empresa}_{**número**}_{**série**}_{**AAAA-MM**}` (e, na NFS-e,
+  `nfsesp-{tomador}-{prestador}-{**número**}`). Relançar com 9792 monta um id
+  **DIFERENTE**: nasce um segundo documento e o 792 **continua lá**.
+  🚨 **O CUSTO É A MESMA VENDA CONTADA DUAS VEZES** — Livro, Resumo por CFOP,
+  competência, faturamento e bloco C/A do SPED —, e **nenhum validador acusa**,
+  porque os dois documentos são formalmente corretos. É a duplicidade do art.
+  136 (11/08) e a do `duplicatasNasLinhas` (04/09) pela porta da DIGITAÇÃO.
+  🚨 **E A SAÍDA QUE EXISTIA TINHA O NOME QUE DIZIA QUE ELA NÃO SERVIA**: a
+  retirada por lápide está no ar desde 03/09 e o botão se chamava **"🚫 Esta
+  nota não é desta empresa"** — **falso aqui**. A nota É da empresa; o número é
+  que está errado. Quem lê aquilo conclui, com razão, que aquele botão é de
+  outro caso — é o achado 18 (21/08) na forma mais cara: a saída existe,
+  funciona, e o rótulo dela afirma o contrário. Virou **"🚫 Tirar esta nota do
+  livro"**, com as DUAS causas ditas embaixo.
+  ✂️ **E A CORREÇÃO É UM ATO SÓ, nunca dois passos** (`documentoCorrecaoNumero
+  .ts`, PURO): **✏️ Corrigir o número desta nota** grava a nota certa e enterra
+  a errada no MESMO clique. Deixar como procedimento ("relance e depois tire a
+  antiga") é apostar que ninguém esquece a segunda metade — e a metade esquecida
+  é justamente a que duplica o faturamento.
+  ⚠️ **A ORDEM DAS DUAS GRAVAÇÕES É REGRA**: a nota certa entra PRIMEIRO, a
+  lápide da errada depois. Falhando a segunda, sobra uma duplicata — que aparece
+  na lista e alguém tira. Na ordem inversa, a falha deixaria a nota SUMIDA das
+  duas pontas, que é **livro a MENOS**: o erro que não se confere depois.
+  ⚠️ **SÓ NOTA DIGITADA E SEM CHAVE**, e as duas recusas dizem por quê:
+  documento com XML tem o número que ele **DECLARA** (corrigi-lo seria reescrever
+  a nota do cliente — o caminho é o ↻ Substituir da importação), e a chave de 44
+  carrega o número nas **posições 26-34**, então mudar um sem o outro produz uma
+  nota que se desmente por dentro (a régua do `serieDoDocumento`, 21/08).
+  ⚠️ **COLISÃO NO DESTINO RECUSA NOMEANDO**: se já existe nota com o número novo,
+  gravar por cima apagaria uma nota legítima — e se for esta mesma já relançada,
+  o que existe é a **DUPLICATA**, então a recusa manda tirá-la em vez de
+  sobrescrever.
+  🐛 **E RELER O PRÓPRIO DIFF ACHOU DOIS DEFEITOS ANTES DE SUBIR.** (1) O
+  documento novo é um **CREATE**, e a regra do Firestore exige
+  `createdBy == request.auth.uid` — copiar o `createdBy` de quem DIGITOU faria a
+  gravação voltar como *"Missing or insufficient permissions"* sempre que quem
+  corrige fosse outra pessoa: é o defeito de 17/08 que fez o ✍️ nunca gravar, e a
+  mensagem manda procurar problema de permissão que não existe. O documento novo
+  nasce em nome de quem CORRIGE, e o digitador original fica em
+  `digitadaPorEmail` e em `correcaoNumero.createdByOriginal`. (2) O
+  `JSON.parse(JSON.stringify(doc))` que eu usava para copiar transformaria
+  **Timestamp em `{seconds, nanoseconds}`** — um MAPA —, e **o Firestore ordena
+  por TIPO**: dali em diante um `where('createdAt','<=', ts)` deixaria o
+  documento corrigido de fora **em silêncio**. É a armadilha que o corte do
+  fechamento (26/08) documenta, agora na cópia.
+  📌 **E A FÓRMULA DO ID ENTROU EM `REGUAS_VIGIADAS` no MESMO PR**: quem montar
+  `digitada_${...}` à mão fora do dono faz a mesma nota existir com dois ids, e a
+  varredura quebra a build. A régua da correção **importa** `idDigitadaSemChave`
+  e `idDocumentoNfseSp` — escrever a fórmula de novo lá seria exatamente o
+  defeito que este módulo existe para impedir.
+  📌 **REGRA QUE FICA: campo que forma a IDENTIDADE do documento não se corrige
+  "relançando por cima" — e a tela que promete "regravada" precisa dizer quais
+  campos ela NÃO alcança.** O ✍️ passou a dizer, antes do clique, que número,
+  série e data de emissão identificam a nota. Sem essa frase, a promessa certa
+  para 20 campos vira a armadilha silenciosa nos três que custam caro.
+
 - **🚨 "QUANDO EU INFORMO O CFOP NÃO GRAVA" — e ele GRAVAVA: quem falhava era a
   LEITURA de volta** (10/09, Paulo, DISTRIBUIDORA DE BANANAS ELS, no modal
   🔗 Correlação de CFOP → 🧠 Por fornecedor: POSTO BORDO · origem **5656** ·

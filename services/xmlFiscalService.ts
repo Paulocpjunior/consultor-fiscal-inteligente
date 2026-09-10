@@ -42,6 +42,11 @@ import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './
 // no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
 // jest não carrega, que é régua sem prova.
 import { retirarDocumentoDaEmpresa } from './documentoRetirada';
+// 🚨 A SAÍDA PARA A NOTA DIGITADA COM O NÚMERO ERRADO (10/09, Paulo, HANAMI:
+// *"O correto seria 9792, oq eu posso fazer nesse caso?"*). Relançar pelo ✍️
+// NÃO corrige: número, série e competência formam o id, então o relançamento
+// cria um SEGUNDO documento e a mesma venda conta duas vezes.
+import { corrigirNumeroDaNotaDigitada, idComOutroNumero } from './documentoCorrecaoNumero';
 import { declararNotaCancelada, removerCancelamentoDeclarado } from './cancelamentoDeclarado';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
@@ -1009,6 +1014,67 @@ export async function tirarDocumentoDaEmpresa(
     // MERGE: a lápide não substitui o documento.
     await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
     return { ok: true, mensagem: decisao.avisoDepois };
+}
+
+/**
+ * CORRIGIR O NÚMERO DE UMA NOTA DIGITADA — num ato só.
+ *
+ * A decisão inteira (o que pode, o que recusa, o que se grava) mora no dono
+ * PURO `documentoCorrecaoNumero.ts`; aqui é só o I/O.
+ *
+ * 🚨 A ORDEM DAS DUAS GRAVAÇÕES É REGRA, não detalhe: **a nota certa entra
+ * PRIMEIRO, a lápide da errada depois.** Se a segunda falhar, sobra uma
+ * duplicata — que aparece na lista e alguém tira. Na ordem inversa, uma falha
+ * deixaria a nota SUMIDA das duas pontas, que é livro a MENOS: o erro que não
+ * se confere depois.
+ */
+export async function corrigirNumeroDaNota(
+    id: string,
+    numeroNovo: string,
+    serieNova: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string; idNovo?: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    // O destino se consulta ANTES de decidir: gravar por cima de documento que
+    // já existe apagaria uma nota legítima.
+    const idAlvo = idComOutroNumero(existing as any, String(numeroNovo || '').trim(),
+        String(serieNova || '').trim() || String((existing as any).serie || '1').trim());
+    const destino = idAlvo && idAlvo !== id ? await getDocumento(idAlvo) : null;
+
+    const decisao = corrigirNumeroDaNotaDigitada(
+        existing as any,
+        numeroNovo,
+        serieNova,
+        { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email },
+        destino as any,
+    );
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    if (decisao.modo === 'patch') {
+        await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patchNovo, { merge: true });
+        return { ok: true, mensagem: decisao.avisoDepois, idNovo: id };
+    }
+
+    // O documento inteiro viaja para o id novo — é a MESMA nota, com o número
+    // certo. Copiar campo a campo aqui faria a nota corrigida nascer diferente
+    // da digitada (a segunda cópia da montagem); o que muda vem do dono.
+    // ⚠️ O CONTEÚDO VAI COMO VEIO DO FIRESTORE, sem passar por JSON: um
+    // `JSON.parse(JSON.stringify(...))` transformaria Timestamp em
+    // `{seconds, nanoseconds}` — um MAPA —, e o Firestore ordena por TIPO.
+    // A partir daí um `where('createdAt','<=', ts)` deixaria o documento
+    // corrigido de fora EM SILÊNCIO (é a armadilha que o corte do fechamento
+    // documenta). O que vem do banco não tem `undefined`, então não há o que
+    // limpar.
+    const { id: _idAntigo, ...conteudo } = existing as any;
+    await setDoc(
+        doc(db, COLLECTIONS.DOCUMENTOS, decisao.idNovo),
+        { ...conteudo, ...decisao.patchNovo },
+    );
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patchAntigo!, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois, idNovo: decisao.idNovo };
 }
 
 /**

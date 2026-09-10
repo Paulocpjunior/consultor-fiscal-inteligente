@@ -289,9 +289,34 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
 }
 
 /**
+ * A FÓRMULA DO ID DA DIGITADA SEM CHAVE — exportada de propósito.
+ *
+ * 🚨 Ela é a IDENTIDADE do documento, e por isso **número, série e competência
+ * não são "mais três campos"**: mudá-los muda o id, ou seja produz um documento
+ * NOVO. Quem corrige o número precisa remontar o id com a MESMA fórmula
+ * (`documentoCorrecaoNumero`) — escrevê-la de novo lá criaria dois ids para o
+ * mesmo documento, e a nota entraria duas vezes no livro.
+ */
+export function idDigitadaSemChave(
+    empresaId: string,
+    numero: string,
+    serie: string | undefined,
+    competencia: string,
+): string {
+    return `digitada_${empresaId}_${String(numero).trim()}_${String(serie || '1').trim()}_${competencia}`;
+}
+
+/**
  * Id DETERMINÍSTICO: relançar a mesma nota corrige a digitação em vez de
  * duplicar o documento. Com chave, o id É a chave — é isso que faz o XML
  * futuro cair NO MESMO documento e fazer o upgrade.
+ *
+ * ⚠️ **A EXCEÇÃO QUE CUSTA CARO**: "relançar corrige" vale para todo campo
+ * MENOS os que formam o id — número, série e a competência da emissão. Nesses,
+ * relançar cria um SEGUNDO documento e a nota conta duas vezes (livro, Resumo
+ * por CFOP, competência, faturamento, bloco C/A do SPED), sem nenhum validador
+ * acusar. Para eles existe `corrigirNumeroDaNotaDigitada`, que troca o número
+ * E enterra o documento antigo no MESMO ato.
  */
 export function idNotaDigitada(i: NotaDigitadaInput): string {
     if (especieDe(i) === 'servico') {
@@ -308,7 +333,7 @@ export function idNotaDigitada(i: NotaDigitadaInput): string {
     const chave = soDigitos(i.chave);
     if (chave.length === 44) return chave;
     const comp = String(i.dhEmi || '').slice(0, 7);
-    return `digitada_${i.empresaId}_${String(i.numero).trim()}_${String(i.serie || '1').trim()}_${comp}`;
+    return idDigitadaSemChave(i.empresaId, i.numero, i.serie, comp);
 }
 
 /** Monta o documento na MESMA forma que o importer grava. */
