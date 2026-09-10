@@ -284,6 +284,20 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     <input type="date" value={dhEmi} onChange={e => setDhEmi(e.target.value)} className={campo} />
                 </div>
             </div>
+            {/* 🚨 ESTES TRÊS CAMPOS SÃO A IDENTIDADE DO DOCUMENTO, e por isso a
+                promessa "relançar corrige a digitação" NÃO vale para eles: o id
+                é `digitada_{empresa}_{número}_{série}_{mês}`, então relançar com
+                outro número monta um id DIFERENTE e nasce um SEGUNDO documento.
+                A mesma venda passa a contar duas vezes no livro, na competência e
+                no SPED — sem nenhum validador acusar (10/09, caso HANAMI). A
+                consequência vai DITA antes do clique, com o caminho da correção. */}
+            <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2 leading-snug">
+                ⚠️ <strong>Número, série e data de emissão identificam a nota.</strong> Corrigir qualquer
+                outro campo é só relançar por cima — mas se você errar um destes três e relançar,
+                nasce uma <strong>segunda nota</strong> e a mesma operação conta duas vezes.
+                Para corrigir o número, abra a nota na lista e use <strong>✏️ Corrigir o número desta nota</strong>:
+                ela troca o número e tira a antiga do livro no mesmo ato.
+            </p>
 
             {especie === 'mercadoria' || especie === 'transporte' ? (
                 <div>

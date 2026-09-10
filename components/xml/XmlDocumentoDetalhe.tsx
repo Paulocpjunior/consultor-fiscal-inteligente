@@ -7,7 +7,14 @@ import { procedenciaDoDocumento, hashCurto, dataLegivel } from '../../services/d
 // uma nota da J.P. PISSATO na empresa SILVIO FREIRE … como resolver?"*). Não
 // tinha como: `deleteDocumento` existia e NENHUMA tela o chamava.
 import { explicarRetirada, MIN_MOTIVO_RETIRADA } from '../../services/documentoRetirada';
-import { tirarDocumentoDaEmpresa, marcarNotaCancelada, desmarcarNotaCancelada } from '../../services/xmlFiscalService';
+// 🚨 A SAÍDA PARA A NOTA DIGITADA COM O NÚMERO ERRADO (10/09, Paulo, HANAMI:
+// *"O correto seria 9792, oq eu posso fazer nesse caso?"*). Relançar pelo ✍️
+// não corrige: número e série formam o id, então nasceria um SEGUNDO documento
+// e a mesma venda contaria duas vezes — sem nenhum validador acusar.
+import { explicarCorrecao } from '../../services/documentoCorrecaoNumero';
+import {
+    tirarDocumentoDaEmpresa, marcarNotaCancelada, desmarcarNotaCancelada, corrigirNumeroDaNota,
+} from '../../services/xmlFiscalService';
 // 🚨 A PORTA PARA A NOTA QUE FOI CANCELADA DEPOIS DA CAPTURA (10/09, Paulo, JG
 // SOLUCOES · Barueri: *"essas duas notas são canceladas, importei as notas pelo
 // portal nacional e as mesmas subiram como ativas … poderia existir um campo
@@ -71,7 +78,18 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const [gravandoEscr, setGravandoEscr] = useState(false);
     const [erroEscr, setErroEscr] = useState<string | null>(null);
     const [okEscr, setOkEscr] = useState<string | null>(null);
-    const jaRetirada = explicarRetirada(d as any);
+    // ── Número/série corrigidos NESTA nota (Paulo, 10/09) ──────────────────
+    const [abrirNum, setAbrirNum] = useState(false);
+    const [numIn, setNumIn] = useState('');
+    const [serieIn, setSerieIn] = useState('');
+    const [gravandoNum, setGravandoNum] = useState(false);
+    const [erroNum, setErroNum] = useState<string | null>(null);
+    // ⚠️ A CORREÇÃO É LIDA ANTES DA RETIRADA: as duas usam a MESMA lápide, e
+    // `explicarRetirada` diria "tirada desta empresa" sobre uma nota que não
+    // saiu da empresa — ela só virou outro número. Dizer a causa errada manda
+    // procurar no lugar errado.
+    const jaCorrigida = explicarCorrecao(d as any);
+    const jaRetirada = jaCorrigida ? null : explicarRetirada(d as any);
 
     // Só documento de MERCADORIA tem CFOP/CST de item — na NFS-e o campo não
     // existe, e oferecê-lo ali prometeria o que a tela não cumpre.
@@ -82,6 +100,13 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     // ⚠️ A decisão é por NOTA (Paulo, 17/08: "é por NF"), então nota com itens
     // de CFOPs diferentes passa a sair com UM só. A tela DIZ isso ANTES do
     // clique, em vez de o total mudar sozinho depois.
+    // 🚨 SÓ NOTA DIGITADA E SEM CHAVE tem número corrigível. Documento com XML
+    // tem o número que ele DECLARA (corrigi-lo seria reescrever a nota do
+    // cliente), e a chave de 44 carrega o número nas posições 26-34 — mudar um
+    // sem o outro produz uma nota que se desmente por dentro.
+    const digitadaSemChave = String((d as any).origem || '') === 'digitada'
+        && String((d as any).chave || '').replace(/\D/g, '').length !== 44;
+
     const cfopsDaNota: string[] = ehMercadoria
         ? (cfopsDistintosDaNota(d as any, direcaoDoDoc, {}) as string[]) || []
         : [];
@@ -104,6 +129,26 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
             setErroEscr(e?.message || 'Falha ao gravar.');
         } finally {
             setGravandoEscr(false);
+        }
+    };
+
+    const corrigirNumero = async () => {
+        setGravandoNum(true); setErroNum(null);
+        try {
+            const r = await corrigirNumeroDaNota(d.id, numIn, serieIn, currentUser || null);
+            if (!r.ok) { setErroNum(r.mensagem); return; }
+            onShowToast?.(r.mensagem);
+            setAbrirNum(false);
+            setNumIn(''); setSerieIn('');
+            onRetirado?.();
+            // A nota corrigida é OUTRO documento (o id carrega o número): o
+            // detalhe aberto passou a apontar para a versão enterrada, e deixá-lo
+            // na tela mostraria a nota errada como se fosse a que vale.
+            onClose();
+        } catch (e: any) {
+            setErroNum(e?.message || 'Falha ao corrigir o número.');
+        } finally {
+            setGravandoNum(false);
         }
     };
 
@@ -640,6 +685,94 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                     )
                 )}
 
+                {/* ═══ O NÚMERO DA NOTA DIGITADA ESTÁ ERRADO ════════════════
+                    10/09, Paulo (HANAMI EMBALAGENS, NF-e de saída lançada à mão):
+                    *"precisava fazer uma correção em uma nota q eu lancei
+                    manualmente … O correto seria 9792"* — ela está como 792.
+
+                    🚨 RELANÇAR PELO ✍️ NÃO CORRIGE: número, série e competência
+                    formam o id do documento, então o relançamento monta um id
+                    DIFERENTE e nasce um SEGUNDO documento. A mesma venda passa a
+                    contar duas vezes no Livro, no Resumo por CFOP, na competência,
+                    no faturamento e no bloco C/A do SPED — e nenhum validador
+                    acusa, porque os dois documentos são formalmente corretos.
+
+                    Por isso a correção é UM ATO SÓ: grava a nota certa e enterra
+                    a errada junto. Deixar como procedimento em dois passos é
+                    apostar que ninguém esquece a segunda metade — e a metade
+                    esquecida é justamente a que duplica o faturamento. */}
+                {digitadaSemChave && !jaRetirada && !jaCorrigida && (
+                    !abrirNum ? (
+                        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                            <button
+                                onClick={() => {
+                                    setNumIn(String(d.numero || ''));
+                                    setSerieIn(String((d as any).serie || ''));
+                                    setErroNum(null);
+                                    setAbrirNum(true);
+                                }}
+                                className="text-xs rounded-md border border-sky-300 text-sky-700 dark:text-sky-300 px-3 py-1.5 hover:bg-sky-50 dark:hover:bg-sky-900/20 btn-press whitespace-nowrap"
+                                title="Para a nota lançada à mão com o número errado. A nota certa entra e a errada sai no mesmo ato."
+                            >
+                                ✏️ Corrigir o número desta nota
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="mt-3 rounded-md border border-sky-300 bg-sky-50 dark:bg-sky-900/20 p-3">
+                            <p className="text-xs font-bold text-sky-900 dark:text-sky-300">
+                                ✏️ Corrigir o número da nota {d.numero}
+                            </p>
+                            {/* A CONSEQUÊNCIA VAI DITA ANTES DO CLIQUE — é o que
+                                separa esta porta de "relançar e torcer". */}
+                            <p className="text-[11px] text-sky-900 dark:text-sky-300 mt-1 leading-snug">
+                                A nota passa a valer com o número novo, e a de nº <strong>{d.numero}</strong> sai
+                                do livro <strong>no mesmo ato</strong> — a venda não conta duas vezes. O documento
+                                antigo <strong>não é apagado</strong>: fica guardado apontando para o novo.
+                                <br />
+                                ⚠️ Isto é só para nota <strong>lançada à mão</strong>. Se o número certo é de
+                                outra nota (outro valor, outra data), não é correção: tire esta do livro e lance
+                                a certa.
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-end gap-2">
+                                <label className="text-[11px] text-sky-900 dark:text-sky-300">
+                                    Número certo
+                                    <input
+                                        value={numIn}
+                                        onChange={(e) => setNumIn(e.target.value)}
+                                        className="mt-0.5 block w-32 rounded border border-sky-300 bg-white dark:bg-slate-800 p-1.5 text-xs"
+                                        placeholder="9792"
+                                    />
+                                </label>
+                                <label className="text-[11px] text-sky-900 dark:text-sky-300">
+                                    Série
+                                    <input
+                                        value={serieIn}
+                                        onChange={(e) => setSerieIn(e.target.value)}
+                                        className="mt-0.5 block w-20 rounded border border-sky-300 bg-white dark:bg-slate-800 p-1.5 text-xs"
+                                        placeholder="1"
+                                    />
+                                </label>
+                            </div>
+                            {erroNum && (
+                                <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroNum}</p>
+                            )}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={corrigirNumero}
+                                    disabled={gravandoNum || !numIn.trim()}
+                                    className="text-xs rounded-md bg-sky-600 text-white px-3 py-1.5 font-semibold hover:bg-sky-700 disabled:opacity-50 btn-press whitespace-nowrap"
+                                    title={!numIn.trim() ? 'Informe o número certo da nota.' : 'Corrige o número e enterra a nota antiga no mesmo ato'}
+                                >
+                                    {gravandoNum ? 'corrigindo…' : '✏️ Corrigir o número'}
+                                </button>
+                                <button
+                                    onClick={() => { setAbrirNum(false); setErroNum(null); }}
+                                    className="text-xs underline text-slate-500 btn-press">cancelar</button>
+                            </div>
+                        </div>
+                    )
+                )}
+
                 {/* ═══ A NOTA FOI CANCELADA DEPOIS DA CAPTURA ════════════════
                     10/09, Paulo (JG SOLUCOES · Barueri · NFS-e 76 de R$ 15.004,06):
                     *"essas duas notas são canceladas, importei as notas pelo portal
@@ -753,7 +886,12 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                     INFLA o livro de quem não a tomou e SOME do livro de quem
                     tomou, sem nenhum validador acusar: o documento é legítimo
                     e o cadastro das duas empresas está certo. */}
-                {jaRetirada ? (
+                {jaCorrigida ? (
+                    <div className="mt-3 rounded-md border border-slate-300 bg-slate-100 dark:bg-slate-700/50 p-3">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">✏️ Nota corrigida</p>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">{jaCorrigida}</p>
+                    </div>
+                ) : jaRetirada ? (
                     <div className="mt-3 rounded-md border border-slate-300 bg-slate-100 dark:bg-slate-700/50 p-3">
                         <p className="text-xs font-bold text-slate-700 dark:text-slate-300">🚫 Nota tirada desta empresa</p>
                         <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">{jaRetirada}</p>
@@ -763,10 +901,20 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                         <button
                             onClick={() => setAbrirRetirada(true)}
                             className="text-xs rounded-md border border-red-300 text-red-700 dark:text-red-300 px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 btn-press whitespace-nowrap"
-                            title="Para quando a nota foi importada na empresa errada. Ela sai do livro DESTA empresa; o documento não é apagado."
+                            title="Para a nota que entrou na empresa errada — ou que foi lançada errada e já existe a certa. Ela sai do livro DESTA empresa; o documento não é apagado."
                         >
-                            🚫 Esta nota não é desta empresa
+                            🚫 Tirar esta nota do livro
                         </button>
+                        {/* 🚨 O RÓTULO ANTIGO ERA "Esta nota não é desta empresa"
+                            — e ele NOMEAVA UMA CAUSA SÓ. Quem tinha lançado a nota
+                            certa da empresa CERTA com o número errado lia aquilo e
+                            concluía, com razão, que o botão não servia: a saída
+                            existia, funcionava, e o nome dela dizia o contrário
+                            (o achado 18, 21/08). As duas causas vão DITAS. */}
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                            Para a nota que <strong>não é desta empresa</strong> — ou que foi lançada errada e a
+                            certa já está no livro (duplicata).
+                        </p>
                     </div>
                 ) : (
                     <div className="mt-3 rounded-md border border-red-300 bg-red-50 dark:bg-red-900/20 p-3">
