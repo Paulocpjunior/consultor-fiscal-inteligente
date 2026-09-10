@@ -686,14 +686,40 @@ export function formatarFaixas(nums: number[]): string {
  *
  * Três leituras, com ações OPOSTAS:
  *  · `captura-incompleta` — faltam mais números do que existem notas ⇒ o
- *    problema é o cofre/autXML, não a numeração;
+ *    problema é o trilho de captura, não a numeração;
  *  · `buraco-pontual` — poucos buracos num talão majoritariamente capturado ⇒
  *    aí sim vale conferir número a número (inutilização ou nota perdida);
  *  · `continua` — nada faltando.
+ *
+ * ═══ 🚨 A LEITURA É POR SÉRIE, NUNCA SOMADA ═════════════════════════════════
+ *
+ * Ela nasceu somando as séries ("a causa é da EMPRESA"), e a J.N. VINATEX
+ * (Paulo, 10/09 · 08/2026) derrubou a premissa com os dois talões dela:
+ *
+ *   · **55 · série 10** — 11194–12712, 1417 capturadas, **102** faltantes
+ *     ⇒ buraco PONTUAL: vale conferir número a número.
+ *   · **65 · série 10** — 11745–13399, 582 capturadas, **1073** faltantes
+ *     ⇒ mais buracos do que notas: é CAPTURA, e não se confere um a um.
+ *
+ * Somados dão 1175 contra 1999, ou seja `buraco-pontual` — e a tela mandava
+ * **conferir 1175 números um a um**, sendo que 1073 deles (91%) são NFC-e que
+ * o trilho não trouxe. A série que precisava do alarme ficou ESCONDIDA atrás da
+ * série grande e bem capturada.
+ *
+ * E o motivo é estrutural, não aritmético: **o trilho de captura é por
+ * MODELO**. A NF-e chega pelo cofre/autXML (a SEFAZ não entrega ao emitente,
+ * Rej. 641) e a NFC-e chega pelo SAE-NFC-e, que exige o A1 do PRÓPRIO emitente
+ * — com A3 quem traz é o Agente A3, na máquina onde o cartão está. Trilhos
+ * diferentes falham por motivos diferentes e pedem AÇÕES OPOSTAS, então os
+ * números não se somam (a régua de 03/09: *quando as ações são diferentes, os
+ * números são diferentes*).
  */
 export type CausaFaltantes = 'captura-incompleta' | 'buraco-pontual' | 'continua';
 
 export interface LeituraFaltantes {
+    /** Qual talão — a causa é da SÉRIE, porque o trilho de captura é por modelo. */
+    modelo: string;
+    serie: string;
     causa: CausaFaltantes;
     faltantes: number;
     capturadas: number;
@@ -701,32 +727,46 @@ export interface LeituraFaltantes {
     acao: string;
 }
 
-export function lerFaltantes(linhas: LinhaSerieNumeracao[]): LeituraFaltantes {
-    const faltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
-    const capturadas = linhas.reduce((s, l) => s + (l.ultimo - l.primeiro + 1 - l.faltantesTotal), 0);
+/** O trilho por onde aquele modelo chega — a ação de "faltou" muda com ele. */
+function acaoDeCapturaIncompleta(modelo: string, faltantes: number, capturadas: number): string {
+    const abre = `Faltam MAIS números (${faltantes}) do que as notas capturadas (${capturadas}) neste talão. `
+        + 'Isto não é uma lista para conferir uma a uma: é o trilho de captura que não está trazendo as notas. ';
+    // ⚠️ Mandar a NFC-e para a Cobertura de Saída seria o achado 18 (21/08):
+    // aviso que aponta o lugar de OUTRO problema. O cofre/autXML é o trilho da
+    // NF-e; a NFC-e nem passa por ele.
+    if (String(modelo) === '65') {
+        return abre
+            + 'A NFC-e não vem pelo cofre nem por autXML — ela chega pelo SAE-NFC-e, que exige o A1 do PRÓPRIO '
+            + 'emitente; com certificado A3 a chave vive no cartão e não roda no servidor, então quem traz é o '
+            + 'Agente A3, na máquina onde o cartão está. Confira o trilho desta empresa antes de caçar número.';
+    }
+    return abre
+        + 'A SEFAZ não entrega a saída ao emitente (Rej. 641): a NF-e vem pelo cofre de e-mail ou por autXML. '
+        + 'Resolva em Captura → Cobertura de Saída; enquanto isso, a numeração deste talão não pode ser conferida.';
+}
 
-    if (!faltantes) {
-        return {
-            causa: 'continua', faltantes, capturadas,
-            acao: 'A numeração está contínua no recorte — nada a conferir.',
-        };
+/**
+ * Uma leitura POR SÉRIE — só das que têm buraco. Lista vazia = nada a dizer.
+ */
+export function lerFaltantesPorSerie(linhas: LinhaSerieNumeracao[]): LeituraFaltantes[] {
+    const saida: LeituraFaltantes[] = [];
+    for (const l of (linhas || [])) {
+        const faltantes = l.faltantesTotal;
+        if (!faltantes) continue;
+        const capturadas = l.ultimo - l.primeiro + 1 - faltantes;
+        const base = { modelo: String(l.modelo), serie: String(l.serie), faltantes, capturadas };
+        if (faltantes > capturadas) {
+            saida.push({ ...base, causa: 'captura-incompleta', acao: acaoDeCapturaIncompleta(base.modelo, faltantes, capturadas) });
+            continue;
+        }
+        saida.push({
+            ...base, causa: 'buraco-pontual',
+            acao: `${faltantes} buraco(s) num talão majoritariamente capturado (${capturadas} notas). Aqui vale `
+                + 'conferir número a número: cada um é inutilização na SEFAZ (não gera XML) ou nota emitida que '
+                + 'não chegou.',
+        });
     }
-    if (faltantes > capturadas) {
-        return {
-            causa: 'captura-incompleta', faltantes, capturadas,
-            acao: `Faltam MAIS números (${faltantes}) do que as notas capturadas (${capturadas}). Isto não é `
-                + 'uma lista para conferir uma a uma: é o trilho de captura da SAÍDA que não está trazendo as '
-                + 'notas — a SEFAZ não entrega ao emitente (Rej. 641), elas vêm pelo cofre de e-mail ou por '
-                + 'autXML. Resolva em Captura → Cobertura de Saída; enquanto isso, a numeração não pode ser '
-                + 'conferida.',
-        };
-    }
-    return {
-        causa: 'buraco-pontual', faltantes, capturadas,
-        acao: `${faltantes} buraco(s) num talão majoritariamente capturado (${capturadas} notas). Aqui vale `
-            + 'conferir número a número: cada um é inutilização na SEFAZ (não gera XML) ou nota emitida que '
-            + 'não chegou.',
-    };
+    return saida;
 }
 
 // ─── Resumo por participante (fornecedor/cliente) ───────────────────────────
