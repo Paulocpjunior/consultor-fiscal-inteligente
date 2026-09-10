@@ -43,6 +43,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **E O QUE SAI DO ARQUIVO SAI DITO**: a geração diz quantos documentos
   ficaram de fora por retirada — e o aviso **só nasce quando houve retirada**,
   senão seria alarme em todo arquivo normal.
+  🐛 **E A TRAVA NASCEU FRACA — a prova por REVERSÃO pegou**: trocando
+  `filter(docContaNoLivro)` por `filter(() => true)` no orquestrador ela
+  continuava **VERDE**, porque o **import** do dono seguia no arquivo e ela lia
+  a MENÇÃO do nome, não a CHAMADA. **Trava que não grita quando devia é pior
+  que trava nenhuma: ela dá sensação de cobertura** (a lição do
+  `dtsNaoPrometeFantasma`, 22/08). A linha de import passou a sair antes da
+  leitura, e a exigência é a chamada.
   🐛 **E A PRÓPRIA TRAVA PEGOU SEIS EXCEÇÕES MINHAS ÓRFÃS na primeira
   execução**: declarei motivo para seis arquivos que **nem consultam** a coleção
   (só mencionam a string num comentário). Exceção órfã envelhece dizendo que

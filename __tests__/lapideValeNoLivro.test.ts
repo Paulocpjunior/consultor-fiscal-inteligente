@@ -57,6 +57,18 @@ const SEM_LAPIDE_COM_MOTIVO: Record<string, string> = {
 };
 
 const OLHA_A_LAPIDE = /docContaNoLivro|docRetiradoDoAcervo|_deleted|_merged_into/;
+/**
+ * 🐛 A 1ª VERSÃO DESTA TRAVA NÃO GRITOU QUANDO DEVIA — pega na prova por
+ * reversão: trocando `filter(docContaNoLivro)` por `filter(() => true)` no
+ * orquestrador ela continuava VERDE, porque o **import** do dono seguia lá e
+ * ela lia a MENÇÃO do nome, não a CHAMADA. Trava que não grita quando devia é
+ * pior que trava nenhuma: ela dá sensação de cobertura (a lição do
+ * `dtsNaoPrometeFantasma`, 22/08). A linha de import sai antes da leitura.
+ */
+const semImports = (fonte: string): string => fonte
+    .split('\n')
+    .filter(l => !/^\s*(import|export)\s.*from\s/.test(l) && !/^\s{4}\w+,?\s*$/.test(l))
+    .join('\n');
 
 function arquivosQueConsultam(): string[] {
     return readdirSync(BACKEND)
@@ -67,7 +79,7 @@ function arquivosQueConsultam(): string[] {
 describe('MATA-BURRO: a lápide vale no LIVRO, não só na listagem', () => {
     it('todo leitor de documentos_fiscais olha a lápide — ou declara por quê não', () => {
         const semTrava = arquivosQueConsultam().filter(f =>
-            !OLHA_A_LAPIDE.test(readFileSync(join(BACKEND, f), 'utf8'))
+            !OLHA_A_LAPIDE.test(semImports(readFileSync(join(BACKEND, f), 'utf8')))
             && !(f in SEM_LAPIDE_COM_MOTIVO));
         expect(semTrava).toEqual([]);
     });
@@ -85,7 +97,9 @@ describe('MATA-BURRO: a lápide vale no LIVRO, não só na listagem', () => {
             'nfts-routes.js',                   // declaração de serviços tomados
         ];
         const semDono = QUEM_DECIDE_LIVRO.filter(f =>
-            !/docContaNoLivro|docRetiradoDoAcervo/.test(readFileSync(join(BACKEND, f), 'utf8')));
+            // A CHAMADA, nunca a menção: `filter(docContaNoLivro)` ou `docRetiradoDoAcervo(`.
+            !/docContaNoLivro\s*\)|docContaNoLivro\s*\(|docRetiradoDoAcervo\s*\(/
+                .test(semImports(readFileSync(join(BACKEND, f), 'utf8'))));
         expect(semDono).toEqual([]);
     });
 
