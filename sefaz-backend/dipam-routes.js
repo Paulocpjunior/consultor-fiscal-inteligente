@@ -187,7 +187,7 @@ router.get('/varredura', requireAuth, async (req, res) => {
                     // formas, mas sem `totais` na projeção o fallback nunca
                     // dispara — a nota importada pelo navegador (que grava SÓ
                     // `totais.vNF`) entrava valendo ZERO na base do FUNRURAL.
-                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'emitente', 'destinatario', 'tpNF',
+                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado', 'emitente', 'destinatario', 'tpNF',
                     'valorTotal', 'totais.vNF', 'totais.vProd',
                     'cnpjEmit', 'xNomeEmit', 'ufEmit', 'codMunEmit',
                     'cnpjDest', 'xNomeDest', 'ieDest', 'ufDest', 'codMunDest',

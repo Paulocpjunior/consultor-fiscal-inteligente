@@ -42,6 +42,7 @@ import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './
 // no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
 // jest não carrega, que é régua sem prova.
 import { retirarDocumentoDaEmpresa } from './documentoRetirada';
+import { declararNotaCancelada, removerCancelamentoDeclarado } from './cancelamentoDeclarado';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
 // fica gravada como 'saida' até o backfill passar, e este painel é o número
@@ -1006,6 +1007,53 @@ export async function tirarDocumentoDaEmpresa(
     if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
 
     // MERGE: a lápide não substitui o documento.
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois };
+}
+
+/**
+ * "ESTA NOTA ESTÁ CANCELADA" — quando só o papel diz (10/09, Barueri).
+ *
+ * O documento capturado pelo Padrão Nacional veio `autorizado` porque o
+ * cancelamento aconteceu DEPOIS, no portal da prefeitura — e o CFI não fala com
+ * aquele portal. A nota cancelada continuava somando no faturamento.
+ *
+ * A decisão (motivo, autor, o que a frase diz depois) mora no dono PURO
+ * `cancelamentoDeclarado.ts`; aqui é só o I/O. E quem faz a declaração VALER no
+ * app inteiro é `docCancelado`, no dono da leitura — uma declaração que só esta
+ * camada honrasse seria a "régua que só escreve".
+ */
+export async function marcarNotaCancelada(
+    id: string,
+    motivo: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    const decisao = declararNotaCancelada(
+        existing as any,
+        motivo,
+        { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email },
+    );
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois };
+}
+
+/** O ↩ que nasce junto: botão que tira do total nasce com o que desfaz (14/08). */
+export async function desmarcarNotaCancelada(
+    id: string,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    const decisao = removerCancelamentoDeclarado(existing as any);
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
     await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
     return { ok: true, mensagem: decisao.avisoDepois };
 }

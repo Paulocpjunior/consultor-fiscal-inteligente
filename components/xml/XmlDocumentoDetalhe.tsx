@@ -7,7 +7,13 @@ import { procedenciaDoDocumento, hashCurto, dataLegivel } from '../../services/d
 // uma nota da J.P. PISSATO na empresa SILVIO FREIRE … como resolver?"*). Não
 // tinha como: `deleteDocumento` existia e NENHUMA tela o chamava.
 import { explicarRetirada, MIN_MOTIVO_RETIRADA } from '../../services/documentoRetirada';
-import { tirarDocumentoDaEmpresa } from '../../services/xmlFiscalService';
+import { tirarDocumentoDaEmpresa, marcarNotaCancelada, desmarcarNotaCancelada } from '../../services/xmlFiscalService';
+// 🚨 A PORTA PARA A NOTA QUE FOI CANCELADA DEPOIS DA CAPTURA (10/09, Paulo, JG
+// SOLUCOES · Barueri: *"essas duas notas são canceladas, importei as notas pelo
+// portal nacional e as mesmas subiram como ativas … poderia existir um campo
+// para cancelarmos quando acontecer isso"*). O cancelamento aconteceu no portal
+// da PREFEITURA, e o CFI não fala com aquele portal.
+import { MIN_MOTIVO_CANCELAMENTO } from '../../services/cancelamentoDeclarado';
 // 🚨 A PORTA PARA A RETENÇÃO QUE O CLIENTE ESQUECEU DE INFORMAR (04/09,
 // FRONTINI ENGENHEIROS): a nota já está capturada com retenção ZERO, e
 // corrigi-la no portal não muda o que o CFI capturou.
@@ -23,7 +29,7 @@ import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitad
 // Relatórios → ✏️ CFOP por nota — a tela existia e ninguém achava.
 import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
-import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
+import { direcaoEfetivaDoc, origemDoCancelamento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { cfopsDistintosDaNota } from '../../sefaz-backend/cfop-correlacao.js';
 
 interface Props {
@@ -37,6 +43,10 @@ interface Props {
 
 const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUser, onRetirado, onShowToast }) => {
     const [abrirRetirada, setAbrirRetirada] = useState(false);
+    const [abrirCancel, setAbrirCancel] = useState(false);
+    const [motivoCancel, setMotivoCancel] = useState('');
+    const [erroCancel, setErroCancel] = useState<string | null>(null);
+    const [gravandoCancel, setGravandoCancel] = useState(false);
     const [motivo, setMotivo] = useState('');
     const [tirando, setTirando] = useState(false);
     const [erroRetirada, setErroRetirada] = useState<string | null>(null);
@@ -111,6 +121,38 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
             setErroRetirada(e?.message || 'Falha ao tirar a nota.');
         } finally {
             setTirando(false);
+        }
+    };
+
+    const declararCancelada = async () => {
+        setGravandoCancel(true); setErroCancel(null);
+        try {
+            const r = await marcarNotaCancelada(d.id, motivoCancel, currentUser || null);
+            if (!r.ok) { setErroCancel(r.mensagem); return; }
+            onShowToast?.(r.mensagem);
+            setAbrirCancel(false);
+            setMotivoCancel('');
+            onRetirado?.();
+            onClose();
+        } catch (e: any) {
+            setErroCancel(e?.message || 'Falha ao declarar o cancelamento.');
+        } finally {
+            setGravandoCancel(false);
+        }
+    };
+
+    const desfazerCancelada = async () => {
+        setGravandoCancel(true); setErroCancel(null);
+        try {
+            const r = await desmarcarNotaCancelada(d.id);
+            if (!r.ok) { setErroCancel(r.mensagem); return; }
+            onShowToast?.(r.mensagem);
+            onRetirado?.();
+            onClose();
+        } catch (e: any) {
+            setErroCancel(e?.message || 'Falha ao remover a declaração.');
+        } finally {
+            setGravandoCancel(false);
         }
     };
 
@@ -586,6 +628,113 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                         </div>
                     )
                 )}
+
+                {/* ═══ A NOTA FOI CANCELADA DEPOIS DA CAPTURA ════════════════
+                    10/09, Paulo (JG SOLUCOES · Barueri · NFS-e 76 de R$ 15.004,06):
+                    *"essas duas notas são canceladas, importei as notas pelo portal
+                    nacional e as mesmas subiram como ativas … poderia existir um
+                    campo para cancelarmos quando acontecer isso"*.
+
+                    O documento veio `autorizado` porque o cancelamento aconteceu
+                    DEPOIS, no portal da PREFEITURA — e o CFI não fala com aquele
+                    portal. É o "dedup por EXISTÊNCIA" (02/09) num trilho municipal:
+                    todo fato que nasce depois da captura é invisível para quem só
+                    pergunta uma vez. E o custo é RECEITA INFLADA. */}
+                {!jaRetirada && (origemDoCancelamento(d as any) === 'declarado' ? (
+                    <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3">
+                        <p className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                            🚫 Nota declarada CANCELADA
+                        </p>
+                        {/* 🚨 O CARIMBO: número que sai de declaração humana NÃO se
+                            apresenta como lido. Sem ele, o faturamento cai e quem
+                            confere procura buraco de captura. */}
+                        <p className="text-[11px] text-amber-900 dark:text-amber-300 mt-1 leading-snug">
+                            Ela não conta no faturamento, no Livro, no Resumo por CFOP nem no SPED.
+                            {' '}O documento capturado continua dizendo <strong>{String((d as any).status || 'autorizado')}</strong> —
+                            {' '}o que vale aqui é a declaração.
+                            {(d as any).cancelamentoDeclarado?.porEmail && (
+                                <> Declarado por <strong>{(d as any).cancelamentoDeclarado.porEmail}</strong>
+                                {(d as any).cancelamentoDeclarado?.em
+                                    ? <> em {dataLegivel((d as any).cancelamentoDeclarado.em)}</> : null}.</>
+                            )}
+                            {(d as any).cancelamentoDeclarado?.motivo && (
+                                <> Motivo: <em>{(d as any).cancelamentoDeclarado.motivo}</em></>
+                            )}
+                        </p>
+                        {erroCancel && (
+                            <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroCancel}</p>
+                        )}
+                        {/* O ↩ nasce junto do botão que tira do total (14/08). */}
+                        <button
+                            onClick={desfazerCancelada}
+                            disabled={gravandoCancel}
+                            className="mt-2 text-xs underline text-amber-800 dark:text-amber-300 disabled:opacity-50 btn-press"
+                            title="Remove a declaração: a nota volta a valer pelo que o próprio documento diz."
+                        >
+                            {gravandoCancel ? 'removendo…' : '↩ remover a declaração (a nota volta ao livro)'}
+                        </button>
+                    </div>
+                ) : origemDoCancelamento(d as any) === 'documento' ? null : !abrirCancel ? (
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <button
+                            onClick={() => setAbrirCancel(true)}
+                            className="text-xs rounded-md border border-amber-400 text-amber-800 dark:text-amber-300 px-3 py-1.5 hover:bg-amber-50 dark:hover:bg-amber-900/20 btn-press whitespace-nowrap"
+                            title="Para a nota que foi cancelada no portal do município DEPOIS de o app capturá-la."
+                        >
+                            🚫 Esta nota está CANCELADA
+                        </button>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                            O documento capturado diz <strong>{String((d as any).status || 'autorizado')}</strong>. Use isto quando
+                            a nota foi cancelada <strong>no portal do município</strong> depois da captura — o app não fala
+                            com aquele portal e não tem como saber sozinho.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="mt-3 rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3">
+                        <p className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                            Declarar a nota {d.numero} como CANCELADA
+                        </p>
+                        {/* 🚨 A CONSEQUÊNCIA VAI ANTES DO CLIQUE: marcar como
+                            cancelada uma nota VÁLIDA apaga receita do livro, e esse
+                            é o lado caro do erro (02/09). */}
+                        <p className="text-[11px] text-amber-900 dark:text-amber-300 mt-1 leading-snug">
+                            Ela sai do faturamento, do Livro, do Resumo por CFOP, da competência e do SPED.
+                            {' '}<strong>Marcar como cancelada uma nota que vale apaga receita do livro</strong> — confira
+                            o carimbo de cancelada no papel antes. O documento <strong>não é apagado</strong> e o
+                            status capturado <strong>não é reescrito</strong>: fica registrado quem declarou e por quê,
+                            e dá para voltar atrás.
+                        </p>
+                        <textarea
+                            value={motivoCancel}
+                            onChange={(e) => setMotivoCancel(e.target.value)}
+                            rows={2}
+                            placeholder='Onde está a prova? Ex.: "cancelada no portal de Barueri, PDF com carimbo CANCELADA"'
+                            className="mt-2 w-full rounded border border-amber-300 bg-white dark:bg-slate-800 p-2 text-xs"
+                        />
+                        <p className="text-[10px] text-amber-800 dark:text-amber-400 mt-0.5">
+                            {motivoCancel.trim().length}/{MIN_MOTIVO_CANCELAMENTO} caracteres — daqui a um mês
+                            ninguém lembra por que esta nota saiu do faturamento.
+                        </p>
+                        {erroCancel && (
+                            <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroCancel}</p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <button
+                                onClick={declararCancelada}
+                                disabled={gravandoCancel || motivoCancel.trim().length < MIN_MOTIVO_CANCELAMENTO}
+                                className="text-xs rounded-md bg-amber-700 text-white px-3 py-1.5 font-bold disabled:opacity-50 btn-press whitespace-nowrap"
+                                title={motivoCancel.trim().length < MIN_MOTIVO_CANCELAMENTO
+                                    ? `Escreva o motivo (mínimo ${MIN_MOTIVO_CANCELAMENTO} caracteres).`
+                                    : 'Grava a declaração com o seu nome e a data.'}
+                            >
+                                {gravandoCancel ? 'gravando…' : '🚫 Declarar cancelada'}
+                            </button>
+                            <button
+                                onClick={() => { setAbrirCancel(false); setErroCancel(null); }}
+                                className="text-xs underline text-slate-500 btn-press">cancelar</button>
+                        </div>
+                    </div>
+                ))}
 
                 {/* ═══ A NOTA ENTROU NA EMPRESA ERRADA ═══════════════════════
                     03/09, Paulo: *"lancei uma nota da J.P. PISSATO na empresa

@@ -996,7 +996,7 @@ export async function corrigirStatusCanceladoPorEvento({ competencias = [], maxD
     try {
       const snap = await db.collection('documentos_fiscais')
         .where('competencia', '==', competencia)
-        .select('status', 'cStat', 'eventos')
+        .select('status', 'cStat', 'eventos', 'cancelamentoDeclarado')
         .limit(maxDocs)
         .get();
       for (const docSnap of snap.docs) {

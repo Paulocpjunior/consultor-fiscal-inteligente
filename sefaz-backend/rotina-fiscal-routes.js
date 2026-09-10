@@ -246,7 +246,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
             // `status` ainda 'autorizado'. Sem eles a Rotina dizia
             // "0 cancelada(s)" e a etapa fechava VERDE — o farol honesto
             // mentindo justamente no guia do mês do colaborador.
-            .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos',
+            .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado',
                 // `emitente`/`destinatario`/`tpNF` entram pra detectar compra
                 // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
                 // detalhe fica na aba própria, aqui só sinaliza a obrigação.
@@ -269,7 +269,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // CARTA DE CORREÇÃO: ela pode ter mudado o CFOP/natureza, e
                 // o livro sai do XML ORIGINAL. Era capturada e nenhum ponto
                 // da escrituração olhava — a validação passou a olhar.
-                'eventos', 'numero'),
+                'eventos', 'cancelamentoDeclarado', 'numero'),
         { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
     );
     const documentos = docsSnaps.map((s) => s.data() || {});
