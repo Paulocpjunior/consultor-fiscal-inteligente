@@ -345,10 +345,20 @@ export function chaveDaNotaDoEvento(d) {
  * corrigidas no dia anterior. Consertar o leitor não basta se a consulta não
  * traz o campo.
  */
-export const CAMPOS_PARA_DOC_CANCELADO = Object.freeze(['status', 'cStat', 'eventos']);
+export const CAMPOS_PARA_DOC_CANCELADO = Object.freeze(['status', 'cStat', 'eventos', 'cancelamentoDeclarado']);
 
 export function docCancelado(d) {
     if (!d) return false;
+    // 🚨 A DECLARAÇÃO HUMANA VENCE (10/09, JG SOLUCOES · Barueri · NFS-e 76):
+    // o Padrão Nacional entregou a nota como `autorizado` porque o
+    // cancelamento aconteceu DEPOIS, no portal da PREFEITURA — e o CFI não
+    // fala com aquele portal. Sem isto a nota cancelada continuava somando no
+    // faturamento, no Livro e no bloco A, sem nenhum validador acusar.
+    //
+    // ⚠️ Ela só CANCELA, nunca "descancela": o `status` capturado continua lá,
+    // intocado, e é contra ele que a declaração se confere. Quem afirmou, por
+    // quê e quando ficam no próprio campo (`cancelamentoDeclarado`).
+    if (String(d.cancelamentoDeclarado?.em || '').trim()) return true;
     if (STATUS_CANCELADO.has(String(d.status || '').toLowerCase())) return true;
     if (CSTAT_NOTA_CANCELADA.has(String(d.cStat || ''))) return true;
     const eventos = Array.isArray(d.eventos) ? d.eventos : [];
@@ -365,6 +375,22 @@ export function docCancelado(d) {
     });
 }
 
+
+/**
+ * QUEM AFIRMOU O CANCELAMENTO — e a resposta tem TRÊS valores, não dois.
+ *
+ * `'documento'` = a fonte disse (status, cStat ou evento) · `'declarado'` =
+ * alguém afirmou, e o carimbo diz quem · `null` = a nota vale.
+ *
+ * Número derivado de declaração humana NÃO se apresenta como lido: é a régua
+ * do `inssOrigem`, do `issRetidoOrigem` e do `competenciaOrigem`. Sem isto, o
+ * faturamento cai e quem confere procura buraco de captura.
+ */
+export function origemDoCancelamento(d) {
+    if (!d) return null;
+    if (String(d.cancelamentoDeclarado?.em || '').trim()) return 'declarado';
+    return docCancelado(d) ? 'documento' : null;
+}
 
 /**
  * O VALOR do documento, em TODAS as formas em que ele é gravado.

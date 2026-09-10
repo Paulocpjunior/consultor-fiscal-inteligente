@@ -71,6 +71,7 @@ export function ehEntradaDoEmitente(
  * `eventos` a régua diz "não cancelada" com toda confiança.
  */
 export const CAMPOS_PARA_DOC_CANCELADO: readonly string[];
+export function origemDoCancelamento(d: any): 'documento' | 'declarado' | null;
 export function docCancelado(d: unknown): boolean;
 export const CSTAT_EVENTO_CANCELAMENTO: Set<string>;
 

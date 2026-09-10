@@ -62,6 +62,58 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   e a causa chegando como erro de *schema*, que se lê como defeito de estrutura
   do evento, não como "o texto de uma nota é longo".
 
+- **🚫 A NOTA FOI CANCELADA DEPOIS DA CAPTURA E NÃO HAVIA COMO DIZER ISSO — o
+  faturamento contava nota cancelada** (10/09, Paulo, JG SOLUCOES EM TECNOLOGIA
+  · Barueri · NFS-e **76** de **R$ 15.004,06**: *"essas duas notas são
+  canceladas, importei as notas pelo portal nacional e as mesmas subiram como
+  ativas … **poderia existir um campo para cancelarmos quando acontecer
+  isso**"*).
+  📌 **E O DOCUMENTO NÃO ESTÁ ERRADO — isso é o que decide o desenho**: o
+  Padrão Nacional (ADN) entregou a nota como ela estava quando foi transcrita
+  (`status: autorizado`); o cancelamento aconteceu **DEPOIS, no portal da
+  PREFEITURA**, com quem o CFI não fala. É o **"dedup por EXISTÊNCIA"** de 02/09
+  num trilho municipal: **todo fato que nasce depois da captura é invisível para
+  quem só pergunta uma vez.** Não é buraco de captura, é limite do trilho.
+  🚨 **O CUSTO É RECEITA INFLADA, e nenhum validador acusa**: nota cancelada
+  somando no faturamento, no Livro de Serviços, no Resumo por CFOP, na
+  competência e no bloco A do EFD-Contribuições — o documento é legítimo, então
+  não há o que acender. É o caso MARCOS ANTONIO ZAMBOLIN (02/09) num município
+  sem trilho de reconferência.
+  ✂️ `cancelamentoDeclarado.ts` (PURO) é a **DECLARAÇÃO sobre o documento, nunca
+  a reescrita dele** (a régua de 04/09): o `status` capturado fica como veio —
+  é a prova do que a fonte disse, e é contra ele que a declaração se confere —
+  e o que vale sai **carimbado** com quem afirmou, quando e por quê, com o ↩ do
+  lado.
+  🚨 **QUEM FAZ VALER É O DONO DA LEITURA** (`docCancelado`): declaração que só a
+  tela honrasse seria a "régua que só escreve", com o faturamento seguindo
+  inflado e a pessoa achando que resolveu. Ligada lá, ela vale de graça nos ~30
+  leitores — Livro, SPED das duas famílias, relatórios, Exportar SAGE, R-2010.
+  ⚠️ **E O CAMPO ENTROU NA PROJEÇÃO NO MESMO PR** — a trava
+  `projecaoNaoCegaARegua` (22/08) acusou as **SEIS** consultas que ficariam
+  cegas: campo fora do `.select()` some da leitura e a régua responde *"não
+  cancelada"* com toda confiança. Foi ela que achou, não a minha lista.
+  ⚠️ **SÓ CANCELA, NUNCA "DESCANCELA"**: documento que já diz cancelado **não
+  recebe** declaração (o botão nem aparece — carimbo humano sobre fato do órgão
+  faria ninguém saber qual dos dois respondeu), e o ↩ apenas REMOVE a
+  declaração, devolvendo a nota à régua do documento. Ele grava **`null`**, não
+  objeto vazio: meio objeto deixaria a régua vendo "declaração existe" e a nota
+  fora do livro.
+  ⚠️ **MOTIVO ESCRITO (≥15) E AUTOR OBRIGATÓRIOS**, e a consequência vai DITA
+  ANTES do clique: **marcar como cancelada uma nota que VALE apaga receita do
+  livro**, que é o lado caro do erro (02/09) — decisão que apaga receita não
+  pode ser clique anônimo.
+  🚩 **O QUE ISTO NÃO RESOLVE, e vai dito**: (1) o **PDF da prefeitura de
+  Barueri é recusado** pelo importador (*"Documento nao parece ser uma NFSe"*) —
+  e mesmo lendo ele **não resolveria este caso**, porque o carimbo CANCELADA é
+  marca d'água, não campo; (2) **não há importador do TXT/CSV de Barueri** — o
+  CSV que existe é o do portal de **SP**, outro leiaute. Os dois são trabalho
+  próprio e dependem dos arquivos na mão (parser se calibra com a amostra).
+  📌 **REGRA QUE FICA: quando o fato que muda o livro nasce FORA do trilho de
+  captura, o app precisa de uma porta para alguém DECLARÁ-LO — e a declaração
+  entra pela régua da LEITURA, com autor, motivo e volta atrás.** Sem a porta, a
+  única saída que sobra é reimportar um documento que não existe, e o número
+  segue errado em silêncio.
+
 - **🚨 O RECIBO DA RECEITA CHEGAVA E ERA JOGADO FORA — a competência ENTREGUE
   ficava trancada dentro do app** (10/09, Paulo, J.N. VINATEX · 08/2026, minutos
   depois de o `obs` ser corrigido e a competência retransmitida:
