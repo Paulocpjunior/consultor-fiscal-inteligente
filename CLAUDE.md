@@ -38,8 +38,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   manual da Receita), e só o XSD do **R-4020** está no repo do Contábil — nele
   o campo IRMÃO `observ` é `maxLength 200`, o que CORROBORA a ordem de grandeza
   e **não é o número do 2010** (o 1010 tem sete campos num arquivo e nove no
-  outro). O único tamanho PROVADO é 35, então o teto é **80**: errar para baixo
+  outro). O tamanho PROVADO era 35, então o teto nasceu **80**: errar para baixo
   omite uma observação informativa, errar para cima devolve o MS0030 e o lote.
+  📏 **E O PISO SUBIU PARA 97 NO DIA SEGUINTE, POR ARQUIVO ACEITO — o teto
+  nasceu ABAIXO do que a Receita já aceitava** (10/09, Paulo mandou o
+  `evtServTom` de **07/2026** da MESMA empresa e do MESMO prestador, `tpAmb 1` —
+  PRODUÇÃO — pelo REINF.Web `verProc 3.46.0000`): o `obs` dele tem **97
+  caracteres** e foi ACEITO. Com 80 o app omitiria observação que o leiaute
+  recebe. Subiu para 97 no Contábil (v3.4.273), que é o piso **PROVADO**, nunca
+  um palpite maior — é a régua de sempre, **arquivo ACEITO vence leiaute
+  DEDUZIDO**.
+  ⚠️ **97 É PISO, NUNCA TETO, e o próprio arquivo diz por quê**: aquele `obs` é
+  a MESMA discriminação **COMPRIMIDA** pelo outro sistema (rótulos suprimidos,
+  valores colados). Ou seja, o REINF.Web resolve o mesmo problema **recortando**;
+  aqui a régua continua sendo **omitir e NOMEAR**. Acima de 97 volta a ser
+  dedução, e dedução ali devolve o MS0030 com o lote.
+  ⚠️ **E O XML ACEITO NÃO FECHA A PENDÊNCIA DO XSD**: ele eleva o PISO; só o XSD
+  fixa o número do leiaute. Continua na fila do Paulo.
   📌 **REGRA QUE FICA: campo de leiaute com MaxLength não recebe texto que um
   TERCEIRO digita.** Ou o app conhece o teto e decide o que cabe, ou está
   apostando que ninguém vai escrever demais — e essa aposta não falha no
