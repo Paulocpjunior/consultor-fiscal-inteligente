@@ -72,6 +72,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   estava cancelada, dizendo que o faturamento mudou quando ele não mudou. Passou
   a ler `docCancelado(antes)`. E a `reguaUnica` acusou `valorIss`/`issDevido` na
   mesma linha, a assinatura da régua de LEITURA do ISS.
+  🐛 **E RELER O PRÓPRIO DIFF ACHOU O ÚLTIMO: `merge: true` NÃO PROTEGE DE
+  `null` ESCRITO.** O payload mandava `empresaNome: ctx.empresaNome || null` e
+  `chave: nota.chaveAcesso || null` — e o documento deste id **pode já
+  existir**, que é justamente o ponto de o id ser a chave. `merge` protege do
+  que NÃO viaja; `null` que viaja SOBRESCREVE. Ou seja, importar o CSV do
+  município apagaria o `empresaId`/`empresaNome` que o ADN trouxe, **calado**.
+  `semVazios` tira do payload o que este arquivo não responde. É o irmão do
+  `patchSubstituiuDigitada` (que existe porque merge **não remove** campo): as
+  duas pontas do mesmo mecanismo, e as duas custam dado de documento fiscal.
+  🐛 **E RELER O PRÓPRIO DIFF ACHOU O ÚLTIMO: `merge: true` NÃO PROTEGE DE
+  `null` ESCRITO.** O payload mandava `empresaNome: ctx.empresaNome || null` e
+  `chave: nota.chaveAcesso || null` — e o documento deste id **pode já
+  existir**, que é justamente o ponto de o id ser a chave. `merge` protege do
+  que NÃO viaja; `null` que viaja SOBRESCREVE. Ou seja, importar o CSV do
+  município apagaria o `empresaId`/`empresaNome` que o ADN trouxe, **calado**.
+  `semVazios` tira do payload o que este arquivo não responde. É o irmão do
+  `patchSubstituiuDigitada` (que existe porque merge **não remove** campo): as
+  duas pontas do mesmo mecanismo, e as duas custam dado de documento fiscal.
   📌 **REGRA QUE FICA: quando um município tem trilho próprio, o CSV dele vence
   o Portal Nacional — porque o ADN entrega a nota como ela estava na TRANSCRIÇÃO
   e o portal do município responde HOJE.** Todo fato que nasce depois da captura
