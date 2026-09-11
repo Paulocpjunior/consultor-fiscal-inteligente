@@ -28,6 +28,7 @@
 
 import { parametroAplicavel, rotuloParametro } from './cfop-cerebro.js';
 import { cnpjEmitente } from './participante-doc-helper.js';
+import { cfopInformadoDoItem, escrituracaoDoItem } from './escrituracao-item.js';
 
 /**
  * Apenas os CFOPs de COMPRA DE PRODUTO/MERCADORIA exigem heurística de
@@ -312,22 +313,33 @@ export function correlacionarCfop(cfopOrigem, direcao, ctx = {}) {
  *
  * Precedência — o MAIS ESPECÍFICO vence, igual ao cadastro de NCM:
  *
+ *   0. `doc.escrituracaoItens[nItem].cfop` — decisão humana NAQUELE ITEM (11/09)
  *   1. `doc.cfopEscriturado`  — decisão humana NAQUELA nota
- *   2. `ctx.cfopOverrides`    — mapa CFOP→CFOP da EMPRESA (modal 🔗)
- *   3. `correlacionarCfop`    — a régua automática
+ *   2. 🧠 `ctx.parametrosCfop` — o cérebro (por fornecedor)
+ *   3. `ctx.cfopOverrides`    — mapa CFOP→CFOP da EMPRESA (modal 🔗)
+ *   4. `correlacionarCfop`    — a régua automática
  *
  * ⚠️ **A decisão por NF vale para TODOS OS ITENS da nota** — foi o que o dono
- * pediu, e a consequência tem que ser DITA por quem oferece o campo: nota com
- * itens de CFOPs diferentes (compra + ST, por exemplo) passa a sair com um só.
- * Quem informa é `cfopsDistintosDaNota`, para a tela avisar ANTES do clique em
- * vez de o número mudar sozinho depois.
+ * pediu (17/08), e é o caso COMUM. A nota MISTA (item com ST e item sem, na
+ * mesma NF — o caso da Sandra, 11/09) tem o degrau 0: o item informado sai
+ * com o dele e os outros seguem a nota. Quem informa a mistura é
+ * `cfopsDistintosDaNota`, para a tela oferecer o "por item" ANTES do clique
+ * em vez de o número mudar sozinho depois.
+ *
+ * 🚨 O `item` é OBRIGATÓRIO para todo leitor que tem o item na mão (registro
+ * `consumidoresMedidos`): leitor que passar só o CFOP responde sobre o caso
+ * "nenhum item informado" com toda confiança — e a Sandra veria o 1407 no
+ * detalhe da nota e o livro gravaria 1556 no MESMO item.
  *
  * @param {object} doc            o documento (é dele que sai o override por NF)
  * @param {string} cfopDoItem     CFOP cru do item, como veio no XML
  * @param {'entrada'|'saida'} direcao
- * @param {object} [ctx]          { naturezaAtividade, cfopOverrides }
+ * @param {object} [ctx]          { naturezaAtividade, cfopOverrides, parametrosCfop }
+ * @param {object} [item]         o ITEM (é dele que sai o override por item — pelo `nItem`)
  */
-export function cfopDoLancamento(doc, cfopDoItem, direcao, ctx = {}) {
+export function cfopDoLancamento(doc, cfopDoItem, direcao, ctx = {}, item = null) {
+    const doItem = cfopInformadoDoItem(doc, item);
+    if (doItem) return doItem;
     const daNota = String(doc?.cfopEscriturado || '').replace(/\D/g, '');
     if (daNota.length === 4) return daNota;
     // O CÉREBRO entra AQUI, entre a decisão da nota e o override da empresa: ele
@@ -363,7 +375,16 @@ function competenciaDoDoc(doc) {
 }
 
 /** De onde veio o CFOP do lançamento — número sem origem não se confere. */
-export function origemDoCfopLancamento(doc, cfopDoItem, direcao, ctx = {}) {
+export function origemDoCfopLancamento(doc, cfopDoItem, direcao, ctx = {}, item = null) {
+    const doItem = escrituracaoDoItem(doc, item);
+    if (doItem && doItem.cfop) {
+        return {
+            origem: 'item',
+            rotulo: `informado neste item (nº ${String(Number(String(item?.nItem || '').replace(/\D/g, '')) || '?')})`,
+            por: doItem.por || null,
+            em: doItem.em || null,
+        };
+    }
     const daNota = String(doc?.cfopEscriturado || '').replace(/\D/g, '');
     if (daNota.length === 4) {
         return {

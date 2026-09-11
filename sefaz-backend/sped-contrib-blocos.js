@@ -45,7 +45,7 @@ import {
 import { separarDeclaraveisNoBlocoA, avisoDoBlocoASemParticipante } from './sped-a100-declaravel.js';
 // CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
 // declarando códigos diferentes para o mesmo item é a divergência de sempre.
-import { cstDoLancamento } from './cst-correlacao.js';
+import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
 import { convertCfopParaEntrada, serieDoC100 } from './sped-fiscal-blocoC.js';
 // Régua ÚNICA da base do PIS/COFINS — desconto incondicional fora da receita e
 // ICMS fora da base (Tema 69). Estava faltando nos DOIS lugares que a usam (o
@@ -140,7 +140,7 @@ function cstIcmsDoItemContrib(item, cfopLancado, nota) {
         item.cstIcms || item.cst || item.CST || item.CSTICMS || item.cst_icms || item.icmsCst || '',
     ).replace(/\D/g, '');
     if (!cru) return '';   // item sem CST não recebe CST deduzido do CFOP
-    const r = cstDoLancamento(cru, cfopLancado, nota?.cstEscriturado);
+    const r = cstDoLancamento(cru, cfopLancado, cstInformadoDoItem(nota, item));
     const escolhido = String(r.cst || cru);
     return escolhido.length === 2 ? `0${escolhido}` : escolhido.padStart(3, '0').slice(-3);
 }
@@ -724,7 +724,7 @@ export function buildBlocoC_Contrib(dados) {
             const vlItem = parseFloat(item.vProd || item.valor || 0) || 0;
             const liquidoDoItem = liquidosDosItens[k] || 0;
             const cfopLancado = convertCfopParaEntrada(
-                item.cfop || item.CFOP || '0000', direcao, dados, nota,
+                item.cfop || item.CFOP || '0000', direcao, dados, nota, item,
             );
             const cstIcms = cstIcmsDoItemContrib(item, cfopLancado, nota);
             const aliqIcmsItem = parseFloat(item.aliqIcms || 0)

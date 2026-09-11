@@ -260,3 +260,71 @@ export function conferirContador0100(linhas) {
     }
     return erros;
 }
+
+/**
+ * C100 de TERCEIRO sem COD_PART, ou com COD_PART que o 0150 não declara.
+ *
+ * 🚨 FONTE — Guia Prático 3.2.3, registro C100: *"Campo 04 (COD_PART) -
+ * Validação: o valor informado deve existir no campo COD_PART do registro
+ * 0150. Quando se tratar de NFC-e (modelo 65), o campo não deve ser
+ * preenchido"*; e a chave do registro *"para documentos com campo IND_EMIT
+ * igual a '1-Terceiros': campo IND_OPER, campo IND_EMIT, campo COD_PART, …"*.
+ * O Guia 1.35 do EFD-Contribuições referencia o 0150 pelo mesmo campo.
+ *
+ * O CASO (11/09, Paulo, testando o SPED de uma distribuidora): *"deu erros de
+ * cod de participante nas entradas … 493 só de código de participante"*. A
+ * causa está medida no dono (`participanteDoDocumento`): a entrada capturada
+ * pela SEFAZ chega ACHATADA e o C100 saía `|C100|0|1||55|…|` — um erro por
+ * nota de entrada, 493 notas. Esta regra é a REDE: se o caminho voltar a
+ * perder o lado, o arquivo acusa aqui em vez de no PVA.
+ *
+ * ⚠️ NFC-e (COD_MOD 65) fica de FORA: nela o campo não PODE ser preenchido
+ * (Exceção 9), e quem cobra isso é a R2 da prevalidação. Emissão própria
+ * (IND_EMIT 0) também não é acusada pelo vazio — o COD_PART ali é facultativo
+ * na chave do registro; só o "COD_PART preenchido e fora do 0150" vale para
+ * ela.
+ */
+export function conferirCodPartDoC100(linhas) {
+    const erros = [];
+    const lista = (linhas || []).map(String);
+    const no0150 = new Set(
+        lista.filter((l) => registroDe(l) === '0150').map((l) => String(campos(l)[2] || '').trim()).filter(Boolean),
+    );
+    for (const l of lista) {
+        if (registroDe(l) !== 'C100') continue;
+        const f = campos(l);
+        const indEmit = String(f[3] || '').trim();
+        const codPart = String(f[4] || '').trim();
+        const codMod = String(f[5] || '').trim();
+        const num = f[8] || '?';
+        if (codMod === '65') continue;
+        if (!codPart) {
+            if (indEmit !== '1') continue;
+            erros.push({
+                regra: 'c100-sem-cod-part', registro: 'C100', campo: '4 - COD_PART',
+                valor: '', esperado: 'CNPJ/CPF do participante, cadastrado no 0150', linha: l,
+                mensagem: `A nota nº ${num} (emitida por TERCEIRO) está sem COD_PART — o PVA recusa cada C100 assim.`,
+                acao: 'O documento entrou sem o lado da contraparte legível (emitente da compra). Rode o ♻️ Reler '
+                    + 'participante dos XMLs (XMLs → 🌾 DIPAM / Produtor rural) para recuperar da fonte; se o XML '
+                    + 'não trouxer o CNPJ, é captura incompleta — reimporte o XML completo.',
+                fonte: 'Guia Prático 3.2.3, C100 campo 04 (COD_PART) — chave do registro para IND_EMIT=1 inclui '
+                    + 'COD_PART; Validação: "o valor informado deve existir no campo COD_PART do registro 0150" '
+                    + '(caso 11/09, 493 recusas numa distribuidora).',
+            });
+            continue;
+        }
+        if (!no0150.has(codPart)) {
+            erros.push({
+                regra: 'c100-cod-part-fora-do-0150', registro: 'C100', campo: '4 - COD_PART',
+                valor: codPart, esperado: 'um COD_PART declarado no 0150', linha: l,
+                mensagem: `A nota nº ${num} referencia o participante ${codPart}, que o 0150 não declara.`,
+                acao: 'O C100 e o 0150 têm que sair do MESMO dono (participanteDoDocumento). Se o participante tem '
+                    + 'documento com tamanho inválido (nem CPF nem CNPJ), o 0150 o pula — confira o cadastro na nota.',
+                fonte: 'Guia Prático 3.2.3, C100 campo 04: "o valor informado deve existir no campo COD_PART do '
+                    + 'registro 0150".',
+            });
+        }
+    }
+    return erros;
+}
+

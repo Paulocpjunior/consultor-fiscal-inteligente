@@ -18,6 +18,12 @@ zero vulnerabilidade em 412 dependências de produção.
 
 ## 🔴 Só o Paulo resolve
 
+- **SPED da distribuidora: regerar e reconferir no PVA.** Os 493 erros de
+  código de participante nas entradas eram do gerador (C100 da nota capturada
+  pela SEFAZ saía sem o CNPJ do fornecedor). Corrigido em 11/09; informar os
+  itens das notas mistas (✂️ por item), regerar e validar. Se sobrar COD_MUN
+  no 0150, rodar ♻️ Reler participante dos XMLs.
+
 Nenhum é trabalho de código: são leituras de painel, cliques em produção ou
 acessos que o desenvolvimento não tem.
 
@@ -61,6 +67,12 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
   e E200/E210 de ST. Gerados e conferidos internamente; prova só vem do recibo.
 
 ## ✅ Fechado em 11/09
+
+- **CFOP e CST por ITEM** — a nota mista (item com ST e item sem) recebe um
+  CFOP/CST por produto no ✂️ do detalhe da nota. O item vence a nota; vale no
+  Livro, no Resumo, no SPED e no SAGE.
+- **C100 sem COD_PART nas entradas capturadas** — o dono da contraparte passou
+  a ler a forma achatada; regra nova na prevalidação das duas famílias.
 
 - **Nota gravada no mês errado** agora tem correção: Central de Documentos →
   XMLs → **📅 Competência do acervo**. Uma nota por clique, com motivo escrito,

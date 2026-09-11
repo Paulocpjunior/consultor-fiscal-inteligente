@@ -59,15 +59,20 @@ export const PARES_COMBUSTIVEL_ENTRADA: Record<string, string>;
 export const PARES_DEVOLUCAO_RECEBIDA: Record<string, { producao: string; terceiros: string }>;
 
 /**
- * O CFOP que vai para o LANÇAMENTO, com o documento na mão.
- * Precedência: `doc.cfopEscriturado` (por NF) > `ctx.parametrosCfop` (🧠 cérebro,
- * por fornecedor) > `ctx.cfopOverrides` (empresa) > `correlacionarCfop` (régua).
+ * O CFOP que vai para o LANÇAMENTO, com o documento E o item na mão.
+ * Precedência: `doc.escrituracaoItens[nItem]` (por ITEM, 11/09) > `doc.cfopEscriturado`
+ * (por NF) > `ctx.parametrosCfop` (🧠 cérebro, por fornecedor) > `ctx.cfopOverrides`
+ * (empresa) > `correlacionarCfop` (régua).
+ *
+ * 🚨 `item` é obrigatório para quem tem o item na mão — sem ele o CFOP informado
+ * por item é ignorado em silêncio (registro `consumidoresMedidos`).
  */
 export function cfopDoLancamento(
     doc: any,
     cfopDoItem: string | undefined,
     direcao: DirecaoCfop,
-    ctx?: CorrelacaoCtx,
+    ctx: CorrelacaoCtx | undefined,
+    item: unknown,
 ): string;
 
 /** De onde veio o CFOP do lançamento — número sem origem não se confere. */
@@ -75,8 +80,9 @@ export function origemDoCfopLancamento(
     doc: any,
     cfopDoItem: string | undefined,
     direcao: DirecaoCfop,
-    ctx?: CorrelacaoCtx,
-): { origem: 'nota' | 'cerebro' | 'empresa' | 'regra'; rotulo: string; por: string | null; em: string | null };
+    ctx: CorrelacaoCtx | undefined,
+    item: unknown,
+): { origem: 'item' | 'nota' | 'cerebro' | 'empresa' | 'regra'; rotulo: string; por: string | null; em: string | null };
 
 /** Os CFOPs distintos que a nota teria SEM o override — o que o carimbo colapsa. */
 export function cfopsDistintosDaNota(doc: any, direcao: DirecaoCfop, ctx?: CorrelacaoCtx): string[];

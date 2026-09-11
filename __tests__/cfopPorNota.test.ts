@@ -28,29 +28,29 @@ const ctx = { naturezaAtividade: 'comercio' };
 
 describe('a precedência: NF > empresa > régua automática', () => {
     it('sem nada informado, vale a régua', () => {
-        expect(cfopDoLancamento({}, '5151', 'entrada', ctx)).toBe('1152');
+        expect(cfopDoLancamento({}, '5151', 'entrada', ctx, null)).toBe('1152');
     });
 
     it('override da EMPRESA vence a régua', () => {
-        expect(cfopDoLancamento({}, '5151', 'entrada', { ...ctx, cfopOverrides: { '5151': '1949' } }))
+        expect(cfopDoLancamento({}, '5151', 'entrada', { ...ctx, cfopOverrides: { '5151': '1949' } }, null))
             .toBe('1949');
     });
 
     it('🚨 o CFOP informado NA NF vence os dois — é o mais específico', () => {
         const doc = { cfopEscriturado: '1202' };
-        expect(cfopDoLancamento(doc, '5151', 'entrada', { ...ctx, cfopOverrides: { '5151': '1949' } }))
+        expect(cfopDoLancamento(doc, '5151', 'entrada', { ...ctx, cfopOverrides: { '5151': '1949' } }, null))
             .toBe('1202');
     });
 
     it('e vale para TODOS os itens da nota (foi o que o dono pediu)', () => {
         const doc = { cfopEscriturado: '1102', itens: [{ cfop: '5102' }, { cfop: '5405' }] };
-        expect(cfopDoLancamento(doc, '5102', 'entrada', ctx)).toBe('1102');
-        expect(cfopDoLancamento(doc, '5405', 'entrada', ctx)).toBe('1102');
+        expect(cfopDoLancamento(doc, '5102', 'entrada', ctx, null)).toBe('1102');
+        expect(cfopDoLancamento(doc, '5405', 'entrada', ctx, null)).toBe('1102');
     });
 
     it('campo em branco devolve a nota à régua — não vira CFOP vazio', () => {
-        expect(cfopDoLancamento({ cfopEscriturado: '' }, '5151', 'entrada', ctx)).toBe('1152');
-        expect(cfopDoLancamento({ cfopEscriturado: '  ' }, '5151', 'entrada', ctx)).toBe('1152');
+        expect(cfopDoLancamento({ cfopEscriturado: '' }, '5151', 'entrada', ctx, null)).toBe('1152');
+        expect(cfopDoLancamento({ cfopEscriturado: '  ' }, '5151', 'entrada', ctx, null)).toBe('1152');
     });
 });
 
@@ -58,16 +58,16 @@ describe('a ORIGEM vai junto do número — sem ela ninguém confere', () => {
     it('diz quando veio da NF, e de quem', () => {
         const o = origemDoCfopLancamento(
             { cfopEscriturado: '1202', cfopEscrituradoPor: 'colab@sp.com.br', cfopEscrituradoEm: '2026-08-17T12:00:00Z' },
-            '5151', 'entrada', ctx,
+            '5151', 'entrada', ctx, null,
         );
         expect(o.origem).toBe('nota');
         expect(o.por).toBe('colab@sp.com.br');
     });
 
     it('distingue override da empresa de correlação automática', () => {
-        expect(origemDoCfopLancamento({}, '5151', 'entrada', { ...ctx, cfopOverrides: { '5151': '1949' } }).origem)
+        expect(origemDoCfopLancamento({}, '5151', 'entrada', { ...ctx, cfopOverrides: { '5151': '1949' } }, null).origem)
             .toBe('empresa');
-        expect(origemDoCfopLancamento({}, '5151', 'entrada', ctx).origem).toBe('regra');
+        expect(origemDoCfopLancamento({}, '5151', 'entrada', ctx, null).origem).toBe('regra');
     });
 });
 
@@ -124,13 +124,17 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
     // NF não vence a régua automática.
     it('Resumo por CFOP e Por produto passam o DOCUMENTO', () => {
         const f = leitor('services/relatoriosAgregacoes.ts');
-        expect((f.match(/cfopDoLancamento\(d, cru, [^,]+, ctx\)/g) || []).length).toBe(2);
+        // ✂️ 11/09: o ITEM vai junto — sem ele o CFOP informado por item é ignorado.
+        expect((f.match(/cfopDoLancamento\(d, cru, [^,]+, ctx, it\)/g) || []).length).toBe(2);
         // E a direção não volta a ser lida crua nessas chamadas.
         expect(f).not.toMatch(/cfopDoLancamento\(d, cru, d\.direcao/);
     });
 
     it('Livro de Entradas/Saídas passa o documento', () => {
-        expect(leitor('components/Relatorios/index.tsx')).toMatch(/cfopDoLancamento\(d, c, direcao,/);
+        const livro = leitor('components/Relatorios/index.tsx');
+        expect(livro).toMatch(/cfopDoLancamento\(d, c, direcao,/);
+        // ✂️ 11/09: e o ITEM chega como 5º argumento.
+        expect(livro).toMatch(/cfopDoLancamento\(d, c, direcao, \{[\s\S]{0,400}?\}, i\)/);
     });
 
     // ⚠️ ESTE TESTE TRAVAVA A FORMA LITERAL DA CHAMADA e por isso reprovou a
@@ -142,7 +146,7 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
     // prendia o '9' no texto do arquivo.
     it('Exportar SAGE passa o documento nas DUAS saídas (.FML e planilha)', () => {
         const f = leitor('services/iobSageExportService.ts');
-        expect((f.match(/cfopParaEscriturar\(it\.cfop, [^,]+, ctxCfop, d\)/g) || []).length).toBe(2);
+        expect((f.match(/cfopParaEscriturar\(it\.cfop, [^,]+, ctxCfop, d, it\)/g) || []).length).toBe(2);
         // E a direção NÃO pode voltar a ser lida crua nessas duas chamadas.
         expect(f).not.toMatch(/cfopParaEscriturar\(it\.cfop, d\.direcao/);
     });
@@ -157,8 +161,8 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
     // RÉGUA. Trava que prende a FORMA impede a correção que a régua manda.
     it('SPED C170 e C190 passam a nota, e a direção vem da RÉGUA', () => {
         const f = leitor('sefaz-backend/sped-fiscal-blocoC.js');
-        expect(f).toMatch(/convertCfopParaEntrada\([\s\S]{0,80}item\.CFOP \|\| '0000', direcaoEfetivaDoc\(nota\), nota\._dados, nota,?\s*\)/);
-        expect(f).toMatch(/convertCfopParaEntrada\(cfopRaw, direcaoEfetivaDoc\(nota\), nota\._dados, nota\)/);
+        expect(f).toMatch(/convertCfopParaEntrada\([\s\S]{0,80}item\.CFOP \|\| '0000', direcaoEfetivaDoc\(nota\), nota\._dados, nota, item,?\s*\)/);
+        expect(f).toMatch(/convertCfopParaEntrada\(cfopRaw, direcaoEfetivaDoc\(nota\), nota\._dados, nota, item\)/);
         // O campo CRU não pode voltar a alimentar a correlação.
         expect(f).not.toMatch(/convertCfopParaEntrada\([^)]*nota\.direcao/);
         // E o wrapper tem que chamar a régua COM documento, não a correlação crua.
@@ -170,10 +174,10 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
     // régua em 22/08, porque ela decide também o CST de escrituração.
     it('E510 (IPI) recebe a nota pela callback — senão divergiria do C190', () => {
         const f = leitor('sefaz-backend/sped-bloco-ipi-e510.js');
-        expect(f).toMatch(/conv\(item\.cfop \|\| item\.CFOP \|\| '0000', [^,]+, nota\._dados, nota\)/);
+        expect(f).toMatch(/conv\(item\.cfop \|\| item\.CFOP \|\| '0000', [^,]+, nota\._dados, nota, item\)/);
         expect(f).not.toMatch(/conv\(item\.cfop \|\| item\.CFOP \|\| '0000', nota\.direcao/);
         expect(leitor('sefaz-backend/sped-fiscal-blocoE.js'))
-            .toMatch(/convertCfop: \(cfop, direcao, notaDados, nota\)/);
+            .toMatch(/convertCfop: \(cfop, direcao, notaDados, nota, item\)/);
     });
 });
 

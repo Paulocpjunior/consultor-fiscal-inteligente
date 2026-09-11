@@ -195,3 +195,69 @@ export async function desligarParametroCfop(id: string, porEmail: string): Promi
         desligadoEm: new Date().toISOString(),
     });
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ✂️ POR ITEM — a nota MISTA (Sandra, 11/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// *"essa nota tem 2 produtos … um produto é com ST outro sem, ou seja 1407 e
+// 1556 … aqui nesse informar CFOP e CST só consigo colocar um CFOP e um CST
+// só"*. O campo por NOTA (17/08) continua sendo o caso comum; este é o degrau
+// acima dele: ITEM > NOTA > cérebro > empresa > régua (quem aplica é
+// `cfopDoLancamento`/`cstInformadoDoItem`, lidos por todos os leitores).
+//
+// 🚨 O MAPA GRAVA POR CAMINHO (`escrituracaoItens.<nItem>`), nunca o objeto
+// inteiro: gravar o mapa todo a partir do que a tela carregou apagaria o item
+// que OUTRA pessoa informou entre a leitura e o clique — o defeito do ✕ de
+// 14/08. E `itens[]` não é tocado: é o que o DOCUMENTO declara, e o merge do
+// Firestore substitui arrays inteiros.
+
+import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
+import { validarCstEscriturado } from '../sefaz-backend/cst-correlacao.js';
+
+export interface GravarEscrituracaoItemInput {
+    documentoId: string;
+    direcao: 'entrada' | 'saida';
+    /** O `nItem` do item (o atributo <det nItem> do XML). */
+    nItem: string | number;
+    /** CFOP informado para o item. VAZIO = este item segue a nota/régua. */
+    cfop: string;
+    /** Tributação do CST (2 dígitos). VAZIO = segue a nota/régua. */
+    cst: string;
+    porEmail: string;
+}
+
+export async function gravarEscrituracaoItem(i: GravarEscrituracaoItemInput): Promise<{ cfop: string; cst: string }> {
+    if (!i.documentoId) throw new Error('Documento sem id — não dá para gravar.');
+    if (!String(i.porEmail || '').trim()) {
+        throw new Error('Sessão sem usuário identificado — saia e entre de novo. '
+            + 'A escrituração do item fica gravada com quem informou.');
+    }
+    const chave = chaveDoItem({ nItem: i.nItem });
+    if (!chave) {
+        // Item sem identidade não recebe decisão: casar por posição faria a
+        // escolha pular de produto na próxima releitura do XML.
+        throw new Error('Este item não tem número (nItem) legível — reimporte o XML completo antes de informar por item.');
+    }
+    const vc = validarCfopEscriturado(i.cfop, i.direcao);
+    if (!vc.ok) throw new Error(`Item ${chave}: ${vc.motivo}`);
+    const vs = validarCstEscriturado(i.cst);
+    if (!vs.ok) throw new Error(`Item ${chave}: ${vs.motivo}`);
+
+    const ref = doc(db, COLECAO_DOCUMENTOS, i.documentoId);
+    const caminho = `escrituracaoItens.${chave}`;
+    if (!vc.cfop && !vs.cst) {
+        await updateDoc(ref, { [caminho]: deleteField() });
+        return { cfop: '', cst: '' };
+    }
+    await updateDoc(ref, {
+        [caminho]: {
+            cfop: vc.cfop || '',
+            cst: vs.cst || '',
+            por: i.porEmail,
+            em: new Date().toISOString(),
+        },
+    });
+    return { cfop: vc.cfop || '', cst: vs.cst || '' };
+}

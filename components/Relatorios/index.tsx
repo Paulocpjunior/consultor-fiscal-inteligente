@@ -98,7 +98,8 @@ import CfopCerebroPainel, { type FornecedorOpcao } from '../CfopCerebroPainel';
 // A descrição oficial vai JUNTO do número: foi por não vê-la que um 1101 numa
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
 import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
-import { cstDoLancamento, resumirCst } from '../../sefaz-backend/cst-correlacao.js';
+import { cstDoLancamento, cstInformadoDoItem, resumirCst } from '../../sefaz-backend/cst-correlacao.js';
+import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -547,13 +548,15 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             // (art. 136), que já nasce 1xxx, passa intacta.
             const cfopsEscriturados = Array.from(new Set(
                 (d.itens || [])
-                    .map((i: any) => String(i.cfop || '').replace(/\D/g, ''))
-                    .filter(Boolean)
-                    .map((c: string) => String(cfopDoLancamento(d, c, direcao, {
+                    .map((i: any) => ({ i, c: String(i.cfop || '').replace(/\D/g, '') }))
+                    .filter(({ c }: any) => Boolean(c))
+                    // O ITEM vai junto (11/09): nota mista sai com dois CFOPs
+                    // no livro, como no arquivo — não com o da nota colapsado.
+                    .map(({ i, c }: any) => String(cfopDoLancamento(d, c, direcao, {
                         naturezaAtividade: natureza.natureza,
                         cfopOverrides: cadastroFiscal?.cfopOverrides,
                         parametrosCfop: cerebroAtivo(parametrosCfop),
-                    }) || c)),
+                    }, i) || c)),
             ));
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
@@ -797,7 +800,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 const docEfetivo = { ...d, cfopEscriturado: informado };
                 const daRegua = cfopsDistintosDaNota(d, direcao, ctx);
                 const cru = String(d.itens?.[0]?.cfop || '').replace(/\D/g, '');
-                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx);
+                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx, d.itens?.[0] || null);
                 const parte: any = contraparteDoc(d);
                 return {
                     id: d.id,
@@ -824,11 +827,19 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     // validarmos a operação... o CST do fornecedor vai vir como
                     // 00, temos que indicar 90 para essas operações"). A régua é
                     // a mesma que o SPED usa — a tela não recalcula nada.
+                    // A coluna mostra o 1º ITEM da nota — e passa pelo dono que
+                    // resolve ITEM > NOTA (11/09). Nota com escrituração por item
+                    // ganha o selo ✂️ ao lado, porque uma linha só não conta a
+                    // nota mista inteira.
                     cst: cstDoLancamento(
                         d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || '',
                         informado || daRegua[0] || '',
-                        cstGravado[d.id] !== undefined ? cstGravado[d.id] : d.cstEscriturado,
+                        cstInformadoDoItem(
+                            { ...d, cstEscriturado: cstGravado[d.id] !== undefined ? cstGravado[d.id] : d.cstEscriturado },
+                            d.itens?.[0],
+                        ),
                     ),
+                    porItem: resumoEscrituracaoItens(d),
                     valor: d.totais?.vNF || d.valorTotal || 0,
                 };
             })
@@ -1196,8 +1207,14 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                         {l.daRegua.join(' ') || '—'}
                                         {l.mista && (
                                             <span className="ml-1 text-amber-600 dark:text-amber-400"
-                                                title="Esta nota tem mais de um CFOP entre os itens. Informar um CFOP na NF faz todos saírem com ele.">
+                                                title="Esta nota tem mais de um CFOP entre os itens. Informar um CFOP na NF faz todos saírem com ele — para um CFOP por PRODUTO, abra a nota na Central de Documentos → ✏️ Informar CFOP e CST → ✂️ por item.">
                                                 ⚠ mista
+                                            </span>
+                                        )}
+                                        {l.porItem.total > 0 && (
+                                            <span className="ml-1 text-indigo-700 dark:text-indigo-300"
+                                                title={`Itens com CFOP/CST próprios (vencem o da nota): nº ${l.porItem.nItens.join(', ')}. Edite na Central de Documentos → detalhe da nota → ✏️ → ✂️ por item.`}>
+                                                ✂️ {l.porItem.total} item(ns)
                                             </span>
                                         )}
                                     </td>

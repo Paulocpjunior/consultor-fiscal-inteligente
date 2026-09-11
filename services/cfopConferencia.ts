@@ -96,7 +96,7 @@ export function conferirCorrelacaoCfop(
             // O DOCUMENTO vai junto: é dele que sai o CFOP informado na NF (✏️) e o
             // fornecedor que o cérebro procura. Chamar sem ele era prometer a régua
             // automática numa nota que a pessoa já tinha decidido.
-            const destino = cfopParaEscriturar(origem, 'entrada', ctx, d);
+            const destino = cfopParaEscriturar(origem, 'entrada', ctx, d, it);
             const chave = `${origem}->${destino}`;
 
             let motivo: MotivoCorrelacao;
@@ -104,7 +104,7 @@ export function conferirCorrelacaoCfop(
             let conferir = false;
             const sufixo = origem.slice(1);
             const ehCompra = SUFIXOS_COMPRA.includes(sufixo);
-            const origemDecisao = origemDoCfopLancamento(d, origem, 'entrada', ctx || {});
+            const origemDecisao = origemDoCfopLancamento(d, origem, 'entrada', ctx || {}, it);
 
             if (origemDecisao.origem === 'nota') {
                 motivo = 'nota';

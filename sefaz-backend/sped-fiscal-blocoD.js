@@ -180,7 +180,9 @@ function buildD190PorNota(nota) {
     // frete escritura na ótica de entrada (1352/2352). Preservar o do emitente
     // escrituraria a operação DELE — é a lição da correlação de CFOP.
     const cfop = String(
-        cfopDoLancamento(nota, cfopDoCte(nota), direcaoEfetivaDoc(nota), {}) || cfopDoCte(nota),
+        // O CT-e não tem ITEM: o CFOP mora no cabeçalho, e o `null` diz isso de
+        // propósito (o 5º argumento é obrigatório pelo registro consumidoresMedidos).
+        cfopDoLancamento(nota, cfopDoCte(nota), direcaoEfetivaDoc(nota), {}, null) || cfopDoCte(nota),
     ).padStart(4, '0').slice(-4);
     const aliq = parseFloat(nota.aliqIcms || 0) || 0;
 

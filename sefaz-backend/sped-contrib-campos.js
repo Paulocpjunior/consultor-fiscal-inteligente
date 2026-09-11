@@ -40,7 +40,7 @@
 
 import { validarCnpj } from './documento-dv.js';
 import {
-    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirContador0100, POS_DT_FIN_CONTRIBUICOES,
+    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirContador0100, conferirCodPartDoC100, POS_DT_FIN_CONTRIBUICOES,
     conferirPeriodoDoArquivo as periodoDoArquivoComum,
 } from './sped-c100-regras-comuns.js';
 // A contagem oficial dos 184 registros lidos por inteiro no Guia 1.35 — gerada
@@ -1474,6 +1474,7 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // (no ICMS/IPI é o 5). Carimbar a posição do vizinho faria a regra ler
         // o nome da empresa como se fosse data.
         ...conferirCodModContraChave(linhas),
+        ...conferirCodPartDoC100(linhas),
         ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
         ...conferirConsolidacao1900(linhas).erros,
         ...conferirM205ComValorZero(linhas).erros,

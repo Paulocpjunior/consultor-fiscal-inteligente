@@ -103,7 +103,7 @@ export function montarLinhasE510(notas, deps = {}) {
             // fica gravada como 'saida' até o backfill passar; lida crua, ela
             // ia ao E510 com o CFOP e o CST da operação DO FORNECEDOR.
             const direcaoNota = direcaoEfetivaDoc(nota) || nota.direcao;
-            const cfop = String(conv(item.cfop || item.CFOP || '0000', direcaoNota, nota._dados, nota));
+            const cfop = String(conv(item.cfop || item.CFOP || '0000', direcaoNota, nota._dados, nota, item));
             // CST de ESCRITURAÇÃO: entrada converte o CST de saída do fornecedor.
             const cst = cstIpiEscrituracao(item.cstIpi, direcaoNota);
             if (direcaoNota !== 'entrada' && cst === '99') saidasOutras += 1;
