@@ -34,7 +34,7 @@
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 // 🚨 A data do fato gerador atravessa o túnel na forma que o R-4020 aceita
 // (`AAAA-MM-DD`) — quem a lê das três formas do documento é o DONO.
-import { dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+import { dataDeclaradaDoDocumento, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // 🚨 31/08: o app DENUNCIAVA a retenção errada e não entregava a certa. Quem
 // responde "quanto esta nota reteve, de verdade" é este dono — ajuste
 // declarado > CSRF decomposta > documento —, e ele é ÚNICO de propósito: um
@@ -230,7 +230,11 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, aju
     for (const d of documentos || []) {
         if (CANCELADOS.has(texto(d?.status).toLowerCase())) continue;
         // TOMADAS: o cliente é o tomador, não o prestador.
-        if (d?.direcao !== 'entrada') continue;
+        // 🚨 A DIREÇÃO SAI DA RÉGUA: o campo gravado mente na nota própria de
+        // entrada (art. 136), que fica como 'saida' até o backfill passar.
+        // Lendo o campo cru, documento de entrada legítimo ficaria FORA do
+        // evento — retenção que a empresa sofreu e não declara.
+        if (direcaoEfetivaDoc(d) !== 'entrada') continue;
 
         const n = normalizarNotaTomada(d);
         if (alvo && n.tomadorCnpj && n.tomadorCnpj !== alvo) continue;

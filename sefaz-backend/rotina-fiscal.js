@@ -20,7 +20,7 @@
 // ============================================================================
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { acharFichaCompetencia } from './ipi-varredura.js';
@@ -214,8 +214,13 @@ export function montarRotinaFiscal({
     declaracaoCobertura = null,
 }) {
     const docs = documentos || [];
-    const entradas = docs.filter((d) => d.direcao === 'entrada').length;
-    const saidas = docs.filter((d) => d.direcao === 'saida').length;
+    // 🚨 A DIREÇÃO SAI DA RÉGUA, NUNCA DO CAMPO GRAVADO. A nota PRÓPRIA de
+    // entrada (art. 136 — compra de produtor rural, importação) fica gravada
+    // como 'saida' até o backfill passar, e quem responde é `direcaoEfetivaDoc`
+    // pelo `tpNF`. Lendo o campo cru, a etapa de CAPTURA contava a compra como
+    // venda — e é esta contagem que decide se a empresa aparece com movimento.
+    const entradas = docs.filter((d) => direcaoEfetivaDoc(d) === 'entrada').length;
+    const saidas = docs.filter((d) => direcaoEfetivaDoc(d) === 'saida').length;
     // 🏠 Aluguel puro: a receita não tem documento por natureza.
     const soLocacao = receitaSoDeLocacao(apuracao);
     const locacao = Number(apuracao?.receitaDeLocacao || 0);

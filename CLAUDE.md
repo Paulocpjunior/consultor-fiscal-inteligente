@@ -5,6 +5,58 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧭 A DIREÇÃO DO DOCUMENTO SAÍA DO CAMPO GRAVADO EM CINCO LEITORES — e o
+  campo MENTE justamente na compra de produtor rural** (11/09, achado na
+  auditoria que o Paulo pediu; ninguém reportou).
+  📌 **A CLASSE ESTAVA NOMEADA DESDE 22/08 E NUNCA FOI FECHADA**: ficou escrito
+  aqui que *"restam ~60 leituras cruas de `direcao` e elas NÃO foram triadas uma
+  a uma"*. A medição de hoje deu **97** — ou seja, a classe estava **CRESCENDO**,
+  não encolhendo. Pendência nomeada sem trava é pendência que engorda.
+  🔴 **O CAMPO MENTE NUM CASO QUE ESTA CASA TEM ÀS DEZENAS POR MÊS**: a nota
+  PRÓPRIA de entrada (RICMS/SP art. 136 — compra de produtor rural, importação)
+  é emitida PELA EMPRESA com `tpNF=0`, então o importer a grava como **'saida'**
+  e só o backfill do sync-cron a vira. Quem responde é `direcaoEfetivaDoc`, pelo
+  `tpNF`. É o caso EDUARDO GUERRA (31/07), que já custou correção no import, no
+  SPED das duas famílias, no `.FML`, no preflight, nos relatórios e na Central
+  de Documentos — **seis vezes, sempre na instância, nunca na classe**.
+  ⚠️ **TRIAGEM POR RISCO ANTES DE CORRIGIR, e ela poupou 92 dos 97**: a pergunta
+  não é *"lê o campo cru?"*, é **"decide LIVRO, IMPOSTO ou o FAROL que diz se o
+  mês fechou?"**. Ficaram FORA, com o motivo declarado: o **DONO** da régua
+  (`xml-metadata-helper`, `participante-doc-helper` — ali o laço da nota própria
+  vem na linha seguinte), o **ESCRITOR** (quem DECIDE a direção na gravação), o
+  campo **DIGITADO** (no ✍️ a direção é a que a pessoa escolheu, não capturada),
+  o **FILTRO** que a pessoa escolhe, a **linha já AGREGADA** de relatório, o
+  **diagnóstico da própria forma crua** (`health-consolidado` conta quantos
+  estão SEM direção — o campo É o objeto da medição) e a direção de **MENSAGEM**
+  do WhatsApp/Connect, que é outro assunto com o mesmo nome.
+  ✂️ **OS CINCO QUE DECIDIAM E FORAM CORRIGIDOS**: o **farol da Rotina do Mês**
+  (`rotina-fiscal.js` contava a compra de produtor como VENDA na etapa de
+  captura — e é essa contagem que decide se a empresa aparece com movimento); o
+  **bloco C** (`sped-selecao-documentos.js`, a exclusão da NFC-e nas entradas
+  escapava para o cupom com `tpNF=0`); o **ISS da carteira**
+  (`iss-carteira.js`) e a **apuração de ISS SP** (`issSpApuracao.ts`), onde a
+  direção decide entre DUAS guias — ISS próprio × ISS retido como tomadora, e
+  trocá-las cobra a guia errada; e o **R-4020** (`reinf-retencoes-pj.js`, quem
+  entra no evento de retenção).
+  ✅ **E O RELATÓRIO DE FATURAMENTO JÁ ESTAVA CERTO — medido, não suposto**: a
+  varredura larga o acusou e a leitura mostrou `const direcao =
+  direcaoEfetivaDoc(d)` na linha de cima. **Corrigir os 97 teria mexido em 92
+  lugares certos**, que é o jeito conhecido de a equipe desligar a trava.
+  🚦 **A TRAVA É POR VARREDURA COM EXCEÇÃO DECLARADA**
+  (`direcaoEfetivaNosLeitores.test.ts`): a lista é por ARQUIVO e cada entrada
+  carrega o MOTIVO. Ela tem as três guardas da casa — **silêncio falso** (exige
+  ≥300 arquivos lidos, senão glob quebrado passaria verde sem ler nada),
+  **exceção ÓRFÃ** (arquivo que parou de casar sai da lista, senão a próxima
+  leitura crua entra por baixo dela) e a exigência da **CHAMADA**, nunca da
+  menção do nome — varredura que lê o import passa verde com a régua desligada,
+  que é a lição da lápide (10/09). **Provada revertendo dois dos cinco**: ela
+  acusa cada um pelo nome do arquivo e pela contagem.
+  📌 **REGRA QUE FICA: pendência nomeada e não travada CRESCE.** Esta viveu 20
+  dias como linha deste arquivo, com o número escrito (~60), e ninguém a
+  reabriu — enquanto 18 leituras novas nasciam. Classe que se fecha com
+  varredura se fecha no dia em que é nomeada; o que sobra vira dívida que
+  engorda em silêncio e só aparece quando alguém vai medir.
+
 - **🚨 "PEDE PARA EU CONFERIR 1327 NOTAS DE 1 EM 1 HORA" — a régua SOMAVA dois
   talões com causas OPOSTAS** (10/09, Paulo fechando a J.N. VINATEX · 08/2026,
   com o print circulado em vermelho: *"quando eu vou verificar as canceladas se
