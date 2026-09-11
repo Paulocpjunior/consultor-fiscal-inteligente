@@ -454,10 +454,25 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // indistinguível de "não tem saldo": o defeito da ausência plausível outra
     // vez, agora do lado da leitura.
     //
-    // ⚠️ E TRANSPORTAR é o campo do MÊS ANTERIOR: `saldoCredor*Transportar` é o
-    // que SOBROU dele (calculado, 18/08 — caso KROYA), enquanto `saldoCredor*`
-    // é o que ENTROU. Preferir o "transportar" da anterior corrige a defasagem
-    // registrada em 17/08; o outro fica de reserva, carimbado na origem.
+    // ⚠️ A FICHA TEM DOIS CAMPOS, E OS DOIS SÃO DIGITADOS (nenhum é calculado —
+    // `saldoCredorFicha.ts` diz por quê): em cada competência M, "Saldo Credor
+    // ICMS (Mês Anterior)" (`saldoCredorIcms`) é o que ENTROU em M — o número
+    // que a própria ficha ABATE da guia de M —, e "a TRANSPORTAR"
+    // (`saldoCredor*Transportar`) é o que a pessoa diz que SOBROU de M.
+    //
+    // 🚨 11/09, LEGACY · 08/2026: o E110 saiu com c.10 = 0,00 e Paulo, com a
+    // ficha aberta: *"ela carrega um saldo credor anterior, já informado na
+    // ficha financeira"*. Estava informado — em AGOSTO, no campo "Mês
+    // Anterior". O código lia `saldoCredorIcms` da ficha de JULHO (o que
+    // entrou em julho, não o que sobrou dele — a defasagem nomeada em 17/08 e
+    // nunca fechada) e ignorava o campo de agosto. O IPI já lia o de agosto
+    // desde 19/08 (PWR); o ICMS ficou atrás, e o espelho divergiu.
+    //
+    // A régua, IGUAL para ICMS e IPI: **o campo desta competência manda** —
+    // é o mesmo número que abateu a GUIA, e arquivo e guia bebem da mesma
+    // fonte (a lição do F600 × ficha, 28/08). O "a transportar" da anterior
+    // é a RESERVA, quando o campo desta está vazio; e quando os dois existem
+    // e DIVERGEM, isso é alerta (06/08), nunca escolha calada.
     let saldoCredorIcmsAnterior = 0;
     let saldoCredorIpiAnterior = 0;
     let origemSaldoIcms = '';
@@ -494,6 +509,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                     // E110/E520 (somarIcmsPorDirecao / somarImpostoPorDirecao)
                     // sobre as notas daquele mês + os ajustes E111 lançados.
                     const movimentos = {};
+                    // O contexto que decide o CRÉDITO de cada mês da cadeia é o
+                    // MESMO do arquivo (regime de quem escritura + CNPJ) —
+                    // senão a cadeia somaria o destaque cru e o E110 o zerado.
+                    const ctxCronologia = { empresa, regimeEscrituracao };
                     for (const comp of mesesCadeia) {
                         const [snapNotas, snapAj] = await Promise.all([
                             db.collection('documentos_fiscais')
@@ -509,8 +528,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                         );
                         movimentos[comp] = {
                             icms: {
-                                debitos: somarIcmsPorDirecao(notasMes, 'saida'),
-                                creditos: somarIcmsPorDirecao(notasMes, 'entrada'),
+                                debitos: somarIcmsPorDirecao(notasMes, 'saida', ctxCronologia),
+                                creditos: somarIcmsPorDirecao(notasMes, 'entrada', ctxCronologia),
                                 cls,
                             },
                             ipi: {
@@ -557,21 +576,40 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                 const n = parseFloat(v);
                 return Number.isFinite(n) && n > 0 ? n : 0;
             };
-            if (num(anterior?.saldoCredorIcmsTransportar)) {
+            const r2 = (v) => Math.round(v * 100) / 100;
+            const divergencia = (rotulo, desta, transportar) => {
+                warnings.push(
+                    `A ficha diz DOIS saldos anteriores de ${rotulo}: ${desta.toFixed(2)} no campo "Mês Anterior" desta `
+                    + `competência e ${transportar.toFixed(2)} no "a TRANSPORTAR" da competência anterior. O arquivo `
+                    + `sai com ${desta.toFixed(2)} — o mesmo número que abateu a guia. Se o certo é o outro, corrija `
+                    + 'a ficha desta competência antes de transmitir.',
+                );
+            };
+
+            if (num(atual?.saldoCredorIcms)) {
+                saldoCredorIcmsAnterior = num(atual.saldoCredorIcms);
+                origemSaldoIcms = 'campo "Saldo Credor ICMS (Mês Anterior)" da ficha desta competência';
+                if (num(anterior?.saldoCredorIcmsTransportar)
+                    && r2(num(anterior.saldoCredorIcmsTransportar)) !== r2(saldoCredorIcmsAnterior)) {
+                    divergencia('ICMS', saldoCredorIcmsAnterior, num(anterior.saldoCredorIcmsTransportar));
+                }
+            } else if (num(anterior?.saldoCredorIcmsTransportar)) {
                 saldoCredorIcmsAnterior = num(anterior.saldoCredorIcmsTransportar);
-                origemSaldoIcms = 'saldo A TRANSPORTAR da ficha da competência anterior';
-            } else if (num(anterior?.saldoCredorIcms)) {
-                saldoCredorIcmsAnterior = num(anterior.saldoCredorIcms);
-                origemSaldoIcms = 'campo "Saldo Credor ICMS (mês anterior)" da ficha da competência ANTERIOR '
-                    + '— é o que ENTROU naquele mês, não o que sobrou dele';
+                origemSaldoIcms = 'saldo A TRANSPORTAR da ficha da competência anterior '
+                    + '(o campo "Saldo Credor ICMS (Mês Anterior)" desta competência está vazio)';
             }
 
-            if (num(anterior?.saldoCredorIpiTransportar)) {
-                saldoCredorIpiAnterior = num(anterior.saldoCredorIpiTransportar);
-                origemSaldoIpi = 'saldo de IPI A TRANSPORTAR da ficha da competência anterior';
-            } else if (num(atual?.saldoCredorIpi)) {
+            if (num(atual?.saldoCredorIpi)) {
                 saldoCredorIpiAnterior = num(atual.saldoCredorIpi);
                 origemSaldoIpi = 'campo "Cred. IPI do mês anterior (compensado)" da ficha desta competência';
+                if (num(anterior?.saldoCredorIpiTransportar)
+                    && r2(num(anterior.saldoCredorIpiTransportar)) !== r2(saldoCredorIpiAnterior)) {
+                    divergencia('IPI', saldoCredorIpiAnterior, num(anterior.saldoCredorIpiTransportar));
+                }
+            } else if (num(anterior?.saldoCredorIpiTransportar)) {
+                saldoCredorIpiAnterior = num(anterior.saldoCredorIpiTransportar);
+                origemSaldoIpi = 'saldo de IPI A TRANSPORTAR da ficha da competência anterior '
+                    + '(o campo "Cred. IPI do mês anterior" desta competência está vazio)';
             }
         } catch (err) {
             console.warn(`[sped-fiscal] saldos anteriores falharam: ${err.message}`);

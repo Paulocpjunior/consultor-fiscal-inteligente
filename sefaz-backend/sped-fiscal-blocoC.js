@@ -273,7 +273,62 @@ export function avisoDeEntradaSemCredito(notas, dados) {
         + `(CST x90, base e ICMS zero — R$ ${icms.toFixed(2).replace('.', ',')} destacados pelo fornecedor) `
         + `porque a empresa é ${regime === 'SIMPLES' ? 'optante do Simples Nacional' : regime} e não se credita `
         + '(LC 123/2006, art. 23; Guia 3.2.3, C170 campo 10: CST "sob o enfoque do declarante"). É o mesmo '
-        + 'que o Livro de Entradas do CFI mostra. Para creditar um item de propósito, informe o CST na nota (✏️).';
+        + 'que o Livro de Entradas do CFI mostra, e o E110 (campo 06) soma o MESMO zero. Para creditar um item '
+        + 'de propósito, informe o CST na nota (✏️).';
+}
+
+/**
+ * Σ do ICMS que o bloco C ESCRITUROU numa direção — o número que o E110 tem de
+ * declarar (campo 02 nas saídas, campo 06 nas entradas).
+ *
+ * ═══ O CASO (11/09, LEGACY · DF · 08/2026, PVA) ═════════════════════════════
+ *
+ * *"O valor deve ser igual a soma do campo VL_ICMS dos registros (C190, C590,
+ * D190, D590, D730 para CFOP iniciado por 1 (exceto 1605), 2, 3 e CFOP 5605"*
+ * — `6 - VL_TOT_CREDITOS` · esperado **0,00** · conteúdo **4.569,96**, sobre
+ * `|E110|0,00|0,00|0,00|0,00|4569,96|…|4569,96|0,00|0,00|`.
+ *
+ * O E110 somava o `vICMS` CRU dos itens de entrada (`somarImpostoPorDirecao`),
+ * enquanto o C190 — desde a manhã do MESMO dia — sai por `icmsDoItemNoArquivo`,
+ * que ZERA o crédito que o regime ou o CST informado tiram. Duas leituras do
+ * mesmo item, montadas em passos diferentes do gerador: o C190 declarava zero
+ * e o E110 declarava o destaque do FORNECEDOR como crédito — e o crédito é o
+ * que vira SALDO A TRANSPORTAR (c.14), ou seja imposto a MENOS nos meses
+ * seguintes, num arquivo que se desmente por dentro.
+ *
+ * É a régua de 09/09 na ponta da APURAÇÃO: *"quando a régua da LEITURA muda numa
+ * tela, ela muda no ARQUIVO no MESMO PR"* — o C190 mudou e o E110 ficou atrás.
+ *
+ * ═══ A RÉGUA ════════════════════════════════════════════════════════════════
+ *
+ * Passa pela MESMA seleção do bloco C (`selecionarNotasBlocoC`: resumo sem
+ * item, NFC-e em entrada e entrada do emitente ficam FORA aqui como ficam lá) e
+ * soma o que `somarTotaisDosItens` devolve — o dono único de base/ICMS do item
+ * no arquivo. Cancelada, denegada e inutilizada saem com os campos VAZIOS
+ * (Exceção 1) e sem C190, então não somam.
+ *
+ * ⚠️ NÃO cai no total do documento: o C190 é POR ITEM, e o `pick()` que caía
+ * no total quando a soma dos itens dava zero foi justamente o que trouxe o
+ * destaque de volta ao C100 na ELS (pego pelo teste, 11/09).
+ *
+ * @param {object[]} notas
+ * @param {'entrada'|'saida'} direcao
+ * @param {object} dados   o contexto do arquivo — é dele que sai o REGIME de
+ *   quem escritura (`regimeEscrituracao`/`empresa`) e o CNPJ da seleção.
+ *   Parâmetro OBRIGATÓRIO (registro `consumidoresMedidos`): sem ele a régua
+ *   responde "credita" para toda entrada, com toda confiança — o defeito.
+ */
+export function somarIcmsNoArquivo(notas, direcao, dados) {
+    const selecao = selecionarNotasBlocoC(notas, dados?.empresa?.cnpj);
+    let total = 0;
+    for (const nota of selecao.notas) {
+        if (direcaoEfetivaDoc(nota) !== direcao) continue;
+        if (docCancelado(nota)) continue;
+        if (nota.status === 'denegado' || nota.status === 'inutilizado') continue;
+        const n = nota._dados ? nota : { ...nota, _dados: dados };
+        total += somarTotaisDosItens(n).vICMS;
+    }
+    return total;
 }
 
 /**

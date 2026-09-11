@@ -24,7 +24,11 @@ zero vulnerabilidade em 412 dependências de produção.
   da nota TOMADA (R$ 6,17 na LEGACY), corrigido de novo: nota tomada não entra,
   o campo sai zero. Toda empresa do DF que já gerou pelo CFI gerou com o bloco
   errado — regerar, ler a caixa de avisos (a prevalidação acusa antes do PVA) e
-  validar.
+  validar. **À noite, a terceira rodada**: o E110 da LEGACY saiu com créditos
+  de 4.569,96 sobre C190 zerados (o PVA recusa) e saldo anterior 0,00 com o
+  saldo na ficha — corrigidos: o E110 soma o que o C190 escriturou e o c.10 lê
+  a ficha DESTA competência. Regerar a LEGACY de novo e conferir o saldo no
+  aviso.
 - **LEGACY × Federação e KROYA × GOLDLOG: importar os XMLs e tirar do livro o
   que foi digitado.** Desde 11/09 a mesma NF-e pode ficar nas duas empresas da
   carteira. As saídas da LEGACY recusadas entram agora (importar de novo). As
@@ -106,6 +110,11 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
   fora do DF continua vazio. Item de NFS-e deixou de entrar no 0200. Regra R41
   na prevalidação. **À tarde**: o campo *ISS substituto* (M) deixou de sair da
   nota TOMADA — sai zero, e a tomada com ISS retido é contada e dita no aviso.
+- **E110 pelo mesmo número do C190 + saldo anterior da ficha desta
+  competência** — o campo 06 somava o ICMS cru do fornecedor que o C190 já
+  zerava (regime ou CST informado); agora o dono é um só (`somarIcmsNoArquivo`),
+  e o campo 10 lê "Saldo Credor ICMS (Mês Anterior)" da competência gerada, não
+  da anterior. ICMS e IPI com a mesma régua; dois saldos divergentes saem ditos.
 - **Retenção informada à mão que "sumia" ao reabrir** — o formulário abre
   preenchido com o que foi gravado e o carimbo fica à vista.
 - **A mesma NF-e em duas empresas da carteira** — o outro lado ganha documento

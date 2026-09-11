@@ -5,6 +5,59 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 O E110 SOMAVA O CRÉDITO CRU QUE O C190 JÁ ZERAVA — e o saldo anterior
+  vinha da ficha do MÊS ERRADO** (11/09, à noite, Paulo, LEGACY · DF · 08/2026,
+  com o Relatório de Erros do PVA depois de o B470 passar: *"deu certo o B470,
+  porém apareceu esse valor de ICMS; outra informação importante, ela carrega um
+  saldo credor anterior, já informado na ficha financeira"*).
+  📖 **O PVA NOMEOU O CAMPO**: *"O valor deve ser igual a soma do campo VL_ICMS
+  dos registros (C190, C590, D190, D590, D730 para CFOP iniciado por 1 (exceto
+  1605), 2, 3 e CFOP 5605"* — `6 - VL_TOT_CREDITOS` · esperado **0,00** ·
+  conteúdo **4.569,96**, e o mesmo 4.569,96 no c.14 (saldo a transportar).
+  🔴 **A CAUSA É A RÉGUA DE 09/09 PELA METADE**: de manhã (ELS) o C170/C190
+  passaram a ler `icmsDoItemNoArquivo` — o crédito que o REGIME ou o CST
+  INFORMADO tiram sai ZERO no item. O **E110 continuou somando `item.vICMS`
+  CRU** (`somarImpostoPorDirecao`): o C190 dizia zero e o E110 declarava o
+  destaque do FORNECEDOR como crédito, que virava saldo a transportar —
+  **imposto a MENOS nos meses seguintes**, num arquivo que se desmente por
+  dentro. A R7 da prevalidação acusava na caixa de avisos; o arquivo foi ao PVA
+  mesmo assim.
+  ✂️ `somarIcmsNoArquivo(notas, direcao, dados)` no bloco C é o **dono**: passa
+  pela MESMA seleção do bloco C (`selecionarNotasBlocoC`) e soma
+  `somarTotaisDosItens` — o único somador de base/ICMS do item. `somarIcmsPorDirecao`
+  (bloco E) DELEGA; o E110, a cronologia do saldo de abertura e o painel de
+  crédito acumulado passam o CONTEXTO (regime + CNPJ). Registrado em
+  `consumidoresMedidos` com 3 argumentos: sem o contexto a régua responde
+  "credita" para toda entrada, com toda confiança. ⚠️ **NÃO cai no total do
+  documento**: resumo sem item fica fora do E110 como fica fora do C190.
+  🔴 **E O c.10 SAIU ZERO COM O SALDO NA FICHA**: o orquestrador lia
+  `saldoCredorIcms` da ficha da competência **ANTERIOR** (o que ENTROU em julho
+  — a defasagem nomeada em 17/08 e nunca fechada). Na ficha, o campo *"Saldo
+  Credor ICMS (Mês Anterior)"* de M é o que entrou em M, e é **o número que
+  abateu a GUIA de M**. Paulo preencheu em AGOSTO; o código lia JULHO. O IPI já
+  lia o campo desta competência desde 19/08 (PWR); o ICMS ficou atrás — espelho
+  que responde diferente do espelhado (09/09).
+  ✂️ **Régua IGUAL para ICMS e IPI**: o campo DESTA competência manda (arquivo
+  e guia bebem da mesma fonte — a lição do F600 × ficha, 28/08); o *"a
+  transportar"* da anterior é a RESERVA quando ele está vazio; os dois
+  existindo e DIVERGINDO sai aviso com os dois números (06/08: divergência é
+  alerta, nunca escolha calada). O fallback defasado (`anterior.saldoCredorIcms`)
+  **morreu**, travado por varredura. O aviso do saldo passou a ser dirigido pela
+  ORIGEM que o leitor carimba, em vez de afirmar de qual ficha veio.
+  🐛 **DUAS FIXTURES TROCADAS COM MOTIVO**: `spedE520SaldoAnterior` exigia
+  *"prefere o transportar da ANTERIOR"* e `saldoAnteriorApuracao` exigia a frase
+  *"da ficha da competência anterior, não o saldo que sobrou dela"* — as duas
+  descreviam a defasagem. **Provado por REVERSÃO**: E110 cru derruba 5 testes;
+  ficha anterior derruba 1.
+  🚩 **PENDÊNCIA DO PAULO**: regerar o SPED 08/2026 da LEGACY de novo (o E110
+  muda: c.06 e c.10) e validar; conferir o saldo anterior que saiu no aviso.
+  📌 **REGRA QUE FICA: régua que muda o ITEM muda o TOTAL que o soma no MESMO
+  PR — e "o C190 está certo" não fecha o caso enquanto o E110 somar por outra
+  leitura.** O PVA cruza os dois; a casa tem de cruzar antes. E campo de ficha
+  que abate a GUIA é o campo que vai ao ARQUIVO: ler a ficha do mês vizinho é
+  arquivo e guia bebendo de fontes diferentes, que é a divergência que só
+  aparece no PVA.
+
 - **🧾 O SPED DA OPTANTE VOLTOU DO PVA COM TRÊS RECUSAS DO GERADOR E UMA DE
   CADASTRO — e o Livro do CFI estava certo o tempo todo** (11/09, Paulo, ELS ·
   Simples · 08/2026, com o print do PVA e o Livro de Entradas lado a lado:
