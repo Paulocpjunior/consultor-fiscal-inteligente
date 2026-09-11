@@ -5,6 +5,60 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📅 A NOTA GRAVADA NO MÊS ERRADO GANHOU PORTA — e a página de pendências
+  quase saiu pelo trilho que esta casa proíbe** (11/09, Paulo: *"corrige os
+  itens que dependem de vc, a pagina com as pendencias nao pode ser um link do
+  claude"*).
+  🚨 **A SEGUNDA METADE DA ORDEM É UMA REGRA DE 31/07 QUE EU FUREI**: *"Material
+  pra equipe NUNCA vai como artifact do claude.ai — link é privado do dono, e o
+  colaborador recebe 'link inválido'. O trilho é HTML estático em `public/`
+  servido pelo próprio app"*. Eu publiquei a auditoria como link de chat, que é
+  exatamente o que a `guiaParDuplo` existe para impedir. Refeita em
+  `public/pendencias-cfi.html` + `docs/pendencias-cfi.md`, com o **par duplo**,
+  o CSS dos guias da casa e o link no **rodapé**, ao lado do 📗 de conferência.
+  🐛 **E PUBLICAR ACHOU O MESMO BURACO DE 17/08 DO OUTRO LADO DA TRAVA**: o
+  filtro do HTML foi alargado naquele dia (a página de privacidade não casava
+  `guia-*`), e o do **`docs/` ficou preso a `guia-colaborador-*.md`** — ou seja,
+  fonte COM o marcador e outro nome era **INVISÍVEL** para a varredura, que é
+  justamente a metade órfã que ela existe para pegar. Agora vale a mesma régua
+  nos dois lados: **o nome OU o marcador declarado**. Meia correção envelhece em
+  silêncio, e esta envelheceu 25 dias.
+  ✂️ **E A PENDÊNCIA QUE DEPENDIA DE MIM FECHOU: a competência do ACERVO.** Em
+  03/09 os quatro trilhos passaram a gravar pelo FATO GERADOR e ficou escrito
+  que *"o ACERVO não se conserta sozinho… o `dataFatoGerador` ESTÁ no banco,
+  então o app TEM como listar e corrigir"*. `competencia-acervo.js` (PURO) é a
+  lista e a decisão; a rota grava **uma nota por clique**.
+  ⚠️ **A FILA VARRE A COMPETÊNCIA PEDIDA *E A SEGUINTE*, e sem isso ela não
+  acha nada do caso real**: em SP a nota de 31/08 pode ser emitida até 10/09,
+  então ela está gravada em **SETEMBRO** justamente quando se fecha AGOSTO. Quem
+  procurasse só dentro de agosto veria a fila VAZIA com as notas faltando — o
+  silêncio falso na tela que existe para achá-las.
+  ⚠️ **SÓ ACUSA QUANDO OS DOIS MESES DIVERGEM**: a maioria do acervo antigo foi
+  gravada pela emissão e está CERTA por construção (emitir e prestar no mesmo
+  mês é o caso comum). Acusar todas encheria a fila de nota correta — a lição
+  das 236 empresas em ALTO (26/08). E **só alcança documento de SERVIÇO**: na
+  NF-e a emissão É a competência, e perguntar ali inventaria divergência.
+  ⚠️ **A CONSEQUÊNCIA VAI DITA ANTES DO CLIQUE, e ela é dos DOIS lados**:
+  corrigir tira a nota de um mês e põe no outro — *"se algum dos dois já foi
+  entregue, o arquivo daquele mês precisa ser regerado"*, porque o app não sabe
+  quais competências foram transmitidas. Motivo escrito (≥15) e autor
+  obrigatórios: mudar mês de livro não é clique anônimo.
+  ⚠️ **E A DECISÃO É RECALCULADA SOBRE O DOCUMENTO DE AGORA**, nunca sobre o que
+  a tela mandou: entre ler a fila e clicar, alguém pode ter corrigido a mesma
+  nota, e gravar por cima reescreveria o autor e o motivo originais — o defeito
+  do ✕ de 14/08. Nota já corrigida não é reoferecida.
+  🚦 **DUAS TRAVAS DA CASA PEGARAM O CÓDIGO NOVO ANTES DE SUBIR**, e as duas
+  estavam certas: a da **lápide** (a rota consulta `documentos_fiscais` e o
+  filtro mora no núcleo, por documento) e a do **túnel de data** (`dhEmi` cru
+  atribuído a campo de data — ele vai para `competenciaDaNfse`, que normaliza
+  na entrada). As duas viraram exceção **declarada COM o motivo**, que é o
+  mecanismo que elas oferecem.
+  📌 **REGRA QUE FICA: correção de trilho não conserta o ACERVO, e as duas
+  metades são entregas diferentes.** Em 03/09 o trilho ficou certo e a nota
+  velha continuou no mês errado por oito dias, sem nada acusar — porque o
+  sintoma desta classe é a nota que EXISTE, está capturada, e simplesmente não
+  aparece no mês a que pertence.
+
 - **🧭 A DIREÇÃO DO DOCUMENTO SAÍA DO CAMPO GRAVADO EM CINCO LEITORES — e o
   campo MENTE justamente na compra de produtor rural** (11/09, achado na
   auditoria que o Paulo pediu; ninguém reportou).

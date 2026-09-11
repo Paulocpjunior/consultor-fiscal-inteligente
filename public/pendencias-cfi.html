@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: esta página e a fonte em docs/ se atualizam JUNTAS.
+     `guiaParDuplo` barra o build se as revisões divergirem. -->
+<meta name="guia-id" content="pendencias-cfi">
+<meta name="guia-revisao" content="2026-09-11">
+<title>Pendências do CFI — o que falta e quem resolve · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+<style>
+    .fila { border-left: 4px solid var(--borda); padding-left: 14px; margin: 14px 0; }
+    .fila.dinheiro { border-left-color: var(--vermelho); }
+    .fila.decisao  { border-left-color: var(--ambar); }
+    .fila.nomeada  { border-left-color: var(--cinza); }
+    .fila.feito    { border-left-color: var(--verde); }
+    .fila h3 { margin: 0 0 4px; }
+    .fila p { margin: 4px 0; font-size: .94rem; }
+    .estado { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+    .estado div {
+        border: 1px solid var(--borda); border-radius: 10px; background: #fff;
+        padding: 10px 16px; min-width: 150px; flex: 1;
+    }
+    .estado dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--cinza); }
+    .estado dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 700; color: var(--verde); font-variant-numeric: tabular-nums; }
+    .estado dd small { display: block; font-size: .78rem; font-weight: 400; color: var(--cinza); }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Pendências do CFI</h1>
+            <p>O que falta, e quem resolve cada item · medido em 11/09/2026</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<section>
+    <h2>📌 Como ler esta página</h2>
+    <p>Tudo aqui foi <strong>medido contra o código</strong> na data acima, não copiado de anotação
+    antiga. A ordem é por <strong>quem resolve</strong>, porque é isso que decide a próxima ação.</p>
+    <dl class="estado">
+        <div><dt>Testes</dt><dd>7.755<small>516 suítes, todas verdes</small></dd></div>
+        <div><dt>Tipos e build</dt><dd>ok<small>lint, tsc e build limpos</small></dd></div>
+        <div><dt>Vulnerabilidades</dt><dd>0<small>em 412 dependências de produção</small></dd></div>
+    </dl>
+</section>
+
+<section>
+    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">9 itens</span></h2>
+    <p>Nenhum é trabalho de código. São leituras de painel, cliques em produção ou acessos
+    que o time de desenvolvimento não tem.</p>
+
+    <div class="fila dinheiro">
+        <h3>SPED entregue com nota que já tinha sido tirada do livro</h3>
+        <p>Entre <code>03/09</code> e <code>10/09</code> a retirada de nota valia na tela e não valia no
+        arquivo. Quem tirou uma nota nesse período e já gerou o SPED daquela competência entregou o
+        arquivo <strong>com a nota tirada</strong>.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar e conferir, competência por competência.
+        O app não sabe quais já foram transmitidas.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>NOVA ERA: seis produtores fora do FUNRURAL por engano</h3>
+        <p>Foram tirados quando a tela ainda não dizia qual nota era qual. Eram justamente as notas
+        próprias de entrada, que <strong>devem</strong> gerar sub-rogação. Enquanto não voltarem, o
+        FUNRURAL dela sai a menor.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Central de Documentos → 🌾 DIPAM / Produtor rural.
+        O botão de desfazer mostra quanto volta ao total antes do clique.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>EXPERTE: captura bloqueada</h3>
+        <p>Zero documento no banco em qualquer competência, com IPI apurado na ficha. É esta empresa
+        que segura a prova final do registro E510.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Central de Documentos → 📋 Status por Empresa diz o bloqueio.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>PS VIDROS: marcar contribuinte de IPI como Não</h3>
+        <p>Sem isso o E500/E520 continua saindo num comércio, onde o IPI da nota do fornecedor é custo
+        e não crédito. O PVA recusa o arquivo.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Empresas → Dados Fiscais.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>VINATEX 08/2026: qual evento a Receita tem registrado</h3>
+        <p>O <code>MS1028</code> diz que o evento já existe, o que contradiz a conclusão de que nada
+        tinha sido aceito. Só o recibo do e-CAC diz se a competência já está entregue e com quais valores.</p>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>JOAO EVANGELISTA: cadastro duplicado</h3>
+        <p>Mesma família do caso WALDESA. A exclusão é lápide, não apagamento.</p>
+        <div class="alerta">⚠️ <strong>Conferir:</strong> que não volta depois de recarregar e em outro navegador.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Rotação do segredo do cron <span class="selo selo-ambar">aberta desde 27/07</span></h3>
+        <p>O valor vazou duas vezes em colagem de terminal. Trocar exige rodar os dois scripts de agendamento.</p>
+        <div class="alerta">⚠️ Neste serviço o tráfego fica fixado numa revisão, então variável trocada
+        nasce a 0%. Os agendamentos continuariam com o segredo velho, falhando calados.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Bloco K: ler o número da fila de migração</h3>
+        <p>Zero empresa e o bloco é descartável, como o SAT foi. Uma que seja e vira alvo nomeado.
+        Não dá para decidir sem a leitura.</p>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>DeRE: três pré-requisitos e quatro schemas</h3>
+        <p>Piloto da Reforma, procuração no e-CAC e credencial. Faltam também os schemas de
+        <code>D-1199</code>, <code>D-2101</code>, <code>D-9121</code> e <code>D-9199</code>, mais o manual
+        de erros. A primeira competência é <code>10/2026</code>, com entrega em <code>13/11</code>.</p>
+    </div>
+</section>
+
+<section>
+    <h2>🟠 Decisão do Paulo <span class="selo selo-ambar">2 itens</span></h2>
+    <p>Estão parados esperando uma escolha. Nenhum será construído por dedução.</p>
+
+    <div class="fila decisao">
+        <h3>Converter os outros CST na correlação de CFOP</h3>
+        <p>Hoje a régua converte <code>00</code> e <code>20</code> e preserva <code>40</code>,
+        <code>41</code>, <code>50</code>, <code>51</code>, <code>60</code> e <code>70</code> de propósito:
+        cada um declara um fato (isenta, diferimento, ST já cobrada) que o <code>90</code> apagaria.</p>
+        <div class="quando"><strong>A pergunta:</strong> existe fornecedor em que o certo é converter um desses?</div>
+    </div>
+
+    <div class="fila decisao">
+        <h3>Dívida técnica de junho: atacar ou deixar</h3>
+        <p>São refatorações de dias num app fiscal em produção, com risco de regressão silenciosa.
+        Estão medidas e piorando (tabela abaixo), mas nenhuma está quebrando nada hoje.</p>
+        <div class="quando"><strong>A pergunta:</strong> vale parar para atacar, ou seguem esperando?</div>
+    </div>
+</section>
+
+<section>
+    <h2>⚪ Com o desenvolvimento, já nomeado no código <span class="selo">5 itens</span></h2>
+    <p>Nenhum é esquecimento: cada um está escrito dentro do próprio módulo, com o motivo de não ter
+    sido fechado. <strong>O app não afirma o que não sabe em nenhum deles.</strong></p>
+
+    <div class="fila nomeada">
+        <h3>Robô de auditoria de dependências travado</h3>
+        <p>Ele acha o problema, corrige e valida, e morre ao abrir o pedido de alteração: o GitHub não
+        dá essa permissão à automação. Medido de novo em <code>04/09</code>: a configuração marcada em
+        agosto <strong>não</strong> está em vigor.</p>
+        <div class="onde">📍 <strong>Como conferir sem esperar:</strong> a sonda abre um pedido vazio de
+        propósito no dia sem problema nenhum.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Código de ISS retido do CSV de Barueri</h3>
+        <p>A coluna vem <code>"2"</code> nas 24 notas e o significado não está provado: a convenção do
+        portal e a do padrão nacional dizem o oposto. Afirmar que não houve faz o ISS sair a maior;
+        afirmar que houve tira ISS devido.</p>
+        <div class="quando">O app guarda o valor cru e <strong>não afirma nada</strong>. Fecha com uma nota
+        de Barueri que tenha ISS retido.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Arquivo TXT de lote de Barueri não é lido</h3>
+        <p>Largura fixa, amostra com duas notas e campos sem significado provado. Leiaute posicional
+        deduzido é a família dos códigos inventados que já custaram caro.</p>
+        <div class="quando"><strong>Não é beco:</strong> a recusa manda usar o CSV do mesmo portal, que
+        cobre tudo que decide livro.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Tamanho máximo do campo de observação do R-2010</h3>
+        <p>O teto de <code>97</code> é o piso <strong>provado</strong> por um evento aceito em produção,
+        não o número do leiaute. O schema oficial é bloqueado pela rede do ambiente de desenvolvimento.</p>
+        <div class="alerta">⚠️ Acima de 97 volta a ser dedução, e dedução ali devolve o lote inteiro.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Três partes do SPED ainda sem recibo</h3>
+        <p>O bloco D do EFD-Contribuições, o E510 de IPI e o E200/E210 de ST nunca passaram pelo
+        validador. São gerados e conferidos internamente, mas prova mesmo só vem do recibo.</p>
+    </div>
+</section>
+
+<section>
+    <h2>✅ Fechado em 11/09</h2>
+
+    <div class="fila feito">
+        <h3>A nota gravada no mês errado agora tem como ser corrigida</h3>
+        <p>Em São Paulo a nota de 31/08 pode ser emitida até 10/09, e quem decide o mês é o
+        <strong>fato gerador</strong>. Até 03/09 a competência era gravada pela emissão: essas notas somem
+        do Livro de Serviços e do ISS do mês a que pertencem, e aparecem no mês seguinte.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Central de Documentos → XMLs →
+        <strong>📅 Competência do acervo</strong>. Escolha a empresa e a competência que está fechando.</div>
+        <div class="alerta">⚠️ <strong>Uma nota por clique, com motivo escrito.</strong> Corrigir muda os
+        DOIS meses: se algum deles já foi entregue, o arquivo precisa ser regerado e conferido.</div>
+    </div>
+
+    <div class="fila feito">
+        <h3>A direção do documento parou de sair do campo gravado</h3>
+        <p>O campo mente na compra de produtor rural: a nota é emitida pela própria empresa e fica
+        guardada como saída. Cinco leitores decidiam livro, imposto ou farol por esse campo.</p>
+        <div class="alerta">⚠️ Em cliente que compra de produtor rural, a contagem de entradas e saídas da
+        Rotina do Mês pode mudar em relação ao que se via antes de 11/09 — e agora está certa.</div>
+    </div>
+</section>
+
+<section>
+    <h2>📊 O que a medição mostrou</h2>
+    <p>Três números que não estavam sendo acompanhados.</p>
+    <div class="tabela-rolagem">
+    <table>
+        <thead><tr><th>Medida</th><th class="num">Antes</th><th class="num">Hoje</th><th>Situação</th></tr></thead>
+        <tbody>
+            <tr><td>Erros de acesso a índice sem checagem</td><td class="num">1.031</td><td class="num">1.102</td><td>piorou 71</td></tr>
+            <tr><td>Telas acima de 800 linhas</td><td class="num">11</td><td class="num">15</td><td>piorou 4</td></tr>
+            <tr><td>Leituras cruas da direção do documento</td><td class="num">60</td><td class="num">0</td><td>fechado em 11/09</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>O terceiro estava nomeado desde agosto com o número escrito, e em vinte dias cresceu de 60 para 97
+    sem ninguém reabrir. <strong>Pendência nomeada e não travada cresce</strong> — por isso ele agora tem
+    uma varredura que impede a volta.</p>
+</section>
+
+</main>
+<footer>
+    SP Assessoria Contábil · Consultor Fiscal Inteligente · página medida em 11/09/2026<br>
+    Fonte desta página: <code>docs/pendencias-cfi.md</code> — as duas metades se atualizam juntas.
+</footer>
+</body>
+</html>
