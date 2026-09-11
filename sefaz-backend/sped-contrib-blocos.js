@@ -31,7 +31,7 @@ import { retencaoEfetivaDaNota, chaveDoAjuste } from './retencao-pj-ajuste.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
-    serieDoDocumento, codItemDoItem, unidadeDoItem, levaC170NoContribuicoes,
+    serieDoDocumento, codItemNoArquivo, unidadeDoItem, levaC170NoContribuicoes,
     codSitDoDocumento,
 } from './sped-selecao-documentos.js';
 // 🚨 Quem decide o que entra no bloco D — e o que fica de fora, com a CAUSA.
@@ -465,7 +465,8 @@ export function buildBlocoA(dados) {
         const itensDoDoc = (nota.itens || []).length
             ? nota.itens.map((item, i) => ({
                 nItem: item.nItem || String(i + 1),
-                cod: codItemDoItem(item),
+                // `codItemDoItem` + a unidade quando o código circula com duas (o mapa é o do 0200).
+                cod: codItemNoArquivo(item, dados.unidadesPorCodItem),
                 descr: item.xProd || item.descricao || '',
                 valor: parseFloat(item.vProd || item.valor || 0),
                 item,
@@ -738,7 +739,7 @@ export function buildBlocoC_Contrib(dados) {
             linhas.push(fmt.buildLine([
                 'C170',
                 item.nItem || '1',                                    //  2 NUM_ITEM
-                fmt.sanitizeString(codItemDoItem(item), 60),            //  3 COD_ITEM
+                fmt.sanitizeString(codItemNoArquivo(item, dados.unidadesPorCodItem), 60), //  3 COD_ITEM (codItemDoItem + unidade)
                 fmt.sanitizeString(item.xProd || item.descricao || '', 255), // 4 DESCR_COMPL
                 fmt.formatValue(item.qCom || item.quantidade || 1, 5), //  5 QTD
                 unidadeDoItem(item),                                    //  6 UNID

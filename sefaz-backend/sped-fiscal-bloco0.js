@@ -110,6 +110,17 @@ function buildBloco0(dados) {
         );
     }
 
+    // 🚨 IE torta no cadastro é ALERTA, nunca contorno (regra de 06/08): o
+    // PVA recusa o arquivo com "Inscrição Estadual inválida" e a causa mora
+    // em Dados Fiscais — sem esta frase a pessoa procura defeito no gerador.
+    const motivoIe = fmt.motivoIeInvalida(dados.empresa?.dadosFiscais?.uf, dados.empresa?.dadosFiscais?.inscricaoEstadual);
+    if (motivoIe && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `0000: ${motivoIe} — o PVA vai recusar com "Inscrição Estadual inválida". O app NÃO completa `
+            + 'nem corta o número: corrija a IE em Empresas → Dados Fiscais (ELS · 08/2026, 11/09).',
+        );
+    }
+
     // ── 0100 — Contabilista ─────────────────────────────────────────────
     linhas.push(build0100(dados));
 
@@ -239,7 +250,12 @@ function build0000(dados) {
         fmt.sanitizeCnpjCpf(empresa.cnpj),
         '',  // CPF (vazio pra PJ)
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),
-        fmt.sanitizeString(df.inscricaoEstadual || '', 14),
+        // 🚨 IE SÓ COM DÍGITOS (11/09, ELS · 08/2026, PVA: *"Inscrição Estadual
+        // inválida"*): esta linha escrevia o texto do cadastro como estava —
+        // `158.638.009.11`, com pontos — e o PVA confere o DV pela UF. O dono
+        // é o MESMO do 0140 do Contribuições. O que o cadastro tem ERRADO
+        // (11 dígitos numa IE paulista de 12) vai DITO no aviso, não corrigido.
+        fmt.sanitizeIe(df.inscricaoEstadual),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
         // 🚨 Inscrição Municipal — pelo DONO (`ccm-sp.js`), que lê as duas
         // formas E trata os SÓ-ZEROS como vazio. Até 29/08 esta linha escrevia

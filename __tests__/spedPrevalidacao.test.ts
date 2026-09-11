@@ -228,7 +228,10 @@ describe('o resultado é acionável, não um número solto', () => {
         // 0000 tem 15 — ela descrevia um arquivo que o PVA recusaria, e a
         // trava de contagem (R42) a pegou no dia em que nasceu. Este é o
         // 0000 que o `buildBloco0` de fato emite.
-        const r = prevalidarSpedFiscal([L('|0000|020|0|01072026|31072026|X|123||SP|1|3550308|||A|0|')]);
+        // 🐛 FIXTURE TROCADA DE NOVO (11/09): a IE era "1" numa empresa de SP —
+        // um arquivo que o PVA recusa com "Inscrição Estadual inválida" (a
+        // recusa da ELS), e a R45 a pegou ao nascer. IE FICTÍCIA de 12 dígitos.
+        const r = prevalidarSpedFiscal([L('|0000|020|0|01072026|31072026|X|123||SP|110042490114|3550308|||A|0|')]);
         expect(r.erros).toHaveLength(0);
         expect(r.resumo).toMatch(/Nenhuma das recusas/);
         expect(resumoPrevalidacao(r)).toEqual([]);

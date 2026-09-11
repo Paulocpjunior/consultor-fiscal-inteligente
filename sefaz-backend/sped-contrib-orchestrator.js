@@ -40,7 +40,8 @@ import { direcaoEfetivaDoc, docContaNoLivro } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
-    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido, unidadeDoItem, descreverUnidade,
+    tipoItemDoDocumento, TIPO_ITEM_SERVICO, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido, unidadeDoItem, descreverUnidade,
+    unidadesPorCodItem, codItemNoArquivo, codigosComDuasUnidades, avisoDeItemComDuasUnidades,
     levaC170NoContribuicoes, ehNfce,
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
@@ -256,13 +257,17 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // Mesma colisão do EFD ICMS/IPI, e ela entra nas DUAS famílias no mesmo PR:
     // deixar numa só é a "meia trava" do COD_MUN do 0150 (22/08).
     const colisoesDeItem = [];
+    // Mesmo código com duas unidades: sufixo nos dois lados (0200 aqui, C170 e
+    // A170 nos blocos), com o MESMO mapa — a régua do ICMS/IPI (ELS, 11/09).
+    const unidadesPorCodigo = unidadesPorCodItem(notas, levaC170NoContribuicoes);
     for (const nota of notas) {
         if (!levaC170NoContribuicoes(nota)) {
             itensSoEmNfce += (nota.itens || []).length;
             continue;
         }
         for (const item of (nota.itens || [])) {
-            const codItem = codItemDoItem(item);
+            // `codItemDoItem` é a chave; `codItemNoArquivo` soma a unidade quando preciso.
+            const codItem = codItemNoArquivo(item, unidadesPorCodigo);
             const jaCadastrado = itensMap.get(codItem);
             if (jaCadastrado) {
                 const campo = conferirColisaoDeItem(jaCadastrado, {
@@ -347,6 +352,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     warnings.push(...avisosDoFechamento);
     if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
+    const codigosComSufixo = codigosComDuasUnidades(unidadesPorCodigo);
+    if (codigosComSufixo.length) warnings.push(avisoDeItemComDuasUnidades(codigosComSufixo));
     // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
     // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
     // destinação: ela não está no XML.
@@ -503,6 +510,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         itens,
         participantes,
         unidades,
+        unidadesPorCodItem: unidadesPorCodigo,
         receitaSemDocumento,
         receitaAplicacaoFinanceira,
         contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',

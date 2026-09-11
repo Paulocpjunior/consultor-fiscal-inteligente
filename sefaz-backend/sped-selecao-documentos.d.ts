@@ -146,6 +146,13 @@ export function avisoDeTipoItemPresumido(
 ): string;
 
 /** Documentos escriturados no EFD ICMS/IPI (bloco C sem NFC-e + bloco D) — quem pode sustentar 0150/0200. */
+export function unidadesPorCodItem(
+    notas: Array<Record<string, unknown>> | null | undefined,
+    entra?: (nota: Record<string, unknown>) => boolean,
+): Map<string, Set<string>>;
+export function codItemNoArquivo(item: unknown, unidadesPorCodigo?: Map<string, Set<string>> | null): string;
+export function codigosComDuasUnidades(unidadesPorCodigo?: Map<string, Set<string>> | null): Array<{ codItem: string; unidades: string[] }>;
+export function avisoDeItemComDuasUnidades(lista: Array<{ codItem: string; unidades: string[] }> | null | undefined): string;
 export function documentosEscrituradosNoFiscal(
     notas: Array<Record<string, unknown>> | null | undefined,
     empresaCnpj?: string | null,

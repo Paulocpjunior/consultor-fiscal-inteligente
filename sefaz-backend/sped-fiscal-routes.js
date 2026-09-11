@@ -366,6 +366,8 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // modelo 55 e chave 65 sem nenhum teste acusar.
         const prevalidacao = prevalidarSpedFiscal(linhasDoArquivo, {
             contribuinteIpi: dados.empresa?.dadosFiscais?.contribuinteIpi || '',
+            // O regime decide a R44 (crédito de ICMS na entrada do optante).
+            regime: dados.regimeEscrituracao || '',
         });
         for (const linha of resumoPrevalidacao(prevalidacao)) dados.warnings.push(linha);
 
