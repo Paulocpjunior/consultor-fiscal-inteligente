@@ -12,7 +12,6 @@ import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC } from './sped-fiscal-blocoC.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 import {
-    buildBlocoB,
     buildBlocoG, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
@@ -33,15 +32,17 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
-    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
+    selecionarNotasBlocoC, documentosEscrituradosNoFiscal, tipoItemDoDocumento, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
     unidadeDoItem, descreverUnidade,
 } from './sped-selecao-documentos.js';
 import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
-import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
+import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 // 🔒 O acervo que o fim de mês congelou — o dono da pergunta "este documento
 // já estava aqui quando o mês foi fechado?".
 import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
 import { docContaNoLivro } from './xml-metadata-helper.js';
+// 🏛️ Bloco B — ISS do DF (11/09, LEGACY): B001|0 + B470 em quem é de Brasília.
+import { buildBlocoB, apurarIssBlocoB, avisosDoBlocoB } from './sped-fiscal-blocoB.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
 // 🧠 O cérebro do CFOP entra no ARQUIVO (07/09): sem esta leitura o C170/C190
 // saíam pela régua automática num fornecedor que a pessoa já tinha ensinado.
@@ -173,16 +174,12 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     //   · Nota que NÃO foi escriturada (só o resumo na base, ou sem itens) —
     //     ela sai do bloco C nomeada, e o participante dela vai junto.
     //
-    // Mesma régua do 0200 logo abaixo, que já fazia isso pelos itens.
-    const nfceOuNaoEscriturada = (() => {
-        const escrituradas = new Set(
-            selecionarNotasBlocoC(notas, empresa.cnpj)
-                .notas.filter(n => modeloDoDoc(n) !== '65')
-                .map(n => n.id || n.chave),
-        );
-        for (const c of selecionarCtesBlocoD(notas)) escrituradas.add(c.id || c.chave);
-        return (n) => !escrituradas.has(n.id || n.chave);
-    })();
+    // A régua é a MESMA do 0200 logo abaixo, e mora no dono
+    // (`documentosEscrituradosNoFiscal`): até 11/09 o participante tinha esta
+    // trava e o item NÃO — o 0200 da LEGACY saiu com o `ITEM-1` de uma NFS-e,
+    // que este arquivo não escritura, e o PVA recusou (item órfão).
+    const escriturados = documentosEscrituradosNoFiscal(notas, empresa.cnpj);
+    const nfceOuNaoEscriturada = (n) => !escriturados.escriturado(n);
     const participantesMap = new Map();
     let participantesOrfaos = 0;
     for (const nota of notas) {
@@ -256,6 +253,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     const colisoesDeItem = [];
     for (const nota of notas) {
         if (ehEmissaoPropriaDoc(nota, empresa.cnpj)) continue;
+        // 🚨 Item de nota que este arquivo NÃO escritura (NFS-e, resumo, sem
+        // itens, entrada do emitente) não pode cadastrar-se no 0200: nenhum
+        // C170 o referenciaria, e o PVA recusa (LEGACY, 11/09).
+        if (nfceOuNaoEscriturada(nota)) continue;
         for (const item of (nota.itens || [])) {
             const codItem = codItemDoItem(item);
             const jaCadastrado = itensMap.get(codItem);
@@ -308,9 +309,15 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // "Codigo invalido. Informar codigo da unidade de medida (UNID) se
     //  referenciado em pelo menos um dos blocos ou no Registro 0200 ou 0220."
 
+    // ─── 5b. Bloco B (ISS do DF) ───
+    // Apurado AQUI, junto das notas, para o aviso sair com os outros — o
+    // gerador (`buildBlocoB`) só formata o que este objeto carrega.
+    const blocoB = apurarIssBlocoB({ notas, empresaCnpj: empresa.cnpj });
+
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    warnings.push(...avisosDoBlocoB({ uf: empresa?.dadosFiscais?.uf, apuracao: blocoB }));
     if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
     // erro é quem lê o livro, e é por isso que ela tem de sair DITA.
@@ -682,6 +689,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         // cadastro da empresa fica de reserva pra quem já usava.
         inventarioMotInv,
         blocoK,
+        blocoB,
         participantes,
         unidades,
         saldoCredorIcmsAnterior,
@@ -718,7 +726,7 @@ export async function montarBlocos({ dados }) {
     // C → …), travada por teste.
     const linhasBlocoC = buildBlocoC(dados);
     const linhasBloco0 = buildBloco0(dados);
-    const linhasBlocoB = buildBlocoB();   // vazio
+    const linhasBlocoB = buildBlocoB(dados);  // B001|0 + B470 no DF; vazio fora dele
     const linhasBlocoD = buildBlocoD(dados);  // CTe modelo 57
     const linhasBlocoE = buildBlocoE(dados);  // ICMS (E100/E110/E116) + IPI (E200/E210 se houver)
     // Bloco G — CIAP real quando a empresa tem bens cadastrados; senão, vazio.

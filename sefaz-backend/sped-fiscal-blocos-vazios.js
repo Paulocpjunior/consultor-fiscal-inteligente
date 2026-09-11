@@ -19,7 +19,7 @@ import * as fmt from './sped-fiscal-format.js';
 
 /**
  * Gera abertura+encerramento de um bloco vazio.
- * @param {string} sigla - 'B', 'D', 'E', 'G', 'H', 'K' ou '1'
+ * @param {string} sigla - 'G' (os demais ganharam gerador próprio)
  * @returns {string[]} 2 linhas SPED
  */
 function buildBlocoVazio(sigla) {
@@ -29,7 +29,10 @@ function buildBlocoVazio(sigla) {
     ];
 }
 
-export const buildBlocoB = () => buildBlocoVazio('B');
+// buildBlocoB foi pra ./sped-fiscal-blocoB.js — o DF tem B470 (11/09, LEGACY).
+// A versão vazia foi DELETADA de propósito: era ela que saía `B001|1` em toda
+// empresa de Brasília, e o PVA recusa (*"Registro filho obrigatório não foi
+// informado — B470"*).
 // buildBlocoD foi pra ./sped-fiscal-blocoD.js (com D100/D190 reais).
 // buildBlocoE foi pra ./sped-fiscal-blocoE.js (com E100/E110 zerada).
 export const buildBlocoG = () => buildBlocoVazio('G');

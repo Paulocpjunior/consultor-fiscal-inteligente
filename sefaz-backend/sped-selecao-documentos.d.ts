@@ -144,3 +144,9 @@ export function avisoDeTipoItemPresumido(
     itens: Array<{ tipo?: string }> | null | undefined,
     ctx?: { contribuinteIpi?: string } | null,
 ): string;
+
+/** Documentos escriturados no EFD ICMS/IPI (bloco C sem NFC-e + bloco D) — quem pode sustentar 0150/0200. */
+export function documentosEscrituradosNoFiscal(
+    notas: Array<Record<string, unknown>> | null | undefined,
+    empresaCnpj?: string | null,
+): { ids: Set<string>; escriturado: (n: Record<string, unknown> | null | undefined) => boolean };

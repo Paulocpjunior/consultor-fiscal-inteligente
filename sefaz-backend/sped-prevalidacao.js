@@ -1474,6 +1474,48 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         }
     })();
 
+    // ── R41. Bloco B: o DF exige o B470; fora do DF o bloco sai VAZIO ────────
+    //
+    // 📖 FONTE — PVA (LEGACY 1458 · DF · 08/2026, 11/09): *"Registro filho
+    // obrigatório não foi informado. B470"* sobre um arquivo com `|B001|1|`; e o
+    // arquivo ACEITO do e-Fiscal da mesma empresa (10/2025) traz `|B001|0|` +
+    // `|B470|` com os catorze valores. Guia 3.2.3, B001: *"Os estabelecimentos
+    // NÃO domiciliados no Distrito Federal deverão informar apenas os registros
+    // B001 e B990 (abertura – bloco sem dados informados e fechamento)"*.
+    //
+    // A UF sai do 0000 (campo 09) — é o que diz de onde é o estabelecimento.
+    (() => {
+        const r0000 = doReg('0000')[0];
+        const b001 = doReg('B001')[0];
+        if (!r0000 || !b001) return;
+        const uf = String(campos(r0000)[9] || '').trim().toUpperCase();
+        const indDad = String(campos(b001)[2] || '').trim();
+        const temB470 = doReg('B470').length > 0;
+        if (uf === 'DF') {
+            if (indDad !== '0' || !temB470) {
+                add(erros, {
+                    regra: 'bloco-b-df-sem-b470', registro: 'B470', campo: '—', linha: b001,
+                    valor: indDad === '0' ? 'B001|0 sem B470' : `B001|${indDad}`,
+                    esperado: 'B001|0 + um B470 (apuração do ISS)',
+                    mensagem: 'A empresa é do DF e o bloco B saiu sem o B470 — o PVA recusa o arquivo inteiro.',
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. No DF o bloco B leva B001|0 e o B470 com '
+                        + 'os totais do ISS (zerados quando não houve prestação no mês).',
+                    fonte: 'PVA: "Registro filho obrigatório não foi informado — B470" (LEGACY 1458 · DF · 08/2026, 11/09); '
+                        + 'Guia 3.2.3, Seção 2: bloco B "exclusivo para contribuintes do Distrito Federal".',
+                });
+            }
+        } else if (indDad === '0' || temB470) {
+            add(erros, {
+                regra: 'bloco-b-fora-do-df', registro: 'B001', campo: '2 - IND_DAD', linha: b001,
+                valor: indDad, esperado: '1 (bloco sem dados), sem B470',
+                mensagem: `A empresa é de ${uf || 'UF não informada'} e o bloco B saiu com dados — só o DF escritura ISS aqui.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. Fora do DF o bloco B leva só B001|1 e B990.',
+                fonte: 'Guia Prático 3.2.3, B001: "Os estabelecimentos NÃO domiciliados no Distrito Federal deverão '
+                    + 'informar apenas os registros B001 e B990".',
+            });
+        }
+    })();
+
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────
     //
     // 📖 FONTE — Guia 3.2.3, G125 campo 02: *"o código informado neste campo

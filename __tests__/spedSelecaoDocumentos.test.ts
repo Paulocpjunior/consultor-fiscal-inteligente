@@ -17,7 +17,7 @@
 // o IPI do E520. Nota fora do bloco é nota fora da APURAÇÃO.
 // ============================================================================
 import {
-    ehNotaDeMercadoria, ehConhecimentoDeTransporte, selecionarNotasBlocoC,
+    ehNotaDeMercadoria, ehConhecimentoDeTransporte, selecionarNotasBlocoC, documentosEscrituradosNoFiscal,
     selecionarCtesBlocoD, avisosDaSelecao, ehResumoSefaz, codSitDoDocumento,
 } from '../sefaz-backend/sped-selecao-documentos.js';
 // @ts-expect-error — módulo .js do backend (sem tipos)
@@ -255,24 +255,25 @@ describe('C100 — o COD_MOD sai da chave e a NFC-e respeita o leiaute dela', ()
 // não foi escriturada (só resumo / sem itens). O 0150 tem que casar com a
 // MESMA régua do bloco C — é o que o 0200 já fazia pelos itens.
 // ═══════════════════════════════════════════════════════════════════════════
-describe('🚨 o 0150 casa com a régua do bloco C', () => {
+describe('🚨 o 0150 e o 0200 casam com a régua do bloco C — pelo DONO', () => {
     const fonte = readFileSync(join(__dirname, '..', 'sefaz-backend/sped-fiscal-orchestrator.js'), 'utf8');
 
-    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (09/09). Ela prendia o TEXTO
-    // `selecionarNotasBlocoC(notas)` — e essa forma VIROU o defeito: desde a MV
-    // LIDER a régua exige o CNPJ de quem escritura (é ele que separa a nota
-    // própria NOSSA da entrada do FORNECEDOR), então travar a chamada antiga
-    // impediria a correção que a régua manda fazer. O que ela protege é a
-    // INTENÇÃO: o 0150 sai da MESMA seleção do bloco C, com a empresa.
-    it('a coleta de participantes usa a régua, não varre todas as notas', () => {
-        expect(fonte).toMatch(/selecionarNotasBlocoC\(notas,\s*empresa\.cnpj\)/);
-        expect(fonte).toMatch(/modeloDoDoc\(n\) !== '65'/);
-        expect(fonte).toMatch(/selecionarCtesBlocoD\(notas\)/);
+    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO — duas vezes. Em 09/09 ela prendia o
+    // TEXTO `selecionarNotasBlocoC(notas)`; em 11/09 (LEGACY, item de NFS-e
+    // órfão no 0200) a régua "quem está escriturado?" MUDOU DE CASA para o dono
+    // `documentosEscrituradosNoFiscal`, porque o 0150 tinha a trava e o 0200 não
+    // — e travar a forma antiga impediria a correção. O que ela protege é a
+    // INTENÇÃO: participante E item saem da MESMA seleção, com a empresa.
+    it('a coleta de participantes e a de itens usam o dono, com o CNPJ da empresa', () => {
+        expect(fonte).toMatch(/documentosEscrituradosNoFiscal\(notas,\s*empresa\.cnpj\)/);
+        expect(fonte).not.toMatch(/selecionarNotasBlocoC\(notas\)/);
     });
 
-    it('CT-e conta como referência (o D100 tem COD_PART)', () => {
-        const trecho = fonte.slice(fonte.indexOf('4. Extrai participantes'), fonte.indexOf('4b.'));
-        expect(trecho).toMatch(/selecionarCtesBlocoD/);
+    it('CT-e conta como referência (o D100 tem COD_PART) — e NFC-e não (o C100 dela não leva)', () => {
+        const cte = { id: 'cte', tipo: 'CTe', modelo: '57', direcao: 'entrada', cnpjDest: EMPRESA_CNPJ, valorTotal: 10 };
+        const { escriturado } = documentosEscrituradosNoFiscal([cte, capturada()], EMPRESA_CNPJ);
+        expect(escriturado(cte)).toBe(true);
+        expect(escriturado(capturada())).toBe(false);
     });
 });
 

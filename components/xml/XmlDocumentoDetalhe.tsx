@@ -291,6 +291,29 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
         return () => { vivo = false; };
     }, [(d as any).empresaCnpj, competenciaDoc, chaveAjuste, okRet]);
 
+    // 🚨 O QUE JÁ FOI INFORMADO ENTRA NO FORMULÁRIO (11/09, WALDESA — duas NFS-e
+    // da mesma prestadora: *"quando eu lanço uma NF com as retenções e salvo e
+    // vou lançar a outra retenção na outra NF, as retenções some da outra NF"*).
+    // O ajuste ESTAVA gravado (o R-4020 do Contábil trazia as duas) — o que
+    // sumia era a TELA: reabrir o formulário mostrava os cinco campos VAZIOS e
+    // o carimbo saía de vista, e vazio sobre ajuste gravado se lê como
+    // "sumiu". Reabrir para editar traz o que foi informado; gravar de novo
+    // substitui esses campos e MANTÉM o que você não mexer.
+    const aTextoPtBr = (v: unknown) =>
+        (v === undefined || v === null || v === '' || !Number.isFinite(Number(v))
+            ? '' : Number(v).toFixed(2).replace('.', ','));
+    const abrirFormRet = () => {
+        if (ajusteAtual) {
+            setRet({
+                ir: aTextoPtBr(ajusteAtual.ir), inss: aTextoPtBr(ajusteAtual.inss),
+                csll: aTextoPtBr(ajusteAtual.csll), pis: aTextoPtBr(ajusteAtual.pis),
+                cofins: aTextoPtBr(ajusteAtual.cofins),
+            });
+            setMotivoRet(String(ajusteAtual.motivo || ''));
+        }
+        setAbrirRet(true);
+    };
+
     const gravarRet = async (remover = false) => {
         setGravandoRet(true); setErroRet(null); setOkRet(null);
         try {
@@ -504,11 +527,11 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                     !abrirRet ? (
                         <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                             <button
-                                onClick={() => setAbrirRet(true)}
+                                onClick={abrirFormRet}
                                 className="text-xs rounded-md border border-sky-300 text-sky-700 dark:text-sky-300 px-3 py-1.5 hover:bg-sky-50 dark:hover:bg-sky-900/20 btn-press whitespace-nowrap"
                                 title="Para quando o documento saiu sem a retenção (ou com ela errada). Fica gravado com o motivo e com quem informou."
                             >
-                                ✍️ Informar retenção desta nota
+                                {ajusteAtual ? '✍️ Editar a retenção informada' : '✍️ Informar retenção desta nota'}
                             </button>
                             {semRetencaoNoDoc && (
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -549,6 +572,18 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                             <p className="text-xs font-bold text-sky-800 dark:text-sky-300">
                                 Retenção da nota {d.numero} · competência {competenciaDoc}
                             </p>
+                            {/* O carimbo fica À VISTA com o formulário aberto: sem ele, os campos
+                                pré-preenchidos parecem valores do documento, e o formulário vazio
+                                (antes do prefill) parecia ajuste perdido. */}
+                            {ajusteAtual && (
+                                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-1">
+                                    ✍️ Editando a retenção já INFORMADA nesta nota
+                                    {ajusteAtual.autor ? ` por ${ajusteAtual.autor}` : ''}
+                                    {ajusteAtual.em ? ` em ${String(ajusteAtual.em).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                                    {' '}— os campos já trazem o que foi gravado. Gravar de novo substitui o que você
+                                    mudar e mantém o resto; para voltar ao documento, use ↩ desfazer.
+                                </p>
+                            )}
                             <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-1 leading-snug">
                                 O documento <strong>não é reescrito</strong>: o que você informa aqui é uma
                                 <strong> declaração</strong>, gravada com o seu nome e o motivo, e ela

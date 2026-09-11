@@ -116,9 +116,17 @@
 </section>
 
 <section>
-    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">11 itens</span></h2>
+    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">12 itens</span></h2>
     <p>Nenhum é trabalho de código. São leituras de painel, cliques em produção ou acessos
     que o time de desenvolvimento não tem.</p>
+
+    <div class="fila dinheiro">
+        <h3>SPED ICMS/IPI de agosto de TODA empresa de Brasília: regerar</h3>
+        <p>O bloco B (ISS do DF) saía vazio e o PVA recusa (<code>B470</code>). Corrigido em 11/09 pelo caso
+        LEGACY — mas toda empresa do DF que já gerou pelo CFI gerou com o bloco errado.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar, ler a caixa de avisos (a prevalidação
+        acusa antes do PVA — o item órfão do 0200 já aparecia lá) e validar no PVA.</div>
+    </div>
 
     <div class="fila dinheiro">
         <h3>SPED entregue com nota que já tinha sido tirada do livro</h3>
@@ -273,6 +281,19 @@
 
 <section>
     <h2>✅ Fechado em 11/09</h2>
+
+    <div class="fila feito">
+        <h3>Bloco B do DF no EFD ICMS/IPI</h3>
+        <p><code>B001|0</code> + <code>B470</code> em quem é de Brasília (zerado quando não houve prestação,
+        como o arquivo aceito do e-Fiscal); fora do DF continua vazio. Item de NFS-e deixou de entrar no
+        0200. Regra R41 na prevalidação.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>Retenção informada à mão que "sumia" ao reabrir a nota</h3>
+        <p>O ajuste estava gravado; o formulário é que abria vazio. Agora abre preenchido e o carimbo fica à
+        vista. A natureza de rendimento por NOTA no R-4020 é do Contábil e ficou nomeada.</p>
+    </div>
 
     <div class="fila feito">
         <h3>A mesma NF-e em duas empresas da carteira</h3>

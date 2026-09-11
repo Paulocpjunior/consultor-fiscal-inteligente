@@ -5,6 +5,87 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏛️ "ESSE BLOCO B470 TEM QUE PREENCHER … SÃO PARA TODAS AS EMPRESAS DE
+  BRASÍLIA" — o bloco B nasceu VAZIO para todo mundo, e o DF é diferente**
+  (11/09, Paulo, LEGACY · DF · 08/2026, com o recibo do PVA e os DOIS arquivos:
+  *"deu apenas esses 2 erros, esse bloco B470 tem que preencher, segue um
+  arquivo anterior e o atual"*).
+  📖 **AS DUAS FONTES FECHAM**: o PVA diz *"Registro filho obrigatório não foi
+  informado — B470"* sobre o nosso `|B001|1|`; o arquivo ACEITO do e-Fiscal
+  (10/2025, mesma empresa) traz `|B001|0|` + `|B470|` com **catorze zeros**; e o
+  Guia 3.2.3 (Seção 2) diz que o bloco B é *"exclusivo para contribuintes do
+  Distrito Federal"* e que os NÃO domiciliados no DF *"deverão informar apenas
+  os registros B001 e B990"*. O gerador vivia em `sped-fiscal-blocos-vazios.js`
+  e nunca soube da UF.
+  ✂️ `sped-fiscal-blocoB.js` (PURO) é o dono: UF ≠ DF ⇒ `B001|1` (literal no
+  Guia); DF ⇒ `B001|0` + `B470` + `B990|3`. O B470 soma as **prestações** do
+  declarante (NFS-e de saída — `ehNotaDeServico` + `direcaoEfetivaDoc`,
+  cancelada fora) em VL_CONT/VL_BC_ISS/VL_ISS, o ISS retido pelo tomador em
+  J/H, e o ISS que o declarante reteve como **tomador** em M (VL_ISS_ST).
+  ⚠️ **ZERO SÓ ENTRA QUANDO ZERO É A RESPOSTA**: numa empresa do DF sem
+  prestação no mês (a LEGACY é comércio de livros) os catorze zeros são o que o
+  aceito declara, e **não há aviso** — alarme sobre arquivo correto desliga a
+  trava. Com prestação, o aviso DIZ o que saiu zero por falta de dado (material
+  de terceiros/próprio, subempreitada, isentas, uniprofissional) e que o
+  **B020/B025 por documento NÃO é gerado** — só há arquivo aceito SEM
+  movimento, e leiaute deduzido não entra (o `1405` num registro que a SEFAZ-DF
+  cruza). A rodada do PVA com prestação é o que prova o próximo degrau.
+  🔴 **E O SEGUNDO ERRO DO MESMO RECIBO ERA MEIA TRAVA**: `|0200|ITEM-1|Serviço|`
+  sem C170. O coletor do 0200 varria TODAS as notas — inclusive a NFS-e, que
+  este arquivo não escritura — enquanto o **0150 já tinha** a régua *"só entra
+  quem algum registro referencia"*. `documentosEscrituradosNoFiscal` (no dono da
+  seleção) responde para os DOIS. A prevalidação **já acusava** o órfão
+  (`0200-orfao`); o arquivo foi ao PVA mesmo assim — aviso que a pessoa não lê
+  antes de transmitir é a lição do "PVA de bolso" pela metade.
+  🚦 **R41 na prevalidação**: DF sem B470 acusa; fora do DF com B001|0 acusa.
+  Provado sobre o arquivo REAL da LEGACY (as duas recusas do PVA aparecem) e
+  por reversão (2 testes caem).
+  🚩 **ACHADO NOMEADO, NÃO CORRIGIDO**: no mesmo arquivo a prevalidação diz que
+  duas notas têm `VL_DOC` maior que a Σ `VL_OPR` dos C190 (R$ 200,00 de frete e
+  R$ 15,71 de outras despesas que o C190 não carrega). O PVA **aceitou**; é a
+  família do `VL_OPR` sem o IPI (20/08) — livro a MENOR que só a fiscalização
+  vê. A decisão de 20/08 foi *dizer, não ratear*; nota com UM grupo de
+  CST/CFOP não precisaria de rateio, e isso é mudança de VALOR em arquivo
+  fiscal — pede PR próprio, com o número na frente do dono.
+  🚩 **PENDÊNCIA DO PAULO**: regerar o SPED de 08/2026 da LEGACY e **de toda
+  empresa de Brasília** que já gerou pelo CFI — o bloco B saía errado em todas.
+  📌 **REGRA QUE FICA: bloco que nasce "vazio" nasce com a pergunta "vazio para
+  QUEM?" — o Guia tem exceção por UF, e a exceção só apareceu no primeiro
+  cliente de fora de SP a chegar no PVA.** E régua de órfão que existe para o
+  0150 existe para o 0200: item e participante são o mesmo problema com dois
+  registros.
+
+- **✍️ "AS RETENÇÕES SOME DA OUTRA NF" — o ajuste ESTAVA gravado; o formulário
+  é que nascia VAZIO por cima dele** (11/09, Paulo, WALDESA · duas NFS-e da
+  SERASA tomadas, retenção informada à mão: *"quando eu lanço uma NF com as
+  retenções e salvo e vou lançar a outra retenção na outra NF, as retenções
+  some da outra NF"*).
+  📖 **O PRÓPRIO PRINT DELE DESMENTIA A PERDA**: o R-4020 do Contábil, ao lado,
+  listava **2 notas · "2 nota(s) com a retenção AJUSTADA à mão"**, com IRRF,
+  PIS, COFINS e CSLL fechando nas alíquotas legais sobre o bruto das duas. A
+  gravação é incremental por chave da nota (`set` com `merge`, `ajustes.<chave>`)
+  e não perdeu nada. **Medido antes de mexer**: a rota, a chave (`prestadorCnpj
+  + número`, que a nota digitada grava) e a leitura do painel estavam certos.
+  🔴 **O QUE SUMIA ERA A TELA**: o carimbo *"Retenção INFORMADA nesta nota"* só
+  aparecia com o formulário FECHADO, e ao clicar em *"Informar retenção"* os
+  cinco campos abriam VAZIOS (*"vazio ≠ zero"*) com o motivo em `0/15`. Vazio
+  sobre ajuste gravado se lê como "sumiu" — é o `04/09` (FRONTINI, *"não ficou
+  salvo"*) pela porta da EDIÇÃO.
+  ✂️ Reabrir traz o que foi informado (valores em pt-BR, motivo), o botão diz
+  **"Editar a retenção informada"**, e o carimbo fica À VISTA com o formulário
+  aberto, dizendo que gravar de novo substitui o que mudar e mantém o resto.
+  Campo que ninguém informou continua vazio — nunca `0,00` inventado. Provado
+  por RENDER, clicando.
+  🚩 **O QUE ESTE PR NÃO FECHA, e vai dito**: *"a Natureza de rendimento está
+  errada pois são duas NF com serviços diferentes"* — no Contábil a natureza do
+  R-4020 é cadastrada **por beneficiário** (uma linha, `15006 informada`), e
+  duas notas do MESMO prestador com serviços diferentes precisam de natureza
+  **por NOTA**. É do repo `plano-contas-iob`, e a natureza não está na nota
+  (quem escolhe é a pessoa) — fica nomeado como próximo passo lá.
+  📌 **REGRA QUE FICA: régua que só escreve tem uma terceira ponta — a EDIÇÃO.**
+  Ler de volta e mostrar não basta se o formulário de editar nasce vazio: quem
+  reabre digita tudo de novo ou conclui que perdeu.
+
 - **🔁 "DIZ QUE ESSE XML JÁ ESTÁ GRAVADO EM OUTRA EMPRESA (FEDERAÇÃO)" — a
   mesma NF-e passou a ter UM DOCUMENTO POR LADO, e a tela nem tinha chegado na
   frase da contraparte** (11/09, Paulo, com o print: *"fui importar o movimento
