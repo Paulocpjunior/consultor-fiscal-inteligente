@@ -12,6 +12,13 @@
 //
 // E o SEGUNDO erro do mesmo PVA: `|0200|ITEM-1|Serviço|||SV|09|` sem C170 — o
 // coletor do 0200 cadastrava o item da NFS-e, que este arquivo NÃO escritura.
+//
+// À TARDE, o arquivo regerado saiu com `Valor do ISS substituto a recolher
+// R$ 6,17` e os outros treze zerados (print do PVA). Paulo: *"ele puxou esse
+// ISS, ele pegou da nota de serviços tomados, tem que estar tudo zerado (SPED
+// LEGACY)"*. O campo M (VL_ISS_ST) vinha da NFS-e TOMADA com ISS retido — e a
+// nota tomada não prova ISS substituto devido ao DF. O campo sai ZERO; a
+// tomada é contada e o valor vai DITO no aviso.
 // ============================================================================
 import * as fs from 'fs';
 import * as path from 'path';
@@ -81,7 +88,7 @@ describe('no DF: B001|0 + B470, o filho que o PVA cobra', () => {
     });
 });
 
-describe('o B470 soma as prestações do declarante e o ISS retido como tomador', () => {
+describe('o B470 soma as prestações do declarante — e NUNCA a nota tomada', () => {
     it('prestação (saída): VL_CONT, VL_BC_ISS e VL_ISS; ISS retido pelo tomador vai em J e H', () => {
         const notas = [
             nfse({ valorTotal: 1000, valorIss: 50 }),
@@ -100,18 +107,49 @@ describe('o B470 soma as prestações do declarante e o ISS retido como tomador'
         expect(a.valores.vlIssSt).toBe(0);
     });
 
-    it('tomada (entrada) com ISS retido pelo declarante vai em M (VL_ISS_ST); sem retenção não entra', () => {
+    // FIXTURE TROCADA (11/09, à tarde): a versão de manhã exigia
+    // `vlIssSt === 30` — ela DESCREVIA o defeito que o Paulo viu no PVA
+    // (R$ 6,17 vindo de uma tomada). A intenção que fica: a tomada é CONTADA e
+    // dita, e o campo M sai zero.
+    it('tomada (entrada) com ISS retido NÃO entra no campo M — é contada e o valor vai dito (caso LEGACY, R$ 6,17)', () => {
+        const tomada = (over: Record<string, unknown> = {}) => nfse({
+            direcao: 'entrada', prestadorCnpj: '44555666000177', tomadorCnpj: EMPRESA,
+            cnpjEmit: '44555666000177', cnpjDest: EMPRESA, ...over,
+        });
         const notas = [
-            nfse({ direcao: 'entrada', prestadorCnpj: '44555666000177', tomadorCnpj: EMPRESA,
-                cnpjEmit: '44555666000177', cnpjDest: EMPRESA, valorIss: 30, issRetido: true }),
-            nfse({ direcao: 'entrada', prestadorCnpj: '44555666000177', tomadorCnpj: EMPRESA,
-                cnpjEmit: '44555666000177', cnpjDest: EMPRESA, valorIss: 30 }),
+            tomada({ numero: '20', valorTotal: 123.4, valorServicos: 123.4, valorIss: 6.17, issRetido: true }),
+            tomada({ numero: '21', valorIss: 30 }),                         // sem retenção: nem conta
+            tomada({ numero: '22', valorIss: 12, valores: { issRetido: true } }),  // a forma aninhada
         ];
         const a = apurarIssBlocoB({ notas });
         expect(a.prestadas).toBe(0);
-        expect(a.tomadasComRetencao).toBe(1);
-        expect(a.valores.vlIssSt).toBe(30);
+        expect(a.tomadasComRetencao).toBe(2);
+        expect(a.issRetidoTomadasFora).toBe(18.17);
+        expect(a.valores.vlIssSt).toBe(0);
         expect(a.valores.vlCont).toBe(0);
+        // O arquivo da LEGACY: catorze zeros, mesmo com a tomada retida no mês.
+        const linhas = buildBlocoB({ empresa: empresa('DF'), notas }).map(sq);
+        expect(linhas[1]).toBe(`|B470|${new Array(14).fill('0,00').join('|')}|`);
+    });
+
+    it('o que ficou de fora sai DITO — e não vira o aviso das prestações', () => {
+        const notas = [nfse({ direcao: 'entrada', prestadorCnpj: '44555666000177', tomadorCnpj: EMPRESA,
+            cnpjEmit: '44555666000177', cnpjDest: EMPRESA, valorIss: 6.17, issRetido: true })];
+        const avisos = avisosDoBlocoB({ uf: 'DF', apuracao: apurarIssBlocoB({ notas }) });
+        expect(avisos).toHaveLength(1);
+        expect(avisos[0]).toMatch(/1 NFS-e TOMADA/);
+        expect(avisos[0]).toMatch(/R\$ 6,17/);
+        expect(avisos[0]).toMatch(/sai ZERO/);
+        expect(avisos[0]).not.toMatch(/prestada/);
+        // Fora do DF o bloco é vazio e ninguém precisa ler aviso de tomada.
+        expect(avisosDoBlocoB({ uf: 'SP', apuracao: apurarIssBlocoB({ notas }) })).toEqual([]);
+    });
+
+    it('trava na FONTE: nenhum ramo de entrada alimenta o campo M', () => {
+        const fonte = fs.readFileSync(path.join(__dirname, '..', 'sefaz-backend', 'sped-fiscal-blocoB.js'), 'utf8');
+        const codigo = fonte.split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n');
+        expect(codigo).not.toMatch(/vlIssSt\s*\+=/);
+        expect(codigo).toMatch(/const vlIssSt = 0;/);
     });
 
     it('cancelada fica de fora; nota de MERCADORIA fica de fora', () => {

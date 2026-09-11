@@ -13,8 +13,11 @@ export interface ValoresB470 {
 
 export interface ApuracaoBlocoB {
     prestadas: number;
+    /** NFS-e TOMADAS com ISS retido — só CONTADAS; o campo M sai zero (11/09, LEGACY). */
     tomadasComRetencao: number;
     semValor: number;
+    /** O ISS retido das tomadas que ficou FORA do B470 — vai dito no aviso. */
+    issRetidoTomadasFora: number;
     valores: ValoresB470;
 }
 

@@ -37,10 +37,35 @@
 //
 // 🚨 O QUE VAI NO B470, e de ONDE vem: as prestações de SERVIÇO do declarante
 // (NFS-e de SAÍDA do período — `ehNotaDeServico` + `direcaoEfetivaDoc`, os
-// donos de sempre) somadas em VL_CONT / VL_BC_ISS / VL_ISS / VL_ISS_RT; e o ISS
-// que o declarante RETEVE como tomador (NFS-e de ENTRADA com retenção) no
-// VL_ISS_ST. Cancelada fica de fora (`docCancelado`), e a lápide já foi
-// aplicada por quem carregou as notas.
+// donos de sempre) somadas em VL_CONT / VL_BC_ISS / VL_ISS / VL_ISS_RT.
+// Cancelada fica de fora (`docCancelado`), e a lápide já foi aplicada por quem
+// carregou as notas.
+//
+// ═══ O CAMPO M (VL_ISS_ST) NÃO SAI DA NOTA TOMADA — 11/09, à tarde ═══════════
+//
+// A 1ª versão deste módulo (de manhã) somava no campo 14 (*"ISS retido pelo
+// declarante na condição de tomador"*) o ISS retido das NFS-e de ENTRADA. O
+// arquivo regerado da LEGACY saiu com **`Valor do ISS substituto a recolher
+// R$ 6,17`** e os outros treze campos zerados — e o Paulo, com o print do PVA:
+// *"ele puxou esse ISS, ele pegou da nota de serviços tomados, tem que estar
+// tudo zerado (SPED LEGACY)"*.
+//
+// Ele está certo, e o motivo é de FONTE: o "ISS retido" que chega na nota
+// TOMADA é a declaração do PRESTADOR, no portal do município DELE, de que
+// alguém reteve o ISS daquela nota. Ele não diz a QUAL município a retenção é
+// devida (LC 116/2003, art. 3º — regra do prestador, com a lista de exceções
+// no local do serviço) nem que o tomador é SUBSTITUTO tributário do ISS no DF
+// (isso é enquadramento da legislação distrital, por serviço e por prestador,
+// que não está em campo nenhum da nota). Somar ali é AFIRMAR à SEFAZ-DF um
+// ISS substituto a recolher que o documento não prova — e o e-Fiscal, no
+// arquivo ACEITO da mesma empresa, nunca alimentou esse campo pela tomada.
+//
+// A régua passou a ser: o campo M sai ZERO; a NFS-e tomada com ISS retido é
+// CONTADA (`tomadasComRetencao`) e o valor que ficou de fora vai DITO no
+// aviso (`issRetidoTomadasFora`) — o número que a régua tirou sai nomeado,
+// nunca some calado. Quem for substituto no DF informa no PVA, com a nota na
+// mão; ligar isso no gerador sem caso real seria o `1405` num campo que a
+// SEFAZ-DF cruza com a guia.
 //
 // ⚠️ ZERO SÓ ENTRA QUANDO ZERO É A RESPOSTA (regra de 06/08). Numa empresa do
 // DF SEM nota de serviço no mês — o caso LEGACY, comércio de livros — os
@@ -99,6 +124,7 @@ export function baseIssDoDocumento(doc) {
  * @param {string}   [p.empresaCnpj]
  * @returns {{
  *   prestadas: number, tomadasComRetencao: number, semValor: number,
+ *   issRetidoTomadasFora: number,
  *   valores: {
  *     vlCont:number, vlMatTerc:number, vlMatProp:number, vlSub:number, vlIsnt:number,
  *     vlDedBc:number, vlBcIss:number, vlBcIssRt:number, vlIss:number, vlIssRt:number,
@@ -107,8 +133,8 @@ export function baseIssDoDocumento(doc) {
  * }}
  */
 export function apurarIssBlocoB({ notas } = {}) {
-    let vlCont = 0, vlBcIss = 0, vlBcIssRt = 0, vlIss = 0, vlIssRt = 0, vlIssSt = 0;
-    let prestadas = 0, tomadasComRetencao = 0, semValor = 0;
+    let vlCont = 0, vlBcIss = 0, vlBcIssRt = 0, vlIss = 0, vlIssRt = 0;
+    let prestadas = 0, tomadasComRetencao = 0, semValor = 0, issRetidoTomadasFora = 0;
 
     for (const n of notas || []) {
         if (!ehNotaDeServico(n)) continue;
@@ -131,14 +157,22 @@ export function apurarIssBlocoB({ notas } = {}) {
                 vlBcIssRt += baseEfetiva;
             }
         } else if (direcao === 'entrada') {
-            // M — o ISS que o declarante reteve como TOMADOR (substituto).
+            // A NFS-e TOMADA não alimenta o B470 (ver o cabeçalho: o ISS
+            // "retido" dela é declaração do prestador no portal do município
+            // DELE, e não prova ISS substituto devido ao DF). Só se CONTA e o
+            // valor sai DITO no aviso — nunca no campo M.
             const retido = issRetidoEfetivoDoc(n);
             if (Number.isFinite(retido.valor) && retido.valor > 0) {
                 tomadasComRetencao += 1;
-                vlIssSt += retido.valor;
+                issRetidoTomadasFora += retido.valor;
             }
         }
     }
+
+    // M — ISS substituto (retido pelo declarante como tomador): ZERO por régua.
+    // O app não tem como afirmar o enquadramento distrital; o caso LEGACY
+    // (11/09) saiu com 6,17 aqui vindo de uma tomada, e era errado.
+    const vlIssSt = 0;
 
     // Campos que o app NÃO tem em lugar nenhum — saem zero e vão DITOS no aviso
     // quando há prestação no mês (ver `avisosDoBlocoB`).
@@ -147,7 +181,7 @@ export function apurarIssBlocoB({ notas } = {}) {
     const vlIssRec = r2(vlIss - vlIssRt - vlDed);                // L = I - J - K
 
     return {
-        prestadas, tomadasComRetencao, semValor,
+        prestadas, tomadasComRetencao, semValor, issRetidoTomadasFora: r2(issRetidoTomadasFora),
         valores: {
             vlCont: r2(vlCont), vlMatTerc, vlMatProp, vlSub, vlIsnt, vlDedBc,
             vlBcIss: r2(vlBcIss), vlBcIssRt: r2(vlBcIssRt), vlIss: r2(vlIss), vlIssRt: r2(vlIssRt),
@@ -166,15 +200,25 @@ export const CAMPOS_B470 = [
 export function avisosDoBlocoB({ uf, apuracao } = {}) {
     const avisos = [];
     if (!blocoBAplicaNaUf(uf)) return avisos;
-    const a = apuracao || { prestadas: 0, tomadasComRetencao: 0, semValor: 0 };
-    if (a.prestadas > 0 || a.tomadasComRetencao > 0) {
+    const a = apuracao || { prestadas: 0, tomadasComRetencao: 0, semValor: 0, issRetidoTomadasFora: 0 };
+    if (a.prestadas > 0) {
         avisos.push(
             `Bloco B (ISS do DF): o B470 somou ${a.prestadas} NFS-e prestada(s)`
-            + (a.tomadasComRetencao ? ` e ${a.tomadasComRetencao} tomada(s) com ISS retido pelo declarante` : '')
             + '. Material de terceiros/próprio, subempreitada, isentas e sociedade uniprofissional saem ZERO '
             + 'porque o app não tem esse dado — confira antes de transmitir. O B020/B025 (um por documento) '
             + 'NÃO é gerado: o único arquivo aceito na mão é sem movimento, e leiaute deduzido não entra. '
             + 'Se o PVA cobrar, mande o arquivo aceito com prestação de serviço.',
+        );
+    }
+    if (a.tomadasComRetencao > 0) {
+        // O número que a régua tirou sai DITO (caso LEGACY, 11/09): sem esta
+        // frase, quem viu o R$ 6,17 antes procuraria captura que não falhou.
+        avisos.push(
+            `Bloco B (ISS do DF): ${a.tomadasComRetencao} NFS-e TOMADA(s) trazem ISS retido `
+            + `(R$ ${fmt.formatValue(a.issRetidoTomadasFora)}) e NÃO entraram no B470 — o campo "ISS substituto a `
+            + 'recolher" sai ZERO por regra. A retenção que vem na nota tomada é declaração do prestador no '
+            + 'portal do município dele; ela não prova ISS substituto devido ao DF. Se esta empresa é '
+            + 'substituta tributária do ISS no DF, informe o campo no PVA com a nota na mão.',
         );
     }
     if (a.semValor > 0) {

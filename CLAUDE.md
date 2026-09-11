@@ -131,13 +131,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   vê. A decisão de 20/08 foi *dizer, não ratear*; nota com UM grupo de
   CST/CFOP não precisaria de rateio, e isso é mudança de VALOR em arquivo
   fiscal — pede PR próprio, com o número na frente do dono.
+  🚨 **E O ARQUIVO REGERADO VOLTOU COM `ISS substituto a recolher R$ 6,17` — o
+  campo M saía da NOTA TOMADA** (11/09, à tarde, Paulo com o print do PVA:
+  *"ele puxou esse ISS, ele pegou da nota de serviços tomados, tem que estar
+  tudo zerado (SPED LEGACY)"*). A versão da manhã somava no campo 14 (*"ISS
+  retido pelo declarante na condição de tomador"*) o `issRetidoEfetivoDoc` das
+  NFS-e de ENTRADA — e o único número diferente de zero no B470 da LEGACY era
+  esse. **O motivo é de FONTE**: o "ISS retido" da nota tomada é a declaração
+  do PRESTADOR, no portal do município DELE, de que alguém reteve; ela não diz
+  a qual município a retenção é devida (LC 116/2003 art. 3º) nem que o tomador
+  é SUBSTITUTO no DF — enquadramento distrital que não está em campo nenhum.
+  Somar ali AFIRMA à SEFAZ-DF um ISS substituto que o documento não prova, e o
+  aceito do e-Fiscal nunca alimentou o campo pela tomada. ✂️ O campo M sai
+  **ZERO por régua** (`const vlIssSt = 0`, travado na fonte); a tomada é
+  CONTADA e o valor vai DITO no aviso (`issRetidoTomadasFora`) — *"1 NFS-e
+  TOMADA traz ISS retido (R$ 6,17) e NÃO entrou no B470"* —, senão quem viu o
+  6,17 procuraria captura que não falhou. ⚠️ **Fixture trocada com motivo**: o
+  teste da manhã exigia `vlIssSt === 30` e DESCREVIA o defeito. Provado por
+  reversão (2 testes caem).
   🚩 **PENDÊNCIA DO PAULO**: regerar o SPED de 08/2026 da LEGACY e **de toda
-  empresa de Brasília** que já gerou pelo CFI — o bloco B saía errado em todas.
+  empresa de Brasília** que já gerou pelo CFI — o bloco B saía errado em todas
+  (vazio de manhã; com o campo M vindo da tomada à tarde).
   📌 **REGRA QUE FICA: bloco que nasce "vazio" nasce com a pergunta "vazio para
   QUEM?" — o Guia tem exceção por UF, e a exceção só apareceu no primeiro
   cliente de fora de SP a chegar no PVA.** E régua de órfão que existe para o
   0150 existe para o 0200: item e participante são o mesmo problema com dois
-  registros.
+  registros. **E campo de apuração que o documento não PROVA sai zero e dito
+  — a nota do outro lado declara a operação DELE, nunca o enquadramento do
+  declarante.**
 
 - **✍️ "AS RETENÇÕES SOME DA OUTRA NF" — o ajuste ESTAVA gravado; o formulário
   é que nascia VAZIO por cima dele** (11/09, Paulo, WALDESA · duas NFS-e da

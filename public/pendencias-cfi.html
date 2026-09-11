@@ -123,7 +123,9 @@
     <div class="fila dinheiro">
         <h3>SPED ICMS/IPI de agosto de TODA empresa de Brasília: regerar</h3>
         <p>O bloco B (ISS do DF) saía vazio e o PVA recusa (<code>B470</code>). Corrigido em 11/09 pelo caso
-        LEGACY — mas toda empresa do DF que já gerou pelo CFI gerou com o bloco errado.</p>
+        LEGACY — e, à tarde, o B470 regerado saía com o campo <em>ISS substituto</em> vindo da nota TOMADA
+        (R$ 6,17 na LEGACY), corrigido de novo: nota tomada não entra, o campo sai zero. Toda empresa do DF
+        que já gerou pelo CFI gerou com o bloco errado.</p>
         <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar, ler a caixa de avisos (a prevalidação
         acusa antes do PVA — o item órfão do 0200 já aparecia lá) e validar no PVA.</div>
     </div>
@@ -296,7 +298,8 @@
         <h3>Bloco B do DF no EFD ICMS/IPI</h3>
         <p><code>B001|0</code> + <code>B470</code> em quem é de Brasília (zerado quando não houve prestação,
         como o arquivo aceito do e-Fiscal); fora do DF continua vazio. Item de NFS-e deixou de entrar no
-        0200. Regra R41 na prevalidação.</p>
+        0200. Regra R41 na prevalidação. <strong>À tarde:</strong> o campo <em>ISS substituto</em> (M) deixou
+        de sair da nota TOMADA — sai zero, e a tomada com ISS retido é contada e dita no aviso.</p>
     </div>
 
     <div class="fila feito">
