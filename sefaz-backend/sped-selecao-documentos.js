@@ -207,6 +207,32 @@ export function selecionarNotasBlocoC(notas, empresaCnpj) {
     return { notas: escrituradas, soResumo, semItens, nfceEmEntrada, entradaDoEmitente };
 }
 
+/**
+ * Quais documentos ESTÃO escriturados no EFD ICMS/IPI — e portanto podem
+ * sustentar um participante no 0150 ou um item no 0200.
+ *
+ * 🚨 O CASO (11/09, LEGACY · 08/2026, PVA): `|0200|ITEM-1|Serviço|||SV|09|` sem
+ * nenhum C170 apontando para ele — *"Não informar item, se não referenciado em
+ * pelo menos um dos demais blocos"*. O coletor do 0200 varria TODAS as notas
+ * do período, e a NFS-e não vai ao bloco C deste arquivo (ela é do bloco A do
+ * EFD-Contribuições, e no ICMS/IPI do DF vira totais no B470). O participante
+ * já tinha esta régua no orquestrador; o item não — meia trava.
+ *
+ * Entram: as notas do bloco C (`selecionarNotasBlocoC`) menos a NFC-e (o C100
+ * dela não leva COD_PART e ela é emissão própria, sem C170) e os CT-e do bloco
+ * D. Nota que ficou de fora do bloco C (só resumo, sem itens, entrada do
+ * emitente) leva o participante e os itens dela junto.
+ */
+export function documentosEscrituradosNoFiscal(notas, empresaCnpj) {
+    const ids = new Set();
+    for (const n of selecionarNotasBlocoC(notas, empresaCnpj).notas) {
+        if (modeloDoDoc(n) === COD_MOD_NFCE) continue;
+        ids.add(n.id || n.chave);
+    }
+    for (const c of selecionarCtesBlocoD(notas)) ids.add(c.id || c.chave);
+    return { ids, escriturado: (n) => ids.has(n?.id || n?.chave) };
+}
+
 /** CT-e do período (bloco D), sem os resumos. */
 export function selecionarCtesBlocoD(notas) {
     return (notas || []).filter(ehConhecimentoDeTransporte);

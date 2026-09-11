@@ -18,6 +18,10 @@ zero vulnerabilidade em 412 dependências de produção.
 
 ## 🔴 Só o Paulo resolve
 
+- **SPED ICMS/IPI de agosto de TODA empresa de Brasília: regerar.** O bloco B
+  (ISS do DF) saía vazio e o PVA recusa (`B470`); corrigido em 11/09 pelo caso
+  LEGACY. Toda empresa do DF que já gerou pelo CFI gerou com o bloco errado —
+  regerar, ler a caixa de avisos (a prevalidação acusa antes do PVA) e validar.
 - **LEGACY × Federação e KROYA × GOLDLOG: importar os XMLs e tirar do livro o
   que foi digitado.** Desde 11/09 a mesma NF-e pode ficar nas duas empresas da
   carteira. As saídas da LEGACY recusadas entram agora (importar de novo). As
@@ -56,6 +60,14 @@ acessos que o desenvolvimento não tem.
 
 ## ⚪ Com o desenvolvimento, já nomeado no código
 
+- **`VL_OPR` do C190 sem o frete/outras despesas da nota** (LEGACY 08/2026:
+  R$ 200,00 e R$ 15,71 que o C100 declara e o C190 não carrega). O PVA aceita;
+  é livro a menor. A decisão de 20/08 foi *dizer, não ratear* — nota com um
+  grupo só de CST/CFOP dispensa rateio, e isso é mudança de valor em arquivo
+  fiscal: PR próprio, com o número na frente.
+- **Natureza de rendimento POR NOTA no R-4020 (Contábil).** Hoje é por
+  beneficiário; duas NFS-e do mesmo prestador com serviços diferentes (WALDESA
+  × SERASA) precisam de natureza por nota. Repo `plano-contas-iob`.
 Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
 **O app não afirma o que não sabe em nenhum deles.**
 
@@ -74,6 +86,12 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
 
 ## ✅ Fechado em 11/09
 
+- **Bloco B do DF no EFD ICMS/IPI** — `B001|0` + `B470` em quem é de
+  Brasília (zerado quando não houve prestação, como o aceito do e-Fiscal);
+  fora do DF continua vazio. Item de NFS-e deixou de entrar no 0200. Regra R41
+  na prevalidação.
+- **Retenção informada à mão que "sumia" ao reabrir** — o formulário abre
+  preenchido com o que foi gravado e o carimbo fica à vista.
 - **A mesma NF-e em duas empresas da carteira** — o outro lado ganha documento
   próprio (`documento-lado.js`) nos três importadores; evento, cancelamento e
   manifestação chegam nos dois lados; a tela lê as partes do arquivo, não só do
