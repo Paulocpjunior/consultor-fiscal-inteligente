@@ -50,6 +50,16 @@ const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
  */
 export function partesDoDocumento(doc) {
     const d = doc || {};
+    // União: quem chamou a posse com o gravado E o que chega (ver
+    // decidirPosseDocumento) recebe as partes dos dois — um resumo sem
+    // destinatário não apaga o destinatário que o arquivo completo traz.
+    if (Array.isArray(d.__partesDe)) {
+        const out = [];
+        for (const parte of d.__partesDe) {
+            for (const c of partesDoDocumento(parte)) if (!out.includes(c)) out.push(c);
+        }
+        return out;
+    }
     const cand = [
         d.cnpjEmit, d.cpfEmit,
         d.emitente?.cnpjCpf, d.emitente?.cnpj, d.emitente?.CNPJ,
@@ -84,7 +94,14 @@ export function ehParteDoDocumento(doc, cnpj) {
 export function decidirPosseDocumento({ existente, pretendente, documento } = {}) {
     const ex = existente || {};
     const pre = pretendente || {};
-    const doc = documento || ex;
+    // 🚨 AS PARTES SAEM DOS DOIS DOCUMENTOS — o que está GRAVADO e o que está
+    // CHEGANDO (11/09, LEGACY × FEDERAÇÃO). A Federação captura a entrada
+    // pela SEFAZ como RESUMO (resNFe), que traz só o EMITENTE: julgar a posse
+    // só pelo gravado devolvia "dono não é parte" sobre a destinatária da
+    // nota, e a tela da LEGACY caía em "gravado em OUTRA empresa" em vez de
+    // reconhecer a contraparte. O arquivo COMPLETO que a LEGACY importa tem os
+    // dois lados — e é ele que responde. Ausência no resumo não é prova.
+    const doc = documento ? { ...ex, ...documento, __partesDe: [ex, documento] } : ex;
 
     const donoId = String(ex.empresaId ?? '').trim();
     const novoId = String(pre.empresaId ?? '').trim();

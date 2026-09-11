@@ -26,7 +26,7 @@ export type SituacaoPosse =
     | 'dono-nao-e-parte';
 
 export function decidirPosseDocumento(p: {
-    existente: { empresaId?: string | null; empresaCnpj?: string | null; empresaNome?: string | null } | null | undefined;
+    existente: { empresaId?: string | null; empresaCnpj?: string | null; empresaNome?: string | null; [campo: string]: any } | null | undefined;
     pretendente: { empresaId?: string | null; empresaCnpj?: string | null } | null | undefined;
     /** O documento (default: o próprio `existente`). */
     documento?: any;

@@ -71,6 +71,21 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O OUTRO LADO da mesma chave — o id do documento da contraparte que também é cliente',
+        dono: 'sefaz-backend/documento-lado.js',
+        comoUsar: "import { idDoDocumentoDoLado, carimboDoLado } from 'sefaz-backend/documento-lado.js'",
+        porque: '11/09, Paulo, LEGACY × FEDERAÇÃO: *"são notas emitidas para Federação, porém no consultor diz que '
+            + 'esse XML já está gravado em outra empresa"*. A mesma NF-e é saída de uma cliente e entrada da outra, '
+            + 'e o id do documento é a CHAVE — então o outro lado ganha um id DERIVADO (chave + separador + CNPJ). '
+            + 'Quem montar essa string à mão em outro lugar e divergir um caractere faz o mesmo lado existir com '
+            + 'DOIS ids — a venda contando duas vezes — e a propagação de eventos (cancelamento, CC-e, '
+            + 'manifestação) deixa de achar o documento pela chave.',
+        assinaturas: [
+            // O separador do id escrito fora do dono.
+            /__lado_/,
+        ],
+    },
+    {
         nome: 'A IDENTIDADE da nota digitada — o id que carrega número, série e competência',
         dono: 'services/notaDigitada.ts',
         comoUsar: "import { idDigitadaSemChave } from 'services/notaDigitada'",

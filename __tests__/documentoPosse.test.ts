@@ -160,9 +160,13 @@ describe('🚨 a mensagem da importação manual dava o conselho ERRADO', () => 
             empresaKroya,
         );
         expect(r.situacao).toBe('contraparte-na-carteira');
-        expect(r.acao).toMatch(/Ninguém errou/);
-        expect(r.acao).toMatch(/CHAVE EM BRANCO/);
-        expect(r.acao).not.toMatch(/corrigida na origem/);
+        // 11/09: a raiz fechou — o app grava o OUTRO LADO em vez de mandar
+        // lançar pelo ✍️ sem chave. A frase diz o que vai acontecer.
+        expect(r.gravaOutroLado).toBe(true);
+        expect(r.exigeAcao).toBe(false);
+        expect(r.mensagem).toMatch(/OUTRO LADO/);
+        expect(r.mensagem).not.toMatch(/corrigida na origem/);
+        expect(r.acao).toBeNull();
     });
 
     it('dono que NÃO é parte continua com a mensagem antiga', () => {

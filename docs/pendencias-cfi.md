@@ -18,6 +18,12 @@ zero vulnerabilidade em 412 dependências de produção.
 
 ## 🔴 Só o Paulo resolve
 
+- **LEGACY × Federação e KROYA × GOLDLOG: importar os XMLs e tirar do livro o
+  que foi digitado.** Desde 11/09 a mesma NF-e pode ficar nas duas empresas da
+  carteira. As saídas da LEGACY recusadas entram agora (importar de novo). As
+  saídas da KROYA lançadas pelo ✍️ sem chave em agosto viram duplicata quando o
+  XML entrar: importar e depois 🚫 Tirar do livro cada digitada. Competência já
+  entregue: regerar.
 - **SPED da distribuidora: regerar e reconferir no PVA.** Os 493 erros de
   código de participante nas entradas eram do gerador (C100 da nota capturada
   pela SEFAZ saía sem o CNPJ do fornecedor). Corrigido em 11/09; informar os
@@ -68,6 +74,10 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
 
 ## ✅ Fechado em 11/09
 
+- **A mesma NF-e em duas empresas da carteira** — o outro lado ganha documento
+  próprio (`documento-lado.js`) nos três importadores; evento, cancelamento e
+  manifestação chegam nos dois lados; a tela lê as partes do arquivo, não só do
+  resumo gravado.
 - **CFOP e CST por ITEM** — a nota mista (item com ST e item sem) recebe um
   CFOP/CST por produto no ✂️ do detalhe da nota. O item vence a nota; vale no
   Livro, no Resumo, no SPED e no SAGE.

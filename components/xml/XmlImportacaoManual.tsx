@@ -134,7 +134,15 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                             ? `NF ${res.documento.numero} COMPLETADA — estava na base como resumo, sem itens/CST; agora tem tudo.`
                             : res.substituiu
                                 ? `NF ${res.documento.numero} SUBSTITUÍDA pelo conteúdo deste arquivo (${res.documento.direcao}).`
-                                : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
+                                : res.outroLado
+                                    // A contraparte também é cliente: a mesma
+                                    // chave já tinha dono e ESTE documento é o
+                                    // lado desta empresa. Sem a frase, um
+                                    // documento "a mais" na base é susto.
+                                    ? `NF ${res.documento.numero} importada como o OUTRO LADO (${res.documento.direcao}) — a mesma `
+                                      + `chave já está gravada em ${res.outroLado.outroLadoCnpj || 'outra empresa da carteira'}, `
+                                      + 'que é a contraparte; cada empresa fica com o seu documento.'
+                                    : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
                     });
                     onImported?.(res.documento);
                 } else {

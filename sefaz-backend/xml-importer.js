@@ -12,6 +12,10 @@ import { classificarTipoDoc } from './xml-tipo-doc.js';
 import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 import { decidirPosseDocumento } from './documento-posse.js';
+// O OUTRO LADO da mesma chave (11/09, LEGACY × FEDERAÇÃO): a contraparte que
+// também é cliente grava documento PRÓPRIO, com o id do dono.
+import { idDoDocumentoDoLado, carimboDoLado } from './documento-lado.js';
+import { refsDaChave } from './documento-lado-io.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
 import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from './releitura-notas-vazias.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
@@ -384,7 +388,7 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor, tipoDocNormalizado }) {
+export async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor, tipoDocNormalizado }) {
   // Persiste evento como subdoc/array dentro da NFe original.
   // Se a NFe original não existir ainda, cria um "stub" com status pendente.
   const docRef = db.collection('documentos_fiscais').doc(chaveNFe);
@@ -415,51 +419,71 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
   // liam o mesmo 'eventos=[E1]', ambos faziam append e um sobrescrevia o outro
   // — evento perdido (a classe do bug "3630 NSUs perdidos"). runTransaction
   // serializa por docId e re-tenta em conflito.
+  // 🚨 O EVENTO É DA NOTA, NÃO DE UM LADO (11/09): a mesma chave pode ter o
+  // documento do destinatário (id = chave) E o do emitente (o OUTRO LADO,
+  // `ladoDe.chave`). O cancelamento anexado só no principal deixaria a saída
+  // da LEGACY contando no faturamento com a nota cancelada — calado.
+  // As referências são resolvidas ANTES da transação (query não entra em
+  // txn); dentro dela, leitura de todos primeiro, escrita depois.
+  const { refs } = await refsDaChave(db, chaveNFe);
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(docRef);
-    if (snap.exists) {
-      // Anexa ao array de eventos (sem duplicar). Preferimos o nProt (chave
-      // natural do protocolo); quando ausente, usamos tpEvento+nSeqEvento+
-      // dhEvento como chave composta — senão o reprocessamento (ex.: reset NSU)
-      // duplicaria eventos sem protocolo no array.
-      const data = snap.data();
-      const eventosExistentes = data.eventos || [];
-      const jaExiste = eventoData.nProt
-        ? eventosExistentes.some(e => e.nProt === eventoData.nProt)
-        : eventosExistentes.some(e =>
-            !e.nProt &&
-            e.tpEvento === eventoData.tpEvento &&
-            String(e.nSeqEvento ?? '') === String(eventoData.nSeqEvento ?? '') &&
-            e.dhEvento === eventoData.dhEvento);
-      if (jaExiste) {
-        return { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
-      }
-      const updates = {
-        eventos: [...eventosExistentes, eventoData],
-      };
-      // Se cancelamento REGISTRADO, atualiza status da NFe. 135 = registrado e
-      // vinculado; 155 = homologado FORA DE PRAZO — cancelamento igual (o gate
-      // só em '135' deixou cancelada de fora de prazo contando no Livro e no
-      // fechamento; bug 11/08, MV LIDER 639).
-      if (evento.tipo === 'cancelamento' && CSTAT_EVENTO_CANCELAMENTO.has(String(evento.cStat || ''))) {
-        updates.status = 'cancelado';
-        updates.canceladoEm = evento.dhEvento;
-        updates.canceladoProtocolo = evento.nProt;
-      }
-      // 23/05 — defesa contra Update() requires...:
-      // garante que todos os valores do updates sao definidos antes de chamar.
-      for (const [k, v] of Object.entries(updates)) {
-        if (v === undefined) {
-          console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
-          delete updates[k];
+    const snaps = [];
+    for (const ref of refs) snaps.push({ ref, snap: await tx.get(ref) });
+    const existentes = snaps.filter((x) => x.snap.exists);
+    if (existentes.length > 0) {
+      let resultado = null;
+      for (const { ref, snap } of existentes) {
+        // Anexa ao array de eventos (sem duplicar). Preferimos o nProt (chave
+        // natural do protocolo); quando ausente, usamos tpEvento+nSeqEvento+
+        // dhEvento como chave composta — senão o reprocessamento (ex.: reset NSU)
+        // duplicaria eventos sem protocolo no array.
+        const data = snap.data();
+        const eventosExistentes = data.eventos || [];
+        const jaExiste = eventoData.nProt
+          ? eventosExistentes.some(e => e.nProt === eventoData.nProt)
+          : eventosExistentes.some(e =>
+              !e.nProt &&
+              e.tpEvento === eventoData.tpEvento &&
+              String(e.nSeqEvento ?? '') === String(eventoData.nSeqEvento ?? '') &&
+              e.dhEvento === eventoData.dhEvento);
+        if (jaExiste) {
+          resultado = resultado || { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
+          continue;
+        }
+        const updates = {
+          eventos: [...eventosExistentes, eventoData],
+        };
+        // Se cancelamento REGISTRADO, atualiza status da NFe. 135 = registrado e
+        // vinculado; 155 = homologado FORA DE PRAZO — cancelamento igual (o gate
+        // só em '135' deixou cancelada de fora de prazo contando no Livro e no
+        // fechamento; bug 11/08, MV LIDER 639).
+        if (evento.tipo === 'cancelamento' && CSTAT_EVENTO_CANCELAMENTO.has(String(evento.cStat || ''))) {
+          updates.status = 'cancelado';
+          updates.canceladoEm = evento.dhEvento;
+          updates.canceladoProtocolo = evento.nProt;
+        }
+        // 23/05 — defesa contra Update() requires...:
+        // garante que todos os valores do updates sao definidos antes de chamar.
+        for (const [k, v] of Object.entries(updates)) {
+          if (v === undefined) {
+            console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
+            delete updates[k];
+          }
+        }
+        if (Object.keys(updates).length === 0) {
+          console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando update');
+          resultado = resultado || { status: 'evento_skip_vazio', chave: chaveNFe };
+          continue;
+        }
+        tx.update(ref, updates);
+        // O status que sai é o do documento que de fato recebeu o evento
+        // (o principal vem primeiro; o lado só entra no lugar dele se o
+        // principal já o tinha).
+        if (!resultado || resultado.status !== 'evento_anexado') {
+          resultado = { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo, lados: existentes.length - 1 };
         }
       }
-      if (Object.keys(updates).length === 0) {
-        console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando update');
-        return { status: 'evento_skip_vazio', chave: chaveNFe };
-      }
-      tx.update(docRef, updates);
-      return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
+      return resultado;
     }
     // Stub: cria um doc parcial pra quando o documento-pai chegar, ela faz merge.
     // 23/05 — adicionado defaults pra campos undefined (numero, serie, etc)
@@ -618,9 +642,12 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   }
 
   // ── NFE / RESNFE: caminho original ──────────────────────────────────
-  const docId = meta.chave;
+  let docId = meta.chave;
   const storagePath = buildStoragePath(empresaId, meta.chave, meta.tipoDoc);
-  const docRef = db.collection('documentos_fiscais').doc(docId);
+  let docRef = db.collection('documentos_fiscais').doc(docId);
+  // Preenchido quando este documento é o OUTRO LADO de uma chave que já tem
+  // dono na carteira (as duas empresas são partes).
+  let ladoDe = null;
 
   // Fast-path: lê o doc atual e, se for duplicado óbvio, sai SEM gravar storage
   // (economia). A decisão AUTORITATIVA é refeita dentro da transação de escrita
@@ -632,7 +659,40 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   } catch (e) {
     console.warn('[xml-importer] erro lendo doc existente:', e.message);
   }
-  const existingData = existing?.exists ? existing.data() : null;
+  let existingData = existing?.exists ? existing.data() : null;
+
+  // ═══ O OUTRO LADO ═════════════════════════════════════════════════════════
+  // A chave já tem dono, e a empresa desta captura TAMBÉM é parte do documento
+  // (saída de uma cliente, entrada da outra — KROYA × GOLDLOG, LEGACY ×
+  // FEDERAÇÃO). Até 11/09 isto era RECUSADO nomeado; agora o documento desta
+  // empresa é OUTRO, com id derivado (dono: documento-lado.js), e daqui em
+  // diante o fluxo é o normal sobre ELE (duplicado/upgrade/merge).
+  if (existingData && empresaId && existingData.empresaId && existingData.empresaId !== empresaId) {
+    const posseLado = decidirPosseDocumento({
+      existente: existingData,
+      pretendente: { empresaId, empresaCnpj: empresaCnpj?.replace(/\D/g, '') || null },
+      documento: { cnpjEmit: meta.cnpjEmit, cnpjDest: meta.cnpjDest },
+    });
+    const idLado = posseLado.situacao === 'contraparte-legitima'
+      ? idDoDocumentoDoLado(meta.chave, empresaCnpj)
+      : '';
+    if (idLado) {
+      ladoDe = carimboDoLado({
+        chave: meta.chave,
+        outroLadoCnpj: existingData.empresaCnpj,
+        outroLadoEmpresaId: existingData.empresaId,
+      });
+      docId = idLado;
+      docRef = db.collection('documentos_fiscais').doc(docId);
+      try {
+        const snapLado = await docRef.get();
+        existingData = snapLado.exists ? snapLado.data() : null;
+      } catch (e) {
+        console.warn('[xml-importer] erro lendo doc do lado:', e.message);
+        existingData = null;
+      }
+    }
+  }
 
   if (decidirGravacaoNFe({ existingData, tipoDoc: meta.tipoDoc, schema, chave: meta.chave }).duplicado) {
     // Duplicado SEM DONO (ou de outra empresa) ainda precisa ser reatribuído —
@@ -801,6 +861,9 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     createdBy: capturadoPor?.uid || null,
     capturadoPor: capturadoPor || null,
     eventosBeforeNFe: false,
+    // O carimbo do lado: é por `ladoDe.chave` que a propagação de eventos
+    // (cancelamento, CC-e, manifestação) acha este documento.
+    ...(ladoDe ? { ladoDe } : {}),
   };
   // Escrita AUTORITATIVA em transação: re-lê o doc DENTRO da txn e decide
   // duplicado/upgrade/merge de forma atômica. Sem isso, um .set() não-merge
@@ -856,6 +919,9 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       chave: meta.chave,
       tipoDoc: meta.tipoDoc,
       upgrade: dec.upgrade || undefined,
+      // Entrou como o OUTRO LADO de uma chave que já tinha dono — vai dito no
+      // resultado, senão o log do cron não distingue o lado de uma nota nova.
+      outroLado: ladoDe ? true : undefined,
     };
   });
 
