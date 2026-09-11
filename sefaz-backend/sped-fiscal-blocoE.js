@@ -34,7 +34,10 @@ import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
 // o cancelamento vem de `docCancelado` (o campo `status` mente por evento).
 import { ehNotaDeMercadoria } from './sped-selecao-documentos.js';
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
-import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
+// 🚨 O ICMS do E110 é a Σ do que o BLOCO C ESCRITUROU — o dono é
+// `somarIcmsNoArquivo` (11/09, LEGACY: E110 c.06 com 4.569,96 sobre C190
+// zerados). Somar `vICMS` cru aqui de novo é a segunda leitura do mesmo item.
+import { convertCfopParaEntrada, somarIcmsNoArquivo } from './sped-fiscal-blocoC.js';
 
 const ZERO = '0,00';
 
@@ -86,16 +89,24 @@ export function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
     return total;
 }
 
-// ICMS por direção (mantém a assinatura/comportamento original).
 /**
- * Débito (saídas) ou crédito (entradas) de ICMS do período.
+ * Débito (saídas) ou crédito (entradas) de ICMS do período — o número que vai
+ * no E110, que é a Σ do que o BLOCO C escriturou nos C190.
  *
- * EXPORTADA porque o detector de crédito acumulado precisa do MESMO número que
- * vai no E110 — dois jeitos de somar ICMS é o painel divergindo do arquivo, e
- * aí ninguém sabe qual dos dois está certo.
+ * EXPORTADA porque o detector de crédito acumulado e a cronologia do saldo de
+ * abertura precisam do MESMO número que vai no E110 — dois jeitos de somar
+ * ICMS é o painel divergindo do arquivo, e aí ninguém sabe qual está certo.
+ *
+ * 🚨 ELA NÃO SOMA `vICMS` CRU (11/09, LEGACY): o C190 zera o crédito que o
+ * regime ou o CST informado tiram (`icmsDoItemNoArquivo`), e o E110 tem de
+ * declarar o MESMO zero — o PVA cruza os dois. Quem responde é o dono no
+ * bloco C; `somarImpostoPorDirecao` (cru) fica para o IPI do E520 e o ST.
+ *
+ * @param {object} dados  contexto do arquivo (regime de quem escritura + CNPJ).
+ *   OBRIGATÓRIO — registro `consumidoresMedidos`.
  */
-export function somarIcmsPorDirecao(notas, direcao) {
-    return somarImpostoPorDirecao(notas, direcao, 'vICMS', 'vICMS');
+export function somarIcmsPorDirecao(notas, direcao, dados) {
+    return somarIcmsNoArquivo(notas, direcao, dados);
 }
 
 function calcularDataVencimento(competenciaFim, diaVencimento) {
@@ -196,8 +207,8 @@ export function buildBlocoE(dados) {
     };
     if (regime === 'lucro') {
         ap = aplicarAjustesApuracao({
-            vlTotDebitos: somarIcmsPorDirecao(dados.notas, 'saida'),
-            vlTotCreditos: somarIcmsPorDirecao(dados.notas, 'entrada'),
+            vlTotDebitos: somarIcmsPorDirecao(dados.notas, 'saida', dados),
+            vlTotCreditos: somarIcmsPorDirecao(dados.notas, 'entrada', dados),
             vlSldCredorAnt: parseFloat(dados.saldoCredorIcmsAnterior || 0),
         }, cls);
     }

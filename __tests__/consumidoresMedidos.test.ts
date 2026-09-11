@@ -53,6 +53,12 @@ const REGUAS: ReguaVigiada[] = [
         motivo: '04/09 — o F600 lia o mapa que nenhum orquestrador passava; o M200/M600 saía sem o abatimento',
     },
     {
+        fn: 'somarIcmsPorDirecao',
+        minArgs: 3,
+        argumento: 'dados (o contexto do arquivo — regime de quem escritura + CNPJ; é ele que zera o crédito que o C190 zera)',
+        motivo: '11/09 LEGACY — o E110 c.06 saiu 4.569,96 sobre C190 zerados: sem o contexto a régua responde "credita" para toda entrada',
+    },
+    {
         fn: 'selecionarNotasBlocoC',
         minArgs: 2,
         argumento: 'empresaCnpj (quem ESCRITURA — separa a nota própria NOSSA da entrada do FORNECEDOR)',

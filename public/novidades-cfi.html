@@ -161,6 +161,15 @@
     não entra no B470: o campo sai <strong>zero</strong>, e a caixa de avisos diz quantas notas tomadas com
     ISS retido ficaram de fora e o valor. Se a empresa for substituta tributária do ISS no DF, esse campo se
     informa no PVA, com a nota na mão.</p>
+    <p><strong>E a apuração de ICMS (E110) de TODA empresa do Lucro:</strong> o campo <em>créditos por
+    entradas</em> (06) somava o ICMS destacado pelo fornecedor mesmo quando o C190 já saía zerado — pelo
+    regime (optante) ou pelo CST informado na nota (✏️). O PVA recusa (<em>"deve ser igual à soma do VL_ICMS
+    dos C190"</em>) e o valor virava saldo credor a transportar. Agora o E110 soma o MESMO número dos C190.
+    E o <em>saldo credor do período anterior</em> (10) passou a sair do campo <strong>"Saldo Credor ICMS
+    (Mês Anterior)" da ficha DESTA competência</strong> — o mesmo que abate a guia —, não da ficha do mês
+    anterior; se os dois campos da ficha disserem saldos diferentes, a caixa de avisos mostra os dois.</p>
+    <div class="alerta">⚠️ <strong>Regere o SPED 08/2026 da LEGACY de novo</strong> e confira, no aviso, o
+    saldo anterior que saiu.</div>
 
     <h3>7. ✍️ <strong>A retenção informada à mão não "some" mais ao reabrir a nota</strong></h3>
     <p>Ao clicar em <em>Informar retenção</em> numa nota que já tinha retenção informada, os campos abriam

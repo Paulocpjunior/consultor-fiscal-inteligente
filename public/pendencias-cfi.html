@@ -125,7 +125,10 @@
         <p>O bloco B (ISS do DF) saía vazio e o PVA recusa (<code>B470</code>). Corrigido em 11/09 pelo caso
         LEGACY — e, à tarde, o B470 regerado saía com o campo <em>ISS substituto</em> vindo da nota TOMADA
         (R$ 6,17 na LEGACY), corrigido de novo: nota tomada não entra, o campo sai zero. Toda empresa do DF
-        que já gerou pelo CFI gerou com o bloco errado.</p>
+        que já gerou pelo CFI gerou com o bloco errado. <strong>À noite, a terceira rodada:</strong> o E110
+        da LEGACY saiu com créditos de 4.569,96 sobre C190 zerados (o PVA recusa) e saldo anterior 0,00 com
+        o saldo na ficha — corrigidos: o E110 soma o que o C190 escriturou e o campo 10 lê a ficha DESTA
+        competência. Regerar a LEGACY de novo e conferir o saldo no aviso.</p>
         <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar, ler a caixa de avisos (a prevalidação
         acusa antes do PVA — o item órfão do 0200 já aparecia lá) e validar no PVA.</div>
     </div>
@@ -300,6 +303,14 @@
         como o arquivo aceito do e-Fiscal); fora do DF continua vazio. Item de NFS-e deixou de entrar no
         0200. Regra R41 na prevalidação. <strong>À tarde:</strong> o campo <em>ISS substituto</em> (M) deixou
         de sair da nota TOMADA — sai zero, e a tomada com ISS retido é contada e dita no aviso.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>E110 pelo mesmo número do C190 + saldo anterior da ficha desta competência</h3>
+        <p>O campo 06 somava o ICMS cru do fornecedor que o C190 já zerava (regime ou CST informado); agora o
+        dono é um só (<code>somarIcmsNoArquivo</code>), e o campo 10 lê <em>"Saldo Credor ICMS (Mês
+        Anterior)"</em> da competência gerada, não da anterior. ICMS e IPI com a mesma régua; dois saldos
+        divergentes saem ditos no aviso.</p>
     </div>
 
     <div class="fila feito">
