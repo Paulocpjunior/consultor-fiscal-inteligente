@@ -35,6 +35,7 @@ const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
 const DifalPanel = lazy(() => import('./DifalPanel'));
 const NcmCadastroPanel = lazy(() => import('./NcmCadastroPanel'));
 const IssSpPanel = lazy(() => import('./IssSpPanel'));
+const CompetenciaAcervoPanel = lazy(() => import('./CompetenciaAcervoPanel'));
 
 type TabId =
     | 'dashboard'
@@ -46,6 +47,7 @@ type TabId =
     | 'dipam'
     | 'difal'
     | 'iss_sp'
+    | 'competencia-acervo'
     | 'ncm'
     | 'importacao'
     | 'empresas'
@@ -88,6 +90,7 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             { id: 'difal', label: '🧭 DIFAL aquisição' },
             { id: 'ncm', label: '🏷️ Cadastro NCM' },
             { id: 'iss_sp', label: '🏛️ ISS SP (guia)' },
+            { id: 'competencia-acervo', label: '📅 Competência do acervo' },
         ],
     },
     {
@@ -309,6 +312,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'iss_sp' && (
                     <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando ISS SP…</p>}>
                         <IssSpPanel currentUser={currentUser} onShowToast={onShowToast} />
+                    </Suspense>
+                )}
+                {tab === 'competencia-acervo' && (
+                    <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando competências…</p>}>
+                        <CompetenciaAcervoPanel currentUser={currentUser} onShowToast={onShowToast} />
                     </Suspense>
                 )}
                 {tab === 'importacao' && (

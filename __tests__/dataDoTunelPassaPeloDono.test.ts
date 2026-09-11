@@ -54,6 +54,10 @@ const DECLARADOS: Record<string, string> = {
     // Listagem de DIAGNÓSTICO (conferência de chaves): não vira arquivo nem
     // atravessa fronteira; mostra o campo como está gravado.
     'sefaz-backend/sped-fiscal-routes.js': 'listagem de diagnóstico, não vira arquivo',
+    // Passa o valor CRU para `competenciaDaNfse`, que normaliza na entrada
+    // pelo `dataDeclaradaDoDocumento`. Normalizar aqui antes seria a
+    // segunda leitura da mesma data, e é o dono quem responde.
+    'sefaz-backend/competencia-acervo.js': 'entrega a data crua ao dono (competenciaDaNfse), que normaliza',
 };
 
 function arquivos(dir: string, out: string[] = []): string[] {
