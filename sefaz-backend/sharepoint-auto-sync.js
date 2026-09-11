@@ -25,6 +25,8 @@ import { secretsMatch } from './cron-secret.js';
 // DEPOIS na resposta da Microsoft — o card acusava "a resposta não nomeou o
 // aplicativo" sobre 416 respostas que nomeavam.
 import { recortarPreservandoApp } from './sharepoint-erro-credencial.js';
+import { decidirPosseDocumento } from './documento-posse.js';
+import { idDoDocumentoDoLado, carimboDoLado } from './documento-lado.js';
 // 🚨 O caminho MUDOU em 02/09: a árvore real não tem nível de GRUPO, a empresa
 // vem ANTES do departamento e o mês é por NOME. E o nome da pasta da empresa é
 // HUMANO — tem de ser ACHADO pelo código, nunca montado. Ver caminho-sharepoint.js.
@@ -475,11 +477,27 @@ async function syncEmpresa(db, empresa, competencias, pastasDeEmpresas) {
                     const parsed = parseXmlServer(file.content);
                     if (!parsed || !parsed.chave) { summary.erros++; continue; }
 
-                    const docId = parsed.chave;
+                    let docId = parsed.chave;
+                    let ladoDe = null;
                     const existingDoc = await db.collection('documentos_fiscais').doc(docId).get();
                     if (existingDoc.exists) {
-                        summary.duplicados++;
-                        continue;
+                        // A chave já tem dono. Se ESTA empresa também é parte
+                        // (saída de uma cliente, entrada da outra — 11/09), o
+                        // documento dela é o OUTRO LADO, com o id do dono;
+                        // senão continua sendo duplicado, como sempre.
+                        const ex = existingDoc.data() || {};
+                        const posse = decidirPosseDocumento({
+                            existente: ex,
+                            pretendente: { empresaId: empresa.id, empresaCnpj: cnpj },
+                            documento: { cnpjEmit: parsed.emitente?.cnpjCpf, cnpjDest: parsed.destinatario?.cnpjCpf },
+                        });
+                        const idLado = posse.situacao === 'contraparte-legitima'
+                            ? idDoDocumentoDoLado(parsed.chave, cnpj) : '';
+                        if (!idLado) { summary.duplicados++; continue; }
+                        const snapLado = await db.collection('documentos_fiscais').doc(idLado).get();
+                        if (snapLado.exists) { summary.duplicados++; continue; }
+                        ladoDe = carimboDoLado({ chave: parsed.chave, outroLadoCnpj: ex.empresaCnpj, outroLadoEmpresaId: ex.empresaId });
+                        docId = idLado;
                     }
 
                     const xmlHash = sha256Hex(file.content);
@@ -514,6 +532,7 @@ async function syncEmpresa(db, empresa, competencias, pastasDeEmpresas) {
                         importadoEm: Date.now(),
                         createdBy: 'system:auto-sync',
                         createdByEmail: 'auto-sync@system',
+                        ...(ladoDe ? { ladoDe } : {}),
                     };
 
                     // Remove undefined values (Firestore rejects them)

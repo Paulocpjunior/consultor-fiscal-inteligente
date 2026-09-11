@@ -5,6 +5,52 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔁 "DIZ QUE ESSE XML JÁ ESTÁ GRAVADO EM OUTRA EMPRESA (FEDERAÇÃO)" — a
+  mesma NF-e passou a ter UM DOCUMENTO POR LADO, e a tela nem tinha chegado na
+  frase da contraparte** (11/09, Paulo, com o print: *"fui importar o movimento
+  de saída da empresa 360 - Legacy, são notas emitidas para Federação, porém no
+  consultor diz que esse XML já está gravado em outra empresa"*).
+  📌 **A RAIZ ESTAVA NOMEADA DESDE 17/08** (KROYA × GOLDLOG: *"a identidade do
+  documento ainda não separa os dois lados"*) e o contorno era o ✍️ sem chave,
+  nota a nota. Com a LEGACY são dezenas por mês, e nota digitada NUNCA recebe o
+  evento de cancelamento que a SEFAZ manda pela chave — ela ficaria valendo
+  cancelada, calada. Pendência nomeada e não fechada CRESCE (11/09, de manhã).
+  🔴 **E O PRINT MOSTROU UM SEGUNDO DEFEITO, ANTES DA RAIZ**: a tela disse
+  *"gravado em OUTRA empresa"* em vez de *"contraparte"* — o documento da
+  Federação é um **RESUMO** (resNFe), que só traz o EMITENTE, e a posse julgada
+  só pelo gravado devolvia *"dono não é parte"* sobre a destinatária. O arquivo
+  COMPLETO que a LEGACY importa tem os dois lados; a posse passou a unir as
+  partes do gravado com as do que CHEGA (`decidirPosseDocumento` →
+  `documento`, e `lerDuplicado` ganhou o 3º argumento). O importer do backend
+  já fazia essa união; o do navegador não — a armadilha das duas formas, agora
+  entre resumo e completa. E o carimbo saía *"data não registrada"* porque a
+  captura grava `createdAt` (Timestamp) e o leitor só lia `importadoEm`.
+  ✂️ `documento-lado.js` (PURO, `REGUAS_VIGIADAS`) é o dono do id do OUTRO
+  LADO: `chave__lado_CNPJ`, carimbado `ladoDe: {chave, outroLadoCnpj,
+  outroLadoEmpresaId}`. O primeiro a chegar fica com id = chave (nada muda no
+  acervo). Os TRÊS importadores gravam o lado — navegador (`importXmlManual`),
+  `xml-importer` (SEFAZ/cofre/autXML, onde a contraparte era RECUSA nomeada) e
+  `sharepoint-auto-sync` (onde era `duplicados++` mudo) — e daí em diante vale
+  o fluxo normal sobre o lado (já está aqui / substituir / completar resumo).
+  ⚠️ **O LADO SÓ NASCE PARA QUEM É PARTE**: dono que não é parte continua sendo
+  posse errada; terceiro continua recusado.
+  🚨 **O QUE CHEGA PELA CHAVE É FATO DA NOTA, NÃO DE UM LADO**:
+  `documento-lado-io.js` (`refsDaChave`) resolve principal + lados a partir de
+  QUALQUER id (a reconferência da LEGACY passa o id do lado dela), e os três
+  escritores por chave passam por ele — `anexarEventoNaNFe` (cancelamento e
+  CC-e capturados), `gravarCancelamentoConfirmado` (reconferência e 🔎) e a
+  manifestação. Sem isso a saída da LEGACY continuaria contando com a nota
+  cancelada no lado da Federação. O carimbo da FILA da reconferência continua
+  por documento, de propósito: ele responde *"esta empresa já perguntou?"*.
+  **Provado por REVERSÃO**: só o principal em `refsDaChave` derruba três testes.
+  🚩 **PENDÊNCIA DO PAULO**: importar os XMLs de saída da LEGACY (entram agora)
+  e da KROYA — e, na KROYA, **🚫 Tirar do livro** cada nota digitada sem chave
+  de agosto, senão a mesma venda conta duas vezes.
+  📌 **REGRA QUE FICA: identidade de documento que não cabe o caso real é dívida
+  que engorda — e a posse se julga pelo arquivo que CHEGA, não só pelo que já
+  está gravado.** O resumo é a forma mais pobre do documento; quem decide com
+  ele decide com metade das partes.
+
 - **✂️ "SÓ CONSIGO COLOCAR UM CFOP E UM CST" — a nota MISTA ganhou o degrau
   por ITEM, e medir o SPED do mesmo dia achou 493 C100 SEM PARTICIPANTE**
   (11/09, Sandra via Paulo, com o print do ✏️: *"essa nota tem 2 produtos, com o
@@ -9132,10 +9178,10 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   empresa escolhida é parte?"* — o que engolia o caso de posse errada de verdade
   (escolhida parte × dono não-parte); pego pelo teste na hora, e a tela passou a
   chamar a MESMA régua em vez de ter cópia.
-  🚧 **A RAIZ CONTINUA ABERTA — a identidade do documento ainda não separa os
-  dois lados.** Enquanto isso o lado que falta se lança pelo ✍️ **sem preencher
-  a CHAVE** (com a chave ele cai no mesmo documento), e essas notas SAEM quando
-  a correção subir, senão contam duas vezes.
+  ✅ **A RAIZ FECHOU EM 11/09 (LEGACY × FEDERAÇÃO)** — o outro lado ganhou
+  documento próprio (`documento-lado.js`); ver o mata-burro no topo. O contorno
+  do ✍️ sem chave (KROYA, agosto) virou PENDÊNCIA do Paulo: importar os XMLs e
+  tirar do livro as digitadas, senão contam duas vezes.
   ✅ **CASO REAL CONFIRMADO 19/08 — o desenho funcionou** (Paulo: *"esse CNPJ é
   da GOLDLOG. Nas capturas, foi escriturado pelo consultor o movimento de
   entrada na GOLDLOG (nota+chave de acesso), sua contrapartida que foi a SAÍDA

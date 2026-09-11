@@ -38,6 +38,10 @@ import {
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
+// 🚨 O OUTRO LADO DA MESMA CHAVE (11/09, LEGACY × FEDERAÇÃO): a NF-e que é
+// saída de uma cliente e entrada de outra ganha um documento por lado. O id
+// sai do DONO — montá-lo aqui seria a segunda cópia da identidade.
+import { idDoDocumentoDoLado, carimboDoLado } from '../sefaz-backend/documento-lado.js';
 // A decisão de tirar uma nota da empresa (motivo, autor, lápide) é PURA e mora
 // no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
 // jest não carrega, que é régua sem prova.
@@ -433,6 +437,12 @@ export interface ImportXmlSuccess {
     substituiu?: boolean;
     /** true quando COMPLETOU um resumo/incompleto com a NF-e inteira (upgrade). */
     completou?: boolean;
+    /**
+     * Preenchido quando o documento entrou como o OUTRO LADO de uma chave que
+     * já tem dono na carteira (a contraparte também é cliente). A tela DIZ
+     * isso — um documento a mais na base sem explicação é susto.
+     */
+    outroLado?: { chave: string; outroLadoCnpj: string | null };
 }
 
 export interface ImportXmlSkipped {
@@ -498,8 +508,9 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
 
         const xmlHash = await sha256Hex(xmlText);
 
-        // Duplicidade — id determinístico pela chave.
-        const docId = chave || xmlHash;
+        // Duplicidade — id determinístico pela chave (ou o id do OUTRO LADO,
+        // quando a chave já tem dono e as duas empresas são partes dela).
+        let docId = chave || xmlHash;
 
         // Para colaboradores nao-admin, regras Firestore retornam permission-denied
         // ao ler doc inexistente (comportamento padrao do Firestore para evitar
@@ -519,10 +530,46 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
         // lápide de exclusão reimportar é justamente a ação certa (o documento
         // está invisível na lista E bloqueando a reentrada, o pior dos dois
         // mundos). Chamar tudo de "duplicado" era o que fechava o beco.
-        const leitura = lerDuplicado(
+        // As partes do ARQUIVO viajam junto: o que está gravado pode ser um
+        // RESUMO só com o emitente, e é a NF-e completa que prova que a
+        // empresa escolhida é a contraparte (o print da LEGACY, 11/09).
+        const partesDoArquivo = {
+            cnpjEmit: parsed.emitente?.cnpjCpf ?? null,
+            cnpjDest: parsed.destinatario?.cnpjCpf ?? null,
+        };
+        let leitura = lerDuplicado(
             existing && existing.exists() ? (existing.data() as DocumentoExistente) : null,
             empresa,
+            partesDoArquivo,
         );
+        // ═══ O OUTRO LADO ═══════════════════════════════════════════════════
+        // A chave já tem dono e a empresa escolhida TAMBÉM é parte (saída de
+        // uma, entrada da outra): o documento desta empresa é OUTRO, com id
+        // derivado. Se ele já existe, a leitura recomeça sobre ELE — e daí em
+        // diante vale o fluxo normal (já está aqui / substituir / completar).
+        let ladoDe: ReturnType<typeof carimboDoLado> = null;
+        if (leitura.gravaOutroLado && existing && existing.exists()) {
+            const idLado = idDoDocumentoDoLado(chave, empresa.cnpj);
+            if (idLado) {
+                const outroLado = existing.data() as DocumentoExistente;
+                ladoDe = carimboDoLado({
+                    chave,
+                    outroLadoCnpj: outroLado.empresaCnpj,
+                    outroLadoEmpresaId: outroLado.empresaId,
+                });
+                docId = idLado;
+                let existingLado: Awaited<ReturnType<typeof getDoc>> | null = null;
+                try {
+                    existingLado = await getDoc(doc(db, COLLECTIONS.DOCUMENTOS, idLado));
+                } catch (err: any) {
+                    if (err?.code !== 'permission-denied') throw err;
+                }
+                existing = existingLado && existingLado.exists() ? existingLado : null;
+                if (existing) {
+                    leitura = lerDuplicado(existing.data() as DocumentoExistente, empresa, partesDoArquivo);
+                }
+            }
+        }
         // SUBSTITUIÇÃO: só quando alguém PEDIU, e só na MESMA empresa.
         //
         // Sobrescrever documento de outra empresa seria mover a nota de dona
@@ -577,6 +624,9 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // — e o dia em que alguém trocar por `{ merge: true }` o documento
             // volta invisível, sem nada apontando para cá.
             const paraGravar: Record<string, unknown> = { ...sanitize(documento) };
+            // O carimbo do lado é o que a propagação de eventos (cancelamento,
+            // CC-e, manifestação) usa para achar ESTE documento pela chave.
+            if (ladoDe) paraGravar.ladoDe = ladoDe;
             if (podeSubstituir && !leitura.permiteReincluir) {
                 // O rastro fica NO documento: substituição é reescrita de dado
                 // fiscal, e sem quem/quando ninguém reconstrói o que mudou.
@@ -618,6 +668,7 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             status: 'ok', documento,
             substituiu: podeSubstituir && !leitura.permiteReincluir && !podeCompletar,
             completou: podeCompletar,
+            outroLado: ladoDe ? { chave, outroLadoCnpj: ladoDe.outroLadoCnpj } : undefined,
         };
     } catch (err: any) {
         await registrarErro({

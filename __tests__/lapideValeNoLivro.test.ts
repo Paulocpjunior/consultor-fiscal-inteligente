@@ -41,6 +41,7 @@ const SEM_LAPIDE_COM_MOTIVO: Record<string, string> = {
     'sefaz-sp-nfce-orchestrator.js': 'captura de NFC-e — escreve',
     'sefaz-sp-nfce-routes.js': 'grava o cancelamento de NFC-e na chave — escreve',
     'cancelamento-gravacao.js': 'grava o cancelamento confirmado pela SEFAZ — escreve',
+    'documento-lado-io.js': 'resolve os documentos de uma CHAVE para os escritores de evento — o fato da nota entra também no lado retirado, porque a lápide diz "não conta no livro", não "não existe": reincluir o documento depois traz o cancelamento junto',
     'backfill-cst-itens.js': 'reprocessa o XML guardado para completar campos de item — não decide livro',
     // ── DELEGA ao núcleo, que filtra POR DOCUMENTO ─────────────────────────
     'competencia-acervo-routes.js': 'a lápide é aplicada por `classificarCompetenciaDoAcervo`, que devolve `fora-do-escopo` para nota tirada do livro — provado em competenciaAcervo.test.ts',

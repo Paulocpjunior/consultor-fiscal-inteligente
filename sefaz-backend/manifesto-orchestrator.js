@@ -4,6 +4,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { refsDaChave } from './documento-lado-io.js';
 import { manifestarNFe, TIPOS_MANIFESTACAO } from './manifesto-client.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
@@ -321,11 +322,19 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
 
     const evtAceito = result.retorno.eventos.find(e => ['135', '136'].includes(e.cStat));
     if (evtAceito) {
-      const docRef = db.collection('documentos_fiscais').doc(chNFe);
+      // NOS DOIS LADOS DA CHAVE (11/09): se a destinatária é o OUTRO LADO
+      // (a emitente importou a saída antes), o evento de manifestação tem de
+      // chegar no documento DELA — senão ela continua elegível e o lote
+      // volta a manifestar a mesma chave (a SEFAZ recusa a repetição, e o
+      // app coleciona recusa). `refsDaChave` devolve principal + lados.
+      const { refs } = await refsDaChave(db, chNFe);
+      const docRef = refs[0];
       const snap = await docRef.get();
       if (snap.exists && !empresaId) empresaId = snap.data().empresaId || null;
-      if (snap.exists) {
-        const eventosExistentes = snap.data().eventos || [];
+      for (const ref of refs) {
+        const s = ref === docRef ? snap : await ref.get();
+        if (!s.exists) continue;
+        const eventosExistentes = s.data().eventos || [];
         const novoEvento = {
           tpEvento: evtAceito.tpEvento,
           tipo: `manifestacao_${tipo}`,
@@ -340,7 +349,7 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
           xMotivo: evtAceito.xMotivo,
           importadoPor: capturadoPor?.email || 'manifesto-auto',
         };
-        await docRef.update({ eventos: [...eventosExistentes, novoEvento] });
+        await ref.update({ eventos: [...eventosExistentes, novoEvento] });
       }
       // Ciência/Confirmação aceita → busca a procNFe completa na hora.
       // Em lote (skipRedownload), adia: a completa vem no próximo DistDFe.
