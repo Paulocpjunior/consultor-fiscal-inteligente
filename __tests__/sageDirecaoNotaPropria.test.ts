@@ -52,14 +52,14 @@ describe('🚨 nota própria de entrada — o livro do cliente', () => {
     // O CFOP de entrada é 1xxx/2xxx. Passando 'saida' cru, a correlação
     // escolheria a família 5xxx — e o E-Fiscal recusa o lançamento.
     it('a correlação de CFOP recebe ENTRADA, e o código sai da família 1xxx', () => {
-        const cfop = cfopParaEscriturar('5102', 'entrada', undefined, notaPropriaDeEntrada());
+        const cfop = cfopParaEscriturar('5102', 'entrada', undefined, notaPropriaDeEntrada(), null);
         expect(String(cfop).charAt(0)).toBe('1');
     });
 
     // Saída de verdade continua saída — a régua não pode inverter o caso comum.
     it('venda normal continua SAÍDA', () => {
         const venda = { ...notaPropriaDeEntrada(), tpNF: '1' } as unknown as DocumentoFiscal;
-        const cfop = cfopParaEscriturar('5102', 'saida', undefined, venda);
+        const cfop = cfopParaEscriturar('5102', 'saida', undefined, venda, null);
         expect(String(cfop).charAt(0)).toBe('5');
     });
 });

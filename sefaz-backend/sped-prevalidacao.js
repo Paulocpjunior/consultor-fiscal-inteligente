@@ -47,7 +47,7 @@ import { linhasMalformadas } from './sped-auditoria-saida.js';
 import { conferirContagemDeCamposFiscal, conferirTamanhoDeCamposFiscal } from './sped-fiscal-campos.js';
 
 import {
-    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, POS_DT_FIN_ICMS_IPI,
+    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, conferirCodPartDoC100, POS_DT_FIN_ICMS_IPI,
     conferirContador0100,
 } from './sped-c100-regras-comuns.js';
 
@@ -101,6 +101,10 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // MESMO nas duas famílias, e esta recusa valia no EFD-Contribuições sem
     // rodar lá (a "meia trava" do COD_MUN, 22/08).
     for (const e of conferirCodModContraChave(lista)) add(erros, e);
+    // ── R1b. C100 de terceiro sem COD_PART / fora do 0150 ───────────────────
+    // 11/09: 493 recusas numa distribuidora — toda entrada capturada pela
+    // SEFAZ saía sem o participante (forma achatada). A régua mora no comum.
+    for (const e of conferirCodPartDoC100(lista)) add(erros, e);
 
     // ── R2. NFC-e não informa participante nem tributos no C100 ─────────────
     // PVA (mesmo arquivo, 86 ocorrências).

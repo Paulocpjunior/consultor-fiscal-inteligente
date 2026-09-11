@@ -1,3 +1,4 @@
+import { escrituracaoDoItem } from './escrituracao-item.js';
 /**
  * cst-correlacao — o CST que a ESCRITURAÇÃO usa, quando ele não é o do fornecedor.
  *
@@ -45,6 +46,7 @@
  */
 
 /** Só dígitos, e no máximo os 3 que o CST tem. */
+
 function digitos(v) {
     return String(v == null ? '' : v).replace(/\D/g, '');
 }
@@ -179,10 +181,33 @@ export function validarCstEscriturado(valor) {
 }
 
 /**
+ * A TRIBUTAÇÃO informada que vale para ESTE item: a do ITEM vence a da NOTA.
+ *
+ * Sandra, 11/09: nota com item COM ST (1407 · CST 60) e item SEM (1556 · CST
+ * 90) — o campo por nota só comportava UM CST, e o item de uso/consumo
+ * continuava "puxando com ICMS" no SPED do Paulo. É o degrau 0 da precedência
+ * do CFOP (`cfopDoLancamento`), no CST.
+ *
+ * 🚨 Todo leitor que chama `cstDoLancamento` com a nota na mão passa por AQUI
+ * (varredura em cstCorrelacao.test.ts): quem lesse `nota.cstEscriturado`
+ * direto responderia "nenhum item informado" com toda confiança.
+ *
+ * @returns {string} tributação (2 dígitos) ou '' — vazio é "segue a régua".
+ */
+export function cstInformadoDoItem(doc, item) {
+    const doItem = escrituracaoDoItem(doc, item);
+    if (doItem && doItem.cst) return doItem.cst;
+    const daNota = tributacaoInformada(doc && doc.cstEscriturado);
+    return daNota || '';
+}
+
+/**
  * O CST que a escrituração deve usar para o item.
  *
  * @param {string} cstDoItem   CST como veio do XML do fornecedor ('00' ou '000')
  * @param {string} cfopEscriturado CFOP com que a nota está sendo escriturada
+ * @param {string} [cstInformado] tributação informada — POR ITEM ou por nota; quem
+ *   resolve a precedência é `cstInformadoDoItem(nota, item)`
  * @returns {{cst: string|null, original: string|null, situacao: string, motivo: string, destino: string|null}}
  */
 export function cstDoLancamento(cstDoItem, cfopEscriturado, cstInformado) {

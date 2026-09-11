@@ -226,7 +226,7 @@ export function conferirAntesDeGerar(
             // alarme falso em TODA compra de produtor rural, que é o jeito mais
             // rápido de ensinar a equipe a ignorar o preflight.
             const direcao = direcaoEfetivaDoc(d) as string;
-            const cfopFinal = cfopParaEscriturar(it.cfop, direcao, opts.cfopCtx, d);
+            const cfopFinal = cfopParaEscriturar(it.cfop, direcao, opts.cfopCtx, d, it);
             const primeiro = String(cfopFinal || '')[0];
             const esperado = direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
             if (!primeiro || !esperado.includes(primeiro)) {

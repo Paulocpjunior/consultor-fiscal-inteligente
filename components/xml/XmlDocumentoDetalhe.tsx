@@ -34,10 +34,11 @@ import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitad
 // que sobem com base e ICMS destacados? Poderia ter uma opção igual essa das
 // retenções"*). Os dois campos existem desde 17-19/08 e moravam SÓ em
 // Relatórios → ✏️ CFOP por nota — a tela existia e ninguém achava.
-import { gravarCfopEscriturado } from '../../services/cfopEscrituradoService';
+import { gravarCfopEscriturado, gravarEscrituracaoItem } from '../../services/cfopEscrituradoService';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { direcaoEfetivaDoc, origemDoCancelamento } from '../../sefaz-backend/xml-metadata-helper.js';
-import { cfopsDistintosDaNota } from '../../sefaz-backend/cfop-correlacao.js';
+import { cfopsDistintosDaNota, cfopDoLancamento } from '../../sefaz-backend/cfop-correlacao.js';
+import { escrituracaoDoItem, resumoEscrituracaoItens, chaveDoItem } from '../../sefaz-backend/escrituracao-item.js';
 
 interface Props {
     documento: DocumentoFiscal;
@@ -78,6 +79,10 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const [gravandoEscr, setGravandoEscr] = useState(false);
     const [erroEscr, setErroEscr] = useState<string | null>(null);
     const [okEscr, setOkEscr] = useState<string | null>(null);
+    // ✂️ POR ITEM (Sandra, 11/09): a nota mista recebe um CFOP/CST por produto.
+    // Rascunho é TEXTO por item; o que está gravado sai do documento.
+    const [modoItem, setModoItem] = useState(false);
+    const [itemIn, setItemIn] = useState<Record<string, { cfop: string; cst: string }>>({});
     // ── Número/série corrigidos NESTA nota (Paulo, 10/09) ──────────────────
     const [abrirNum, setAbrirNum] = useState(false);
     const [numIn, setNumIn] = useState('');
@@ -110,6 +115,60 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const cfopsDaNota: string[] = ehMercadoria
         ? (cfopsDistintosDaNota(d as any, direcaoDoDoc, {}) as string[]) || []
         : [];
+    const itensDaNota: any[] = ehMercadoria ? ((d as any).itens || []) : [];
+    const porItem = resumoEscrituracaoItens(d as any);
+    /** Linhas do editor por item — o que está gravado, o que a régua daria e o rascunho. */
+    const linhasItem = itensDaNota.map((it: any) => {
+        const k = chaveDoItem(it);
+        const gravado = escrituracaoDoItem(d as any, it);
+        const cru = String(it?.cfop || '').replace(/\D/g, '');
+        const rascunho = itemIn[k];
+        return {
+            k, it,
+            cru,
+            cstCru: String(it?.cstIcms || it?.cst || ''),
+            // O que ESTE item recebe hoje pela régua (com o que a nota já informou).
+            regua: cru ? String(cfopDoLancamento(d as any, cru, direcaoDoDoc, {}, it) || cru) : '',
+            gravado,
+            cfopIn: rascunho ? rascunho.cfop : (gravado?.cfop || ''),
+            cstIn: rascunho ? rascunho.cst : (gravado?.cst || ''),
+        };
+    });
+    const abrirPorItem = () => {
+        setItemIn({});
+        setModoItem(true);
+    };
+    const gravarPorItem = async () => {
+        setGravandoEscr(true); setErroEscr(null); setOkEscr(null);
+        try {
+            const email = String(currentUser?.email || '');
+            let mudados = 0;
+            for (const l of linhasItem) {
+                if (!l.k) continue;
+                const atualCfop = l.gravado?.cfop || '';
+                const atualCst = l.gravado?.cst || '';
+                const novoCfop = String(l.cfopIn || '').trim();
+                const novoCst = String(l.cstIn || '').trim();
+                if (novoCfop === atualCfop && novoCst === atualCst) continue;
+                await gravarEscrituracaoItem({
+                    documentoId: d.id, direcao: direcaoDoDoc, nItem: l.k, cfop: novoCfop, cst: novoCst, porEmail: email,
+                });
+                mudados += 1;
+            }
+            setOkEscr(mudados
+                ? `${mudados} item(ns) informado(s). O item informado VENCE o CFOP/CST da nota; os outros seguem a nota. `
+                  + 'Vale no Livro, no Resumo por CFOP, no SPED e no Exportar SAGE — gere de novo.'
+                : 'Nada mudou — nenhum item foi alterado.');
+            if (mudados) onShowToast?.(`Escrituração por item da nota ${d.numero} gravada.`);
+            setModoItem(false);
+            setAbrirEscr(false);
+            if (mudados) onRetirado?.();
+        } catch (e: any) {
+            setErroEscr(e?.message || 'Falha ao gravar.');
+        } finally {
+            setGravandoEscr(false);
+        }
+    };
 
     const gravarEscr = async (limpar = false) => {
         setGravandoEscr(true); setErroEscr(null); setOkEscr(null);
@@ -606,6 +665,16 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                     </p>
                                 </div>
                             )}
+                            {porItem.total > 0 && (
+                                <div className="mt-2 rounded-md border border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 p-2">
+                                    <p className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
+                                        ✂️ {porItem.total} item(ns) com CFOP/CST próprios — item nº {porItem.nItens.join(', ')}
+                                    </p>
+                                    <p className="text-[10px] text-indigo-700 dark:text-indigo-400 mt-0.5">
+                                        O item informado vence o da nota; os demais seguem a nota (ou a régua).
+                                    </p>
+                                </div>
+                            )}
                             {okEscr && <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">✓ {okEscr}</p>}
                         </div>
                     ) : (
@@ -617,13 +686,88 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                 itens passa a sair com UM só, e isso vai DITO antes do
                                 clique — total que muda sozinho faz desconfiar do número
                                 certo (a lição do ✕ do FUNRURAL, 30/08). */}
-                            {cfopsDaNota.length > 1 && (
+                            {!modoItem && cfopsDaNota.length > 1 && (
                                 <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
                                     ⚠ Esta nota tem <strong>{cfopsDaNota.length} CFOPs</strong> pela régua
-                                    ({cfopsDaNota.join(' · ')}). O informado vale para <strong>todos os itens</strong>.
+                                    ({cfopsDaNota.join(' · ')}). O informado aqui vale para <strong>todos os itens</strong> —
+                                    para um CFOP/CST por produto (item com ST e item sem na mesma nota), use o ✂️ por item.
                                 </p>
                             )}
-                            <div className="grid grid-cols-2 gap-2 mt-2">
+                            {/* ✂️ A PORTA POR ITEM nasce ONDE a limitação aparecia: Sandra
+                                (11/09) leu "só consigo colocar um CFOP e um CST" nesta
+                                caixa. Nota com um item só não ganha o botão — por item e
+                                por nota seriam a mesma coisa, e botão a mais confunde. */}
+                            {!modoItem && itensDaNota.length > 1 && (
+                                <button
+                                    onClick={abrirPorItem}
+                                    className="mt-2 text-xs rounded-md border border-indigo-300 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 btn-press whitespace-nowrap"
+                                    title="Um CFOP e um CST por PRODUTO desta nota. O item informado vence o da nota."
+                                >
+                                    ✂️ Informar por item ({itensDaNota.length} itens)
+                                    {porItem.total > 0 ? ` · ${porItem.total} já informado(s)` : ''}
+                                </button>
+                            )}
+                            {modoItem && (
+                                <div className="mt-2">
+                                    <p className="text-[11px] text-indigo-800 dark:text-indigo-300">
+                                        Um CFOP/CST por <strong>produto</strong>. Linha em branco segue a nota (ou a régua).
+                                        O item informado <strong>vence</strong> o CFOP/CST da nota.
+                                    </p>
+                                    <div className="overflow-x-auto mt-1 rounded border border-indigo-200 dark:border-indigo-800">
+                                        <table className="w-full text-[11px]">
+                                            <thead className="bg-indigo-100/60 dark:bg-indigo-900/40">
+                                                <tr>
+                                                    <th className="px-1.5 py-1 text-left">#</th>
+                                                    <th className="px-1.5 py-1 text-left">Produto</th>
+                                                    <th className="px-1.5 py-1 text-center" title="CFOP como veio no XML (o do fornecedor, na compra)">CFOP na nota</th>
+                                                    <th className="px-1.5 py-1 text-center" title="O que este item recebe hoje: pela nota informada, pelo cérebro ou pela régua">Hoje</th>
+                                                    <th className="px-1.5 py-1 text-center">CST na nota</th>
+                                                    <th className="px-1.5 py-1 text-center">CFOP do item</th>
+                                                    <th className="px-1.5 py-1 text-center">CST do item</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-indigo-100 dark:divide-indigo-900">
+                                                {linhasItem.map((l) => (
+                                                    <tr key={l.k || String(l.it?.xProd)}>
+                                                        <td className="px-1.5 py-1 text-slate-500">{l.k || '—'}</td>
+                                                        <td className="px-1.5 py-1 max-w-[180px] truncate" title={l.it?.xProd}>{l.it?.xProd || '—'}</td>
+                                                        <td className="px-1.5 py-1 text-center font-mono">{l.cru || '—'}</td>
+                                                        <td className="px-1.5 py-1 text-center font-mono">{l.regua || '—'}</td>
+                                                        <td className="px-1.5 py-1 text-center font-mono">{l.cstCru || '—'}</td>
+                                                        <td className="px-1.5 py-1 text-center">
+                                                            <input
+                                                                value={l.cfopIn}
+                                                                disabled={!l.k}
+                                                                onChange={e => setItemIn(x => ({ ...x, [l.k]: { cfop: e.target.value, cst: l.cstIn } }))}
+                                                                placeholder="—"
+                                                                inputMode="numeric"
+                                                                maxLength={4}
+                                                                className="w-16 rounded border border-indigo-300 bg-white dark:bg-slate-800 p-1 text-xs font-mono text-center"
+                                                            />
+                                                        </td>
+                                                        <td className="px-1.5 py-1 text-center">
+                                                            <input
+                                                                value={l.cstIn}
+                                                                disabled={!l.k}
+                                                                onChange={e => setItemIn(x => ({ ...x, [l.k]: { cfop: l.cfopIn, cst: e.target.value } }))}
+                                                                placeholder="—"
+                                                                inputMode="numeric"
+                                                                maxLength={3}
+                                                                className="w-12 rounded border border-indigo-300 bg-white dark:bg-slate-800 p-1 text-xs font-mono text-center"
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-1">
+                                        CFOP com 4 dígitos na faixa {direcaoDoDoc === 'entrada' ? '1/2/3' : '5/6/7'}; CST só a tributação
+                                        (ex.: 60 para ST, 90 para Outras) — a origem continua vindo do item.
+                                    </p>
+                                </div>
+                            )}
+                            {!modoItem && <div className="grid grid-cols-2 gap-2 mt-2">
                                 <div>
                                     <label className="block text-[11px] font-bold text-indigo-800 dark:text-indigo-300">CFOP</label>
                                     <input
@@ -653,7 +797,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                         2 dígitos (00 · 40 · 60 · 90…). A <strong>origem</strong> continua vindo do item.
                                     </p>
                                 </div>
-                            </div>
+                            </div>}
                             <p className="text-[10px] text-indigo-700 dark:text-indigo-400 mt-2">
                                 Vale no Livro, no Resumo por CFOP, no SPED e no Exportar SAGE — as quatro
                                 telas leem a mesma régua, então elas não divergem.
@@ -662,23 +806,44 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                 <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroEscr}</p>
                             )}
                             <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {modoItem ? (
+                                    <>
+                                        <button
+                                            onClick={gravarPorItem}
+                                            disabled={gravandoEscr}
+                                            className="text-xs rounded-md bg-indigo-700 text-white px-3 py-1.5 font-bold disabled:opacity-50 btn-press whitespace-nowrap"
+                                        >
+                                            {gravandoEscr ? 'gravando…' : '✂️ Gravar por item'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setModoItem(false); setItemIn({}); }}
+                                            disabled={gravandoEscr}
+                                            className="text-xs underline text-slate-600 dark:text-slate-300 btn-press whitespace-nowrap"
+                                        >
+                                            ← voltar ao campo por nota
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => gravarEscr(false)}
+                                            disabled={gravandoEscr}
+                                            className="text-xs rounded-md bg-indigo-700 text-white px-3 py-1.5 font-bold disabled:opacity-50 btn-press whitespace-nowrap"
+                                        >
+                                            {gravandoEscr ? 'gravando…' : '✏️ Gravar escrituração'}
+                                        </button>
+                                        <button
+                                            onClick={() => gravarEscr(true)}
+                                            disabled={gravandoEscr}
+                                            className="text-xs underline text-slate-600 dark:text-slate-300 btn-press whitespace-nowrap"
+                                            title="Devolve a nota à régua automática (CFOP correlacionado e CST derivado). Itens informados um a um continuam valendo — limpe-os no ✂️."
+                                        >
+                                            ↩ voltar à régua automática
+                                        </button>
+                                    </>
+                                )}
                                 <button
-                                    onClick={() => gravarEscr(false)}
-                                    disabled={gravandoEscr}
-                                    className="text-xs rounded-md bg-indigo-700 text-white px-3 py-1.5 font-bold disabled:opacity-50 btn-press whitespace-nowrap"
-                                >
-                                    {gravandoEscr ? 'gravando…' : '✏️ Gravar escrituração'}
-                                </button>
-                                <button
-                                    onClick={() => gravarEscr(true)}
-                                    disabled={gravandoEscr}
-                                    className="text-xs underline text-slate-600 dark:text-slate-300 btn-press whitespace-nowrap"
-                                    title="Devolve a nota à régua automática (CFOP correlacionado e CST derivado)."
-                                >
-                                    ↩ voltar à régua automática
-                                </button>
-                                <button
-                                    onClick={() => { setAbrirEscr(false); setErroEscr(null); }}
+                                    onClick={() => { setAbrirEscr(false); setModoItem(false); setErroEscr(null); }}
                                     className="text-xs underline text-slate-500 btn-press">cancelar</button>
                             </div>
                         </div>

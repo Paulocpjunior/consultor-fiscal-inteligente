@@ -116,7 +116,7 @@
 </section>
 
 <section>
-    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">9 itens</span></h2>
+    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">10 itens</span></h2>
     <p>Nenhum é trabalho de código. São leituras de painel, cliques em produção ou acessos
     que o time de desenvolvimento não tem.</p>
 
@@ -127,6 +127,16 @@
         arquivo <strong>com a nota tirada</strong>.</p>
         <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar e conferir, competência por competência.
         O app não sabe quais já foram transmitidas.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>SPED da distribuidora: regerar e reconferir no PVA</h3>
+        <p>Os <strong>493 erros de código de participante</strong> nas entradas eram do gerador (o C100 da
+        nota capturada pela SEFAZ saía sem o CNPJ do fornecedor). Corrigido em 11/09 — o arquivo
+        precisa ser <strong>gerado de novo</strong>. As notas mistas (um CFOP por produto) agora se
+        informam no <strong>✂️ por item</strong> do detalhe da nota.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> informar os itens das notas mistas, regerar o
+        SPED e validar no PVA. Se sobrar "COD_MUN" no 0150, rodar ♻️ Reler participante dos XMLs.</div>
     </div>
 
     <div class="fila dinheiro">
@@ -252,6 +262,18 @@
 
 <section>
     <h2>✅ Fechado em 11/09</h2>
+
+    <div class="fila feito">
+        <h3>CFOP e CST por ITEM — a nota mista</h3>
+        <p>Item com ST e item sem, na mesma nota, recebem um CFOP/CST por produto no <strong>✂️ por
+        item</strong> do detalhe da nota. O item vence a nota; vale no Livro, no Resumo, no SPED e no SAGE.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>C100 sem COD_PART nas entradas capturadas pela SEFAZ</h3>
+        <p>O dono da contraparte passou a ler a forma achatada da captura; regra nova na prevalidação
+        das duas famílias acusa antes do PVA.</p>
+    </div>
 
     <div class="fila feito">
         <h3>A nota gravada no mês errado agora tem como ser corrigida</h3>

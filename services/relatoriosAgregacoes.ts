@@ -182,7 +182,7 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             // própria de entrada (art. 136) já nasce 1xxx e passa intacta.
             // O CFOP informado NA NF vence a régua automática (decisão do
             // Paulo, 17/08: "é por NF"). Sem ele, nada muda.
-            const cfop = String(cfopDoLancamento(d, cru, direcaoDoc(d) as any, ctx) || cru);
+            const cfop = String(cfopDoLancamento(d, cru, direcaoDoc(d) as any, ctx, it) || cru);
             if (!porCfop.has(cfop)) porCfop.set(cfop, []);
             porCfop.get(cfop)!.push(it);
         }
@@ -900,7 +900,7 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
             if (it.uCom) linha._unidades.add(String(it.uCom).trim().toUpperCase());
             if (it.cfop) {
                 const cru = String(it.cfop).replace(/\D/g, '');
-                linha._cfops.add(String(cfopDoLancamento(d, cru, direcao, ctx) || cru));
+                linha._cfops.add(String(cfopDoLancamento(d, cru, direcao, ctx, it) || cru));
             }
             linha._notas.add(d.id || d.chave);
             mapa.set(k, linha);

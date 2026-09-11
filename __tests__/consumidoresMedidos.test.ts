@@ -66,9 +66,22 @@ const REGUAS: ReguaVigiada[] = [
     },
     {
         fn: 'cfopParaEscriturar',
-        minArgs: 4,
-        argumento: 'doc (o DOCUMENTO — é dele que saem o CFOP informado na NF e o fornecedor do cérebro)',
-        motivo: '07/09 — a conferência de correlação chamava com 3 argumentos e prometia a régua automática numa nota já decidida',
+        minArgs: 5,
+        argumento: 'doc (o DOCUMENTO) e item (o ITEM — é dele que sai o CFOP informado por item, 11/09)',
+        motivo: '07/09 — a conferência chamava com 3 argumentos e prometia a régua automática numa nota já decidida; '
+            + '11/09 — sem o item, a nota mista da Sandra (1407 + 1556) sairia com um CFOP só no .FML',
+    },
+    {
+        fn: 'cfopDoLancamento',
+        minArgs: 5,
+        argumento: 'item (o ITEM — `escrituracaoItens[nItem]` vence o CFOP da nota; CT-e sem item passa null DITO)',
+        motivo: '11/09 Sandra — "preciso lançar 2 CFOPs nessa nota": leitor que passa só o CFOP responde "nenhum item informado" com toda confiança',
+    },
+    {
+        fn: 'convertCfopParaEntrada',
+        minArgs: 5,
+        argumento: 'item (o ITEM) — C170, C190 e E510 das duas famílias',
+        motivo: '11/09 — o SPED do Paulo continuava com uso/consumo "puxando com ICMS" porque o item de ST e o de consumo saíam com o CFOP da nota',
     },
 ];
 

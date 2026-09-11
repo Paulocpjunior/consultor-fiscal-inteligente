@@ -173,7 +173,7 @@ describe('🔌 os dois orquestradores LEEM o cérebro e o bloco C o RECEBE', () 
 
     it('a conferência de correlação passa o DOCUMENTO à régua (senão NF e cérebro são ignorados)', () => {
         const f = semComentario(ler('services/cfopConferencia.ts'));
-        expect(f).toMatch(/cfopParaEscriturar\(origem, 'entrada', ctx, d\)/);
+        expect(f).toMatch(/cfopParaEscriturar\(origem, 'entrada', ctx, d, it\)/);
         expect(f).not.toMatch(/cfopParaEscriturar\(origem, 'entrada', ctx\)/);
     });
 
@@ -212,8 +212,8 @@ describe('🧠 o CFOP do cérebro sai em cada leitor', () => {
 
     it('SAGE (.FML/preflight): `cfopParaEscriturar` honra o cérebro pelo contexto', () => {
         const ctx = { naturezaAtividade: 'comercio', parametrosCfop: [PARAM] };
-        expect(cfopParaEscriturar('5102', 'entrada', ctx, nota())).toBe('1556');
-        expect(cfopParaEscriturar('5102', 'entrada', { naturezaAtividade: 'comercio' }, nota())).toBe('1102');
+        expect(cfopParaEscriturar('5102', 'entrada', ctx, nota(), null)).toBe('1556');
+        expect(cfopParaEscriturar('5102', 'entrada', { naturezaAtividade: 'comercio' }, nota(), null)).toBe('1102');
     });
 
     it('conferência: NF informada vence tudo e sai NOMEADA como decisão da nota', () => {

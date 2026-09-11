@@ -222,13 +222,13 @@ describe('número da nota — resgate pela chave de acesso', () => {
 
 describe('CFOP de ENTRADA (E201 campo 08 / E222)', () => {
     it('converte o CFOP do emitente no de entrada', () => {
-        expect(cfopParaEscriturar('6102', 'entrada')[0]).toBe('2');
-        expect(cfopParaEscriturar('5101', 'entrada')[0]).toBe('1');
-        expect(cfopParaEscriturar('7101', 'entrada')[0]).toBe('3');
+        expect(cfopParaEscriturar('6102', 'entrada', undefined, null, null)[0]).toBe('2');
+        expect(cfopParaEscriturar('5101', 'entrada', undefined, null, null)[0]).toBe('1');
+        expect(cfopParaEscriturar('7101', 'entrada', undefined, null, null)[0]).toBe('3');
     });
 
     it('saída mantém o CFOP original (é a operação da própria empresa)', () => {
-        expect(cfopParaEscriturar('5102', 'saida')).toBe('5102');
+        expect(cfopParaEscriturar('5102', 'saida', undefined, null, null)).toBe('5102');
     });
 
     it('REGRESSÃO: E201 e E222 não saem mais com CFOP 5xxx/6xxx numa entrada', () => {

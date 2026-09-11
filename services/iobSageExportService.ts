@@ -20,6 +20,7 @@ import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // 🚨 O livro creditava ICMS de optante do Simples e ignorava o CST informado
 // na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
 import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi } from '../sefaz-backend/credito-icms-entrada.js';
+import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -321,15 +322,18 @@ export interface CfopCtx {
 }
 
 export function cfopParaEscriturar(
-    cfop: string | undefined, direcao: string, ctx?: CfopCtx, doc?: any,
+    cfop: string | undefined, direcao: string, ctx: CfopCtx | undefined, doc: any, item: any,
 ): string {
     // `doc` traz o CFOP informado NA NF — decisão humana naquela nota, que vence
-    // o override da empresa e a régua automática. Sem ele nada muda.
+    // o override da empresa e a régua automática. `item` traz o informado NO
+    // ITEM (11/09, Sandra — nota mista), que vence o da nota. Os dois são
+    // obrigatórios (registro `consumidoresMedidos`): sem o item o .FML gravaria
+    // no item com ST o CFOP do item sem, calado.
     return cfopDoLancamento(doc, cfop || '', direcao === 'entrada' ? 'entrada' : 'saida', {
         naturezaAtividade: ctx?.naturezaAtividade ?? null,
         cfopOverrides: ctx?.cfopOverrides ?? null,
         parametrosCfop: ctx?.parametrosCfop ?? null,
-    });
+    }, item);
 }
 
 /**
@@ -600,6 +604,13 @@ export interface CtxAlocacaoIcms {
      */
     cstEscriturado?: string | null;
     /**
+     * CST de tributação informado POR ITEM (`escrituracaoItens[nItem].cst`,
+     * 11/09 — o caso da Sandra: item com ST e item sem na MESMA nota). Vence o
+     * da nota no item que o tem; os outros itens seguem `cstEscriturado`.
+     * Chave = `chaveDoItem(it)`.
+     */
+    cstEscrituradoItens?: Record<string, string> | null;
+    /**
      * `true` quando quem escritura NÃO se credita de ICMS (optante do Simples).
      * Quem responde é `entradaGeraCreditoIcms`, nunca um `if` de tela.
      */
@@ -625,8 +636,17 @@ export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocac
     const regime = ctxEmpresa?.regimeTributario ?? null;
     const credito = entradaGeraCreditoIcms({ regime, direcao });
     const creditoIpi = entradaGeraCreditoIpi({ regime, direcao });
+    const porItem: Record<string, string> = {};
+    const mapa = d?.escrituracaoItens;
+    if (mapa && typeof mapa === 'object') {
+        for (const [k, e] of Object.entries(mapa as Record<string, any>)) {
+            const cst = String(e?.cst ?? '').replace(/\D/g, '');
+            if (cst) porItem[String(Number(k))] = cst;
+        }
+    }
     return {
         cstEscriturado: d?.cstEscriturado ?? null,
+        cstEscrituradoItens: Object.keys(porItem).length ? porItem : null,
         semCreditoIcms: !credito.credita,
         semCreditoIpi: !creditoIpi.credita,
     };
@@ -651,13 +671,18 @@ export function alocarTributacaoIcms(
     st: number;
 } {
     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-    const colunaInformada = colunaDoCstInformado(ctx?.cstEscriturado);
+    const colunaDaNota = colunaDoCstInformado(ctx?.cstEscriturado);
     const semCredito = ctx?.semCreditoIcms === true;
     const semCreditoIpi = ctx?.semCreditoIpi === true;
     let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0, st = 0;
     for (const it of itens) {
         const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
         const cst = String(it.cst || '').replace(/\D/g, '');
+        // O CST informado no ITEM vence o da NOTA (11/09) — é o que separa,
+        // na mesma NF, o item com ST (60 → Outras, já era) do item de
+        // uso/consumo (90 → Outras, sem crédito) do item que segue tributado.
+        const doItem = ctx?.cstEscrituradoItens?.[chaveDoItem(it)];
+        const colunaInformada = doItem ? colunaDoCstInformado(doItem) : colunaDaNota;
         ipi += it.vIPI || 0;
         st += (it as any).vICMSST || 0;
         // O que a PESSOA informou vence o XML; depois vem o regime de quem
@@ -839,7 +864,7 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
     // Agrupa itens por CFOP.
     const porCfop = new Map<string, DocumentoFiscalItem[]>();
     for (const it of d.itens || []) {
-        const cfop = cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d) || '0000';
+        const cfop = cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d, it) || '0000';
         if (!porCfop.has(cfop)) porCfop.set(cfop, []);
         porCfop.get(cfop)!.push(it);
     }
@@ -950,7 +975,7 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d),
+            'CFOP': cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d, it),
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,

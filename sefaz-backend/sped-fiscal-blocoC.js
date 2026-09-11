@@ -21,7 +21,7 @@
 import * as fmt from './sped-fiscal-format.js';
 import { montarC197Difal } from './sped-difal-c197.js';
 import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
-import { cstDoLancamento } from './cst-correlacao.js';
+import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
 // Régua ÚNICA de QUAL documento entra no bloco — o modelo vem dela, nunca do
 // campo cru `n.modelo`, que o importer principal não grava.
 import {
@@ -87,7 +87,8 @@ function cstDoItemNoArquivo(item, cfopLancado, nota) {
     const cru = getCstIcms(item);
     // O CST informado NAQUELA NOTA vence a régua — a precedência mora no DONO
     // (cstDoLancamento), nunca aqui, senão C170 e C190 divergiriam.
-    const r = cstDoLancamento(cru, cfopLancado, nota?.cstEscriturado);
+    // ✂️ POR ITEM vence POR NOTA (11/09, Sandra): a precedência mora no dono.
+    const r = cstDoLancamento(cru, cfopLancado, cstInformadoDoItem(nota, item));
     const escolhido = r.cst || cru;
     return escolhido.length === 2 ? '0' + escolhido : String(escolhido).padStart(3, '0').slice(-3);
 }
@@ -130,12 +131,13 @@ function getCstIcms(item) {
  *
  * O contexto eh extraido de `dados.empresa.dadosFiscais` quando disponivel.
  */
-export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
+export function convertCfopParaEntrada(rawCfop, direcao, dados, doc, item) {
     const empresa = dados?.empresa;
     const df = empresa?.dadosFiscais || {};
     // `doc` traz o CFOP informado NA NF, que vence a régua automática (decisão
-    // do Paulo, 17/08: "é por NF"). Chamador que não passa o doc continua
-    // caindo na correlação de sempre — nada regride.
+    // do Paulo, 17/08: "é por NF"); `item` traz o informado NO ITEM (11/09,
+    // Sandra — nota mista, um CFOP por produto), que vence o da nota. Os dois
+    // são OBRIGATÓRIOS para quem os tem na mão (registro consumidoresMedidos).
     return cfopDoLancamento(doc, rawCfop, direcao, {
         naturezaAtividade: derivarNaturezaAtividade(empresa),
         cfopOverrides: df.cfopOverrides,
@@ -144,7 +146,7 @@ export function convertCfopParaEntrada(rawCfop, direcao, dados, doc) {
         // tinha ensinado para o fornecedor — a aba ✏️ mostrava um CFOP e o
         // C170/C190 gravava outro.
         parametrosCfop: dados?.parametrosCfop || null,
-    });
+    }, item);
 }
 
 /**
@@ -458,7 +460,7 @@ function buildC170(item, nItem, nota) {
     // `.FML` do SAGE grava 1102 e o E110 já soma como crédito. Dois arquivos
     // do mesmo mês declarando CFOPs diferentes para a MESMA nota.
     const cfopLancado = convertCfopParaEntrada(
-        item.cfop || item.CFOP || '0000', direcaoEfetivaDoc(nota), nota._dados, nota,
+        item.cfop || item.CFOP || '0000', direcaoEfetivaDoc(nota), nota._dados, nota, item,
     );
     // 🔁 O CST SEGUE O CFOP ESCRITURADO — Paulo, 18/08: "a nota vai vir 5102,
     // vamos registrar como 1556; aí que está a chave do SPED: o CST do
@@ -541,7 +543,7 @@ function buildC190sFromNota(nota) {
     for (const item of (nota.itens || [])) {
         const cfopRaw = String(item.cfop || item.CFOP || '0000');
         // Mesma régua do C170 — e é o C190 que a apuração soma.
-        const cfop = convertCfopParaEntrada(cfopRaw, direcaoEfetivaDoc(nota), nota._dados, nota);
+        const cfop = convertCfopParaEntrada(cfopRaw, direcaoEfetivaDoc(nota), nota._dados, nota, item);
         // O C190 agrupa por CST+CFOP: usar o CST cru aqui e o convertido no
         // C170 faria os dois registros do MESMO item discordarem — e é o C190
         // que a apuração soma.

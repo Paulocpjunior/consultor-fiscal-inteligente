@@ -5,6 +5,59 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✂️ "SÓ CONSIGO COLOCAR UM CFOP E UM CST" — a nota MISTA ganhou o degrau
+  por ITEM, e medir o SPED do mesmo dia achou 493 C100 SEM PARTICIPANTE**
+  (11/09, Sandra via Paulo, com o print do ✏️: *"essa nota tem 2 produtos, com o
+  CFOP 5929 … um produto é com ST outro sem ou seja 1407 e 1556 … aqui nesse
+  informar CFOP e CST só consigo colocar um CFOP e um CST só"*; e Paulo: *"deu
+  erros de cod de participante nas entradas … 493 só de código de participante"*).
+  📌 **A DECISÃO DE 17/08 ("é por NF") CONTINUA SENDO O CASO COMUM** — o que
+  nasceu é o degrau ACIMA dela, para a nota que a régua por nota não consegue
+  escriturar certa: item COM ST (1407 · 60) e item SEM (1556 · 90) na MESMA NF.
+  A tela já DIZIA "⚠ mista … vale para todos os itens" — dizer não é resolver, e
+  a consequência era o "uso e consumo puxando com ICMS" do SPED do Paulo.
+  ✂️ `escrituracao-item.js` (PURO) é o dono de ONDE a decisão mora
+  (`doc.escrituracaoItens[nItem] = {cfop, cst, por, em}`) e de COMO o item se
+  identifica (`nItem`). Precedência nos donos de sempre: **ITEM > NOTA > 🧠
+  cérebro > empresa > régua** (`cfopDoLancamento` ganhou o 5º argumento;
+  `cstInformadoDoItem(nota, item)` alimenta a 3ª posição de `cstDoLancamento`;
+  `ctxAlocacaoDoDoc` leva `cstEscrituradoItens` para a coluna do livro).
+  ⚠️ **MAPA À PARTE, NUNCA `itens[]`**: o array é o que o DOCUMENTO declara, o
+  merge do Firestore substitui arrays INTEIROS, e um ♻️ reler XML apagaria a
+  decisão humana calado. A gravação é POR CAMINHO (`escrituracaoItens.3`) —
+  gravar o mapa inteiro a partir do que a tela carregou apagaria o item que
+  outra pessoa informou entre a leitura e o clique (o ✕ de 14/08).
+  ⚠️ **ITEM SEM `nItem` NÃO RECEBE DECISÃO**: casar por posição faria a escolha
+  pular de produto quando um backfill reordenasse a lista.
+  🚦 **O ITEM É ARGUMENTO OBRIGATÓRIO** em `cfopDoLancamento`,
+  `convertCfopParaEntrada` e `cfopParaEscriturar` (registro
+  `consumidoresMedidos`): leitor que passa só o CFOP responde "nenhum item
+  informado" com toda confiança — a Sandra veria 1407 no detalhe e o livro
+  gravaria 1556 no MESMO item. O CT-e passa `null` DITO (o CFOP dele mora no
+  cabeçalho). Provado por REVERSÃO no arquivo: só com o campo por nota os dois
+  C170 saem `1556·090` e o item com ST perde o 60.
+  🔴 **E O SEGUNDO ACHADO É A ARMADILHA DAS DUAS FORMAS DENTRO DO PRÓPRIO
+  DONO**: `participanteDoDocumento` lia só a forma ANINHADA (`emitente`), e a
+  captura pela SEFAZ grava ACHATADO (`cnpjEmit`). O EFD-Contribuições
+  normalizava a nota ANTES de chamá-lo (21/08); o EFD ICMS/IPI não — então
+  **toda entrada capturada automaticamente saía `|C100|0|1||55|…|`** (COD_PART
+  vazio) e o coletor do 0150 recebia null e a PULAVA. Um erro por nota de
+  entrada: 493. **Medido rodando o `buildBlocoC`**, não deduzido. A PWR (20/08)
+  passou porque as entradas dela tinham entrado pelo NAVEGADOR, que grava o
+  objeto. O dono passou a ler as duas formas (via `normalizarParticipantesDoc`,
+  idempotente), o que fecha C100, 0150, D100 e A100 de uma vez.
+  🚦 **E A RECUSA VIROU REGRA NAS DUAS FAMÍLIAS** (`conferirCodPartDoC100`, no
+  comum): C100 de terceiro sem COD_PART, e COD_PART que o 0150 não declara —
+  fonte no Guia 3.2.3 (campo 04 e a chave do registro para IND_EMIT=1). NFC-e
+  e emissão própria ficam de fora do vazio, de propósito.
+  🚩 **PENDÊNCIA DO PAULO**: regerar o SPED da distribuidora e validar; se
+  sobrar COD_MUN no 0150, o caminho é o ♻️ Reler participante dos XMLs.
+  📌 **REGRA QUE FICA: "está escrito que a tela avisa" não fecha o caso quando
+  a régua não CONSEGUE produzir o livro certo — aviso sobre limite do desenho
+  é o desenho pedindo o degrau seguinte.** E dono que existe para fechar a
+  armadilha das duas formas precisa ser provado com a forma ACHATADA na
+  fixture — o fiscal só tinha teste aninhado, e foi o SPED real que acusou.
+
 - **📅 A NOTA GRAVADA NO MÊS ERRADO GANHOU PORTA — e a página de pendências
   quase saiu pelo trilho que esta casa proíbe** (11/09, Paulo: *"corrige os
   itens que dependem de vc, a pagina com as pendencias nao pode ser um link do

@@ -105,6 +105,32 @@
     GUERRA e parecidos), vale <strong>conferir a contagem de entradas e saídas</strong> da Rotina do Mês: ela pode
     mudar em relação ao que você viu antes de hoje — e agora está certa.</div>
 
+    <h3>3. ✂️ <strong>Nota com dois produtos agora recebe um CFOP e um CST por PRODUTO</strong></h3>
+    <p>O pedido veio da Sandra: uma nota de consumo com dois produtos, <strong>um com ST e outro sem</strong> —
+    ou seja, um item entra como <strong>1407</strong> e o outro como <strong>1556</strong>. O campo
+    "Informar CFOP e CST" só aceitava <strong>um</strong> CFOP para a nota inteira, então ou o item com ST
+    perdia o CST 60, ou o item de consumo continuava creditando ICMS no livro e no SPED.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → abra a nota → <strong>✏️ Informar CFOP e
+    CST desta nota</strong> → botão <strong>✂️ Informar por item</strong> (aparece quando a nota tem mais de um
+    item). Cada linha recebe o CFOP e o CST daquele produto; linha em branco segue a nota. Em Relatórios →
+    ✏️ CFOP por nota a nota ganha o selo <strong>✂️ N item(ns)</strong>.</div>
+    <div class="alerta">⚠️ <strong>O item informado vence o CFOP/CST da nota.</strong> O campo por nota continua
+    valendo para o caso comum — use o por item só na nota mista. E vale nas quatro telas de uma vez:
+    Livro, Resumo por CFOP, SPED (as duas famílias) e Exportar SAGE. Gere o arquivo de novo depois de
+    informar.</div>
+
+    <h3>4. 🧾 <strong>SPED: os erros de "código de participante" nas entradas</strong></h3>
+    <p>Paulo gerou o SPED de uma distribuidora e o PVA devolveu <strong>493 erros de código de participante
+    nas entradas</strong>. A causa foi medida: toda nota de entrada <strong>capturada pela SEFAZ</strong> saía
+    no C100 <strong>sem o CNPJ do fornecedor</strong> e ficava fora do cadastro de participantes (0150). As
+    notas importadas pela tela não tinham o problema — por isso a PWR passou em agosto.</p>
+    <div class="onde">📍 <strong>Onde:</strong> geração do SPED Fiscal. <strong>Nada para você fazer</strong> além de
+    <strong>gerar o arquivo de novo</strong>: a correção é automática. E a prevalidação passou a acusar
+    "C100 sem COD_PART" antes de o arquivo ir ao PVA.</div>
+    <div class="alerta">⚠️ Se depois de regerar aparecer <strong>"participante sem código de município
+    (COD_MUN)"</strong>, é outra coisa: o município não foi gravado na captura. Rode <strong>♻️ Reler
+    participante dos XMLs</strong> (XMLs → 🌾 DIPAM / Produtor rural) antes de preencher à mão.</div>
+
     <h2 style="margin-top:32px">O que entrou em 10/09</h2>
 
     <h3>1. 🚫 <strong>Dá para marcar como CANCELADA a nota que o portal do município cancelou depois</strong></h3>

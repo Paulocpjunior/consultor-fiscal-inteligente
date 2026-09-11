@@ -86,31 +86,31 @@ describe('🚨 VIGÊNCIA NÃO RETROAGE — mês já entregue não muda de CFOP s
 
 describe('🚨 a PRECEDÊNCIA: a NF vence o cérebro', () => {
     it('sem parâmetro, vale a régua automática', () => {
-        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([]))).toBe('1403');
+        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([]), null)).toBe('1403');
     });
 
     it('com parâmetro, ele vence a régua', () => {
-        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]))).toBe('1407');
+        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]), null)).toBe('1407');
     });
 
     it('mas a decisão NAQUELA NF vence o parâmetro — quem corrigiu olhou a nota', () => {
         const doc = { ...nota('2026-07'), cfopEscriturado: '1949' };
-        expect(cfopDoLancamento(doc, '5405', 'entrada', ctx([param()]))).toBe('1949');
+        expect(cfopDoLancamento(doc, '5405', 'entrada', ctx([param()]), null)).toBe('1949');
     });
 
     it('e a competência anterior continua na régua, mesmo com parâmetro criado', () => {
-        expect(cfopDoLancamento(nota('2026-06'), '5405', 'entrada', ctx([param()]))).toBe('1403');
+        expect(cfopDoLancamento(nota('2026-06'), '5405', 'entrada', ctx([param()]), null)).toBe('1403');
     });
 
     it('🚨 SAÍDA não aprende — o CFOP da nota própria já é o certo', () => {
         // Aprender na saída seria reescrever o que o cliente emitiu.
-        expect(cfopDoLancamento(nota('2026-07'), '5405', 'saida', ctx([param()]))).toBe('5405');
+        expect(cfopDoLancamento(nota('2026-07'), '5405', 'saida', ctx([param()]), null)).toBe('5405');
     });
 });
 
 describe('a ORIGEM diz que veio do cérebro, e de quem', () => {
     it('nomeia o parâmetro, o escopo e a vigência', () => {
-        const o = origemDoCfopLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]));
+        const o = origemDoCfopLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]), null);
         expect(o.origem).toBe('cerebro');
         expect(o.rotulo).toMatch(/parâmetro do fornecedor \(CFOP 5405, desde 2026-07\)/);
         expect(o.por).toBe('colab@sp.com.br');
