@@ -43,7 +43,7 @@
 import * as fmt from './sped-fiscal-format.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { isResumoSchema, isResumoTipoDoc } from './gravacao-nfe-regua.js';
-import { docCancelado, ehEntradaDoEmitente } from './xml-metadata-helper.js';
+import { docCancelado, ehEntradaDoEmitente, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 /** Rótulos de tipo que NUNCA são mercadoria (bloco C). */
 const RE_NAO_MERCADORIA = /CTe|MDFe|NFSe|NFS-e/i;
@@ -181,7 +181,11 @@ export function selecionarNotasBlocoC(notas, empresaCnpj) {
         // 📖 Guia Prático 3.2.3, C100: *"As NFC-e (código 65) não devem ser
         // escrituradas nas ENTRADAS"*. Cupom é venda ao consumidor — recebê-lo
         // como documento de entrada não é operação que se escritura no bloco C.
-        if (modeloDoDoc(n) === '65' && n.direcao === 'entrada') {
+        // ⚠️ A direção sai da RÉGUA (`direcaoEfetivaDoc`), nunca do campo
+        // gravado: cupom com `tpNF=0` emitido pela empresa fica como 'saida' no
+        // banco e escapava desta exclusão, entrando no bloco C como se fosse
+        // venda. É a família de `docCancelado` e `modeloDoDoc`, na direção.
+        if (modeloDoDoc(n) === '65' && direcaoEfetivaDoc(n) === 'entrada') {
             nfceEmEntrada.push(rotuloDoDoc(n));
             continue;
         }
