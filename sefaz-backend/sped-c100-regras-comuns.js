@@ -284,6 +284,53 @@ export function conferirContador0100(linhas) {
  * na chave do registro; só o "COD_PART preenchido e fora do 0150" vale para
  * ela.
  */
+/** COD_SIT em que o C100 sai sem COD_PART (Exceção 1: 02, 03, 04 e 05). */
+export const C100_SEM_PARTICIPANTE = new Set(['02', '03', '04', '05']);
+
+/**
+ * C100 cancelado/denegado só com os campos que a Exceção 1 permite.
+ *
+ * 📖 FONTE — PVA (ELS · 08/2026, 11/09, 19×): *"Para documento fiscal
+ * cancelado (código da situação = 02 ou 03) ou NF-e denegada (04), somente
+ * informar os campos código da situação, indicador de operação, código do
+ * modelo e a chave"*; Guia 3.2.3, C100, Exceção 1: *"preencher somente os
+ * campos REG, IND_OPER, IND_EMIT, COD_MOD, COD_SIT, SER, NUM_DOC e CHV_NF-e …
+ * Demais campos deverão ser apresentados com conteúdo VAZIO"*.
+ *
+ * @param {string[]} linhas
+ * @param {{permitidas?: number[]}} [opts] posições (REG = 1) que PODEM vir
+ *   preenchidas — o padrão é o do EFD ICMS/IPI. Inutilizada (05) leva tudo
+ *   menos a chave e fica FORA desta conferência.
+ */
+export function conferirCanceladaSoCampos(linhas, opts = {}) {
+    const permitidas = new Set(opts.permitidas || [1, 2, 3, 5, 6, 7, 8, 9]);
+    const erros = [];
+    for (const l of (linhas || []).map(String)) {
+        if (registroDe(l) !== 'C100') continue;
+        const f = campos(l);
+        const codSit = String(f[6] || '').trim();
+        if (!['02', '03', '04'].includes(codSit)) continue;
+        const preenchidas = [];
+        for (let pos = 1; pos < f.length - 1; pos += 1) {
+            if (permitidas.has(pos)) continue;
+            if (String(f[pos] ?? '').trim() !== '') preenchidas.push(pos === 4 ? '4 - COD_PART' : String(pos));
+        }
+        if (!preenchidas.length) continue;
+        erros.push({
+            regra: 'c100-cancelada-com-campos', registro: 'C100', campo: preenchidas.join(', '),
+            valor: '', esperado: 'em branco', linha: l,
+            mensagem: `A nota nº ${f[8] || '?'} está ${codSit === '04' ? 'DENEGADA' : 'CANCELADA'} (COD_SIT ${codSit}) `
+                + `e saiu com campo(s) preenchido(s) que o leiaute manda deixar VAZIOS: ${preenchidas.join(', ')}.`,
+            acao: 'Defeito de GERAÇÃO — reporte com o print. Cancelada leva só IND_OPER, IND_EMIT, COD_MOD, '
+                + 'COD_SIT, SER, NUM_DOC e a chave; sem COD_PART e sem filhos.',
+            fonte: 'PVA: "Para documento fiscal cancelado (código da situação = 02 ou 03) ou NF-e denegada (04), '
+                + 'somente informar os campos código da situação, indicador de operação, código do modelo e a '
+                + 'chave" (ELS · 08/2026, 11/09, 19×); Guia 3.2.3, C100, Exceção 1.',
+        });
+    }
+    return erros;
+}
+
 export function conferirCodPartDoC100(linhas) {
     const erros = [];
     const lista = (linhas || []).map(String);
@@ -296,8 +343,13 @@ export function conferirCodPartDoC100(linhas) {
         const indEmit = String(f[3] || '').trim();
         const codPart = String(f[4] || '').trim();
         const codMod = String(f[5] || '').trim();
+        const codSit = String(f[6] || '').trim();
         const num = f[8] || '?';
         if (codMod === '65') continue;
+        // 🚨 CANCELADA/DENEGADA/INUTILIZADA NÃO LEVA COD_PART — Exceção 1 do
+        // C100 nas DUAS famílias. Cobrá-lo aqui mandaria preencher o campo que
+        // o PVA recusa preenchido (ELS · 08/2026, 11/09, 19 recusas).
+        if (C100_SEM_PARTICIPANTE.has(codSit)) continue;
         if (!codPart) {
             if (indEmit !== '1') continue;
             erros.push({

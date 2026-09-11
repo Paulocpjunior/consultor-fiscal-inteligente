@@ -28,11 +28,15 @@ zero vulnerabilidade em 412 dependências de produção.
   saídas da KROYA lançadas pelo ✍️ sem chave em agosto viram duplicata quando o
   XML entrar: importar e depois 🚫 Tirar do livro cada digitada. Competência já
   entregue: regerar.
-- **SPED da distribuidora: regerar e reconferir no PVA.** Os 493 erros de
-  código de participante nas entradas eram do gerador (C100 da nota capturada
-  pela SEFAZ saía sem o CNPJ do fornecedor). Corrigido em 11/09; informar os
-  itens das notas mistas (✂️ por item), regerar e validar. Se sobrar COD_MUN
-  no 0150, rodar ♻️ Reler participante dos XMLs.
+- **SPED da distribuidora (ELS · 08/2026): corrigir a IE no cadastro, regerar
+  e reconferir no PVA.** A segunda rodada trouxe 37 erros e três eram do
+  gerador (cancelada com COD_PART, item com duas unidades sem 0220, ICMS de
+  entrada creditado numa optante) — corrigidos em 11/09. O quarto é
+  **CADASTRO**: a IE está com **11 dígitos** (a de SP tem 12) em Empresas →
+  Dados Fiscais; o app não completa o número. Sobraram no print *"Campo
+  obrigatório (3)"* e *"domiciliado no Brasil (1)"* sem o registro nomeado —
+  se voltarem depois de regerar, mandar o Relatório de Erros do PVA (o
+  arquivo, não o print).
 
 Nenhum é trabalho de código: são leituras de painel, cliques em produção ou
 acessos que o desenvolvimento não tem.
@@ -85,6 +89,14 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
   e E200/E210 de ST. Gerados e conferidos internamente; prova só vem do recibo.
 
 ## ✅ Fechado em 11/09
+
+- **SPED da ELS (Simples): cancelada, unidade e ICMS de entrada** — C100/D100
+  cancelado ou denegado sai só com os campos da Exceção 1 (sem COD_PART, sem
+  filhos) e não sustenta 0150/0200; código de item que circula com duas
+  unidades vira um 0200 por código+unidade (`codItemNoArquivo`, nas duas
+  famílias); a entrada do optante sai CST x90 com base/ICMS zero pela MESMA
+  régua do Livro (`entradaGeraCreditoIcms`), e o CST informado vence; a IE do
+  0000 sai só com dígitos. Regras R42-R45 na prevalidação.
 
 - **Bloco B do DF no EFD ICMS/IPI** — `B001|0` + `B470` em quem é de
   Brasília (zerado quando não houve prestação, como o aceito do e-Fiscal);

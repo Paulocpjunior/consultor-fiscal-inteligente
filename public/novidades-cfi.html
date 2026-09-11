@@ -131,6 +131,56 @@
     (COD_MUN)"</strong>, é outra coisa: o município não foi gravado na captura. Rode <strong>♻️ Reler
     participante dos XMLs</strong> (XMLs → 🌾 DIPAM / Produtor rural) antes de preencher à mão.</div>
 
+    <h3>5. 🔁 <strong>A mesma nota em DUAS empresas da carteira: agora cada uma fica com o seu documento</strong></h3>
+    <p>Quando uma cliente vende para OUTRA cliente (LEGACY → Federação, KROYA → GOLDLOG), a mesma NF-e é
+    <strong>saída de uma e entrada da outra</strong> — dois livros. Até hoje o CFI só guardava <strong>um dono
+    por chave</strong>: a Federação capturava a entrada pela SEFAZ e, ao importar as saídas da LEGACY, a tela
+    dizia <em>"já está gravado em OUTRA empresa"</em>. O contorno era lançar a nota à mão, sem chave, uma a uma.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → <strong>Importar</strong> →
+    Manual &amp; Cofre. Importe os XMLs normalmente: a linha do resultado diz
+    <strong>"importada como o OUTRO LADO"</strong> e nomeia a empresa que já tinha a nota. Vale também para
+    a captura automática (SEFAZ, cofre, autXML) e para o SharePoint — nada para configurar.</div>
+    <div class="alerta">⚠️ <strong>Cancelamento, carta de correção e manifestação chegam nos DOIS lados</strong>
+    — o evento é da nota, não de uma empresa. E <strong>se você já lançou o lado que faltava pelo ✍️ sem
+    chave</strong> (KROYA × GOLDLOG, em agosto), importe os XMLs e depois <strong>tire do livro a nota
+    digitada</strong> (🚫 no detalhe dela) — senão a mesma venda conta duas vezes.</div>
+
+    <h3>6. 🏛️ <strong>SPED ICMS/IPI das empresas de BRASÍLIA: o bloco B (ISS do DF) saía vazio e o PVA recusava</strong></h3>
+    <p>O PVA respondia <em>"Registro filho obrigatório não foi informado — B470"</em>. No Distrito Federal o
+    bloco B é obrigatório com o <strong>B470</strong> (apuração do ISS), mesmo quando a empresa não prestou
+    serviço no mês — aí ele sai zerado, como o arquivo antigo do e-Fiscal já fazia. Fora do DF nada muda.
+    O mesmo recibo acusava um <strong>item de serviço órfão no 0200</strong>: item de NFS-e não entra mais
+    no cadastro de itens do EFD ICMS/IPI.</p>
+    <div class="onde">📍 <strong>Onde:</strong> card <strong>SPED Fiscal</strong> → gerar de novo. A prevalidação
+    (a caixa de avisos antes do arquivo) passou a acusar as duas coisas ANTES do PVA.</div>
+    <div class="alerta">⚠️ <strong>Regere o SPED de agosto de toda empresa de Brasília</strong> que já foi gerado
+    pelo CFI — todas saíam com o bloco B errado. E leia a caixa de avisos antes de transmitir: o item órfão
+    já aparecia lá.</div>
+
+    <h3>7. ✍️ <strong>A retenção informada à mão não "some" mais ao reabrir a nota</strong></h3>
+    <p>Ao clicar em <em>Informar retenção</em> numa nota que já tinha retenção informada, os campos abriam
+    vazios e o carimbo saía de vista — parecia que a retenção da outra nota tinha sumido. Ela estava gravada
+    (o R-4020 do Contábil já a trazia). Agora o botão diz <strong>"Editar a retenção informada"</strong>, os
+    campos abrem preenchidos com o que foi gravado e o carimbo (quem informou, quando, motivo) fica na tela.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → abrir a nota → bloco
+    <strong>Retenção da nota</strong>.</div>
+
+    <h3>8. 🧾 <strong>SPED de empresa do Simples: cancelada, unidade do item e ICMS de entrada — as três recusas do PVA</strong></h3>
+    <p>Paulo gerou o SPED de uma distribuidora do Simples e o PVA devolveu três coisas. <strong>(a)</strong> a nota
+    <strong>cancelada</strong> saía com o código do participante — e cancelada leva só situação, operação,
+    modelo e chave; <strong>(b)</strong> o mesmo <strong>código de produto</strong> aparecia em KG numa nota e
+    em CX noutra (o código é do FORNECEDOR, e dois fornecedores usam o mesmo número) — o PVA cobrava um
+    "fator de conversão" que o XML não traz; <strong>(c)</strong> o livro do PVA mostrava <strong>ICMS nas
+    entradas</strong> enquanto o Livro de Entradas do CFI mostrava 0,00 — optante do Simples não se credita,
+    e o SPED copiava o destaque do fornecedor.</p>
+    <div class="onde">📍 <strong>Onde:</strong> card <strong>SPED Fiscal</strong> → gerar de novo. A cancelada sai
+    limpa; o item com duas unidades vira dois cadastros (ex.: <code>1-KG</code> e <code>1-CX</code>); e a
+    entrada do optante sai com CST x90 e base/ICMS zero — <strong>igual ao Livro do CFI</strong>. Se quiser
+    creditar um item de propósito, informe o CST na nota (✏️) e ele vence. A caixa de avisos diz o que mudou.</div>
+    <div class="alerta">⚠️ <strong>"Inscrição Estadual inválida"</strong> no PVA é CADASTRO: a IE dessa empresa está
+    com <strong>11 dígitos</strong> em Empresas → Dados Fiscais, e a de SP tem 12. O app tira a pontuação, mas
+    <strong>não completa</strong> o número — corrija lá e regere. A caixa de avisos passou a dizer isso antes do PVA.</div>
+
     <h2 style="margin-top:32px">O que entrou em 10/09</h2>
 
     <h3>1. 🚫 <strong>Dá para marcar como CANCELADA a nota que o portal do município cancelou depois</strong></h3>
@@ -385,20 +435,6 @@
 </section>
 
 <section>
-        <h3>5. 🔁 <strong>A mesma nota em DUAS empresas da carteira: agora cada uma fica com o seu documento</strong></h3>
-    <p>Quando uma cliente vende para OUTRA cliente (LEGACY → Federação, KROYA → GOLDLOG), a mesma NF-e é
-    <strong>saída de uma e entrada da outra</strong> — dois livros. Até hoje o CFI só guardava <strong>um dono
-    por chave</strong>: a Federação capturava a entrada pela SEFAZ e, ao importar as saídas da LEGACY, a tela
-    dizia <em>"já está gravado em OUTRA empresa"</em>. O contorno era lançar a nota à mão, sem chave, uma a uma.</p>
-    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → <strong>Importar</strong> →
-    Manual &amp; Cofre. Importe os XMLs normalmente: a linha do resultado diz
-    <strong>"importada como o OUTRO LADO"</strong> e nomeia a empresa que já tinha a nota. Vale também para
-    a captura automática (SEFAZ, cofre, autXML) e para o SharePoint — nada para configurar.</div>
-    <div class="alerta">⚠️ <strong>Cancelamento, carta de correção e manifestação chegam nos DOIS lados</strong>
-    — o evento é da nota, não de uma empresa. E <strong>se você já lançou o lado que faltava pelo ✍️ sem
-    chave</strong> (KROYA × GOLDLOG, em agosto), importe os XMLs e depois <strong>tire do livro a nota
-    digitada</strong> (🚫 no detalhe dela) — senão a mesma venda conta duas vezes.</div>
-
 <h2>O que mudou em 07/09</h2>
 
     <h3>1. 🧠 <strong>O CFOP que você ensinou para um fornecedor agora vale em TODO lugar</strong></h3>
@@ -450,26 +486,6 @@
 </section>
 
 <section>
-    <h3>6. 🏛️ <strong>SPED ICMS/IPI das empresas de BRASÍLIA: o bloco B (ISS do DF) saía vazio e o PVA recusava</strong></h3>
-    <p>O PVA respondia <em>"Registro filho obrigatório não foi informado — B470"</em>. No Distrito Federal o
-    bloco B é obrigatório com o <strong>B470</strong> (apuração do ISS), mesmo quando a empresa não prestou
-    serviço no mês — aí ele sai zerado, como o arquivo antigo do e-Fiscal já fazia. Fora do DF nada muda.
-    O mesmo recibo acusava um <strong>item de serviço órfão no 0200</strong>: item de NFS-e não entra mais
-    no cadastro de itens do EFD ICMS/IPI.</p>
-    <div class="onde">📍 <strong>Onde:</strong> card <strong>SPED Fiscal</strong> → gerar de novo. A prevalidação
-    (a caixa de avisos antes do arquivo) passou a acusar as duas coisas ANTES do PVA.</div>
-    <div class="alerta">⚠️ <strong>Regere o SPED de agosto de toda empresa de Brasília</strong> que já foi gerado
-    pelo CFI — todas saíam com o bloco B errado. E leia a caixa de avisos antes de transmitir: o item órfão
-    já aparecia lá.</div>
-
-    <h3>7. ✍️ <strong>A retenção informada à mão não "some" mais ao reabrir a nota</strong></h3>
-    <p>Ao clicar em <em>Informar retenção</em> numa nota que já tinha retenção informada, os campos abriam
-    vazios e o carimbo saía de vista — parecia que a retenção da outra nota tinha sumido. Ela estava gravada
-    (o R-4020 do Contábil já a trazia). Agora o botão diz <strong>"Editar a retenção informada"</strong>, os
-    campos abrem preenchidos com o que foi gravado e o carimbo (quem informou, quando, motivo) fica na tela.</p>
-    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → abrir a nota → bloco
-    <strong>Retenção da nota</strong>.</div>
-
     <h2>O que mudou em 06/09</h2>
 
     <h3>1. 🤖 <strong>O motor de IA passou para a família Gemini 3.8 — em todos os apps</strong></h3>

@@ -112,7 +112,15 @@ function buildD100(notaCrua, dados) {
     // C100 e o coletor do 0150 usam, senão o D100 aponta para quem o 0150 não
     // cadastrou. Sem participante legível o campo sai VAZIO, nunca inventado.
     const participante = participanteDoDocumento(nota, dados.empresa?.cnpj);
-    const codPart = String(participante?.cnpjCpf || participante?.cnpj || '').replace(/\D/g, '');
+    // 🚨 CANCELADA/DENEGADA SAI QUASE VAZIA — Guia 3.2.3, D100, Exceção 1:
+    // *"preencher somente os campos REG, IND_OPER, IND_EMIT, COD_MOD, COD_SIT,
+    // SER, SUB, NUM_DOC e CHV_CTE. Demais campos deverão ser apresentados com
+    // conteúdo VAZIO. Não deverão ser informados registros filhos."* É a mesma
+    // recusa que o PVA deu 19× no C100 da ELS (11/09); o D100 tinha o defeito
+    // inteiro, esperando o primeiro CT-e cancelado.
+    const ehCancelada = ['02', '03', '04'].includes(codSit);
+    const soCancelavel = (valor) => (ehCancelada ? '' : valor);
+    const codPart = ehCancelada ? '' : String(participante?.cnpjCpf || participante?.cnpj || '').replace(/\D/g, '');
 
     // Tipo CTe: campo tpCTe do XML; default 0 (normal)
     const tpCte = String(nota.tpCTe || '0').slice(0, 1);
@@ -130,20 +138,20 @@ function buildD100(notaCrua, dados) {
         '',  // SUB
         fmt.sanitizeString(String(nota.numero || ''), 9),
         fmt.sanitizeString(nota.chave || nota.chaveAcesso || '', 44),
-        fmt.formatDate(nota.dataEmissao || nota.dhEmi),
-        fmt.formatDate(nota.dataEntrada || nota.dataEmissao || nota.dhEmi),
-        tpCte,
-        fmt.sanitizeString(nota.chaveCTeRef || '', 44),
+        soCancelavel(fmt.formatDate(nota.dataEmissao || nota.dhEmi)),
+        soCancelavel(fmt.formatDate(nota.dataEntrada || nota.dataEmissao || nota.dhEmi)),
+        soCancelavel(tpCte),
+        soCancelavel(fmt.sanitizeString(nota.chaveCTeRef || '', 44)),
         // VL_DOC pela régua do VALOR: o CT-e capturado grava `valorTotal` na
         // raiz (o XML traz <vTPrest>), e `t.vNF || t.valor` não existe nele —
         // era o mesmo VL_DOC 0,00 do bloco D do EFD-Contribuições.
-        fmt.formatValue(valorDoDoc(nota), 2),
-        fmt.formatValue(t.vDesc || 0, 2),
-        '9',  // IND_FRT default sem cobranca (CTe nao tem o conceito de frete sobre frete)
-        fmt.formatValue(t.vTPrest || t.vServ || valorDoDoc(nota), 2),
-        fmt.formatValue(t.vBC || 0, 2),
-        fmt.formatValue(t.vICMS || 0, 2),
-        fmt.formatValue(t.vNT || 0, 2),
+        soCancelavel(fmt.formatValue(valorDoDoc(nota), 2)),
+        soCancelavel(fmt.formatValue(t.vDesc || 0, 2)),
+        soCancelavel('9'),  // IND_FRT default sem cobranca (CTe nao tem o conceito de frete sobre frete)
+        soCancelavel(fmt.formatValue(t.vTPrest || t.vServ || valorDoDoc(nota), 2)),
+        soCancelavel(fmt.formatValue(t.vBC || 0, 2)),
+        soCancelavel(fmt.formatValue(t.vICMS || 0, 2)),
+        soCancelavel(fmt.formatValue(t.vNT || 0, 2)),
         '',  // COD_INF
         '',  // COD_CTA
     ]);
@@ -222,8 +230,11 @@ export function buildBlocoD(dados) {
                 continue;
             }
             linhas.push(buildD100(nota, dados));
-            // D190 pra cada CTe — agrupamento detalhado pode vir em fase futura
-            linhas.push(buildD190PorNota(nota));
+            // D190 pra cada CTe — agrupamento detalhado pode vir em fase futura.
+            // Cancelado/denegado não leva filho (D100, Exceção 1).
+            if (!docCancelado(nota) && !['denegado', 'inutilizado'].includes(String(nota.status || ''))) {
+                linhas.push(buildD190PorNota(nota));
+            }
         } catch (e) {
             console.error(`[blocoD] erro ao gerar registros do CTe ${nota.chave || nota.numero}:`, e.message);
         }

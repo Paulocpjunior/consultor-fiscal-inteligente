@@ -48,8 +48,9 @@ import { conferirContagemDeCamposFiscal, conferirTamanhoDeCamposFiscal } from '.
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, conferirCodPartDoC100, POS_DT_FIN_ICMS_IPI,
-    conferirContador0100,
+    conferirContador0100, conferirCanceladaSoCampos,
 } from './sped-c100-regras-comuns.js';
+import { motivoIeInvalida } from './sped-fiscal-format.js';
 
 const campos = (linha) => String(linha || '').split('|');
 const registroDe = (linha) => campos(linha)[1] || '';
@@ -105,6 +106,10 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // 11/09: 493 recusas numa distribuidora — toda entrada capturada pela
     // SEFAZ saía sem o participante (forma achatada). A régua mora no comum.
     for (const e of conferirCodPartDoC100(lista)) add(erros, e);
+    // ── R42. Cancelada/denegada só com os campos da Exceção 1 ───────────────
+    // PVA (ELS · 08/2026, 11/09, 19×) — o COD_PART da cancelada, que o
+    // gerador preenchia. A régua mora no comum (as duas famílias têm a exceção).
+    for (const e of conferirCanceladaSoCampos(lista)) add(erros, e);
 
     // ── R2. NFC-e não informa participante nem tributos no C100 ─────────────
     // PVA (mesmo arquivo, 86 ocorrências).
@@ -209,7 +214,9 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
             const reg = registroDe(l);
             if (reg === 'C100') {
                 fecha();
-                const cancelada = ['02', '03'].includes(campos(l)[6] || '');
+                // 02/03 canceladas e 04 denegada — Exceção 1 (a denegada
+                // faltava aqui e no gerador até 11/09).
+                const cancelada = ['02', '03', '04'].includes(campos(l)[6] || '');
                 atual = cancelada ? null : l;
                 temFilho = false;
             } else if (reg === 'C190' && atual) {
@@ -1514,6 +1521,117 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
                     + 'informar apenas os registros B001 e B990".',
             });
         }
+    })();
+
+    // ── R43. Unidade do C170 ≠ unidade do 0200 exige o 0220 ─────────────────
+    //
+    // 📖 FONTE — PVA (ELS · 08/2026, 11/09, 13×): *"Se o campo de Unidade deste
+    // registro for diferente do campo Unidade do registro 0200, é obrigatório
+    // que o registro 0200 possua um filho 0220"*; Guia 3.2.3, C170 campo 06:
+    // *"o valor informado deve existir no registro 0220 para o código do item
+    // … exceto se o campo 07 - TIPO_ITEM do registro 0200 for igual a 07
+    // (Material de Uso e Consumo)"*.
+    //
+    // A causa é o `cProd` do FORNECEDOR colidindo entre fornecedores com
+    // unidades diferentes; o gerador passou a cadastrar um 0200 por
+    // código+unidade (`codItemNoArquivo`). Esta regra pega a próxima forma.
+    (() => {
+        const cadastro = new Map();   // COD_ITEM → { unid, tipo, conv: Set }
+        let pai = null;
+        for (const l of lista) {
+            const reg = registroDe(l);
+            if (reg === '0200') {
+                const f = campos(l);
+                pai = { unid: String(f[6] || '').trim(), tipo: String(f[7] || '').trim(), conv: new Set() };
+                cadastro.set(String(f[2] || '').trim(), pai);
+            } else if (reg === '0220' && pai) {
+                pai.conv.add(String(campos(l)[2] || '').trim());
+            } else if (reg.startsWith('0') && reg !== '0205' && reg !== '0206' && reg !== '0210' && reg !== '0221') {
+                pai = null;
+            }
+        }
+        for (const l of c170s) {
+            const f = campos(l);
+            const cod = String(f[3] || '').trim();
+            const unid = String(f[6] || '').trim();
+            const c = cadastro.get(cod);
+            if (!c || !unid || !c.unid || c.unid === unid || c.tipo === '07' || c.conv.has(unid)) continue;
+            add(erros, {
+                regra: 'c170-unid-x-0200', registro: 'C170', campo: '6 - UNID', linha: l,
+                valor: unid, esperado: `${c.unid} (a unidade do 0200 de ${cod}) ou um 0220 para ${unid}`,
+                mensagem: `O item ${cod} sai no C170 em ${unid} e o 0200 o cadastra em ${c.unid} — sem 0220 o PVA recusa.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O código do produto é do FORNECEDOR e dois '
+                    + 'fornecedores podem usar o mesmo número com unidades diferentes: o gerador cadastra um 0200 '
+                    + 'por código+unidade (ex.: 1-KG e 1-CX). O fator de conversão do 0220 não está no XML e o app '
+                    + 'não o inventa.',
+                fonte: 'PVA: "Se o campo de Unidade deste registro for diferente do campo Unidade do registro 0200, '
+                    + 'é obrigatório que o registro 0200 possua um filho 0220" (ELS · 08/2026, 11/09, 13×); Guia '
+                    + '3.2.3, C170 campo 06.',
+            });
+        }
+    })();
+
+    // ── R44. Optante do Simples não credita ICMS na ENTRADA ─────────────────
+    //
+    // 📖 FONTE — PVA (ELS · Simples · 08/2026, 11/09, 8 advertências):
+    // *"Contribuintes optantes pelo Simples Nacional devem desconsiderar … Se
+    // IND_OPER do C100 = 0 e os dois últimos caracteres do CST_ICMS…"*; Guia
+    // 3.2.3, C170 campo 10: *"optantes pelo Simples Nacional … na escrituração
+    // dos documentos fiscais de entrada, informar o CST_ICMS sob o enfoque do
+    // declarante"*; LC 123/2006, art. 23. O regime vem do CONTEXTO (a rota o
+    // passa) — o arquivo não o carrega, e sem ele a regra fica muda: ausência
+    // não é prova.
+    if (String(ctx.regime || '').toUpperCase() === 'SIMPLES') {
+        let indOper = null;
+        for (const l of lista) {
+            const reg = registroDe(l);
+            if (reg === 'C100') { indOper = String(campos(l)[2] || '').trim(); continue; }
+            if (reg !== 'C170' || indOper !== '0') continue;
+            const f = campos(l);
+            const trib = String(f[10] || '').trim().slice(-2);
+            const vlIcms = num(f[15]);
+            if (!['00', '10', '20', '70'].includes(trib) || !(vlIcms > 0)) continue;
+            add(erros, {
+                regra: 'optante-credito-icms-entrada', registro: 'C170', campo: '10 - CST_ICMS, 15 - VL_ICMS', linha: l,
+                valor: `${f[10]} · ${f[15]}`, esperado: 'CST x90 com base e ICMS zero, salvo CST informado na nota',
+                mensagem: `A entrada do item ${f[3] || '?'} saiu com CST ${f[10]} e ICMS ${f[15]} — a empresa é optante do `
+                    + 'Simples e não se credita: o livro do PVA mostraria ICMS que o Livro do CFI não mostra.',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O C170/C190 lê o crédito pela mesma régua do '
+                    + 'Livro de Entradas (CST sob o enfoque do declarante). Para creditar um item de propósito, '
+                    + 'informe o CST na nota (✏️).',
+                fonte: 'PVA: "Contribuintes optantes pelo Simples Nacional devem desconsiderar … Se IND_OPER do '
+                    + 'C100 = 0 e os dois últimos caracteres do CST_ICMS…" (ELS · 08/2026, 11/09, 8×); Guia 3.2.3, '
+                    + 'C170 campo 10; LC 123/2006, art. 23.',
+            });
+        }
+    }
+
+    // ── R45. IE do 0000 no formato que o PVA confere ────────────────────────
+    //
+    // 📖 FONTE — PVA (ELS · 08/2026, 11/09): *"Inscrição Estadual inválida"*;
+    // Guia 3.2.3, 0000 campo 10: *"será conferido o dígito verificador (DV) da
+    // Inscrição Estadual informada, considerando-se a UF do informante"*. O
+    // app não calcula DV de tabela nenhuma de memória: acusa o que se PROVA —
+    // caractere que não é dígito, e comprimento errado onde ele é conhecido.
+    (() => {
+        const r0000 = doReg('0000')[0];
+        if (!r0000) return;
+        const f = campos(r0000);
+        const uf = String(f[9] || '').trim().toUpperCase();
+        const ie = String(f[10] || '').trim();
+        if (!ie) return;
+        const motivo = /\D/.test(ie)
+            ? `a IE "${ie}" saiu com caractere que não é dígito`
+            : motivoIeInvalida(uf, ie);
+        if (!motivo) return;
+        add(erros, {
+            regra: '0000-ie-invalida', registro: '0000', campo: '10 - IE', linha: r0000,
+            valor: ie, esperado: uf === 'SP' ? '12 dígitos, sem pontuação' : 'só dígitos',
+            mensagem: `${motivo} — o PVA recusa com "Inscrição Estadual inválida".`,
+            acao: 'Corrija a IE em Empresas → Dados Fiscais. O app não completa nem corta o número: IE '
+                + 'truncada é a inscrição de outro contribuinte.',
+            fonte: 'PVA: "Inscrição Estadual inválida" (ELS · 08/2026, 11/09); Guia 3.2.3, 0000 campo 10.',
+        });
     })();
 
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────

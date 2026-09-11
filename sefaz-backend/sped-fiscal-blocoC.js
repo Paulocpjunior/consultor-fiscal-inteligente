@@ -26,15 +26,100 @@ import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
 // campo cru `n.modelo`, que o importer principal não grava.
 import {
     selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento, serieDoDocumento,
-    codItemDoItem, unidadeDoItem,
+    codItemNoArquivo, unidadeDoItem,
 } from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+// 🚨 O CRÉDITO DE ICMS DA ENTRADA É DE QUEM ESCRITURA (11/09, ELS · Simples):
+// o C170/C190 copiavam o destaque do FORNECEDOR — o Livro do CFI já lia esta
+// régua desde 09/09 e o SPED não. Ver `creditoIcmsDoItem`.
+import { entradaGeraCreditoIcms, colunaDoCstInformado } from './credito-icms-entrada.js';
+import { regimeDaEmpresa } from './regime-tributario.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
 // leem daqui; eram três leituras, e as três discordavam do manual.
 import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O SPED CREDITAVA ICMS DE OPTANTE DO SIMPLES — e o Livro do CFI, não
+//
+// 11/09, Paulo, DISTRIBUIDORA ELS (Simples) · 08/2026, com os dois prints lado
+// a lado: *"no livro de entrada está puxando algumas notas com ICMS, mas no
+// livro do consultor está certinho"*. O Livro de Entradas do CFI dizia Base
+// ICMS/ICMS **0,00** (a régua `entradaGeraCreditoIcms`, de 09/09); o livro
+// que o PVA imprime do arquivo trazia o ICMS destacado pelo FORNECEDOR — e o
+// próprio PVA avisou, 8×: *"Contribuintes optantes pelo Simples Nacional devem
+// desconsiderar … Se IND_OPER do C100 = 0 e os dois últimos caracteres do
+// CST_ICMS…"*.
+//
+// A CAUSA É A DE SEMPRE: o documento é do fornecedor. `item.vBC`/`item.vICMS`
+// são o destaque da operação de quem VENDEU; o C170 e o C190 os copiavam. Em
+// 09/09 ficou escrito que o SPED Fiscal tinha alocação PRÓPRIA e não passou
+// pela régua *"porque optante do Simples em SP não entrega EFD ICMS/IPI, então
+// não havia caso"*. O caso chegou.
+//
+// 📖 Guia 3.2.3 (C170, campo 10): *"Para os estabelecimentos informantes da
+// EFD-ICMS/IPI, optantes pelo Simples Nacional e que recolham o ICMS por este
+// regime … na escrituração dos documentos fiscais de entrada, informar o
+// CST_ICMS sob o ENFOQUE DO DECLARANTE."* E LC 123/2006, art. 23: o optante
+// não se credita.
+//
+// A RÉGUA — a MESMA do Livro, por PRECEDÊNCIA: o que a PESSOA informou (CST
+// por item/nota) > o REGIME de quem escritura > o destaque do documento.
+//   · CST informado com crédito (00/10/20/70): mantém base e ICMS — "conferi
+//     e credita" é decisão de quem olhou a nota (regra de 09/09).
+//   · CST informado isento/sem crédito: base e ICMS ZERO.
+//   · Nada informado e regime SEM crédito (Simples): a tributação vira **90**
+//     (Outras — a coluna que o Livro já usa) com a ORIGEM preservada, e base,
+//     alíquota e ICMS saem ZERO. Isento/ST (40/41/50/60/…) NÃO vira 90: cada
+//     um declara um fato que o 90 apagaria — a régua de 09/09.
+//   · Regime desconhecido ou Lucro: nada muda (ausência não é prova).
+//
+// ⚠️ SÓ A ENTRADA. Na saída o destaque é DÉBITO da própria empresa — outro
+// fato. E o ICMS-ST (vBCST/vICMSST) continua no registro: ele descreve o
+// imposto RETIDO, não um crédito.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** O regime de quem escritura, no vocabulário de `regime-tributario.js`. */
+function regimeDoArquivo(dados) {
+    if (dados?.regimeEscrituracao) return String(dados.regimeEscrituracao);
+    const empresa = dados?.empresa;
+    if (!empresa) return '';
+    const colecao = empresa.colecao
+        || (empresa._regime === 'simples' ? 'simples_empresas' : (empresa._regime === 'lucro' ? 'lucro_empresas' : ''));
+    const r = regimeDaEmpresa({ ...empresa, colecao }).regime;
+    return r === 'INDEFINIDO' ? '' : r;
+}
+
+/**
+ * "Este item de ENTRADA credita ICMS para quem escritura?"
+ * @returns {{credita: boolean, por: 'informado'|'regime'|'documento'}}
+ */
+function creditoIcmsDoItem(item, nota) {
+    const direcao = direcaoEfetivaDoc(nota);
+    if (direcao !== 'entrada') return { credita: true, por: 'documento' };
+    const coluna = colunaDoCstInformado(cstInformadoDoItem(nota, item));
+    if (coluna === 'tributada') return { credita: true, por: 'informado' };
+    if (coluna === 'isentas' || coluna === 'outras') return { credita: false, por: 'informado' };
+    const r = entradaGeraCreditoIcms({ regime: regimeDoArquivo(nota?._dados), direcao });
+    return { credita: r.credita, por: r.credita ? 'documento' : 'regime' };
+}
+
+/**
+ * Base, alíquota e ICMS do item COMO VÃO PARA O ARQUIVO — C170, C190 e a soma
+ * do C100 leem daqui, um dono só.
+ */
+function icmsDoItemNoArquivo(item, nota) {
+    const bruto = {
+        vBC: parseFloat(item?.vBC || 0),
+        vICMS: parseFloat(item?.vICMS || 0),
+        aliq: item?.aliqIcms || (item?.vICMS && item?.vBC ? (item.vICMS / item.vBC * 100) : 0),
+    };
+    const c = creditoIcmsDoItem(item, nota);
+    if (c.credita) return { ...bruto, semCredito: false, por: c.por };
+    return { vBC: 0, vICMS: 0, aliq: 0, semCredito: true, por: c.por };
+}
 
 /**
  * Soma os campos fiscais dos itens da nota.
@@ -46,17 +131,22 @@ import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 function somarTotaisDosItens(nota) {
     let vProd = 0, vBC = 0, vICMS = 0, vBCST = 0, vICMSST = 0;
     let vIPI = 0, vPIS = 0, vCOFINS = 0;
+    let semCredito = false;
     for (const item of (nota && nota.itens) || []) {
+        // Base e ICMS pelo MESMO dono do C170/C190 — a entrada sem crédito
+        // sai zero nos três, senão o C100 desmentiria os próprios filhos.
+        const icms = icmsDoItemNoArquivo(item, nota);
+        if (icms.semCredito) semCredito = true;
         vProd += parseFloat(item.vProd || item.valor || 0);
-        vBC += parseFloat(item.vBC || 0);
-        vICMS += parseFloat(item.vICMS || 0);
+        vBC += icms.vBC;
+        vICMS += icms.vICMS;
         vBCST += parseFloat(item.vBCST || 0);
         vICMSST += parseFloat(item.vICMSST || 0);
         vIPI += parseFloat(item.vIPI || 0);
         vPIS += parseFloat(item.vPIS || 0);
         vCOFINS += parseFloat(item.vCOFINS || 0);
     }
-    return { vProd, vBC, vICMS, vBCST, vICMSST, vIPI, vPIS, vCOFINS };
+    return { vProd, vBC, vICMS, vBCST, vICMSST, vIPI, vPIS, vCOFINS, semCredito };
 }
 
 /**
@@ -90,7 +180,17 @@ function cstDoItemNoArquivo(item, cfopLancado, nota) {
     // ✂️ POR ITEM vence POR NOTA (11/09, Sandra): a precedência mora no dono.
     const r = cstDoLancamento(cru, cfopLancado, cstInformadoDoItem(nota, item));
     const escolhido = r.cst || cru;
-    return escolhido.length === 2 ? '0' + escolhido : String(escolhido).padStart(3, '0').slice(-3);
+    const cst3 = escolhido.length === 2 ? '0' + escolhido : String(escolhido).padStart(3, '0').slice(-3);
+    // 🚨 CST SOB O ENFOQUE DO DECLARANTE (Guia 3.2.3, C170 campo 10): quando o
+    // REGIME tira o crédito e ninguém informou CST, a tributação com crédito
+    // vira 90 — só ela; isento/ST fica, porque declara outro fato.
+    const c = creditoIcmsDoItem(item, nota);
+    // Quem diz se a tributação AFIRMA crédito é o dono (`colunaDoCstInformado`
+    // → 'tributada'), nunca uma segunda lista aqui.
+    if (!c.credita && c.por === 'regime' && colunaDoCstInformado(cst3.slice(-2)) === 'tributada') {
+        return `${cst3[0]}90`;
+    }
+    return cst3;
 }
 
 /**
@@ -150,6 +250,33 @@ export function convertCfopParaEntrada(rawCfop, direcao, dados, doc, item) {
 }
 
 /**
+ * Quantas notas/itens de entrada saíram sem crédito pelo REGIME — o aviso da
+ * geração. Vazio quando nada mudou (alarme sobre arquivo normal é o que
+ * ensina a ignorar alarme).
+ */
+export function avisoDeEntradaSemCredito(notas, dados) {
+    let itens = 0, icms = 0;
+    const numeros = new Set();
+    for (const nota of notas || []) {
+        if (docCancelado(nota)) continue;
+        for (const item of (nota.itens || [])) {
+            const c = creditoIcmsDoItem(item, { ...nota, _dados: nota._dados || dados });
+            if (c.credita || c.por !== 'regime') continue;
+            const v = parseFloat(item.vICMS || 0);
+            if (!(v > 0)) continue;
+            itens += 1; icms += v; numeros.add(String(nota.numero || nota.chave || '?'));
+        }
+    }
+    if (!itens) return '';
+    const regime = regimeDoArquivo(dados);
+    return `C170/C190: ${itens} item(ns) de ENTRADA em ${numeros.size} nota(s) saíram SEM crédito de ICMS `
+        + `(CST x90, base e ICMS zero — R$ ${icms.toFixed(2).replace('.', ',')} destacados pelo fornecedor) `
+        + `porque a empresa é ${regime === 'SIMPLES' ? 'optante do Simples Nacional' : regime} e não se credita `
+        + '(LC 123/2006, art. 23; Guia 3.2.3, C170 campo 10: CST "sob o enfoque do declarante"). É o mesmo '
+        + 'que o Livro de Entradas do CFI mostra. Para creditar um item de propósito, informe o CST na nota (✏️).';
+}
+
+/**
  * Constroi o Bloco C inteiro.
  *
  * @param {object} dados - mesmo objeto retornado por coletarDadosEmpresa
@@ -172,6 +299,14 @@ export function buildBlocoC(dados) {
     // possam acessar empresa.dadosFiscais (naturezaAtividade + overrides).
     // Usa _ no nome pra deixar claro que eh metadata interno.
     for (const nota of notas) { nota._dados = dados; }
+
+    // O que o REGIME tirou de crédito sai DITO: sem isto quem comparasse o
+    // livro do PVA com a DANFE veria base e ICMS zerados e concluiria que
+    // faltou captura — justamente quando o certo é não creditar.
+    if (Array.isArray(dados.warnings)) {
+        const aviso = avisoDeEntradaSemCredito(notas, dados);
+        if (aviso) dados.warnings.push(aviso);
+    }
 
     // DIFAL de aquisicao: calculado UMA vez pro periodo, indexado por chave.
     // O debito na apuracao continua vindo do E111 (o C197 e a origem
@@ -361,9 +496,15 @@ function buildC100(nota, dados) {
     // COD_MOD, COD_SIT, SER, NUM_DOC e CHV_NFe. Demais campos deverão ser
     // apresentados com conteúdo VAZIO. Não informar registros filhos."*
     // O gerador mandava a nota cancelada com todos os valores preenchidos.
-    const ehCancelada = ['02', '03'].includes(codSit);
+    // 🚨 E O COD_PART NÃO ESTÁ NA LISTA — nem a DENEGADA (04) estava aqui
+    // (11/09, ELS · 08/2026, PVA 19×: *"Para documento fiscal cancelado (02 ou
+    // 03) ou NF-e denegada (04), somente informar os campos código da situação,
+    // indicador de operação, código do modelo e a chave"*). O participante da
+    // cancelada também não vai ao 0150 (`documentosEscrituradosNoFiscal`),
+    // senão ele fica órfão — a recusa seguinte.
+    const ehCancelada = ['02', '03', '04'].includes(codSit);
     const soCancelavel = (valor) => (ehCancelada ? '' : valor);
-    const codPart = (!ehNfce && participante && (participante.cnpjCpf || participante.cnpj))
+    const codPart = (!ehNfce && !ehCancelada && participante && (participante.cnpjCpf || participante.cnpj))
         ? String(participante.cnpjCpf || participante.cnpj).replace(/\D/g, '')
         : '';
 
@@ -400,8 +541,11 @@ function buildC100(nota, dados) {
         soCancelavel(fmt.formatValue(t.vFrete, 2)),
         soCancelavel(fmt.formatValue(t.vSeg, 2)),
         soCancelavel(fmt.formatValue(t.vOutro, 2)),
-        soCancelavel(fmt.formatValue(pick(i.vBC, 'vBC'), 2)),       // VL_BC_ICMS — bate com ΣC190
-        soCancelavel(fmt.formatValue(pick(i.vICMS, 'vICMS'), 2)),   // VL_ICMS
+        // ⚠️ Quando o REGIME tirou o crédito, o zero da soma dos itens É a
+        // resposta — cair no total do documento traria de volta o destaque
+        // do fornecedor, e o C100 desmentiria os C190 (ELS, 11/09).
+        soCancelavel(fmt.formatValue(i.semCredito ? i.vBC : pick(i.vBC, 'vBC'), 2)),       // VL_BC_ICMS — bate com ΣC190
+        soCancelavel(fmt.formatValue(i.semCredito ? i.vICMS : pick(i.vICMS, 'vICMS'), 2)), // VL_ICMS
         soNfe(soCancelavel(fmt.formatValue(pick(i.vBCST, 'vBCST'), 2))),
         soNfe(soCancelavel(fmt.formatValue(pick(i.vICMSST, 'vST'), 2))),
         soNfe(soCancelavel(fmt.formatValue(pick(i.vIPI, 'vIPI'), 2))),
@@ -468,15 +612,15 @@ function buildC170(item, nItem, nota) {
     // A régua mora em cst-correlacao.js e PRESERVA a origem (1º dígito), que é
     // fato da mercadoria e não da operação.
     const cstFmt = cstDoItemNoArquivo(item, cfopLancado, nota);
-
-    const aliqIcms = item.aliqIcms || (
-        item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0
-    );
+    // Base/alíquota/ICMS pelo dono — a entrada sem crédito sai ZERO (ELS, 11/09).
+    const icms = icmsDoItemNoArquivo(item, nota);
 
     return fmt.buildLine([
         'C170',
         String(nItem).padStart(3, '0'),
-        fmt.sanitizeString(codItemDoItem(item), 60),
+        // O COD_ITEM concorda com o 0200 pelo MESMO mapa de unidades — código
+        // que circula com duas unidades ganha o sufixo nos dois lados.
+        fmt.sanitizeString(codItemNoArquivo(item, nota._dados?.unidadesPorCodItem), 60),
         '',  // DESCR_COMPL
         fmt.formatValue(item.qCom || item.quantidade, 5),
         unidadeDoItem(item),
@@ -486,9 +630,9 @@ function buildC170(item, nItem, nota) {
         cstFmt,
         fmt.sanitizeString(cfopLancado, 4),
         '',  // COD_NAT
-        fmt.formatValue(item.vBC, 2),
-        fmt.formatValue(aliqIcms, 2),
-        fmt.formatValue(item.vICMS, 2),
+        fmt.formatValue(icms.vBC, 2),
+        fmt.formatValue(icms.aliq, 2),
+        fmt.formatValue(icms.vICMS, 2),
         fmt.formatValue(item.vBCST, 2),
         fmt.formatValue(item.aliqST, 2),
         fmt.formatValue(item.vICMSST, 2),
@@ -548,10 +692,9 @@ function buildC190sFromNota(nota) {
         // C170 faria os dois registros do MESMO item discordarem — e é o C190
         // que a apuração soma.
         const cstFmt = cstDoItemNoArquivo(item, cfop, nota);
-
-        const aliqIcms = item.aliqIcms || (
-            item.vICMS && item.vBC ? (item.vICMS / item.vBC * 100) : 0
-        );
+        // O MESMO dono do C170 — é o C190 que a apuração soma.
+        const icms = icmsDoItemNoArquivo(item, nota);
+        const aliqIcms = icms.aliq;
         // Arredonda aliquota a 2 casas pra agrupamento estavel
         const aliqKey = (Math.round(aliqIcms * 100) / 100).toFixed(2);
 
@@ -577,8 +720,8 @@ function buildC190sFromNota(nota) {
         // citação do Guia 3.2.3 (C190, Campo 05) — foi o IPI faltando aqui que
         // fez o PVA da PWR somar 69.760,36 contra os 71.960,81 do livro.
         g.vlOpr += valorOperacaoDoItem(item);
-        g.vlBcIcms += parseFloat(item.vBC || 0);
-        g.vlIcms += parseFloat(item.vICMS || 0);
+        g.vlBcIcms += icms.vBC;
+        g.vlIcms += icms.vICMS;
         g.vlBcIcmsSt += parseFloat(item.vBCST || 0);
         g.vlIcmsSt += parseFloat(item.vICMSST || 0);
         g.vlIpi += parseFloat(item.vIPI || 0);
@@ -586,11 +729,15 @@ function buildC190sFromNota(nota) {
         // Valor da redução de BC (obrigatório quando CST 20 ou 70).
         // Fórmula correta: vBC × pRedBC / (100 - pRedBC).
         // Fallback (parser legado sem pRedBC): max(0, vProd - vBC).
-        const vBcItem = parseFloat(item.vBC || 0);
+        // ⚠️ Entrada SEM crédito não tem base — logo não tem redução de base:
+        // com vBC zerado o fallback devolveria o vProd inteiro como "redução".
+        const vBcItem = icms.semCredito ? 0 : parseFloat(item.vBC || 0);
         const vProdItem = parseFloat(item.vProd || item.valor || 0);
         const pRedBC = parseFloat(item.pRedBC || 0);
         let itemRedBc = 0;
-        if (pRedBC > 0 && pRedBC < 100 && vBcItem > 0) {
+        if (icms.semCredito) {
+            itemRedBc = 0;
+        } else if (pRedBC > 0 && pRedBC < 100 && vBcItem > 0) {
             itemRedBc = (vBcItem * pRedBC) / (100 - pRedBC);
         } else if (vProdItem > vBcItem && vBcItem > 0) {
             itemRedBc = vProdItem - vBcItem;

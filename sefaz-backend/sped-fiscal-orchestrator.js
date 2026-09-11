@@ -32,9 +32,11 @@ import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
-    selecionarNotasBlocoC, documentosEscrituradosNoFiscal, tipoItemDoDocumento, codItemDoItem, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
+    selecionarNotasBlocoC, documentosEscrituradosNoFiscal, tipoItemDoDocumento, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
     unidadeDoItem, descreverUnidade,
+    unidadesPorCodItem, codItemNoArquivo, codigosComDuasUnidades, avisoDeItemComDuasUnidades,
 } from './sped-selecao-documentos.js';
+import { regimeDaEmpresa } from './regime-tributario.js';
 import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
 import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 // 🔒 O acervo que o fim de mês congelou — o dono da pergunta "este documento
@@ -251,6 +253,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // segundo desaparecer dentro do primeiro, CALADO. A chave não muda aqui
     // (mexer nela produz item órfão); o que muda é a colisão passar a ser DITA.
     const colisoesDeItem = [];
+    // 🚨 O MESMO CÓDIGO COM DUAS UNIDADES ganha o sufixo nos DOIS lados (0200
+    // aqui, C170 no bloco C) — o mapa é um só, e viaja em `dados` (ELS, 11/09).
+    const entraNo0200 = (n) => !ehEmissaoPropriaDoc(n, empresa.cnpj) && !nfceOuNaoEscriturada(n);
+    const unidadesPorCodigo = unidadesPorCodItem(notas, entraNo0200);
     for (const nota of notas) {
         if (ehEmissaoPropriaDoc(nota, empresa.cnpj)) continue;
         // 🚨 Item de nota que este arquivo NÃO escritura (NFS-e, resumo, sem
@@ -258,7 +264,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         // C170 o referenciaria, e o PVA recusa (LEGACY, 11/09).
         if (nfceOuNaoEscriturada(nota)) continue;
         for (const item of (nota.itens || [])) {
-            const codItem = codItemDoItem(item);
+            // `codItemDoItem` é a chave; `codItemNoArquivo` é a chave + a
+            // unidade quando o código circula com mais de uma.
+            const codItem = codItemNoArquivo(item, unidadesPorCodigo);
             const jaCadastrado = itensMap.get(codItem);
             if (jaCadastrado) {
                 const campo = conferirColisaoDeItem(jaCadastrado, {
@@ -322,6 +330,14 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
     // erro é quem lê o livro, e é por isso que ela tem de sair DITA.
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
+    const codigosComSufixo = codigosComDuasUnidades(unidadesPorCodigo);
+    if (codigosComSufixo.length) warnings.push(avisoDeItemComDuasUnidades(codigosComSufixo));
+    // O regime de quem ESCRITURA — o bloco C decide o crédito de ICMS da
+    // entrada por ele (optante do Simples não se credita, LC 123 art. 23).
+    const regimeEscrituracao = (() => {
+        const r = regimeDaEmpresa({ ...empresa, colecao: regime === 'simples' ? 'simples_empresas' : 'lucro_empresas' }).regime;
+        return r === 'INDEFINIDO' ? '' : r;
+    })();
     // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
     // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
     // destinação: ela não está no XML.
@@ -692,6 +708,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         blocoB,
         participantes,
         unidades,
+        unidadesPorCodItem: unidadesPorCodigo,
+        regimeEscrituracao,
         saldoCredorIcmsAnterior,
         saldoCredorIpiAnterior,
         origemSaldoIcms,

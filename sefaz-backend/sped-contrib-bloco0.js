@@ -304,8 +304,9 @@ function build0110(dados) {
  * eles significam. IE com letra de verdade não existe no leiaute do 0140.
  */
 export function ieDoArquivo(bruto) {
-    const d = String(bruto == null ? '' : bruto).replace(/\D/g, '');
-    return d.length ? d.slice(0, 14) : '';
+    // O dono mudou de casa (11/09): o 0000 do ICMS/IPI escrevia a IE crua com
+    // pontos e o PVA recusou. Um `sanitizeIe` para as duas famílias.
+    return fmt.sanitizeIe(bruto);
 }
 
 function build0140(dados) {

@@ -173,6 +173,39 @@ function sanitizeCep(s) {
  * Adiciona | no inicio, fim e entre cada campo.
  * Termina com |\r\n.
  */
+/**
+ * A Inscrição Estadual como o SPED a quer: só dígitos, ou VAZIO.
+ *
+ * "ISENTO" / "NÃO CONTRIBUINTE" viram vazio (é o que significam), e a
+ * pontuação do cadastro (`158.638.009.11`) sai — o PVA confere o DV da IE pela
+ * UF, e ponto no meio é "Inscrição Estadual inválida" (ELS · 08/2026, 11/09).
+ * Um dono para as DUAS famílias: o 0140 do Contribuições já traduzia assim e o
+ * 0000 do ICMS/IPI escrevia o texto cru.
+ */
+function sanitizeIe(bruto) {
+    const d = String(bruto == null ? '' : bruto).replace(/\D/g, '');
+    return d.length ? d.slice(0, 14) : '';
+}
+
+/** Comprimento da IE por UF — só o que está PROVADO por arquivo/recusa. */
+const DIGITOS_IE_POR_UF = { SP: 12 };
+
+/**
+ * A IE cadastrada serve para o arquivo? Devolve o motivo quando não, e `null`
+ * quando serve OU quando o app não tem como saber (UF sem comprimento
+ * conhecido — ausência não é prova).
+ */
+function motivoIeInvalida(uf, bruto) {
+    const cru = String(bruto == null ? '' : bruto).trim();
+    const d = sanitizeIe(cru);
+    if (!d) return null;
+    const esperado = DIGITOS_IE_POR_UF[String(uf || '').trim().toUpperCase()];
+    if (esperado && d.length !== esperado) {
+        return `a IE cadastrada "${cru}" tem ${d.length} dígito(s) e a de ${String(uf).toUpperCase()} tem ${esperado}`;
+    }
+    return null;
+}
+
 function buildLine(campos) {
     return '|' + campos.map(c => c === null || c === undefined ? '' : String(c)).join('|') + '|\r\n';
 }
@@ -185,5 +218,7 @@ export {
     sanitizeString,
     sanitizeCnpjCpf,
     sanitizeCep,
+    sanitizeIe,
+    motivoIeInvalida,
     buildLine,
 };

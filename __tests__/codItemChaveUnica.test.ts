@@ -70,7 +70,9 @@ const ESCREVEM_COD_ITEM = [
 describe('🚨 os quatro leem a MESMA chave', () => {
     it.each(ESCREVEM_COD_ITEM)('%s chama o dono', (rel) => {
         const src = readFileSync(join(RAIZ, rel), 'utf8');
-        expect(src).toContain('codItemDoItem');
+        // `codItemNoArquivo` é `codItemDoItem` + a unidade quando o código
+        // circula com duas (ELS, 11/09) — a chave continua sendo o dono.
+        expect(src).toMatch(/codItemDoItem|codItemNoArquivo/);
     });
 
     it('e nenhum reimplementa a régua por conta própria', () => {

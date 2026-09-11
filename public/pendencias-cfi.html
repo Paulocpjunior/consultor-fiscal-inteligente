@@ -149,13 +149,15 @@
     </div>
 
     <div class="fila dinheiro">
-        <h3>SPED da distribuidora: regerar e reconferir no PVA</h3>
-        <p>Os <strong>493 erros de código de participante</strong> nas entradas eram do gerador (o C100 da
-        nota capturada pela SEFAZ saía sem o CNPJ do fornecedor). Corrigido em 11/09 — o arquivo
-        precisa ser <strong>gerado de novo</strong>. As notas mistas (um CFOP por produto) agora se
-        informam no <strong>✂️ por item</strong> do detalhe da nota.</p>
-        <div class="alerta">⚠️ <strong>O que fazer:</strong> informar os itens das notas mistas, regerar o
-        SPED e validar no PVA. Se sobrar "COD_MUN" no 0150, rodar ♻️ Reler participante dos XMLs.</div>
+        <h3>SPED da distribuidora (ELS · 08/2026): corrigir a IE no cadastro, regerar e reconferir</h3>
+        <p>A segunda rodada do PVA trouxe 37 erros. Três eram do gerador e foram corrigidos em 11/09:
+        nota <strong>cancelada</strong> com código de participante, <strong>item com duas unidades</strong>
+        (o PVA cobrava o 0220) e <strong>ICMS creditado na entrada</strong> de uma optante. O quarto é
+        <strong>cadastro</strong>: a Inscrição Estadual está com <strong>11 dígitos</strong> (a de SP tem
+        12) em Empresas → Dados Fiscais — o app tira a pontuação, mas não completa o número.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> corrigir a IE, regerar o SPED e validar. Se
+        voltarem <em>"Campo obrigatório"</em> ou <em>"domiciliado no Brasil"</em>, mandar o Relatório de Erros
+        do PVA (o arquivo, não o print) — o print não nomeia o registro.</div>
     </div>
 
     <div class="fila dinheiro">
@@ -281,6 +283,14 @@
 
 <section>
     <h2>✅ Fechado em 11/09</h2>
+
+    <div class="fila feito">
+        <h3>SPED da ELS (Simples): cancelada, unidade do item e ICMS de entrada</h3>
+        <p>Cancelada/denegada sai só com os campos da Exceção 1 e não sustenta participante nem item; código
+        de produto com duas unidades vira um cadastro por código+unidade; a entrada do optante sai sem
+        crédito, pela mesma régua do Livro de Entradas; a IE do 0000 sai só com dígitos. Regras R42-R45 na
+        prevalidação.</p>
+    </div>
 
     <div class="fila feito">
         <h3>Bloco B do DF no EFD ICMS/IPI</h3>

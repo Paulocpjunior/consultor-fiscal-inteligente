@@ -227,10 +227,113 @@ export function documentosEscrituradosNoFiscal(notas, empresaCnpj) {
     const ids = new Set();
     for (const n of selecionarNotasBlocoC(notas, empresaCnpj).notas) {
         if (modeloDoDoc(n) === COD_MOD_NFCE) continue;
+        // 🚨 CANCELADA NÃO SUSTENTA NADA (11/09, ELS · 08/2026, PVA: 19×
+        // *"Para documento fiscal cancelado (código da situação = 02 ou 03) ou
+        // NF-e denegada (04), somente informar os campos código da situação,
+        // indicador de operação, código do modelo e a chave"*). O C100 dela
+        // sai SEM COD_PART e SEM filhos (Guia 3.2.3, C100, Exceção 1) — então
+        // o participante e os itens dela no 0150/0200 seriam ÓRFÃOS, a recusa
+        // seguinte. Vale para o CT-e cancelado do bloco D pelo mesmo motivo
+        // (D100, Exceção 1).
+        if (docCancelado(n)) continue;
         ids.add(n.id || n.chave);
     }
-    for (const c of selecionarCtesBlocoD(notas)) ids.add(c.id || c.chave);
+    for (const c of selecionarCtesBlocoD(notas)) {
+        if (docCancelado(c)) continue;
+        ids.add(c.id || c.chave);
+    }
     return { ids, escriturado: (n) => ids.has(n?.id || n?.chave) };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O MESMO COD_ITEM COM DUAS UNIDADES — o C170 e o 0200 discordavam, e o
+// PVA cobra o 0220 que o app não tem como montar
+//
+// 11/09, ELS (distribuidora, Simples) · 08/2026 — PVA, 13×: *"Se o campo de
+// Unidade deste registro for diferente do campo Unidade do registro 0200, é
+// obrigatório que o registro 0200 possua um filho 0220"*.
+//
+// A CAUSA é a chave: o `cProd` é do CATÁLOGO DO FORNECEDOR (a régua de 18/08 —
+// "o XML da compra traz o CFOP do FORNECEDOR, não o nosso" — vale para o
+// código do produto igual). Numa distribuidora que compra de dezenas de
+// produtores, o código `1` de um vem em KG e o `1` de outro vem em CX; o 0200
+// cadastra o PRIMEIRO (com a unidade dele) e todo C170 do segundo aponta para
+// esse cadastro com a unidade ERRADA. É a colisão de 29/08 (`ITEM-n` por
+// documento) na forma que o PVA vê — porque ele compara a UNIDADE.
+//
+// 📖 Guia 3.2.3, C170 campo 06: *"Caso a unidade de medida do documento fiscal
+// seja diferente da unidade de medida de controle de estoque informada no
+// Registro 0200, deverá ser informado no Registro 0220 o fator de conversão"*.
+// O fator NÃO está no XML — e fator inventado (1 KG = 1 CX) é o `1405` num
+// registro que o bloco K cruza. O que o app PODE afirmar é que são cadastros
+// DIFERENTES: o item passa a ser identificado por código + unidade.
+//
+// ⚠️ DETERMINÍSTICO, não "o primeiro vence": quando um código aparece com
+// mais de uma unidade no arquivo, TODAS as ocorrências ganham o sufixo
+// (`1-KG`, `1-CX`) — senão a ordem das notas decidiria qual dos dois fica
+// com o código limpo, e a mesma competência regerada daria outro arquivo.
+// Código com uma unidade só continua LIMPO: nada muda para o caso comum, e é
+// por isso que o cadastro de inventário/bloco K (que aponta pelo código que a
+// pessoa digitou) não se move.
+//
+// 🚦 QUEM LÊ É O PAR: o coletor do 0200 e o C170 (nas DUAS famílias) passam
+// pela mesma função com o MESMO mapa — chave calculada em dois lugares foi o
+// que produziu a divergência de 22/08.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Mapa `COD_ITEM → Set(UNID)` dos itens que ENTRAM no arquivo.
+ *
+ * @param {object[]} notas
+ * @param {(nota: object) => boolean} entra  quais notas escrituram item (a
+ *   régua de cada família — `escriturado && !emissãoPrópria` no ICMS/IPI,
+ *   `levaC170NoContribuicoes` no Contribuições).
+ * @returns {Map<string, Set<string>>}
+ */
+export function unidadesPorCodItem(notas, entra) {
+    const mapa = new Map();
+    for (const nota of notas || []) {
+        if (typeof entra === 'function' && !entra(nota)) continue;
+        for (const item of (nota?.itens || [])) {
+            const cod = codItemDoItem(item);
+            if (!mapa.has(cod)) mapa.set(cod, new Set());
+            mapa.get(cod).add(unidadeDoItem(item));
+        }
+    }
+    return mapa;
+}
+
+/**
+ * O COD_ITEM que VAI PARA O ARQUIVO — `codItemDoItem` mais o sufixo da unidade
+ * quando o mesmo código circula com mais de uma. Sem mapa, é a chave de sempre.
+ */
+export function codItemNoArquivo(item, unidadesPorCodigo) {
+    const cod = codItemDoItem(item);
+    const unidades = unidadesPorCodigo instanceof Map ? unidadesPorCodigo.get(cod) : null;
+    if (!unidades || unidades.size <= 1) return cod;
+    return `${cod}-${unidadeDoItem(item)}`;
+}
+
+/** Os códigos que ganharam sufixo — para o aviso da geração. */
+export function codigosComDuasUnidades(unidadesPorCodigo) {
+    const lista = [];
+    for (const [cod, unidades] of (unidadesPorCodigo instanceof Map ? unidadesPorCodigo : new Map())) {
+        if (unidades.size > 1) lista.push({ codItem: cod, unidades: Array.from(unidades).sort() });
+    }
+    return lista;
+}
+
+/** O aviso — só nasce quando houve sufixo. */
+export function avisoDeItemComDuasUnidades(lista) {
+    if (!Array.isArray(lista) || !lista.length) return '';
+    const amostra = lista.slice(0, 5)
+        .map((c) => `${c.codItem} (${c.unidades.join(' × ')})`)
+        .join('; ');
+    return `0200: ${lista.length} código(s) de item aparecem com MAIS DE UMA unidade no período — ${amostra}`
+        + `${lista.length > 5 ? ` e mais ${lista.length - 5}` : ''}. O código do produto é o do FORNECEDOR, `
+        + 'e fornecedores diferentes usam o mesmo número para produtos diferentes. O arquivo cadastra um '
+        + '0200 por código+unidade (ex.: 1-KG e 1-CX) para o C170 e o 0200 concordarem — sem isso o PVA '
+        + 'cobra o 0220 (fator de conversão), que o XML não traz e o app não inventa.';
 }
 
 /** CT-e do período (bloco D), sem os resumos. */

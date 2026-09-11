@@ -5,6 +5,90 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 O SPED DA OPTANTE VOLTOU DO PVA COM TRÊS RECUSAS DO GERADOR E UMA DE
+  CADASTRO — e o Livro do CFI estava certo o tempo todo** (11/09, Paulo, ELS ·
+  Simples · 08/2026, com o print do PVA e o Livro de Entradas lado a lado:
+  *"ajustou cod de participante, porém ele está pedindo cod de participante das
+  notas canceladas e unidade de registro. e no livro de entrada está puxando
+  algumas notas com ICMS, mas no livro do consultor está certinho"*).
+  📖 **O PVA NOMEOU CADA UMA, e eu medi as três no gerador antes de mexer**:
+  · **19×** *"Para documento fiscal cancelado (02 ou 03) ou NF-e denegada (04),
+  somente informar os campos código da situação, indicador de operação, código
+  do modelo e a chave"* — o `buildC100` já zerava os valores da cancelada
+  (Exceção 1), mas **deixava o COD_PART**, que NÃO está na lista, e a
+  **denegada (04) nem entrava** na exceção. O D100 tinha o defeito inteiro,
+  esperando o primeiro CT-e cancelado.
+  · **13×** *"Se o campo de Unidade deste registro for diferente do campo
+  Unidade do registro 0200, é obrigatório que o registro 0200 possua um filho
+  0220"* — o **`cProd` é do CATÁLOGO DO FORNECEDOR** (a régua do CFOP de 18/08
+  vale para o código do produto): numa distribuidora, o código `1` de um
+  produtor vem em KG e o `1` de outro em CX; o 0200 cadastrava o PRIMEIRO e
+  todo C170 do segundo apontava com a unidade errada. É a colisão de 29/08
+  (*"a chave não muda sem caso real"*) — **o caso real chegou**, na forma que
+  o PVA vê.
+  · **8 advertências** de crédito de ICMS na entrada do optante — o C170/C190
+  copiavam `item.vBC`/`item.vICMS`, o destaque de QUEM VENDEU. Em 09/09 ficou
+  escrito que o SPED Fiscal *"não passou por aqui porque optante do Simples em
+  SP não entrega EFD ICMS/IPI, então não havia caso"*. **Havia.**
+  · **1×** *"Inscrição Estadual inválida"* — o 0000 escrevia a IE **com os
+  pontos do cadastro** (`158.638.009.11`), e o cadastro está com **11 dígitos**
+  numa IE paulista de 12. Isso é ALERTA, nunca contorno (06/08): o app tira a
+  pontuação e **não completa o número** — IE truncada é outro contribuinte.
+  ✂️ **CANCELADA NÃO SUSTENTA NADA**: `documentosEscrituradosNoFiscal` (o dono
+  de *"quem pode segurar um 0150/0200"*, nascido de manhã pela LEGACY) pula
+  `docCancelado` — o C100 dela sai sem COD_PART e sem filhos, então
+  participante e item no bloco 0 seriam a recusa SEGUINTE (órfão). O D100
+  cancelado/denegado também sai só com os campos da Exceção 1 dele, sem D190.
+  ✂️ **A CHAVE DO ITEM GANHOU A UNIDADE — DETERMINÍSTICA**: `unidadesPorCodItem`
+  + `codItemNoArquivo` (no dono da seleção). Código que circula com MAIS DE UMA
+  unidade no arquivo ganha o sufixo em **TODAS** as ocorrências (`1-KG`,
+  `1-CX`) — "o primeiro vence" faria a ORDEM das notas decidir quem fica com o
+  código limpo, e a mesma competência regerada daria outro arquivo. Código com
+  uma unidade continua LIMPO: nada muda no caso comum, e o inventário/bloco K
+  (que apontam pelo código que a pessoa digitou) não se movem. O mapa é UM e
+  viaja em `dados.unidadesPorCodItem` para o 0200 e o C170/A170 **das DUAS
+  famílias** — chave calculada em dois lugares foi a divergência de 22/08.
+  ⚠️ **O FATOR DO 0220 NÃO SE INVENTA**: 1 KG = 1 CX é o `1405` num registro
+  que o bloco K cruza. O que o app PODE afirmar é que são cadastros diferentes.
+  ✂️ **O CRÉDITO DA ENTRADA É DE QUEM ESCRITURA, TAMBÉM NO SPED**:
+  `creditoIcmsDoItem`/`icmsDoItemNoArquivo` no bloco C leem a MESMA régua do
+  Livro (`entradaGeraCreditoIcms` + `colunaDoCstInformado`), com a MESMA
+  precedência de 09/09: **CST informado > REGIME > destaque do documento**. Sem
+  crédito pelo regime, a tributação vira **90** com a ORIGEM preservada e base,
+  alíquota e ICMS saem ZERO — no C170, no C190 e na soma do C100 (o `pick()`
+  do C100 caía no total do documento quando a soma dos itens dava zero, e
+  trazia o destaque de volta: pego pelo teste). Isento/ST (40/41/50/60) **não
+  vira 90**, e a saída fica de fora — ali o destaque é débito. 📖 Guia 3.2.3,
+  C170 campo 10: *"optantes pelo Simples Nacional … na escrituração dos
+  documentos fiscais de entrada, informar o CST_ICMS sob o enfoque do
+  declarante"*; LC 123/2006, art. 23.
+  ⚠️ **O NÚMERO QUE O REGIME TIROU SAI DITO** (`avisoDeEntradaSemCredito`, com
+  a base legal): sem a frase, quem comparasse o livro do PVA com a DANFE veria
+  base e ICMS zerados e procuraria captura que não falhou.
+  🚦 **QUATRO REGRAS NO MESMO PR, cada uma com a recusa literal**: R42
+  (`conferirCanceladaSoCampos`, no comum — as duas famílias têm a Exceção 1),
+  R43 (C170 UNID ≠ 0200 UNID_INV sem 0220, poupando TIPO_ITEM 07 como o Guia
+  manda), R44 (optante com crédito na entrada — precisa do REGIME no contexto,
+  que a rota passa; sem ele fica muda) e R45 (IE com caractere não numérico ou
+  comprimento errado onde ele é PROVADO — só SP=12; DV de tabela não se
+  calcula de memória). `conferirCodPartDoC100` deixou de cobrar COD_PART de
+  02/03/04/05 — cobrar seria mandar preencher o que o PVA recusa preenchido.
+  🐛 **DUAS FIXTURES DESCREVIAM ARQUIVO RECUSADO**: o `0000` "que o buildBloco0
+  de fato emite" tinha IE `1` numa empresa de SP, e a R45 a pegou ao nascer.
+  Trocada por IE FICTÍCIA de 12 dígitos. **Provado por REVERSÃO**: recriando os
+  três defeitos (COD_PART na cancelada, régua do regime desligada, cancelada
+  sustentando 0150/0200) caem 7 testes, nomeados.
+  🚩 **PENDÊNCIA DO PAULO**: corrigir a IE da ELS em Dados Fiscais, regerar e
+  validar. O print ainda traz *"Campo obrigatório (3)"* e *"domiciliado no
+  Brasil (1)"* SEM o registro nomeado — se voltarem, o **Relatório de Erros do
+  PVA** (arquivo) diz a linha; o print não.
+  📌 **REGRA QUE FICA: quando a régua da LEITURA muda numa tela, ela muda no
+  ARQUIVO FISCAL no MESMO PR — e "não havia caso" é a pendência que engorda.**
+  O Livro parou de creditar em 09/09 e o SPED continuou creditando por dois
+  dias; quem achou foi o dono, comparando os dois livros. E o campo que
+  "identifica" o item tem dono no fornecedor: código de terceiro só é chave
+  junto do que o distingue.
+
 - **🏛️ "ESSE BLOCO B470 TEM QUE PREENCHER … SÃO PARA TODAS AS EMPRESAS DE
   BRASÍLIA" — o bloco B nasceu VAZIO para todo mundo, e o DF é diferente**
   (11/09, Paulo, LEGACY · DF · 08/2026, com o recibo do PVA e os DOIS arquivos:
