@@ -9,7 +9,6 @@
  *   · item SEM IPI → cstIpi é undefined/null, NUNCA "0" (campo fiscal não recebe
  *     default; ausência é ausência).
  */
-// @ts-expect-error — módulo .js do backend (sem tipos)
 import { extrairItens } from '../sefaz-backend/xml-importer.js';
 
 const wrap = (dets: string) => `<?xml version="1.0"?>

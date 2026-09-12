@@ -54,7 +54,7 @@ import { reconferirCancelamento } from '../../services/reconferirCancelamentoSer
 import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa } from '../../services/reconferenciaEncadeada';
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
-import { relerNotasVazias } from '../../services/ipiVarreduraService';
+import { relerNotasVazias, relerItensFiscais } from '../../services/ipiVarreduraService';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
@@ -936,6 +936,37 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
     /** Notas "vazias" do recorte — sem itens (CFOP/CST em branco) ou sem nº. */
     const vazias = linhas.filter(l => !l.cfopCru || l.numero === '—').length;
 
+    // ♻️ RELER ITENS DOS XMLS (12/09, ELS · 08/2026): os campos de ITEM que o
+    // extrator aprendeu depois — CST do IPI/PIS/COFINS e, agora, frete, seguro,
+    // outras despesas e FCP-ST, que o VL_OPR do C190 soma. A nota importada
+    // pelo navegador antes de 12/09 não os tem no item, e o SPED cai na
+    // reserva rateada dos totais; relida, volta ao valor que o XML declara.
+    // Só preenche o que está VAZIO (nunca sobrescreve) e só do XML guardado.
+    const relerItens = async () => {
+        setRelendo(true);
+        setResultadoReler(null);
+        try {
+            const r = await relerItensFiscais(empresa.id, competencia);
+            const campos = Object.entries(r.porCampo || {}).map(([c, n]) => `${c} em ${n}`).join(', ');
+            const partes = [
+                r.atualizadas ? `${r.atualizadas} nota(s) ganharam campo de item do XML guardado (${campos})` : '',
+                r.semDadoNoXml ? `${r.semDadoNoXml} relida(s) e o XML não traz mais nada` : '',
+                r.jaRelidas ? `${r.jaRelidas} já relida(s) nesta versão` : '',
+                r.semItens ? `${r.semItens} sem itens (use o ♻️ Reler XMLs guardados)` : '',
+                r.semXml ? `${r.semXml} sem arquivo guardado (buraco de captura — 📋 Status por Empresa)` : '',
+                r.naoPareadas ? `${r.naoPareadas} não pareada(s) — itens gravados ≠ itens do XML, ficaram intactas` : '',
+            ].filter(Boolean);
+            setResultadoReler(partes.length
+                ? `♻️ ${r.examinadas} examinada(s): ${partes.join(' · ')}.`
+                : `♻️ ${r.examinadas} examinada(s) — nada a completar.`);
+            if (r.atualizadas) onRebuscar?.();
+        } catch (e: any) {
+            setResultadoReler(`♻️ Falha ao reler os itens: ${e?.message || 'erro inesperado'}.`);
+        } finally {
+            setRelendo(false);
+        }
+    };
+
     const reler = async () => {
         setRelendo(true);
         setResultadoReler(null);
@@ -1042,6 +1073,14 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                         title="Relê os XMLs guardados no sistema e preenche itens, CFOP, CST e nº das notas vazias — sem redigitar nada."
                         className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
                     >{relendo ? '♻️ Relendo os XMLs…' : `♻️ Reler XMLs guardados${vazias ? ` (${vazias} vazia${vazias > 1 ? 's' : ''})` : ''}`}</button>
+                )}
+                {currentUser?.role === 'admin' && (
+                    <button
+                        onClick={relerItens}
+                        disabled={relendo}
+                        title="Relê os XMLs guardados e completa nos ITENS os campos que o extrator aprendeu depois: CST do IPI/PIS/COFINS, frete, seguro, outras despesas e FCP-ST (o VL_OPR do C190 soma esses quatro). Só preenche o que está vazio."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{relendo ? '♻️ Relendo…' : '♻️ Reler itens dos XMLs'}</button>
                 )}
                 <span className="text-xs text-slate-500">
                     {linhas.length} nota(s) · {comCarimbo} com CFOP informado

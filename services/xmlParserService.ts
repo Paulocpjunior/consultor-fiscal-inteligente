@@ -235,9 +235,13 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         let pRedBC = 0;
         let modBC = '';
         let orig = '';
+        // FCP-ST do item — entra no VL_OPR do C190 junto do ICMS-ST (Guia
+        // 3.2.3, campo 05). Paridade com o xml-importer.js (regra da casa).
+        let vFCPST = 0;
         if (icms) {
             const icmsInner = icms.children[0];
             if (icmsInner) {
+                vFCPST = num(getTextContent(icmsInner, 'vFCPST'));
                 cst = getTextContent(icmsInner, 'CST') || getTextContent(icmsInner, 'CSOSN');
                 vICMS = num(getTextContent(icmsInner, 'vICMS'));
                 vBC = num(getTextContent(icmsInner, 'vBC'));
@@ -314,6 +318,15 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             vUnCom: num(getTextContent(prod, 'vUnCom')),
             vProd: num(getTextContent(prod, 'vProd')),
             vDesc: num(getTextContent(prod, 'vDesc')) || undefined,
+            // 🚨 12/09 (ELS · 08/2026): o importer do backend grava frete,
+            // seguro e outras despesas POR ITEM desde 04/08 e este parser não —
+            // a nota importada pelo navegador entrava no C190 sem eles, o
+            // VL_OPR saía a MENOR e o "Total da operação" do PVA não fechava com
+            // o Vlr. Contábil do Livro. Paridade OBRIGATÓRIA com o xml-importer.
+            vFrete: num(getTextContent(prod, 'vFrete')),
+            vSeg: num(getTextContent(prod, 'vSeg')),
+            vOutro: num(getTextContent(prod, 'vOutro')),
+            vFCPST,
             vBC,
             aliqIcms,
             vICMS,

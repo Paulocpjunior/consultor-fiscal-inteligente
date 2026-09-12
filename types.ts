@@ -1686,6 +1686,16 @@ export interface DocumentoFiscalItem {
     vUnCom: number;
     vProd: number;
     vDesc?: number;
+    /**
+     * Frete, seguro e outras despesas acessórias POR ITEM (<prod>), e o FCP-ST
+     * do item — o VL_OPR do C190 (Guia 3.2.3, campo 05) soma os quatro. O
+     * importer do backend grava desde 04/08; o do navegador só passou a gravar
+     * em 12/09 (caso ELS: Livro 957.467,11 × PVA 955.593,91).
+     */
+    vFrete?: number;
+    vSeg?: number;
+    vOutro?: number;
+    vFCPST?: number;
     /** Base de cálculo do ICMS do item (extraído de <vBC> do bloco ICMS interno). */
     vBC?: number;
     /** Alíquota do ICMS em % (extraído de <pICMS>). */

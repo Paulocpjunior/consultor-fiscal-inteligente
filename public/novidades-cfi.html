@@ -68,14 +68,41 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 11/09/2026 · leitura de 20 minutos</p>
+            <p>Departamento Fiscal · atualizado em 12/09/2026 · leitura de 20 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (11/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (12/09) — leia esta parte primeiro</h2>
+
+    <h3>1. 📐 <strong>SPED ICMS/IPI: o "Total da operação" do PVA agora fecha com o Vlr. Contábil do Livro</strong></h3>
+    <p>A nota <strong>importada pelo navegador</strong> (Central de XMLs → Importar) entrava no C190 do SPED
+    <strong>sem o frete, o seguro, as outras despesas e o FCP-ST</strong> — o item não trazia esses campos, e o
+    total da operação saía a menor. O PVA aceitava; quem via era quem comparava o livro com o relatório do PVA
+    (caso ELS · 08/2026: R$ 1.873,20 de diferença).</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → <strong>✏️ CFOP por nota</strong> → botão
+    <strong>♻️ Reler itens dos XMLs</strong>. Ele completa nos itens, a partir do XML guardado, o que a importação
+    antiga não gravou. Depois, gere o SPED de novo.</div>
+    <div class="alerta">⚠️ Enquanto a nota não for relida, o SPED usa o total do documento no C190 e <strong>diz
+    isso na caixa de avisos</strong> da geração ("VL_OPR do C190: N nota(s) levaram…"). Se ainda sobrar
+    diferença, o aviso "Total da operação" nomeia as notas.</div>
+
+    <h3>2. 🚫 <strong>A nota tirada do livro agora some TAMBÉM dos relatórios e do faturamento</strong></h3>
+    <p>O <strong>🚫 Tirar esta nota do livro</strong> (no detalhe do documento) tirava a nota do SPED, mas ela
+    <strong>continuava</strong> no Livro de Serviços, no Resumo por CFOP, nas Retenções, no faturamento e na
+    lista da Central. Corrigido: a lápide vale em tudo que a tela mostra.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → clique na nota → <strong>🚫 Tirar esta nota
+    do livro</strong> (motivo obrigatório). Não existe "tirar só deste relatório": tirada, ela sai de todos os
+    leitores de uma vez — Livro, relatórios, SPED, R-2020.</div>
+    <div class="alerta">⚠️ Nota <strong>duplicada</strong> (a mesma NFS-e lançada à mão e capturada): tire a
+    duplicata, nunca as duas. A linha com IR/INSS/CSLL em <strong>0,00</strong> costuma ser a digitada; a com
+    <strong>"?"</strong> é a capturada.</div>
+</section>
+
+<section>
+    <h2 style="margin-top:32px">O que entrou em 11/09</h2>
 
     <h3>1. 📅 <strong>Dá para corrigir a nota que ficou gravada no mês errado</strong></h3>
     <p>Em São Paulo a nota de <strong>31/08</strong> pode ser emitida até <strong>10/09</strong>. Quem decide a

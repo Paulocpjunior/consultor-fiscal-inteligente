@@ -38,7 +38,7 @@ import { regimeDaEmpresa } from './regime-tributario.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
 // leem daqui; eram três leituras, e as três discordavam do manual.
-import { valorOperacaoDoItem } from './valor-operacao-c190.js';
+import { valorOperacaoDosItens } from './valor-operacao-c190.js';
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -410,7 +410,17 @@ export function buildBlocoC(dados) {
     }
 
     // C100 + C170s + C190s pra cada nota
+    // 12/09 (ELS): o que o gerador DERIVOU e o que NÃO fecha saem DITOS —
+    // reserva dos totais aplicada (por nota) e VL_DOC × Σ VL_OPR por nota.
+    const comReserva = [];
+    const divergentes = [];
+    const valorDoCampo = (linha, pos) => {
+        const s = String((String(linha || '').split('|')[pos]) || '').trim().replace(/\./g, '').replace(',', '.');
+        const x = Number(s);
+        return Number.isFinite(x) ? x : 0;
+    };
     for (const nota of notas) {
+        const inicio = linhas.length;
         try {
             // C100
             linhas.push(buildC100(nota, dados));
@@ -446,10 +456,20 @@ export function buildBlocoC(dados) {
                 // estado cadastrado; sem ele vira aviso (nao se inventa).
                 const c197 = difalPorChave[String(nota.chave || nota.id || '')];
                 if (c197) for (const linha of c197) linhas.push(linha);
+
+                const r = valorOperacaoDosItens(nota);
+                if (r.reserva.valor) comReserva.push({ numero: nota.numero, rateado: r.rateado, reserva: r.reserva });
+                const daNota = linhas.slice(inicio);
+                const vlDoc = valorDoCampo(daNota.find((l) => l.startsWith('|C100|')), 12);
+                const vlOpr = daNota.filter((l) => l.startsWith('|C190|')).reduce((s, l) => s + valorDoCampo(l, 5), 0);
+                if (Math.abs(vlDoc - vlOpr) > 0.02) divergentes.push({ numero: nota.numero, vlDoc, vlOpr });
             }
         } catch (err) {
             console.warn(`[blocoC] Falha gerando linhas pra nota ${nota.numero}:`, err.message);
         }
+    }
+    if (Array.isArray(dados.warnings)) {
+        for (const a of avisosDoValorDaOperacao(comReserva, divergentes)) dados.warnings.push(a);
     }
 
     // C990 — Encerramento
@@ -715,6 +735,47 @@ function buildC170(item, nItem, nota) {
 }
 
 /**
+ * OS AVISOS DO VL_OPR — o que o gerador derivou e o que não fecha (12/09, ELS).
+ *
+ * Nasce MUDO no arquivo normal: só fala quando alguma nota levou a reserva dos
+ * totais (o item não trazia o campo) ou quando o VL_DOC do C100 não fecha com
+ * a Σ VL_OPR dos C190 dela — que é a conta que a pessoa faz ao comparar o
+ * "Total da operação" do PVA com o Vlr. Contábil do Livro.
+ *
+ * @param {Array<{numero, rateado, reserva}>} comReserva
+ * @param {Array<{numero, vlDoc, vlOpr}>} divergentes
+ * @returns {string[]}
+ */
+export function avisosDoValorDaOperacao(comReserva = [], divergentes = []) {
+    const fmtR = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const out = [];
+    if (comReserva.length) {
+        const total = comReserva.reduce((s, n) => s + Number(n.reserva.valor || 0), 0);
+        const rateadas = comReserva.filter((n) => n.rateado).length;
+        const lista = comReserva.slice(0, 15).map((n) => `nº ${n.numero || '?'} (${n.reserva.campos.map((c) => `${c.rotulo} R$ ${fmtR(Math.abs(c.valor))}`).join(' + ')}${n.rateado ? ', rateado' : ''})`).join(' · ');
+        out.push(
+            `VL_OPR do C190: ${comReserva.length} nota(s) levaram ao C190 valores que só o TOTAL do documento traz `
+            + `(R$ ${fmtR(total)} em frete/seguro/outras despesas/ST/FCP-ST/IPI/desconto) porque os ITENS não trazem o campo — `
+            + 'nota importada pelo navegador antes de 12/09 ou lançada sem XML. Com um item o valor é exato; '
+            + `com vários foi RATEADO proporcionalmente ao valor dos itens (${rateadas} nota(s)). `
+            + 'Para gravar o valor POR ITEM que o XML declara: Relatórios → ✏️ CFOP por nota → ♻️ Reler itens dos XMLs. '
+            + `Notas: ${lista}${comReserva.length > 15 ? ` e mais ${comReserva.length - 15}` : ''}.`,
+        );
+    }
+    if (divergentes.length) {
+        const dif = divergentes.reduce((s, n) => s + (n.vlDoc - n.vlOpr), 0);
+        const lista = divergentes.slice(0, 15).map((n) => `nº ${n.numero || '?'} (VL_DOC ${fmtR(n.vlDoc)} × Σ VL_OPR ${fmtR(n.vlOpr)})`).join(' · ');
+        out.push(
+            `Total da operação: em ${divergentes.length} nota(s) o VL_DOC do C100 não fecha com a Σ VL_OPR dos C190 `
+            + `(diferença total R$ ${fmtR(dif)} — é exatamente o que separa o "Total da operação" do PVA do Vlr. Contábil do Livro). `
+            + `Notas: ${lista}${divergentes.length > 15 ? ` e mais ${divergentes.length - 15}` : ''}. `
+            + 'A prevalidação (R14) acusa cada uma; confira o documento antes de transmitir.',
+        );
+    }
+    return out;
+}
+
+/**
  * C190 — Registro Analitico de Operacoes
  *
  * Agrupa os itens de uma NF por (CST_ICMS, CFOP, ALIQ_ICMS) e gera 1
@@ -738,8 +799,13 @@ function buildC170(item, nItem, nota) {
  */
 function buildC190sFromNota(nota) {
     const grupos = new Map();  // key: "CST|CFOP|ALIQ" -> totais
+    // VL_OPR por item COM a reserva dos totais (frete/seguro/outras/ST/IPI/
+    // desconto que só o total do documento traz — 12/09, caso ELS).
+    const vlOprPorItem = valorOperacaoDosItens(nota).porItem;
 
-    for (const item of (nota.itens || [])) {
+    const itensDaNota = nota.itens || [];
+    for (let idx = 0; idx < itensDaNota.length; idx++) {
+        const item = itensDaNota[idx];
         const cfopRaw = String(item.cfop || item.CFOP || '0000');
         // Mesma régua do C170 — e é o C190 que a apuração soma.
         const cfop = convertCfopParaEntrada(cfopRaw, direcaoEfetivaDoc(nota), nota._dados, nota, item);
@@ -774,7 +840,7 @@ function buildC190sFromNota(nota) {
         // VL_OPR ≠ Σ vProd. A régua está em `valor-operacao-c190.js`, com a
         // citação do Guia 3.2.3 (C190, Campo 05) — foi o IPI faltando aqui que
         // fez o PVA da PWR somar 69.760,36 contra os 71.960,81 do livro.
-        g.vlOpr += valorOperacaoDoItem(item);
+        g.vlOpr += vlOprPorItem[idx];
         g.vlBcIcms += icms.vBC;
         g.vlIcms += icms.vICMS;
         g.vlBcIcmsSt += parseFloat(item.vBCST || 0);

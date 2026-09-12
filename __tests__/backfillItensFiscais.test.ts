@@ -111,7 +111,13 @@ describe('a lista de campos é curta de propósito', () => {
     it('cobre exatamente os buracos nomeados no projeto', () => {
         // Campo novo entra aqui junto com quem o consome — nunca "já que
         // estamos aqui": cada campo a mais é uma chance de sobrescrever.
-        expect(CAMPOS_RECUPERAVEIS).toEqual(['cstIpi', 'cEnqIpi', 'vBcIpi', 'cstPis', 'cstCofins']);
+        // 12/09 (ELS): vFrete/vSeg/vOutro/vFCPST entraram junto com o consumidor
+        // (`valorOperacaoDosItens`, o VL_OPR do C190) — o parser do navegador não
+        // os gravava e o C190 saía a MENOR.
+        expect(CAMPOS_RECUPERAVEIS).toEqual([
+            'cstIpi', 'cEnqIpi', 'vBcIpi', 'cstPis', 'cstCofins',
+            'vFrete', 'vSeg', 'vOutro', 'vFCPST',
+        ]);
     });
 
     it('e nada fora dela é tocado, nem se vier no XML', () => {

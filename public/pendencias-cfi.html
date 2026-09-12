@@ -7,7 +7,7 @@
 <!-- PAR OBRIGATÓRIO: esta página e a fonte em docs/ se atualizam JUNTAS.
      `guiaParDuplo` barra o build se as revisões divergirem. -->
 <meta name="guia-id" content="pendencias-cfi">
-<meta name="guia-revisao" content="2026-09-11">
+<meta name="guia-revisao" content="2026-09-12">
 <title>Pendências do CFI — o que falta e quem resolve · SP Assessoria Contábil</title>
 <style>
     :root {
@@ -287,6 +287,32 @@
 </section>
 
 <section>
+    <h2>✅ Fechado em 12/09</h2>
+
+    <div class="fila feito">
+        <h3>VL_OPR do C190 sem frete, seguro, outras despesas e FCP-ST</h3>
+        <p>ELS 08/2026: Livro de Entradas 957.467,11 contra 955.593,91 no PVA. A causa era o parser do
+        navegador, que não gravava os quatro campos por item. Fonte, acervo (botão <strong>♻️ Reler itens
+        dos XMLs</strong> em Relatórios → ✏️ CFOP por nota) e gerador (reserva dos totais, dita no aviso da
+        geração) no mesmo PR. O aviso agora nomeia a nota em que VL_DOC e a soma dos VL_OPR divergem.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>A lápide (🚫 Tirar esta nota do livro) não valia nos relatórios do navegador</h3>
+        <p>GOLDLOG, nota 781 duplicada: a listagem de documentos que alimenta Relatórios e faturamento
+        não filtrava a retirada. Agora passa pelo mesmo dono do SPED — a nota retirada sai de todos os
+        leitores.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>Natureza de rendimento POR NOTA no R-4020 (Contábil)</h3>
+        <p>Entregue em 11/09 (v3.4.278) e corrigida em 12/09 (v3.4.279): a chave da nota do portal de SP
+        era descartada em silêncio; agora um evento por beneficiário com um pagamento por natureza, e a
+        retificação pelo recibo gravado ou informado à mão.</p>
+    </div>
+</section>
+
+<section>
     <h2>✅ Fechado em 11/09</h2>
 
     <div class="fila feito">
@@ -316,7 +342,7 @@
     <div class="fila feito">
         <h3>Retenção informada à mão que "sumia" ao reabrir a nota</h3>
         <p>O ajuste estava gravado; o formulário é que abria vazio. Agora abre preenchido e o carimbo fica à
-        vista. A natureza de rendimento por NOTA no R-4020 é do Contábil e ficou nomeada.</p>
+        vista. A natureza de rendimento por NOTA no R-4020 é do Contábil e entrou no dia seguinte.</p>
     </div>
 
     <div class="fila feito">
