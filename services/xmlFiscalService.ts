@@ -60,6 +60,7 @@ import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 const direcaoDoDocumento = (d: any): string => (direcaoEfetivaDoc(d) as string) || '';
 import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+import { docContaNoLivro } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
 import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
 import { formasDaCompetencia } from '../sefaz-backend/competencia.js';
@@ -755,6 +756,12 @@ export async function registrarErro(input: ErroInput): Promise<void> {
 // ─── Listagens ──────────────────────────────────────────────────────────────
 
 export interface ListDocumentosFilters {
+    /**
+     * Traz também os documentos RETIRADOS do livro (`_deleted` / `_merged_into`).
+     * Só para quem pergunta sobre o ACERVO (diagnóstico) — livro, relatório e
+     * faturamento NUNCA passam isto (12/09, GOLDLOG).
+     */
+    incluirRetirados?: boolean;
     empresaId?: string;
     /** Vários ids (matriz + filiais da mesma raiz) — vira `in` no servidor. */
     empresaIds?: string[];
@@ -783,7 +790,7 @@ export async function listDocumentos(
     // Out-param opcional: preenchido com truncado=true quando a leitura bateu no
     // teto de páginas (pode haver mais docs). Callers que exportam/agregam devem
     // avisar o usuário — senão o recorte fica silenciosamente incompleto.
-    meta?: { truncado?: boolean },
+    meta?: { truncado?: boolean; retirados?: number },
 ): Promise<DocumentoFiscal[]> {
     if (meta) meta.truncado = false;
     if (!user || !isFirebaseConfigured || !db) return [];
@@ -864,6 +871,22 @@ export async function listDocumentos(
         }
 
         if (scope) docs = docs.filter(d => podeVerDocumentoPorCarteira(d, scope));
+
+        // 🚨 A LÁPIDE NUNCA VALEU NESTA LISTAGEM (12/09, GOLDLOG · nota 781
+        // duplicada). O mata-burro de 03/09 dizia que "`_deleted` já é filtrado
+        // por toda a listagem" — era verdade para EMPRESAS (24/07), nunca para
+        // documentos: quem monta o Livro de Serviços, o faturamento, o Resumo por
+        // CFOP e a Central de XMLs lê daqui, e a nota tirada pelo 🚫 continuava
+        // contando em tudo que o navegador mostra (o SPED já a tirava desde
+        // 10/09). Quem responde é o DONO (`docContaNoLivro`, as DUAS lápides),
+        // e o que sai vai CONTADO em `meta.retirados` — sumir calado seria a
+        // ausência plausível que manda procurar buraco de captura.
+        // `incluirRetirados` é a porta de quem PRECISA vê-las (diagnóstico).
+        if (!filters.incluirRetirados) {
+            const antes = docs.length;
+            docs = docs.filter(docContaNoLivro);
+            if (meta) meta.retirados = antes - docs.length;
+        }
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         // Leitura falhou (rules/rede/índice) — sinaliza incompletude pra o caller

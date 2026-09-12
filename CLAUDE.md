@@ -5,6 +5,85 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📐 "O TOTAL DA OPERAÇÃO NÃO BATE COM MEU VALOR CONTÁBIL" — o C190 somava o
+  ITEM, e o item importado pelo NAVEGADOR não tinha frete, seguro, outras
+  despesas nem FCP-ST** (12/09, Paulo, DISTRIBUIDORA DE BANANAS ELS · SPED
+  ICMS/IPI 08/2026: *"deu certo, mas fazendo a conferência dos valores os
+  valores TOTAL DA OPERAÇÃO não bate com meu valor Contábil, e somando CFOP por
+  CFOP bate um com o outro, será que ele está pegando descontos de alguma
+  nota?"* — Livro de Entradas **957.467,11** × PVA **955.593,91**, diferença
+  **1.873,20**, com as linhas CST 040 do PVA fechando exatamente na coluna
+  Isentas do Livro).
+  📖 **MEDIDO NO CÓDIGO, não deduzido do print**: o Livro lê o `vNF` do
+  DOCUMENTO (`contabilDoc`); o C190 soma os ITENS pela régua do Guia 3.2.3
+  (campo 05: mercadorias + frete + seguro + outras + ST + FCP-ST + IPI −
+  desconto, `valorOperacaoDoItem`). O importer do BACKEND grava
+  `vFrete`/`vSeg`/`vOutro`/`vFCPST` POR ITEM desde 04/08; o parser do
+  **NAVEGADOR** (`xmlParserService.ts`) não gravava **nenhum dos quatro** — e
+  a "paridade obrigatória com o xml-importer" escrita ali só cobria PIS/COFINS.
+  Nota importada à mão entrava no C190 **a MENOR pelas despesas acessórias**;
+  o C100 (que lê os totais) saía certo; a R14 acusava na caixa de avisos; o PVA
+  ACEITA. É a armadilha das duas formas entre os DOIS PARSERS, no campo que o
+  dono lê — e não é desconto: desconto só no total faria o VL_OPR sair a
+  MAIOR (a outra ponta, também fechada).
+  ✂️ **TRÊS METADES NO MESMO PR**: a FONTE (o parser do navegador grava os
+  quatro por item, com teste de paridade campo a campo contra `extrairItens`);
+  o ACERVO (`CAMPOS_RECUPERAVEIS` ganhou os quatro e `VERSAO_RELEITURA_ITENS`
+  subiu para 2 — nota carimbada v1 passa de novo; botão **♻️ Reler itens dos
+  XMLs** na aba ✏️ CFOP por nota, que é onde o aviso aponta); e o GERADOR
+  (`reservaDosTotais`/`valorOperacaoDosItens` no dono `valor-operacao-c190.js`:
+  quando NENHUM item traz o campo — `0` conta como trazido, zero é resposta — e
+  o total do documento o traz, o total é a reserva; com um item o valor é
+  EXATO, com vários é RATEADO proporcional ao valor de cada item, a sobra no
+  último). Fecha a pendência nomeada em 11/09 (*"nota com UM grupo dispensa
+  rateio… PR próprio, com o número na frente do dono"*) — o número chegou.
+  ⚠️ **O DERIVADO SAI DITO** (`avisosDoValorDaOperacao`): quantas notas levaram
+  reserva, o valor, quais foram rateadas, e a ação (♻️). E quando o VL_DOC do
+  C100 NÃO fecha com a Σ VL_OPR dos C190 da nota, o aviso diz o **total da
+  diferença e as notas** — é exatamente a conta que ele fez entre o PVA e o
+  Livro, agora na geração. Nasce MUDO no arquivo normal.
+  🚩 **PENDÊNCIA DO PAULO (ELS 08/2026)**: Relatórios → ✏️ CFOP por nota → ♻️
+  Reler itens dos XMLs (traz o valor por item do XML guardado) → regerar → o
+  aviso da geração diz a diferença que sobrar, nota a nota. Se sobrar, é
+  documento sem item no arquivo (resumo/digitada) — já nomeado em outro aviso.
+  📌 **REGRA QUE FICA: "paridade obrigatória entre os dois parsers" se prova
+  campo a campo, no teste, com o MESMO XML nos dois** — e a lista de campos é a
+  que o DONO do VL_OPR lê, não a que alguém lembrou. O sintoma nunca é erro:
+  é um total plausível a MENOS, num arquivo aceito, achado por quem compara o
+  livro com o PVA à mão.
+
+- **🚫 A LÁPIDE NUNCA VALEU NA LISTAGEM DO NAVEGADOR — a nota tirada do livro
+  continuava no Relatório, no faturamento e na Central** (12/09, Paulo,
+  GOLDLOG · Serviços prestados 08/2026, nota 781 da REALITY duas vezes, o app
+  acusando *"1 nota(s) aparecem MAIS DE UMA VEZ"*: *"optei por não considerá-la
+  neste livro fiscal… mesmo desconsiderando essa nota no livro, ela continuará
+  vinculada à empresa e compondo o faturamento demonstrado nos relatórios?"*).
+  📖 **A RESPOSTA CERTA É "NÃO EXISTE 'SÓ NESTE LIVRO'"**: a saída é o **🚫
+  Tirar esta nota do livro** no detalhe do documento (03/09, 10/09), que grava
+  a lápide `_deleted` — e a lápide vale para TODOS os leitores. Ou valeria.
+  🔴 **MEDIDO: nenhum leitor do NAVEGADOR olhava a lápide de documento.** O
+  mata-burro de 03/09 dizia *"`_deleted` já é filtrado por toda a listagem"* —
+  verdade para EMPRESAS (24/07, WALDESA), **nunca para `documentos_fiscais`**.
+  `listDocumentos` (a fonte do Livro de Serviços, do faturamento, do Resumo
+  por CFOP, das Retenções e da Central de XMLs) devolvia a nota retirada como
+  qualquer outra. Em 10/09 a varredura `lapideValeNoLivro` fechou o BACKEND
+  (SPED das duas famílias, crédito, conferência, NFTS) e escreveu *"isso é
+  VERDADE para a listagem"* — sem ter medido a listagem. Ou seja: desde 03/09 o
+  🚫 tirava a nota do SPED e a deixava no relatório que a equipe imprime.
+  ✂️ `listDocumentos` passa pelo DONO (`docContaNoLivro`, as duas lápides) e o
+  que sai vai CONTADO em `meta.retirados`; `incluirRetirados` é a porta de quem
+  pergunta pelo ACERVO. A varredura ganhou a metade do navegador (`services/`),
+  com exceção declarada COM motivo (a lista de captura do portal de SP).
+  🚩 **PENDÊNCIA DO PAULO (GOLDLOG 08/2026)**: abrir a 781 duplicada (a linha
+  com IR/INSS/CSLL 0,00 é a lançada à mão; a com "?" é a capturada) → 🚫 Tirar
+  esta nota do livro, com o motivo. Feito isso ela some do Livro de Serviços,
+  do faturamento, do bloco A e do R-2020 de uma vez. Nada mais a marcar.
+  📌 **REGRA QUE FICA: frase deste arquivo que afirma cobertura ("já é filtrado
+  por toda a listagem") se RE-MEDE antes de ser citada como fato** — e a
+  varredura que fecha uma classe fecha as DUAS casas (backend e navegador), ou
+  diz qual metade não cobre. Foi repetir a frase de 03/09 em 10/09 que deixou
+  a metade do navegador aberta por mais dois dias.
+
 - **🧾 O E110 SOMAVA O CRÉDITO CRU QUE O C190 JÁ ZERAVA — e o saldo anterior
   vinha da ficha do MÊS ERRADO** (11/09, à noite, Paulo, LEGACY · DF · 08/2026,
   com o Relatório de Erros do PVA depois de o B470 passar: *"deu certo o B470,

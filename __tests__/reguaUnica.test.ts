@@ -349,6 +349,9 @@ const REGUAS_VIGIADAS: Regua[] = [
             /function valorOperacaoDoItem\s*\(/,
             /function pisoDoValorOperacaoDoC170\s*\(/,
             /function faixaDoValorOperacao\s*\(/,
+            // 12/09 (ELS): a RESERVA dos totais quando o item não traz o campo.
+            /function reservaDosTotais\s*\(/,
+            /function valorOperacaoDosItens\s*\(/,
         ],
     },
     {

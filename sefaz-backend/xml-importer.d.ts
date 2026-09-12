@@ -57,6 +57,12 @@ export function preencherEnderecoDestinatario(p?: {
     limit?: number; empresaId?: string | null; competencia?: string | null;
 }): Promise<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; erro?: string }>;
 
+/**
+ * Extrai os itens (`<det>`) de uma NF-e completa — `[]` para resumo (resNFe)
+ * ou XML sem `<det>`. É o MESMO extrator que a captura e o backfill usam.
+ */
+export function extrairItens(xml: string): Array<Record<string, unknown>>;
+
 /** Versão do extrator de ITENS — subir recoloca a base na fila do backfill. */
 export const VERSAO_RELEITURA_ITENS: number;
 

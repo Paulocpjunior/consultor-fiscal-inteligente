@@ -79,6 +79,31 @@ function arquivosQueConsultam(): string[] {
         .filter(f => readFileSync(join(BACKEND, f), 'utf8').includes("collection('documentos_fiscais')"));
 }
 
+// ═══ O NAVEGADOR (12/09, GOLDLOG · nota 781 duplicada) ═══════════════════════
+// A varredura acima só lia `sefaz-backend/`. O mata-burro de 03/09 dizia que
+// "`_deleted` já é filtrado por toda a listagem" — e a LISTAGEM do navegador
+// (`listDocumentos`, de onde saem o Livro de Serviços, o faturamento, o Resumo
+// por CFOP e a Central de XMLs) NUNCA olhou a lápide de documento: a frase era
+// sobre EMPRESAS (24/07). A nota tirada pelo 🚫 sumia do SPED (10/09) e
+// continuava contando em tudo que a tela mostra. Quem consulta a coleção do
+// lado do navegador entra aqui — com a lápide, ou com o motivo.
+const FRONT = join(__dirname, '..', 'services');
+// (cfopEscrituradoService/cstEscrituradoService gravam por ID do documento —
+// não LISTAM, então não casam a assinatura e não precisam de exceção.)
+const FRONT_SEM_LAPIDE_COM_MOTIVO: Record<string, string> = {
+    'nfseSpCapturadasService.ts': 'lista de CAPTURA do portal de SP (Central de XMLs → Portal SP) — o documento retirado ainda prova que a captura funcionou',
+};
+function arquivosDoFrontQueConsultam(): string[] {
+    return readdirSync(FRONT)
+        .filter(f => f.endsWith('.ts'))
+        .filter(f => {
+            const src = readFileSync(join(FRONT, f), 'utf8');
+            return src.includes("collection(db, 'documentos_fiscais')")
+                || src.includes("fetchAllDocs('documentos_fiscais'")
+                || src.includes('fetchAllDocs(COLLECTIONS.DOCUMENTOS');
+        });
+}
+
 describe('MATA-BURRO: a lápide vale no LIVRO, não só na listagem', () => {
     it('todo leitor de documentos_fiscais olha a lápide — ou declara por quê não', () => {
         const semTrava = arquivosQueConsultam().filter(f =>
@@ -108,6 +133,29 @@ describe('MATA-BURRO: a lápide vale no LIVRO, não só na listagem', () => {
 
     it('a varredura tem o que ler — glob quebrado passaria verde sem provar nada', () => {
         expect(arquivosQueConsultam().length).toBeGreaterThan(20);
+    });
+
+    it('NAVEGADOR: todo leitor de documentos_fiscais olha a lápide — ou declara por quê não (12/09, GOLDLOG)', () => {
+        const semTrava = arquivosDoFrontQueConsultam().filter(f =>
+            !OLHA_A_LAPIDE.test(semImports(readFileSync(join(FRONT, f), 'utf8')))
+            && !(f in FRONT_SEM_LAPIDE_COM_MOTIVO));
+        expect(semTrava).toEqual([]);
+    });
+
+    it('NAVEGADOR: a LISTAGEM (de onde saem Livro, faturamento, Resumo por CFOP e a Central) passa pelo DONO', () => {
+        const src = semImports(readFileSync(join(FRONT, 'xmlFiscalService.ts'), 'utf8'));
+        // A CHAMADA, nunca a menção — a lição da prova por reversão de 10/09.
+        expect(/docs = docs\.filter\(docContaNoLivro\)/.test(src)).toBe(true);
+        // E o que sai vai CONTADO: sumir calado seria a ausência plausível.
+        expect(/meta\.retirados = /.test(src)).toBe(true);
+    });
+
+    it('NAVEGADOR: a varredura tem o que ler e as exceções ainda consultam a coleção', () => {
+        const consultam = arquivosDoFrontQueConsultam();
+        expect(consultam.length).toBeGreaterThanOrEqual(2);   // a listagem e a lista do portal de SP
+        const orfas = Object.keys(FRONT_SEM_LAPIDE_COM_MOTIVO).filter(f => !consultam.includes(f));
+        expect(orfas).toEqual([]);
+        expect(Object.values(FRONT_SEM_LAPIDE_COM_MOTIVO).filter(m => m.length < 20)).toEqual([]);
     });
 
     it('toda exceção declarada ainda CONSULTA a coleção — exceção órfã mente', () => {

@@ -1,6 +1,6 @@
 # Pendências do CFI — o que falta e quem resolve
 
-<!-- guia-id: pendencias-cfi · guia-revisao: 2026-09-11 -->
+<!-- guia-id: pendencias-cfi · guia-revisao: 2026-09-12 -->
 <!-- Mexeu aqui? mexa no par em public/pendencias-cfi.html e suba a revisão nos DOIS. -->
 
 > Fonte dupla: este arquivo e `public/pendencias-cfi.html` DEVEM ser atualizados
@@ -71,14 +71,6 @@ acessos que o desenvolvimento não tem.
 
 ## ⚪ Com o desenvolvimento, já nomeado no código
 
-- **`VL_OPR` do C190 sem o frete/outras despesas da nota** (LEGACY 08/2026:
-  R$ 200,00 e R$ 15,71 que o C100 declara e o C190 não carrega). O PVA aceita;
-  é livro a menor. A decisão de 20/08 foi *dizer, não ratear* — nota com um
-  grupo só de CST/CFOP dispensa rateio, e isso é mudança de valor em arquivo
-  fiscal: PR próprio, com o número na frente.
-- **Natureza de rendimento POR NOTA no R-4020 (Contábil).** Hoje é por
-  beneficiário; duas NFS-e do mesmo prestador com serviços diferentes (WALDESA
-  × SERASA) precisam de natureza por nota. Repo `plano-contas-iob`.
 Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
 **O app não afirma o que não sabe em nenhum deles.**
 
@@ -94,6 +86,18 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
   dedução ali devolve o lote inteiro.
 - **Três partes do SPED sem recibo** — bloco D do EFD-Contribuições, E510 de IPI
   e E200/E210 de ST. Gerados e conferidos internamente; prova só vem do recibo.
+
+## ✅ Fechado em 12/09
+
+- **`VL_OPR` do C190 sem frete/seguro/outras/FCP-ST** (ELS 08/2026, Livro
+  957.467,11 × PVA 955.593,91): a causa era o parser do navegador, que não
+  gravava os quatro campos por item. Fonte, acervo (♻️ Reler itens dos XMLs) e
+  gerador (reserva dos totais, dita no aviso) no mesmo PR.
+- **A lápide (🚫 Tirar do livro) não valia nos relatórios do navegador**
+  (GOLDLOG, nota 781 duplicada): `listDocumentos` passa pelo dono.
+- **Natureza de rendimento POR NOTA no R-4020 (Contábil)** — entregue em
+  11/09 (v3.4.278) e corrigida em 12/09 (v3.4.279: a chave da nota do portal
+  de SP era descartada; um evento por beneficiário; retificação pelo recibo).
 
 ## ✅ Fechado em 11/09
 

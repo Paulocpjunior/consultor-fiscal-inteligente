@@ -1241,7 +1241,9 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
  * notas que precisavam dele, respondendo "0 recuperadas · 664 já tinham"
  * enquanto o painel do lado acusava 427 sem fornecedor.
  */
-export const VERSAO_RELEITURA_ITENS = 1;
+// v2 (12/09): frete/seguro/outras/FCP-ST por item entraram em CAMPOS_RECUPERAVEIS —
+// nota já carimbada v1 precisa passar de novo, senão o campo novo nunca chega.
+export const VERSAO_RELEITURA_ITENS = 2;
 
 /**
  * BACKFILL — campos de ITEM que o extrator aprendeu depois (`cstIpi`,
