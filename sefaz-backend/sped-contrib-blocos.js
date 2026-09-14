@@ -57,6 +57,11 @@ import {
 // O valor total do documento (mercadorias + acessórias + ST + IPI − desconto) —
 // o mesmo que o VL_OPR do C190 usa no EFD ICMS/IPI.
 import { valorOperacaoDoItem } from './valor-operacao-c190.js';
+// 🚨 A NFC-e É C100 + C175 (HYPE CAFÉ 1385 · 08/2026, 14/09 — 295 recusas do
+// PVA 6.2.0). O C170 saiu do cupom em 24/08 e o registro que o Guia manda no
+// lugar nunca entrou. O dono consolida por CFOP + CST + alíquotas e decide em
+// qual CST a contribuição INCIDE — o C170 da nota 55 lê a MESMA régua.
+import { consolidarC175, camposDoC175, cstComIncidenciaNaSaida } from './sped-contrib-c175.js';
 // A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
 // arquivo aceito da AFFITTARE 05/2026 como fonte.
 import { montarF550, montarF100, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
@@ -204,12 +209,22 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem)
         // o C170 traz 104,36 (0,65% da base reduzida) enquanto o C100 traz
         // 127,27 (o que o emitente destacou). Manter o destacado aqui faria o
         // próprio registro se desmentir — base × alíquota ≠ valor declarado.
+        // 🚨 CST SEM INCIDÊNCIA SAI COM BASE, ALÍQUOTA E VALOR ZERO (14/09, ao
+        // construir o C175). O item CST 04 (monofásico — refrigerante, cerveja)
+        // ou 06 (alíquota zero) caía no `|| aliq.pis * 100` e levava 0,65%: o
+        // arquivo declarava contribuição sobre revenda que a lei já tributou no
+        // fabricante, e o M210 do PVA a somava como receita tributada. É a
+        // condição da própria validação do M210 (*"CST 01 a 05 com alíquota
+        // diferente de zero"*), e o dono é o mesmo do C175 — um item não pode
+        // incidir no cupom e não incidir na nota 55.
+        const incidePis = cstComIncidenciaNaSaida(cstPis);
+        const incideCofins = cstComIncidenciaNaSaida(cstCofins);
         return {
             cstPis, cstCofins,
-            basePis: base, baseCofins: base,
-            aliqPis, aliqCofins,
-            vlPis: base * (aliqPis / 100),
-            vlCofins: base * (aliqCofins / 100),
+            basePis: incidePis ? base : 0, baseCofins: incideCofins ? base : 0,
+            aliqPis: incidePis ? aliqPis : 0, aliqCofins: incideCofins ? aliqCofins : 0,
+            vlPis: incidePis ? base * (aliqPis / 100) : 0,
+            vlCofins: incideCofins ? base * (aliqCofins / 100) : 0,
         };
     }
     return pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq);
@@ -717,7 +732,39 @@ export function buildBlocoC_Contrib(dados) {
         // C170 declarado na Tabela de Identificação vira item ÓRFÃO, que é a
         // recusa seguinte (a PWR pagou essa em 19/08).
         // ═══════════════════════════════════════════════════════════════════
-        if (!levaC170NoContribuicoes(nota)) continue;
+        if (!levaC170NoContribuicoes(nota)) {
+            // ═══════════════════════════════════════════════════════════════
+            // 🚨 C175 — O REGISTRO QUE O GUIA MANDA NO LUGAR DO C170 (14/09,
+            // HYPE CAFÉ 1385 · 08/2026, PVA 6.2.0: **295 recusas**, uma por
+            // NFC-e — *"…com a informação referente à base de cálculo,
+            // alíquota e valor das contribuições apuradas sendo escrituradas
+            // de forma consolidada e analítica (por CST e alíquotas), no
+            // registro C175"*). Tirar o C170 em 24/08 fechou metade: sem o
+            // C175 a Receita não vê receita nenhuma no cupom, regera o bloco M
+            // ZERADO e recusa o nosso M210 por não ter documento que o
+            // sustente. Cada item passa pela MESMA régua do C170 (CFOP,
+            // líquido, ICMS, CST, alíquota) e o dono consolida por
+            // CFOP + CST + alíquotas — o desenho do C190 do ICMS/IPI.
+            // ═══════════════════════════════════════════════════════════════
+            const itensParaC175 = (nota.itens || []).map((item, k) => {
+                const liquidoDoItem = liquidosDosItens[k] || 0;
+                const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem);
+                return {
+                    cfop: convertCfopParaEntrada(item.cfop || item.CFOP || '0000', direcao, dados, nota, item),
+                    vlItem: parseFloat(item.vProd || item.valor || 0) || 0,
+                    desconto: descontosPorItem[k] || 0,
+                    icms: parseFloat(item.vICMS || 0) || 0,
+                    cstPis: p.cstPis, cstCofins: p.cstCofins,
+                    aliqPis: p.aliqPis, aliqCofins: p.aliqCofins,
+                };
+            });
+            const c175 = consolidarC175(itensParaC175);
+            for (const r of c175.registros) linhas.push(fmt.buildLine(camposDoC175(r, fmt.formatValue)));
+            if (Array.isArray(dados.warnings)) {
+                for (const a of c175.avisos) dados.warnings.push(`NFC-e nº ${nota.numero || '?'}: ${a}`);
+            }
+            continue;
+        }
         (nota.itens || []).forEach((item, k) => {
             // ⚠️ VL_ITEM é BRUTO (Guia, campo 07: quantidade × preço unitário)
             // e o desconto vai no campo 08 — é dali que o PVA reduz a base.
@@ -1315,6 +1362,8 @@ export function buildBlocoM(dados) {
     let docsComDesconto = 0;
     /** Documento sem valor legível em nenhuma das formas — sai do total e é DITO. */
     const semValor = [];
+    /** Itens de SAÍDA cujo CST não tem incidência (04/06/07/08/09…) — fora da base e DITOS. */
+    const semIncidencia = { itens: 0, valor: 0, docs: 0 };
 
     for (const nota of (dados.notas || [])) {
         if (docCancelado(nota) || nota.status === 'denegado') continue;
@@ -1340,7 +1389,28 @@ export function buildBlocoM(dados) {
             semValor.push(String(nota.numero || nota.chave || '(sem número)'));
             continue;
         }
-        const rb = receitaEBaseDoDocumento(nota, doDocumento);
+        // 🚨 A RECEITA DO M210 É A DOS CST COM INCIDÊNCIA (Guia 1.35, M210
+        // campo 03: *"quando o CST da operação vinculada for 01, 02, 03, 04, 05
+        // com alíquota diferente de zero"*). O item CST 04/06 sai do C170/C175
+        // com base zero — o bloco M lê a MESMA régua, senão o nosso M210
+        // discordaria dos nossos próprios documentos (14/09, ao construir o
+        // C175). O que fica de fora vai CONTADO no aviso.
+        let notaParaBase = nota;
+        if (!semItens && direcaoEfetivaDoc(nota) === 'saida') {
+            const itensComIncidencia = nota.itens.filter((i) => (
+                cstComIncidenciaNaSaida(getCstPis(i, regimeApuracao, 'saida'))
+                || cstComIncidenciaNaSaida(getCstCofins(i, regimeApuracao, 'saida'))
+            ));
+            if (itensComIncidencia.length !== nota.itens.length) {
+                const fora = nota.itens.filter((i) => !itensComIncidencia.includes(i));
+                semIncidencia.itens += fora.length;
+                semIncidencia.valor += fora.reduce((s, i) => s + receitaDoItem(i), 0);
+                semIncidencia.docs += 1;
+                if (itensComIncidencia.length === 0) continue;
+                notaParaBase = { ...nota, itens: itensComIncidencia };
+            }
+        }
+        const rb = receitaEBaseDoDocumento(notaParaBase, doDocumento);
         if (rb.receita === 0 && rb.base === 0) {
             semValor.push(String(nota.numero || nota.chave || '(sem número)'));
             continue;
@@ -1452,6 +1522,17 @@ export function buildBlocoM(dados) {
             + `receita ${totalReceitaSaida.toFixed(2)} − ICMS ${icmsExcluido.toFixed(2)} = base `
             + `${totalBcSaida.toFixed(2)}. É a mesma exclusão que a ficha do Lucro já fazia; antes desta `
             + 'competência o SPED declarava a base CHEIA, maior que a da guia.',
+        );
+    }
+
+    if (semIncidencia.itens > 0 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `PIS/COFINS sem incidência: ${semIncidencia.itens} item(ns) de saída em ${semIncidencia.docs} `
+            + `documento(s), R$ ${semIncidencia.valor.toFixed(2)}, ficaram FORA da base do M210/M610 porque o CST `
+            + 'do item é 04/06/07/08/09 (monofásico, alíquota zero, isento, sem incidência, suspensão). '
+            + 'É a régua do Guia 1.35 (M210 campo 03: só CST 01 a 05 com alíquota diferente de zero); o C170/C175 '
+            + 'desses itens sai com base e valor zero. Se algum desses itens deveria tributar, o CST está errado '
+            + 'na NOTA — confira em Relatórios → ✏️ CFOP por nota.',
         );
     }
 

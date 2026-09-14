@@ -558,30 +558,38 @@ const CST_PISCOFINS_VALIDOS = new Set([
     '70', '71', '72', '73', '74', '75', '98', '99',
 ]);
 
-/** Posições PROVADAS no C170 de 37 campos (recibo do PVA · PWR 07/2026). */
-const C170_CST_PIS = 25;
-const C170_CST_COFINS = 31;
+/**
+ * Posições dos CST por registro (1-based, como o PVA nomeia). C170: provadas
+ * pelo recibo do PVA (PWR 07/2026). C175: Guia 1.35, campos 05 e 11.
+ */
+const POSICOES_CST_PISCOFINS = {
+    C170: { CST_PIS: 25, CST_COFINS: 31 },
+    C175: { CST_PIS: 5, CST_COFINS: 11 },
+};
 
 export function conferirCstPisCofins(linhas) {
     const erros = [];
     (linhas || []).forEach((linha, i) => {
         const f = String(linha).split('|');
-        if (f[1] !== 'C170') return;   // forEach: `return` é o continue
+        const reg = f[1];
+        const posicoes = POSICOES_CST_PISCOFINS[reg];
+        if (!posicoes) return;   // forEach: `return` é o continue
         const conferir = (pos, nome) => {
             const cst = String(f[pos] || '').trim();
             if (CST_PISCOFINS_VALIDOS.has(cst)) return;
             erros.push({
-                regra: 'cst-piscofins-fora-da-tabela', registro: 'C170', campo: `${pos} - ${nome}`,
+                regra: 'cst-piscofins-fora-da-tabela', registro: reg, campo: `${pos} - ${nome}`,
                 valor: cst,
-                fonte: 'Tabela 4.3.3/4.3.4 do EFD-Contribuições. Posições provadas pelo recibo do PVA '
-                    + '(PWR 31947349000169 · 07/2026, 20/08) e pelo arquivo aceito de 03/2026.',
-                mensagem: `C170 na linha ${i + 1}: ${nome} = "${cst || '(vazio)'}", que não existe na `
+                fonte: 'Tabela 4.3.3/4.3.4 do EFD-Contribuições. Posições do C170 provadas pelo recibo do PVA '
+                    + '(PWR 31947349000169 · 07/2026, 20/08) e pelo arquivo aceito de 03/2026; as do C175 são '
+                    + 'as do Guia 1.35 (campos 05 e 11).',
+                mensagem: `${reg} na linha ${i + 1}: ${nome} = "${cst || '(vazio)'}", que não existe na `
                     + 'Tabela 4.3.3/4.3.4. O PVA recusa a importação. Confira o CST do item na Central de '
                     + 'Documentos — CSOSN (101, 500…) e código de ICMS não valem para PIS/COFINS.',
             });
         };
-        conferir(C170_CST_PIS, 'CST_PIS');
-        conferir(C170_CST_COFINS, 'CST_COFINS');
+        conferir(posicoes.CST_PIS, 'CST_PIS');
+        conferir(posicoes.CST_COFINS, 'CST_COFINS');
     });
     return { erros, ok: erros.length === 0 };
 }
@@ -660,10 +668,114 @@ export function conferirC170DeNfce(linhas) {
             mensagem: `A NFC-e nº ${numPai || '?'} levou C170 na linha ${i + 1}, e o leiaute do `
                 + 'EFD-Contribuições não admite detalhe de item em cupom — o PVA recusa a importação com '
                 + '"O registro não deve ser informado para o modelo de documento do \'Registro Pai\'". '
-                + 'A receita da NFC-e é declarada no C100 e no bloco M; e os itens que só existem em cupom '
-                + 'têm de sair do 0200 junto, senão viram item órfão.',
+                + 'O cupom se escritura em C100 + C175 (consolidado por CFOP, CST e alíquota); e os itens que '
+                + 'só existem em cupom têm de sair do 0200 junto, senão viram item órfão.',
         });
     });
+    return { erros };
+}
+
+// ── R: NFC-e (COD_MOD 65) SEM C175 — e C175 fora da NFC-e ──────────────────
+//
+// FONTE: PVA 6.2.0 da HYPE CAFE SERVICOS DE ALIMENTACAO 66641236000115 ·
+// 08/2026 (14/09) — **295 recusas**, uma por NFC-e, literal:
+//
+//   "A escrituração das receitas auferidas por Notas Fiscais Eletrônicas de
+//    Consumidor Final - NFC-e (COD_MOD = 65) deve ser efetuada de forma
+//    individualizada no registro C100, sendo o campo COD_PART facultativo e
+//    com a informação referente à base de cálculo, alíquota e valor das
+//    contribuições apuradas sendo escrituradas de forma consolidada e
+//    analítica (por CST e alíquotas), no registro C175."
+//
+// mais **2** no M210/M610 (*"Não deverá existir um registro M210/M610 … não
+// informados nos documentos com CST de 01 a 05"*), que são CONSEQUÊNCIA: sem
+// C175 a Receita não vê receita no cupom e o M210 fica sem documento que o
+// sustente. Guia 1.35: C175 é *"O (se existir C100 e COD_MOD igual a 65)"*,
+// só admite CFOP iniciado com 5, e não pode repetir a combinação
+// CFOP + CST + alíquotas dentro do mesmo documento.
+//
+// 📌 É A SEGUNDA METADE DA REGRA DE 24/08: tirar o C170 do cupom estava certo,
+// e faltou o registro que o Guia manda no lugar. Nasce VERDE sobre o gerador
+// corrigido e acusaria o arquivo de 14/09 com as 295 linhas.
+/**
+ * C100 de NFC-e sem filho C175; C175 pendurado em documento que não é NFC-e;
+ * CFOP fora de 5xxx; combinação CFOP+CST+alíquotas repetida no mesmo C100.
+ */
+export function conferirC175DaNfce(linhas) {
+    const erros = [];
+    const lista = Array.isArray(linhas) ? linhas : [];
+    let pai = null;
+    const FONTE = 'PVA 6.2.0: "A escrituração das receitas auferidas por NFC-e (COD_MOD = 65) deve ser '
+        + 'efetuada de forma individualizada no registro C100 … escrituradas de forma consolidada e '
+        + 'analítica (por CST e alíquotas), no registro C175" (HYPE CAFE 1385 · 08/2026, 14/09 — 295 '
+        + 'recusas, uma por NFC-e).';
+    const fechar = () => {
+        if (!pai) return;
+        if (pai.mod === '65' && pai.c175 === 0) {
+            erros.push({
+                registro: 'C100', linha: pai.linha, fonte: FONTE,
+                mensagem: `A NFC-e nº ${pai.num || '?'} (linha ${pai.linha}) saiu SEM C175. O leiaute exige, `
+                    + 'para cada NFC-e, ao menos um C175 consolidando os itens por CFOP, CST e alíquota de '
+                    + 'PIS/COFINS — sem ele o PVA recusa a NFC-e e regera o M200/M210 ZERADO, porque a '
+                    + 'receita do cupom é lida do VL_OPR do C175.',
+            });
+        }
+        pai = null;
+    };
+    for (let i = 0; i < lista.length; i += 1) {
+        const c = camposDaLinha(lista[i]);
+        const reg = String(c[0] || '').trim();
+        if (!reg) continue;
+        if (reg === 'C100') {
+            fechar();
+            pai = {
+                linha: i + 1, mod: String(c[4] || '').trim(), num: String(c[7] || '').trim(),
+                c175: 0, combinacoes: new Set(),
+            };
+            continue;
+        }
+        if (reg === 'C175') {
+            if (!pai || pai.mod !== '65') {
+                erros.push({
+                    registro: 'C175', linha: i + 1,
+                    fonte: 'Guia Prático 1.35, Registro C175: "Registro Analítico do Documento (Código 65)" — '
+                        + 'filho de C100 com COD_MOD 65.',
+                    mensagem: `O C175 da linha ${i + 1} está pendurado em ${pai ? `um C100 modelo ${pai.mod}` : 'nenhum C100'}. `
+                        + 'O C175 é exclusivo da NFC-e (modelo 65); a NF-e (55) detalha item a item no C170.',
+                });
+                continue;
+            }
+            pai.c175 += 1;
+            const cfop = String(c[1] || '').trim();
+            if (!cfop.startsWith('5')) {
+                erros.push({
+                    registro: 'C175', linha: i + 1,
+                    fonte: 'Guia Prático 1.35, C175 campo 02: "Na escrituração analítica das NFC-e, só poderão '
+                        + 'ser informados CFOP iniciados com 5".',
+                    mensagem: `O C175 da NFC-e nº ${pai.num || '?'} (linha ${i + 1}) declara CFOP ${cfop || '(vazio)'}. `
+                        + 'Cupom só admite CFOP iniciado com 5 — confira o CFOP do item na Central de Documentos.',
+                });
+            }
+            const combinacao = [cfop, c[4], c[6], c[10], c[12]].map(v => String(v || '').trim()).join('|');
+            if (pai.combinacoes.has(combinacao)) {
+                erros.push({
+                    registro: 'C175', linha: i + 1,
+                    fonte: 'Guia Prático 1.35, C175, Validação do Registro: "não podem ser informados dois ou mais '
+                        + 'registros com a mesma combinação de valores dos campos: CFOP, CST (PIS/Pasep e Cofins) '
+                        + 'e alíquotas (PIS/Pasep e Cofins)".',
+                    mensagem: `A NFC-e nº ${pai.num || '?'} tem dois C175 com a mesma combinação CFOP/CST/alíquota `
+                        + `(linha ${i + 1}). A consolidação tem de somar os itens num registro só.`,
+                });
+            }
+            pai.combinacoes.add(combinacao);
+            continue;
+        }
+        // Qualquer outro registro (C170 de outra nota não existe sob NFC-e;
+        // C110/C111 são filhos legítimos) — só um registro que NÃO é filho de
+        // C100 fecha o pai.
+        if (!/^C1[0-9]{2}$/.test(reg) || reg === 'C100' || reg === 'C180' || reg === 'C190') fechar();
+    }
+    fechar();
     return { erros };
 }
 
@@ -705,7 +817,7 @@ export function conferirCadastrosOrfaosContrib(linhas) {
                 + '(PWR 1364, 19/08).',
             mensagem: `O item ${cod} está declarado no 0200 (linha ${linha}) e nenhum C170/A170 o `
                 + 'referencia — o PVA recusa item órfão. Item que só existia em NFC-e cai aqui: '
-                + 'o cupom não leva C170 neste arquivo, então o item dele também não entra no 0200.',
+                + 'o cupom sai em C175 (consolidado, sem código de item), então o item dele não entra no 0200.',
         });
     }
 
@@ -753,7 +865,7 @@ export function conferirSomaDosItensContrib(linhas) {
             fonte: 'Guia Prático, C170 campo 07: "a soma de valores dos registros C170 deve ser igual ao '
                 + 'valor informado no campo VL_MERC do registro C100".',
             mensagem: `O documento nº ${pai.num || '?'} (linha ${pai.linha}) declara VL_MERC `
-                + `${(pai.merc / 100).toFixed(2)} e a soma dos VL_ITEM dos C170 dá `
+                + `${(pai.merc / 100).toFixed(2)} e a soma dos VL_ITEM dos C170 (VL_OPR dos C175) dá `
                 + `${(pai.soma / 100).toFixed(2)}. O pai e os filhos têm de dizer o mesmo valor — se o `
                 + 'desconto incondicional saiu de um lado, tem de sair do outro.',
         });
@@ -767,6 +879,9 @@ export function conferirSomaDosItensContrib(linhas) {
             return;
         }
         if (reg === 'C170' && pai) { pai.soma += cent(campos[6]); pai.temFilho = true; return; }
+        // C175 campo 03 (VL_OPR): "somatório do valor das mercadorias e produtos
+        // constantes na NFC-e" — a Σ dos C175 fecha com o VL_MERC do pai.
+        if (reg === 'C175' && pai) { pai.soma += cent(campos[2]); pai.temFilho = true; return; }
         if (reg) { fechar(); pai = null; }
     });
     fechar();
@@ -802,8 +917,18 @@ export function conferirReceitaBrutaDoM210(linhas) {
     // Outras fontes de receita bruta na MESMA soma — havendo qualquer uma,
     // a Σ dos C170 é um PISO, não o total, e a regra fica muda.
     const OUTRAS_FONTES = ['A170', 'C181', 'C481', 'C491', 'C381', 'C601', 'C870',
-        'C880', 'D201', 'D601', 'D300', 'D350', 'C175', 'F100', 'F200', 'F500',
+        'C880', 'D201', 'D601', 'D300', 'D350', 'F100', 'F200', 'F500',
         'F510', 'F550', 'F560', 'I100'];
+    // A condição da própria validação: *"quando o CST da operação vinculada for
+    // 01, 02, 03, 04, 05 com alíquota diferente de zero e 49"*. Item CST 06
+    // (alíquota zero) ou 04 com alíquota zero NÃO entra na receita bruta — e o
+    // gerador o emite assim desde 14/09 (C175 da HYPE).
+    const contaNaReceita = (cst, aliqTxt) => {
+        const c = String(cst || '').trim();
+        if (c === '49') return true;
+        const a = Number(String(aliqTxt || '0').replace(/\./g, '').replace(',', '.')) || 0;
+        return ['01', '02', '03', '04', '05'].includes(c) && a !== 0;
+    };
     let temOutraFonte = false;
     let saida = false;
     let somaItens = 0;
@@ -816,7 +941,14 @@ export function conferirReceitaBrutaDoM210(linhas) {
         if (OUTRAS_FONTES.includes(reg)) { temOutraFonte = true; continue; }
         if (reg === 'C100') { saida = String(c[1] || '').trim() === '1'; continue; }
         if (reg === 'C170') {
-            if (saida) { somaItens += cent(c[6]); temC170DeSaida = true; }
+            // CST_PIS campo 25, ALIQ_PIS campo 27 (posições provadas, PWR 07/2026).
+            if (saida && contaNaReceita(c[24], c[26])) { somaItens += cent(c[6]); temC170DeSaida = true; }
+            continue;
+        }
+        if (reg === 'C175') {
+            // "VL_OPR do registro C175" está na MESMA lista da validação. CST_PIS
+            // campo 05, ALIQ_PIS campo 07 (Guia 1.35, Registro C175).
+            if (saida && contaNaReceita(c[4], c[6])) { somaItens += cent(c[2]); temC170DeSaida = true; }
             continue;
         }
         if (reg === 'M210' || reg === 'M610') {
@@ -834,7 +966,7 @@ export function conferirReceitaBrutaDoM210(linhas) {
                 + 'soma dos seguintes campos … VL_ITEM dos registros C170 … [IND_OPER = 1]" (PWR 1364, '
                 + '07/2026 — cinco dias porque o PVA regera o registro por esta regra).',
             mensagem: `O ${d.reg} (linha ${d.linha}) declara VL_REC_BRT ${(d.valor / 100).toFixed(2)} e a `
-                + `soma dos VL_ITEM dos C170 de saída dá ${(somaItens / 100).toFixed(2)}. É esta soma que a `
+                + `soma dos VL_ITEM dos C170 (VL_OPR dos C175) de saída com CST tributado dá ${(somaItens / 100).toFixed(2)}. É esta soma que a `
                 + 'Receita valida no campo — o PVA regera o registro e sobrescreve o que estiver aqui. '
                 + 'O desconto incondicional não entra nesta conta: ele sai no campo 08 (VL_DESC) do C170 e '
                 + 'reduz a BASE (campo 04), que é onde ele reduz tributo.',
@@ -943,6 +1075,8 @@ const ARITMETICA_PIS_COFINS = {
     //            [base, alíquota, valor, (base_quant, aliq_quant)]  — 1-based
     A170: [[10, 11, 12], [14, 15, 16]],
     C170: [[26, 27, 30, 28, 29], [32, 33, 36, 34, 35]],
+    // Guia 1.35, C175 campos 10 e 16 — a mesma validação, sobre a consolidação da NFC-e.
+    C175: [[6, 7, 10, 8, 9], [12, 13, 16, 14, 15]],
     D101: [[6, 7, 8]],
     D105: [[6, 7, 8]],
     F100: [[8, 9, 10], [12, 13, 14]],
@@ -1004,7 +1138,7 @@ export function conferirAritmeticaPisCofins(linhas) {
             erros.push({
                 registro: reg, linha: i + 1,
                 fonte: 'Guia Prático da EFD-Contribuições 1.35 — a mesma validação em A170 (campos 12 e 16), '
-                    + 'C170 (30 e 36), D101/D105 (08), F100 (10 e 14) e F550 (07 e 12): "o valor do campo '
+                    + 'C170 (30 e 36), C175 (10 e 16), D101/D105 (08), F100 (10 e 14) e F550 (07 e 12): "o valor do campo '
                     + 'deve corresponder ao valor da base de cálculo multiplicado pela alíquota aplicável ao '
                     + 'item … O resultado deverá ser dividido pelo valor 100".',
                 mensagem: `O ${reg} da linha ${i + 1} não fecha consigo mesmo: base ${r$(base)} × `
@@ -1451,6 +1585,7 @@ export function conferirCreditoDoM100(linhas) {
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
+        ...conferirC175DaNfce(linhas).erros,
         ...conferirBlocoDContrib(linhas).erros,
         ...conferirAritmeticaPisCofins(linhas).erros,
         ...conferirPeriodoDoArquivo(linhas).erros,

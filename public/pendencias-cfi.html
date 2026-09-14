@@ -116,9 +116,21 @@
 </section>
 
 <section>
-    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">12 itens</span></h2>
+    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">13 itens</span></h2>
     <p>Nenhum é trabalho de código. São leituras de painel, cliques em produção ou acessos
     que o time de desenvolvimento não tem.</p>
+
+    <div class="fila dinheiro">
+        <h3>HYPE CAFÉ 08/2026: regerar o EFD-Contribuições e validar no PVA (C175)</h3>
+        <p>O PVA devolveu 298 erros: 295 eram <em>uma por NFC-e</em>, pedindo o registro C175 (a receita do cupom
+        consolidada por CST e alíquota), e 2 no M210/M610 — consequência, porque sem C175 o PVA não vê receita
+        nenhuma e mostra o M200 zerado. Corrigido em 14/09: o arquivo passa a sair com C100 + C175 para cada
+        NFC-e, e item com CST 04/06 (monofásico, alíquota zero) sai sem PIS/COFINS. Sobra 1 erro que é de
+        cadastro: o participante <code>05425342667</code> no 0150 sem código de município (na mão, como sempre).</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> gerar o EFD-Contribuições de 08/2026 de novo, apagar a
+        escrituração antiga no PVA e importar o arquivo novo. Conferir na tela do PVA se o M200/M210 vieram com a
+        receita das NFC-e. Vale também para 07/2026, que nunca teve recibo.</div>
+    </div>
 
     <div class="fila dinheiro">
         <h3>SPED ICMS/IPI de agosto de TODA empresa de Brasília: regerar</h3>
@@ -288,6 +300,17 @@
 
 <section>
     <h2>✅ Fechado em 14/09</h2>
+
+    <div class="fila feito">
+        <h3>🧾 NFC-e no EFD-Contribuições: o C175 que nunca tinha saído</h3>
+        <p>Em 24/08 o C170 saiu do cupom (o PVA recusava 572 vezes) e ficou faltando a outra metade: o Guia
+        1.35 manda <em>"somente os registros C100 e C175"</em>, e o PVA lê a receita do cupom no VL_OPR do C175.
+        Agora cada NFC-e sai com um C175 por CFOP + CST + alíquota, com base sem ICMS e sem desconto; a régua de
+        incidência (CST 04/06/07/08/09 ⇒ zero) vale no C170, no C175 e no bloco M; e a prevalidação acusa NFC-e
+        sem C175 antes do PVA.</p>
+        <div class="quando"><strong>Pendência do Paulo:</strong> regerar a HYPE 08/2026 e validar — o M200/M210
+        do PVA passa a vir do C175.</div>
+    </div>
 
     <div class="fila feito">
         <h3>📒 Registro de Apuração do ICMS (RAICMS) sem gerar o SPED</h3>

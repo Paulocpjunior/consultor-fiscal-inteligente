@@ -106,6 +106,21 @@
     apuração que gera o arquivo — se aqui aparece 1.216,32, o SPED sai com 1.216,32. Para lançar ou corrigir
     um ajuste (e os códigos do DIFAL art. 117), continua sendo em SPED Fiscal → Ajustes E111; o relatório só
     mostra. Empresa do Simples não tem esta apuração (o ICMS dela está no DAS).</div>
+
+    <h3>3. 🧾 <strong>EFD-Contribuições de quem emite NFC-e: o cupom agora sai com o C175</strong></h3>
+    <p>O PVA recusava <strong>uma vez por NFC-e</strong> (na HYPE CAFÉ de 08/2026 foram 295) dizendo que a
+    receita do cupom tem de vir <em>"consolidada e analítica (por CST e alíquotas), no registro C175"</em> — e
+    mostrava o <strong>M200/M210 zerado</strong>, porque ele lê a receita do cupom nesse registro. O CFI passou a
+    gerar, para cada NFC-e, um C175 por CFOP + CST + alíquota de PIS/COFINS (o "C190" do Contribuições), com a
+    base já sem o ICMS e sem o desconto. Item com CST 04/06 (monofásico, alíquota zero — refrigerante, cerveja)
+    sai com base e valor zero, como manda a tabela: antes levava 0,65%/3% indevidos.</p>
+    <div class="onde">📍 <strong>Onde:</strong> card <strong>SPED Fiscal</strong> → gerar o
+    <strong>EFD-Contribuições</strong> da competência de novo. Nada a cadastrar. A caixa de avisos diz quantas
+    NFC-e saíram com C175 e quanto ficou fora da base por CST sem incidência.</div>
+    <div class="alerta">⚠️ Empresa que já gerou o EFD-Contribuições de 08/2026 com NFC-e (varejo, bar, café,
+    loja) precisa <strong>regerar e validar de novo no PVA</strong>: o arquivo anterior saía sem o C175, e o M200
+    dele vinha zerado na tela do PVA. Se algum item que deveria tributar aparecer no aviso de "sem incidência",
+    o CST está errado na nota — Relatórios → ✏️ CFOP por nota.</div>
 </section>
 
 <section>
