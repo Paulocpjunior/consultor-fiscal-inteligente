@@ -5,6 +5,47 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📒 "OU EU TENHO QUE GERAR O SPED PARA CONFERIR O VALOR DO ICMS A PAGAR OU
+  CREDOR?" — a apuração só existia a caminho do E110** (14/09, Paulo, HYPE
+  CAFÉ 1385 · Lucro Presumido · 08/2026, com o print do *Registro de Apuração
+  do ICMS* do e-Fiscal: *"crie um relatório conforme modelo acima, porque por
+  exemplo, o valor de difal só aparece lá no ajuste E111"*).
+  📖 **O MODELO É O RAICMS DO e-FISCAL** (Históricos · Coluna Auxiliar · Somas):
+  001 saídas com débito 1.204,16 · 002 Outros Débitos *"Artigo 117, II do
+  RICMS/00"* aux 32,09 · 004 total 1.236,25 · 005 entradas 0,00 · 006 Outros
+  Créditos *"Artigo 117, I"* 19,93 · 008/010 19,93 · 011 saldo devedor
+  **1.216,32** · 013 a recolher 1.216,32 · 014 vazio. Cada ajuste E111 sai
+  NOMEADO na coluna auxiliar; linha sem lançamento sai VAZIA, não 0,00.
+  🔴 **MEDIDO NO CÓDIGO**: débitos, créditos, ajustes (o par do art. 117
+  incluído), saldo anterior, deduções e o fechamento moravam DENTRO do
+  `buildBlocoE`, montados a caminho da linha E110 — quem quisesse o número
+  tinha de gerar o arquivo e ler a linha. O DIFAL só era visível na aba dele.
+  ✂️ `apuracao-icms-raicms.js` (PURO) é o **dono da apuração do ICMS
+  próprio**: `apurarIcmsProprio(dados)` faz a conta UMA vez — o **bloco E lê
+  dela para escrever o E110** e `montarRaicms` lê dela para as 14 linhas do
+  papel. A rota `GET /api/admin/sped-fiscal/apuracao-icms` passa pelo MESMO
+  `coletarDadosEmpresa` do /gerar (notas, E111, DIFAL art. 117, saldo pela
+  cronologia ou pela ficha) e NÃO grava nada; a aba **Relatórios → 📒
+  Apuração do ICMS (RAICMS)** mostra e imprime (casca única, identificação).
+  ⚠️ **A TELA NÃO CALCULA NADA** (regra de 12/08: relatório nunca tem conta
+  própria) — travado na fonte: o bloco E não pode chamar `aplicarAjustesApuracao`
+  nem `classificarAjustes`; quem chama a fórmula é o dono, a definição e a
+  cronologia do saldo (`saldo-abertura.js`), com o motivo escrito no teste.
+  🚦 **A PROVA É POR COMPOSIÇÃO**: o teste gera o bloco E de verdade e exige
+  campo a campo do E110 = linha do papel (011 = 004 − 010 quando devedor, 014
+  = 010 − 004 quando credor). Provado por REVERSÃO: bloco E com conta própria
+  derruba 7 testes; 013 sem a dedução derruba 2.
+  🐛 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: a trava de 11/09 prendia a
+  CHAMADA `somarIcmsPorDirecao(dados.notas, 'entrada', dados)` dentro do bloco
+  E — e a conta mudou de casa. A intenção (o débito/crédito vem do dono do
+  bloco C, com o CONTEXTO) continua travada, agora onde a conta vive.
+  🚩 **PENDÊNCIA DO PAULO (HYPE 08/2026)**: abrir a aba e conferir contra o
+  print do e-Fiscal — bate depois de cadastrar os dois códigos do art. 117.
+  📌 **REGRA QUE FICA: número que só existe DENTRO do arquivo fiscal é número
+  que ninguém confere antes de transmitir.** Toda apuração que vira registro
+  (E110, E520, E210, M200) tem um dono puro que o gerador LÊ — e é esse dono,
+  nunca o arquivo, que a tela de conferência imprime.
+
 - **🧭 "O DIFERENCIAL DE ALÍQUOTA NAS AQUISIÇÕES DELA É DENTRO DA APURAÇÃO" —
   o DIFAL do Lucro só existia como C197 e o E110 nunca recebia nada** (14/09,
   Paulo, HYPE CAFÉ 1385 · Lucro Presumido · 08/2026, com três prints do

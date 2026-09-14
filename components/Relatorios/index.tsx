@@ -58,6 +58,8 @@ import { relerNotasVazias, relerItensFiscais } from '../../services/ipiVarredura
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
+// 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 — a tela não calcula.
+import { carregarApuracaoIcms, type ApuracaoIcmsResposta } from '../../services/apuracaoIcmsService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
 import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, parseValorMoeda, type MesDeclaracao } from '../../services/declaracaoFaturamento';
 import { montarApuracaoTrimestre, trimestresDisponiveis } from '../../services/apuracaoTrimestral';
@@ -84,7 +86,8 @@ export type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
     | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
-    | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre';
+    | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
+    | 'apuracao-icms';
 
 import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
@@ -131,6 +134,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'dipam', label: '🌾 DIPAM/FUNRURAL' },
             { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
             { id: 'trimestre', label: '🧮 Apuração trimestral (Presumido)' },
+            { id: 'apuracao-icms', label: '📒 Apuração do ICMS (RAICMS)' },
         ],
     },
 ];
@@ -412,6 +416,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             {aba === 'dipam' && <AbaDipam competencia={competencia} />}
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
             {aba === 'trimestre' && <AbaTrimestre currentUser={currentUser} />}
+            {aba === 'apuracao-icms' && <AbaApuracaoIcms currentUser={currentUser} competencia={competencia} />}
         </div>
     );
 };
@@ -2743,6 +2748,214 @@ const AbaFicha: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 <p className="text-xs text-slate-500">
                     {fichas.length} mês(es) · último: {fichas[fichas.length - 1]?.mesReferencia.split('-').reverse().join('/')} · faturamento acumulado {fmtBRL(fichas.reduce((s, f) => s + (f.faturamentoMesTotal || 0), 0))}
                 </p>
+            )}
+        </Card>
+    );
+};
+
+
+// ─── 📒 Registro de Apuração do ICMS (RAICMS) ───────────────────────────────
+//
+// 14/09, Paulo, HYPE CAFÉ · Lucro Presumido · 08/2026, com o print do e-Fiscal:
+// *"crie um relatório conforme modelo acima, porque por exemplo, o valor de
+// difal só aparece lá no ajuste E111, ou eu tenho que gerar o SPED para
+// conferir o valor do ICMS a pagar ou credor"*.
+//
+// A tela é o MODELO do e-Fiscal (Históricos · Coluna Auxiliar · Somas, linhas
+// 001-014) e NÃO CALCULA NADA: as linhas vêm da rota, que passa pelo MESMO
+// coletor e pelo MESMO dono da conta que escreve o E110. Um número diferente
+// aqui e no arquivo seria o relatório divergindo do que a SEFAZ recebe.
+
+/** Cada seção do modelo, com as linhas que ela abriga. */
+const SECOES_RAICMS: Array<{ titulo: string; codigos: string[] }> = [
+    { titulo: 'Débito do Imposto', codigos: ['001', '002', '003', '004'] },
+    { titulo: 'Crédito do Imposto', codigos: ['005', '006', '007', '008', '009', '010'] },
+    { titulo: 'Apuração de Saldos', codigos: ['011', '012', '013', '014'] },
+];
+
+/**
+ * O e-Fiscal imprime VAZIO (não 0,00) na linha que não tem o que dizer —
+ * estorno sem lançamento, dedução sem lançamento, e o lado do saldo que não
+ * é o deste mês (devedor esconde a 014; credor esconde a 011 e a 013).
+ */
+const somaVisivelRaicms = (l: { codigo: string; itens: unknown[]; soma: number }, devedor: boolean): boolean => {
+    if (l.itens.length > 0 || l.soma > 0) return true;
+    if (['001', '004', '005', '008', '009', '010'].includes(l.codigo)) return true;
+    return (devedor ? ['011', '013'] : ['014']).includes(l.codigo);
+};
+
+const AbaApuracaoIcms: React.FC<{ currentUser: User; competencia: string }> = ({ currentUser, competencia }) => {
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
+    const [loadingLista, setLoadingLista] = useState(false);
+    const [dados, setDados] = useState<ApuracaoIcmsResposta | null>(null);
+    const [erro, setErro] = useState<string | null>(null);
+    const [carregando, setCarregando] = useState(false);
+    const [verColeta, setVerColeta] = useState(false);
+    const { gerando, rodar } = usePdf();
+
+    React.useEffect(() => {
+        let alive = true;
+        setLoadingLista(true);
+        lucroPresumidoService.getEmpresasResumo(currentUser)
+            .then(r => { if (alive) setEmpresas(r.empresas); })
+            .finally(() => { if (alive) setLoadingLista(false); });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    React.useEffect(() => {
+        let alive = true;
+        if (!empresaId || !competencia) { setDados(null); setErro(null); return; }
+        setCarregando(true);
+        setErro(null);
+        carregarApuracaoIcms(empresaId, competencia)
+            .then(r => {
+                if (!alive) return;
+                if (!r.ok) { setErro(r.error || 'Falha ao ler a apuração.'); setDados(null); return; }
+                setDados(r);
+            })
+            .catch(e => { if (alive) { setErro(`Falha ao ler a apuração: ${e?.message || e}`); setDados(null); } })
+            .finally(() => { if (alive) setCarregando(false); });
+        return () => { alive = false; };
+    }, [empresaId, competencia]);
+
+    const compFmt = (c: string) => c.split('-').reverse().join('/');
+    const periodoTxt = dados
+        ? (dados.competenciaInicio === dados.competenciaFim
+            ? compFmt(dados.competenciaFim)
+            : `${compFmt(dados.competenciaInicio)} a ${compFmt(dados.competenciaFim)}`)
+        : compFmt(competencia);
+
+    /** As linhas do papel — a MESMA montagem serve tela e PDF. */
+    const linhasPapel = useMemo(() => {
+        if (!dados) return [] as Array<{ secao?: string; n: string; historico: string; aux: string; soma: string; item?: boolean }>;
+        const porCodigo = new Map(dados.linhas.map(l => [l.codigo, l]));
+        const out: Array<{ secao?: string; n: string; historico: string; aux: string; soma: string; item?: boolean }> = [];
+        for (const sec of SECOES_RAICMS) {
+            out.push({ secao: sec.titulo, n: '', historico: sec.titulo, aux: '', soma: '' });
+            for (const cod of sec.codigos) {
+                const l = porCodigo.get(cod);
+                if (!l) continue;
+                out.push({ n: l.codigo, historico: l.historico, aux: '', soma: somaVisivelRaicms(l, dados.devedor) ? fmtBRL(l.soma) : '' });
+                for (const it of l.itens) {
+                    out.push({ n: '', historico: `${it.historico} (${it.codigo})`, aux: fmtBRL(it.valor), soma: '', item: true });
+                }
+            }
+        }
+        return out;
+    }, [dados]);
+
+    const pdf = () => {
+        if (!dados) return;
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Registro de Apuração do ICMS — ${dados.empresaNome}`,
+            subtitulo: `${fmtCnpj(dados.cnpj)} · IE ${dados.inscricaoEstadual || 'não cadastrada'} · ${dados.periodicidade} · período ${periodoTxt}`,
+            colunas: [
+                { titulo: 'Nº', largura: 5 },
+                { titulo: 'Históricos', largura: 55, quebra: true },
+                { titulo: 'Coluna Auxiliar', largura: 15, alinhamento: 'direita' },
+                { titulo: 'Somas', largura: 15, alinhamento: 'direita' },
+            ],
+            linhas: linhasPapel.map(l => [l.n, l.secao ? l.historico.toUpperCase() : (l.item ? `   ${l.historico}` : l.historico), l.aux, l.soma]),
+            totais: dados.devedor
+                ? ['013', 'IMPOSTO A RECOLHER', '', fmtBRL(dados.impostoARecolher)]
+                : ['014', 'SALDO CREDOR A TRANSPORTAR', '', fmtBRL(dados.saldoCredorATransportar)],
+            identificacao: montarIdentificacao(dados.identificacao),
+            observacoes: [
+                'Mesmos números do Registro E110 do SPED Fiscal: este relatório passa pelo MESMO coletor e pela MESMA apuração '
+                + 'que gera o arquivo, sem gerá-lo. Os ajustes E111 (inclusive o DIFAL de aquisição — RICMS/SP art. 117) aparecem '
+                + 'na Coluna Auxiliar, um por lançamento.',
+                ...(dados.origemSaldoAnterior ? [`Saldo credor do período anterior (009): ${dados.origemSaldoAnterior}.`] : []),
+                ...dados.avisos,
+            ],
+            fileName: `apuracao-icms-${dados.cnpj.replace(/\D/g, '')}-${dados.competenciaFim}.pdf`,
+        }));
+    };
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
+                    <EmpresaSearchSelect
+                        empresas={opcoesLucro(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder={loadingLista ? 'Carregando…' : 'Buscar por código, nome ou CNPJ…'}
+                    />
+                </div>
+                <BotaoPdf onClick={pdf} disabled={!dados} gerando={gerando} />
+            </div>
+            <p className="text-xs text-slate-500">
+                Modelo do Registro de Apuração do ICMS (RAICMS) do e-Fiscal, competência {compFmt(competencia)} (a mesma do topo).
+                Os números são os do E110 do SPED Fiscal — <strong>a mesma apuração, sem gerar o arquivo</strong>. Ajuste E111
+                (inclusive o DIFAL de aquisição do art. 117) sai na Coluna Auxiliar com o histórico lançado; para lançar ou
+                corrigir, é na aba Ajustes E111 do card SPED Fiscal.
+            </p>
+            {carregando && <p className="text-sm text-slate-500">Apurando…</p>}
+            {erro && <p className="text-sm text-red-700 dark:text-red-300 font-semibold">⛔ {erro}</p>}
+            {!empresaId && !erro && <p className="text-sm text-slate-500">Escolha uma empresa do Lucro para apurar.</p>}
+            {dados && (
+                <>
+                    <div className="text-xs text-slate-600 dark:text-slate-300">
+                        <strong>{dados.empresaNome}</strong> · {fmtCnpj(dados.cnpj)} · IE {dados.inscricaoEstadual || 'não cadastrada'} · {dados.periodicidade} · período {periodoTxt} · {dados.documentosLidos} documento(s) lido(s)
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <th className="text-left py-1 pr-2 w-10">Nº</th>
+                                    <th className="text-left py-1 pr-2">Históricos</th>
+                                    <th className="text-right py-1 pr-2 w-36">Coluna Auxiliar</th>
+                                    <th className="text-right py-1 w-36">Somas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {linhasPapel.map((l, i) => (
+                                    <tr
+                                        key={i}
+                                        className={l.secao
+                                            ? 'bg-slate-100 dark:bg-slate-700/60 font-bold'
+                                            : (l.item ? 'text-slate-600 dark:text-slate-300' : 'border-t border-slate-100 dark:border-slate-700')}
+                                        data-raicms-linha={l.n || (l.item ? 'item' : 'secao')}
+                                    >
+                                        <td className="py-1 pr-2 font-mono text-xs">{l.n}</td>
+                                        <td className={`py-1 pr-2 ${l.item ? 'pl-6 italic' : ''}`}>{l.historico}</td>
+                                        <td className="py-1 pr-2 text-right font-mono">{l.aux}</td>
+                                        <td className="py-1 text-right font-mono">{l.soma}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className={`rounded-lg p-3 text-sm font-semibold ${dados.devedor ? 'bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : 'bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100'}`}>
+                        {dados.devedor
+                            ? <>Imposto a recolher (013): {fmtBRL(dados.impostoARecolher)}</>
+                            : <>Saldo credor a transportar para o período seguinte (014): {fmtBRL(dados.saldoCredorATransportar)}</>}
+                        {dados.debitosEspeciais > 0 && <> · débitos especiais fora da apuração: {fmtBRL(dados.debitosEspeciais)}</>}
+                    </div>
+                    {dados.origemSaldoAnterior && (
+                        <p className="text-xs text-slate-500">Saldo credor do período anterior (009): {dados.origemSaldoAnterior}.</p>
+                    )}
+                    {dados.avisos.length > 0 && (
+                        <ul className="text-xs text-amber-800 dark:text-amber-200 list-disc pl-5 space-y-1">
+                            {dados.avisos.map((a, i) => <li key={i}>{a}</li>)}
+                        </ul>
+                    )}
+                    {dados.avisosDaColeta.length > 0 && (
+                        <div className="text-xs text-slate-500">
+                            <button type="button" className="underline" onClick={() => setVerColeta(v => !v)}>
+                                {verColeta ? 'Ocultar' : 'Ver'} os {dados.avisosDaColeta.length} aviso(s) da coleta (os mesmos da geração do SPED)
+                            </button>
+                            {verColeta && (
+                                <ul className="list-disc pl-5 mt-1 space-y-1">
+                                    {dados.avisosDaColeta.map((a, i) => <li key={i}>{a}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </>
             )}
         </Card>
     );
