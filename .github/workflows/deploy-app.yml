@@ -126,6 +126,7 @@ jobs:
       - name: Typecheck + testes
         run: |
           npm run lint
+          npm run test:cadastro-contabil
           npx jest --ci
 
       - name: Regressão de calendário fiscal no fuso de São Paulo
