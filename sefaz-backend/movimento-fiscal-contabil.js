@@ -1,3 +1,4 @@
+import { montarMovimentoNfeContabil } from './movimento-nfe-contabil.js';
 import { federaisDoRelatorio } from './federais-relatorio.js';
 // Movimento fiscal normalizado para o Consultor Contabil (CCI).
 //
@@ -114,6 +115,7 @@ function normalizarDocumento(d, empresaCnpj, movimento, lacunas) {
 }
 
 export function montarMovimentoFiscalContabil({ cnpjEmpresa, competencia, movimento, documentos } = {}) {
+    if (['entrada', 'saida'].includes(movimento)) return montarMovimentoNfeContabil({ cnpjEmpresa, competencia, movimento, documentos });
     const cnpj = soDigitos(cnpjEmpresa);
     const tipo = texto(movimento);
     if (cnpj.length !== 14) throw new Error('CNPJ da empresa invalido.');
