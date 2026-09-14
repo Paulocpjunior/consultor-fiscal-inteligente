@@ -52,7 +52,8 @@ export async function localizarCadastroContabilPorCnpj(cnpj, deps = {}) {
         const colecao = colecoes[indice];
         docs.forEach((doc) => {
             const data = doc.data() || {};
-            if (data._merged_into) return;
+            // Mesmo critério da lista do CFI: tombstones não são cadastros ativos.
+            if (data._merged_into || data._deleted) return;
             if (limparCnpjCadastroContabil(data.cnpj) !== cnpjLimpo) return;
             encontrados.push({ colecao, id: doc.id, data });
         });
