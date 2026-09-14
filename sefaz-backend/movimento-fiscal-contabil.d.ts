@@ -49,6 +49,8 @@ export interface MovimentoFiscalCfiPayload {
     ressalvas: string[];
 }
 
+export function montarMovimentoFiscalContabil(params: { cnpjEmpresa: string; competencia: string; movimento: 'entrada' | 'saida'; documentos?: unknown[] }): import('./movimento-nfe-contabil.js').MovimentoNfePayload;
+
 export function montarMovimentoFiscalContabil(params?: {
     cnpjEmpresa?: string;
     competencia?: string;

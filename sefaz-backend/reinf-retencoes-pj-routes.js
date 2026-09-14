@@ -454,8 +454,8 @@ router.get('/movimento-fiscal', autorizar, async (req, res) => {
         if (cnpj.length !== 14) {
             return res.status(400).json({ ok: false, error: 'Informe o CNPJ da empresa com 14 digitos.' });
         }
-        if (!['servicos_prestados', 'servicos_tomados'].includes(movimento)) {
-            return res.status(400).json({ ok: false, error: 'Selecione servicos_prestados ou servicos_tomados.' });
+        if (!['servicos_prestados', 'servicos_tomados', 'entrada', 'saida'].includes(movimento)) {
+            return res.status(400).json({ ok: false, error: 'Selecione serviços prestados/tomados ou NF-e de entrada/saída.' });
         }
 
         const db = getDb();
