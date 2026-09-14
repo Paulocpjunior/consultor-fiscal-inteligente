@@ -20,6 +20,8 @@ import { conferirContagemDeCamposFiscal } from './sped-fiscal-campos.js';
 // 🧮 A abertura do saldo credor vem do SPED ENTREGUE colado — nunca digitada.
 import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { competenciaParaGerarArquivo } from './competencia.js';
+// 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 (14/09, HYPE).
+import { apurarIcmsProprio, montarRaicms } from './apuracao-icms-raicms.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { IND_EST_VALIDOS, quantidadeInformada } from './sped-bloco-k.js';
 import { fetchAllDocs } from './firestore-paginate.js';
@@ -349,6 +351,82 @@ router.get('/difal-art117', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[sped/difal-art117 GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * GET /apuracao-icms?empresaId=X&competencia=YYYY-MM
+ *   (ou competenciaInicio + competenciaFim, no trimestral)
+ *
+ * 📒 O REGISTRO DE APURAÇÃO DO ICMS (modelo do e-Fiscal) SEM GERAR O ARQUIVO.
+ *
+ * 14/09, Paulo, HYPE CAFÉ: *"o valor de difal só aparece lá no ajuste E111, ou
+ * eu tenho que gerar o SPED para conferir o valor do ICMS a pagar ou credor"*.
+ * A apuração só existia a caminho do E110. Esta rota passa pelo MESMO
+ * `coletarDadosEmpresa` do /gerar (notas, E111 lançados, par do DIFAL art.
+ * 117, saldo anterior pela cronologia ou pela ficha) e pelo MESMO dono da
+ * conta (`apurarIcmsProprio`) — e NÃO grava arquivo nem carimba nada.
+ *
+ * Só LÊ. Quem tem acesso é quem tem acesso à empresa (carteira), como o
+ * /difal-art117 — o relatório é do colaborador que fecha o mês.
+ */
+router.get('/apuracao-icms', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        if (!periodo.competencia && !(periodo.competenciaInicio && periodo.competenciaFim)) {
+            return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+        }
+
+        const dados = await coletarDadosEmpresa({
+            empresaId: String(empresaId),
+            competencia: periodo.competencia,
+            competenciaInicio: periodo.competenciaInicio,
+            competenciaFim: periodo.competenciaFim,
+        });
+        if (dados.empresa?._regime !== 'lucro') {
+            return res.status(400).json({
+                ok: false,
+                error: 'O Registro de Apuração do ICMS é do Lucro (RPA). Optante do Simples não apura ICMS próprio — '
+                    + 'o imposto dele sai no DAS.',
+            });
+        }
+
+        const apuracao = apurarIcmsProprio(dados);
+        const raicms = montarRaicms(apuracao, { origemSaldoAnterior: dados.origemSaldoIcms || '' });
+        const df = dados.empresa.dadosFiscais || {};
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            empresaNome: dados.empresa.nome || '',
+            cnpj: dados.empresa.cnpj || '',
+            inscricaoEstadual: df.inscricaoEstadual || '',
+            uf: apuracao.uf,
+            competenciaInicio: dados.competenciaInicio,
+            competenciaFim: dados.competenciaFim,
+            periodicidade: dados.competenciaInicio === dados.competenciaFim ? 'Mensal' : 'Trimestral',
+            documentosLidos: (dados.notas || []).length,
+            // Só o que o bloco de identificação do PDF imprime — nunca o cadastro inteiro.
+            identificacao: {
+                respLegalNome: df.respLegalNome || null, respLegalCpf: df.respLegalCpf || null,
+                respLegalCargo: df.respLegalCargo || null, responsaveisLegais: df.responsaveisLegais || null,
+                contadorNome: df.contadorNome || null, contadorCrc: df.contadorCrc || null, contadorCpf: df.contadorCpf || null,
+            },
+            ...raicms,
+            // O que a COLETA avisou (E111 ignorado, DIFAL sem código, saldo pela
+            // cronologia…) vai junto: é o mesmo aviso que sairia na geração.
+            avisosDaColeta: dados.warnings || [],
+        });
+    } catch (e) {
+        if (e?.code === 'EMPRESA_NAO_ENCONTRADA' || e?.code === 'DADOS_FISCAIS_INCOMPLETOS') {
+            return res.status(400).json({ ok: false, error: e.message });
+        }
+        console.error('[sped/apuracao-icms GET]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

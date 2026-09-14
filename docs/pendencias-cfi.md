@@ -89,6 +89,14 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
 
 ## ✅ Fechado em 14/09
 
+- **📒 Registro de Apuração do ICMS (RAICMS) sem gerar o SPED** — HYPE CAFÉ:
+  *"o valor de DIFAL só aparece lá no ajuste E111, ou eu tenho que gerar o
+  SPED para conferir o ICMS a pagar ou credor"*. A apuração só existia a
+  caminho do E110. Agora Relatórios → 📒 Apuração do ICMS imprime o modelo do
+  e-Fiscal (linhas 001–014, cada E111 na Coluna Auxiliar — inclusive o par do
+  art. 117) lendo a MESMA apuração que escreve o E110, sem gerar o arquivo.
+  **Pendência do Paulo**: abrir na HYPE 08/2026 e conferir contra o print
+  (1.204,16 + 32,09 − 19,93 = 1.216,32) — bate depois de cadastrar os códigos.
 - **DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117)** — HYPE CAFÉ,
   Lucro Presumido: o DIFAL de uso/consumo e ativo não sai em guia, entra no
   E110 como débito pela alíquota interna (art. 117, II) e crédito do imposto

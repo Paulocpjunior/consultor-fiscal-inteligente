@@ -26,7 +26,11 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
-import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './sped-ajustes-apuracao.js';
+import { montarLinhasE111 } from './sped-ajustes-apuracao.js';
+// 📒 A apuração do ICMS próprio tem UM dono (14/09, HYPE CAFÉ): o E110 e o
+// Registro de Apuração (relatório) leem a MESMA conta — duas contas fariam a
+// tela prometer um imposto e o arquivo declarar outro.
+import { apurarIcmsProprio } from './apuracao-icms-raicms.js';
 import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
 import { montarLinhasE510 } from './sped-bloco-ipi-e510.js';
 import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
@@ -193,25 +197,14 @@ export function buildBlocoE(dados) {
     // classificados pelo TIPO embutido no código (4º caractere) e aplicados
     // na fórmula do E110. Só pra Lucro — Simples não apura ICMS aqui.
     const uf = (dados?.empresa?.dadosFiscais?.uf || '').toUpperCase();
-    const cls = classificarAjustes(regime === 'lucro' ? dados.ajustesApuracao : [], uf);
-    // Só se avisa sobre o saldo do bloco que REALMENTE saiu — aviso sobre bloco
-    // inexistente é o alarme sem ação que ensina a ignorar os que importam.
+    // ST e IPI também são apurados aqui — o aviso de saldo anterior precisa
+    // saber se cada bloco SAIU, e isso só se sabe depois de montá-los.
     let geraSt = false;
     let geraIpi = false;
 
-    let ap = {
-        vlTotDebitos: 0, vlTotAjDebitos: 0, vlEstornosCred: 0,
-        vlTotCreditos: 0, vlTotAjCreditos: 0, vlEstornosDeb: 0,
-        vlSldCredorAnt: 0, vlSldApurado: 0, vlTotDed: 0,
-        vlIcmsRecolher: 0, vlSldCredorTransportar: 0, vlDebEsp: 0,
-    };
-    if (regime === 'lucro') {
-        ap = aplicarAjustesApuracao({
-            vlTotDebitos: somarIcmsPorDirecao(dados.notas, 'saida', dados),
-            vlTotCreditos: somarIcmsPorDirecao(dados.notas, 'entrada', dados),
-            vlSldCredorAnt: parseFloat(dados.saldoCredorIcmsAnterior || 0),
-        }, cls);
-    }
+    // A apuração do ICMS próprio — a MESMA que o Registro de Apuração
+    // (Relatórios → 📒) imprime. Fora do Lucro vem zerada (o Simples não apura).
+    const { ap, cls } = apurarIcmsProprio(dados);
 
     linhas.push(fmt.buildLine([
         'E110',

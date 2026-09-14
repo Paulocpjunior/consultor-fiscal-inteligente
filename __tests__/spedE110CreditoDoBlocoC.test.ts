@@ -132,7 +132,17 @@ describe('🚦 trava na FONTE — um dono para o ICMS do E110', () => {
         const src = ler('sefaz-backend/sped-fiscal-blocoE.js').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
         expect(src).toMatch(/return somarIcmsNoArquivo\(notas, direcao, dados\);/);
         expect(src).not.toMatch(/somarImpostoPorDirecao\(notas, direcao, 'vICMS', 'vICMS'\)/);
-        expect(src).toMatch(/somarIcmsPorDirecao\(dados\.notas, 'entrada', dados\)/);
+        // 📒 14/09 (HYPE CAFÉ): a apuração do E110 mudou de casa — mora em
+        // `apuracao-icms-raicms.js`, lida pelo bloco E E pelo Registro de
+        // Apuração. A asserção prendia a CHAMADA dentro do bloco E; a intenção
+        // (o débito/crédito do E110 vem do dono do bloco C, com o CONTEXTO)
+        // continua travada, agora onde a conta vive.
+        expect(src).toMatch(/const \{ ap, cls \} = apurarIcmsProprio\(dados\);/);
+        expect(src).not.toMatch(/aplicarAjustesApuracao\(/);
+        const dono = ler('sefaz-backend/apuracao-icms-raicms.js').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        expect(dono).toMatch(/somarIcmsNoArquivo\(dados\.notas, 'entrada', dados\)/);
+        expect(dono).toMatch(/somarIcmsNoArquivo\(dados\.notas, 'saida', dados\)/);
+        expect(dono).not.toMatch(/somarImpostoPorDirecao/);
     });
 
     it('o dono passa pela MESMA seleção do bloco C e pelo MESMO somador do item', () => {
