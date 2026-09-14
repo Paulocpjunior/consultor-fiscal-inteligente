@@ -9,7 +9,11 @@
 
 import admin from 'firebase-admin';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
-import { buildBlocoC } from './sped-fiscal-blocoC.js';
+import { buildBlocoC, convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
+// 🧭 DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117): o par de E111
+// (débito pela interna + crédito da origem) nasce aqui e entra no E110 pela
+// MESMA lista dos ajustes lançados à mão — dois somadores divergiriam.
+import { consolidarDifalArt117 } from './difal-art117-apuracao.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 import {
     buildBlocoG, buildBloco1,
@@ -634,6 +638,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // o E250 nunca saía e o aviso mandava "informe no cadastro", um cadastro
     // que não existia. Mora no MESMO doc dos ajustes, como o código do C197.
     let obrigacoesStPorUf = {};
+    // 🧭 DIFAL na apuração (art. 117): códigos dos dois E111 + o informado por
+    // nota, no MESMO doc dos ajustes (14/09, HYPE CAFÉ). Trimestral concatena
+    // o informado dos três meses; os códigos são os do último doc que os tem.
+    let difalArt117Cfg = { codigoDebito: '', codigoCredito: '', porChave: {} };
+    let difalArt117 = null;
     if (regime === 'lucro') {
         try {
             const comps = listarCompetenciasPeriodo(periodoInicio, periodoFim);
@@ -646,7 +655,31 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                 if (s.exists && s.data().obrigacoesStPorUf) {
                     obrigacoesStPorUf = { ...obrigacoesStPorUf, ...s.data().obrigacoesStPorUf };
                 }
+                const a117 = s.exists ? (s.data().difalArt117 || null) : null;
+                if (a117) {
+                    difalArt117Cfg = {
+                        codigoDebito: a117.codigoDebito || difalArt117Cfg.codigoDebito,
+                        codigoCredito: a117.codigoCredito || difalArt117Cfg.codigoCredito,
+                        porChave: { ...difalArt117Cfg.porChave, ...(a117.porChave || {}) },
+                    };
+                }
             }
+            // O CFOP entregue ao dono é o ESCRITURADO — a régua do bloco C (nota,
+            // item, cérebro, empresa). Ler o cru deixaria a nota do Mercado Livre
+            // (6102) fora do DIFAL: o caso KALUNGA, na apuração.
+            const dadosCfop = { empresa, parametrosCfop };
+            difalArt117 = consolidarDifalArt117({
+                notas,
+                ufEmpresa: (empresa.dadosFiscais?.uf || '').toUpperCase(),
+                aliqInternaPadrao: Number(difalCfg.difalAliqInternaPadrao) || undefined,
+                cfopDoItem: (nota, item) => convertCfopParaEntrada(item?.cfop, 'entrada', dadosCfop, nota, item),
+                informadoPorChave: difalArt117Cfg.porChave,
+                codigoDebito: difalArt117Cfg.codigoDebito,
+                codigoCredito: difalArt117Cfg.codigoCredito,
+                codigoC197: difalCfg.difalCodigoAjusteC197 || '',
+            });
+            ajustesApuracao.push(...difalArt117.ajustes);
+            for (const a of difalArt117.avisos) warnings.push(`DIFAL na apuração (art. 117): ${a}`);
             const clsPrev = classificarAjustes(ajustesApuracao, (empresa.dadosFiscais?.uf || '').toUpperCase());
             for (const erro of clsPrev.erros) {
                 warnings.push(`Ajuste E111 IGNORADO: ${erro}`);
@@ -757,7 +790,15 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         obrigacoesStPorUf,
         difalCodObservacao: difalCfg.difalCodObservacao || '',
         difalAliqInternaPadrao: difalCfg.difalAliqInternaPadrao || 18,
-        difalAliqInternaPorChave: difalCfg.difalAliqInternaPorChave || {},
+        // A alíquota interna INFORMADA por nota na aba do art. 117 vale também
+        // para o C197 — uma alíquota por nota, não uma por registro.
+        difalAliqInternaPorChave: {
+            ...(difalCfg.difalAliqInternaPorChave || {}),
+            ...Object.fromEntries((difalArt117?.porNota || [])
+                .filter((n) => n.origem === 'informada' && n.aliqInterna > 0)
+                .map((n) => [n.chave, n.aliqInterna])),
+        },
+        difalArt117,
         ciap,
         dipam,
         warnings,

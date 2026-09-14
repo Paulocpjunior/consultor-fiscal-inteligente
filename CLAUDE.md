@@ -5,6 +5,58 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧭 "O DIFERENCIAL DE ALÍQUOTA NAS AQUISIÇÕES DELA É DENTRO DA APURAÇÃO" —
+  o DIFAL do Lucro só existia como C197 e o E110 nunca recebia nada** (14/09,
+  Paulo, HYPE CAFÉ 1385 · Lucro Presumido · 08/2026, com três prints do
+  e-Fiscal: *"precisamos criar um campo para fazermos um ajuste, no EFISCAL
+  lançamos dentro da nota, depois fazemos esse ajuste para sair na apuração"*).
+  📖 **OS PRINTS SÃO A FONTE, e fecham centavo a centavo**: NF do MERCADO LIVRE
+  (MG), CFOP escriturado **2.556**, valor contábil **166,10**; o diálogo
+  "Diferencial de Alíquotas" dentro da nota traz base **178,26** · interna
+  **18%** · ICMS destacado **19,93** · diferença 12,15; e o Registro de Apuração
+  traz **Outros Débitos "Artigo 117, II do RICMS/00" = 32,09** e **Outros
+  Créditos "Artigo 117, I" = 19,93**, com 1.204,16 + 32,09 − 19,93 =
+  **1.216,32** a recolher. É o **RICMS/SP art. 117**: na entrada interestadual
+  de uso/consumo ou ativo o RPA escritura o CRÉDITO do imposto da origem (I) e
+  o DÉBITO pela alíquota interna (II) — o DIFAL não sai em guia, sai no saldo.
+  E a base é **POR DENTRO** (art. 37 §5º + art. 49): (166,10 − 19,93) ÷ 0,82 =
+  178,26. ⚠️ A "diferença 12,15" do diálogo é conta sem arredondar; o que vai
+  ao arquivo são os DOIS lançamentos arredondados, e o RAICMS fecha em 12,16.
+  🔴 **MEDIDO NO CÓDIGO**: `montarC197Difal` calculava o DIFAL "por fora"
+  (base × (interna − inter), o desenho do Simples) e só emitia C197 com o
+  código da tabela 5.3 cadastrado; o aviso mandava *"lance o ajuste na aba
+  E111"* — à mão, todo mês, nota a nota. E lia o **CFOP CRU do XML**: o Mercado
+  Livre emite 6102 (para ele é venda), então a nota da HYPE nem era candidata.
+  É o caso KALUNGA (18/08) na apuração.
+  ✂️ `difal-art117-apuracao.js` (PURO, em `REGUAS_VIGIADAS`) é o dono: propõe
+  por nota (CFOP **ESCRITURADO** — o resolvedor é argumento OBRIGATÓRIO, sem
+  ele lança), base por dentro, débito pela interna, crédito do destacado;
+  consolida em **DOIS E111** que o orquestrador empurra em `ajustesApuracao` —
+  a MESMA lista dos lançados à mão, então o E110 soma por um somador só. A
+  tela é o "campo dentro da nota": SPED Fiscal → Ajustes E111 → **🧭 DIFAL de
+  aquisição na apuração** (rota `GET /api/admin/sped-fiscal/difal-art117`
+  chama o MESMO dono; a tela NÃO calcula). O informado vence a proposta,
+  carimbado; **"não devido" é decisão NOMEADA** (o próprio e-Fiscal avisa:
+  *"preencha somente se o DIFAL for devido"* — CAT 26/2008, 426-A).
+  ⚠️ **OS DOIS CÓDIGOS DA 5.1.1 NÃO SE INVENTAM**: entram pelo cadastro
+  (`difalArt117.codigoDebito/codigoCredito`, no doc dos ajustes, gravados POR
+  CAMINHO) e o app confere só a FORMA — UF, 3º '0' (própria), 4º **'0' no
+  débito e '2' no crédito** (estorno no lugar do crédito é recusa). **SEM OS
+  DOIS NÃO SAI NENHUM**: só o débito recolheria 32,09 em vez de 12,16 (a
+  maior, e o PVA aceita); só o crédito, a menor. A falta sai DITA com o total.
+  ⚠️ **ICMS destacado ZERO não vira crédito derivado** (CST 40/41 é fato);
+  fica zero, avisado. E C197 cadastrado com 4º caractere que o Guia soma nos
+  campos 03/07 + o par E111 = DIFAL duas vezes — o app não escolhe, DIZ (R38).
+  🚩 **PENDÊNCIA DO PAULO (HYPE 08/2026)**: cadastrar os dois códigos (os
+  números da tabela 5.1.1 de SP para o art. 117 I e II), conferir a base das
+  notas na aba, regerar e validar no PVA. 🚩 **NOMEADO, NÃO FEITO**: o C197
+  continua lendo o CFOP cru — só vale quando houver código 5.3 cadastrado, e
+  ninguém tem; corrigir sem caso seria mexer em registro que nunca saiu.
+  📌 **REGRA QUE FICA: "lance o ajuste na aba" não é entrega quando o app tem
+  como calcular o ajuste — é passar o trabalho adiante todo mês.** E DIFAL
+  tem DOIS desenhos com a MESMA palavra: por FORA (Simples, guia, base × Δ) e
+  por DENTRO (RPA, apuração, art. 117); a régua de um não serve para o outro.
+
 - **📐 "O TOTAL DA OPERAÇÃO NÃO BATE COM MEU VALOR CONTÁBIL" — o C190 somava o
   ITEM, e o item importado pelo NAVEGADOR não tinha frete, seguro, outras
   despesas nem FCP-ST** (12/09, Paulo, DISTRIBUIDORA DE BANANAS ELS · SPED
