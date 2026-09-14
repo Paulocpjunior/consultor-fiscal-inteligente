@@ -18,6 +18,9 @@ import {
 } from '../../sefaz-backend/sped-ajustes-apuracao.js';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
+// 🧭 O DIFAL de aquisição DENTRO da apuração (art. 117) mora aqui, ao lado dos
+// códigos estaduais que ele precisa — é onde a pessoa já vem lançar o E111.
+import DifalArt117 from './DifalArt117';
 
 interface Props {
     currentUser: User | null;
@@ -291,6 +294,15 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                             Use o <strong>💾 Salvar ajustes</strong> acima: os três blocos gravam no mesmo lugar.
                         </p>
                     </div>
+
+                    {/* 🧭 O campo "dentro da nota" do e-Fiscal — pedido do Paulo em 14/09 (HYPE CAFÉ). */}
+                    <DifalArt117
+                        empresaId={empresaId}
+                        empresaCnpj={empresa?.cnpj || ''}
+                        competencia={competencia}
+                        uf={uf}
+                        onShowToast={onShowToast}
+                    />
                 </div>
             )}
             {loading && <p className="text-xs text-center py-4" style={{ color: 'var(--text-muted)' }}>Carregando ajustes…</p>}

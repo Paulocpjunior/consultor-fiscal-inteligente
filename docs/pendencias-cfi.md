@@ -1,6 +1,6 @@
 # Pendências do CFI — o que falta e quem resolve
 
-<!-- guia-id: pendencias-cfi · guia-revisao: 2026-09-12 -->
+<!-- guia-id: pendencias-cfi · guia-revisao: 2026-09-14 -->
 <!-- Mexeu aqui? mexa no par em public/pendencias-cfi.html e suba a revisão nos DOIS. -->
 
 > Fonte dupla: este arquivo e `public/pendencias-cfi.html` DEVEM ser atualizados
@@ -86,6 +86,17 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
   dedução ali devolve o lote inteiro.
 - **Três partes do SPED sem recibo** — bloco D do EFD-Contribuições, E510 de IPI
   e E200/E210 de ST. Gerados e conferidos internamente; prova só vem do recibo.
+
+## ✅ Fechado em 14/09
+
+- **DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117)** — HYPE CAFÉ,
+  Lucro Presumido: o DIFAL de uso/consumo e ativo não sai em guia, entra no
+  E110 como débito pela alíquota interna (art. 117, II) e crédito do imposto
+  da origem (art. 117, I). O app propõe a base por dentro por nota (CFOP
+  escriturado) e a pessoa confirma ou informa, na aba SPED Fiscal → Ajustes
+  E111. Os dois códigos da tabela 5.1.1 são cadastrados; sem os dois, nada
+  entra. **Pendência do Paulo**: cadastrar os dois códigos na HYPE 08/2026,
+  conferir a base das notas, regerar e validar no PVA.
 
 ## ✅ Fechado em 12/09
 

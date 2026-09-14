@@ -71,6 +71,20 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'A BASE POR DENTRO do DIFAL de aquisição na apuração (RICMS/SP art. 117 + art. 37 §5º)',
+        dono: 'sefaz-backend/difal-art117-apuracao.js',
+        comoUsar: "import { baseDifalPorDentro, consolidarDifalArt117 } from 'sefaz-backend/difal-art117-apuracao.js'",
+        porque: '14/09, Paulo, HYPE CAFÉ (Lucro Presumido): *"o diferencial de alíquota nas aquisições dela é dentro '
+            + 'da apuração"*. A base é (valor − ICMS da origem) ÷ (1 − alíquota interna) — corroborada centavo a centavo '
+            + 'pelo e-Fiscal (166,10 → 178,26 → débito 32,09 / crédito 19,93). Uma segunda fórmula em outro lugar faria '
+            + 'a tela prometer uma base e o E110 sair com outra, e o DIFAL do Simples (que é por FORA, em guia) '
+            + 'engoliria a régua do Lucro ou vice-versa.',
+        assinaturas: [
+            // A divisão "por dentro" escrita à mão fora do dono.
+            /\/\s*\(\s*1\s*-\s*\w*[aA]liq\w*\s*\/\s*100\s*\)/,
+        ],
+    },
+    {
         nome: 'O OUTRO LADO da mesma chave — o id do documento da contraparte que também é cliente',
         dono: 'sefaz-backend/documento-lado.js',
         comoUsar: "import { idDoDocumentoDoLado, carimboDoLado } from 'sefaz-backend/documento-lado.js'",

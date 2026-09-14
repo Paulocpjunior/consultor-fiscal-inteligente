@@ -23,6 +23,12 @@ import { competenciaParaGerarArquivo } from './competencia.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { IND_EST_VALIDOS, quantidadeInformada } from './sped-bloco-k.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+// 🧭 DIFAL na apuração (art. 117) — a tela lê pelo MESMO dono que o gerador,
+// senão a aba prometeria um número e o E110 sairia com outro (a lição da
+// réplica de CFOP no modal, 12/08).
+import { consolidarDifalArt117, ALIQ_INTERNA_PADRAO } from './difal-art117-apuracao.js';
+import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
+import { lerParametrosCfopDaEmpresa } from './cfop-parametros-store.js';
 
 // Valor do documento em TODAS as formas (o import pelo navegador grava só
 // `totais.vNF`) — régua única.
@@ -268,6 +274,85 @@ router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req,
 // saldo digitado é a ficha de novo, com outro nome. O POST extrai, confere o
 // CNPJ contra a empresa e grava com carimbo; quem decide o saldo anterior de
 // cada geração é `resolverSaldoAnterior` no orquestrador.
+/**
+ * 🧭 DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117) — a leitura da
+ * aba: por nota (proposta × informado), totais, os dois códigos conferidos e
+ * o par de E111 que o próximo arquivo vai carregar.
+ *
+ * Paulo, 14/09 (HYPE CAFÉ, Lucro Presumido): *"o diferencial de alíquota nas
+ * aquisições dela é dentro da apuração… no EFISCAL lançamos dentro da nota,
+ * depois fazemos esse ajuste para sair na apuração"*.
+ *
+ * Só LÊ: quem grava o informado por nota e os códigos é a tela, no doc de
+ * ajustes (`sped_ajustes_apuracao`, merge por caminho). O CFOP entregue ao
+ * dono é o ESCRITURADO — a mesma régua do bloco C.
+ */
+router.get('/difal-art117', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        const competencia = periodo.competencia;
+        if (!competencia) return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+
+        const db = fa().firestore();
+        const lucro = await db.collection('lucro_empresas').doc(String(empresaId)).get();
+        if (!lucro.exists) {
+            return res.status(400).json({
+                ok: false,
+                error: 'O DIFAL na apuração (art. 117) é do Lucro (RPA). Optante do Simples recolhe o DIFAL por guia — use a aba 🧭 DIFAL aquisição da Central de XMLs.',
+            });
+        }
+        const empresa = { id: String(empresaId), ...lucro.data(), _regime: 'lucro' };
+        const ufEmpresa = String(empresa.dadosFiscais?.uf || '').toUpperCase();
+
+        const snap = await db.collection('documentos_fiscais')
+            .where('empresaId', '==', String(empresaId))
+            .where('competencia', '==', competencia)
+            .get();
+        const notas = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(docContaNoLivro);
+
+        const { parametros: parametrosCfop, erro: erroParametros } = await lerParametrosCfopDaEmpresa(db, String(empresaId));
+        const cfgSnap = await db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${competencia}`).get();
+        const cfg = cfgSnap.exists ? (cfgSnap.data() || {}) : {};
+        const a117 = cfg.difalArt117 || {};
+        const dadosCfop = { empresa, parametrosCfop };
+
+        const consolidado = consolidarDifalArt117({
+            notas,
+            ufEmpresa,
+            aliqInternaPadrao: Number(cfg.difalAliqInternaPadrao) || undefined,
+            cfopDoItem: (nota, item) => convertCfopParaEntrada(item?.cfop, 'entrada', dadosCfop, nota, item),
+            informadoPorChave: a117.porChave || {},
+            codigoDebito: a117.codigoDebito || '',
+            codigoCredito: a117.codigoCredito || '',
+            codigoC197: cfg.difalCodigoAjusteC197 || '',
+        });
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            competencia,
+            ufEmpresa,
+            aliqInternaPadrao: Number(cfg.difalAliqInternaPadrao) || ALIQ_INTERNA_PADRAO,
+            codigoDebito: a117.codigoDebito || '',
+            codigoCredito: a117.codigoCredito || '',
+            documentosLidos: notas.length,
+            // Falha ao ler o cérebro do CFOP NÃO vira "sem parâmetro" calado: a
+            // proposta pode estar lendo o CFOP errado, e a pessoa precisa saber.
+            avisoParametrosCfop: erroParametros
+                ? `Não consegui ler os parâmetros de CFOP (${erroParametros}) — a proposta usou só o CFOP da nota/item e a régua automática.`
+                : null,
+            ...consolidado,
+        });
+    } catch (e) {
+        console.error('[sped/difal-art117 GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.get('/saldo-abertura', requireAdmin, async (req, res) => {
     try {
         const { empresaId } = req.query || {};
