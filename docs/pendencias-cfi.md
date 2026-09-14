@@ -18,6 +18,15 @@ zero vulnerabilidade em 412 dependências de produção.
 
 ## 🔴 Só o Paulo resolve
 
+- **HYPE CAFÉ 08/2026: regerar o EFD-Contribuições e validar no PVA (C175).**
+  298 erros: 295 uma por NFC-e pedindo o registro C175 (receita do cupom
+  consolidada por CST e alíquota) e 2 no M210/M610 — consequência, porque sem
+  C175 o PVA não vê receita e mostra o M200 zerado. Corrigido em 14/09: o
+  arquivo sai com C100 + C175 por NFC-e, e item CST 04/06 sai sem PIS/COFINS.
+  Sobra 1 erro de cadastro (0150 `05425342667` sem código de município, na
+  mão). O que fazer: gerar de novo, apagar a escrituração antiga no PVA e
+  importar; conferir se o M200/M210 vieram com a receita das NFC-e. Vale
+  também para 07/2026, que nunca teve recibo.
 - **SPED ICMS/IPI de agosto de TODA empresa de Brasília: regerar.** O bloco B
   (ISS do DF) saía vazio e o PVA recusa (`B470`); corrigido em 11/09 pelo caso
   LEGACY — e, à tarde, o B470 regerado saía com o campo *ISS substituto* vindo
@@ -89,6 +98,13 @@ Nenhum é esquecimento: cada um está escrito dentro do módulo, com o motivo.
 
 ## ✅ Fechado em 14/09
 
+- **🧾 NFC-e no EFD-Contribuições: o C175 que nunca tinha saído** — em 24/08
+  o C170 saiu do cupom e faltou a outra metade: o Guia 1.35 manda *"somente os
+  registros C100 e C175"*, e o PVA lê a receita do cupom no VL_OPR do C175.
+  Cada NFC-e sai com um C175 por CFOP + CST + alíquota (base sem ICMS e sem
+  desconto); a régua de incidência (CST 04/06/07/08/09 ⇒ zero) vale no C170,
+  no C175 e no bloco M; a prevalidação acusa NFC-e sem C175 antes do PVA.
+  Pendência do Paulo: regerar a HYPE 08/2026 e validar.
 - **📒 Registro de Apuração do ICMS (RAICMS) sem gerar o SPED** — HYPE CAFÉ:
   *"o valor de DIFAL só aparece lá no ajuste E111, ou eu tenho que gerar o
   SPED para conferir o ICMS a pagar ou credor"*. A apuração só existia a

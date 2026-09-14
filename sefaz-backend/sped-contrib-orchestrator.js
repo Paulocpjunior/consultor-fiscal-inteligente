@@ -437,11 +437,13 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const nfceNoArquivo = notas.filter(ehNfce).length;
     if (nfceNoArquivo > 0 && itensSoEmNfce > 0) {
         warnings.push(
-            `${nfceNoArquivo} NFC-e (modelo 65) foram escrituradas SEM C170, e os ${itensSoEmNfce} item(ns) `
-            + 'delas ficaram fora do 0200/0190. É o leiaute: o PVA recusa o C170 de cupom com "O registro não '
-            + 'deve ser informado para o modelo de documento do Registro Pai", e item declarado sem ninguém '
-            + 'referenciá-lo vira item órfão — a recusa seguinte. A receita das NFC-e continua declarada no '
-            + 'C100 (VL_DOC/VL_PIS/VL_COFINS) e no bloco M: nada deixa de ser apurado.',
+            `${nfceNoArquivo} NFC-e (modelo 65) foram escrituradas com C100 + C175 (analítico por CFOP, CST e `
+            + `alíquota), SEM C170, e os ${itensSoEmNfce} item(ns) delas ficaram fora do 0200/0190. É o leiaute `
+            + '(Guia 1.35: "deve a pessoa jurídica apresentar somente os registros C100 e C175"): o PVA recusa '
+            + 'o C170 de cupom com "O registro não deve ser informado para o modelo de documento do Registro '
+            + 'Pai" e, sem o C175, recusa cada NFC-e e regera o M200/M210 ZERADO (HYPE 08/2026). Item declarado '
+            + 'sem ninguém referenciá-lo vira item órfão — o C175 não referencia item. A receita das NFC-e é a '
+            + 'soma dos VL_OPR dos C175 e entra no bloco M: nada deixa de ser apurado.',
         );
     }
     // 🚨 PERÍODO SEM RECEITA NENHUMA NÃO PASSA CALADO (21/08, AFFITTARE: o

@@ -40,6 +40,9 @@ export const DETALHES_VIGIADOS = {
     // é legítima em CST sem crédito, e vigiar isso encheria a tela de alarme
     // falso — que é o caminho pra ninguém mais ler alarme nenhum.
     A170: { rotulo: 'itens de serviço (Contribuições)', campos: { 5: 'VL_ITEM' } },
+    // C175 — a consolidação da NFC-e por CFOP/CST/alíquota (14/09, HYPE). Só o
+    // VL_OPR: base zerada é legítima em CST sem incidência (04/06), como no A170.
+    C175: { rotulo: 'resumo da NFC-e por CFOP/CST/alíquota (Contribuições)', campos: { 3: 'VL_OPR' } },
     // 🚨 A100 FALTAVA — e foi por isso que um arquivo com 37 documentos de
     // serviço, TODOS com VL_DOC 0,00, passou pela auditoria (17/08, CLINICA
     // MEDICA MANTOAN 07/2026). Só o A170 estava vigiado, e aquele arquivo não

@@ -5,6 +5,61 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 "295 SÃO DE REGISTRO C175, E NÃO PUXOU O M200 NEM M210" — a NFC-e no
+  EFD-Contribuições é C100 + C175, e o C175 nunca tinha saído** (14/09, Paulo,
+  HYPE CAFÉ 1385 · Lucro Presumido · 08/2026, com o Relatório de Erros do PVA
+  6.2.0: **298 erros** — 295 *"A escrituração das receitas auferidas por NFC-e
+  (COD_MOD = 65) deve ser efetuada de forma individualizada no registro C100 …
+  com a informação referente à base de cálculo, alíquota e valor das
+  contribuições … escrituradas de forma consolidada e analítica (por CST e
+  alíquotas), no registro C175"*, 2 *"Não deverá existir um registro M210/M610
+  … não informados nos documentos com CST de 01 a 05"*, 1 COD_MUN do 0150).
+  📖 **O GUIA 1.35 DIZ DUAS VEZES**: no C100 (*"deve a pessoa jurídica
+  apresentar somente os registros C100 e C175"*) e na obrigatoriedade (C175:
+  *"O (se existir C100 e COD_MOD igual a 65)"*). O C175 é o **C190 do
+  Contribuições**: um registro por **CFOP + CST + alíquotas**, consolidando os
+  itens do cupom — 18 campos, sem código de item (o 0200 continua de fora).
+  🔴 **MEDIDO**: em 24/08 o C170 saiu do cupom (572 recusas) e ficou escrito
+  *"a receita da NFC-e é declarada no C100 e no bloco M"*. **Metade**: o PVA
+  regera o bloco M a partir dos DOCUMENTOS e a validação do M210 soma *"VL_OPR
+  do registro C175"* — sem ele a Receita não vê receita no cupom, mostra
+  M200/M210 ZERADOS na tela e recusa o nosso M210 por não ter documento que o
+  sustente. Meia correção trocou uma recusa por outra, e a segunda esperou a
+  competência seguinte (a 07/2026 da HYPE nunca teve recibo).
+  ✂️ `sped-contrib-c175.js` (PURO) é o dono: `consolidarC175` agrupa por
+  CFOP + CST + alíquotas em CENTAVOS, o valor sai da BASE consolidada ×
+  alíquota ÷ 100 (a validação do campo 10/16), desconto incondicional E ICMS
+  excluído vão os DOIS no campo 04 (Seção 12: no C175 as três exclusões têm a
+  mesma casa). Cada item passa pela MESMA régua do C170
+  (`pisCofinsDoItemC170`) antes de consolidar; `camposDoC175` monta os 18
+  campos e o gerador passa pelo `buildLine`.
+  🚨 **E A RÉGUA DE INCIDÊNCIA NASCEU JUNTO, nos DOIS registros**: item de
+  saída com CST **04/06/07/08/09/49/99** caía no `|| aliq.pis * 100` e levava
+  0,65% — o arquivo declarava PIS/COFINS sobre revenda monofásica (refrigerante,
+  cerveja) que a lei já tributou no fabricante. `cstComIncidenciaNaSaida`
+  (CST 01, 02, 03 e 05) zera base, alíquota e valor no C170 e no C175, e o **bloco M lê
+  a mesma régua** (Guia 1.35, M210 campo 03: *"CST 01 a 05 com alíquota
+  diferente de zero"*) — o que sai da base vai CONTADO no aviso, com o valor.
+  🚦 **PREVALIDAÇÃO NO MESMO PR** (`conferirC175DaNfce`, recusa literal como
+  fonte): NFC-e sem C175 · C175 em nota 55 · CFOP fora de 5xxx · combinação
+  repetida. E as vizinhas passaram a conhecer o registro: aritmética (campos
+  10 e 16), CST fora da tabela (campos 05 e 11), Σ VL_OPR = VL_MERC do pai, **VL_REC_BRT
+  do M210 soma o C175** (antes ele estava em OUTRAS_FONTES e deixava a regra
+  MUDA — silêncio com cara de cobertura), `DETALHES_VIGIADOS` (VL_OPR). A
+  contagem de 18 campos já estava no Guia extraído e ficou muda por não haver
+  linha: provada por composição, gerador → prevalidação, zero erros.
+  🚩 **PENDÊNCIA DO PAULO (HYPE 08/2026)**: regerar o EFD-Contribuições e
+  validar — o M200/M210 do PVA passa a vir do C175. O 0150 `05425342667` sai
+  com COD_MUN vazio (pendência de sempre, na mão) e com o nome **`SEM NOME`**:
+  é o gerador inventando nome de participante quando o documento não traz —
+  achado NOMEADO, não corrigido (trocar por vazio é outra recusa; o certo é
+  DIZER a falta, e isso pede caso com o XML na mão).
+  📌 **REGRA QUE FICA: quando o Guia diz "apresentar SOMENTE os registros X e
+  Y", tirar o que sobra é metade — o que falta é Y.** E regra da prevalidação
+  que põe um registro em "outras fontes ⇒ fica muda" precisa de um teste que
+  a faça GRITAR com esse registro presente, senão ela é silêncio com nome de
+  cobertura.
+
 - **📒 "OU EU TENHO QUE GERAR O SPED PARA CONFERIR O VALOR DO ICMS A PAGAR OU
   CREDOR?" — a apuração só existia a caminho do E110** (14/09, Paulo, HYPE
   CAFÉ 1385 · Lucro Presumido · 08/2026, com o print do *Registro de Apuração

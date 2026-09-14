@@ -203,7 +203,8 @@ describe('🚨 os dois leitores do dono', () => {
 
     it('e a falta é DITA, com a receita ressalvada', () => {
         const orq = fonte('../sefaz-backend/sped-contrib-orchestrator.js');
-        expect(orq).toMatch(/NFC-e \(modelo 65\) foram escrituradas SEM C170/);
+        // 14/09: o cupom passou a sair com C100 + C175 — a frase mudou junto.
+        expect(orq).toMatch(/NFC-e \(modelo 65\) foram escrituradas com C100 \+ C175/);
         expect(orq).toMatch(/nada deixa de ser apurado/);
     });
 });
