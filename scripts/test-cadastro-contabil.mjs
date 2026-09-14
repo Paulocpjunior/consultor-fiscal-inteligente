@@ -33,4 +33,18 @@ await assert.rejects(
     /mais de um cadastro fiscal/
 );
 
-console.log('OK: cadastro fiscal compartilhado com o CCI');
+// Regressão COMERCIAL VEGA: registro excluído e cadastro ativo com espaço no CNPJ.
+const cnpjVega = '07.570.793/0001-23';
+const excluido = doc('vega-excluido', { cnpj: cnpjVega, _deleted: true, _deletedAt: '2026-07-27T16:52:01.064Z' });
+const ativo = doc('vega-ativo', { cnpj: cnpjVega + ' ', nome: 'COMERCIAL VEGA - LOCACAO, VENDAS LTDA' });
+const consultar = (simples, lucro = []) => localizarCadastroContabilPorCnpj(cnpjVega, {
+    db, fetchAllDocs: async q => q.nome === 'simples_empresas' ? simples : lucro,
+});
+assert.equal((await consultar([excluido, ativo])).id, 'vega-ativo');
+assert.equal((await consultar([ativo, excluido])).regime.codigo, 'SIMPLES_NACIONAL');
+assert.equal(await consultar([excluido]), null);
+assert.equal((await consultar([ativo], [excluido])).id, 'vega-ativo');
+assert.equal((await consultar([ativo, doc('mesclado', { cnpj: cnpjVega, _merged_into: 'vega-ativo' })])).id, 'vega-ativo');
+await assert.rejects(consultar([ativo, doc('outro-ativo', { cnpj: cnpjVega })]), e => e.status === 409);
+await assert.rejects(consultar([ativo], [doc('ativo-lucro', { cnpj: cnpjVega })]), e => e.status === 409);
+console.log('OK: cadastro fiscal compartilhado com o CCI, excluídos ignorados e duplicidades ativas bloqueadas');
