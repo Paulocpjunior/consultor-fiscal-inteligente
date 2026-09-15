@@ -15,6 +15,8 @@
 
 /** @type {Array<{colecao:string, grupo:string, funcionalidade:string, descricao?:string}>} */
 export const CATALOGO_BANCO = [
+    { colecao: 'ebef_dossies', grupo: 'Societário', funcionalidade: 'Dossiês e-BEF por empresa e exercício; acesso por carteira, documentos privados e revisão; escrita exclusiva do backend' },
+    { colecao: 'ebef_versoes', grupo: 'Societário', funcionalidade: 'Subcoleção de ebef_dossies: snapshots imutáveis de cada revisão e operação do dossiê e-BEF' },
     // ── Cadastro & acesso ──────────────────────────────────────────────────
     { colecao: 'users', grupo: 'Cadastro & Acesso', funcionalidade: 'Usuários, papéis e departamentos do SaaS (login, admin/colaborador, gate dos módulos irmãos)' },
     { colecao: 'carteiras', grupo: 'Cadastro & Acesso', funcionalidade: 'Carteira de clientes por colaborador' },

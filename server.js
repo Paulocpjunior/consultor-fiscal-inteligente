@@ -1,3 +1,4 @@
+import ebefRouter from './sefaz-backend/ebef-routes.js';
 import express from 'express';
 import { secretsMatch } from './sefaz-backend/cron-secret.js';
 import cors from 'cors';
@@ -426,6 +427,7 @@ app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
 app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
 app.use('/api/admin/prazos-municipais', prazosMunicipaisRouter);
 app.use('/api/admin/cadastro-contabil', cadastroContabilRouter);
+app.use('/api/admin/ebef', ebefRouter);
 // O cron e chamado pelo Cloud Scheduler com header X-Cron-Secret — fica fora
 // do prefixo /api/admin pra preservar o padrao dos outros crons.
 app.use('/api/internal/cron', healthAlertaCronRouter);

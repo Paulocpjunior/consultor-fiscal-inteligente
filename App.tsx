@@ -51,6 +51,7 @@ const LucroPresumidoRealDashboard = lazy(() => import('./components/LucroPresumi
 const AnaliseCreditos = lazy(() => import('./components/AnaliseCreditos'));
 // VencimentosHub funde Obrigações&Tarefas + Minha Agenda + Vencimentos da
 // Semana num só card (mesmo grupo: prazos derivados do regime/cadastro).
+const EbefModule = lazy(() => import('./components/Ebef/EbefModule'));
 const VencimentosHub = lazy(() => import('./components/Vencimentos/VencimentosHub'));
 const CentralDocumentosFiscais = lazy(() => import('./components/xml/CentralDocumentosFiscais'));
 const RotinaFiscalPainel = lazy(() => import('./components/RotinaFiscalPainel'));
@@ -1257,6 +1258,9 @@ const App: React.FC = () => {
                         {/* Vencimentos & Obrigações — hub que funde Obrigações&Tarefas +
                             Minha Agenda + Vencimentos da Semana (mesmo grupo: prazos
                             derivados do regime/cadastro de cada empresa). */}
+                        {searchType === SearchType.EBEF && (
+                            <ErrorBoundary modulo="Beneficiários finais e-BEF"><Suspense fallback={<LoadingSpinner />}><EbefModule currentUser={currentUser} /></Suspense></ErrorBoundary>
+                        )}
                         {searchType === SearchType.OBRIGACOES_FISCAIS && (
                             <ErrorBoundary modulo="Vencimentos e Obrigações">
                             <Suspense fallback={<LoadingSpinner />}>

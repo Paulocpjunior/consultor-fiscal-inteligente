@@ -16,7 +16,8 @@
     "test": "jest",
     "test:cadastro-contabil": "node scripts/test-cadastro-contabil.mjs",
     "typecheck": "tsc --noEmit",
-    "precommit": "npm run typecheck && npm run lint:strict"
+    "precommit": "npm run typecheck && npm run lint:strict",
+    "test:ebef:api": "node scripts/test-ebef-api.mjs"
   },
   "keywords": [],
   "author": "",

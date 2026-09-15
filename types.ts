@@ -1,5 +1,6 @@
 
 export enum SearchType {
+    EBEF = 'Beneficiários finais · e-BEF',
     ROTINA_FISCAL = 'Rotina do Mês',
     CFOP = 'CFOP',
     NCM = 'NCM',

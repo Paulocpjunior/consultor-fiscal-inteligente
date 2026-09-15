@@ -27,6 +27,7 @@ import type { User } from '../../types';
 
 const VencimentosSemanaPanel = lazy(() => import('./VencimentosSemanaPanel'));
 const MinhaAgendaPanel = lazy(() => import('../MinhaAgenda/MinhaAgendaPanel'));
+const EbefAgenda = lazy(() => import('../Ebef/EbefAgenda'));
 const Tarefas = lazy(() => import('../Tarefas'));
 const CalendarioFiscal = lazy(() => import('../CalendarioFiscal'));
 
@@ -35,13 +36,14 @@ interface Props {
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'proximos' | 'empresa' | 'tarefas' | 'calendario';
+type SubTab = 'proximos' | 'empresa' | 'tarefas' | 'calendario' | 'ebef';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'proximos', label: '⏰ Próximos Vencimentos' },
     { id: 'empresa', label: '🏢 Por Empresa' },
     { id: 'tarefas', label: '📋 Tarefas (Kanban)' },
     { id: 'calendario', label: '📅 Calendário' },
+    { id: 'ebef', label: 'Beneficiários finais · e-BEF' },
 ];
 
 const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -67,6 +69,7 @@ const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             <ErrorBoundary modulo="VencimentosHub">
                 <Suspense fallback={<LoadingSpinner />}>
+                    {sub === 'ebef' && <EbefAgenda />}
                     {sub === 'proximos' && <VencimentosSemanaPanel onShowToast={onShowToast} />}
                     {sub === 'empresa' && <MinhaAgendaPanel onShowToast={onShowToast} />}
                     {sub === 'tarefas' && <Tarefas currentUser={currentUser} />}

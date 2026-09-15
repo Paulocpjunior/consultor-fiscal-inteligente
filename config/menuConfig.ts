@@ -20,6 +20,7 @@ import {
 } from '../components/Icons';
 
 export const searchDescriptions: Record<SearchType, string> = {
+    [SearchType.EBEF]: 'Enquadramento, estrutura societária, documentos e acompanhamento do e-BEF da empresa ativa.',
     [SearchType.ROTINA_FISCAL]: 'A ordem do mês, cliente a cliente: capturar → validar → apurar → entregar obrigações → emitir e enviar a guia. Mostra em que etapa cada empresa parou e qual é o próximo passo.',
     [SearchType.CFOP]: 'Consulte códigos de operação e entenda a aplicação e tributação.',
     [SearchType.NCM]: 'Classificação fiscal de mercadorias e incidência de impostos (IPI, ICMS).',
@@ -141,6 +142,7 @@ export const MENU_GRUPOS: MenuGrupo[] = [
     },
     {
         titulo: 'Vencimentos & Guias', cor: '#d97706', cards: [
+            { type: SearchType.EBEF, label: 'Beneficiários finais (e-BEF)', Icon: UserGroupIcon },
             { type: SearchType.OBRIGACOES_FISCAIS, label: 'Vencimentos & Obrigações', Icon: CalendarIcon },
             { type: SearchType.DAS_SIMPLES, Icon: CalculatorIcon },
             { type: SearchType.DCTFWEB, Icon: DocumentTextIcon },
