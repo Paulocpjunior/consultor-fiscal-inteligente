@@ -5,6 +5,60 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A LISTA VAZIA MANDAVA IMPORTAR NUMA ABA CHAMADA "SAÍDA 55" — com o
+  filtro em NFC-e** (15/09, Paulo, PRONTO SOCORRO 0896 · 08/2026: *"essa
+  empresa tem NFCE, mas o relatório de saída mostra todas as notas, porém na
+  base não aparece essas notas de NFCE, não deveria aparecer?"*).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR O FILTRO, porque a outra hipótese pedia a
+  ação OPOSTA**: ou a nota está na base e a tela está cega (defeito de leitura),
+  ou ela nunca foi capturada (buraco de captura). `applyDocumentosFilters`
+  compara `tipoDoc || tipo`, e os QUATRO trilhos que gravam NFC-e escrevem
+  `'NFCe'` nos dois campos — SAE-NFC-e e cofre pelo importador do backend (que
+  classifica pelo schema e, na falta dele, pelo **modelo lido na chave**),
+  navegador por `parseNFeXml` (modelo 65 ⇒ `tipo: 'NFCe'`) e SharePoint pelo
+  mesmo importador. **O filtro não está cego**: zero ali é ausência na base.
+  ⚠️ **E ISSO MUDA O QUE A PERGUNTA SIGNIFICA — não é tela escondendo nota, é
+  LIVRO A MENOS.** O relatório e a lista leem a MESMA coleção, então 119 no
+  Livro de Saídas com zero em NFCe quer dizer que nenhuma das 119 é NFC-e. Se o
+  cliente emitiu NFC-e naquele mês, o livro está curto — e isso não aparece como
+  erro em lugar nenhum, que é a ausência plausível de sempre.
+  🐛 **QUASE "CORRIGI" CÓDIGO CERTO no caminho**: `detectTipo` devolve só
+  `'NFe' | 'NFSe'` e carimba a NFC-e como `'NFe'`. Parece defeito e **não é** —
+  ela responde *"lê como mercadoria ou como serviço?"* (emitente/`totais.vNF` ×
+  prestador/`valores`), não o rótulo do modelo; a coluna Tipo da lista renderiza
+  `d.tipo` cru, que sai `NFCe`. Medi antes de escrever — é a régua da triagem
+  (29/08): **alarme de varredura se TRIA antes de virar correção**.
+  ✂️ **O QUE ESTAVA MESMO ERRADO ERA A FRASE DO VAZIO, e é o achado 18 em dose
+  dupla**: com o filtro em **NFCe + Saída** a tela dizia *"NF-e emitidas pela
+  empresa não são distribuídas por esse canal — importe-as pela aba Importação
+  Manual"*. (1) **"Importação Manual" não é rótulo de aba nenhuma** — o real é
+  `📥 Manual & Cofre (saída 55)`, e quem lê "saída 55" procurando NFC-e conclui,
+  com razão, que aquilo não serve; (2) existe aba **PRÓPRIA** para o modelo 65,
+  a `🧾 NFC-e Saída (SP)`, e a frase não a citava. Quem traz NFC-e é o
+  **SAE-NFC-e**, com o A1 do PRÓPRIO emitente; com A3 a chave vive no cartão e
+  não roda no Cloud Run, então quem traz é o **Agente A3** (a medição de 02/09,
+  MV LIDER).
+  ✂️ `documentosVazioMotivo.ts` (PURO) decide a frase pelo MODELO filtrado —
+  NFC-e, NFS-e (municipal, que não passa por Distribuição DF-e nenhuma), CT-e
+  (o automático traz o frete TOMADO) e o caso comum do 55. Régua dentro de
+  `.tsx` é régua sem prova, pela enésima vez.
+  ⚠️ **AUSÊNCIA NÃO É PROVA, e a ressalva é o que impede a frase de afirmar
+  demais**: zero **não** diz que faltam notas — a empresa pode não emitir aquele
+  modelo. A tela diz por qual PORTA elas entrariam, e nada além disso. Dizer
+  "faltam notas" sobre quem não emite é alarme sobre estado correto.
+  ⚠️ **E ELA NÃO AFIRMA O CERTIFICADO**: diz a condição (A3 não roda no
+  servidor) e ONDE se vê qual a empresa tem, nunca *"esta empresa usa A3"* —
+  carimbar a causa no escuro manda procurar no lugar errado.
+  🚦 **A TRAVA É O RÓTULO DA ABA**: a varredura exige que TODA aba nomeada no
+  aviso exista no menu da Central, lida da FONTE dele. **Aviso que aponta aba
+  renomeada envelhece em SILÊNCIO**, levando a pessoa ao lugar errado sem nada
+  acusar — que é exatamente como esta frase sobreviveu. Provada renomeando a
+  `🧾 NFC-e Saída (SP)` de propósito: o teste cai nomeando a aba.
+  📌 **REGRA QUE FICA: aviso que manda a pessoa a uma aba nomeia a aba como o
+  MENU a escreve, e a existência do rótulo se TRAVA.** Nome de aba em mensagem
+  se lê da fonte, nunca da memória — o colaborador procura exatamente o que
+  está escrito, e não acha.
+
 - **🧾 "295 SÃO DE REGISTRO C175, E NÃO PUXOU O M200 NEM M210" — a NFC-e no
   EFD-Contribuições é C100 + C175, e o C175 nunca tinha saído** (14/09, Paulo,
   HYPE CAFÉ 1385 · Lucro Presumido · 08/2026, com o Relatório de Erros do PVA
