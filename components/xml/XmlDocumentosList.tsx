@@ -24,6 +24,9 @@ import { docCancelado } from '../../sefaz-backend/xml-metadata-helper.js';
 import { ladoDaContraparte } from '../../sefaz-backend/participante-doc-helper.js';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
 import EmpresaFilterCombobox from './EmpresaFilterCombobox';
+// A frase da lista VAZIA de saída muda com o MODELO filtrado — régua pura,
+// porque régua dentro de tela é régua sem prova.
+import { motivoDaListaVaziaDeSaida } from '../../services/documentosVazioMotivo';
 
 interface Props {
     currentUser: User;
@@ -851,18 +854,27 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
                                 A empresa pode ter documentos de outros tipos/competências — limpe os filtros para ver tudo.
                             </p>
                         </div>
-                    ) : filters.direcao === 'saida' ? (
-                        <div className="text-center py-6 px-4 space-y-1">
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Nenhuma nota de <strong>saída</strong> encontrada para este filtro.
-                            </p>
-                            <p className="text-[11px] text-amber-700 dark:text-amber-300 max-w-2xl mx-auto">
-                                A captura automática usa a Distribuição DF-e da SEFAZ, que entrega apenas notas onde a
-                                empresa é <strong>destinatária</strong> (entrada) e eventos. NF-e <strong>emitidas</strong> pela
-                                empresa não são distribuídas por esse canal — importe-as pela aba{' '}
-                                <strong>Importação Manual</strong> (XML do sistema emissor) ou via SharePoint.
-                            </p>
-                        </div>
+                    ) : motivoDaListaVaziaDeSaida(filters) ? (
+                        (() => {
+                            // 🚨 A PRIMEIRA PARADA MUDA COM O MODELO — quem decide é o
+                            // DONO, nunca uma frase escrita aqui. Com o filtro em NFCe
+                            // esta tela mandava importar por uma aba chamada "saída 55",
+                            // e nem citava a 🧾 NFC-e Saída (SP), que é quem traz o
+                            // modelo 65 (o caso PRONTO SOCORRO 0896, 15/09).
+                            const m = motivoDaListaVaziaDeSaida(filters)!;
+                            return (
+                                <div className="text-center py-6 px-4 space-y-1">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{m.titulo}</p>
+                                    <p className="text-[11px] text-amber-700 dark:text-amber-300 max-w-2xl mx-auto">
+                                        {m.explicacao}
+                                    </p>
+                                    <p className="text-[11px] text-amber-800 dark:text-amber-200 max-w-2xl mx-auto font-semibold">
+                                        {m.acao}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 max-w-2xl mx-auto">{m.ressalva}</p>
+                                </div>
+                            );
+                        })()
                     ) : (
                         <p className="text-center text-xs text-slate-400 py-6">Nenhum documento encontrado.</p>
                     )
