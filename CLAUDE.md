@@ -5,6 +5,72 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔁 "NA FICHA DO 07 ELE INFORMA CERTINHO, MAS QUANDO EU CRIO A FICHA DO 08
+  ELE NÃO VEM COM O VALOR" — a ficha nova cravava ZERO no saldo credor, e o
+  SPED já estava certo, o que tornava tudo pior** (15/09, Paulo, PWR INDÚSTRIA
+  METALÚRGICA · 07 → 08/2026: *"deveria vir, até mesmo para fins de SPED ICMS
+  IPI"*, com a Memória de Apuração mostrando **Cred. IPI do mês anterior
+  2.547,39** e **IPI a transportar p/ 08/2026 4.747,84**, e o formulário de 08
+  com os dois campos "Mês Anterior" em **0,00**).
+  📖 **O DADO ESTAVA GRAVADO — o print prova**: `saldoCredorIpiTransportar` de
+  07 traz 4.747,84, número que **ninguém calcula** (decisão de 18/08, caso
+  KROYA: a conta óbvia `entrou − a recolher` está ERRADA quando o mês gera mais
+  crédito do que débito). Não faltava dado, faltava **LEITURA**.
+  🔴 **MEDIDO NUMA LINHA**: `resetForm` (`LucroPresumidoRealDashboard.tsx`)
+  fazia `setSaldoCredorIcms(0); setSaldoCredorIpi(0)` — ficha nova nasce com
+  **zero cravado**, e ninguém abre a competência anterior para ver o que ela
+  mandou transportar.
+  🚨 **E O SPED JÁ ESTAVA PROTEGIDO, O QUE PIORA O CASO EM VEZ DE SALVAR**:
+  desde 11/09 (LEGACY) o orquestrador cai na **RESERVA** quando o campo desta
+  competência está vazio, então o E520 de 08 **já saía com 4.747,84**. Ou seja,
+  a **ficha apurava com 0,00 e o arquivo declarava 4.747,84** — a GUIA a MAIOR e
+  o SPED dizendo o contrário. É **arquivo e guia bebendo de fontes diferentes**
+  (a lição do F600 × ficha, 28/08), e **nada acende**: os dois números são
+  plausíveis, cada um no seu lugar.
+  ✂️ `saldoAnteriorProposto.ts` (PURO) é o dono: `proporSaldoAnterior` lê o "a
+  TRANSPORTAR" da competência anterior **pelo DONO da ficha**
+  (`acharFichaCompetencia` — `mesReferencia` tem TRÊS formas, e `===` na mão
+  devolve NADA, indistinguível de "não foi lançada"), e a ficha nova nasce com
+  ele, **carimbado com a origem** (*"veio do a TRANSPORTAR de 07/2026 —
+  digitado lá, não calculado"*).
+  ⚠️ **O QUE A PESSOA DIGITOU VENCE A PROPOSTA, SEMPRE** (`aplicarPropostaAoCampo`,
+  com o último proposto num `ref`): a proposta só entra no campo que **ninguém
+  tocou**, e **só em ficha NOVA** — reabrir ficha gravada reescreveria um número
+  que alguém apurou, que é mudar imposto pelas costas de quem o digitou.
+  ⚠️ **A PROPOSTA SEGUE A COMPETÊNCIA ESCOLHIDA**, nunca a de abertura da tela:
+  trocar de 09 para 08 muda a proposta. E proposta nova NULA **volta o campo a
+  zero** em vez de deixar o saldo da outra competência grudado.
+  ⚠️ **AUSÊNCIA NÃO VIRA ZERO PROPOSTO, e são TRÊS causas com ações diferentes**
+  — sem ficha anterior · anterior não informou · competência ilegível. Zero num
+  campo de saldo é a afirmação *"você não tem crédito"*, dita a quem talvez
+  tenha. Zero **DIGITADO** na anterior, esse sim, é resposta e é propagado.
+  ⚠️ **PIS E COFINS FICAM DE FORA, DITO NA TELA**: a ficha tem o campo "mês
+  anterior" deles e **não tem** o par "a transportar" — propor por analogia
+  seria inventar saldo federal a partir de uma régua estadual.
+  ✂️ **NA FICHA ABERTA O APP DIZ, NUNCA REESCREVE**: campo zerado com transporte
+  na anterior vira aviso âmbar **com o botão de trazer o valor** e com as DUAS
+  consequências na frase (guia sem o abatimento + SPED declarando assim mesmo);
+  valor diferente do transporte vira aviso NEUTRO com os dois números, porque
+  pode ser decisão de quem apura — é a mesma divergência que a geração do SPED
+  já denuncia, dita antes, na tela onde ela se resolve. **Nasce MUDO na ficha em
+  dia.**
+  🐛 **E O RESET NÃO ZERAVA OS "A TRANSPORTAR" — achado no caminho**: quem abria
+  a ficha de julho e clicava em nova ficha levava o transporte de JULHO
+  **grudado** na de agosto, e a tela passava a afirmar ao cliente um saldo de
+  agosto que ninguém apurou. É o mesmo defeito na direção contrária. Zerados
+  como **`null`**, nunca 0 — "não informado" e "o crédito acabou" são respostas
+  diferentes, e o relatório imprime cada uma de um jeito.
+  🚦 **A LIGAÇÃO É TRAVADA POR VARREDURA** e provada por REVERSÃO nas duas
+  metades (tirar o zerar do transporte derruba 1; tirar a guarda de ficha nova
+  derruba 1). A tela não pode citar `acharFichaCompetencia` — régua dentro de
+  `.tsx` é régua sem prova.
+  📌 **REGRA QUE FICA: quando o GERADOR ganha uma reserva para o campo vazio, a
+  TELA que preenche esse campo entra no mesmo eixo** — senão a reserva conserta
+  o arquivo e deixa a guia errada, e as duas ficam plausíveis. A correção de
+  11/09 fechou a leitura do arquivo e a ficha continuou nascendo zerada por
+  quatro dias, sem nada acusar, porque o sintoma desta classe é **um número
+  certo no arquivo e outro na guia**.
+
 - **🚨 A LISTA VAZIA MANDAVA IMPORTAR NUMA ABA CHAMADA "SAÍDA 55" — com o
   filtro em NFC-e** (15/09, Paulo, PRONTO SOCORRO 0896 · 08/2026: *"essa
   empresa tem NFCE, mas o relatório de saída mostra todas as notas, porém na
