@@ -33,7 +33,7 @@ export interface VeredictoDere {
 }
 
 export const FONTES_DERE: Readonly<Record<
-    'LC_214' | 'LEIAUTES_1_1_0' | 'MANUAL_DEV_1_0_2' | 'ATO_CONJUNTO_4' | 'ESCLARECIMENTO_26_08' | 'MOD_1_0_1', string>>;
+    'LC_214' | 'LEIAUTES_1_1_0' | 'LEIAUTES_1_2_0' | 'MANUAL_DEV_1_0_2' | 'ATO_CONJUNTO_4' | 'ESCLARECIMENTO_26_08' | 'MOD_1_0_1', string>>;
 export const REGIMES_ESPECIFICOS_IBS_CBS: readonly RegimeEspecificoIbsCbs[];
 export const REGIMES_ESPECIFICOS_VALIDOS: readonly string[];
 /** Tabelas 21/31/41 do Anexo I: [código NNC, descrição], por regime com código no D-1001. */
