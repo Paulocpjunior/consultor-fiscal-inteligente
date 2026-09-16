@@ -68,16 +68,36 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 15/09/2026 · leitura de 20 minutos</p>
+            <p>Departamento Fiscal · atualizado em 16/09/2026 · leitura de 20 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (15/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (16/09) — leia esta parte primeiro</h2>
 
-    <h3>1. 🧾 <strong>Lista de saída vazia: agora ela diz a porta CERTA do modelo que você filtrou</strong></h3>
+    <h3>1. 🚚 <strong>EFD-Contribuições: o frete cobrado do cliente agora entra na base do PIS/COFINS</strong></h3>
+    <p>Em nota de <strong>saída</strong> com frete, o arquivo declarava a base <strong>sem o frete</strong> — ou
+    seja, <strong>menos</strong> do que a guia que o cliente pagou. Na PWR de 08/2026 a diferença era de
+    <strong>R$ 750,00</strong> de base: o PVA mostrava <strong>14.436,83</strong> e a Memória de Apuração
+    <strong>15.186,83</strong>. Agora os dois batem, e com eles o PIS (98,71) e a COFINS (455,60).</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Contribuições</strong> → gerar o arquivo. Quando há
+    frete no mês, a geração mostra um aviso dizendo <strong>quantos documentos</strong> levaram frete, o
+    <strong>total</strong> e a base final — confira essa base contra a <strong>Memória de Apuração</strong>. Em
+    mês sem frete nada aparece, como antes.</div>
+    <div class="alerta">⚠️ <strong>A RECEITA do M210 não muda, só a BASE.</strong> O Guia define o
+    <code>VL_ITEM</code> como “somente o valor das mercadorias”, então o <strong>Valor da Receita</strong> que o
+    PVA mostra continua sendo o das mercadorias. Quem sobe é o <strong>Valor da Base de Cálculo</strong> — e é
+    sobre ele que a contribuição é apurada. <strong>Confira a base, não a receita.</strong></div>
+    <div class="alerta">📌 <strong>O desconto já estava certo.</strong> Ele continua saindo no campo próprio de
+    cada item e reduzindo a base, como antes — o que faltava era só o frete. E na <strong>compra</strong> nada
+    mudou: o frete pago ao fornecedor é outra conta.</div>
+    <div class="alerta">🚩 <strong>Vale regerar as competências anteriores</strong> das empresas que cobram frete
+    na nota. Onde havia frete, o arquivo entregue declarou a <strong>menos</strong> — e o PVA aceita, então isso
+    não apareceu como erro em lugar nenhum.</div>
+
+    <h3>2. 🧾 <strong>Lista de saída vazia: agora ela diz a porta CERTA do modelo que você filtrou</strong></h3>
     <p>Filtrando <strong>NFCe</strong> em Saída e não achando nada, a tela mandava importar “pela aba
     <strong>Importação Manual</strong>”. Duas coisas erradas na mesma frase: aba com esse nome <strong>não
     existe</strong> (a real chama-se <strong>📥 Manual &amp; Cofre (saída 55)</strong>, e quem procura NFC-e lê
@@ -95,7 +115,7 @@
     cliente emite NFC-e e ela não está na base, o <strong>Livro de Saídas sai a menos</strong> — vale conferir
     empresa por empresa.</div>
 
-    <h3>2. 🔁 <strong>A ficha nova do Lucro já vem com o saldo credor que o mês anterior mandou transportar</strong></h3>
+    <h3>3. 🔁 <strong>A ficha nova do Lucro já vem com o saldo credor que o mês anterior mandou transportar</strong></h3>
     <p>Você informava “ICMS/IPI a transportar” na ficha de julho, criava a de agosto e o campo
     <strong>“Mês Anterior”</strong> nascia <strong>0,00</strong> — tinha de digitar o mesmo número de novo, todo
     mês. Agora ele <strong>vem preenchido</strong>, carimbado com a ficha de onde veio.</p>
