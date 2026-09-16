@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
 		   xmlns:xs="http://www.w3.org/2001/XMLSchema" 
-		   xmlns="http://www.dere.gov.br/schemas/evtPGCC/v1_0_2" 
-		   targetNamespace="http://www.dere.gov.br/schemas/evtPGCC/v1_0_2" 
+		   xmlns="http://www.dere.gov.br/schemas/evtPGCC/v1_0_3" 
+		   targetNamespace="http://www.dere.gov.br/schemas/evtPGCC/v1_0_3" 
 		   elementFormDefault="qualified" 
 		   attributeFormDefault="unqualified">
 	
@@ -291,7 +291,7 @@
 					</xs:annotation>
 				  <xs:complexType>
 					  <xs:sequence> 
-				        <xs:element name="infoConta" minOccurs="1" maxOccurs="50000">
+				        <xs:element name="infoConta" minOccurs="1" maxOccurs="150000">
                         <xs:annotation>
                             <xs:documentation>Detalhamento de informações da conta contábil.</xs:documentation>
                         </xs:annotation>

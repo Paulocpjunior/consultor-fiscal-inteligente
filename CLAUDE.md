@@ -2424,6 +2424,64 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   defeito**, porque declarava o item sintético de uma nota que o bloco A já não
   emite. Travar a forma antiga impede a correção que a régua manda fazer.
 
+- **🏦 A DeRE MUDOU DE VERSÃO — 1.2.0 (05/09/2026) — E O "D-1121 NÃO EXISTE" DE
+  02/09 CADUCOU** (16/09, Paulo: *"tivemos uma recente atualização no DERE,
+  você deve analisar criticamente todos os arquivos, efetuar os devidos ajustes
+  e adequações quanto ao novo layout"*, com o zip "06-Arquivos XSD v1.2.0", o
+  Histórico de Versões 1.2.0 e o Anexo II 1.2.0).
+  📖 **O QUE VEIO E O QUE NÃO VEIO, dito antes de qualquer afirmação**: vieram o
+  HISTÓRICO, o ANEXO II (que agora INTEGRA as Mensagens de Erro — o documento
+  08 deixou de ser faltante) e os **28 XSD**. **Não vieram o leiaute campo a
+  campo dos eventos (02) nem o Anexo I (03) da 1.2.0** — então dos eventos
+  novos só se conhece o XSD, e para as Tabelas 21/31/41 vale a 1.1.0 (o
+  histórico não lista alteração nelas). `FONTES_DERE.LEIAUTES_1_2_0` diz
+  exatamente isso; `DOCUMENTOS_DERE_FALTANDO` também.
+  🚨 **A AFIRMAÇÃO DERRUBADA: o D-1121 EXISTE desde a 1.2.0** ("Relação de
+  Deduções Utilizadas na Apuração", com o retorno D-9112). Em 02/09 eu escrevi
+  aqui "D-1121 NÃO EXISTE", lendo a 1.1.0 — e estava CERTO para a 1.1.0: o
+  resumo de terceiros afirmava um evento que a versão VIGENTE não tinha. O
+  que fica é a régua, não a vergonha: **evento entra no módulo quando a FONTE
+  o publica**, e a fonte publicou em 05/09. O teste que exigia "não contém
+  D-1121" foi TROCADO pela prova contra as duas fontes — todo evento ou está
+  no sumário da 1.1.0 ou na seção 3.1 (inclusões) do histórico 1.2.0; nenhum
+  entra por memória.
+  📐 **O QUE MAIS MUDOU, MEDIDO** (diff dos XSD + leitura do histórico):
+  (1) **o D-1001 NÃO mudou** — `evtInfoContrib-v1_0_1.xsd` veio byte a byte
+  igual, e as regras dele no Anexo II têm o mesmo texto; o gerador do D-1001
+  segue válido sem tocar; (2) `evtBalancete` 1_0_0→1_0_1 e `evtPGCC` 1_0_2→1_0_3
+  mudaram SÓ namespace e `maxOccurs` de `infoConta` (10.000→90.000 e
+  50.000→150.000) — as versões antigas SAÍRAM do repo (namespace antigo é
+  MS0009, e servir a velha ao lado da nova é convite à segunda cópia); (3) os
+  XSD que faltavam (D-1199, D-2101, D-9121, D-9199) VIERAM — `xsdFaltando()` é
+  `[]` pela primeira vez; (4) **D-1198 Reabertura** (+ D-9198) — retificar o
+  fechamento agora tem evento, e ele é `eventual`: só existe quando há o que
+  reabrir, e por isso NÃO entra em `mensais` exigidos; (5) **dez eventos
+  TRANSACIONAIS** (D-2201…D-4201, retorno D-9209) com leiaute que a própria
+  Receita chama de PRELIMINAR — grupo `transacional`, `preliminar: true`, o app
+  LISTA e não cobra (cobrar leiaute preliminar é cobrar o que ainda pode
+  mudar); (6) **D-2101 reestruturado** por saldos contábeis e chave
+  `{idTitulo (ISIN), cCta}`; (7) D-1121 é CONDICIONAL a **34 codTribs** de
+  dedução, lidos do Anexo II e provados contra o TEXTO da fonte no teste, e
+  dispensado pelo `{indInexistDedu}` novo do D-1199.
+  ✂️ **DUAS RÉGUAS DE FORMA NOVAS viraram função, como o Id de 02/09**: a
+  **chave da DeRE** (`{chDeRE}`, 53 caracteres: raiz · país alfa-2 · tipo de
+  inscrição · inscrição em 20 · codBC · AAAAMMD1D2 · série · DV · seq) com o DV
+  em módulo 11, pesos 2-9 da DIREITA para a esquerda — `montarChaveDere`/
+  `lerChaveDere`/`dvChaveDere` reproduzem o EXEMPLO literal da RN (`…0001` →
+  DV 2); e o **arredondamento pela ABNT NBR 5891** (`arredondarDere`: 8 casas
+  intermediárias, 2 finais, **empate para o algarismo PAR** — 18,245 → 18,24 e
+  18,235 → 18,24). ⚠️ `Math.round`/`toFixed` erram o empate, e é a memória do
+  D-9199 que sai com essa régua: conferir contra ele com a régua errada acusaria
+  divergência de um centavo sobre número certo. A conta é feita sobre os
+  DÍGITOS, não sobre o float (18.245 em binário não é 18.245).
+  ⚠️ **A Tabela 15 (países) NÃO está no repo**: `montarChaveDere` confere o país
+  só na FORMA (duas letras) e diz isso — validar contra uma lista que não veio
+  seria inventar a tabela.
+  📌 **REGRA QUE FICA: leitura da fonte tem DATA, e afirmação negativa ("não
+  existe") envelhece mais rápido que a positiva.** "D-1121 não existe" era
+  fato datado (1.1.0) escrito como fato eterno. Toda negativa sobre leiaute
+  passa a nomear a versão em que foi lida — e o teste prova contra o ARQUIVO da
+  versão, não contra a memória de quem escreveu.
 - **🏦 A DeRE NÃO É "DECLARAÇÃO DE RETENÇÕES" — é a Declaração Eletrônica de
   REGIMES ESPECÍFICOS de IBS/CBS, e o CFI passou a saber QUEM, QUANDO e O QUÊ**
   (02/09, Paulo: *"analise este link, preciso que crie uma nova função capaz de

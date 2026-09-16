@@ -8,7 +8,10 @@
 // mensais (balancete, aplicações) dependem de insumo contábil e vêm depois.
 //
 // FONTES: Leiautes 1.1.0, seção 1.1 (docs/dere/02-…txt, p. 2-5) e o XSD
-// `evtInfoContrib-v1_0_1.xsd` (docs/dere/xsd/). O XML sai na ORDEM do XSD e é
+// `evtInfoContrib-v1_0_1.xsd` (docs/dere/xsd/) — que veio byte a byte IGUAL no
+// pacote 1.2.0 (16/09): o D-1001 não mudou, e as regras dele no Anexo II 1.2.0
+// (REG_SEC_DIFERENTE_REG_PRINC, EXIGIR/REJEITAR_GRUPO_REGIME, INI_VALID,
+// FIM_VALID, TPATIVIDADE_REG*) têm o mesmo texto. O XML sai na ORDEM do XSD e é
 // conferido contra o PRÓPRIO arquivo pelo `dere-xsd-bolso.js` — o teste gera e
 // confere; gerador que não passa no próprio XSD não sobe.
 //

@@ -7,11 +7,11 @@
 // cadastro afirma; o CNAE sugere; o LEIAUTE decide quem cabe), QUANDO vence
 // (dia 15 do mês seguinte, antecipado — a 1ª competência é 10/2026 e vence
 // 13/11/2026 porque 15/11 é domingo e 14 é sábado), QUAIS eventos existem (os
-// do leiaute 1.1.0 — D-1121 NÃO), as réguas de FORMA do Anexo II (Id, recibo,
+// do leiaute 1.1.0 + os que a 1.2.0 INCLUIU, entre eles o D-1121), as réguas de FORMA do Anexo II (Id, recibo,
 // protocolo) e que a obrigação entra no MÊS do cliente pelo catálogo — sem
 // acender a carteira inteira e sem tocar em quem é do Simples.
 // ============================================================================
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import {
     CATALOGO, mesDoCliente, obrigacoesAplicaveis, obrigacoesDoCliente,
@@ -26,6 +26,7 @@ import {
     XSD_DERE, xsdFaltando,
     eventosDaCompetencia, prazoDere, situacaoDere, triarCarteiraDere,
     montarIdEventoDere, lerIdEventoDere, lerRecibo, lerProtocolo,
+    arredondarDere, dvChaveDere, montarChaveDere, lerChaveDere,
 } from '../sefaz-backend/dere';
 
 const RAIZ = join(__dirname, '..');
@@ -72,6 +73,11 @@ describe('o vocabulário — a LC 214/2025 lista os regimes; o LEIAUTE 1.1.0 diz
 
     it('as fontes dizem o que foi LIDO e o que continua por resumo', () => {
         expect(FONTES_DERE.LEIAUTES_1_1_0).toMatch(/LIDOS/);
+        // A 1.2.0 (16/09) veio pela METADE, e a fonte diz qual metade: histórico + Anexo II + XSD
+        // lidos; leiaute campo a campo (02) e Anexo I (03) NÃO recebidos.
+        expect(FONTES_DERE.LEIAUTES_1_2_0).toMatch(/05\/09\/2026/);
+        expect(FONTES_DERE.LEIAUTES_1_2_0).toMatch(/LIDOS/);
+        expect(FONTES_DERE.LEIAUTES_1_2_0).toMatch(/NÃO foram recebidos/);
         expect(FONTES_DERE.MANUAL_DEV_1_0_2).toMatch(/LIDO/);
         expect(FONTES_DERE.ATO_CONJUNTO_4).toMatch(/resumo de terceiros/);
         expect(FONTES_DERE.MOD_1_0_1).toMatch(/NÃO RECEBIDO/);
@@ -248,28 +254,54 @@ describe('dere.js — os eventos do LEIAUTE 1.1.0, cronograma, prazo e a situaç
         expect(CRONOGRAMA_DERE.map((m) => m.dataIso)).toEqual(['2026-10-01', '2026-11-15', '2027-01-01']);
     });
 
-    it('eventos: exatamente os do sumário dos Leiautes 1.1.0 — e D-1121 NÃO existe', () => {
+    it('eventos: os do sumário da 1.1.0 continuam TODOS, e os que a 1.2.0 INCLUIU estão na seção 3.1 do histórico dela', () => {
         expect(EVENTOS_DERE.filter((e) => e.grupo === 'tabela').map((e) => e.codigo)).toEqual(['D-1001', 'D-1011']);
         expect(EVENTOS_DERE.filter((e) => e.grupo === 'mensal').map((e) => e.codigo).sort())
-            .toEqual(['D-1101', 'D-1106', 'D-1199', 'D-2101']);
+            .toEqual(['D-1101', 'D-1106', 'D-1121', 'D-1198', 'D-1199', 'D-2101']);
+        expect(EVENTOS_DERE.filter((e) => e.grupo === 'transacional').map((e) => e.codigo))
+            .toEqual(['D-2201', 'D-2202', 'D-2211', 'D-2221', 'D-2231', 'D-2241', 'D-2242', 'D-2251', 'D-3201', 'D-4201']);
         expect(EVENTOS_DERE.filter((e) => e.grupo === 'retorno').map((e) => e.codigo).sort())
-            .toEqual(['D-9001', 'D-9101', 'D-9106', 'D-9121', 'D-9199']);
-        // O resumo de terceiros listava um "D-1121 Relação de Deduções"; o leiaute
-        // não o tem. Voltar a listá-lo é voltar a cobrar evento que não existe.
-        expect(EVENTOS_DERE.map((e) => e.codigo)).not.toContain('D-1121');
-        // E os nomes saem do sumário, não de memória.
-        const sumario = readFileSync(join(RAIZ, 'docs/dere/02-leiautes-eventos-v1.1.0.txt'), 'utf8').toUpperCase();
-        for (const e of EVENTOS_DERE) expect({ codigo: e.codigo, noSumario: sumario.includes(`EVENTO ${e.codigo}`) }).toEqual({ codigo: e.codigo, noSumario: true });
+            .toEqual(['D-9001', 'D-9101', 'D-9106', 'D-9112', 'D-9121', 'D-9198', 'D-9199', 'D-9209']);
+        // 02/09 este teste exigia "D-1121 NÃO existe" — verdade para a 1.1.0. A
+        // 1.2.0 (05/09) o INCLUIU; a asserção mudou porque a FONTE mudou, e é a
+        // fonte que prova: todo evento ou está no sumário da 1.1.0 ou na lista de
+        // inclusões da 1.2.0 (seção 3.1 do histórico). Nenhum entra por memória.
+        const sumario110 = readFileSync(join(RAIZ, 'docs/dere/02-leiautes-eventos-v1.1.0.txt'), 'utf8').toUpperCase();
+        const hist120 = readFileSync(join(RAIZ, 'docs/dere/05-historico-de-versoes-v1.2.0.txt'), 'utf8');
+        const inclusoes120 = hist120.slice(hist120.indexOf('3.1 Inclusão de Novos Eventos', hist120.indexOf('===== PÁGINA 6')), hist120.indexOf('3.2 Evento D-1011', hist120.indexOf('===== PÁGINA 6')));
+        for (const e of EVENTOS_DERE) {
+            const na110 = sumario110.includes(`EVENTO ${e.codigo}`);
+            const na120 = new RegExp(`${e.codigo} – .*\\n?.*INCLUSÃO`).test(inclusoes120) || inclusoes120.includes(`${e.codigo} – `);
+            expect({ codigo: e.codigo, naFonte: na110 || na120 }).toEqual({ codigo: e.codigo, naFonte: true });
+            // E o que a 1.1.0 NÃO tinha está marcado como inclusão da 1.2.0 — não o contrário.
+            if (!na110) expect({ codigo: e.codigo, incluidoNa120: na120 }).toEqual({ codigo: e.codigo, incluidoNa120: true });
+        }
+        // Os transacionais são PRELIMINARES (Histórico 2.1.a) e o app não os cobra.
+        for (const e of EVENTOS_DERE.filter((k) => k.grupo === 'transacional')) expect(e.preliminar).toBe(true);
+        const ev = eventosDaCompetencia('10/2026');
+        expect(ev.mensais.map((e) => e.codigo)).not.toContain('D-1198');
+        expect(ev.eventuais.map((e) => e.codigo)).toEqual(['D-1198']);
+        expect(ev.transacionais).toHaveLength(10);
         expect(eventosDaCompetencia('09/2026').mensais).toHaveLength(0);
     });
 
-    it('D-1106 e D-2101 são CONDICIONAIS ao codTrib do PGCC — com os códigos do Anexo II', () => {
+    it('D-1106, D-2101 e D-1121 são CONDICIONAIS ao codTrib do PGCC — com os códigos LIDOS do Anexo II 1.2.0', () => {
         const porCodigo = Object.fromEntries(EVENTOS_DERE.map((e) => [e.codigo, e]));
         expect(porCodigo['D-1106'].condicional?.codTribs).toEqual(['120130001', '120230001', '120330001', '111112701']);
         expect(porCodigo['D-2101'].condicional?.codTribs).toEqual(['110113001', '110113002']);
+        // Os 34 códigos do D-1121 saem da RN do Anexo II 1.2.0 — a tabela do módulo
+        // é provada contra o TEXTO da fonte, nunca digitada de memória.
+        const anexo = readFileSync(join(RAIZ, 'docs/dere/04-anexo-ii-regras-de-validacao-v1.2.0.txt'), 'utf8');
+        const bloco = anexo.slice(anexo.indexOf('Evento D-1121: \n['), anexo.indexOf('Evento D-2101: \n['));
+        const daFonte = bloco.match(/\d{9}/g) ?? [];
+        expect(daFonte).toHaveLength(34);
+        expect([...(porCodigo['D-1121'].condicional?.codTribs ?? [])].sort()).toEqual([...daFonte].sort());
+        expect(porCodigo['D-1121'].condicional?.texto).toMatch(/indInexistDedu/);
+        expect(porCodigo['D-1198'].eventual).toBe(true);
         expect(porCodigo['D-1101'].condicional).toBeUndefined();
         expect(porCodigo['D-1199'].nota).toMatch(/INCLUSÃO/);
         expect(porCodigo['D-1199'].nota).toMatch(/REABERTURA/);
+        expect(porCodigo['D-1199'].nota).toMatch(/D-1198/);
     });
 
     it('prazoDere: null antes da vigência; 13/11/2026 para 10/2026; 15/12/2026 (terça) para 11/2026', () => {
@@ -357,11 +389,14 @@ describe('Anexo II — as réguas de FORMA (Id, recibo, protocolo): o app confer
 
     it('Id: evento inexistente, CNPJ torto, data ilegível e sequencial fora da faixa são RECUSAS nomeadas', () => {
         const d = new Date('2026-11-10T12:00:00Z');
-        expect(montarIdEventoDere({ codigoEvento: 'D-1121', cnpj: '11222333000181', data: d }).motivo).toMatch(/não existe/);
+        // 1121 existe desde a 1.2.0 — quem NÃO existe é o 1122.
+        expect(montarIdEventoDere({ codigoEvento: 'D-1121', cnpj: '11222333000181', data: d }).ok).toBe(true);
+        expect(montarIdEventoDere({ codigoEvento: 'D-1122', cnpj: '11222333000181', data: d }).motivo).toMatch(/não existe no leiaute 1\.2\.0/);
         expect(montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '', data: d }).motivo).toMatch(/CNPJ/);
         expect(montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11222333000181', data: new Date('x') }).motivo).toMatch(/Data/);
         expect(montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11222333000181', data: d, sequencial: 0 }).motivo).toMatch(/Sequencial/);
-        expect((lerIdEventoDere('DeRE11211112223330001812026110923300000007') as any).ok).toBe(false);
+        expect((lerIdEventoDere('DeRE11211112223330001812026110923300000007') as any).evento).toBe('D-1121');
+        expect((lerIdEventoDere('DeRE11221112223330001812026110923300000007') as any).ok).toBe(false);
         expect((lerIdEventoDere('dere1101111222333000181202611092330000000007') as any).ok).toBe(false);
     });
 
@@ -371,7 +406,8 @@ describe('Anexo II — as réguas de FORMA (Id, recibo, protocolo): o app confer
         expect(rec.evento).toBe('D-1101');
         expect(rec.periodo).toBe('10/2026');
         expect(rec.idInterno).toBe('123456');
-        expect((lerRecibo('1121-202610-1') as any).ok).toBe(false);
+        expect((lerRecibo('1121-202610-1') as any).evento).toBe('D-1121');
+        expect((lerRecibo('1122-202610-1') as any).ok).toBe(false);
         expect((lerRecibo('1101-202613-1') as any).ok).toBe(false);
         expect((lerRecibo('1.202610.1') as any).ok).toBe(false);
 
@@ -383,6 +419,50 @@ describe('Anexo II — as réguas de FORMA (Id, recibo, protocolo): o app confer
         expect((lerProtocolo('1.202610.1') as any).ambiente).toBe('producao');
         expect((lerProtocolo('3.202610.1') as any).ok).toBe(false);
         expect((lerProtocolo('1101-202610-1') as any).ok).toBe(false);
+    });
+
+    it('1.2.0 — a CHAVE da DeRE (53) reproduz o EXEMPLO da RN, e chave torta é recusa nomeada', () => {
+        // Anexo II 1.2.0, "RN - Formação da Chave da DeRE", exemplo literal:
+        // 1C345G7Z BR 1 0000001G01J3A5000191 1020 2026050105 0001 2 000
+        const r = montarChaveDere({ raiz: '1C345G7Z', pais: 'BR', tpInscAdq: 1, nrInscAdq: '0000001G01J3A5000191', codBC: '1020', ano: 2026, mes: 5, diaIni: 1, diaFim: 5, serie: 1, seq: 0 });
+        expect(r.ok).toBe(true);
+        expect(r.chave).toBe('1C345G7ZBR10000001G01J3A50001911020202605010500012000');
+        expect(r.chave).toHaveLength(53);
+        expect(dvChaveDere(r.chave!.slice(0, 49))).toBe(2);
+        const lida = lerChaveDere(r.chave) as any;
+        expect(lida).toMatchObject({ ok: true, raiz: '1C345G7Z', pais: 'BR', tpInscAdq: '1', tpInscAdqRotulo: 'CNPJ', codBC: '1020', periodo: '05/2026', diaIni: 1, diaFim: 5, serie: 1, dv: 2, seq: 0, chaveMae: true });
+        // Chave-filha troca só os 3 últimos; DV trocado é RECUSA que diz qual seria.
+        expect((lerChaveDere(r.chave!.slice(0, 50) + '007') as any)).toMatchObject({ ok: true, seq: 7, chaveMae: false });
+        expect((lerChaveDere(r.chave!.slice(0, 49) + '5000') as any).motivo).toMatch(/DV 5 não confere.*seria 2/);
+        expect((lerChaveDere(r.chave!.toLowerCase()) as any).ok).toBe(false);
+        // O que a RN veda, o app recusa NOMEANDO: agrupar competências distintas, país fora da forma, CPF de 20+ sem truncar.
+        expect(montarChaveDere({ raiz: '1C345G7Z', tpInscAdq: 2, nrInscAdq: '12345678901', codBC: '1020', ano: 2026, mes: 5, diaIni: 28, diaFim: 32 }).motivo).toMatch(/1-31/);
+        expect(montarChaveDere({ raiz: '1C345G7Z', pais: 'BRA', tpInscAdq: 1, nrInscAdq: '1', codBC: '1020', ano: 2026, mes: 5, diaIni: 1, diaFim: 5 }).motivo).toMatch(/alfa-2/);
+        expect(montarChaveDere({ raiz: '1C345G7Z', tpInscAdq: 1, nrInscAdq: 'A'.repeat(21), codBC: '1020', ano: 2026, mes: 5, diaIni: 1, diaFim: 5 }).motivo).toMatch(/NIF \(3\) e Outro \(9\)/);
+        // NIF longo fica com os 20 ÚLTIMOS (regra de truncamento da RN).
+        const nif = montarChaveDere({ raiz: '1C345G7Z', pais: 'PT', tpInscAdq: 3, nrInscAdq: 'X'.repeat(5) + 'Y'.repeat(20), codBC: '1020', ano: 2026, mes: 2, diaIni: 1, diaFim: 28 });
+        expect(nif.chave!.slice(11, 31)).toBe('Y'.repeat(20));
+        expect(montarChaveDere({ raiz: '1C345G7Z', tpInscAdq: 7, nrInscAdq: '1', codBC: '1020', ano: 2026, mes: 5, diaIni: 1, diaFim: 5 }).motivo).toMatch(/tpInscAdq/);
+        expect(montarChaveDere({ raiz: '1C345G7', tpInscAdq: 1, nrInscAdq: '1', codBC: '1020', ano: 2026, mes: 5, diaIni: 1, diaFim: 5 }).motivo).toMatch(/8 posições/);
+    });
+
+    it('1.2.0 — arredondamento pela NBR 5891: os CINCO exemplos da RN, e o empate vai para o PAR', () => {
+        // Exemplos literais da RN (arredondamento na 2ª casa).
+        expect(arredondarDere(18.234).valor).toBe(18.23);
+        expect(arredondarDere(18.237).valor).toBe(18.24);
+        expect(arredondarDere(18.2351).valor).toBe(18.24);
+        expect(arredondarDere(18.245).valor).toBe(18.24); // 4 é par → fica
+        expect(arredondarDere(18.235).valor).toBe(18.24); // 3 é ímpar → sobe
+        // Math.round/toFixed errariam o empate — é por isso que a régua existe.
+        expect(Math.round(18.245 * 100) / 100).not.toBe(arredondarDere(18.245).valor);
+        expect(arredondarDere(-18.235).valor).toBe(-18.24);
+        expect(arredondarDere(2.5, 0).valor).toBe(2);
+        expect(arredondarDere(3.5, 0).valor).toBe(4);
+        expect(arredondarDere(9.995).valor).toBe(10);
+        // Memória intermediária a 8 casas (D-9199).
+        expect(arredondarDere(0.123456785, 8).valor).toBe(0.12345678);
+        expect(arredondarDere('12,50').ok).toBe(false);
+        expect(arredondarDere(1, 9).ok).toBe(false);
     });
 
     it('a integração é REFERÊNCIA do Manual 1.0.2 — token, endpoints, assinatura, pré-requisitos, protocolo ≠ recibo', () => {
@@ -447,11 +527,25 @@ describe('🚨 o campo chega a quem monta o mês, ao cadastro e à tela', () => 
         }
         expect(existsSync(join(RAIZ, 'docs/dere/README.md'))).toBe(true);
         expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/MOD/);
-        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/XSD dos eventos D-1199/);
+        // As Mensagens de Erro SAÍRAM da lista de faltantes: a 1.2.0 as integrou ao Anexo II (Histórico 2.1.h.5).
+        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).not.toMatch(/Mensagens de Erro/);
+        expect(readFileSync(join(RAIZ, 'docs/dere/04-anexo-ii-regras-de-validacao-v1.2.0.txt'), 'utf8')).toMatch(/2 MENSAGENS DE ERRO DO SISTEMA/);
+        // O que da 1.2.0 NÃO veio está DITO — leiaute dos eventos (02) e Anexo I (03).
+        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/Eventos v1\.2\.0/);
+        expect(DOCUMENTOS_DERE_FALTANDO.join(' ')).toMatch(/Anexo I — Tabelas v1\.2\.0/);
+        expect(DOCUMENTOS_DERE.filter((d) => d.versao === '1.2.0').map((d) => d.pdf).sort())
+            .toEqual(['/docs/dere/04-anexo-ii-regras-de-validacao-v1.2.0.pdf', '/docs/dere/05-historico-de-versoes-v1.2.0.pdf']);
     });
 
     it('📐 os XSD estão no repo (texto) E servidos pelo app, ligados ao evento certo pelo elemento-raiz e pelo namespace', () => {
-        expect(XSD_DERE.length).toBe(9);
+        expect(XSD_DERE.length).toBe(28);
+        // O pacote 1.2.0 tem exatamente 28 arquivos — e o repo serve exatamente eles
+        // (versão antiga de Balancete/PGCC SAIU: namespace antigo é MS0009).
+        const noRepo = readdirSync(join(RAIZ, 'docs/dere/xsd')).filter((f) => f.endsWith('.xsd')).sort();
+        expect(noRepo).toEqual(XSD_DERE.map((x) => x.arquivo).slice().sort());
+        expect(readdirSync(join(RAIZ, 'public/docs/dere/xsd')).filter((f) => f.endsWith('.xsd')).sort()).toEqual(noRepo);
+        expect(noRepo).not.toContain('evtBalancete-v1_0_0.xsd');
+        expect(noRepo).not.toContain('evtPGCC-v1_0_2.xsd');
         for (const x of XSD_DERE) {
             const txt = join(RAIZ, 'docs/dere/xsd', x.arquivo);
             expect({ arquivo: x.arquivo, existe: existsSync(txt) && existsSync(join(RAIZ, 'public/docs/dere/xsd', x.arquivo)) })
@@ -468,14 +562,33 @@ describe('🚨 o campo chega a quem monta o mês, ao cadastro e à tela', () => 
             const x = XSD_DERE.find((k) => k.evento === e.codigo);
             expect({ codigo: e.codigo, xsd: e.xsd ?? null }).toEqual({ codigo: e.codigo, xsd: x ? x.arquivo : null });
         }
-        // O pacote é PARCIAL — e o que falta é DITO, nunca preenchido por dedução.
-        expect(xsdFaltando().sort()).toEqual(['D-1199', 'D-2101', 'D-9121', 'D-9199']);
+        // Com a 1.2.0 nenhum evento fica sem XSD — e o gerador de cada um continua
+        // exigindo o arquivo NA MÃO (o D-1001 já lê o dele).
+        expect(xsdFaltando()).toEqual([]);
+        // O de-para XSD → evento é provado pela DOCUMENTAÇÃO do próprio arquivo quando ela nomeia o evento.
+        const docPorEvento: Record<string, RegExp> = {
+            'D-1121': /Relação de Deduções/, 'D-9112': /Relação de Deduções/, 'D-1198': /Reabertura/, 'D-9198': /Reabertura/,
+            'D-1199': /Fechamento Mensal/, 'D-9199': /Fechamento Mensal/, 'D-2101': /títulos de dívida com oferta pública/i,
+            'D-9121': /Títulos de Dívida com Oferta Pública/, 'D-9209': /eventos transacionais/, 'D-4201': /apostas e prêmios/,
+            'D-3201': /planos de assistência à saúde/, 'D-2251': /seguros, previdência e capitalização/, 'D-2231': /arrendamento mercantil/,
+            'D-2221': /antecipação de recebíveis/, 'D-2211': /operações de crédito e TVM/, 'D-2202': /detalhamento de tarifas/,
+            'D-2201': /serviços remunerados por preço/, 'D-2241': /credenciados ou destinatários/, 'D-2242': /entre participantes/,
+        };
+        for (const [ev, re] of Object.entries(docPorEvento)) {
+            const x = XSD_DERE.find((k) => k.evento === ev)!;
+            expect({ ev, doc: re.test(readFileSync(join(RAIZ, 'docs/dere/xsd', x.arquivo), 'utf8')) }).toEqual({ ev, doc: true });
+        }
+        // Entre os pacotes, o D-1001 veio IDÊNTICO — o gerador não muda por causa do XSD.
+        expect(XSD_DERE.find((k) => k.evento === 'D-1001')!.arquivo).toBe('evtInfoContrib-v1_0_1.xsd');
+        // Balancete e PGCC subiram de versão só no teto de contas (Histórico 2.1.d).
+        expect(readFileSync(join(RAIZ, 'docs/dere/xsd/evtBalancete-v1_0_1.xsd'), 'utf8')).toMatch(/name="infoConta" minOccurs="1" maxOccurs="90000"/);
+        expect(readFileSync(join(RAIZ, 'docs/dere/xsd/evtPGCC-v1_0_3.xsd'), 'utf8')).toMatch(/name="infoConta" minOccurs="1" maxOccurs="150000"/);
         expect(ler('components/DerePanel.tsx')).toMatch(/r\.xsd\.map/);
         expect(ler('components/DerePanel.tsx')).toMatch(/r\.xsdFaltando/);
     });
 
     it('📐 o Id que o app monta passa no PADRÃO do próprio XSD, e a raiz passa em {nrInsc}', () => {
-        const xsd = readFileSync(join(RAIZ, 'docs/dere/xsd/evtBalancete-v1_0_0.xsd'), 'utf8');
+        const xsd = readFileSync(join(RAIZ, 'docs/dere/xsd/evtBalancete-v1_0_1.xsd'), 'utf8');
         const padraoId = /xs:pattern value="(DeRE[^"]+)"/.exec(xsd)![1];
         expect(padraoId).toBe('DeRE[0-9]{4}[1-2][A-Z0-9]{14}[0-9]{19}');
         const r = montarIdEventoDere({ codigoEvento: 'D-1101', cnpj: '11.222.333/0001-81', data: new Date('2026-11-10T02:30:00Z'), sequencial: 7 });
