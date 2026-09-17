@@ -224,10 +224,15 @@ export function buildBlocoD(dados) {
     // D100 + D190 por CTe
     /** CT-e sem CFOP legível: sai NOMEADO em vez de entrar com natureza inventada. */
     const semCfop = [];
+    /** Quanto de frete e de ICMS ficou de fora — o aviso DIZ o número, não só a contagem. */
+    let valorFora = 0;
+    let icmsFora = 0;
     for (const nota of notas) {
         try {
             if (!cfopDoCte(nota)) {
                 semCfop.push(String(nota.numero || nota.chave || '(sem número)'));
+                valorFora += valorDoDoc(nota);
+                icmsFora += Number(nota?.totais?.vICMS) || 0;
                 continue;
             }
             linhas.push(buildD100(nota, dados));
@@ -241,21 +246,27 @@ export function buildBlocoD(dados) {
         }
     }
     if (semCfop.length && Array.isArray(dados.warnings)) {
-        // ⚠️ A CONSEQUÊNCIA VAI DITA, não só o que ficou de fora: sem o CFOP o
-        // conhecimento não vira D100/D190, então o frete NÃO é escriturado e o
-        // ICMS dele não entra no livro. Quando TODOS caem aqui o bloco sai SEM
-        // DADOS — e quem conferir o arquivo precisa saber que o bloco vazio é
-        // consequência disto, não ausência de frete no mês.
+        // ⚠️ A CONSEQUÊNCIA VAI DITA COM O NÚMERO, não só a contagem: sem o CFOP o
+        // conhecimento não vira D100/D190, então aquele VALOR de frete não é
+        // escriturado. Quando TODOS caem aqui o bloco sai SEM DADOS — e quem
+        // conferir o arquivo precisa saber que o bloco vazio é consequência disto,
+        // não ausência de frete no mês.
+        // ⚠️ O ICMS SÓ VAI DITO QUANDO EXISTE (17/09, medido no EFD de 05/2026 da
+        // EDUARDO GUERRA, gerado pelo e-Fiscal e ACEITO): os 34 CT-e dela saem com
+        // CST 090, alíquota 0 e ICMS ZERO. Afirmar "o ICMS fica fora do livro" ali
+        // prometeria um crédito que não existe — frase que afirma demais é o
+        // `csllOuTotal` com outra roupa (02/09).
         const todos = linhas.length === 0;
+        const dinheiro = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         dados.warnings.push(
             `Bloco D: ${semCfop.length} CT-e ficaram FORA porque o CFOP não foi capturado — `
             + `nº ${semCfop.slice(0, 10).join(', ')}${semCfop.length > 10 ? ` e mais ${semCfop.length - 10}` : ''}. `
             + 'O CFOP do CT-e mora no CABEÇALHO do XML e a captura antiga não o lia; cravar um valor aqui '
             + 'declararia a NATUREZA da operação de transporte no escuro. '
             + (todos
-                ? 'Com isso o bloco D sai SEM DADOS (D001 com IND_MOV=1) e NENHUM frete foi escriturado '
-                + 'nesta competência — o ICMS desses conhecimentos fica fora do livro. '
-                : 'O frete desses conhecimentos não foi escriturado, e o ICMS deles fica fora do livro. ')
+                ? `Com isso o bloco D sai SEM DADOS (D001 com IND_MOV=1) e NENHUM frete foi escriturado nesta competência — R$ ${dinheiro(valorFora)} ficaram fora do livro`
+                : `O frete desses conhecimentos não foi escriturado — R$ ${dinheiro(valorFora)} ficaram fora do livro`)
+            + (icmsFora > 0 ? `, junto com R$ ${dinheiro(icmsFora)} de ICMS. ` : ' (esses CT-e não têm ICMS destacado). ')
             + 'Rode o ♻️ (reler XMLs guardados) na Central de XMLs para recuperá-lo, ou reimporte o XML '
             + 'do conhecimento; depois regere o arquivo.',
         );

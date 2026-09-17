@@ -133,17 +133,31 @@ describe('🚨 o que ficou de fora sai DITO — com a consequência, não só a 
 
     // ⚠️ Sem esta frase, quem abrir o arquivo vê um bloco D vazio e conclui que
     // a empresa não teve frete no mês — quando o frete existe e ficou de fora.
-    it('quando TODOS caem, diz que o bloco sai sem dados e que o ICMS fica fora', () => {
+    it('quando TODOS caem, diz que o bloco sai sem dados e QUANTO ficou fora', () => {
         const w = aviso([CTE_SEM_CFOP]);
         expect(w).toMatch(/bloco D sai SEM DADOS/i);
         expect(w).toMatch(/NENHUM frete foi escriturado/i);
-        expect(w).toMatch(/ICMS desses conhecimentos fica fora do livro/i);
+        expect(w).toContain('R$ 500,00');
     });
 
     it('quando só PARTE cai, não afirma que o bloco ficou vazio', () => {
         const w = aviso([CTE_COM_CFOP, CTE_SEM_CFOP]);
         expect(w).not.toMatch(/bloco D sai SEM DADOS/i);
-        expect(w).toMatch(/ICMS deles fica fora do livro/i);
+        expect(w).toMatch(/ficaram fora do livro/i);
+        expect(w).toContain('R$ 500,00');
+    });
+
+    // 🚨 A FRASE NÃO AFIRMA ICMS QUE NÃO EXISTE — medido no EFD de 05/2026 da
+    // EDUARDO GUERRA (gerado pelo e-Fiscal e ACEITO): os 34 CT-e dela saem com
+    // CST 090, alíquota 0 e ICMS ZERO, e prometer crédito ali mandaria procurar
+    // no livro um valor que o documento não destaca.
+    it('só cita o ICMS quando o CT-e o destaca', () => {
+        expect(aviso([CTE_SEM_CFOP])).toContain('R$ 60,00 de ICMS');
+
+        const semIcms = { ...CTE_SEM_CFOP, totais: { vBC: 0, vICMS: 0 }, aliqIcms: 0 };
+        const w = aviso([semIcms]);
+        expect(w).not.toMatch(/de ICMS/);
+        expect(w).toMatch(/não têm ICMS destacado/i);
     });
 
     it('manda reler os XMLs guardados e regerar — a ação que resolve', () => {
