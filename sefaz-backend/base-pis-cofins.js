@@ -214,8 +214,16 @@ export function fretesDosItens(nota) {
 }
 
 /**
- * O valor do item JÁ LÍQUIDO do desconto incondicional — o que vai ao
- * `VL_ITEM` do C170 e, somado, ao `VL_MERC` do C100.
+ * O valor do item JÁ LÍQUIDO do desconto incondicional — o insumo da **BASE**
+ * de PIS/COFINS do C170 (campos 26 e 32).
+ *
+ * 🚨 **ELE NÃO VAI AO `VL_ITEM`**, e este comentário já afirmou o contrário
+ * (corrigido em 17/09). O campo 07 é *"somente o valor das mercadorias
+ * (equivalente à quantidade vezes preço unitário)"* e a validação o amarra ao
+ * `VL_MERC` do C100 — que sai BRUTO. Quem lesse a prosa antiga baixaria o
+ * `VL_ITEM` para o líquido e quebraria a validação nos dois registros, que foi
+ * exatamente o que custou cinco dias em 25/08. O desconto sai no campo 08
+ * (VL_DESC) e reduz só a base.
  *
  * @returns {number[]} um valor por item, na ordem de `nota.itens`.
  */

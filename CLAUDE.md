@@ -5,6 +5,79 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📐 "A BASE BATEU, MAS O VALOR DA RECEITA TEM QUE SER 18.355,90" — os DOIS
+  números estavam certos, e ninguém tinha como saber disso olhando as telas**
+  (17/09, Paulo, PWR 08/2026, com a base já conferida: *"foi o mesmo caso do
+  mês que fizemos"* — e era mesmo, com o frete somado ao desconto).
+  📖 **A MEDIÇÃO É LITERAL, e ela está no Guia 1.35** (extraído em `docs/sped/`
+  desde 20/08): o **M210 campo 03** valida *"o valor do campo será igual à soma
+  dos seguintes campos … **VL_ITEM dos registros C170** … [IND_OPER = 1]"*, e o
+  **C170 campo 07** define VL_ITEM como *"somente o valor das mercadorias
+  (equivalente à quantidade vezes preço unitário)"*, com a validação *"a soma
+  de valores dos registros C170 deve ser igual ao valor informado no campo
+  **VL_MERC** do registro C100"*. Ou seja: **o VL_REC_BRT é mercadoria BRUTA —
+  sem frete e sem abater desconto — por VALIDAÇÃO, não por escolha do app.**
+  📌 **A DIFERENÇA É SEMPRE `frete − desconto`, e ela fecha ao centavo**: o
+  arquivo declara 17.775,31 (Σ vProd) e a Memória mostra 18.355,90 (o `vNF`, =
+  mercadoria − desconto 169,41 + frete 750,00). São **580,59**, e os dois
+  números medem coisas diferentes: o M210 declara a receita da ESCRITURAÇÃO e a
+  Memória, a receita do **IRPJ/CSLL presumido**. A base, que é o que a guia
+  paga, é a MESMA nos dois: **15.186,83 · PIS 98,71 · COFINS 455,60**.
+  🚨 **E NÃO DÁ PARA "CONSERTAR" A RECEITA MEXENDO NO C170**: somar o frete no
+  VL_ITEM ou abater o desconto dele quebra a validação contra o VL_MERC —
+  **duas recusas no lugar de uma divergência de tela**, que foi exatamente o
+  que custou os cinco dias de 25/08. E o **PVA REGERA o bloco M** a partir dos
+  documentos (Manual do Lucro Presumido, PVA 2.04), então escrever outro número
+  no M210 é escrever num campo que ele sobrescreve — a Sandra já provou isso
+  apagando a base inteira do PVA e reimportando.
+  ✂️ **O QUE A RODADA ENTREGOU FOI A CONCILIAÇÃO, na geração**: o aviso diz os
+  DOIS números, a diferença, as parcelas que a explicam (`− desconto … + frete
+  …`) e **não chama nenhum dos dois de errado** — mandando conferir a BASE, que
+  é o que a guia paga. ⚠️ Ele **nasce MUDO** em competência sem frete e sem
+  desconto, porque ali os dois números são o mesmo e alarme sobre arquivo
+  correto é o jeito conhecido de a equipe ignorar o aviso que importa.
+  🚩 **O CAMINHO QUE EXISTE FICA NOMEADO, NÃO FEITO**: o próprio Guia oferece
+  uma porta para o frete VIRAR receita declarada — *"no caso da pessoa jurídica
+  vir a escriturar essa receita de frete no registro **F100**"* —, e o M210
+  campo 03 soma o `VL_OPER` do F100. Ele levaria a receita a **18.525,31**
+  (bruta, com o frete e SEM abater o desconto, que é a receita bruta do DL
+  1.598/77) mantendo a base em 15.186,83, com o frete saindo do C170 e entrando
+  pelo F100 — **nunca nos dois, senão a base conta em dobro**. Não entrou aqui
+  porque muda VALOR de arquivo fiscal, depende do **COD_CTA/0500** (a régua do
+  CF BANK: *"emitir a referência sem a declaração é justamente a recusa"*) e
+  **não produz o 18.355,90 que foi pedido** — o desconto não pode sair do
+  VL_ITEM em leitura nenhuma. Valor se fecha com o número na frente do dono.
+  🔴 **E MEDIR ISTO ACHOU UM DEFEITO VIVO A UM CAMPO DE DISTÂNCIA: o
+  `IND_ESCRI` do C010 saía do REGIME.** A linha era `regimeApuracao === '1' ?
+  '1' : '2'` e o campo não fala de cumulativo × não-cumulativo — o Guia é
+  literal: *"1 – Apuração com base nos registros de CONSOLIDAÇÃO … (C180 e
+  C190); 2 – Apuração com base no registro INDIVIDUALIZADO de NF-e (C100 e
+  C170)"*. Como as validações do M210 **campo 03 E campo 04** só recolhem os
+  C170 *"cujo COD_MOD seja diferente de 55 ou quando COD_MOD seja igual a 55 e
+  o IND_ESCRI do C010 seja igual a 2"*, toda empresa do **não-cumulativo** sai
+  com a NF-e FORA da receita e FORA da base — o PVA iria buscar C181/C491, que
+  este gerador nunca emite, e o arquivo declararia **ZERO com movimento**.
+  ⚠️ **E o PVA ACEITA**, porque ele regera o bloco M. É a família do IPI em
+  E200/E210 e do Bloco H zerado: o defeito esperando o primeiro cliente do
+  outro regime — nenhuma empresa do Lucro Real tinha gerado ainda.
+  ⚠️ **Vazio também não serve**, embora o campo seja `Obrig. N`: a validação
+  exige literalmente `= 2` para o modelo 55, e vazio não é 2. O `2` está
+  PROVADO por arquivo aceito (é o que a PWR cumulativa vem declarando), e virou
+  constante — quem decide o campo é **o que o gerador EMITE**, não o regime.
+  🐛 **E UM COMENTÁRIO AFIRMAVA A REGRA AO CONTRÁRIO**: o JSDoc de
+  `valoresLiquidosDosItens` dizia que ele é *"o que vai ao VL_ITEM do C170 e,
+  somado, ao VL_MERC do C100"* — FALSO, ele alimenta só a BASE. Quem lesse
+  aquilo baixaria o VL_ITEM para o líquido e quebraria as duas validações; é a
+  classe de 29/08 (*comentário que AFIRMA uma regra e está errado*), e a régua
+  é a mesma: comentário com data e número é citado de volta como fato.
+  📌 **REGRA QUE FICA: quando duas telas da casa mostram números diferentes
+  para o mesmo mês e as DUAS estão certas, a entrega é a CONCILIAÇÃO — dita na
+  geração, com a conta fechando na própria frase.** Explicar por mensagem
+  resolve a rodada e volta no mês seguinte; foi o desconto em 25/08 e o frete
+  agora. E antes de "corrigir" um número que o dono aponta, **ler a validação
+  do campo no Guia**: aqui ela estava a um `grep` de distância e dizia que o
+  número reclamado é o único que aquele campo aceita.
+
 - **🚨 "VERIFICAR PQ ESSE ERRO NÃO FOI AJUSTADO" — a correção estava PRONTA,
   TESTADA e PARADA NUMA BRANCH, e o dono mandou o print do mesmo defeito**
   (17/09, Paulo, PWR 08/2026, com a tela do M210 do PVA sublinhada em vermelho:
