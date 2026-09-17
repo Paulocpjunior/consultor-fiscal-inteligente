@@ -5,6 +5,119 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "VERIFICAR PQ ESSE ERRO NÃO FOI AJUSTADO" — a correção estava PRONTA,
+  TESTADA e PARADA NUMA BRANCH, e o dono mandou o print do mesmo defeito**
+  (17/09, Paulo, PWR 08/2026, com a tela do M210 do PVA sublinhada em vermelho:
+  `Valor da Receita 17.775,31 · Base de Cálculo 14.436,83` — a base que a
+  correção do dia anterior fazia subir para 15.186,83).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR, e a medição cabe numa linha**:
+  `git branch -r --contains HEAD` devolveu **só** a branch de trabalho. O
+  commit do frete **não estava na main** e **nunca foi deployado** — logo o app
+  que gerou aquele arquivo é o ANTERIOR à correção, e a base sai antiga **por
+  construção**. Não era a régua que não fechava; era a ENTREGA que parou.
+  🔴 **A CAUSA É UMA REGRA DA CASA LIDA PELA METADE.** *"NUNCA criar pull
+  request sem pedido explícito"* protege contra abrir PR por conta própria — e
+  eu a li como se ela autorizasse **encerrar o trabalho na branch**. Encerrei
+  com *"não abri PR — me diga se quer que eu abra"*, e com isso a correção
+  ficou num lugar que **nenhum usuário alcança**. Regra de rito não é autoridade
+  para deixar trabalho no meio do caminho.
+  🚨 **E O SINTOMA É O MAIS CARO DESTA CASA: o dono reportando DE NOVO o mesmo
+  defeito.** Do lado dele nada distingue *"o app está quebrado"* de *"a
+  correção não chegou"* — a tela é idêntica nos dois casos. É a família do
+  *"trabalho que PARECE entregue"* (13/08: rota sem botão, trava escrita como
+  lista) na forma mais direta possível: **código certo, teste verde, commit
+  feito — e zero efeito no mundo**.
+  ⚠️ **E A ENTREGA NÃO É SÓ O MERGE — o PVA GUARDA A ESCRITURAÇÃO IMPORTADA.**
+  Mesmo com a correção no ar, o arquivo que já foi importado **não muda
+  sozinho**: é preciso REGERAR no CFI e, no PVA, **apagar a competência e
+  importar o arquivo novo** (a lição de 25/08, PWR, em que quatro dias se foram
+  porque toda geração saía com o MESMO nome de arquivo e ninguém conseguia
+  saber qual estava aberto — por isso o nome carrega a hora desde então).
+  📌 **REGRA QUE FICA: correção parada em branch é correção NÃO ENTREGUE — e
+  quem fecha o ciclo é o deploy VERDE, nunca o commit.** Terminar sem PR só é
+  aceitável quando isso é DITO como pendência em cima (*"está pronto e PARADO,
+  falta sua autorização para abrir o PR"*), nunca como quem termina uma tarefa.
+  E quando o dono volta com o print do mesmo defeito, **a primeira pergunta é
+  "isto chegou à produção?"** — um comando responde, e responder por hipótese
+  custa o dia dele.
+
+- **🚚 "ALGUMAS NOTAS TÊM FRETE, E O CONSULTOR NÃO ENTENDEU QUE ELE É SOMADO
+  COM O VALOR DAS MERCADORIAS" — a base do PIS/COFINS saía R$ 750,00 a MENOS
+  que a guia, e o PVA ACEITAVA** (16/09, Paulo, PWR INDÚSTRIA METALÚRGICA ·
+  08/2026: *"já fizemos ele mês passado, certinho já está ajustado… no mês que
+  fizemos as notas não tinha frete"*).
+  📖 **OS DOIS PRINTS FECHAM AO CENTAVO, e é isso que prova o defeito**: o M210
+  do PVA traz `VL_REC_BRT 17.775,31 · VL_BC_CONT 14.436,83`; a Memória de
+  Apuração do próprio CFI traz base **15.186,83** (18.355,90 − 3.169,07 de
+  ICMS) com **PIS 98,71 · COFINS 455,60**. A diferença da BASE é **750,00** — o
+  frete do mês —, e a da receita (580,59) é o mesmo frete **menos** o desconto
+  de 169,41, porque a ficha parte do total da nota (`vProd + frete − desconto`).
+  🔴 **MEDIDO: `receitaDoItem` é `vProd − vDesc` e mais nada** — frete, seguro e
+  outras despesas não entram em lugar nenhum da base. **O desconto JÁ estava
+  sendo abatido** (é o que a segunda metade do relato supunha faltar): o que
+  faltava era só o frete, e dizer as duas coisas faria consertar o que está
+  certo.
+  🚨 **O CUSTO É GUIA E ARQUIVO BEBENDO DE FONTES DIFERENTES** — a divergência
+  que esta casa mais paga, agora na direção em que a Receita COBRA: o cliente
+  pagou 554,31 e o SPED declarava 526,94. E **nenhum validador acusa**, porque o
+  PVA REGERA o bloco M a partir dos nossos próprios C170 — os dois lados do
+  arquivo concordam entre si e discordam da guia.
+  📖 **A FONTE É LITERAL, e separa os dois casos** (Guia 1.35, **C100 campo
+  18**): *"vindo o valor do frete constante no documento fiscal a integrar a
+  operação da venda, sendo o ônus for suportado pelo adquirente, o seu valor
+  integra o produto da venda e, por conseguinte, **compõe a receita bruta**"*
+  (Lei 12.973/2014), e nas Observações: *"…**deve integrar a base de cálculo
+  do(s) produto(s) vendido(s)**, devendo assim ter o seu valor acrescido ao
+  valor da base de cálculo do PIS/Pasep e da Cofins, **nos correspondentes
+  campos do Registro C170**"*. Quando o frete é **suportado pelo VENDEDOR**, ele
+  *"constitui hipótese de CRÉDITO no regime não cumulativo"* — ali não é receita,
+  é outro documento (o CT-e de entrada, bloco D).
+  ✂️ `fretesDosItens` (no dono, `base-pis-cofins.js`) lê as DUAS formas — o
+  `vFrete` do ITEM e o do TOTAL rateado — e a base do C170 (campos **26 e 32**),
+  do **C175** e do bloco M passa a somá-lo. O **VL_ITEM (campo 07) NÃO muda**: o
+  Guia o define como *"somente o valor das mercadorias"* e a validação o amarra
+  ao `VL_MERC` do C100 — somar ali trocaria a divergência por DUAS recusas. Por
+  isso o `VL_REC_BRT` segue 17.775,31 e **só a BASE sobe**, para 15.186,83.
+  ⚠️ **QUEM SUPORTA O ÔNUS SE RESPONDE PELO LEIAUTE DA NF-e, não por
+  interpretação**: `vFrete` SEMPRE compõe o `vNF`, então frete destacado em nota
+  de SAÍDA é frete que o adquirente paga junto com a mercadoria. O frete que o
+  vendedor absorve não aparece ali — ele chega pelo CT-e. Por isso a régua **não
+  lê o `modFrete`** (que diz quem CONTRATOU, não quem SUPORTA).
+  ⚠️ **O FRETE SEGUE O CST DO PRODUTO** (literal: *"se o produto goza de…
+  não incidência, o frete correspondente goza de… não incidência"*) — e isso cai
+  sozinho do rateio: a parte que toca item sem incidência entra numa base que já
+  sai ZERO.
+  ⚠️ **A ENTRADA NÃO MUDA, e a prova é por RESULTADO**: o frete da compra é
+  custo que *"pode compor a base dos créditos não cumulativos"* — faculdade, em
+  outro regime, e a PWR é cumulativa. Somá-lo por simetria seria inventar
+  crédito; o teste exige o arquivo **idêntico** com e sem frete.
+  ⚠️ **E O MECANISMO DO RATEIO VIROU DONO ÚNICO** (`porItemComRateioDoTotal`):
+  o arquivo teria DUAS cópias dele no minuto em que o frete chegou. ⚠️ Ele
+  **não se juntou ao `valor-operacao-c190.js`** de propósito — aquele responde
+  *"qual é o VL_OPR?"* no EFD ICMS/IPI e está provado contra arquivo ACEITO;
+  unificar mexeria em valor aceito por um centavo (`floor` × `round`).
+  📣 **E O NÚMERO VAI DITO** (a régua de 24/08, nesta mesma empresa): o aviso
+  nomeia o frete, o total e diz que só a base sobe — e **nasce MUDO** em mês sem
+  frete, que é como 07/2026 fechou certo. Os avisos de desconto e de ICMS
+  ganharam a parcela `+ frete` porque eles **fecham a conta na própria frase**:
+  sem isso passariam a se desmentir no primeiro documento com frete.
+  🚩 **ACHADO NOMEADO, NÃO CORRIGIDO**: o `IND_FRT` (campo 17) sai cravado em
+  **9 — sem cobrança de frete** ao lado de um `VL_FRT` de 750,00 — o registro se
+  desmente por dentro. Não dá para corrigir hoje: **`modFrete` não é capturado
+  por nenhum dos dois parsers**, e escolher entre CIF e FOB sem ele seria
+  inventar quem contratou. Não muda valor (o PVA aceita e a base não o lê);
+  fechar é capturar nos dois parsers + ♻️ reler os XMLs.
+  🚩 **PENDÊNCIA DO PAULO (PWR 08/2026)**: regerar o EFD-Contribuições e
+  conferir a BASE do M210 contra a Memória de Apuração — tem de bater 15.186,83,
+  com PIS 98,71 e COFINS 455,60. **E vale olhar as competências anteriores de
+  quem cobra frete na nota**: onde havia frete, o arquivo declarou a MENOS.
+  📌 **REGRA QUE FICA: quando o dono diz "no mês passado estava certo", a
+  pergunta é O QUE MUDOU NOS DOCUMENTOS — não o que mudou no código.** Aqui a
+  régua estava igual; o que chegou foi um campo que ela nunca tinha visto. E
+  relato de quem usa vem com a causa junto: metade dele estava certa (o frete) e
+  metade não (o desconto já era abatido) — **medir as duas antes de mexer é o
+  que impede corrigir o que está certo**.
+
 - **🔁 "NA FICHA DO 07 ELE INFORMA CERTINHO, MAS QUANDO EU CRIO A FICHA DO 08
   ELE NÃO VEM COM O VALOR" — a ficha nova cravava ZERO no saldo credor, e o
   SPED já estava certo, o que tornava tudo pior** (15/09, Paulo, PWR INDÚSTRIA

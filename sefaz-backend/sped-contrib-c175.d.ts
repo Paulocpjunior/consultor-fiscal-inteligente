@@ -10,6 +10,8 @@ export interface ItemParaC175 {
     vlItem: number;
     desconto: number;
     icms: number;
+    /** Frete cobrado do adquirente: ACRESCE a base, nunca o VL_OPR. */
+    frete?: number;
     cstPis: string;
     cstCofins: string;
     aliqPis: number;

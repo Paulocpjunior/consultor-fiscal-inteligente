@@ -98,12 +98,45 @@ export function receitaDoItem(item) {
  * @returns {number[]} um desconto por item, na ordem de `nota.itens`.
  */
 export function descontosDosItens(nota) {
+    return porItemComRateioDoTotal(nota, 'vDesc', 'vDesc', { teto: true });
+}
+
+/**
+ * O MECANISMO do rateio — *"o ITEM manda; o total do documento é a reserva"*.
+ *
+ * Dono único de uma régua que este arquivo já tinha DUAS vezes assim que o
+ * frete chegou (`descontosDosItens` e `fretesDosItens` fazem a MESMA pergunta
+ * sobre campos diferentes). Reescrevê-la de novo seria a terceira cópia — e a
+ * segunda foi o que fez `getContadorPadrao` e `UNIDADES_PADRAO` divergirem
+ * nesta mesma dupla de arquivos.
+ *
+ * ⚠️ **O RATEIO FECHA NA UNIDADE**: em CENTAVOS, com a sobra no ÚLTIMO item,
+ * então a Σ é EXATAMENTE o valor do documento. Sem isso, trocaríamos a
+ * divergência por um erro de arredondamento — o mesmo defeito com outra roupa.
+ *
+ * ⚠️ **NÃO É O MESMO RATEIO DO `valor-operacao-c190.js`**, e isto é decisão:
+ * aquele responde *"qual é o VL_OPR do C190?"* no EFD **ICMS/IPI**, somando
+ * sete campos com sinal, e está provado contra arquivo ACEITO. Régua única é o
+ * dono da MESMA pergunta, não o dono mais próximo (a lição do
+ * `ufDoDestinatarioDoc`) — juntar os dois mexeria em valor de arquivo aceito
+ * por causa de um centavo de arredondamento (`floor` aqui × `round` lá).
+ *
+ * @param {object} nota
+ * @param {string} campoItem  nome do campo no ITEM (ex.: 'vDesc', 'vFrete')
+ * @param {string} campoTotal nome do campo em `totais` (ex.: 'vDesc', 'vFrete')
+ * @param {{teto?: boolean}} [opcoes] `teto` limita o rateio ao valor das
+ *   mercadorias — vale para o DESCONTO (que não pode passar do que se vende) e
+ *   NÃO vale para o frete, que é um acréscimo e pode superar a mercadoria numa
+ *   entrega cara de item barato.
+ * @returns {number[]} um valor por item, na ordem de `nota.itens`.
+ */
+function porItemComRateioDoTotal(nota, campoItem, campoTotal, opcoes) {
     const itens = Array.isArray(nota?.itens) ? nota.itens : [];
     if (!itens.length) return [];
 
-    const proprios = itens.map(i => n(i?.vDesc));
+    const proprios = itens.map(i => n(i?.[campoItem]));
     const somaPropria = proprios.reduce((s, v) => s + v, 0);
-    const doTotal = n(nota?.totais?.vDesc);
+    const doTotal = n(nota?.totais?.[campoTotal]);
     if (somaPropria > 0 || !(doTotal > 0)) return proprios;
 
     const valores = itens.map(i => Math.max(0, n(i?.vProd ?? i?.valor)));
@@ -111,11 +144,73 @@ export function descontosDosItens(nota) {
     if (!(soma > 0)) return proprios;
 
     // Em CENTAVOS, para a Σ fechar na unidade — a sobra vai no último item.
-    const totalCent = Math.round(Math.min(doTotal, soma) * 100);
+    const alvo = opcoes?.teto ? Math.min(doTotal, soma) : doTotal;
+    const totalCent = Math.round(alvo * 100);
     const rateio = valores.map(v => Math.floor((v / soma) * totalCent));
     const sobra = totalCent - rateio.reduce((s, v) => s + v, 0);
     rateio[rateio.length - 1] += sobra;
     return rateio.map(c => c / 100);
+}
+
+/**
+ * O FRETE DE CADA ITEM — o próprio, mais a parte que cabe a ele do frete
+ * lançado só no TOTAL do documento.
+ *
+ * ═══ POR QUE EXISTE (Paulo, 16/09, PWR 1364 · 08/2026) ══════════════════════
+ *
+ * *"algumas notas têm frete, então o consultor não entendeu que o valor dos
+ * fretes é somado com o valor das mercadorias… no mês que fizemos as notas não
+ * tinha frete."*
+ *
+ * O M210 do PVA trazia `VL_REC_BRT 17.775,31` e `VL_BC_CONT 14.436,83`,
+ * enquanto a Memória de Apuração do próprio CFI dizia base **15.186,83** —
+ * **R$ 750,00 de diferença, que é exatamente o frete do mês**. A guia saiu por
+ * uma base e o arquivo declarou outra, MENOR: PIS 93,84 × 98,71 e COFINS
+ * 433,10 × 455,60. É a divergência guia × arquivo que esta casa mais paga,
+ * agora na direção em que a Receita cobra.
+ *
+ * ═══ A FONTE É LITERAL, e ela separa os dois casos ══════════════════════════
+ *
+ * Guia Prático 1.35, **C100 campo 18 (VL_FRT)**:
+ *
+ * *"vindo o valor do frete constante no documento fiscal a integrar a operação
+ * da venda, sendo o ônus for suportado pelo adquirente, o seu valor integra o
+ * produto da venda e, por conseguinte, **compõe a receita bruta da pessoa
+ * jurídica vendedora**"* (Lei 12.973/2014), e nas Observações:
+ *
+ * *"Quando o frete nas operações de vendas não for suportado pelo vendedor, mas
+ * sim pelo adquirente, o seu valor **deve integrar a base de cálculo do(s)
+ * produto(s) vendido(s)**, devendo assim ter o seu valor acrescido ao valor da
+ * base de cálculo do PIS/Pasep e da Cofins, **nos correspondentes campos do
+ * Registro C170**"*.
+ *
+ * *"Quando o frete nas operações de vendas **for** suportado pelo vendedor, o
+ * seu valor constitui hipótese de **crédito** no regime não cumulativo"* — ou
+ * seja, ali ele NÃO é receita, é outra conta e outro documento (o CT-e de
+ * entrada, bloco D).
+ *
+ * ═══ COMO SE SABE QUEM SUPORTA O ÔNUS — sem interpretar código ══════════════
+ *
+ * 🚨 **PELO PRÓPRIO LEIAUTE DA NF-e, `vFrete` SEMPRE COMPÕE O `vNF`**
+ * (`vNF = vProd − vDesc + vST + vFCPST + vFrete + vSeg + vOutro + vII + vIPI +
+ * …`). Então frete destacado numa nota de SAÍDA é frete que o adquirente paga
+ * junto com a mercadoria — é preço de venda, e portanto receita. O frete que o
+ * vendedor absorve não aparece aqui: ele chega pelo CT-e da transportadora.
+ *
+ * Por isso a régua **não lê o `modFrete`**: o indicador diz quem CONTRATOU, e
+ * a pergunta do Guia é quem SUPORTA — e o `vNF` já responde essa. (O
+ * `modFrete` também não é capturado por nenhum dos dois parsers hoje; ver o
+ * achado do `IND_FRT` no comentário do C100.)
+ *
+ * ⚠️ **E O FRETE SEGUE O CST DO PRODUTO**, literal no Guia: *"se o produto/item
+ * goza de suspensão, isenção ou não incidência, o frete correspondente goza de
+ * suspensão, isenção ou não incidência"*. Isso cai sozinho do rateio: a parte
+ * que toca um item sem incidência entra numa base que já sai ZERO.
+ *
+ * @returns {number[]} um frete por item, na ordem de `nota.itens`.
+ */
+export function fretesDosItens(nota) {
+    return porItemComRateioDoTotal(nota, 'vFrete', 'vFrete');
 }
 
 /**
@@ -136,13 +231,19 @@ export function icmsDestacadoDoItem(item) {
 }
 
 /**
- * BASE de cálculo do PIS/COFINS do item: receita − ICMS destacado.
+ * BASE de cálculo do PIS/COFINS do item: receita + frete cobrado − ICMS.
  *
  * Nunca negativa. ICMS ausente (CST 40/41/60, item sem destaque) não inventa
  * exclusão: sem valor destacado, a base é a própria receita.
+ *
+ * ⚠️ O frete é ARGUMENTO, não lido do item aqui: quem sabe se ele veio no item
+ * ou no total do documento é `fretesDosItens`, e um `n(item.vFrete)` nesta
+ * linha deixaria de fora justamente a nota que só declara o frete no total —
+ * a ausência PLAUSÍVEL que este projeto já pagou onze vezes. Sem o argumento a
+ * base é a de antes, então nada regride em quem ainda não passa o frete.
  */
-export function baseDoItem(item) {
-    return Math.max(0, receitaDoItem(item) - icmsDestacadoDoItem(item));
+export function baseDoItem(item, freteDoItem) {
+    return Math.max(0, receitaDoItem(item) + Math.max(0, n(freteDoItem)) - icmsDestacadoDoItem(item));
 }
 
 /**
@@ -161,16 +262,25 @@ export function receitaEBaseDoDocumento(nota, valorSemItens) {
         const v = Math.max(0, n(valorSemItens));
         return {
             receita: v, base: v, icms: 0, temItens: false,
-            descontoDoDocumento: 0, desconto: 0, receitaBruta: v,
+            descontoDoDocumento: 0, desconto: 0, receitaBruta: v, frete: 0,
         };
     }
-    let receita = 0, base = 0, icms = 0, descontoNosItens = 0;
-    for (const item of itens) {
+    // 🚨 O FRETE COBRADO DO ADQUIRENTE ENTRA NA BASE, NUNCA NA RECEITA.
+    // O Guia manda acrescê-lo *"ao valor da base de cálculo do PIS/Pasep e da
+    // Cofins, nos correspondentes campos do Registro C170"* (campos 26 e 32) —
+    // e NÃO ao `VL_ITEM`, que o campo 07 define como *"somente o valor das
+    // mercadorias"* e que a validação amarra ao `VL_MERC` do C100. Somá-lo na
+    // receita quebraria as duas coisas de uma vez.
+    const fretes = fretesDosItens(nota);
+    let receita = 0, base = 0, icms = 0, descontoNosItens = 0, frete = 0;
+    itens.forEach((item, k) => {
+        const freteDoItem = Math.max(0, n(fretes[k]));
         receita += receitaDoItem(item);
-        base += baseDoItem(item);
+        base += baseDoItem(item, freteDoItem);
         icms += icmsDestacadoDoItem(item);
         descontoNosItens += n(item?.vDesc);
-    }
+        frete += freteDoItem;
+    });
 
     // 🚨 O DESCONTO CHEGA EM DUAS FORMAS — e ler só uma é a armadilha que este
     // projeto mais pagou (11ª vez). A NF-e traz `<prod><vDesc>` POR ITEM, mas há
@@ -195,7 +305,7 @@ export function receitaEBaseDoDocumento(nota, valorSemItens) {
     const desconto = descontoNosItens + descontoDoDocumento;
     return {
         receita, base, icms, temItens: true, descontoDoDocumento,
-        desconto, receitaBruta: receita + desconto,
+        desconto, receitaBruta: receita + desconto, frete,
     };
 }
 

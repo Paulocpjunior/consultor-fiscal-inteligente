@@ -76,13 +76,15 @@ const aliq4 = (v) => {
  * Consolida os itens de UMA NFC-e nos registros C175.
  *
  * @param {Array<{cfop: string, vlItem: number, desconto: number, icms: number,
- *   cstPis: string, cstCofins: string, aliqPis: number, aliqCofins: number}>} itens
+ *   frete?: number, cstPis: string, cstCofins: string, aliqPis: number,
+ *   aliqCofins: number}>} itens
  *   um por item do documento, JÁ decididos pela mesma régua do C170
  *   (`pisCofinsDoItemC170` no gerador — CST do item ou 01, alíquota do item ou
  *   do regime, sem incidência ⇒ zeros). `vlItem` é BRUTO (quantidade × preço),
  *   `desconto` é o incondicional (próprio + rateado do documento) e `icms` o
  *   destacado — os dois vão ao campo 04 (Seção 12 do Guia: no C175, exclusão
- *   do ICMS e descontos incondicionais têm a MESMA casa, VL_DESC).
+ *   do ICMS e descontos incondicionais têm a MESMA casa, VL_DESC). `frete` é o
+ *   cobrado do adquirente (`fretesDosItens`), que ACRESCE a base e não o VL_OPR.
  * @returns {{registros: Array<object>, avisos: string[]}}
  */
 export function consolidarC175(itens) {
@@ -100,7 +102,15 @@ export function consolidarC175(itens) {
 
         const vlItem = cent(it?.vlItem);
         const exclusoes = cent(it?.desconto) + cent(it?.icms);
-        const base = Math.max(0, vlItem - exclusoes);
+        // 🚨 O FRETE COBRADO DO ADQUIRENTE É ACRÉSCIMO DE BASE, e NÃO entra no
+        // VL_OPR (Guia 1.35, C100 campo 18: acrescer *"ao valor da base de
+        // cálculo do PIS/Pasep e da Cofins"*; o VL_OPR é a receita da operação,
+        // irmão do VL_ITEM do C170, que o campo 07 define como *"somente o
+        // valor das mercadorias"*). Item sem incidência não recebe nada: a
+        // parte dele cai numa base que já sai ZERO, que é o que o Guia manda
+        // (*"o frete correspondente goza de… não incidência"*).
+        const frete = Math.max(0, cent(it?.frete));
+        const base = Math.max(0, vlItem + frete - exclusoes);
         const g = grupos.get(chave) || {
             cfop, cstPis, cstCofins, aliqPis, aliqCofins,
             vlOprCent: 0, vlDescCent: 0, basePisCent: 0, baseCofinsCent: 0,
