@@ -5,6 +5,73 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚚 "IMPORTOU, MAS O FRETE NÃO ESTÁ APARECENDO NA APURAÇÃO" — o arquivo
+  passou no PVA e o bloco D saiu VAZIO, e a AÇÃO que eu tinha escrito apontava
+  um botão que não alcança CT-e** (17/09, Paulo, EDUARDO GUERRA 08/2026, com
+  três prints: o *Registros fiscais das entradas* do PVA totalizando
+  **3.002.765,17** em 13 CFOPs e **nenhum de transporte**, o Resumo por CFOP do
+  CFI com a mesma lista, e a tela do **D100 — ENTRADA do PVA em BRANCO**).
+  ✅ **O `|D001|0|` ESTAVA RESOLVIDO — foi o deploy 981 que provou**: o arquivo
+  IMPORTOU, que é exatamente o que a correção prometia. O que sobrou é a outra
+  metade, e eu tinha avisado que ela viria: *"passa no PVA, mas passa sem o
+  frete"*.
+  🔴 **A CAUSA É DE CAPTURA e estava medida: CT-e capturado ANTES de 21/08 não
+  tem `cfop`** — o CFOP do conhecimento mora no **CABEÇALHO** do XML
+  (`<ide><CFOP>`) e a captura antiga só lia dentro de `<prod>`. `cfopDoCte` o
+  descarta, e **continua certo** (cravar declararia a NATUREZA da operação de
+  transporte no escuro — foi o `5352` em 100% dos conhecimentos).
+  🚨 **O ACHADO DO DIA É MEU: NENHUM DOS DOIS ♻️ ALCANÇA O CT-e.** Medido no
+  código, não deduzido — (1) **♻️ Reler itens dos XMLs** (`backfill-itens-fiscais`)
+  só mexe em campos de **ITEM**, e o CT-e não tem `itens[]`: `parearItens`
+  devolve vazio com *"sem itens de um dos lados"*; (2) **♻️ Reler XMLs
+  guardados** (`releitura-notas-vazias`) devolve **`'fora-do-escopo'`** para
+  CT-e, escrito no comentário de lá. Ou seja: a régua existia, o XML estava no
+  **Storage**, e **não havia caminho** — enquanto o aviso da geração (que eu
+  escrevi) e a pendência deste arquivo mandavam rodar o ♻️. É o **achado 18
+  (21/08)** na forma mais cara: aviso apontando um lugar que não resolve, num
+  arquivo que o PVA **ACEITA sem o frete**.
+  ✂️ `cte-cabecalho.js` (PURO) é o dono de *"o que o cabeçalho do CT-e
+  declara"* — CFOP, CST, alíquota, base e ICMS — e nasce com o botão **🚚 Reler
+  cabeçalho dos CT-e** na aba ✏️ CFOP por nota (rota
+  `POST /api/admin/sefaz/reler-cabecalho-ctes`, admin porque ESCREVE em
+  documento fiscal). Rota sem botão é código morto com cara de entrega (13/08).
+  ⚠️ **E O IMPORTER PASSOU A DELEGAR, porque a pergunta é a MESMA**: a captura
+  fazia `pickTag(xml, 'CFOP')` **solto** — e isso, numa NF-e, acha o CFOP do
+  **PRIMEIRO ITEM** e o grava na RAIZ como se fosse do documento, falso em nota
+  mista. `lerCabecalhoCte` devolve **null fora do CT-e**, e a troca foi medida
+  antes: só `cfopDoCte` (bloco D) lê esses campos na raiz, e ele nem vê NF-e.
+  ⚠️ **AUSENTE ≠ ZERO, e aqui isso decide o LIVRO**: o grupo `ICMS45` (isento)
+  traz **só o CST**, então base e alíquota ficam **null** — gravar 0 seria o app
+  afirmando o que o documento não diz. Já o **zero DECLARADO é fato**, e o
+  gabarito prova: os 34 CT-e do EFD de 05/2026 dela, ACEITO, saem com CST 090,
+  alíquota **0** e ICMS **0**.
+  ⚠️ **E `totais` do CT-e NÃO VEM de `<ICMSTot>`** (isso é NF-e): o conhecimento
+  capturado fica com ele nulo e o D190 saía com base e ICMS **0,00** mesmo
+  quando o documento destaca. Recuperado junto — no caso dela o zero é a
+  resposta certa, mas o defeito era latente para quem tem ICMS de frete.
+  ⚠️ **O CARIMBO É DE VERSÃO** (`cabecalhoCteVersao`), nunca "tem campo
+  preenchido" (13/08): a condição-alvo **não se limpa sozinha** — CT-e isento
+  nunca terá `vICMS`, e julgar pela presença faria o backfill rebaixar o mesmo
+  documento para sempre.
+  ⚠️ **ZERO CT-e NO RECORTE NÃO É "nada a fazer"**: ou a empresa não tomou frete
+  no mês, ou o conhecimento não foi capturado — ações OPOSTAS —, e a tela diz as
+  duas em vez de um "0" que faz concluir a errada.
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO** (`spedFiscalBlocoD.test.ts`):
+  ela prendia o TEXTO `cfopCabecalho = pickTag(xml, 'CFOP')`, que é justamente
+  a forma trocada — e a nova trava a intenção (lê o cabeçalho pelo DONO, grava
+  na raiz) **mais** a proibição da busca solta. **Provado por REVERSÃO**: o
+  patch desligado derruba 6 testes, nomeados.
+  🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA 08/2026)**: rodar o **🚚 Reler
+  cabeçalho dos CT-e**, regerar e, no PVA, **apagar a competência** antes de
+  importar. O resultado do botão responde POR CAUSA — `xmlSemCfop` quer dizer
+  que o próprio conhecimento não declara CFOP (aí a ação é com o transportador)
+  e `semArquivo` é buraco de captura.
+  📌 **REGRA QUE FICA: aviso que manda rodar um BOTÃO se prova contra o botão.**
+  "Rode o ♻️" era verdade para NF-e e falso para o documento que o aviso estava
+  descrevendo — e a frase sobreviveu a dois dias porque ninguém perguntou *"este
+  botão alcança ESTE tipo de documento?"*. Ação que nomeia ferramenta entra com
+  um teste que a amarra ao caso REAL daquele aviso.
+
 - **🚨 "O SPED DA 1137 DEU ESSE ERRO DE ESTRUTURA DESSE BLOCO" — o D001 dizia
   que o bloco TINHA movimento e o bloco saía com DUAS linhas** (17/09, Paulo,
   EDUARDO GUERRA · EFD ICMS/IPI 08/2026, com o Relatório de Erros do PVA:
@@ -68,11 +135,11 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   que não existe — é o `csllOuTotal` com outra roupa (02/09). O aviso passou a
   dizer o **VALOR do frete** que ficou de fora (fato que o app tem na mão) e a
   citar o ICMS **só quando algum CT-e o destaca**.
-  🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA 08/2026)**: rodar o **♻️ Reler itens
-  dos XMLs** para recuperar o CFOP do cabeçalho dos conhecimentos, regerar e
-  conferir — com o CFOP na mão o bloco D passa a SAIR, com o frete escriturado e
-  o crédito de ICMS dentro do livro. Sem isso o arquivo passa no PVA, mas passa
-  **sem o frete**.
+  ✅ **ENTREGUE NO DEPLOY 981 — e o print seguinte mostrou a outra metade**: o
+  arquivo IMPORTOU e o bloco D saiu VAZIO, porque a ação que esta linha mandava
+  (*"rodar o ♻️ Reler itens dos XMLs"*) **não alcança CT-e** — nenhum dos dois
+  ♻️ alcançava. Ver o mata-burro 🚚 no topo; quem recupera é o **🚚 Reler
+  cabeçalho dos CT-e**, que nasceu daquele print.
   📌 **REGRA QUE FICA: `IND_MOV` de abertura de bloco sai do que foi PRODUZIDO,
   nunca do que foi SELECIONADO.** Toda vez que o laço pode descartar — e ele
   quase sempre pode, nem que seja pelo `try/catch` — a contagem da seleção é uma
