@@ -27,7 +27,13 @@ export interface ValoresNfseNacional {
     /** null = a nota não diz; true/false = ela diz. */
     issRetido: boolean | null;
     liquido: number | null;
-    /** Sempre false hoje: o leiaute do <tribFed> não está provado neste repo. */
+    ir?: number;
+    inss?: number;
+    pis?: number;
+    cofins?: number;
+    csll?: number;
+    pccAgregadoDeclarado?: boolean;
+    tipoRetencaoContribuicoes?: string;
     retencoesFederaisGravadas: boolean;
 }
 
