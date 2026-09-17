@@ -345,10 +345,12 @@ export function buildBlocoC(dados) {
     // é livro a menor — foi o defeito que a PS VIDROS denunciou.
     if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecao));
 
-    // C001 — Abertura
-    // Indicador de movimento: 0 = Bloco com dados, 1 = Bloco sem dados
-    const indMovimento = notas.length > 0 ? '0' : '1';
-    linhas.push(fmt.buildLine(['C001', indMovimento]));
+    // 🚨 A ABERTURA (C001) VEM NO FIM, derivada do que este gerador EMITIU —
+    // `linhas` aqui é o CONTEÚDO do bloco. Ela decidia pela CONTAGEM DA SELEÇÃO
+    // (`notas.length > 0`), e foi essa forma que produziu o `|D001|0|` sem
+    // conteúdo da EDUARDO GUERRA (17/09) no bloco vizinho. Aqui o laço não
+    // descarta hoje — mas a forma é a mesma, e meia trava protege o cliente que
+    // já quebrou e deixa o próximo descoberto (22/08). Ver `fmt.abrirBloco`.
 
     // Anexa referencia ao objeto dados em cada nota pra que helpers de CFOP
     // possam acessar empresa.dadosFiscais (naturezaAtividade + overrides).
@@ -472,12 +474,13 @@ export function buildBlocoC(dados) {
         for (const a of avisosDoValorDaOperacao(comReserva, divergentes)) dados.warnings.push(a);
     }
 
-    // C990 — Encerramento
-    // Total de linhas do bloco INCLUINDO o proprio C990
-    const totalBloco = linhas.length + 1;
-    linhas.push(fmt.buildLine(['C990', totalBloco]));
-
-    return linhas;
+    // C001 — Abertura, DEPOIS do conteúdo (ver o mata-burro acima).
+    // C990 — Encerramento; o total INCLUI a abertura e o próprio C990.
+    return [
+        fmt.abrirBloco('C001', linhas),
+        ...linhas,
+        fmt.buildLine(['C990', linhas.length + 2]),
+    ];
 }
 
 /**

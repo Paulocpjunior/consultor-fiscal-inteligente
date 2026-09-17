@@ -5,6 +5,155 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "O SPED DA 1137 DEU ESSE ERRO DE ESTRUTURA DESSE BLOCO" — o D001 dizia
+  que o bloco TINHA movimento e o bloco saía com DUAS linhas** (17/09, Paulo,
+  EDUARDO GUERRA · EFD ICMS/IPI 08/2026, com o Relatório de Erros do PVA:
+  **Total de Erros 1**, linha 5363, campo `2 - IND_MOV`, registro `D001`,
+  conteúdo do registro **`|D001|0|`** — *"Registro de abertura do bloco informa
+  que o bloco tem movimento, no entanto nenhum registro foi informado no
+  bloco"*).
+  📌 **A TRAVA DA CASA JÁ TINHA PEGO — e o print dele prova isso.** São DOIS
+  arquivos com horas diferentes: o do PVA é `…20260917-1529.txt` e o da tela é
+  `…20260917-1532.txt`. Ou seja, ele gerou, levou ao PVA, tomou a recusa, voltou
+  e regerou — e aí a caixa vermelha do CFI disse a MESMA coisa, com a ação
+  junto: *"⚠ NÃO TRANSMITA … D001 diz IND_MOV=0 (bloco COM dados), mas o bloco D
+  não tem nenhum registro de conteúdo. Ou gera o conteúdo, ou declara
+  IND_MOV=1."* É a `bloco-vazio-declarado-cheio` da auditoria de saída (06/08),
+  por VARREDURA (`^[A-Z1-9]001$`), fazendo exatamente o que foi desenhada para
+  fazer: o **"PVA de bolso"** respondendo em 3 minutos o que custou uma volta de
+  validador. **Por isso NÃO nasceu regra nova na prevalidação** — dois alarmes
+  para o mesmo defeito é o caminho conhecido para a equipe ignorar os dois.
+  🔴 **A CAUSA É DE ORDEM, NÃO DE LEITURA — e foi MEDIDA rodando o gerador, não
+  deduzida do print**: o `IND_MOV` saía da **SELEÇÃO** (`notas.length > 0`) e o
+  conteúdo saía do **LAÇO**, dois passos do gerador respondendo o MESMO fato.
+  Reproduzido ao byte com um CT-e nas condições dele: `|D001|0|` seguido de
+  `|D990|2|`. É a classe do **C100 × C190** (26/08) — o pai lê uma fonte, o
+  filho agrega outra.
+  ⚠️ **E NÃO SE RESOLVE FAZENDO O DESCARTADO ENTRAR.** Quem descarta ali é a
+  régua de 21/08, e ela está CERTA: **CT-e sem CFOP legível não entra**, porque
+  o CFOP do conhecimento mora no **CABEÇALHO** do XML (a captura antiga só lia
+  dentro de `<prod>`) e cravar um valor declararia a **NATUREZA da operação de
+  transporte** no escuro — é o `5352` que saía em 100% dos conhecimentos, e o
+  `1405` antes dele. A EDUARDO GUERRA é justamente a tomadora de frete cujos
+  CT-e foram capturados ANTES daquela correção.
+  ✂️ **QUEM MUDA É A ABERTURA: ela passa a falar do PASSADO.** `fmt.abrirBloco
+  (reg, conteudo)` é o dono do IND_MOV e deriva do que o gerador **EMITIU** —
+  a mesma régua da frase da rodada de reconferência (02/09): *"frase que fala no
+  passado se escreve do RESULTADO, nunca da intenção"*. O D001 e o C990 passaram
+  a ser montados no `return`, com o total contando abertura + conteúdo + 990.
+  ⚠️ **O BLOCO C ENTROU JUNTO, e o motivo é régua**: ele tinha a MESMA forma e
+  **hoje não descarta nada** no laço — mas meia trava protege o cliente que já
+  quebrou e deixa o próximo descoberto (22/08), e um `continue` futuro ali
+  reintroduziria o defeito **em silêncio**.
+  ⚠️ **E A CONSEQUÊNCIA PASSOU A IR DITA, não só a contagem**: o aviso já
+  nomeava os CT-e que ficaram de fora e não dizia o que isso CUSTA — sem CFOP
+  não há D100/D190, então **o frete não é escriturado e o ICMS dele fica fora do
+  livro**; quando TODOS caem, o bloco sai SEM DADOS. Sem essa frase, quem abre o
+  arquivo vê o bloco D vazio e conclui que a empresa não teve frete no mês.
+  ✅ **E O ARQUIVO NÃO SE DESMENTE POR DENTRO — medido**: `selecionarNotasBlocoC`
+  exclui o CT-e, então o ICMS dele **não entra no E110**. O que há é livro a
+  MENOS (crédito de frete não aproveitado), não a divergência interna de 11/09.
+  📖 **E O EFD DE 05/2026 DELA — gerado pelo e-Fiscal e ACEITO — É O GABARITO
+  DO BLOCO D, medido depois** (17/09, Paulo mandou o arquivo): `|D001|0|` com
+  **34 D100 + 34 D190**, CFOP **2353**, CST **090**, alíquota **0** e **ICMS
+  ZERO** nos 34, somando **R$ 383.983,86** de frete no mês. Ele responde três
+  coisas de uma vez: (1) o bloco D dela **tem** movimento e é grande — a
+  pendência do ♻️ não é detalhe; (2) a correlação de CFOP do CFI **já está
+  certa** para a família de transporte (medido: `6353 → 2353`, que é o que o
+  e-Fiscal escreveu — o sufixo do CT-e descreve o ramo do TOMADOR e atravessa a
+  operação, ao contrário do caso 151/152 de 17/08); (3) ⚠️ **e ele derrubou uma
+  frase minha do mesmo dia**: o aviso afirmava *"o ICMS desses conhecimentos
+  fica fora do livro"* em todo caso, e ali o ICMS é **zero em 34 de 34**.
+  Prometer crédito que o documento não destaca manda procurar no livro um valor
+  que não existe — é o `csllOuTotal` com outra roupa (02/09). O aviso passou a
+  dizer o **VALOR do frete** que ficou de fora (fato que o app tem na mão) e a
+  citar o ICMS **só quando algum CT-e o destaca**.
+  🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA 08/2026)**: rodar o **♻️ Reler itens
+  dos XMLs** para recuperar o CFOP do cabeçalho dos conhecimentos, regerar e
+  conferir — com o CFOP na mão o bloco D passa a SAIR, com o frete escriturado e
+  o crédito de ICMS dentro do livro. Sem isso o arquivo passa no PVA, mas passa
+  **sem o frete**.
+  📌 **REGRA QUE FICA: `IND_MOV` de abertura de bloco sai do que foi PRODUZIDO,
+  nunca do que foi SELECIONADO.** Toda vez que o laço pode descartar — e ele
+  quase sempre pode, nem que seja pelo `try/catch` — a contagem da seleção é uma
+  PROMESSA que o gerador talvez não cumpra. E o sintoma é o mais caro que
+  existe: **o PVA não IMPORTA o arquivo**, ou seja não é recusa de um registro
+  que se conserta e reenvia, é o arquivo inteiro barrado na porta por causa de
+  duas linhas.
+
+- **📐 "A BASE BATEU, MAS O VALOR DA RECEITA TEM QUE SER 18.355,90" — os DOIS
+  números estavam certos, e ninguém tinha como saber disso olhando as telas**
+  (17/09, Paulo, PWR 08/2026, com a base já conferida: *"foi o mesmo caso do
+  mês que fizemos"* — e era mesmo, com o frete somado ao desconto).
+  📖 **A MEDIÇÃO É LITERAL, e ela está no Guia 1.35** (extraído em `docs/sped/`
+  desde 20/08): o **M210 campo 03** valida *"o valor do campo será igual à soma
+  dos seguintes campos … **VL_ITEM dos registros C170** … [IND_OPER = 1]"*, e o
+  **C170 campo 07** define VL_ITEM como *"somente o valor das mercadorias
+  (equivalente à quantidade vezes preço unitário)"*, com a validação *"a soma
+  de valores dos registros C170 deve ser igual ao valor informado no campo
+  **VL_MERC** do registro C100"*. Ou seja: **o VL_REC_BRT é mercadoria BRUTA —
+  sem frete e sem abater desconto — por VALIDAÇÃO, não por escolha do app.**
+  📌 **A DIFERENÇA É SEMPRE `frete − desconto`, e ela fecha ao centavo**: o
+  arquivo declara 17.775,31 (Σ vProd) e a Memória mostra 18.355,90 (o `vNF`, =
+  mercadoria − desconto 169,41 + frete 750,00). São **580,59**, e os dois
+  números medem coisas diferentes: o M210 declara a receita da ESCRITURAÇÃO e a
+  Memória, a receita do **IRPJ/CSLL presumido**. A base, que é o que a guia
+  paga, é a MESMA nos dois: **15.186,83 · PIS 98,71 · COFINS 455,60**.
+  🚨 **E NÃO DÁ PARA "CONSERTAR" A RECEITA MEXENDO NO C170**: somar o frete no
+  VL_ITEM ou abater o desconto dele quebra a validação contra o VL_MERC —
+  **duas recusas no lugar de uma divergência de tela**, que foi exatamente o
+  que custou os cinco dias de 25/08. E o **PVA REGERA o bloco M** a partir dos
+  documentos (Manual do Lucro Presumido, PVA 2.04), então escrever outro número
+  no M210 é escrever num campo que ele sobrescreve — a Sandra já provou isso
+  apagando a base inteira do PVA e reimportando.
+  ✂️ **O QUE A RODADA ENTREGOU FOI A CONCILIAÇÃO, na geração**: o aviso diz os
+  DOIS números, a diferença, as parcelas que a explicam (`− desconto … + frete
+  …`) e **não chama nenhum dos dois de errado** — mandando conferir a BASE, que
+  é o que a guia paga. ⚠️ Ele **nasce MUDO** em competência sem frete e sem
+  desconto, porque ali os dois números são o mesmo e alarme sobre arquivo
+  correto é o jeito conhecido de a equipe ignorar o aviso que importa.
+  🚩 **O CAMINHO QUE EXISTE FICA NOMEADO, NÃO FEITO**: o próprio Guia oferece
+  uma porta para o frete VIRAR receita declarada — *"no caso da pessoa jurídica
+  vir a escriturar essa receita de frete no registro **F100**"* —, e o M210
+  campo 03 soma o `VL_OPER` do F100. Ele levaria a receita a **18.525,31**
+  (bruta, com o frete e SEM abater o desconto, que é a receita bruta do DL
+  1.598/77) mantendo a base em 15.186,83, com o frete saindo do C170 e entrando
+  pelo F100 — **nunca nos dois, senão a base conta em dobro**. Não entrou aqui
+  porque muda VALOR de arquivo fiscal, depende do **COD_CTA/0500** (a régua do
+  CF BANK: *"emitir a referência sem a declaração é justamente a recusa"*) e
+  **não produz o 18.355,90 que foi pedido** — o desconto não pode sair do
+  VL_ITEM em leitura nenhuma. Valor se fecha com o número na frente do dono.
+  🔴 **E MEDIR ISTO ACHOU UM DEFEITO VIVO A UM CAMPO DE DISTÂNCIA: o
+  `IND_ESCRI` do C010 saía do REGIME.** A linha era `regimeApuracao === '1' ?
+  '1' : '2'` e o campo não fala de cumulativo × não-cumulativo — o Guia é
+  literal: *"1 – Apuração com base nos registros de CONSOLIDAÇÃO … (C180 e
+  C190); 2 – Apuração com base no registro INDIVIDUALIZADO de NF-e (C100 e
+  C170)"*. Como as validações do M210 **campo 03 E campo 04** só recolhem os
+  C170 *"cujo COD_MOD seja diferente de 55 ou quando COD_MOD seja igual a 55 e
+  o IND_ESCRI do C010 seja igual a 2"*, toda empresa do **não-cumulativo** sai
+  com a NF-e FORA da receita e FORA da base — o PVA iria buscar C181/C491, que
+  este gerador nunca emite, e o arquivo declararia **ZERO com movimento**.
+  ⚠️ **E o PVA ACEITA**, porque ele regera o bloco M. É a família do IPI em
+  E200/E210 e do Bloco H zerado: o defeito esperando o primeiro cliente do
+  outro regime — nenhuma empresa do Lucro Real tinha gerado ainda.
+  ⚠️ **Vazio também não serve**, embora o campo seja `Obrig. N`: a validação
+  exige literalmente `= 2` para o modelo 55, e vazio não é 2. O `2` está
+  PROVADO por arquivo aceito (é o que a PWR cumulativa vem declarando), e virou
+  constante — quem decide o campo é **o que o gerador EMITE**, não o regime.
+  🐛 **E UM COMENTÁRIO AFIRMAVA A REGRA AO CONTRÁRIO**: o JSDoc de
+  `valoresLiquidosDosItens` dizia que ele é *"o que vai ao VL_ITEM do C170 e,
+  somado, ao VL_MERC do C100"* — FALSO, ele alimenta só a BASE. Quem lesse
+  aquilo baixaria o VL_ITEM para o líquido e quebraria as duas validações; é a
+  classe de 29/08 (*comentário que AFIRMA uma regra e está errado*), e a régua
+  é a mesma: comentário com data e número é citado de volta como fato.
+  📌 **REGRA QUE FICA: quando duas telas da casa mostram números diferentes
+  para o mesmo mês e as DUAS estão certas, a entrega é a CONCILIAÇÃO — dita na
+  geração, com a conta fechando na própria frase.** Explicar por mensagem
+  resolve a rodada e volta no mês seguinte; foi o desconto em 25/08 e o frete
+  agora. E antes de "corrigir" um número que o dono aponta, **ler a validação
+  do campo no Guia**: aqui ela estava a um `grep` de distância e dizia que o
+  número reclamado é o único que aquele campo aceita.
+
 - **🚨 "VERIFICAR PQ ESSE ERRO NÃO FOI AJUSTADO" — a correção estava PRONTA,
   TESTADA e PARADA NUMA BRANCH, e o dono mandou o print do mesmo defeito**
   (17/09, Paulo, PWR 08/2026, com a tela do M210 do PVA sublinhada em vermelho:

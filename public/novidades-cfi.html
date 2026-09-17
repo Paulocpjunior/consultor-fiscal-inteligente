@@ -96,6 +96,44 @@
     <div class="alerta">🚩 <strong>Vale regerar as competências anteriores</strong> das empresas que cobram frete
     na nota. Onde havia frete, o arquivo entregue declarou a <strong>menos</strong> — e o PVA aceita, então isso
     não apareceu como erro em lugar nenhum.</div>
+
+    <h3>2. 📐 <strong>A geração agora CONCILIA a receita do arquivo com a da Memória de Apuração</strong></h3>
+    <p>A <strong>Receita</strong> que o PVA mostra e a que a <strong>Memória de Apuração</strong> mostra são
+    números <strong>diferentes — e os dois estão certos</strong>. O arquivo declara o valor das
+    <strong>mercadorias</strong> (é o que o Guia manda: “somente o valor das mercadorias”); a Memória parte do
+    <strong>valor contábil da nota</strong>, que é mercadorias <strong>− desconto + frete</strong> e é a receita
+    do IRPJ/CSLL. Na PWR de 08/2026: <strong>17.775,31</strong> no arquivo e <strong>18.355,90</strong> na
+    Memória, diferença de <strong>580,59</strong> = frete 750,00 − desconto 169,41.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Contribuições</strong> → gerar o arquivo. O aviso
+    traz os dois números, a diferença e as parcelas que a explicam. Em mês sem frete e sem desconto ele não
+    aparece, porque ali os dois números são o mesmo.</div>
+    <div class="alerta">⚠️ <strong>Não há o que corrigir nessa diferença.</strong> Somar o frete ou abater o
+    desconto no valor do item faria o PVA <strong>recusar</strong> o arquivo. O que tem de bater entre as duas
+    telas é a <strong>BASE</strong> — é ela que a guia paga.</div>
+
+    <h3>3. 🧾 <strong>Lucro Real: a NF-e voltava a ficar de fora da receita e da base</strong></h3>
+    <p>Um campo do arquivo (o indicador de escrituração) saía pelo <strong>regime</strong> em vez de pelo tipo de
+    registro. No <strong>Lucro Real</strong> isso fazia o PVA desprezar <strong>todas as notas modelo 55</strong>
+    ao montar a apuração — o arquivo sairia declarando <strong>zero de receita e zero de base</strong> numa
+    empresa com movimento, e o PVA <strong>aceita</strong> assim. Corrigido.</p>
+    <div class="onde">📍 <strong>Onde:</strong> nada a fazer — vale na próxima geração. Empresas do
+    <strong>Lucro Presumido</strong> nunca foram afetadas (é por isso que ninguém tinha visto).</div>
+
+    <h3>4. 🚚 <strong>SPED ICMS/IPI: “o bloco diz que tem movimento e está vazio” — corrigido</strong></h3>
+    <p>O PVA recusava o arquivo inteiro com <strong>um único erro</strong>: <em>“Registro de abertura do bloco
+    informa que o bloco tem movimento, no entanto nenhum registro foi informado no bloco”</em>, no
+    <strong>D001</strong> (bloco dos conhecimentos de transporte). Acontecia quando <strong>todos</strong> os
+    CT-e da competência ficavam de fora — e a abertura do bloco já tinha sido escrita prometendo movimento.
+    Agora ela só diz “tem movimento” quando o bloco de fato tem.</p>
+    <div class="onde">📍 <strong>Onde:</strong> nada a fazer — vale na próxima geração do
+    <strong>SPED Fiscal</strong>. <strong>E o app já avisava antes do PVA:</strong> a caixa vermelha
+    <strong>“⚠ NÃO TRANSMITA”</strong> na própria tela de geração é esta conferência, e ela dizia a mesma coisa
+    que o validador — vale ler a caixa antes de levar o arquivo ao PVA.</div>
+    <div class="alerta">🚩 <strong>O arquivo passar não quer dizer que o frete foi escriturado.</strong> Quando o
+    CT-e fica de fora, é porque o <strong>CFOP dele não foi capturado</strong> (nos conhecimentos antigos o CFOP
+    não era lido) — e sem ele o frete <strong>não entra no livro</strong>, junto com o ICMS. O aviso da geração
+    agora diz isso com todas as letras, com os números dos conhecimentos. Para recuperar:
+    <strong>Relatórios → ✏️ CFOP por nota → ♻️ Reler itens dos XMLs</strong> e gerar de novo.</div>
 </section>
 
 <section>

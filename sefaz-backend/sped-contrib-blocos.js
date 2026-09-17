@@ -141,6 +141,13 @@ function getCstCofins(item, regimeApuracao, direcao) {
 const IND_FRT_SEM_COBRANCA = '9';
 /** IND_MOV 0 = houve movimentação física. Mercadoria em NF-e sempre tem. */
 const IND_MOV_COM_MOVIMENTACAO = '0';
+/**
+ * IND_ESCRI 2 = *"Apuração com base no registro INDIVIDUALIZADO de NF-e (C100
+ * e C170)"* — que é o único caminho que este gerador produz. Ver o bloco de
+ * comentário no C010: o campo saía do REGIME, e com `1` (consolidado) a
+ * validação do M210 tirava TODOS os C170 de modelo 55 da receita e da base.
+ */
+const IND_ESCRI_INDIVIDUALIZADA = '2';
 /** IND_APUR 0 = apuração mensal do IPI. */
 const IND_APUR_MENSAL = '0';
 /**
@@ -610,10 +617,45 @@ export function buildBlocoC_Contrib(dados) {
     }
 
     linhas.push(fmt.buildLine(['C001', '0']));
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 O `IND_ESCRI` NÃO É O REGIME — e aqui ele saía do regime (17/09).
+    //
+    // A linha era `regimeApuracao === '1' ? '1' : '2'`, e o campo NÃO fala de
+    // cumulativo × não-cumulativo. Guia Prático 1.35, C010 campo 03:
+    //
+    //   *"Indicador da apuração das contribuições e créditos, na escrituração
+    //    das operações por NF-e e ECF, no período: 1 – Apuração com base nos
+    //    registros de CONSOLIDAÇÃO das operações por NF-e (C180 e C190) e por
+    //    ECF (C490); 2 – Apuração com base no registro INDIVIDUALIZADO de NF-e
+    //    (C100 e C170) e de ECF (C400)"*.
+    //
+    // 🚨 O CUSTO ERA RECEITA E BASE **ZERADAS** NO LUCRO REAL. A validação do
+    // M210 campo 03 (e a do campo 04, idêntica) só recolhe os C170 *"cujo
+    // COD_MOD seja diferente de 55 ou quando COD_MOD seja igual a 55 e o
+    // IND_ESCRI do registro C010 seja igual a 2"*. Com IND_ESCRI = 1, toda
+    // NF-e (modelo 55) sairia da soma, e o PVA iria buscar C181/C491 — que
+    // este gerador nunca emite. O arquivo declararia ZERO de receita e ZERO de
+    // base numa empresa com movimento, e o PVA ACEITA: ele regera o bloco M.
+    //
+    // ⚠️ E NÃO CABE DEIXAR VAZIO. O campo é `Obrig. N` porque só é exigido de
+    // quem manda os DOIS tipos de registro — mas a validação do M210 exige
+    // literalmente `= 2` para o modelo 55, e vazio não é 2: os C170 cairiam
+    // fora do mesmo jeito.
+    //
+    // ✅ O `2` ESTÁ PROVADO POR ARQUIVO ACEITO: é o que a PWR (cumulativa) vem
+    // declarando nos arquivos que o PVA importou. Só o não-cumulativo saía com
+    // `1`, e nenhuma empresa do Lucro Real tinha gerado ainda — o defeito
+    // esperava o primeiro cliente, como o IPI em E200/E210 e o Bloco H zerado.
+    //
+    // 📌 Constante, e não parâmetro, DE PROPÓSITO: quem decide este campo é o
+    // que o gerador EMITE, e ele emite C100/C170 individualizados em qualquer
+    // regime. No dia em que existir o caminho consolidado (C180/C190), o valor
+    // passa a DEPENDER do que foi gerado — nunca a ser cravado de novo.
+    // ═══════════════════════════════════════════════════════════════════════
     linhas.push(fmt.buildLine([
         'C010',
         fmt.sanitizeCnpjCpf(dados.empresa.cnpj),
-        regimeApuracao === '1' ? '1' : '2',
+        IND_ESCRI_INDIVIDUALIZADA,
     ]));
 
     for (const notaCrua of notasC) {
@@ -1595,6 +1637,57 @@ export function buildBlocoM(dados) {
             + `Ele NÃO entra no VL_ITEM (campo 07 = "somente o valor das mercadorias"), então o VL_REC_BRT do `
             + `M210 segue ${totalReceitaSaida.toFixed(2)} e só a BASE sobe, para ${totalBcSaida.toFixed(2)}. `
             + 'Confira essa base contra a Memória de Apuração — é ela que a guia paga.',
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 A RECEITA DO M210 E A DA MEMÓRIA DE APURAÇÃO MEDEM COISAS DIFERENTES
+    // — e quem confere as duas telas lado a lado não tem como saber disso.
+    //
+    // Paulo, 17/09 (PWR 08/2026, com a base JÁ conferida): *"Base do PIS/COFINS
+    // bateu, mas o valor da Receita não mudou e tem que ser 18.355,90, que é o
+    // valor das Vendas; foi o mesmo caso do mês que fizemos"*. E ele estava
+    // olhando dois números CERTOS:
+    //
+    //   · o `VL_REC_BRT` do M210 é a Σ dos `VL_ITEM` dos C170 — **mercadoria
+    //     BRUTA**, sem frete e sem abater desconto (Guia 1.35, M210 campo 03 e
+    //     C170 campo 07, com a validação `Σ VL_ITEM = VL_MERC do C100`);
+    //   · a Memória parte do **valor contábil da nota** (`vNF` = mercadoria −
+    //     desconto + frete), que é a receita do IRPJ/CSLL presumido.
+    //
+    // A diferença é SEMPRE `frete − desconto`, e sem esta linha ela volta todo
+    // mês como "a receita está errada" — foi o que custou cinco dias em 25/08,
+    // com o desconto, e voltou agora com o frete junto.
+    //
+    // ⚠️ NÃO DÁ PARA "CONSERTAR" A RECEITA DO M210 mexendo no C170: somar frete
+    // ou abater desconto no `VL_ITEM` quebra a validação contra o `VL_MERC` —
+    // duas recusas no lugar de uma divergência de tela. E o PVA **regera** o
+    // bloco M a partir dos documentos (Manual do Lucro Presumido, PVA 2.04),
+    // então escrever outro número aqui é escrever num campo que ele sobrescreve.
+    // O único caminho que o Guia oferece para o frete VIRAR receita declarada é
+    // escriturá-lo no F100 (*"no caso da pessoa jurídica vir a escriturar essa
+    // receita de frete no registro F100"*) — decisão de valor, com o número na
+    // frente do dono, nunca de carona.
+    //
+    // ⚠️ Nasce MUDO quando não há frete nem desconto: ali os dois números são
+    // iguais, e alarme sobre arquivo correto é o jeito conhecido de a equipe
+    // parar de ler os avisos que importam.
+    // ═══════════════════════════════════════════════════════════════════════
+    const contabilDasSaidas = totalReceitaSaida - descontoExcluido + freteNaBase;
+    if (Array.isArray(dados.warnings)
+        && Math.round(contabilDasSaidas * 100) !== Math.round(totalReceitaSaida * 100)) {
+        const parcelas = [
+            descontoExcluido > 0 ? `− desconto ${descontoExcluido.toFixed(2)}` : '',
+            freteNaBase > 0 ? `+ frete ${freteNaBase.toFixed(2)}` : '',
+        ].filter(Boolean).join(' ');
+        dados.warnings.push(
+            `Receita do M210/M610 × Memória de Apuração: o arquivo declara ${totalReceitaSaida.toFixed(2)} e a `
+            + `Memória mostra ${contabilDasSaidas.toFixed(2)} — os DOIS estão certos e medem coisas diferentes. `
+            + 'O VL_REC_BRT é a soma dos VL_ITEM dos C170, que o Guia 1.35 define como "somente o valor das '
+            + `mercadorias" (BRUTAS); a Memória parte do valor contábil da nota (mercadorias ${parcelas}), que é a `
+            + `receita do IRPJ/CSLL. A diferença é ${Math.abs(contabilDasSaidas - totalReceitaSaida).toFixed(2)}. `
+            + `O que a guia de PIS/COFINS paga é a BASE (${totalBcSaida.toFixed(2)}), e é ela que tem de bater `
+            + 'com a Memória — confira a base, não a receita.',
         );
     }
 
