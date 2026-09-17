@@ -5,6 +5,67 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "O SPED DA 1137 DEU ESSE ERRO DE ESTRUTURA DESSE BLOCO" — o D001 dizia
+  que o bloco TINHA movimento e o bloco saía com DUAS linhas** (17/09, Paulo,
+  EDUARDO GUERRA · EFD ICMS/IPI 08/2026, com o Relatório de Erros do PVA:
+  **Total de Erros 1**, linha 5363, campo `2 - IND_MOV`, registro `D001`,
+  conteúdo do registro **`|D001|0|`** — *"Registro de abertura do bloco informa
+  que o bloco tem movimento, no entanto nenhum registro foi informado no
+  bloco"*).
+  📌 **A TRAVA DA CASA JÁ TINHA PEGO — e o print dele prova isso.** São DOIS
+  arquivos com horas diferentes: o do PVA é `…20260917-1529.txt` e o da tela é
+  `…20260917-1532.txt`. Ou seja, ele gerou, levou ao PVA, tomou a recusa, voltou
+  e regerou — e aí a caixa vermelha do CFI disse a MESMA coisa, com a ação
+  junto: *"⚠ NÃO TRANSMITA … D001 diz IND_MOV=0 (bloco COM dados), mas o bloco D
+  não tem nenhum registro de conteúdo. Ou gera o conteúdo, ou declara
+  IND_MOV=1."* É a `bloco-vazio-declarado-cheio` da auditoria de saída (06/08),
+  por VARREDURA (`^[A-Z1-9]001$`), fazendo exatamente o que foi desenhada para
+  fazer: o **"PVA de bolso"** respondendo em 3 minutos o que custou uma volta de
+  validador. **Por isso NÃO nasceu regra nova na prevalidação** — dois alarmes
+  para o mesmo defeito é o caminho conhecido para a equipe ignorar os dois.
+  🔴 **A CAUSA É DE ORDEM, NÃO DE LEITURA — e foi MEDIDA rodando o gerador, não
+  deduzida do print**: o `IND_MOV` saía da **SELEÇÃO** (`notas.length > 0`) e o
+  conteúdo saía do **LAÇO**, dois passos do gerador respondendo o MESMO fato.
+  Reproduzido ao byte com um CT-e nas condições dele: `|D001|0|` seguido de
+  `|D990|2|`. É a classe do **C100 × C190** (26/08) — o pai lê uma fonte, o
+  filho agrega outra.
+  ⚠️ **E NÃO SE RESOLVE FAZENDO O DESCARTADO ENTRAR.** Quem descarta ali é a
+  régua de 21/08, e ela está CERTA: **CT-e sem CFOP legível não entra**, porque
+  o CFOP do conhecimento mora no **CABEÇALHO** do XML (a captura antiga só lia
+  dentro de `<prod>`) e cravar um valor declararia a **NATUREZA da operação de
+  transporte** no escuro — é o `5352` que saía em 100% dos conhecimentos, e o
+  `1405` antes dele. A EDUARDO GUERRA é justamente a tomadora de frete cujos
+  CT-e foram capturados ANTES daquela correção.
+  ✂️ **QUEM MUDA É A ABERTURA: ela passa a falar do PASSADO.** `fmt.abrirBloco
+  (reg, conteudo)` é o dono do IND_MOV e deriva do que o gerador **EMITIU** —
+  a mesma régua da frase da rodada de reconferência (02/09): *"frase que fala no
+  passado se escreve do RESULTADO, nunca da intenção"*. O D001 e o C990 passaram
+  a ser montados no `return`, com o total contando abertura + conteúdo + 990.
+  ⚠️ **O BLOCO C ENTROU JUNTO, e o motivo é régua**: ele tinha a MESMA forma e
+  **hoje não descarta nada** no laço — mas meia trava protege o cliente que já
+  quebrou e deixa o próximo descoberto (22/08), e um `continue` futuro ali
+  reintroduziria o defeito **em silêncio**.
+  ⚠️ **E A CONSEQUÊNCIA PASSOU A IR DITA, não só a contagem**: o aviso já
+  nomeava os CT-e que ficaram de fora e não dizia o que isso CUSTA — sem CFOP
+  não há D100/D190, então **o frete não é escriturado e o ICMS dele fica fora do
+  livro**; quando TODOS caem, o bloco sai SEM DADOS. Sem essa frase, quem abre o
+  arquivo vê o bloco D vazio e conclui que a empresa não teve frete no mês.
+  ✅ **E O ARQUIVO NÃO SE DESMENTE POR DENTRO — medido**: `selecionarNotasBlocoC`
+  exclui o CT-e, então o ICMS dele **não entra no E110**. O que há é livro a
+  MENOS (crédito de frete não aproveitado), não a divergência interna de 11/09.
+  🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA 08/2026)**: rodar o **♻️ Reler itens
+  dos XMLs** para recuperar o CFOP do cabeçalho dos conhecimentos, regerar e
+  conferir — com o CFOP na mão o bloco D passa a SAIR, com o frete escriturado e
+  o crédito de ICMS dentro do livro. Sem isso o arquivo passa no PVA, mas passa
+  **sem o frete**.
+  📌 **REGRA QUE FICA: `IND_MOV` de abertura de bloco sai do que foi PRODUZIDO,
+  nunca do que foi SELECIONADO.** Toda vez que o laço pode descartar — e ele
+  quase sempre pode, nem que seja pelo `try/catch` — a contagem da seleção é uma
+  PROMESSA que o gerador talvez não cumpra. E o sintoma é o mais caro que
+  existe: **o PVA não IMPORTA o arquivo**, ou seja não é recusa de um registro
+  que se conserta e reenvia, é o arquivo inteiro barrado na porta por causa de
+  duas linhas.
+
 - **📐 "A BASE BATEU, MAS O VALOR DA RECEITA TEM QUE SER 18.355,90" — os DOIS
   números estavam certos, e ninguém tinha como saber disso olhando as telas**
   (17/09, Paulo, PWR 08/2026, com a base já conferida: *"foi o mesmo caso do

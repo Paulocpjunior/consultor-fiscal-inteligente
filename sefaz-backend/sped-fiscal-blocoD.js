@@ -213,12 +213,13 @@ function buildD190PorNota(nota) {
  * Monta o Bloco D completo a partir de dados.notas filtradas por modelo 57.
  */
 export function buildBlocoD(dados) {
+    // 🚨 A ABERTURA VEM DEPOIS DO CONTEÚDO (17/09, EDUARDO GUERRA): o `D001`
+    // saía `0` (bloco COM dados) pela CONTAGEM DA SELEÇÃO, e o laço abaixo
+    // podia descartar todos os CT-e — o arquivo prometia movimento e entregava
+    // `|D001|0|` seguido de `|D990|2|`. Quem decide o IND_MOV é o que este
+    // gerador EMITIU; ver `fmt.abrirBloco`.
     const linhas = [];
     const notas = filtrarNotasBlocoD(dados.notas);
-
-    // D001 — Abertura
-    const indMovimento = notas.length > 0 ? '0' : '1';
-    linhas.push(fmt.buildLine(['D001', indMovimento]));
 
     // D100 + D190 por CTe
     /** CT-e sem CFOP legível: sai NOMEADO em vez de entrar com natureza inventada. */
@@ -240,19 +241,31 @@ export function buildBlocoD(dados) {
         }
     }
     if (semCfop.length && Array.isArray(dados.warnings)) {
+        // ⚠️ A CONSEQUÊNCIA VAI DITA, não só o que ficou de fora: sem o CFOP o
+        // conhecimento não vira D100/D190, então o frete NÃO é escriturado e o
+        // ICMS dele não entra no livro. Quando TODOS caem aqui o bloco sai SEM
+        // DADOS — e quem conferir o arquivo precisa saber que o bloco vazio é
+        // consequência disto, não ausência de frete no mês.
+        const todos = linhas.length === 0;
         dados.warnings.push(
             `Bloco D: ${semCfop.length} CT-e ficaram FORA porque o CFOP não foi capturado — `
             + `nº ${semCfop.slice(0, 10).join(', ')}${semCfop.length > 10 ? ` e mais ${semCfop.length - 10}` : ''}. `
             + 'O CFOP do CT-e mora no CABEÇALHO do XML e a captura antiga não o lia; cravar um valor aqui '
-            + 'declararia a NATUREZA da operação de transporte no escuro. Rode o ♻️ (reler XMLs guardados) '
-            + 'para recuperá-lo, ou reimporte o XML do conhecimento.',
+            + 'declararia a NATUREZA da operação de transporte no escuro. '
+            + (todos
+                ? 'Com isso o bloco D sai SEM DADOS (D001 com IND_MOV=1) e NENHUM frete foi escriturado '
+                + 'nesta competência — o ICMS desses conhecimentos fica fora do livro. '
+                : 'O frete desses conhecimentos não foi escriturado, e o ICMS deles fica fora do livro. ')
+            + 'Rode o ♻️ (reler XMLs guardados) na Central de XMLs para recuperá-lo, ou reimporte o XML '
+            + 'do conhecimento; depois regere o arquivo.',
         );
     }
 
-    // D990 — Encerramento
-    // Total INCLUI o proprio D990
-    const totalBloco = linhas.length + 1;
-    linhas.push(fmt.buildLine(['D990', totalBloco]));
-
-    return linhas;
+    // D001 — Abertura, DEPOIS do conteúdo (ver o mata-burro no topo da função).
+    // D990 — Encerramento; o total INCLUI a abertura e o próprio D990.
+    return [
+        fmt.abrirBloco('D001', linhas),
+        ...linhas,
+        fmt.buildLine(['D990', linhas.length + 2]),
+    ];
 }

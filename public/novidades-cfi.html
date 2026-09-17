@@ -118,6 +118,22 @@
     empresa com movimento, e o PVA <strong>aceita</strong> assim. Corrigido.</p>
     <div class="onde">📍 <strong>Onde:</strong> nada a fazer — vale na próxima geração. Empresas do
     <strong>Lucro Presumido</strong> nunca foram afetadas (é por isso que ninguém tinha visto).</div>
+
+    <h3>4. 🚚 <strong>SPED ICMS/IPI: “o bloco diz que tem movimento e está vazio” — corrigido</strong></h3>
+    <p>O PVA recusava o arquivo inteiro com <strong>um único erro</strong>: <em>“Registro de abertura do bloco
+    informa que o bloco tem movimento, no entanto nenhum registro foi informado no bloco”</em>, no
+    <strong>D001</strong> (bloco dos conhecimentos de transporte). Acontecia quando <strong>todos</strong> os
+    CT-e da competência ficavam de fora — e a abertura do bloco já tinha sido escrita prometendo movimento.
+    Agora ela só diz “tem movimento” quando o bloco de fato tem.</p>
+    <div class="onde">📍 <strong>Onde:</strong> nada a fazer — vale na próxima geração do
+    <strong>SPED Fiscal</strong>. <strong>E o app já avisava antes do PVA:</strong> a caixa vermelha
+    <strong>“⚠ NÃO TRANSMITA”</strong> na própria tela de geração é esta conferência, e ela dizia a mesma coisa
+    que o validador — vale ler a caixa antes de levar o arquivo ao PVA.</div>
+    <div class="alerta">🚩 <strong>O arquivo passar não quer dizer que o frete foi escriturado.</strong> Quando o
+    CT-e fica de fora, é porque o <strong>CFOP dele não foi capturado</strong> (nos conhecimentos antigos o CFOP
+    não era lido) — e sem ele o frete <strong>não entra no livro</strong>, junto com o ICMS. O aviso da geração
+    agora diz isso com todas as letras, com os números dos conhecimentos. Para recuperar:
+    <strong>Relatórios → ✏️ CFOP por nota → ♻️ Reler itens dos XMLs</strong> e gerar de novo.</div>
 </section>
 
 <section>
