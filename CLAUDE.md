@@ -53,6 +53,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ✅ **E O ARQUIVO NÃO SE DESMENTE POR DENTRO — medido**: `selecionarNotasBlocoC`
   exclui o CT-e, então o ICMS dele **não entra no E110**. O que há é livro a
   MENOS (crédito de frete não aproveitado), não a divergência interna de 11/09.
+  📖 **E O EFD DE 05/2026 DELA — gerado pelo e-Fiscal e ACEITO — É O GABARITO
+  DO BLOCO D, medido depois** (17/09, Paulo mandou o arquivo): `|D001|0|` com
+  **34 D100 + 34 D190**, CFOP **2353**, CST **090**, alíquota **0** e **ICMS
+  ZERO** nos 34, somando **R$ 383.983,86** de frete no mês. Ele responde três
+  coisas de uma vez: (1) o bloco D dela **tem** movimento e é grande — a
+  pendência do ♻️ não é detalhe; (2) a correlação de CFOP do CFI **já está
+  certa** para a família de transporte (medido: `6353 → 2353`, que é o que o
+  e-Fiscal escreveu — o sufixo do CT-e descreve o ramo do TOMADOR e atravessa a
+  operação, ao contrário do caso 151/152 de 17/08); (3) ⚠️ **e ele derrubou uma
+  frase minha do mesmo dia**: o aviso afirmava *"o ICMS desses conhecimentos
+  fica fora do livro"* em todo caso, e ali o ICMS é **zero em 34 de 34**.
+  Prometer crédito que o documento não destaca manda procurar no livro um valor
+  que não existe — é o `csllOuTotal` com outra roupa (02/09). O aviso passou a
+  dizer o **VALOR do frete** que ficou de fora (fato que o app tem na mão) e a
+  citar o ICMS **só quando algum CT-e o destaca**.
   🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA 08/2026)**: rodar o **♻️ Reler itens
   dos XMLs** para recuperar o CFOP do cabeçalho dos conhecimentos, regerar e
   conferir — com o CFOP na mão o bloco D passa a SAIR, com o frete escriturado e
