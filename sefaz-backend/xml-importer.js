@@ -18,6 +18,9 @@ import { idDoDocumentoDoLado, carimboDoLado } from './documento-lado.js';
 import { refsDaChave } from './documento-lado-io.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
 import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from './releitura-notas-vazias.js';
+import {
+  lerCabecalhoCte, classificarCteParaCabecalho, patchDoCabecalhoCte, VERSAO_RELEITURA_CTE,
+} from './cte-cabecalho.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -290,8 +293,18 @@ export function extrairMetadados(xml, schema) {
   // com CFOP **'5352' CRAVADO** em 100% dos conhecimentos e CST '000' — dado
   // fiscal INVENTADO, a mesma família do 'PARTSEM'. A natureza da operação de
   // transporte não se adivinha; ela está no XML e faltava LER.
-  const cfopCabecalho = pickTag(xml, 'CFOP') || null;
-  const cstCabecalho = pickTag(xml, 'CST') || null;
+  //
+  // 📌 QUEM LÊ É O DONO (17/09): a MESMA pergunta é feita pelo backfill do
+  // cabeçalho (`relerCabecalhoCtes`), e duas leituras divergiriam no primeiro
+  // ajuste — o `cfop` da captura e o da releitura têm de ser o mesmo campo.
+  // ⚠️ E ele devolve `null` fora do CT-e de propósito: a busca solta por
+  // `<CFOP>`/`<CST>` que estava aqui achava os do PRIMEIRO ITEM de uma NF-e e
+  // os gravava na RAIZ, como se fossem do documento — falso em nota mista.
+  // Medido antes de trocar: só `cfopDoCte` (bloco D) lê esses campos na raiz,
+  // e ele nem chega a ver NF-e.
+  const cabecalhoCte = lerCabecalhoCte(xml);
+  const cfopCabecalho = cabecalhoCte?.cfop || null;
+  const cstCabecalho = cabecalhoCte?.cstIcms || null;
 
   // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
   // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando
@@ -1411,6 +1424,82 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
       }
     } catch (e) {
       console.warn(`[relerNotasVazias] falha em ${docSnap.id}:`, e.message);
+      res.falhas++;
+    }
+  }
+  return res;
+}
+
+/**
+ * ♻️ RELEITURA DO CABEÇALHO DOS CT-e — o frete que não entra no bloco D
+ * (17/09, EDUARDO GUERRA · 08/2026: o `|D001|0|` foi corrigido, o PVA passou a
+ * IMPORTAR o arquivo, e o bloco D saiu VAZIO — registro D100 em branco na tela
+ * do validador).
+ *
+ * Quem decide o destino de cada documento é a régua PURA `cte-cabecalho.js`;
+ * aqui é só o I/O. O resultado responde POR CAUSA, porque cada uma tem ação
+ * própria — e um número só ("0 recuperadas") seria o alarme sem ação de 13/08:
+ *   recuperados     CFOP/CST/alíquota/ICMS relidos do XML guardado e gravados
+ *   jaCompletos     nada a fazer
+ *   jaRelidos       já passaram por esta versão do leitor
+ *   semArquivo      sem storagePath — buraco de CAPTURA, não de leitura
+ *   xmlSemCfop      o XML está lá e NÃO declara CFOP: não há o que recuperar
+ *   foraDoEscopo    não é CT-e
+ *
+ * ⚠️ O CARIMBO É DE VERSÃO, nunca "tem campo preenchido": a condição-alvo não
+ * se limpa sozinha (CT-e isento nunca terá `vICMS`), então julgar pela presença
+ * faria o backfill rebaixar o mesmo documento para sempre.
+ */
+export async function relerCabecalhoCtes({ empresaId, competencia, limit = 3000 } = {}) {
+  const db = fa().firestore();
+  const res = {
+    examinados: 0, recuperados: 0, jaCompletos: 0, jaRelidos: 0,
+    semArquivo: 0, xmlSemCfop: 0, foraDoEscopo: 0, semMudanca: 0, falhas: 0,
+    campos: {},
+  };
+  let q = db.collection('documentos_fiscais');
+  if (empresaId) q = q.where('empresaId', '==', String(empresaId));
+  if (competencia) q = q.where('competencia', '==', String(competencia));
+  const snap = await q.limit(Math.max(limit, 1)).get();
+
+  const bucket = storage.bucket(STORAGE_BUCKET);
+  for (const docSnap of snap.docs) {
+    const d = docSnap.data() || {};
+    if (d._merged_into || d._deleted) continue;
+
+    const causa = classificarCteParaCabecalho(d);
+    if (causa === 'fora-do-escopo') continue;   // não é CT-e: nem conta como examinado
+    res.examinados++;
+    if (causa === 'completo') { res.jaCompletos++; continue; }
+    if (causa === 'ja-relido') { res.jaRelidos++; continue; }
+    if (causa === 'sem-arquivo') { res.semArquivo++; continue; }
+
+    try {
+      const [buf] = await bucket.file(d.storagePath).download();
+      const lido = lerCabecalhoCte(buf.toString('utf8'));
+      const patch = patchDoCabecalhoCte(d, lido);
+
+      // Sem CFOP no documento E sem CFOP no XML: o conhecimento não declara, e
+      // o app NÃO inventa. Sai NOMEADO — é aqui que a ação deixa de ser nossa.
+      if (!lido?.cfop && !String(d.cfop || '').replace(/\D/g, '')) res.xmlSemCfop++;
+
+      const carimbo = {
+        cabecalhoCteVersao: VERSAO_RELEITURA_CTE,
+        cabecalhoCteRelidoEm: new Date().toISOString(),
+      };
+      if (Object.keys(patch).length) {
+        await docSnap.ref.update({ ...patch, ...carimbo });
+        res.recuperados++;
+        for (const campo of Object.keys(patch)) {
+          res.campos[campo] = (res.campos[campo] || 0) + 1;
+        }
+      } else {
+        // Nada a preencher — mas o carimbo entra, senão ele volta à fila toda vez.
+        await docSnap.ref.update(carimbo);
+        res.semMudanca++;
+      }
+    } catch (e) {
+      console.warn(`[relerCabecalhoCtes] falha em ${docSnap.id}:`, e.message);
       res.falhas++;
     }
   }

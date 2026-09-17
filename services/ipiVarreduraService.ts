@@ -144,6 +144,47 @@ export async function relerNotasVazias(
     return data;
 }
 
+export interface RelerCabecalhoCtesResposta {
+    ok: boolean;
+    competencia: string;
+    /** CT-e examinados (documento que não é conhecimento nem entra na conta). */
+    examinados: number;
+    /** Tiveram CFOP/CST/alíquota/ICMS recuperados do XML guardado. */
+    recuperados: number;
+    jaCompletos: number;
+    jaRelidos: number;
+    /** Sem `storagePath`: buraco de CAPTURA, não de leitura. */
+    semArquivo: number;
+    /** O XML está lá e NÃO declara CFOP — não há o que recuperar. */
+    xmlSemCfop: number;
+    semMudanca: number;
+    falhas: number;
+    campos?: Record<string, number>;
+    error?: string;
+}
+
+/**
+ * ♻️ Relê o CABEÇALHO dos CT-e guardados (CFOP, CST, alíquota e ICMS).
+ *
+ * É a porta que faltava: o `reler-itens-fiscais` só mexe em campos de ITEM e o
+ * CT-e não tem itens; o `reler-notas-vazias` trata CT-e como fora do escopo.
+ * Sem CFOP o conhecimento não vira D100/D190 e o frete fica fora do livro.
+ */
+export async function relerCabecalhoCtes(
+    empresaId: string,
+    competencia: string,
+): Promise<RelerCabecalhoCtesResposta> {
+    const token = await getToken();
+    const res = await fetch('/api/admin/sefaz/reler-cabecalho-ctes', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId, competencia }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+}
+
 /** Relê do XML-fonte os campos de item que o extrator aprendeu depois. */
 export async function relerItensFiscais(
     empresaId: string,

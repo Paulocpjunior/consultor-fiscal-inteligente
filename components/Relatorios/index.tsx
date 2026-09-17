@@ -54,7 +54,7 @@ import { reconferirCancelamento } from '../../services/reconferirCancelamentoSer
 import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa } from '../../services/reconferenciaEncadeada';
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
-import { relerNotasVazias, relerItensFiscais } from '../../services/ipiVarreduraService';
+import { relerNotasVazias, relerItensFiscais, relerCabecalhoCtes } from '../../services/ipiVarreduraService';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
@@ -972,6 +972,43 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         }
     };
 
+    // 🚚 RELER O CABEÇALHO DOS CT-e (17/09, EDUARDO GUERRA · 08/2026): o CFOP
+    // do conhecimento mora no CABEÇALHO do XML e a captura antiga só lia o de
+    // dentro de <prod>. Sem ele o CT-e é descartado do bloco D — com razão,
+    // porque cravar um CFOP declararia a natureza da operação de transporte no
+    // escuro — e o frete fica fora do livro.
+    const relerCtes = async () => {
+        setRelendo(true);
+        setResultadoReler(null);
+        try {
+            const r = await relerCabecalhoCtes(empresa.id, competencia);
+            if (!r.examinados) {
+                // Zero CT-e no recorte NÃO é "nada a fazer": ou a empresa não
+                // tomou frete no mês, ou o conhecimento não foi capturado — e as
+                // duas pedem ações opostas. Dizer só "0" faria concluir a errada.
+                setResultadoReler('🚚 Nenhum CT-e neste recorte. Ou a empresa não tomou frete na competência, ou o conhecimento não foi capturado — confira o 📋 Status por Empresa antes de dar o bloco D por vazio.');
+                return;
+            }
+            const campos = Object.entries(r.campos || {}).map(([c, n]) => `${c} em ${n}`).join(', ');
+            const partes = [
+                r.recuperados ? `${r.recuperados} recuperado(s) do XML guardado (${campos})` : '',
+                r.jaCompletos ? `${r.jaCompletos} já completo(s)` : '',
+                r.jaRelidos ? `${r.jaRelidos} já relido(s) nesta versão` : '',
+                r.semMudanca ? `${r.semMudanca} relido(s) e o XML não traz mais nada` : '',
+                r.xmlSemCfop ? `${r.xmlSemCfop} sem CFOP no próprio XML — o conhecimento não declara, e o app não inventa: peça o arquivo correto ao transportador` : '',
+                r.semArquivo ? `${r.semArquivo} sem arquivo guardado (buraco de captura — 📋 Status por Empresa)` : '',
+                r.falhas ? `${r.falhas} falha(s) de leitura` : '',
+            ].filter(Boolean);
+            setResultadoReler(`🚚 ${r.examinados} CT-e examinado(s): ${partes.join(' · ')}.`
+                + (r.recuperados ? ' Regere o SPED — e, no PVA, apague a competência antes de importar o arquivo novo.' : ''));
+            if (r.recuperados) onRebuscar?.();
+        } catch (e: any) {
+            setResultadoReler(`🚚 Falha ao reler os CT-e: ${e?.message || 'erro inesperado'}.`);
+        } finally {
+            setRelendo(false);
+        }
+    };
+
     const reler = async () => {
         setRelendo(true);
         setResultadoReler(null);
@@ -1086,6 +1123,20 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                         title="Relê os XMLs guardados e completa nos ITENS os campos que o extrator aprendeu depois: CST do IPI/PIS/COFINS, frete, seguro, outras despesas e FCP-ST (o VL_OPR do C190 soma esses quatro). Só preenche o que está vazio."
                         className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
                     >{relendo ? '♻️ Relendo…' : '♻️ Reler itens dos XMLs'}</button>
+                )}
+                {/* ♻️ CABEÇALHO DOS CT-e (17/09, EDUARDO GUERRA · 08/2026): os
+                    dois botões acima NÃO alcançam conhecimento de transporte —
+                    um só mexe em campos de ITEM (e o CT-e não tem itens) e o
+                    outro trata CT-e como fora do escopo. Sem o CFOP do
+                    cabeçalho o conhecimento não vira D100/D190 e o frete fica
+                    fora do livro, com o bloco D saindo vazio no PVA. */}
+                {currentUser?.role === 'admin' && (
+                    <button
+                        onClick={relerCtes}
+                        disabled={relendo}
+                        title="Relê o CABEÇALHO dos CT-e guardados e completa CFOP, CST, alíquota e ICMS — é lá que o conhecimento os declara. Sem eles o frete não entra no bloco D do SPED. Só preenche o que está vazio."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{relendo ? '♻️ Relendo…' : '🚚 Reler cabeçalho dos CT-e'}</button>
                 )}
                 <span className="text-xs text-slate-500">
                     {linhas.length} nota(s) · {comCarimbo} com CFOP informado

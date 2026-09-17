@@ -267,8 +267,16 @@ export function buildBlocoD(dados) {
                 ? `Com isso o bloco D sai SEM DADOS (D001 com IND_MOV=1) e NENHUM frete foi escriturado nesta competência — R$ ${dinheiro(valorFora)} ficaram fora do livro`
                 : `O frete desses conhecimentos não foi escriturado — R$ ${dinheiro(valorFora)} ficaram fora do livro`)
             + (icmsFora > 0 ? `, junto com R$ ${dinheiro(icmsFora)} de ICMS. ` : ' (esses CT-e não têm ICMS destacado). ')
-            + 'Rode o ♻️ (reler XMLs guardados) na Central de XMLs para recuperá-lo, ou reimporte o XML '
-            + 'do conhecimento; depois regere o arquivo.',
+            // 🚨 A AÇÃO APONTA O BOTÃO QUE ALCANÇA O CT-e (17/09, medido): esta
+            // frase mandava rodar "o ♻️" genérico, e NENHUM dos dois que
+            // existiam alcança conhecimento de transporte — o de itens não acha
+            // `itens[]` (o CT-e não tem) e o de notas vazias devolve
+            // 'fora-do-escopo' para CT-e. É o achado 18 (21/08) na forma mais
+            // cara: aviso apontando um lugar que não resolve, num arquivo que o
+            // PVA ACEITA sem o frete.
+            + 'Rode o 🚚 Reler cabeçalho dos CT-e em Relatórios → ✏️ CFOP por nota (é ele que lê o '
+            + 'cabeçalho do XML guardado — o ♻️ de itens não alcança o CT-e), ou reimporte o XML do '
+            + 'conhecimento; depois regere o arquivo.',
         );
     }
 

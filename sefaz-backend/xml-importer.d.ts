@@ -108,3 +108,25 @@ export function relerNotasVazias(p?: {
     semItemNoXml: number;
     falhas: number;
 }>;
+
+/**
+ * 🚚 Releitura do CABEÇALHO dos CT-e (CFOP, CST, alíquota e ICMS) a partir do
+ * XML guardado. Os outros dois ♻️ não alcançam conhecimento de transporte: um
+ * só mexe em campos de ITEM (o CT-e não tem) e o outro o trata como fora do
+ * escopo. Quem classifica é a régua pura `cte-cabecalho.js`.
+ */
+export function relerCabecalhoCtes(p?: {
+    empresaId?: string | null;
+    competencia?: string | null;
+    limit?: number;
+}): Promise<{
+    examinados: number;
+    recuperados: number;
+    jaCompletos: number;
+    jaRelidos: number;
+    semArquivo: number;
+    xmlSemCfop: number;
+    semMudanca: number;
+    falhas: number;
+    campos: Record<string, number>;
+}>;

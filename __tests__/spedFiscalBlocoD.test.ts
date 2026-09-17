@@ -117,11 +117,24 @@ describe('🚨 D190 — CFOP vem do documento, na ótica de quem escritura', () 
         expect(d.warnings.join(' ')).toMatch(/♻️|CABEÇALHO/);
     });
 
-    it('e o importer passa a CAPTURAR o CFOP/CST do cabeçalho do CT-e', () => {
+    // 📌 ASSERÇÃO TROCADA PELA INTENÇÃO (17/09): ela prendia o TEXTO
+    // `cfopCabecalho = pickTag(xml, 'CFOP')` — e essa FORMA tinha dois
+    // problemas. (1) A leitura passou a ter um DONO (`cte-cabecalho.js`),
+    // porque o backfill do cabeçalho faz a MESMA pergunta e duas leituras
+    // divergiriam no primeiro ajuste. (2) A busca solta achava o `<CFOP>` do
+    // PRIMEIRO ITEM de uma NF-e e o gravava na RAIZ, como se fosse do
+    // documento — falso em nota mista. A intenção que este teste protege (a
+    // captura lê o CABEÇALHO e grava na raiz) continua travada, agora com a
+    // regressão proibida junto.
+    it('e o importer CAPTURA o cabeçalho do CT-e pelo dono, nunca por busca solta', () => {
         const fs = require('fs');
         const path = require('path');
         const imp = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/xml-importer.js'), 'utf8');
-        expect(imp).toMatch(/cfopCabecalho = pickTag\(xml, 'CFOP'\)/);
+        expect(imp).toMatch(/import \{[\s\S]*?lerCabecalhoCte[\s\S]*?\} from '\.\/cte-cabecalho\.js'/);
+        expect(imp).toMatch(/cabecalhoCte = lerCabecalhoCte\(xml\)/);
         expect(imp).toMatch(/meta\.cfopCabecalho \? \{ cfop: meta\.cfopCabecalho \}/);
+        // A forma antiga pegava o CFOP/CST do item da NF-e: não volta.
+        expect(imp).not.toMatch(/cfopCabecalho = pickTag\(xml, 'CFOP'\)/);
+        expect(imp).not.toMatch(/cstCabecalho = pickTag\(xml, 'CST'\)/);
     });
 });
