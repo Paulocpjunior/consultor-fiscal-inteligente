@@ -597,12 +597,16 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     const valorIss = num(getTextContent(valores, 'ValorIss'));
     const issRetido = getTextContent(valores, 'IssRetido');
     const valorIssRetido = num(getTextContent(valores, 'ValorIssRetido'));
-    const valorPis = num(getTextContent(valores, 'ValorPis'));
-    const valorCofins = num(getTextContent(valores, 'ValorCofins'));
+    // GISS/ABRASF com tribFed: campos proprios so entram como retencao
+    // quando o tipo declarado inclui aquele tributo; nao se presume aliquota.
+    const piscofins = valores?.getElementsByTagName('piscofins')[0] || null;
+    const tipoPisCofins = getTextContent(piscofins, 'tpRetPisCofins');
+    const valorPis = num(getTextContent(valores, 'ValorPis') || (['1','3','4','5','9'].includes(tipoPisCofins) ? getTextContent(piscofins, 'vPis') : ''));
+    const valorCofins = num(getTextContent(valores, 'ValorCofins') || (['1','3','4','6','7'].includes(tipoPisCofins) ? getTextContent(piscofins, 'vCofins') : ''));
     const valorInss = num(getTextContent(valores, 'ValorInss'));
     const valorIr = num(getTextContent(valores, 'ValorIr'));
     const valorCsll = num(getTextContent(valores, 'ValorCsll'));
-    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse'));
+    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse') || getTextContent(infNfse, 'ValorLiquidoNfse'));
     const descontoCondicionado = num(getTextContent(valores, 'DescontoCondicionado'));
     const descontoIncondicionado = num(getTextContent(valores, 'DescontoIncondicionado'));
 
@@ -979,12 +983,14 @@ function parseNFSeNacional(xmlText: string): ParsedXml {
             issRetido: lida.valores.issRetido === true,
             baseCalculo,
             aliquotaIss: lida.valores.aliquotaIss ?? 0,
-            // 🚩 As retenções federais NÃO são lidas (o `<tribFed>` não está
-            // provado neste repo) — e por isso elas NÃO viajam como zero: o
-            // documento sai sem os campos, que é o que faz o Relatório de
-            // Retenções imprimir "?" em vez de "0,00". Zero ali seria a
-            // afirmação de que não houve retenção (regra de 01/08).
-            retencoesLidas: false,
+            retencoesLidas: lida.valores.retencoesFederaisGravadas,
+            ...(lida.valores.retencoesFederaisGravadas ? {
+                ir: lida.valores.ir, inss: lida.valores.inss,
+                pis: lida.valores.pis, cofins: lida.valores.cofins,
+                csll: lida.valores.csll,
+                pccAgregadoDeclarado: lida.valores.pccAgregadoDeclarado,
+                tipoRetencaoContribuicoes: lida.valores.tipoRetencaoContribuicoes,
+            } : {}),
             lacunas: lida.lacunas,
         },
     } as ParsedXml & { _nfseValores?: any };
@@ -1143,6 +1149,7 @@ export function buildDocumentoFiscal(input: {
                     ir: nfseValores.ir,
                     inss: nfseValores.inss,
                     csll: nfseValores.csll,
+                    ...(nfseValores.pccAgregadoDeclarado !== undefined ? { pccAgregadoDeclarado: nfseValores.pccAgregadoDeclarado, tipoRetencaoContribuicoes: nfseValores.tipoRetencaoContribuicoes } : {}),
                 }),
             },
         } : {}),

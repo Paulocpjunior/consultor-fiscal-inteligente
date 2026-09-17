@@ -123,6 +123,13 @@ function extrairMetadadosNfse(xml) {
         valorServico: lida.valores.servico ?? 0,
         valorIss: lida.valores.iss ?? 0,
         aliquotaIss: lida.valores.aliquotaIss ?? 0,
+        ...(lida.valores.retencoesFederaisGravadas ? { valores: {
+            ir: lida.valores.ir, inss: lida.valores.inss,
+            pis: lida.valores.pis, cofins: lida.valores.cofins,
+            csll: lida.valores.csll,
+            pccAgregadoDeclarado: lida.valores.pccAgregadoDeclarado,
+            tipoRetencaoContribuicoes: lida.valores.tipoRetencaoContribuicoes,
+        } } : {}),
         lacunasLeitura: lida.lacunas,
     };
 }
