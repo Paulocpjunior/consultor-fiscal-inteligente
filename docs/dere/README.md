@@ -1,8 +1,9 @@
 # DeRE — Declaração de Regimes Específicos (IBS/CBS/IS) · documentação oficial no repo
 
 > Regra da casa (20/08): **fonte oficial que chega vira ARQUIVO NO REPO, não
-> conhecimento de sessão.** Os PDFs vieram do Paulo em 02/09/2026 (o gov.br,
-> o sped.rfb.gov.br e o cgibs.gov.br são bloqueados pela rede deste ambiente).
+> conhecimento de sessão.** Os PDFs vieram do Paulo em 02/09/2026 (v1.1.0) e
+> 16/09/2026 (v1.2.0 — histórico, Anexo II e XSD; o gov.br, o sped.rfb.gov.br e
+> o cgibs.gov.br são bloqueados pela rede deste ambiente).
 > O texto extraído fica aqui, grep-ável; os PDFs originais ficam em
 > `public/docs/dere/` e são servidos pelo app (⚙️ Config Admin → 🏦 DeRE →
 > Documentação oficial).
@@ -11,12 +12,14 @@
 
 | Arquivo | Versão | Data | O que é |
 |---|---|---|---|
+| `05-historico-de-versoes-v1.2.0.txt` | **1.2.0** | 05/09/2026 | O que mudou da 1.1.0 para a 1.2.0 (Ato Técnico Conjunto RFB/SUFIS/CGIBS/DIRETORIA-EXECUTIVA nº 3, de 02/09/2026): **inclusão do D-1121** (Relação de Deduções), D-1198 (Reabertura), dez transacionais preliminares (D-2201…D-4201), retornos D-9112/9198/9209; D-2101 reestruturado; PGCC até 150.000 contas e PREVIC; Balancete até 90.000; chave da DeRE (53) e arredondamento NBR 5891; Tabelas 11/12 desdobradas, 15 (países) e 24 (PREVIC) novas |
+| `04-anexo-ii-regras-de-validacao-v1.2.0.txt` | **1.2.0** | 05/09/2026 | Regras de validação vigentes — **inclui a seção 2, Mensagens de Erro (MS0001-MS1168)**, que era o documento 08 separado; a lista dos 34 codTribs do D-1121; a RN da chave da DeRE; o critério de arredondamento |
 | `02-leiautes-eventos-v1.1.0.txt` | 1.1.0 | 22/06/2026 | Leiaute de TODOS os eventos: D-1001, D-1011 (tabela) · D-1101, D-1106, D-1199, D-2101 (periódicos) · D-9001, D-9101, D-9106, D-9121, D-9199 (retorno) |
 | `03-anexo-i-tabelas-v1.1.0.txt` | 1.1.0 | 22/06/2026 | Tabelas de domínio: 11 (codTrib), 12/12.1/12.2 (codBC), 13 (UF), 14/22/23/32 (planos de contas referenciais SPED/COSIF/SUSEP/ANS), **21/31/41 (atividades por regime)**, 33 |
-| `04-anexo-ii-regras-de-validacao-v1.1.0.txt` | 1.1.0 | 22/06/2026 | Regras de validação com o código de mensagem (MSxxxx) e se interrompem o processamento; as RNs de chave, recibo, protocolo e ID |
+| `04-anexo-ii-regras-de-validacao-v1.1.0.txt` | 1.1.0 | 22/06/2026 | Superado pela 1.2.0 — fica pelo histórico |
 | `05-historico-de-versoes-v1.1.0.txt` | 1.1.0 | 22/06/2026 | O que mudou da 1.0.1 (29/05/2026) para a 1.1.0 |
 | `07-manual-do-desenvolvedor-v1.0.2.txt` | 1.0.2 | 18/08/2026 | APIs (Receita Integra, lote, consulta), assinatura XMLDSig, certificados, produção restrita |
-| `xsd/` (9 arquivos) | 1.0.0–1.0.2 | pacote "06 - Arquivos XSD (Nota Orientativa 2026)", 02/09/2026 | Schemas: `envioLoteDere` / `retornoLoteDere` (lote), `evtInfoContrib` (D-1001), `evtPGCC` (D-1011), `evtBalancete` (D-1101), `evtAplicResTec` (D-1106), `evtRetornoTabela` (D-9001), `evtRetornoBalan` (D-9101), `evtRetornoAplicFin` (D-9106). **Parcial**: não vieram D-1199, D-2101, D-9121, D-9199 |
+| `xsd/` (**28 arquivos**) | 0.0.1–1.0.3 | pacote "06 - Arquivos XSD v1.2.0", 16/09/2026 (substitui o parcial da Nota Orientativa 2026) | TODO evento tem schema. Lote: `envioLoteDere`/`retornoLoteDere`. Tabela: `evtInfoContrib` (D-1001, **idêntico ao de 02/09**), `evtPGCC-v1_0_3` (D-1011). Mensais: `evtBalancete-v1_0_1` (D-1101), `evtAplicResTec` (D-1106), `evtRelDeducoes` (D-1121), `evtDebOpOfPublic` (D-2101), `evtReabertMensal` (D-1198), `evtFechMensal` (D-1199). Transacionais (preliminares): `evtServRemPreco` (D-2201), `evtServRemTarifa` (D-2202), `evtOperFinanc` (D-2211), `evtAntecReceb` (D-2221), `evtArrendMerc` (D-2231), `evtArranjoCredDest` (D-2241), `evtArranjoPartic` (D-2242), `evtSegPrevCap` (D-2251), `evtPlAssistSaude` (D-3201), `evtIdApostPrem` (D-4201). Retornos: `evtRetornoTabela` (D-9001), `evtRetornoBalan` (D-9101), `evtRetornoAplicFin` (D-9106), `evtRetornoRDed` (D-9112), `evtRetornoTitPub` (D-9121), `evtRetornoReabert` (D-9198), `evtRetornoMensal` (D-9199), `evtRetornoTransac` (D-9209). As versões antigas `evtBalancete-v1_0_0` e `evtPGCC-v1_0_2` SAÍRAM (só o `maxOccurs` de `infoConta` e o namespace mudaram; namespace antigo é MS0009) |
 
 ## O que NÃO está aqui (e por isso o app não afirma)
 
@@ -24,10 +27,15 @@
   linguagem de negócio, prazos, penalidades. O que o app sabe do PRAZO vem do
   Ato Conjunto RFB/CGIBS 4/2026 e do esclarecimento CGIBS/RFB de 26/08/2026,
   conhecidos por resumo de terceiros.
-- **06** (não veio) e **08 — Mensagens de Erro do Sistema** (citado no Anexo II).
-- **XSD de D-1199 (fechamento), D-2101, D-9121 e D-9199** — o pacote da Nota
-  Orientativa 2026 não os trouxe. Montar XML desses eventos por dedução é o
-  `1405` num arquivo que a Receita processa.
+- **Da 1.2.0 vieram só três peças**: histórico, Anexo II e XSD. **O leiaute
+  campo a campo dos eventos (02) e o Anexo I (03) da 1.2.0 NÃO vieram** — dos
+  eventos novos (D-1121, D-1198, transacionais) só se conhece o XSD, e as
+  Tabelas 11/12 desdobradas, 15 (países) e 24 (PREVIC) estão DESCRITAS no
+  histórico, não listadas. Para as Tabelas 21/31/41 (atividades do D-1001) vale
+  a 1.1.0: o histórico 1.2.0 não lista alteração nelas.
+- ~~08 — Mensagens de Erro~~ **veio**: a 1.2.0 integrou o documento 08 ao Anexo
+  II (seção 2).
+- ~~XSD de D-1199, D-2101, D-9121 e D-9199~~ **vieram** no pacote 1.2.0.
 
 ## Os fatos que o app usa, com a página
 
@@ -51,9 +59,35 @@
   seguros; D-2101 → 110113001/110113002), D-1199 Fechamento (só inclusão;
   exige D-1101 ativo — EVENTOS_OBRIGATORIOS_PERIODO; retificar exige
   reabertura).
-- **D-1121 NÃO EXISTE** no leiaute 1.1.0 (o resumo de terceiros que o app
-  usou em 02/09 de manhã o listava; corrigido ao ler a fonte).
-- **Retornos**: D-9001 (tabela), D-9101/9106/9121 (totalizadores por evento) e
+- **D-1121 — a história inteira**: NÃO existia na 1.1.0 (o app disse isso em
+  02/09 lendo a fonte, e estava certo para a 1.1.0). A **1.2.0 o INCLUIU**
+  ("Relação de Deduções Utilizadas na Apuração", Histórico 3.1), com o retorno
+  D-9112. É condicional a 34 codTribs de dedução (Anexo II 1.2.0, RN Tabela de
+  codtribs obrigatórios) e dispensado pelo `{indInexistDedu}` do D-1199.
+  Modelo híbrido: inclusão/alteração/exclusão até o fechamento; depois, só a
+  retificação por documento (`tpOper` 4) com o período reaberto pelo **D-1198**.
+- **O que mais a 1.2.0 mudou, lido do histórico**: D-2101 reestruturado por
+  saldos contábeis e chave `{idTitulo (ISIN), cCta}`, `{vApur}` =
+  MENORENTRE(vSelic, vJurosApropr) − vPisCofins; D-1011 com `planoCtaRef` 5
+  (PREVIC) e 150.000 contas; D-1101 com 90.000 contas; competência FUTURA
+  rejeitada (REJEITAR_PERAPUR_FUTURO) e período FECHADO rejeitado
+  (PERAPUR_FECHADO) nos mensais; D-1199 exige que o PGCC dos mensais seja o
+  vigente no fechamento (MS1158); D-9199 devolve os recibos de todos os eventos
+  do mês e `{gCoeficientes}`; os retornos D-9101/9106/9121 devolvem o recibo do
+  PGCC usado. **O D-1001 não mudou** (XSD idêntico; regras do Anexo II com o
+  mesmo texto — REG_SEC_DIFERENTE_REG_PRINC, EXIGIR/REJEITAR_GRUPO_REGIME,
+  INI_VALID, FIM_VALID, TPATIVIDADE_REG*); a 1.2.0 só acrescentou a ele
+  EXIGIR_MOTIVO_EXCLUSAO (tpOper 3) e a auditoria de CNPJ baixado/nulo/inapto
+  contra `iniValid` (CONTRIBUINTE_NO_CADASTRO, MS1159/MS1063/MS1160).
+- **Chave da DeRE (`{chDeRE}`, 53 caracteres)** dos eventos transacionais —
+  `RRRRRRRR PP T C(20) BBBB AAAAMMD1D2 GGGG V SSS`, DV módulo 11 com pesos 2-9
+  da direita para a esquerda (`montarChaveDere`/`lerChaveDere`/`dvChaveDere`,
+  provados contra o exemplo literal da RN). A Tabela 15 (países) não está aqui:
+  o país é conferido só na forma.
+- **Arredondamento** (RN, ABNT NBR 5891): 8 casas intermediárias, 2 finais,
+  empate para o algarismo PAR (`arredondarDere` — `Math.round` erra o empate).
+- **Retornos**: D-9001 (tabela), D-9101/9106/9112/9121 (por evento), D-9198
+  (reabertura), D-9209 (transacionais) e
   **D-9199** — a memória de cálculo do débito de IBS, CBS e IS do mês
   (`totalTributosGeral`), o análogo do que o R-2099/totalizador faz na Reinf.
 - **ID do evento** (42 caracteres): `DeRE` + `NNNN` (evento) + `1` (CNPJ) +

@@ -8,8 +8,9 @@
  *
  * ⚠️ O que ele faz e o que NÃO faz vai na cara da tela: monta a PRÉVIA do
  * D-1001 (do cadastro, conferida contra o XSD oficial) e não transmite nada.
- * Os leiautes 1.1.0, o manual do desenvolvedor e parte dos XSD estão LIDOS e
- * servidos aqui, mas faltam os XSD do D-1199/D-2101, o insumo dos mensais
+ * Os leiautes 1.1.0, o histórico e o Anexo II da 1.2.0, o manual do desenvolvedor
+ * e os 28 XSD do pacote 1.2.0 estão LIDOS e servidos aqui; faltam o leiaute campo a
+ * campo e o Anexo I da 1.2.0, o insumo dos mensais
  * (plano de contas, balancete) é contábil e a transmissão exige credencial do
  * piloto da Reforma.
  * Prometer geração aqui seria a promessa que a tela não cumpre (a lição do ✕
@@ -330,6 +331,18 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                                         {e.nota ? <span className="text-slate-400"> — {e.nota}</span> : null}
                                     </li>
                                 ))}</ul>
+                                {!!r.eventos.eventuais?.length && (
+                                    <p className="mt-1 text-slate-500"><strong>Só quando há o que retificar:</strong> {r.eventos.eventuais.map(e => `${e.codigo} ${e.nome}`).join(' · ')}
+                                        <span className="text-slate-400"> — {r.eventos.eventuais[0].nota}</span></p>
+                                )}
+                                {!!r.eventos.transacionais?.length && (
+                                    <details className="mt-1">
+                                        <summary className="cursor-pointer text-slate-500">
+                                            {r.eventos.transacionais.length} eventos TRANSACIONAIS da 1.2.0 (leiaute <strong>preliminar</strong> — o app lista, não cobra)
+                                        </summary>
+                                        <ul className="ml-4 list-disc text-slate-500">{r.eventos.transacionais.map(e => <li key={e.codigo}><code>{e.codigo}</code> {e.nome}</li>)}</ul>
+                                    </details>
+                                )}
                             </div>
                         )}
                     </details>
@@ -337,7 +350,7 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                     <details>
                         <summary className="cursor-pointer text-slate-500">📚 Documentação oficial (PDF) e o que falta</summary>
                         <p className="mt-1 text-slate-500">
-                            Os documentos abaixo vieram do Paulo em 02/09/2026 e são servidos pelo próprio app — abrem em nova aba.
+                            Os documentos abaixo vieram do Paulo em 02/09 (v1.1.0) e 16/09/2026 (v1.2.0) e são servidos pelo próprio app — abrem em nova aba.
                         </p>
                         <ul className="mt-1 ml-4 list-disc">
                             {r.documentos.map(d => (
@@ -348,7 +361,7 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                             ))}
                         </ul>
                         <p className="mt-2 text-slate-600 dark:text-slate-300">
-                            <strong>XSD (schemas) — pacote "Arquivos XSD (Nota Orientativa 2026)"</strong>, {r.xsd.length} arquivo(s):
+                            <strong>XSD (schemas) — pacote "Arquivos XSD v1.2.0"</strong> (substitui o da Nota Orientativa 2026), {r.xsd.length} arquivo(s):
                         </p>
                         <ul className="mt-1 ml-4 list-disc">
                             {r.xsd.map(x => (

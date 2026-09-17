@@ -16,7 +16,8 @@
 //
 // ═══ DE ONDE VEM CADA AFIRMAÇÃO (e o que ainda NÃO foi lido) ═════════════════
 //
-// Os LEIAUTES v1.1.0 (eventos, tabelas, regras de validação, histórico) e o
+// Os LEIAUTES v1.1.0 (eventos, tabelas, regras de validação, histórico), a
+// atualização 1.2.0 (histórico + Anexo II + XSD, 16/09 — o D-1001 NÃO mudou) e o
 // MANUAL DO DESENVOLVEDOR v1.0.2 foram entregues pelo Paulo em 02/09 e estão
 // em `docs/dere/` (texto) e `public/docs/dere/` (PDF, servido pelo app). O que
 // está abaixo sai DELES, com a página. O que continua por resumo de terceiros
@@ -59,7 +60,13 @@
 export const FONTES_DERE = Object.freeze({
     LC_214: 'LC 214/2025, Título V (regimes específicos de IBS e CBS)',
     LEIAUTES_1_1_0: 'Leiautes da DeRE v1.1.0 (22/06/2026) — LIDOS: docs/dere/02-leiautes-eventos-v1.1.0.txt · '
-        + 'Anexo I Tabelas · Anexo II Regras de Validação · Histórico de Versões (PDFs em public/docs/dere/)',
+        + 'Anexo I Tabelas · Anexo II Regras de Validação · Histórico de Versões (PDFs em public/docs/dere/). '
+        + 'É a última versão em que o leiaute CAMPO A CAMPO dos eventos e o Anexo I chegaram aqui.',
+    LEIAUTES_1_2_0: 'Leiautes da DeRE v1.2.0 (05/09/2026, Ato Técnico Conjunto RFB/SUFIS/CGIBS/DIRETORIA-EXECUTIVA nº 3, '
+        + 'de 02/09/2026) — LIDOS: docs/dere/05-historico-de-versoes-v1.2.0.txt · docs/dere/04-anexo-ii-regras-de-validacao-v1.2.0.txt '
+        + '(que agora INCLUI as Mensagens de Erro) · os 28 XSD em docs/dere/xsd/. ⚠️ O leiaute dos eventos (02) e o '
+        + 'Anexo I (03) da 1.2.0 NÃO foram recebidos: dos eventos novos só se conhece o XSD; das Tabelas 21/31/41 vale '
+        + 'a 1.1.0 (o histórico 1.2.0 não lista alteração nelas).',
     MANUAL_DEV_1_0_2: 'Manual de Orientação aos Desenvolvedores da DeRE v1.0.2 (18/08/2026) — LIDO: '
         + 'docs/dere/07-manual-do-desenvolvedor-v1.0.2.txt',
     ATO_CONJUNTO_4: 'Ato Conjunto RFB/CGIBS nº 4/2026 (30/07/2026) — cronograma e prazo (dia 15 do mês seguinte). '
@@ -75,7 +82,8 @@ export const FONTES_DERE = Object.freeze({
  * Os regimes específicos do Título V da LC 214/2025.
  *
  * `codigoD1001` é o valor do campo `{regTribPrinc}`/`{regTribSecund}` do evento
- * D-1001 (Leiautes 1.1.0, p. 4). **Só quem tem código cabe na declaração** —
+ * D-1001 (Leiautes 1.1.0, p. 4; o XSD evtInfoContrib-v1_0_1 veio IDÊNTICO no
+ * pacote 1.2.0, então a lista não mudou). **Só quem tem código cabe na declaração** —
  * `dereConfirmada` é exatamente isso: tem lugar no leiaute vigente. FALSE não
  * é "não sei": é "o leiaute não tem grupo para este regime", e a tela diz com
  * essas palavras.
@@ -189,7 +197,8 @@ export const REGIMES_ESPECIFICOS_IBS_CBS = Object.freeze([
 
 /**
  * As atividades do D-1001 `{tpAtividade}` — Anexo I, Tabelas 21, 31 e 41
- * (Leiautes 1.1.0, p. 79, 82 e 85). Máscara NNC. Copiadas da fonte; a 1.1.0
+ * (Leiautes 1.1.0, p. 79, 82 e 85; o histórico da 1.2.0 não lista alteração
+ * nas Tabelas 21/31/41 — e o Anexo I 1.2.0 não veio). Máscara NNC. Copiadas da fonte; a 1.1.0
  * desdobrou 06A/06B (leasing operacional × financeiro) e 09F/09Z (arranjos
  * de pagamento). Servem à tela e a um futuro gerador do D-1001 — nunca a uma
  * dedução do app.
@@ -345,7 +354,7 @@ export function decidirDereNoCadastro(empresa, { regimeCatalogo } = {}) {
     if (r) {
         return {
             decisao: 'regime-fora-do-leiaute', regimeEspecifico: r.codigo, rotulo: r.rotulo, codigoD1001: null, sinalCnae,
-            motivo: `Cadastro: ${r.rotulo} (${r.baseLegal}). O leiaute vigente da DeRE (v1.1.0) só tem lugar para `
+            motivo: `Cadastro: ${r.rotulo} (${r.baseLegal}). O leiaute vigente da DeRE (v1.2.0 — o D-1001 não mudou desde a 1.1.0) só tem lugar para `
                 + 'serviços financeiros, planos de saúde e concursos de prognósticos (D-1001 {regTribPrinc} = 1, 2, 3) — '
                 + 'este regime NÃO tem como ser declarado hoje, então a DeRE não se aplica a ele enquanto o leiaute '
                 + 'não o incluir.',

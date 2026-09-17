@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
            xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           xmlns="http://www.dere.gov.br/schemas/evtBalancete/v1_0_0"
-           targetNamespace="http://www.dere.gov.br/schemas/evtBalancete/v1_0_0"
+           xmlns="http://www.dere.gov.br/schemas/evtBalancete/v1_0_1"
+           targetNamespace="http://www.dere.gov.br/schemas/evtBalancete/v1_0_1"
            elementFormDefault="qualified"
            attributeFormDefault="unqualified">
   <xs:import namespace="http://www.w3.org/2000/09/xmldsig#" schemaLocation="xmldsig-core-schema.xsd"/>
@@ -190,7 +190,7 @@
                 </xs:annotation>
                 <xs:complexType>
                   <xs:sequence>
-                  <xs:element name="infoConta" minOccurs="1" maxOccurs="10000">
+                  <xs:element name="infoConta" minOccurs="1" maxOccurs="90000">
                     <xs:annotation>
                       <xs:documentation>Detalhamento de informações da conta contábil no balancete.</xs:documentation>
                     </xs:annotation>

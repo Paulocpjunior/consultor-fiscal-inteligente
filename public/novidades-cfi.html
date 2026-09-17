@@ -68,14 +68,14 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 16/09/2026 · leitura de 20 minutos</p>
+            <p>Departamento Fiscal · atualizado em 17/09/2026 · leitura de 22 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (16/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (17/09) — leia esta parte primeiro</h2>
 
     <h3>1. 🚚 <strong>EFD-Contribuições: o frete cobrado do cliente agora entra na base do PIS/COFINS</strong></h3>
     <p>Em nota de <strong>saída</strong> com frete, o arquivo declarava a base <strong>sem o frete</strong> — ou
@@ -96,8 +96,27 @@
     <div class="alerta">🚩 <strong>Vale regerar as competências anteriores</strong> das empresas que cobram frete
     na nota. Onde havia frete, o arquivo entregue declarou a <strong>menos</strong> — e o PVA aceita, então isso
     não apareceu como erro em lugar nenhum.</div>
+</section>
 
-    <h3>2. 🧾 <strong>Lista de saída vazia: agora ela diz a porta CERTA do modelo que você filtrou</strong></h3>
+<section>
+    <h2>O que mudou em 16/09</h2>
+
+    <h3>1. 🏦 <strong>DeRE na versão 1.2.0</strong> — o D-1121 passou a existir, e o app já sabe</h3>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>⚙️ Config Admin → 🏦 DeRE</strong>. A Receita publicou em
+    05/09 a versão <strong>1.2.0</strong> dos leiautes. O que mudou para quem usa: a lista de eventos ganhou o
+    <strong>D-1121 (Relação de Deduções)</strong> — em 02/09 dizíamos que ele não existia, e não existia na versão
+    de então; agora existe —, o <strong>D-1198 (Reabertura de competência)</strong> e dez eventos
+    <em>transacionais</em> que a própria Receita chama de <strong>preliminares</strong> (o app lista, não cobra).
+    Em <strong>📚 Documentação oficial</strong> estão o Histórico 1.2.0, o Anexo II 1.2.0 (que agora traz as
+    Mensagens de Erro) e os <strong>28 XSD</strong> — todo evento tem schema. <strong>O D-1001 não mudou</strong>:
+    a prévia que você gera continua válida. O que ainda <strong>não</strong> veio (leiaute campo a campo e Anexo I da
+    1.2.0) está dito na tela, para ninguém achar que o app leu o que não leu.</div>
+</section>
+
+<section>
+    <h2>O que mudou em 15/09</h2>
+
+    <h3>1. 🧾 <strong>Lista de saída vazia: agora ela diz a porta CERTA do modelo que você filtrou</strong></h3>
     <p>Filtrando <strong>NFCe</strong> em Saída e não achando nada, a tela mandava importar “pela aba
     <strong>Importação Manual</strong>”. Duas coisas erradas na mesma frase: aba com esse nome <strong>não
     existe</strong> (a real chama-se <strong>📥 Manual &amp; Cofre (saída 55)</strong>, e quem procura NFC-e lê
@@ -115,7 +134,7 @@
     cliente emite NFC-e e ela não está na base, o <strong>Livro de Saídas sai a menos</strong> — vale conferir
     empresa por empresa.</div>
 
-    <h3>3. 🔁 <strong>A ficha nova do Lucro já vem com o saldo credor que o mês anterior mandou transportar</strong></h3>
+    <h3>2. 🔁 <strong>A ficha nova do Lucro já vem com o saldo credor que o mês anterior mandou transportar</strong></h3>
     <p>Você informava “ICMS/IPI a transportar” na ficha de julho, criava a de agosto e o campo
     <strong>“Mês Anterior”</strong> nascia <strong>0,00</strong> — tinha de digitar o mesmo número de novo, todo
     mês. Agora ele <strong>vem preenchido</strong>, carimbado com a ficha de onde veio.</p>

@@ -4,7 +4,7 @@ export interface MarcoDere { dataIso: string; marco: string; detalhe: string; fo
 export interface EventoDere {
     codigo: string;
     nome: string;
-    grupo: 'tabela' | 'mensal' | 'retorno';
+    grupo: 'tabela' | 'mensal' | 'transacional' | 'retorno';
     desde?: string;
     mensalDesde?: string;
     nota?: string;
@@ -12,6 +12,10 @@ export interface EventoDere {
     condicional?: { codTribs: readonly string[]; texto: string };
     /** Arquivo do XSD em docs/dere/xsd/ quando ele veio no pacote; null quando não veio. */
     xsd?: string | null;
+    /** Só existe quando há o que retificar (D-1198) — não é exigido por padrão. */
+    eventual?: boolean;
+    /** Leiaute PRELIMINAR na 1.2.0 (série transacional) — listado, não cobrado. */
+    preliminar?: boolean;
 }
 
 export interface XsdDere {
@@ -23,7 +27,7 @@ export interface XsdDere {
     namespace: string;
     oQue: string;
 }
-export interface EventosDaCompetencia { tabela: EventoDere[]; mensais: EventoDere[] }
+export interface EventosDaCompetencia { tabela: EventoDere[]; mensais: EventoDere[]; eventuais: EventoDere[]; transacionais: EventoDere[] }
 
 export interface EndpointDere { metodo: 'GET' | 'POST' | 'DELETE'; caminho: string; oQue: string }
 export interface IntegracaoDere {
@@ -131,6 +135,17 @@ export function lerRecibo(recibo: unknown):
     | { ok: false; motivo: string };
 export function lerProtocolo(protocolo: unknown):
     | { ok: true; ambiente: 'producao' | 'pre-producao'; recebidoEm: string; numero: string; ressalva: string }
+    | { ok: false; motivo: string };
+
+export function arredondarDere(valor: unknown, casas?: number): { ok: true; valor: number; motivo: null } | { ok: false; valor: null; motivo: string };
+export function dvChaveDere(quarentaENove: unknown): number | null;
+export function montarChaveDere(args: {
+    raiz: string; pais?: string; tpInscAdq: string | number; nrInscAdq: string; codBC: string;
+    ano: number | string; mes: number | string; diaIni: number | string; diaFim: number | string; serie?: number; seq?: number;
+}): { ok: true; chave: string; motivo: null } | { ok: false; chave: null; motivo: string };
+export function lerChaveDere(chave: unknown):
+    | { ok: true; raiz: string; pais: string; tpInscAdq: string; tpInscAdqRotulo: string; nrInscAdq: string; codBC: string;
+        periodo: string; diaIni: number; diaFim: number; serie: number; dv: number; seq: number; chaveMae: boolean }
     | { ok: false; motivo: string };
 
 export function eventosDaCompetencia(competencia: string): EventosDaCompetencia;

@@ -1,0 +1,860 @@
+
+===== PÁGINA 1 =====
+CGIBS  RECEITA FEDERAL 
+Comitê Gestor do IBS  Ministério da Fazenda 
+Leiautes da DeRE 
+Histórico de Versões 
+Versão 1.2.0  |  5 de setembro de 2026 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+DeRE 
+Declaração de Regimes Específicos 
+Leiautes 
+Histórico de Versões 
+ 
+ 
+
+===== PÁGINA 2 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 1 de 13 
+ 
+SUMÁRIO 
+HISTÓRICO DE VERSÕES ................................ ................................ ................................ ................................ ................................ ..............................  2 
+1 APRESENTAÇÃO E CRITÉRIOS DE VERSIONAMENTO ................................ ................................ ................................ ................................ ........ 2 
+1.1 Política de Versionamento ................................ ................................ ................................ ................................ ................................ .................. 2 
+1.2 Legenda de Ações ................................ ................................ ................................ ................................ ................................ .............................  2 
+2 NOTAS DA VERSÃO 1.2.0 ................................ ................................ ................................ ................................ ................................ ....................... 3 
+2.1 Destaques da Versão: ................................ ................................ ................................ ................................ ................................ ........................ 3 
+3 LEIAUTES DA DERE - EVENTOS ................................ ................................ ................................ ................................ ................................ ............ 5 
+3.1 Inclusão de Novos Eventos ................................ ................................ ................................ ................................ ................................ ................ 5 
+3.2 Evento D-1011 – Plano Geral de Contas Comentado ................................ ................................ ................................ ................................ ......... 6 
+3.3 Evento D-1101 – Balancete Mensal ................................ ................................ ................................ ................................ ................................ ... 6 
+3.4 Evento D-1106 – Identificação de Aplicações Financeiras ................................ ................................ ................................ ................................ .. 6 
+3.5 Evento D-1199 – Fechamento Mensal ................................ ................................ ................................ ................................ ................................  6 
+3.6 Evento D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública ................................ ................................ ...........................  7 
+3.7 Evento D-9101 – Retorno Totalizador – Balancete Mensal ................................ ................................ ................................ ................................ . 7 
+3.8 Evento D-9106 – Retorno Totalizador – Identificação de Aplicações Financeiras ................................ ................................ ...............................  7 
+3.9 Evento D-9121 – Retorno Totalizador – Débito em Operações com Títulos de Dívida com Oferta Pública ................................ .........................  8 
+3.10 Evento D-9199 – Retorno Totalizador – Fechamento Mensal ................................ ................................ ................................ ...........................  8 
+4 LEIAUTES DA DERE - ANEXO I - TABELAS ................................ ................................ ................................ ................................ ...........................  9 
+4.1 Inclusão de Novas Tabelas de Domínio ................................ ................................ ................................ ................................ ..............................  9 
+4.2 Tabela 11 – Códigos de Tributação (codTrib) ................................ ................................ ................................ ................................ ...................... 9 
+4.3 Tabela 12 – Códigos de Base de Cálculo (codBC) ................................ ................................ ................................ ................................ ........... 10 
+5 LEIAUTES DA DERE - ANEXO II - REGRAS DE VALIDAÇÃO ................................ ................................ ................................ ..............................  11 
+ 
+  
+===== PÁGINA 3 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 2 de 13 
+ 
+HISTÓRICO DE VERSÕES 
+Versão do Pacote: 1.2.0 (Inclusão de Eventos Transacionais, Relação de Deduções, 
+Reabertura e Aperfeiçoamento Estrutural) 
+Data de Publicação: 05/09/2026 
+Status: Oficial / Produção 
+Referência Anterior: v.1.1.0 (Oficial / Produção - 22/06/2026) e Nota Orientativa DeRE nº 
+2026.001, de 18 de agosto de 2026. 
+Ato Normativo Vinculado:  Ato Técnico Conjunto RFB/SUFIS/CGIBS/DIRETORIA -
+EXECUTIVA Nº 3, de 2 de setembro de 2026. 
+1 APRESENTAÇÃO E CRITÉRIOS DE VERSIONAMENTO 
+Este documento consolida o histórico de alterações técnicas ocorridas nos leiautes, tabelas e 
+regras de validação da DeRE. Seu objetivo é fornecer aos contribuintes e desenvolvedores uma visão 
+clara, objetiva e técnica das modificações realizadas entre as versões publicadas, garantindo a 
+transparência e facilitando a adaptação dos sistemas de informação. 
+1.1 Política de Versionamento 
+A DeRE adota o padrão de versionamento semântico ( X.Y.Z), dimensionado pelo impacto 
+estrutural das mudanças, onde: 
+• X (Maior): Alterações estruturais profundas ou modificações substanciais em eventos ou regras 
+de negócio. Exige adaptação dos sistemas para a geração e transmissão dos eventos; 
+• Y ( Menor): Inclusão de novos eventos ou funcionalidades , exigindo  implementações ou 
+adaptações pontuais para uso dos novos recursos; 
+• Z (Correção): Adequações técnicas de baixo impacto , como c orreções de erros, ajustes em 
+descrições textuais, melhorias em regras de validação, atualizações de tabelas de domínio ou 
+refinamentos técnicos e de negócio. 
+1.2 Legenda de Ações 
+As alterações são classificadas conforme abaixo: 
+• INCLUSÃO: Novo evento, grupo ou campo adicionado; 
+• ALTERAÇÃO: Mudança de nome, tamanho, tipo, obrigatoriedade ou regra de validação de 
+item existente; 
+• EXCLUSÃO: Remoção de evento, grupo ou campo; 
+• DESLOCAMENTO: Item movido de um evento/grupo para outro (implica exclusão na origem 
+e inclusão no destino). 
+===== PÁGINA 4 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 3 de 13 
+ 
+2 NOTAS DA VERSÃO 1.2.0 
+A Versão 1.2.0 consolida a expansão funcional da DeRE para recepcionar as operações 
+individualizadas por adquirente por meio dos Eventos Periódicos Transacionais (leiautes preliminares), 
+institui o controle em conta-corrente de deduções documentadas no Evento D-1121, estabelece o fluxo 
+formal de retificação e reabertura de competências via Evento D-1198 e incorpora os ajustes técnicos 
+decorrentes da Nota Orientativa DeRE nº 2026.001. 
+2.1 Destaques da Versão: 
+a) Implementação dos Eventos Periódicos Transacionais (Séries D-2000, D-3000 e D-4000): 
+Disponibilização dos leiautes preliminares de captura transacional simplificada com foco na 
+base de cálculo líquida e nos tributos incidentes (IBS e CBS), viabilizando o cumprimento do 
+princípio do destino e a apropriação de créditos pelos adquirentes: 
+1. D-2201 – Serviços Remunerados por Preço - Identificação de Adquirentes; 
+2. D-2202 – Tarifas do Regime Geral - Identificação de Adquirentes; 
+3. D-2211 – Operações de Crédito e Valores Mobiliários (TVM) - Identificação de Adquirentes; 
+4. D-2221 – Antecipação de Recebíveis (Securitização, Faturização e Arranjos) - Identificação 
+de Adquirentes; 
+5. D-2231 – Arrendamento Mercantil - Identificação de Adquirentes; 
+6. D-2241 – Arranjos de Pagamento - Identificação de Credenciados ou Destinatários dos 
+Serviços; 
+7. D-2242 – Arranjos de Pagamento - Operações entre Participantes; 
+8. D-2251 – Seguros, Previdência Complementar e Capitalização - Identificação de 
+Adquirentes; 
+9. D-3201 – Planos de Assistência à Saúde - Identificação de Adquirentes e Beneficiários; 
+10. D-4201 – Concursos de Prognósticos - Discriminação de Apostas, Prêmios e Apostadores; 
+11. Em conjunto, foi instituído o evento D-9209 – Retorno – Eventos Transacionais como retorno 
+totalizador padronizado para o processamento dessas transações. 
+b) Instituição do evento Relação de Deduções Utilizadas na Apuração  (D-1121) e Modelo 
+Híbrido de Retificação: Criação do evento D-1121 para escriturar e controlar a conta-corrente 
+de documentos fiscais eletrônicos (DF-e) e aquisições de imóveis que fundamentam deduções 
+da base de cálculo. O evento adota o modelo híbrido: antes do fechamento mensal, são 
+permitidas operações integrais de Inclusão, Alteração e Exclusão; após o encerramento do 
+mês, eventuais retificações ocorrem exclusivamente no nível do documento fiscal (operação 
+[4]), condicionadas à prévia reabertura da competência; 
+===== PÁGINA 5 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 4 de 13 
+ 
+c) Fluxo de Reabertura de Período (D-1198): Disponibilização do evento Reabertura de Período 
+de Apuração (D-1198) para permitir a reabertura de competência cujo fechamento (D -1199) já 
+tenha sido processado; 
+d) Ampliação da Capacidade Volumétrica (D-1011 e D -1011): Expansão do limite de 
+ocorrências do grupo infoConta de 50.000 para 150.000 no Plano Geral de Contas Comentado 
+(D-1011) e de 10.000 para 90.000 no Balancete Mensal (D-1101), comportando a volumetria de 
+conglomerados bancários e operadoras de grande porte; 
+e) Reestruturação Estrutural e Contábil do Evento D -2101: Reestruturação do evento de 
+Débito em Operações com Títulos de Dívida com Oferta Pública, que passa a operar com base 
+em saldos contábeis e movimentações agregadas ({vSaldoContIni}, {vEntradas}, {vSaidas}, 
+{vJurosRec}, {vJurosApropr}, {vSaldoContFin}), ad otando a chave composta {idTitulo, cCta} 
+baseada no código ISIN (ISO 6166), ampliando o limite de ocorrências para até 10.000 títulos 
+por arquivo; 
+f) Padronização da Chave de Acesso da DeRE ({chDeRE}) e Critérios de Arredondamento: 
+Definição da regra matemática e estrutural da Chave de Acesso da DeRE composta por 53 
+caracteres alfanuméricos. Formalização da regra de negócio de arredondamento baseada na 
+norma ABNT NBR 5891 (8 casas decimais para memórias e cálculos intermediários; 2 casas 
+decimais para valores finais); 
+g) Rastreabilidade Cadastral e Transparência nos Retornos (Série D-9000): Inclusão do grupo 
+{infoAdic} nos totalizadores D-9101, D-9106, D-9112 e D-9121 para retornar o recibo do Plano 
+Geral de Contas Comentado (PGCC) utilizado no processamento. No evento D-9199, inclusão 
+do detalhamento dos recibos de todos os eventos componen tes do mês e do grupo 
+{gCoeficientes}, expondo os coeficientes efetivos de rateio e de reversão calculados pelo 
+sistema; 
+h) Atualização de Tabelas de Domínio e Regras de Negócio: 
+1. Inclusão da Tabela 15 (Tabela de Países) e da Tabela 24 (Plano de Contas Referencial – 
+PREVIC); 
+2. Desdobramento e inclusão de Códigos de Tributação (codTrib) na Tabela 11 para operações 
+de Securitização, Faturização, Arranjos de Pagamento, Administradoras de Benefícios de 
+Saúde, SUS e regimes transitórios; 
+3. Reestruturação das bases de cálculo (codBC) na Tabela 12, com desdobramento das séries 
+1200, 2400 e 2500, e inclusão do código 5050; 
+4. Implementação de novas regras de validação (consistência de PGCC, controle temporal de 
+períodos abertos/fechados, limites de BCN e fórmulas matemáticas); 
+5. Unificação da documentação técnica mediante integração do documento “08-Mensagens de 
+Erro do Sistema” ao “04-Leiautes da DeRE - Anexo II”, estabelecendo documento único para 
+as regras de validação e mensagens de erro. 
+  
+===== PÁGINA 6 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 5 de 13 
+ 
+3 LEIAUTES DA DERE - EVENTOS 
+3.1 Inclusão de Novos Eventos 
+Inclusão de Novos Eventos 
+Evento Ação Descrição da Alteração Justificativa Técnica 
+D-1121 – Relação de Deduções 
+Utilizadas na Apuração 
+INCLUSÃO Inclusão do leiaute do evento 
+periódico D-1121. 
+Controlar os documentos fiscais eletrônicos e registros de 
+imóveis que lastreiam deduções na apuração mensal, 
+estabelecendo conta-corrente de aproveitamento. 
+D-1198 – Reabertura de Período de 
+Apuração 
+INCLUSÃO Inclusão do leiaute do evento 
+periódico D-1198. 
+Habilitar a reabertura de períodos mensais já fechados pelo 
+D-1199 para permitir retificações na escrituração. 
+D-2201 – Serviços Remunerados por 
+Preço - Identificação de Adquirentes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Escriturar operações com serviços remunerados por preço no 
+setor financeiro com identificação de adquirentes para 
+partilha no destino e apropriação de créditos. 
+D-2202 – Tarifas do Regime Geral - 
+Identificação de Adquirentes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Escriturar operações com tarifas bancárias típicas e serviços 
+remunerados sob o regime geral com identificação de 
+adquirentes. 
+D-2211 – Operações de Crédito e 
+Valores Mobiliários (TVM) - 
+Identificação de Adquirentes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Escriturar operações de crédito e títulos e valores mobiliários 
+remuneradas por margem, permitindo o cômputo 
+individualizado por tomador/adquirente. 
+D-2221 – Antecipação de Recebíveis 
+(Securitização, Faturização e Arranjos) 
+- Identificação de Adquirentes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Registrar operações de liquidação antecipada de recebíveis 
+comerciais e de arranjos de pagamento tributadas pelo 
+spread/desconto. 
+D-2231 – Arrendamento Mercantil - 
+Identificação de Adquirentes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Declarar contraprestações e valores residuais de leasing 
+operacional e financeiro segregados por adquirente. 
+D-2241 – Arranjos de Pagamento - 
+Identificação de Credenciados ou 
+Destinatários dos Serviços 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Registrar transações de credenciamento (MDR, aluguel de 
+terminais, conectividade) vinculadas aos estabelecimentos 
+credenciados. 
+D-2242 – Arranjos de Pagamento - 
+Operações entre Participantes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Registrar tarifas de intercâmbio, taxas de rede e repasses 
+operacionais liquidados entre os participantes do arranjo de 
+pagamento. 
+D-2251 – Seguros, Previdência 
+Complementar e Capitalização - 
+Identificação de Adquirentes 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Declarar operações com prêmios de seguro, contribuições de 
+previdência e arrecadação de títulos de capitalização 
+individualizados. 
+D-3201 – Planos de Assistência à 
+Saúde - Identificação de Adquirentes e 
+Beneficiários 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Capturar contraprestações de planos coletivos e individuais, 
+viabilizando o detalhamento dos beneficiários para rateio de 
+coeficientes. 
+D-4201 – Concursos de Prognósticos - 
+Discriminação de Apostas, Prêmios e 
+Apostadores 
+INCLUSÃO Inclusão de leiaute preliminar 
+transacional. 
+Identificar apostas físicas e virtuais e premiados nos concursos 
+de prognósticos, subsidiando a apuração do Imposto Seletivo, 
+IBS e CBS. 
+D-9112 – Retorno – Relação de 
+Deduções Utilizadas na Apuração 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9112. 
+Confirmar o processamento e atestar o recibo de entrega das 
+deduções enviadas no evento D-1121. 
+D-9198 – Retorno – Reabertura de 
+Período de Apuração 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9198. 
+Confirmar a alteração do status da competência para 
+"Reaberto", autorizando o reenvio de eventos periódicos. 
+D-9209 – Retorno – Eventos 
+Transacionais 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9209. 
+Confirmar a recepção dos lotes transacionais e retornar a 
+memória de cálculo do rateio de prêmios de planos de saúde 
+({detRateioPremio}). 
+===== PÁGINA 7 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 6 de 13 
+ 
+3.2 Evento D-1011 – Plano Geral de Contas Comentado 
+Evento D-1011 – Plano Geral de Contas Comentado 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+planoCtaRef ALTERAÇÃO Inclusão da opção [5 – PREVIC no domínio de valores 
+válidos. 
+Habilitar a adesão das Entidades Fechadas de Previdência 
+Complementar (EFPC) supervisionadas pela PREVIC. 
+infoConta ALTERAÇÃO Ampliação do limite de ocorrência de 50.000 para 
+150.000 contas. 
+Suportar o volume de contas analíticas de conglomerados 
+financeiros e operadoras de grande porte. 
+cCtaRef ALTERAÇÃO Inclusão de validação vinculada à Tabela 24 – Plano 
+de Contas Referencial – PREVIC quando {planoCtaRef} 
+= [5]. 
+Assegurar a consistência contábil das contas da 
+previdência fechada com seu plano padrão. 
+3.3 Evento D-1101 – Balancete Mensal 
+Evento D-1101 – Balancete Mensal 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+perApur ALTERAÇÃO Inclusão das regras de validação 
+REJEITAR_PERAPUR_FUTURO e PERAPUR_FECHADO. 
+Impedir recepção de competências futuras ou de períodos 
+cujo fechamento mensal já esteja consolidado. 
+infoConta ALTERAÇÃO Ampliação do limite de ocorrência de 10.000 para 
+90.000 contas. 
+Permitir o processamento de balancetes analíticos 
+mensais volumosos em arquivo único. 
+vAjusteDebt ALTERAÇÃO Vinculação à regra de validação 
+CONFERIR_AJUSTE_DEBITO. 
+Garantir que o valor do ajuste a débito não exceda o 
+movimento a débito da conta. 
+vAjusteCred ALTERAÇÃO Vinculação à regra de validação 
+CONFERIR_AJUSTE_CREDITO. 
+Garantir que o valor do ajuste a crédito não exceda o 
+movimento a crédito da conta. 
+3.4 Evento D-1106 – Identificação de Aplicações Financeiras 
+Evento D-1106 – Identificação de Aplicações Financeiras 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+perApur ALTERAÇÃO Inclusão das regras de validação 
+REJEITAR_PERAPUR_FUTURO e PERAPUR_FECHADO. 
+Alinhar as críticas temporais do evento auxiliar ao padrão 
+dos eventos periódicos. 
+vVarMensal ALTERAÇÃO Alteração do tamanho de campo de 4-18 para 4-19 
+caracteres numéricos. 
+Permitir o envio do caractere de sinal negativo ("-"), 
+viabilizando a apuração de desvalorizações monetárias 
+no ativo. 
+vSaldoFinal ALTERAÇÃO Vinculação à regra de validação 
+CONFERIR_SALDO_FINAL_ATIVO. 
+Consistir matematicamente o saldo final do ativo com a 
+movimentação e resgates informados. 
+vApur ALTERAÇÃO Vinculação à regra de validação 
+VALIDAR_VAPUR_D1106. 
+Garantir que a base apurada corresponda exatamente à 
+soma dos rendimentos recebidos e de resgate. 
+3.5 Evento D-1199 – Fechamento Mensal 
+Evento D-1199 – Fechamento Mensal 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+evtFechMensal ALTERAÇÃO Inclusão da regra de validação 
+CONSISTIR_PGCC_EVENTOS_PERIODO. 
+Garantir que o PGCC ativo utilizado nos eventos 
+periódicos do mês coincida com o PGCC vigente 
+no fechamento. 
+perApur ALTERAÇÃO Inclusão da regra de validação 
+REJEITAR_PERAPUR_FUTURO. 
+Bloquear o encerramento de competências 
+posteriores à data de transmissão. 
+infoParamFech / indInexistDedu INCLUSÃO Criação de grupo e campo para declarar 
+formalmente a inexistência de deduções na 
+competência. 
+Dispensar o envio do evento auxiliar D-1121 
+para contribuintes legalmente obrigados que 
+não tenham incorrido em deduções. 
+===== PÁGINA 8 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 7 de 13 
+ 
+Evento D-1199 – Fechamento Mensal 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+metodoAproveit ALTERAÇÃO Vinculação à regra de validação 
+VALIDAR_METODO_APROVEIT. 
+Bloquear preenchimento do método quando não 
+houver opção pelo aproveitamento de base 
+negativa. 
+detBCNeg ALTERAÇÃO Vinculação à regra de validação 
+VERIFICAR_DETBCNEG. 
+Exigir o grupo se o método for manual ([1]) e 
+vedá-lo se for automático ([0]). 
+vUsarBCN ALTERAÇÃO Vinculação à regra de alerta 
+AVISO_CONFERIR_SALDO_BCN. 
+Disparar aviso preventivo caso a dedução de 
+BCN requerida supere o saldo disponível na base 
+de dados. 
+3.6 Evento D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública 
+Evento D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+TODO O EVENTO* ALTERAÇÃO Reestruturação completa do modelo de dados 
+para apuração contábil por agrupamento de 
+ativos. 
+Substituir a parametrização de liquidação individual 
+por controle global de saldos, compras, vendas e 
+juros apropriados. 
+detTitulo ALTERAÇÃO Chave do grupo alterada para {idTitulo, cCta} e 
+ocorrência expandida de 1-500 para 1-10.000. 
+Permitir a correlação direta do ativo contábil com o 
+código ISIN global da emissão. 
+idTitulo ALTERAÇÃO Redefinido como Atributo (Cat A, Tipo C, Tam 12 
+fixo), correspondendo ao padrão ISO 6166 (ISIN). 
+Padronizar a chave de identificação do ativo 
+financeiro no mercado de capitais internacional. 
+cCta DESLOCAMENTO Deslocado do grupo pai para o nível do 
+{detTitulo} como Atributo (Cat A, Tipo C, Tam 1-
+53). 
+Vincular univocamente cada título à sua respectiva 
+conta analítica no plano de contas da instituição. 
+Novos campos de saldo INCLUSÃO Inclusão de {vSaldoContIni}, {vEntradas}, 
+{vSaidas}, {vJurosRec}, {vJurosApropr} e 
+{vSaldoContFin}. 
+Estabelecer a equação contábil de evolução 
+patrimonial do título de dívida com oferta pública. 
+vApur ALTERAÇÃO Fórmula ajustada para: (MENORENTRE({vSelic} e 
+{vJurosApropr})) - {vPisCofins} e associada à 
+regra VALIDAR_VAPUR_D2101. 
+Adequar a dedução da base de cálculo tributável às 
+regras de apropriação contábil por competência. 
+3.7 Evento D-9101 – Retorno Totalizador – Balancete Mensal 
+Evento D-9101 – Retorno Totalizador – Balancete Mensal 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+infoAdic / nrReciboPGCC INCLUSÃO Criação de grupo de informações adicionais 
+retornando o número do recibo do PGCC 
+processado. 
+Garantir a rastreabilidade do mapeamento contábil que 
+fundamentou o processamento do balancete. 
+seqEvento ALTERAÇÃO Domínio de valores válidos alterado para 01-99 
+(formatação de dois dígitos). 
+Uniformização estrutural do versionamento dos 
+arquivos aceitos. 
+3.8 Evento D-9106 – Retorno Totalizador – Identificação de Aplicações Financeiras 
+Evento D-9106 – Retorno Totalizador – Identificação de Aplicações Financeiras 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+infoAdic / nrReciboPGCC INCLUSÃO Criação de grupo de informações adicionais 
+retornando o recibo do PGCC processado. 
+Rastreabilidade da versão do plano de contas vigente 
+nas aplicações financeiras. 
+===== PÁGINA 9 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 8 de 13 
+ 
+3.9 Evento D-9121 – Retorno Totalizador – Débito em Operações com Títulos de Dívida com 
+Oferta Pública 
+Evento D-9121 – Retorno Totalizador – Débito em Operações com Títulos de Dívida com Oferta Pública 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+infoAdic / nrReciboPGCC INCLUSÃO Criação de grupo de informações adicionais 
+retornando o recibo do PGCC processado. 
+Rastreabilidade da versão do plano de contas vinculada 
+aos títulos de dívida. 
+3.10 Evento D-9199 – Retorno Totalizador – Fechamento Mensal 
+Evento D-9199 – Retorno Totalizador – Fechamento Mensal 
+Campo / Grupo Ação Descrição da Alteração Justificativa Técnica 
+infoAdic INCLUSÃO Inclusão de grupo obrigatório contendo os recibos dos 
+eventos processados no mês (nrReciboBalancete, 
+nrReciboAplicFin, nrReciboRelDedu, 
+nrReciboOperTitPub). 
+Fornecer ao declarante a composição documental 
+completa que gerou a apuração definitiva do período. 
+gCoeficientes INCLUSÃO Criação de grupo subordinado a {detBC} 
+demonstrando os coeficientes calculados e aplicados 
+pelo sistema. 
+Transparência no cálculo das taxas efetivas de rateio de 
+captação (pRateioDespCapt), atos cooperados 
+(pRevDedAtoCoop) e exportações (pExport). 
+memoriaCalculo ALTERAÇÃO Especificação do critério de 
+truncamento/arredondamento para 8 casas decimais. 
+Alinhamento com a diretriz da norma ABNT NBR 5891. 
+  
+===== PÁGINA 10 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 9 de 13 
+ 
+4 LEIAUTES DA DERE - ANEXO I - TABELAS 
+4.1 Inclusão de Novas Tabelas de Domínio 
+Inclusão de Novas Tabelas de Domínio 
+Tabela Ação Descrição da Alteração Justificativa Técnica 
+Tabela 15 – Tabela de 
+Países 
+INCLUSÃO Inclusão da tabela com códigos alfa-2, alfa-
+3 e códigos SPED de países. 
+Parametrizar a identificação de adquirentes/destinatários 
+estrangeiros e viabilizar a composição da Chave da DeRE 
+({chDeRE}). 
+Tabela 24 – Plano de 
+Contas Referencial – 
+PREVIC 
+INCLUSÃO Inclusão de tabela de referência externa 
+padronizada da PREVIC. 
+Atender às entidades fechadas de previdência complementar 
+no mapeamento contábil de contas no evento D-1011. 
+4.2 Tabela 11 – Códigos de Tributação (codTrib) 
+Tabela 11 – Códigos de Tributação (codTrib) 
+codTrib Ação Descrição da Alteração Justificativa Técnica 
+GERAL* ALTERAÇÃO Revisão gramatical, padronização terminológica e 
+atualização de referências normativas. 
+Uniformização conceitual e atualização legal para 
+mitigação de riscos de enquadramento indevido. 
+110113001 e 110113002 ALTERAÇÃO Alteração de título e descrição para "Títulos de 
+dívida objeto de oferta pública", referenciando a 
+CVM. 
+Ajuste terminológico alinhado ao texto legal da LC 
+nº 214/2025 e à reestruturação do evento D-2101. 
+11021 e 11022 ALTERAÇÃO Desdobramento estrutural dos grupos do ativo: 
+segregação entre Securitização (grupo 11021) e 
+Faturização (grupo 11022). 
+Desdobramento operacional da atividade de 
+faturização (factoring) separada da securitização. 
+110313411, 110313412, 
+110314411, 110314412, 
+110323411, 110323412, 
+110324411, 110324412, 
+110411411, 110411412, 
+110412411, 110412412, 
+110421411, 110421412, 
+110422411 e 110422412 
+INCLUSÃO Criação de códigos no Ativo para segregar o valor 
+líquido de aquisição de bens de capital e a parcela 
+excedente tributável na transição. 
+Regulamentação do tratamento transitório do 
+PIS/Cofins e preservação de créditos sobre Bens de 
+Capital (Art. 406 da LC 214/2025). 
+110811 e 110812 ALTERAÇÃO Reestruturação completa dos serviços de arranjos 
+de pagamento no ativo: segregação entre valores 
+recebidos de credenciados/destinatários (110811) 
+e valores recebidos de outros participantes do 
+arranjo (110812). 
+Desdobramento operacional das atividades para 
+parametrização das respectivas bases de cálculo. 
+11111 e 11112 ALTERAÇÃO Reestruturação do segmento de seguros: 
+isolamento de ramos elementares (11111) e 
+unificação das operações de seguros de pessoas 
+com cobertura por sobrevivência com a 
+previdência complementar aberta (11112). 
+Desdobramento operacional das atividades para 
+parametrização das respectivas bases de cálculo. 
+1112 ALTERAÇÃO Vinculação exclusiva da série 1112 às entidades 
+fechadas de previdência complementar sob a regra 
+de não incidência. 
+Desdobramento operacional das atividades para 
+parametrização das respectivas bases de cálculo. 
+112011001 INCLUSÃO Criação de código para tarifas recebidas da 
+administração pública tributadas por caixa. 
+Adequação às normas gerais de tributação pelo 
+regime de caixa em contratações com entes 
+públicos. 
+120161003 INCLUSÃO Criação de código para indenizações pagas ao 
+Sistema Único de Saúde (SUS) por assistência a 
+conveniados. 
+Permitir a dedução da base de cálculo das 
+operadoras de planos de saúde relativa aos 
+ressarcimentos ao SUS. 
+1205 INCLUSÃO Inclusão do grupo 1205 destinado à escrituração 
+das comissões recebidas por administradoras de 
+benefícios de saúde. 
+Aferição tributária própria aplicável às 
+Administradoras de Benefícios. 
+===== PÁGINA 11 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 10 de 13 
+ 
+Tabela 11 – Códigos de Tributação (codTrib) 
+codTrib Ação Descrição da Alteração Justificativa Técnica 
+230161001 e 230161002 INCLUSÃO Desdobramento das deduções de destinações 
+obrigatórias de loterias em despesas com 
+comprovante contábil (230161001) e acobertadas 
+por documentos fiscais (230161002). 
+Estabelecer a crítica para exigência do evento D -
+1121 caso a dedução envolva documentos fiscais 
+idôneos. 
+311011201 e 311011202 ALTERAÇÃO Deslocamento e reclassificação das receitas de 
+títulos de dívida com oferta pública associadas ao 
+D-2101. 
+Vinculação com o totalizador D -9121 para dedução 
+e cálculo do teto da Selic na formação da base de 
+cálculo. 
+311011702 e 411011701 INCLUSÃO Criação de códigos para variações a valor justo em 
+TVM (positiva em receita e negativa em despesa). 
+Ajustar o cômputo da avaliação a valor justo no 
+momento da realização do ativo ou passivo (Art. 192, 
+§ 6º). 
+411051101 e 411058001 ALTERAÇÃO Desdobramento das despesas com intermediação 
+de consórcios em individualizáveis por cota 
+(dedutíveis) e não individualizáveis (não 
+dedutíveis). 
+Conformidade com o Art. 204, § 1º, da LC 214/2025 
+e regulamentação infralegal. 
+431300001 e 431300002 INCLUSÃO Desdobramento em contas de resultado das 
+destinações obrigatórias por lei: exclusivamente 
+contábeis e amparadas por documentos fiscais. 
+Parametrizar a apuração do setor de Concursos de 
+Prognósticos e vincular deduções documentadas ao 
+D-1121. 
+4.3 Tabela 12 – Códigos de Base de Cálculo (codBC) 
+Tabela 12 – Códigos de Base de Cálculo (codBC) 
+codBC Ação Descrição da Alteração Justificativa Técnica 
+1205 e 1210 ALTERAÇÃO Redefinidos exclusivamente para Securitização - 
+Serviços Remunerados por Preço (com e sem ISS). 
+Segregar a formação da base de cálculo remunerada por 
+preço da remuneração por margem. 
+1215 e 1220 INCLUSÃO Criação dos códigos para Securitização - Serviços 
+Remunerados por Margem (com e sem ISS). 
+Parametrizar a apuração da base de cálculo sobre o 
+deságio/spread na securitização de créditos. 
+1225 e 1230 INCLUSÃO Criação dos códigos para Faturização - Serviços 
+Remunerados por Preço (com e sem ISS). 
+Isolar as tarifas e comissões da atividade de factoring 
+submetidas ao regime geral/específico. 
+1235 e 1240 INCLUSÃO Criação dos códigos para Faturização - Serviços 
+Remunerados por Margem (com e sem ISS). 
+Parametrizar o desconto de duplicatas e direitos creditórios 
+no fomento mercantil. 
+2405 a 2430 ALTERAÇÃO Reestruturação dos códigos de serviços por preço 
+prestados a credenciados e destinatários, segregando 
+cartões de crédito/débito, benefícios (VT/VR/VA) e 
+outros arranjos. 
+Especializar a apuração do IBS/CBS por modalidade de 
+arranjo e qualificar o direito a crédito do adquirente. 
+2435 a 2460 INCLUSÃO Criação de bases de cálculo específicas para serviços de 
+arranjos de pagamento realizados entre participantes. 
+Tributar as tarifas de intercâmbio e remunerações de 
+bandeiras assegurando o abatimento pelo adquirente. 
+2505 a 2530 INCLUSÃO Criação dos códigos de antecipação de recebíveis de 
+arranjos de pagamento (remuneração por margem), 
+com dedução da taxa DI e perdas. 
+Parametrizar a formação da base líquida na antecipação de 
+fluxos de cartões conforme Art. 219 da LC 214/2025. 
+2535 e 2540 INCLUSÃO Criação dos códigos para apuração do resultado 
+financeiro das contas de pagamento pré e pós-pagas. 
+Apurar o rendimento líquido das contas de pagamento 
+deduzido da remuneração aos titulares (Art. 214, § 5º). 
+3025 e 3030 ALTERAÇÃO Unificação de bases de Seguros de Pessoas com 
+Cobertura por Sobrevivência e Previdência 
+Complementar Aberta. 
+Unificar a base de cálculo em decorrência da equivalência 
+legal das regras de dedutibilidade e alíquotas (art. 224 da LC 
+nº 214/2025). 
+3210 ALTERAÇÃO Renumeração do código de base de cálculo da 
+previdência fechada (anteriormente 3220). 
+Aproveitamento de sequencial de numeração para 
+padronização de intervalos. 
+5050 INCLUSÃO Criação do código para Serviços de Administração de 
+Benefícios de Planos de Assistência à Saúde. 
+Parametrizar a apuração da base de cálculo líquida sobre a 
+taxa de administração e comissões do setor. 
+===== PÁGINA 12 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 11 de 13 
+ 
+5 LEIAUTES DA DERE - ANEXO II - REGRAS DE VALIDAÇÃO 
+Anexo II – Regras de Validação 
+Nome da Regra Ação Descrição da Alteração Aplicação / Contexto 
+AVISO_CONFERIR_SALDO_BCN INCLUSÃO Emite aviso no retorno D -9199 caso o 
+contribuinte requisite no método manual 
+({metodoAproveit} = [1]) montante superior 
+ao saldo da conta-corrente de BCN, limitando 
+a utilização ao saldo remanescente 
+disponível. 
+• D-1199 – Fechamento Mensal. 
+CCTA_NO_PGCC ALTERAÇÃO Alteração da severidade para interromper o 
+processamento (Sim) caso a conta analítica 
+não exista, não esteja ativa ou não possua 
+vigência que cubra o período. 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações 
+Financeiras; 
+• D-2101 – Títulos de Dívida de Oferta Pública. 
+CODTRIB_PERMITIDO_D1106 ALTERAÇÃO Ajuste na redação da regra exigindo conta 
+vigente com codTrib obrigatório no PGCC no 
+último dia da competência ({perApur}). 
+• D-1106 – Identificação de Aplicações 
+Financeiras. 
+CODTRIB_PERMITIDO_D2101 ALTERAÇÃO Ajuste na redação da regra exigindo conta 
+vigente com codTrib obrigatório no PGCC no 
+último dia da competência ({perApur}). 
+• D-2101 – Títulos de Dívida de Oferta Pública. 
+CONFERIR_AJUSTE_CREDITO INCLUSÃO Valida se o valor de ajuste a crédito 
+({vAjusteCred}) é menor ou igual ao 
+movimento bruto a crédito ({vMovCred}). 
+• D-1101 – Balancete Mensal. 
+CONFERIR_AJUSTE_DEBITO INCLUSÃO Valida se o valor de ajuste a débito 
+({vAjusteDebt}) é menor ou igual ao 
+movimento bruto a débito ({vMovDebt}). 
+• D-1101 – Balancete Mensal. 
+CONFERIR_SALDO_FINAL_ATIVO INCLUSÃO Valida a equação patrimonial do ativo 
+financeiro: {vSaldoFinal} = {vSaldoInic} + 
+{vVarMensal} - {vPrincLiqResg}. 
+• D-1106 – Identificação de Aplicações 
+Financeiras. 
+CONFERIR_SALDO_INICIAL INCLUSÃO Valida o transporte contábil dos saldos 
+iniciais: para contas patrimoniais exige 
+equivalência com o saldo final do mês 
+anterior; para contas de resultado zera no 
+primeiro mês do período de encerramento 
+({freqEncerr}). 
+• D-1101 – Balancete Mensal. 
+CONSISTIR_PGCC_EVENTOS_PERIO
+DO 
+INCLUSÃO Rejeita o Fechamento Mensal (D-1199) caso o 
+número do recibo do PGCC vigente no último 
+dia da competência divirja da versão utilizada 
+no processamento dos eventos mensais 
+componentes. 
+• D-1199 – Fechamento Mensal. 
+CONTA_NO_PLANO_CONTAS_REFE
+RENCIAL 
+ALTERAÇÃO Inclusão do plano de contas referencial da 
+PREVIC ([5]) no rol de catálogos 
+regulamentares auditados. 
+• D-1011 – Plano Geral de Contas Comentado. 
+CONTRIBUINTE_NO_CADASTRO ALTERAÇÃO Reestruturação completa segregando a 
+auditoria da base CNPJ para eventos de 
+tabela (D -1001 e D -1011) e eventos 
+periódicos mensais (D-1101, D-1106, D-1121, 
+D-2101, D-1198 e D-1199). 
+• Todos os Eventos de Tabela e Periódicos 
+Mensais. 
+DV_CNPJ ALTERAÇÃO Correção técnica da referência da mensagem 
+de erro disparada (substituição de MS1239 
+por MS1139). 
+• D-2101 – Títulos de Dívida de Oferta Pública; 
+• Eventos Transacionais. 
+DV_CPF INCLUSÃO Institui a validação do dígito verificador do 
+CPF por meio do algoritmo de Módulo 11. 
+• D-1121 – Relação de Deduções Utilizadas na 
+Apuração; 
+• Eventos Transacionais. 
+===== PÁGINA 13 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 12 de 13 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Ação Descrição da Alteração Aplicação / Contexto 
+EVENTOS_OBRIGATORIOS_PERIOD
+O 
+ALTERAÇÃO Inclusão do item 4, tornando obrigatória a 
+transmissão do evento D -1121 se o 
+declarante possuir contas de deduções 
+movimentadas no PGCC e não tiver 
+assinalado o campo {indInexistDedu}. 
+• D-1199 – Fechamento Mensal. 
+EXIGIR_MOTIVO_EXCLUSAO ALTERAÇÃO Ajuste na redação explicitando que o 
+preenchimento de {motExcl} é exclusivo e 
+obrigatório para operações de exclusão 
+({tpOper} = [3]). 
+• D-1001 – Informações do Contribuinte; 
+• D-1011 – Plano Geral de Contas Comentado; 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações 
+Financeiras; 
+• D-1121 – Relação de Deduções Utilizadas na 
+Apuração; 
+• D-2101 – Débito em Operações com Títulos 
+de Dívida com Oferta Pública. 
+EXIGIR_NR_RECIBO ALTERAÇÃO Elevação da severidade da regra para 
+interromper o processamento (Sim), 
+tornando-a erro crítico impeditivo. 
+• Todos os Eventos com suporte a 
+Alteração/Exclusão. 
+EXISTE_INFO_CONTRIBUINTE ALTERAÇÃO Inclusão dos novos eventos periódicos D -
+1121 e D-1199 no rol de validação de vigência 
+ativa do cadastro D-1001. 
+• D-1011 – Plano Geral de Contas Comentado; 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações 
+Financeiras; 
+• D-1121 – Relação de Deduções Utilizadas na 
+Apuração; 
+• D-1199 – Fechamento Mensal; 
+• D-2101 – Débito em Operações com Títulos 
+de Dívida com Oferta Pública. 
+EXISTE_RECIBO_FECH_ATIVO INCLUSÃO Valida se o recibo informado no D -1198 
+possui prefixo 1199, corresponde ao último 
+fechamento ativo do declarante e coincide 
+com a competência reaberta. 
+• D-1198 – Reabertura de Período de Apuração. 
+PERAPUR_FECHADO INCLUSÃO Impede a transmissão e o processamento de 
+eventos periódicos e transacionais quando o 
+período ({perApur}) estiver fechado. 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações 
+Financeiras; 
+• D-1121 – Relação de Deduções Utilizadas na 
+Apuração; 
+• D-2101 – Débito em Operações com Títulos 
+de Dívida com Oferta Pública; 
+• Eventos Transacionais. 
+PERMITIR_PERAPUR_FECHADO INCLUSÃO Habilita a recepção do evento D -1198 
+exclusivamente se a competência ({perApur}) 
+estiver com status "Fechado". 
+• D-1198 – Reabertura de Período de Apuração. 
+REJEITAR_PERAPUR_FUTURO INCLUSÃO Rejeita eventos cuja competência ({perApur}) 
+seja posterior ao mês/ano da data corrente de 
+recepção do lote. 
+• Eventos Periódicos Mensais e Transacionais. 
+RN - Arquivos/Eventos Tratados 
+pelo Sistema 
+ALTERAÇÃO Inclusão formal da chave de negócio do 
+evento D-1121. 
+• Sistema Geral da DeRE. 
+RN - Critério de Arredondamento INCLUSÃO Normatiza a adoção da ABNT NBR 5891 em 
+todos os cálculos do sistema (precisão 
+intermediária de 8 casas decimais e 
+arredondamento final de 2 casas pela regra 
+do número par). 
+• Sistema Geral da DeRE. 
+RN - Formação da Chave da DeRE INCLUSÃO Estrutura o padrão formal de composição da 
+chave agrupadora de 53 caracteres 
+alfanuméricos. 
+• Eventos Transacionais (Séries D-2000 a D-
+4000). 
+RN - Tabela de codtribs 
+obrigatórios para eventos 
+auxiliares 
+ALTERAÇÃO Inclusão da lista com os 34 códigos de 
+tributação de deduções que tornam 
+obrigatória a entrega do evento D-1121. 
+• D-1121 – Relação de Deduções Utilizadas na 
+Apuração; 
+• D-1199 – Fechamento Mensal.  
+===== PÁGINA 14 =====
+Histórico de Versões Versão 1.2.0 
+ 
+Página 13 de 13 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Ação Descrição da Alteração Aplicação / Contexto 
+RN - Validar Saldos Finais Eventos 
+Auxiliares e Balancete 
+ALTERAÇÃO Adequação do item 2 para comparar o campo 
+{vSaldoContFin} do D-2101 com o saldo final 
+da conta correspondente no D-1101. 
+• D-1199 – Fechamento Mensal. 
+TPOPER_D1121_STATUS_PERIODO INCLUSÃO Controla a admissibilidade das operações no 
+D-1121: operações 1, 2 e 3 antes do 
+fechamento; operação 4 permitida apenas se 
+o período estiver reaberto via D-1198. 
+• D-1121 – Relação de Deduções Utilizadas na 
+Apuração. 
+VALIDAR_METODO_APROVEIT INCLUSÃO Valida a obrigatoriedade de indicação do 
+método PEPS ou manual quando houver 
+opção por utilizar saldo de BCN acumulada. 
+• D-1199 – Fechamento Mensal. 
+VALIDAR_VAPUR_D1106 INCLUSÃO Valida se {vApur} equivale à soma de 
+{vRendPerReceb} com {vRendLiqResg}. 
+• D-1106 – Identificação de Aplicações 
+Financeiras. 
+VALIDAR_VAPUR_D2101 INCLUSÃO Valida a aplicação da fórmula {vApur} = 
+(MENORENTRE({vSelic} e {vJurosApropr})) - 
+{vPisCofins}. 
+• D-2101 – Títulos de Dívida de Oferta Pública. 
+VERIFICAR_DETBCNEG INCLUSÃO Exige o detalhamento individualizado de 
+bases negativas no método manual ([1]) e 
+bloqueia seu preenchimento no método PEPS 
+([0]). 
+• D-1199 – Fechamento Mensal. 
+ 
