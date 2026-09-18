@@ -124,6 +124,24 @@
     primeiras), é nota capturada antes de hoje — rode o <strong>♻️ Reler itens dos XMLs</strong> e gere de
     novo. Sem isso o arquivo continua declarando a menos.</div>
 
+    <h3>1a. 🚚 <strong>SPED Fiscal: o CT-e saía SEM NÚMERO — e o PVA quebrava ao abrir o livro de
+    entradas</strong></h3>
+    <p>Na EDUARDO GUERRA de 08/2026, depois de o arquivo passar a importar, o PVA respondeu
+    <em>“Ocorreu um erro ao gerar o relatório”</em> em Relatórios → Documentos → <strong>Entradas de
+    Mercadorias e Aquisição de Serviços</strong> — só nessa empresa, a única com frete no livro. A causa:
+    a captura lia o número do documento pela tag da NF-e (<code>nNF</code>) e o conhecimento de transporte
+    usa outra (<code>nCT</code>). Todo CT-e capturado estava gravado <strong>sem número</strong>, e o D100
+    saía com o campo <strong>NUM_DOC vazio</strong> — o validador importa, mas não consegue montar o
+    relatório.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> → gerar o arquivo. O número
+    agora sai da <strong>chave de acesso</strong> quando o banco não o tem (a chave carrega o número), então
+    basta <strong>regerar</strong> e, no PVA, <strong>apagar a escrituração do mês antes de importar</strong>.
+    Para o número aparecer também na lista de XMLs e nos relatórios do CFI, rode o <strong>🚚 Reler
+    cabeçalho dos CT-e</strong> em Relatórios → ✏️ CFOP por nota (a frase do resultado mostra
+    <strong>numero em N</strong>).</div>
+    <div class="alerta">⚠️ A geração passou a acusar, antes do PVA, documento com número vazio ou diferente
+    do que a chave diz — no C100 e no D100, nas duas famílias de arquivo.</div>
+
     <h3>1. 🚚 <strong>SPED Fiscal: o registro do frete (D100) saía com dois campos a menos e o PVA
     não importava o arquivo</strong></h3>
     <p>Na EDUARDO GUERRA de 08/2026 o validador devolveu <strong>23 recusas</strong> —

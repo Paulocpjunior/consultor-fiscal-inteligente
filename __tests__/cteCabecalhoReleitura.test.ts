@@ -39,6 +39,7 @@ const EMPRESA = {
 /** CT-e com ICMS destacado (CST 00). */
 const XML_CTE_00 = `<?xml version="1.0"?><cteProc><CTe><infCte Id="CTe35260844555666000177570010000000011234567890">
   <ide><cUF>35</cUF><CFOP>6353</CFOP><natOp>PRESTACAO DE SERVICO DE TRANSPORTE</natOp>
+    <mod>57</mod><serie>1</serie><nCT>000000001</nCT>
     <cMunIni>3550308</cMunIni><xMunIni>SAO PAULO</xMunIni><UFIni>SP</UFIni>
     <cMunFim>4106902</cMunFim><xMunFim>CURITIBA</xMunFim><UFFim>PR</UFFim></ide>
   <emit><CNPJ>44555666000177</CNPJ></emit>
@@ -87,6 +88,8 @@ const CTE_GRAVADO_SEM_CFOP = {
 describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
     it('lê CFOP, CST, alíquota e ICMS do cabeçalho', () => {
         expect(lerCabecalhoCte(XML_CTE_00)).toEqual({
+            // O NÚMERO é `nCT` (a captura lia `nNF`, da NF-e, e gravava null).
+            numero: '1',
             cfop: '6353', cstIcms: '00', aliqIcms: 12, vBC: 500, vICMS: 60,
             // 🚨 Campos 24 e 25 do D100 (EFD ICMS/IPI): o município da
             // PRESTAÇÃO, não o dos participantes.
@@ -96,6 +99,7 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
 
     it('lê o grupo ICMSOutraUF, cujos campos levam sufixo próprio', () => {
         expect(lerCabecalhoCte(XML_CTE_OUTRA_UF)).toEqual({
+            numero: null,
             cfop: '6353', cstIcms: '90', aliqIcms: 7, vBC: 200, vICMS: 14,
             codMunIni: null, codMunFim: null,
         });
@@ -113,6 +117,7 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
     // ali seria o app afirmando o que o documento não diz.
     it('no isento (ICMS45) devolve o CST e deixa base/alíquota/ICMS em null', () => {
         expect(lerCabecalhoCte(XML_CTE_45)).toEqual({
+            numero: null,
             cfop: '5353', cstIcms: '40', aliqIcms: null, vBC: null, vICMS: null,
             codMunIni: null, codMunFim: null,
         });
@@ -238,6 +243,51 @@ describe('composição — é o frete voltando ao livro que prova', () => {
         const d190 = linhas.find((l: string) => l.includes('|D190|'));
         expect(d190).toContain('|D190|090|');
         expect(d190).toContain('|0,00|');
+    });
+});
+
+
+// ═══ O NÚMERO DO CONHECIMENTO — a captura lia `nNF` e o CT-e traz `nCT` ═════
+//
+// 18/09, EDUARDO GUERRA · 08/2026: o PVA importou o arquivo (a contagem de 25
+// campos fechava) e quebrou ao gerar o relatório de ENTRADAS — "Ocorreu um erro
+// ao gerar o relatório" — só nesta empresa, a única com CT-e no livro. Medido
+// no gerador: `|D100|0|1|…|57|00|001|||3526…|` — o campo 09 (NUM_DOC) VAZIO em
+// 100% das linhas, porque `extrairMetadados` lia `pickTag(ide, 'nNF')`.
+describe('🚨 o número do CT-e — nCT, nunca nNF', () => {
+    /** A forma REAL do banco: CT-e capturado NÃO tem `numero` (a fixture acima tem, e mente). */
+    const CTE_REAL_SEM_NUMERO = { ...CTE_GRAVADO_SEM_CFOP, numero: undefined };
+
+    it('lerCabecalhoCte lê o nCT sem zeros à esquerda', () => {
+        expect(lerCabecalhoCte(XML_CTE_00).numero).toBe('1');
+    });
+
+    it('o patch preenche o número VAZIO e não toca no gravado', () => {
+        const lido = lerCabecalhoCte(XML_CTE_00);
+        expect(patchDoCabecalhoCte(CTE_REAL_SEM_NUMERO, lido).numero).toBe('1');
+        expect(patchDoCabecalhoCte(CTE_GRAVADO_SEM_CFOP, lido).numero).toBeUndefined();
+    });
+
+    it('CT-e com tudo gravado MENOS o número é ALVO — o NUM_DOC é obrigatório', () => {
+        expect(classificarCteParaCabecalho({
+            ...CTE_REAL_SEM_NUMERO, cfop: '6353', cstIcms: '90', aliqIcms: 0,
+            totais: { vBC: 0, vICMS: 0 }, codMunIniCte: '3550308', codMunFimCte: '3509502',
+        })).toBe('alvo');
+    });
+
+    it('a versão subiu para recolocar na fila os CT-e já relidos hoje', () => {
+        expect(VERSAO_RELEITURA_CTE).toBeGreaterThanOrEqual(3);
+    });
+
+    // A prova que vale: o D100 sai com número ANTES de o 🚚 rodar — a chave
+    // carrega o número nas posições 26-34, e o gerador lê pelo dono.
+    it('sem `numero` no banco o D100 sai com o NUM_DOC da CHAVE, nunca vazio', () => {
+        const patch = patchDoCabecalhoCte(CTE_REAL_SEM_NUMERO, lerCabecalhoCte(XML_CTE_90_ZERO));
+        delete (patch as any).numero; // o 🚚 ainda não trouxe o número: só CFOP/CST/município
+        const linhas = buildBlocoD({ empresa: EMPRESA, notas: [{ ...CTE_REAL_SEM_NUMERO, ...patch }], warnings: [] });
+        const d100 = linhas.find((l: string) => l.startsWith('|D100|'))!.split('|');
+        expect(d100[9]).toBe('1');
+        expect(d100[10]).toBe('35260844555666000177570010000000011234567890');
     });
 });
 

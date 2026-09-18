@@ -14,7 +14,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
-import { selecionarCtesBlocoD, codSitDoDocumento, serieDoDocumento } from './sped-selecao-documentos.js';
+import { selecionarCtesBlocoD, codSitDoDocumento, serieDoDocumento, numeroDoDocumento } from './sped-selecao-documentos.js';
 // Réguas DONAS da leitura do documento — o CT-e capturado grava os campos
 // achatados, e ler só a forma aninhada fazia o COD_PART cair num literal.
 import {
@@ -145,7 +145,11 @@ function buildD100(notaCrua, dados) {
         // sai da CHAVE (posições 23-25), e '000' quando não há série.
         serieDoDocumento(nota),
         '',  // SUB
-        fmt.sanitizeString(String(nota.numero || ''), 9),
+        // NUM_DOC pelo DONO — o gravado, ou o número que a CHAVE carrega
+        // (posições 26-34). O CT-e capturado não tinha `numero` (a captura lia
+        // `nNF`, e o conhecimento traz `nCT`) e o campo saía VAZIO em 100% das
+        // linhas; ver `numeroDoDocumento`.
+        fmt.sanitizeString(numeroDoDocumento(nota), 9),
         fmt.sanitizeString(nota.chave || nota.chaveAcesso || '', 44),
         soCancelavel(fmt.formatDate(nota.dataEmissao || nota.dhEmi)),
         soCancelavel(fmt.formatDate(nota.dataEntrada || nota.dataEmissao || nota.dhEmi)),
@@ -271,13 +275,13 @@ export function buildBlocoD(dados) {
     for (const nota of notas) {
         try {
             if (!cfopDoCte(nota)) {
-                semCfop.push(String(nota.numero || nota.chave || '(sem número)'));
+                semCfop.push(String(numeroDoDocumento(nota) || nota.chave || '(sem número)'));
                 valorFora += valorDoDoc(nota);
                 icmsFora += Number(nota?.totais?.vICMS) || 0;
                 continue;
             }
             if (!codMunDaPrestacao(nota, 'ini') || !codMunDaPrestacao(nota, 'fim')) {
-                semMunicipio.push(String(nota.numero || nota.chave || '(sem número)'));
+                semMunicipio.push(String(numeroDoDocumento(nota) || nota.chave || '(sem número)'));
             }
             linhas.push(buildD100(nota, dados));
             // D190 pra cada CTe — agrupamento detalhado pode vir em fase futura.

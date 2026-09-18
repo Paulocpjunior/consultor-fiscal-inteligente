@@ -48,7 +48,7 @@ import { conferirContagemDeCamposFiscal, conferirTamanhoDeCamposFiscal } from '.
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, conferirCodPartDoC100, POS_DT_FIN_ICMS_IPI,
-    conferirContador0100, conferirCanceladaSoCampos, conferirEnderecoDo0150,
+    conferirContador0100, conferirCanceladaSoCampos, conferirEnderecoDo0150, conferirNumDocContraChave,
 } from './sped-c100-regras-comuns.js';
 import { motivoIeInvalida } from './sped-fiscal-format.js';
 
@@ -108,6 +108,10 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // MESMO nas duas famílias, e esta recusa valia no EFD-Contribuições sem
     // rodar lá (a "meia trava" do COD_MUN, 22/08).
     for (const e of conferirCodModContraChave(lista)) add(erros, e);
+    // ── R1a. NUM_DOC vazio ou divergente da CHAVE — C100 e D100 ─────────────
+    // 18/09, EDUARDO GUERRA: todo D100 saiu com o número vazio (a captura lia
+    // `nNF` e o CT-e traz `nCT`) e o PVA quebrou o relatório de entradas.
+    for (const e of conferirNumDocContraChave(lista)) add(erros, e);
     // ── R1b. C100 de terceiro sem COD_PART / fora do 0150 ───────────────────
     // 11/09: 493 recusas numa distribuidora — toda entrada capturada pela
     // SEFAZ saía sem o participante (forma achatada). A régua mora no comum.

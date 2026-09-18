@@ -5,6 +5,58 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "NÃO ESTOU CONSEGUINDO ABRIR O LIVRO DE ENTRADA, SÓ NA EDUARDO GUERRA" —
+  o PVA importou o arquivo e quebrou ao gerar o relatório, porque TODO CT-e
+  saía SEM NÚMERO** (18/09, à noite, Paulo, EDUARDO GUERRA · 08/2026, com o
+  print do PVA em Relatórios → Documentos → *Entradas de Mercadorias e
+  Aquisição de Serviços*: **"Ocorreu um erro ao gerar o relatório"** — *"de
+  outras o arquivo lê normal, é alguma coisa nessa empresa, não estava assim
+  antes"*).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR o que essa empresa tem que as outras não
+  têm**: ela é a única da carteira com **CT-e no livro**, e o D100 dela só
+  passou a existir HOJE (o 🚚 de manhã e os 25 campos à tarde). Rodando o
+  gerador com um CT-e como a captura grava, a linha saiu
+  **`|D100|0|1|…|57|00|001|||3526…|`** — o campo **09 (NUM_DOC) VAZIO**, em
+  100% dos conhecimentos. O Guia 3.2.3 o exige *"maior que zero"* e manda
+  conferir NUM_DOC/SER contra a chave; o "antes" era o bloco D vazio.
+  🔴 **A CAUSA É UMA TAG**: `extrairMetadados` lia o número por
+  `pickTag(ide, 'nNF')` — a tag da **NF-e**. O conhecimento traz **`nCT`**.
+  Todo CT-e capturado pelo trilho principal (DistDFe, cofre, 🚚 beta) está
+  gravado com `numero: null`; só o SharePoint lia `nCT`. É a armadilha das duas
+  formas entre DOIS MODELOS de documento — e o teste do bloco D não pegou
+  porque a fixture `cteCapturado` trazia `numero: '4321'`: **ela descrevia um
+  mundo que a produção não vive** (a lição do art. 136, 22/08).
+  🚨 **E NENHUMA TRAVA DA CASA OLHAVA O NUM_DOC**: a contagem (R42) e o tamanho
+  (R43) estavam certos, `DETALHES_VIGIADOS` vigiava só o VL_DOC, e não existia
+  regra de "número vazio/divergente da chave" em família nenhuma. O PVA
+  importa (a contagem fecha) e cai depois, num relatório Java que não sabe o
+  que fazer com número em branco — sintoma que se lê como "o PVA está
+  quebrado", não como "falta um campo".
+  ✂️ **TRÊS METADES NO MESMO PR**: (1) o GERADOR lê o número pelo DONO
+  (`numeroDoDocumento`, ao lado de `serieDoDocumento`): o gravado vence e a
+  **chave é a reserva** — o número mora nas posições **26-34**, para NF-e e
+  CT-e igualmente, então o arquivo regerado já sai certo ANTES de qualquer
+  releitura; C100 e D100 das DUAS famílias passam por ele; (2) a CAPTURA
+  pergunta ao dono do cabeçalho (`lerCabecalhoCte` lê `nCT`) e o **🚚 Reler
+  cabeçalho dos CT-e** recupera o acervo (`VERSAO_RELEITURA_CTE` → **3**, que
+  recoloca na fila os relidos de hoje); (3) a PREVALIDAÇÃO ganhou
+  `conferirNumDocContraChave` no módulo COMUM (C100 campo 08, D100 campo 09 —
+  os dez primeiros campos são iguais nas duas famílias), e a AUDITORIA vigia
+  NUM_DOC vazio em 100% das linhas de C100/D100.
+  🚦 **PROVADO POR REVERSÃO**: sem a reserva pela chave caem 4 testes; o
+  arquivo REAL nasce VERDE na regra nova; e uma varredura amarra o importer ao
+  dono (`cabecalhoCte?.numero`, sem reler `nCT` à mão).
+  🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA 08/2026)**: regerar o SPED (o número
+  já sai da chave), no PVA **apagar a competência** antes de importar, e abrir
+  o relatório de entradas. Rodar o **🚚 Reler cabeçalho dos CT-e** para o
+  número aparecer também na lista e nos relatórios do CFI (a frase tem de
+  mostrar `numero em N`).
+  📌 **REGRA QUE FICA: "só nesta empresa" é a pergunta "o que ELA tem que as
+  outras não têm?", e a resposta se mede no arquivo gerado, campo a campo.**
+  E campo obrigatório que o PVA importa sem recusar não é campo conferido —
+  quando o validador aceita e QUEBRA depois, a régua da casa tem de ter
+  gritado antes: registro que entra no livro entra com o NUM_DOC vigiado.
+
 - **🚨 "CONTINUA COM OS ERROS E O DIFAL NÃO APARECEU MESMO RELENDO" — a FILA
   DO ♻️ NÃO ANDAVA: cada rodada relia os MESMOS 1000 documentos** (18/09, à
   noite, Paulo, J.N. VINATEX · 08/2026, com o Relatório de Erros do PVA — **159

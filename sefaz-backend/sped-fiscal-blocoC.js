@@ -26,7 +26,7 @@ import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
 // campo cru `n.modelo`, que o importer principal não grava.
 import {
     selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento, serieDoDocumento,
-    codItemNoArquivo, unidadeDoItem,
+    numeroDoDocumento, codItemNoArquivo, unidadeDoItem,
 } from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-metadata-helper.js';
@@ -634,7 +634,9 @@ function buildC100(nota, dados) {
         // E o PVA confere a série contra a que está DENTRO da chave (3 dígitos),
         // então o zero à esquerda é o que faz os dois baterem.
         serieDoDocumento(nota),
-        fmt.sanitizeString(String(nota.numero || ''), 9),
+        // NUM_DOC pela MESMA régua do D100 (`numeroDoDocumento`): o gravado, e a
+        // chave (posições 26-34) como reserva — o PVA confere um contra o outro.
+        fmt.sanitizeString(numeroDoDocumento(nota), 9),
         fmt.sanitizeString(nota.chave || '', 44),
         soCancelavel(fmt.formatDate(nota.dhEmi)),
         soCancelavel(fmt.formatDate(nota.dhSaiEnt || nota.dhEmi)),
