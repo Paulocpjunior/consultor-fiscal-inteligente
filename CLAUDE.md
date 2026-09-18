@@ -5,6 +5,57 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "PWR — AINDA CONTINUA COM A DIFERENÇA DO VALOR DA RECEITA" — a resposta
+  estava na tela dele e saía GRUDADA num parágrafo de 2.500 caracteres** (18/09,
+  Paulo, PWR 08/2026, **terceira vez** com a MESMA pergunta, 24h depois de a
+  conciliação subir: o `17.775,31` do M210 do PVA sublinhado em vermelho e uma
+  seta apontando o `18.355,90` da coluna **Contábil** do Resumo por CFOP).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR, e o arquivo dele está CERTO**: rodando o
+  gerador com os números dela, a linha que sai é
+  `|M210|51|17775,31|15186,83|…` — **exatamente** o print do PVA, inclusive a
+  **BASE 15.186,83**, que é o número da Memória. Ou seja, a correção do frete
+  (16/09) CHEGOU à produção, e é o próprio print dele que prova: antes a base
+  era 14.436,83. **Não havia defeito de número a procurar.**
+  🔴 **O QUE FALHOU FOI A CAIXA DE AVISOS.** A geração dela empilha **CINCO**
+  avisos, e o quarto responde a pergunta inteira (*"Receita do M210/M610 ×
+  Memória de Apuração: os DOIS estão certos e medem coisas diferentes"*). A tela
+  fazia `warnings.join(' — ')` e entregava ~2.500 caracteres num `<p>` de fonte
+  **12px** — **com o mesmo travessão separando os avisos e separando as frases
+  DENTRO de cada um**. Não há como achar o quarto ali.
+  🚨 **É A CLASSE DA MANHÃ DO MESMO DIA, pela outra ponta**: lá o corte em 12 do
+  `resumoPrevalidacao` deixava de FORA a única recusa que impedia o PVA de
+  importar o arquivo; aqui o aviso certo está DENTRO da lista e ninguém o
+  enxerga. Nas duas o conteúdo estava certo e o **CAMINHO até o olho de quem lê**
+  é que estava quebrado — e nas duas o sintoma não é erro nenhum: é o dono
+  voltando com a pergunta que o app já respondeu.
+  ✂️ `detalhes` do `MensagemBlock` passou a aceitar **LISTA**, um aviso por linha,
+  com o rótulo de cada um à vista (*"Frete na base…"*, *"Receita do M210/M610
+  ×…"*) — nas **DUAS famílias** (o SPED Fiscal tinha o mesmo `join`). `string`
+  continua valendo para a mensagem de uma frase só: trocar as ~10 chamadas curtas
+  seria mexer no que está certo.
+  ⚠️ **NADA É CORTADO** — foi o corte que enterrou a recusa de manhã.
+  🚨 **E A FRASE QUE FALTAVA ERA "NÃO EXISTE CAMINHO".** O aviso de 17/09 dizia
+  *"os dois estão certos"* e parava — o que se lê como *"ainda vamos ajustar"*,
+  e por isso ele voltou esperando o número mudar. Agora ele diz que mexer no
+  C170 quebra a validação `Σ VL_ITEM = VL_MERC do C100`, que **o PVA REGERA o
+  bloco M** (escrever ali é escrever num campo que ele sobrescreve) e — quando
+  há frete — que o único caminho do Guia é o **F100**, com o número que ele de
+  fato produz: **18.525,31** (bruta + frete, sem abater o desconto), **não** o
+  18.355,90 da Memória. Prometer "dá para fazer" sem o número faria ele pedir a
+  mudança esperando o valor errado.
+  🚦 **A PROVA É DE RENDER, e a trava é DUPLA** (`avisoDaGeracaoNaoGruda.test.tsx`):
+  o teste monta a caixa com os avisos **REAIS** que o gerador produz para a
+  competência dela e lê o DOM (cada aviso é um `<li>`; a conciliação cabe sozinha
+  no item), e uma **varredura** proíbe o `join` nos dois caminhos. As duas são
+  necessárias e nenhuma substitui a outra: revertendo o componente caem 3 testes
+  de render e a varredura passa; revertendo o chamador cai a varredura e o render
+  passa — **provado nos dois sentidos**.
+  📌 **REGRA QUE FICA: aviso que o app EMPILHA se entrega em LISTA, um por
+  linha.** Juntar vários com um separador que as próprias frases usam por dentro
+  é o mesmo que não entregar. E **conciliação que não diz "não existe caminho"
+  volta no mês seguinte**: "os dois estão certos" é metade da resposta — a outra
+  metade é o que NÃO dá para fazer, com o número do caminho que existe.
+
 - **🚨 "1 IMAGEM CONTINUA COM ERRO" — o D100 do EFD ICMS/IPI tem **25** campos e
   o gerador parava no 23** (18/09, Paulo, EDUARDO GUERRA · 08/2026, com o
   Relatório de Erros do PVA: **23 recusas**, todas *"O número de campos

@@ -121,6 +121,30 @@
     repete em várias linhas do mesmo registro agora sai <strong>uma vez</strong>, com a contagem
     (“São 23 linhas assim”).</div>
 
+    <h3>4. 📋 <strong>Os avisos da geração pararam de sair grudados num parágrafo só</strong></h3>
+    <p>A caixa de avisos juntava tudo numa linha corrida, separando os avisos com o mesmo travessão que as
+    frases usam por dentro — na PWR de 08/2026 eram <strong>cinco avisos</strong> em cerca de 2.500 caracteres
+    de letra miúda. O aviso que explicava a dúvida do mês (por que a receita do PVA é diferente da Memória)
+    era o quarto, e não havia como achá-lo. Agora <strong>cada aviso ocupa uma linha</strong>, com o rótulo
+    dele à vista.</p>
+    <div class="onde">📍 <strong>Onde:</strong> na caixa de avisos de <strong>SPED Fiscal</strong> e
+    <strong>SPED Contribuições</strong>, depois de gerar. Nada a fazer — é só olhar.</div>
+
+    <h3>5. 📐 <strong>“A receita do PVA está diferente do faturamento” — o aviso agora diz o que NÃO dá para
+    fazer</strong></h3>
+    <p>Quando a nota tem <strong>frete</strong> ou <strong>desconto</strong>, o <em>Valor da Receita</em> do
+    M210 e o faturamento da Memória de Apuração <strong>nunca</strong> vão ser iguais — e os dois estão certos:
+    o campo do SPED é a soma das <strong>mercadorias</strong> (sem frete e sem abater desconto), e a Memória
+    parte do <strong>total da nota</strong>. Na PWR de 08/2026 são 17.775,31 contra 18.355,90, e a diferença é
+    exatamente <strong>frete − desconto</strong>.</p>
+    <div class="alerta">⚠️ <strong>Não há como fazer o campo mostrar o total da nota.</strong> Mudar isso no
+    registro dos itens faz o validador recusar o arquivo, e o PVA <strong>refaz</strong> esse bloco a partir
+    dos documentos — escrever outro número ali é escrever num campo que ele sobrescreve. O aviso passou a
+    dizer isso e, quando há frete, a mostrar o único caminho previsto no Guia (registro F100) com o número que
+    ele daria — que também <strong>não</strong> é o da Memória.</div>
+    <div class="onde">📍 <strong>O que conferir:</strong> a <strong>BASE DE CÁLCULO</strong>, não a receita —
+    é ela que a guia paga, e é ela que tem de bater com a Memória de Apuração.</div>
+
     <h2>Antes disso (17/09)</h2>
 
     <h3>1. 🚚 <strong>EFD-Contribuições: o frete cobrado do cliente agora entra na base do PIS/COFINS</strong></h3>

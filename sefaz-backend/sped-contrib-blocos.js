@@ -1687,7 +1687,25 @@ export function buildBlocoM(dados) {
             + `mercadorias" (BRUTAS); a Memória parte do valor contábil da nota (mercadorias ${parcelas}), que é a `
             + `receita do IRPJ/CSLL. A diferença é ${Math.abs(contabilDasSaidas - totalReceitaSaida).toFixed(2)}. `
             + `O que a guia de PIS/COFINS paga é a BASE (${totalBcSaida.toFixed(2)}), e é ela que tem de bater `
-            + 'com a Memória — confira a base, não a receita.',
+            + 'com a Memória — confira a base, não a receita. '
+            // 🚨 E A FRASE QUE FALTAVA: **não existe caminho** que ponha o
+            // contábil nesse campo. Sem dizer isso, "os dois estão certos" se
+            // lê como "ainda vamos ajustar", e o dono volta no mês seguinte
+            // esperando o número mudar — foi o que aconteceu em 18/09, um dia
+            // depois de a conciliação subir.
+            //
+            // O único caminho que o Guia oferece para o frete VIRAR receita
+            // declarada é escriturá-lo no F100, e ele dá OUTRO número
+            // (mercadoria bruta + frete, sem abater o desconto) — por isso ele
+            // vai com o valor calculado, nunca como promessa vaga.
+            + `Mexer no C170 para chegar em ${contabilDasSaidas.toFixed(2)} quebra a validação "Σ VL_ITEM = `
+            + 'VL_MERC do C100" (duas recusas no lugar de uma divergência de tela), e o PVA REGERA o bloco M a '
+            + 'partir dos documentos, então escrever outro número ali é escrever num campo que ele sobrescreve. '
+            + `${freteNaBase > 0
+                ? `O único caminho do Guia para o frete virar receita DECLARADA é o registro F100, e ele dá `
+                  + `${(totalReceitaSaida + freteNaBase).toFixed(2)} (bruta + frete, sem abater o desconto) — `
+                  + 'não o valor da Memória. É decisão de valor, e depende do plano de contas (COD_CTA/0500).'
+                : 'Não há caminho no leiaute que leve o valor contábil a esse campo.'}`,
         );
     }
 
