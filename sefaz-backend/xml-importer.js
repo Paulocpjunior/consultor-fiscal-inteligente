@@ -414,7 +414,13 @@ export function extrairMetadados(xml, schema) {
 
   // 23/05 — extracao expandida pra Frente 1 (NCM/CFOP/CST)
   const ide = pickFirstBlock(xml, 'ide');
-  const numero = pickTag(ide, 'nNF') || null;
+  // 🚨 `nNF` É A TAG DA NF-e; O CT-e TRAZ `nCT` (18/09, EDUARDO GUERRA · 08/2026).
+  // Esta linha lia só `nNF`, então TODO CT-e capturado ficou gravado com
+  // `numero: null` — e o D100 saía com o NUM_DOC vazio (campo 09, obrigatório
+  // e conferido contra a chave), num arquivo que o PVA importava e depois
+  // quebrava ao gerar o relatório de entradas. Quem lê o cabeçalho do CT-e é o
+  // dono (`lerCabecalhoCte`, abaixo), e o 🚚 recupera o acervo pelo mesmo dono.
+  const numero = pickTag(ide, 'nNF') || cabecalhoCte?.numero || null;
   const serie = pickTag(ide, 'serie') || null;
   const natOp = pickTag(ide, 'natOp') || null;
   const infProt = pickFirstBlock(xml, 'infProt');

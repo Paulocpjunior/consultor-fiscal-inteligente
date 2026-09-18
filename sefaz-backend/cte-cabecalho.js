@@ -51,8 +51,14 @@ import { ehConhecimentoDeTransporte } from './sped-selecao-documentos.js';
  *
  * **2** (18/09) — passou a ler `cMunIni`/`cMunFim`, os campos 24 e 25 do D100
  * do EFD ICMS/IPI. Subir o número recoloca na fila o que já foi relido na v1.
+ *
+ * **3** (18/09, à noite) — passou a ler o **NÚMERO** (`nCT`). A captura lia o
+ * número pela tag `nNF`, que é da NF-e, então TODO CT-e capturado estava
+ * gravado sem `numero` e o D100 saía com o NUM_DOC vazio — o PVA importou
+ * (era só contagem) e quebrou ao gerar o relatório de entradas ("Ocorreu um
+ * erro ao gerar o relatório"), só na EDUARDO GUERRA, a única com CT-e.
  */
-export const VERSAO_RELEITURA_CTE = 2;
+export const VERSAO_RELEITURA_CTE = 3;
 
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
@@ -90,8 +96,8 @@ export function xmlEhCte(xml) {
  * numa NF-e uma busca solta por `<CFOP>`/`<vBC>` acharia os do PRIMEIRO ITEM —
  * dado do item ocupando a casa do documento, que numa nota mista é falso.
  *
- * @returns {null|{cfop:string|null, cstIcms:string|null, aliqIcms:number|null,
- *                 vBC:number|null, vICMS:number|null,
+ * @returns {null|{numero:string|null, cfop:string|null, cstIcms:string|null,
+ *                 aliqIcms:number|null, vBC:number|null, vICMS:number|null,
  *                 codMunIni:string|null, codMunFim:string|null}}
  */
 export function lerCabecalhoCte(xml) {
@@ -101,6 +107,13 @@ export function lerCabecalhoCte(xml) {
     // que venha em outro grupo do documento.
     const ide = bloco(xml, 'ide');
     const cfopCru = soDigitos(tag(ide, 'CFOP') || tag(xml, 'CFOP'));
+
+    // 🚨 O NÚMERO DO CONHECIMENTO É `nCT`, NÃO `nNF` (18/09, EDUARDO GUERRA).
+    // A captura lia `nNF` (a tag da NF-e) e gravava `numero: null` em todo
+    // CT-e — o D100 saía com o NUM_DOC vazio (campo 09, *"maior que zero"* no
+    // Guia 3.2.3) e o PVA quebrava o relatório de entradas. Quem lê é este
+    // dono, e o importer pergunta aqui; zero à esquerda sai, como no ♻️.
+    const numeroCru = soDigitos(tag(ide, 'nCT')).replace(/^0+/, '');
 
     // 🚨 OS MUNICÍPIOS DA PRESTAÇÃO — campos 24/25 do D100 (EFD ICMS/IPI).
     //
@@ -129,6 +142,7 @@ export function lerCabecalhoCte(xml) {
     const vICMS = numeroOuNulo(tag(icms, 'vICMS') ?? tag(icms, 'vICMSOutraUF'));
 
     return {
+        numero: numeroCru || null,
         cfop: cfopCru.length === 4 ? cfopCru : null,
         cstIcms: cstCru || null,
         aliqIcms: aliq,
@@ -157,7 +171,10 @@ export function classificarCteParaCabecalho(d) {
     // campos OBRIGATÓRIOS do D100 nas entradas (Guia 3.2.3, campos 24 e 25):
     // sem eles o arquivo passa na contagem e o PVA recusa por campo vazio.
     const temMunicipios = !!soDigitos(d?.codMunIniCte) && !!soDigitos(d?.codMunFimCte);
-    if (temCfop && temCst && temAliq && temIcms && temMunicipios) return 'completo';
+    // O número entra no "completo" porque é o NUM_DOC do D100 — e a captura
+    // antiga não o gravava em CT-e nenhum.
+    const temNumero = !!soDigitos(d?.numero);
+    if (temCfop && temCst && temAliq && temIcms && temMunicipios && temNumero) return 'completo';
 
     if (Number(d?.cabecalhoCteVersao) >= VERSAO_RELEITURA_CTE) return 'ja-relido';
     if (!d?.storagePath) return 'sem-arquivo';
@@ -175,6 +192,7 @@ export function patchDoCabecalhoCte(d, lido) {
     const patch = {};
     if (!lido) return patch;
 
+    if (!soDigitos(d?.numero) && lido.numero) patch.numero = lido.numero;
     if (!soDigitos(d?.cfop) && lido.cfop) patch.cfop = lido.cfop;
     if (!soDigitos(d?.cstIcms) && lido.cstIcms) patch.cstIcms = lido.cstIcms;
     if (!soDigitos(d?.codMunIniCte) && lido.codMunIni) patch.codMunIniCte = lido.codMunIni;

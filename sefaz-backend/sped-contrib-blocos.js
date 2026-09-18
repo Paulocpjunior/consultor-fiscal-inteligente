@@ -31,7 +31,7 @@ import { retencaoEfetivaDaNota, chaveDoAjuste } from './retencao-pj-ajuste.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
-    serieDoDocumento, codItemNoArquivo, unidadeDoItem, levaC170NoContribuicoes,
+    serieDoDocumento, numeroDoDocumento, codItemNoArquivo, unidadeDoItem, levaC170NoContribuicoes,
     codSitDoDocumento,
 } from './sped-selecao-documentos.js';
 // 🚨 Quem decide o que entra no bloco D — e o que fica de fora, com a CAUSA.
@@ -755,7 +755,7 @@ export function buildBlocoC_Contrib(dados) {
             modeloDoDoc(nota),
             '00',                                          // COD_SIT (cancelada já saiu acima)
             serieDoDocumento(nota),                       // SER — três posições
-            fmt.sanitizeString(nota.numero || '', 9),
+            fmt.sanitizeString(numeroDoDocumento(nota), 9),   // NUM_DOC — gravado, ou o da CHAVE (26-34)
             fmt.sanitizeString(chave, 44),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
             fmt.formatDate(nota.dataEntradaSaida || nota.dhEmi),
@@ -1023,7 +1023,7 @@ export function buildBlocoD_Contrib(dados) {
             // que chegasse sem o campo; a chave carrega a série (23-25).
             serieDoDocumento(nota),                              // 07 SER
             '',                                                  // 08 SUB
-            fmt.sanitizeString(nota.numero || '', 9),            // 09 NUM_DOC
+            fmt.sanitizeString(numeroDoDocumento(nota), 9),       // 09 NUM_DOC — gravado, ou o da CHAVE (26-34)
             fmt.sanitizeString(nota.chaveAcesso || nota.chave || '', 44), // 10 CHV_CTE
             dataDoc,                                             // 11 DT_DOC
             dataDoc,                                             // 12 DT_A_P
