@@ -1196,6 +1196,9 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
   let examinadas = 0, preenchidas = 0, semXml = 0, jaTinham = 0;
   // Contagem POR CAUSA — "0 recuperadas" sem dizer o quê não responde nada.
   let ganharamMunicipio = 0, ganharamFornecedor = 0, ganharamEndereco = 0, semDadoNoXml = 0;
+  // Documentos da fila que NÃO couberam neste lote. `-1` = há mais e a
+  // contagem falhou. Zero é resposta ("a fila acabou"), nunca default.
+  let restaram = 0;
   try {
     // ARMADILHA DO FIRESTORE: `where('ufDest', '==', null)` NÃO devolve os
     // documentos em que o campo simplesmente NÃO EXISTE — e é esse o caso de
@@ -1206,7 +1209,27 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     if (empresaId) q = q.where('empresaId', '==', String(empresaId));
     if (competencia) q = q.where('competencia', '==', String(competencia));
 
-    const snap = await q.limit(empresaId || competencia ? Math.max(limit, 1000) : limit).get();
+    const teto = empresaId || competencia ? Math.max(limit, 1000) : limit;
+    const snap = await q.limit(teto).get();
+
+    // 🚨 O CORTE NÃO PODE SER MUDO (a régua do farol honesto, 30/07). A J.N.
+    // VINATEX de 08/2026 tem **3501 documentos** no recorte e o teto é 1000 por
+    // direção: sem este número, a rodada diria "1000 examinadas" e 2500 ficariam
+    // de fora sem ninguém saber — exatamente o silêncio que faz alguém dar a
+    // competência por relida com 700 participantes ainda sem endereço.
+    // Uma agregação, não uma varredura: `count()` não lê documento.
+    if (snap.size >= teto) {
+      try {
+        const agg = await q.count().get();
+        const total = Number(agg.data()?.count || 0);
+        restaram = Math.max(0, total - snap.size);
+      } catch (e) {
+        // Contagem indisponível não vira "não restou nada" — seria a mesma
+        // mentira, com outra causa. -1 diz "há mais e não sei quantos".
+        console.warn('[preencherEnderecoParticipantes] count() falhou:', e.message);
+        restaram = -1;
+      }
+    }
 
     const bucket = storage.bucket(STORAGE_BUCKET);
     for (const docSnap of snap.docs) {
@@ -1284,9 +1307,9 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     }
   } catch (e) {
     console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
-    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, erro: e.message };
+    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, restaram, erro: e.message };
   }
-  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml };
+  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, restaram };
 }
 
 /**

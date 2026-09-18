@@ -420,9 +420,13 @@ export function conferirEnderecoDo0150(linhas) {
         ocorrencias: sem.length,
         mensagem: `${sem.length} participante(s) estão no 0150 sem ENDERECO e o PVA recusa cada um: `
             + `${sem.slice(0, 5).join(', ')}${sem.length > 5 ? ` e mais ${sem.length - 5}` : ''}.`,
+        // ⚠️ A AÇÃO NOMEIA A ABA — e o botão só passou a existir nela em 18/09.
+        // Até então esta frase mandava rodar uma ferramenta que morava atrás de
+        // uma pendência de produtor rural, invisível para quem não compra de
+        // produtor: aviso que aponta ferramenta se prova contra a ferramenta.
         acao: 'O logradouro vem do próprio XML (<enderEmit>/<enderDest>) e a captura antiga o '
-            + 'descartava. Rode o ♻️ Reler participante e município dos XMLs e regere; o que '
-            + 'sobrar é participante cujo XML não trouxe o dado.',
+            + 'descartava. Rode o ♻️ Reler participante e município dos XMLs em Relatórios → '
+            + '✏️ CFOP por nota e regere; o que sobrar é participante cujo XML não trouxe o dado.',
         fonte: 'Guia Prático 3.2.3, registro 0150, campo 10 (END) — Obrig. "O", sem condição; '
             + 'PVA: "Campo obrigatório" (J.N. VINATEX · 08/2026, 18/09, 732 ocorrências).',
     }];

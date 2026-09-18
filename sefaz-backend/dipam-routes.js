@@ -328,7 +328,17 @@ router.post('/reler-municipios', requireAdmin, async (req, res) => {
             semXml: soma('semXml'), jaTinham: soma('jaTinham'),
             ganharamMunicipio: soma('ganharamMunicipio'),
             ganharamFornecedor: soma('ganharamFornecedor'),
+            // 🚨 ELE JÁ ERA CONTADO NO BACKFILL E A ROTA O JOGAVA FORA — a flag
+            // que ninguém lê (18/09, VINATEX · 732 recusas 0150.10). O
+            // comentário do próprio backfill diz que é ESTE número que responde
+            // "quantos dos 732 o XML resolveu", e ele parava aqui.
+            ganharamEndereco: soma('ganharamEndereco'),
             semDadoNoXml: soma('semDadoNoXml'),
+            // Corte não é mudo: `-1` de um dos lados quer dizer "há mais e não
+            // sei quantos" — somar com 0 daria -1, que é a resposta certa.
+            restaram: (entrada.restaram === -1 || saida.restaram === -1)
+                ? -1
+                : soma('restaram'),
         };
 
         // A AÇÃO SEGUE A CAUSA. "0 recuperadas" sozinho não responde nada — e
@@ -345,6 +355,15 @@ router.post('/reler-municipios', requireAdmin, async (req, res) => {
         }
         if (total.jaTinham && !total.preenchidas && !total.semXml && !total.semDadoNoXml) {
             partes.push('Nada mudou porque todos já haviam sido relidos nesta versão do leitor.');
+        }
+        // A FILA MAIOR QUE O LOTE VAI DITA — e com o caminho: como o carimbo de
+        // versão faz o já-relido ser pulado, a rodada seguinte avança de fato.
+        if (total.restaram === -1) {
+            partes.push('Ainda há documentos desta competência que não couberam nesta rodada — rode de novo '
+                + 'até a fila zerar (o que já foi relido é pulado).');
+        } else if (total.restaram > 0) {
+            partes.push(`${total.restaram} documento(s) desta competência não couberam nesta rodada — rode de novo `
+                + 'até a fila zerar (o que já foi relido é pulado).');
         }
         return res.json({ ok: true, ...total, acao: partes.join(' ') || null });
     } catch (e) {
