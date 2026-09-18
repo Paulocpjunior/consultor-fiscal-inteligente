@@ -56,6 +56,37 @@ export function build0150(p) {
     ]);
 }
 
+/**
+ * Funde o MESMO participante visto em dois documentos — o 0150 é UM por
+ * COD_PART, e o coletor fazia "o primeiro vence": a nota que aparecia primeiro
+ * decidia o cadastro inteiro, mesmo quando ela era a ÚNICA sem endereço.
+ *
+ * 18/09 (VINATEX, 159 recusas do 0150 depois de reler): com o backfill parando
+ * no corte da fila, o cliente cujo primeiro documento não tinha sido relido
+ * saía sem logradouro — enquanto outro documento DELE, mais adiante no mês, já
+ * trazia o endereço. O cadastro é da PESSOA, não da primeira nota.
+ *
+ * ⚠️ PREENCHE SÓ O QUE ESTÁ VAZIO — nunca sobrescreve. Dois documentos com
+ * endereços DIFERENTES para o mesmo participante é outra pergunta (o Guia manda
+ * "os dados atualizados no último evento fiscal"), e escolher aqui por escrita
+ * silenciosa seria decidir o domicílio de terceiro sem ninguém ver. O que este
+ * módulo garante é que ausência num documento não apague presença no outro.
+ * `'SEM NOME'` conta como vazio: é o nome que o coletor INVENTA na falta.
+ *
+ * @param {object|undefined} existente  o que o coletor já tinha para o COD_PART
+ * @param {object} novo                  o mesmo participante, lido de outro documento
+ * @returns {object}
+ */
+export function mesclarParticipante(existente, novo) {
+    if (!existente) return { ...novo };
+    const vazio = (v) => v === undefined || v === null || String(v).trim() === '' || v === 'SEM NOME';
+    const saida = { ...existente };
+    for (const campo of ['nome', 'ie', 'codMunIBGE', 'logradouro', 'numero', 'complemento', 'bairro', 'cnpj', 'cpf']) {
+        if (vazio(saida[campo]) && !vazio(novo?.[campo])) saida[campo] = novo[campo];
+    }
+    return saida;
+}
+
 /** 0190 — Identificação das Unidades de Medida. Idêntico nas duas famílias. */
 export function build0190(u) {
     return fmt.buildLine([

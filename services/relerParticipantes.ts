@@ -121,6 +121,30 @@ export function fraseDoResultado(r: Partial<ReleituraParticipantes>): string {
     return corpo + regerar + (r.acao ? ` ${r.acao}` : '');
 }
 
+/**
+ * A frase do que a rodada NÃO viu — para os ♻️ que NÃO encadeiam sozinhos
+ * (itens, notas vazias, cabeçalho dos CT-e).
+ *
+ * 18/09, à noite: a fila destes backfills cortava num `limit()` ANTES do
+ * filtro do carimbo, e a rodada seguinte relia os MESMOS documentos. Agora ela
+ * anda por cursor, então "clique de novo" passou a ser verdade — e é por isso
+ * que a frase pode mandar clicar. `undefined` (backend antigo) não vira
+ * "esgotou": ausência não é resposta.
+ */
+export function fraseDoRestaram(restaram: number | undefined | null): string {
+    if (restaram === undefined || restaram === null) return '';
+    const r = Number(restaram);
+    if (r === -1) {
+        return ' ⚠️ Ainda há documentos desta competência que não couberam nesta rodada — clique de novo '
+            + 'para continuar (o que já foi relido é pulado).';
+    }
+    if (r > 0) {
+        return ` ⚠️ ${r} documento(s) desta competência não couberam nesta rodada — clique de novo para `
+            + 'continuar (o que já foi relido é pulado).';
+    }
+    return '';
+}
+
 export interface EncadeamentoOpts {
     /** Teto de rodadas — sem ele, backend que não progride vira laço infinito. */
     maxRodadas?: number;

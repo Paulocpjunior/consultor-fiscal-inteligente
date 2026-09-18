@@ -56,7 +56,7 @@ import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
 import { relerNotasVazias, relerItensFiscais, relerCabecalhoCtes } from '../../services/ipiVarreduraService';
 import { relerMunicipiosDipam } from '../../services/dipamService';
-import { encadearReleitura, fraseDoResultado } from '../../services/relerParticipantes';
+import { encadearReleitura, fraseDoResultado, fraseDoRestaram } from '../../services/relerParticipantes';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
@@ -963,9 +963,12 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 r.semXml ? `${r.semXml} sem arquivo guardado (buraco de captura — 📋 Status por Empresa)` : '',
                 r.naoPareadas ? `${r.naoPareadas} não pareada(s) — itens gravados ≠ itens do XML, ficaram intactas` : '',
             ].filter(Boolean);
-            setResultadoReler(partes.length
+            setResultadoReler((partes.length
                 ? `♻️ ${r.examinadas} examinada(s): ${partes.join(' · ')}.`
-                : `♻️ ${r.examinadas} examinada(s) — nada a completar.`);
+                : `♻️ ${r.examinadas} examinada(s) — nada a completar.`)
+                // O que a rodada NÃO viu vai DITO — e "clique de novo" só é
+                // verdade porque a fila passou a andar por cursor (18/09).
+                + fraseDoRestaram(r.restaram));
             if (r.atualizadas) onRebuscar?.();
         } catch (e: any) {
             setResultadoReler(`♻️ Falha ao reler os itens: ${e?.message || 'erro inesperado'}.`);
@@ -1002,7 +1005,8 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 r.falhas ? `${r.falhas} falha(s) de leitura` : '',
             ].filter(Boolean);
             setResultadoReler(`🚚 ${r.examinados} CT-e examinado(s): ${partes.join(' · ')}.`
-                + (r.recuperados ? ' Regere o SPED — e, no PVA, apague a competência antes de importar o arquivo novo.' : ''));
+                + (r.recuperados ? ' Regere o SPED — e, no PVA, apague a competência antes de importar o arquivo novo.' : '')
+                + fraseDoRestaram(r.restaram));
             if (r.recuperados) onRebuscar?.();
         } catch (e: any) {
             setResultadoReler(`🚚 Falha ao reler os CT-e: ${e?.message || 'erro inesperado'}.`);
@@ -1062,9 +1066,10 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 r.semItemNoXml ? `${r.semItemNoXml} com XML guardado sem itens legíveis — mande o caso ao time` : '',
                 r.falhas ? `${r.falhas} falha(s) de leitura` : '',
             ].filter(Boolean);
-            setResultadoReler(partes.length
+            setResultadoReler((partes.length
                 ? `♻️ ${r.examinadas} examinada(s): ${partes.join(' · ')}.`
-                : `♻️ ${r.examinadas} examinada(s) — nada a preencher: as NF-e do recorte já estão completas.`);
+                : `♻️ ${r.examinadas} examinada(s) — nada a preencher: as NF-e do recorte já estão completas.`)
+                + fraseDoRestaram(r.restaram));
             if (r.preenchidas || r.ganharamNumero) onRebuscar?.();
         } catch (e: any) {
             setResultadoReler(`♻️ Falha ao reler: ${e?.message || 'erro inesperado'}.`);
