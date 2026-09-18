@@ -5,6 +5,108 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "1 IMAGEM CONTINUA COM ERRO" — o D100 do EFD ICMS/IPI tem **25** campos e
+  o gerador parava no 23** (18/09, Paulo, EDUARDO GUERRA · 08/2026, com o
+  Relatório de Erros do PVA: **23 recusas**, todas *"O número de campos
+  informado no registro difere do número de campos especificado no leiaute do
+  arquivo"* — registro **D100**, **Valor Esperado 25 · Conteúdo do Campo 23**,
+  uma por CT-e).
+  📖 **OS DOIS QUE FALTAVAM SÃO O 24 e o 25 — COD_MUN_ORIG e COD_MUN_DEST**, e
+  eles existem NESTA família e não no EFD-Contribuições, cujo D100 para no 23.
+  É a MESMA confusão que já custou recibo no **1010** (17/08) e no **0500**
+  (24/08): mesmo número de registro, arquivo diferente, leiaute diferente.
+  ✂️ **O DADO É DO DOCUMENTO, e ele estava sendo descartado**: o Guia pede *"o
+  código do município de ORIGEM do serviço"* e *"de DESTINO"*, e quem os
+  declara é o `<ide>` do CT-e (`cMunIni`/`cMunFim`). `cte-cabecalho.js` passou
+  a lê-los, a captura a gravá-los e o **🚚** a recuperá-los do XML guardado
+  (`VERSAO_RELEITURA_CTE` foi para **2** — é o carimbo de versão que recoloca
+  na fila o que já tinha sido relido).
+  ⚠️ **E ELES NÃO SÃO O MUNICÍPIO DOS PARTICIPANTES**: `codMunEmit`/`codMunDest`
+  dizem onde cada parte está DOMICILIADA, e o frete pode começar e terminar
+  longe dos dois. Cair no do emitente faria o arquivo AFIRMAR uma origem que o
+  documento não declara — e o PVA ACEITA, que é a família do `1405` e do
+  `5352`. Sem o dado o campo sai **VAZIO**: ausência o PVA acusa, município
+  errado não.
+  ⚠️ **E A RECUSA SEGUINTE VAI DITA ANTES** (a lição de 24/08 — meia correção
+  troca uma recusa por outra): com a contagem fechada, o PVA passa a cobrar o
+  CONTEÚDO (*"campo obrigatório nas entradas, se COD_MOD for 57, 63 ou 67"*).
+  O CT-e **continua no livro** (tirá-lo por causa de um campo seria livro a
+  MENOS) e a geração DIZ quais ficaram sem, com a ação.
+  🚨 **E A TRAVA DE CONTAGEM **ACUSAVA** — medido, e isso derrubou a minha
+  primeira hipótese.** `conferirContagemDeCamposFiscal` tem o D100 com 25
+  campos desde 29/08 (lido à mão no Guia) e a **R42** da prevalidação já a
+  consumia. Quebrado estava o **CAMINHO ATÉ A TELA**, em duas pontas:
+  (1) a R42 gerava **uma entrada POR LINHA** — 23 erros idênticos, um por
+  CT-e (o *"20 linhas dizendo o mesmo faz ninguém ler as que importam"*,
+  03/09); e (2) `resumoPrevalidacao` cortava em **12 na ORDEM EM QUE AS REGRAS
+  RODAM** — e a da contagem é a ÚLTIMA, então a única recusa que impedia o PVA
+  de importar o arquivo INTEIRO caiu fora do corte, atrás de avisos que
+  recusam um registro só. O *"…e mais N"* ainda mandava ler o resto no header
+  **`X-SPED-Prevalidacao`**, que a própria rota documenta, na linha de cima,
+  que **a tela não lê**: o resto não estava escondido, estava INALCANÇÁVEL.
+  ✂️ Agora a contagem sai **agrupada por registro** (com *"São 23 linha(s)
+  assim"*) e o resumo ordena por **GRAVIDADE**: o que `barraImportacao` vem
+  primeiro, com ⛔, e o cabeçalho diz quantos deles impedem a importação. O
+  corte de 12 FICA — o que mudou é ele deixar de ser decidido pela ordem de
+  execução.
+  📌 **E EU QUASE CRIEI O SEGUNDO ALARME**: a primeira correção foi empurrar os
+  erros da contagem para os warnings direto da rota — o que daria **dois
+  alarmes para o MESMO defeito**, o caminho conhecido para a equipe ignorar os
+  dois (a decisão de 17/09 sobre o D001). Desfeito: quem fala é a R42, uma vez.
+  📌 **REGRA QUE FICA: trava que ACUSA e cuja frase não chega à tela é trava
+  desligada — e o modo de falha dela é o CORTE DA LISTA.** Todo resumo que
+  corta ordena primeiro pelo que BARRA o arquivo inteiro; e erro que se repete
+  linha a linha se agrupa, porque a ação é uma só. Aviso que manda ler o resto
+  num header precisa que a tela leia esse header — senão é a flag que ninguém
+  lê (29/08) dentro da trava que existe para impedir a recusa.
+
+- **🚨 "NO SPED DA VINATEX DEU 732 ERROS DE ENDEREÇO" — o logradouro estava no
+  XML e o leitor DESCARTAVA** (18/09, Paulo, J.N. VINATEX · 08/2026, com o
+  relatório do PVA: **Total de Erros 732**, todos *"Campo obrigatório"* no
+  registro **0150**, campo **10 - ENDERECO**, em **123 páginas**).
+  📖 **A ASSIMETRIA DO PRINT ERA A PISTA, e ela foi MEDIDA**: a tela do PVA
+  mostrava **Bairro preenchido e Logradouro VAZIO** na mesma linha. Se o
+  acervo estivesse sem endereço, o bairro estaria vazio também.
+  🔴 **MEDIDO NO DONO**: `extrairParticipantesNfe` — a régua da captura — lia
+  do `<enderDest>`/`<enderEmit>` **só a UF e o município**, e jogava fora
+  `xLgr`, `nro`, `xCpl` e `xBairro`, que vêm no MESMO bloco. O comentário dele
+  diz, na linha de cima, *"ENDEREÇO importa"*. É a família do `localErroAviso`
+  (12/08): o dado chega e quem lê o descarta. E `normalizarParticipantesDoc`
+  montava CINCO campos a partir da forma achatada — o coletor do 0150 lê
+  `participanteRaw.logradouro` e recebia `undefined` em **toda nota capturada
+  automaticamente**.
+  🚨 **QUEM PREENCHIA O CAMPO ERA A BrasilAPI — e ela responde OUTRA
+  pergunta**: o endereço do **CADASTRO da Receita**, não o que a NOTA declara
+  (o Guia é literal: o 0150 traz *"os dados atualizados no último evento
+  fiscal"*). Além de fonte errada, ela é **REDE**: com rate-limit, 403 ou
+  timeout o campo fica vazio e o **arquivo inteiro** é recusado por um campo
+  obrigatório. Ela continua como RESERVA (só preenche o que está vazio), nunca
+  como fonte.
+  ✅ **E O PARSER DO NAVEGADOR JÁ LIA OS QUATRO desde sempre** — o que faltava
+  era a **paridade entre os dois parsers**, a mesma lição do C190 (12/09).
+  ✂️ Os quatro campos entraram no extrator, na gravação (`logradouroDest`,
+  `nroDest`, `complementoDest`, `bairroDest` e os do emitente), no **dono da
+  leitura** e no **♻️ Reler participante e município dos XMLs**, com
+  `VERSAO_RELEITURA_PARTICIPANTES` indo para **3** — é ela que recoloca a base
+  na fila. O acervo se recupera do XML no Storage: **reler a FONTE é
+  RECUPERAÇÃO** (06/08), e mandar digitar 732 endereços seria pedir trabalho
+  por um dado que já está no arquivo.
+  🚦 **A RECUSA VIROU REGRA NAS DUAS FAMÍLIAS, no mesmo PR**
+  (`conferirEnderecoDo0150`, no módulo COMUM): o 0150 é o MESMO registro no
+  EFD ICMS/IPI e no EFD-Contribuições, e o campo 10 é **Obrig. `O`** — sem
+  condição, ao contrário do COD_MUN (campo 08, `OC`). Deixá-la numa família é
+  a "meia trava" de 22/08, que faz a próxima empresa gastar a mesma volta de
+  PVA com outro CNPJ.
+  ⚠️ **E ELA SAI EM UMA LINHA, NÃO 732**: a ação é a MESMA para todos, então a
+  regra devolve **uma entrada** com a contagem e os primeiros nomes — a minha
+  primeira versão gritava por participante, que é o vício que eu tinha acabado
+  de corrigir na R42, no mesmo PR.
+  📌 **REGRA QUE FICA: campo obrigatório de arquivo fiscal não se preenche por
+  API de CADASTRO.** Quando o documento declara o dado, a fonte é o documento —
+  API externa é reserva, e reserva que vira fonte transforma rede instável em
+  arquivo recusado. E quando um campo sai vazio e o VIZINHO dele sai
+  preenchido, a pergunta não é "falta cadastro?", é **"o leitor lê os dois?"**.
+
 - **🚚 "IMPORTOU, MAS O FRETE NÃO ESTÁ APARECENDO NA APURAÇÃO" — o arquivo
   passou no PVA e o bloco D saiu VAZIO, e a AÇÃO que eu tinha escrito apontava
   um botão que não alcança CT-e** (17/09, Paulo, EDUARDO GUERRA 08/2026, com

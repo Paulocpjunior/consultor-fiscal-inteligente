@@ -24,6 +24,7 @@ import { ccmSpDaEmpresa } from './ccm-sp.js';
 // MESMO registro. Dono único.
 import {
     build0150, build0190, avisoParticipantesSemMunicipio,
+    avisoParticipantesSemEndereco,
 } from './sped-bloco0-cadastros.js';
 // IND_REG_CUM sai do que o arquivo PRODUZIU (F550 × blocos A/C/D).
 import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
@@ -123,6 +124,11 @@ function buildBloco0Contrib(dados) {
 
     const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
     if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
+    // O campo 10 (ENDERECO) é obrigatório SEM condição — e a recusa dele veio
+    // 732 vezes num arquivo só (VINATEX, 18/09). Aviso próprio porque a AÇÃO é
+    // outra: ali é o ♻️ que relê o XML, aqui é o cadastro do participante.
+    const avisoEnd = avisoParticipantesSemEndereco(dados.participantes);
+    if (avisoEnd && Array.isArray(dados.warnings)) dados.warnings.push(avisoEnd);
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
     const totalBloco = linhas.length + 1;

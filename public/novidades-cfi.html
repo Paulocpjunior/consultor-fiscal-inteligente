@@ -68,14 +68,60 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 17/09/2026 · leitura de 22 minutos</p>
+            <p>Departamento Fiscal · atualizado em 18/09/2026 · leitura de 23 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (17/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (18/09) — leia esta parte primeiro</h2>
+
+    <h3>1. 🚚 <strong>SPED Fiscal: o registro do frete (D100) saía com dois campos a menos e o PVA
+    não importava o arquivo</strong></h3>
+    <p>Na EDUARDO GUERRA de 08/2026 o validador devolveu <strong>23 recusas</strong> —
+    <em>“o número de campos informado no registro difere do leiaute”</em>, com <strong>esperado 25</strong> e
+    <strong>recebido 23</strong>, uma por conhecimento de transporte. Faltavam os campos <strong>município de
+    origem</strong> e <strong>município de destino</strong> da prestação, que existem no SPED Fiscal e não no
+    SPED Contribuições. Esse erro não recusa um registro: ele <strong>barra o arquivo inteiro na porta</strong>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> → gerar o arquivo. Nada a fazer:
+    o arquivo já sai com os 25 campos. <strong>Regere a competência</strong> e, no PVA,
+    <strong>apague a escrituração do mês antes de importar</strong> — senão o validador continua mostrando a
+    importação anterior.</div>
+    <div class="alerta">⚠️ <strong>O código do município vem do próprio CT-e</strong> (o cabeçalho do XML diz
+    onde o frete começou e terminou) — e <strong>não é</strong> o município do transportador nem o da sua
+    empresa. Se o conhecimento não trouxer, o campo sai <strong>vazio</strong> e a geração avisa, com o número
+    de cada CT-e: preencher com o município errado passaria no validador e ficaria errado no livro.</div>
+    <div class="onde">📍 <strong>Se o aviso aparecer:</strong> Relatórios → <strong>✏️ CFOP por nota</strong> →
+    <strong>🚚 Reler cabeçalho dos CT-e</strong> e regere. O que sobrar é conhecimento cujo XML não traz o dado
+    — aí é com o transportador.</div>
+
+    <h3>2. 🏠 <strong>SPED: o ENDEREÇO dos clientes e fornecedores parou de sair em branco</strong></h3>
+    <p>Na J.N. VINATEX de 08/2026 o PVA devolveu <strong>732 erros</strong> — <em>“campo obrigatório”</em> no
+    <strong>endereço</strong> de cada participante, em 123 páginas de relatório. O logradouro
+    <strong>sempre esteve no XML</strong> das notas; o app é que não o estava lendo (lia só a cidade e o
+    estado) e dependia de uma consulta externa por CNPJ para preencher — consulta que falha e deixa o campo
+    vazio.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> e <strong>SPED
+    Contribuições</strong> → gerar o arquivo. As notas <strong>capturadas a partir de agora</strong> já vêm com
+    o endereço. Para o que já está na base, rode Relatórios → <strong>✏️ CFOP por nota</strong> →
+    <strong>♻️ Reler participante e município dos XMLs</strong> e regere.</div>
+    <div class="alerta">⚠️ <strong>A geração passou a avisar ANTES do PVA</strong>, dizendo quantos
+    participantes estão sem endereço e quais são os primeiros — em <strong>uma linha</strong>, não uma por
+    participante. O que sobrar depois do ♻️ é participante cujo XML não trouxe o dado: aí a correção é no
+    cadastro dele.</div>
+
+    <h3>3. 🚦 <strong>O aviso da geração passou a mostrar PRIMEIRO o que impede a importação</strong></h3>
+    <p>A lista de “o que o PVA vai recusar” mostra 12 pontos e resumia o resto. Só que a ordem era a ordem em
+    que as conferências rodam — e a mais grave de todas (a que <strong>barra o arquivo inteiro</strong>) era a
+    última, então ela caía fora da lista. Era por isso que as 23 recusas do D100 não apareciam antes do
+    validador.</p>
+    <div class="onde">📍 <strong>Onde:</strong> na caixa de avisos de qualquer geração de SPED. O que impede a
+    importação aparece no topo, marcado com <strong>⛔</strong>, e o cabeçalho diz quantos são. Erro que se
+    repete em várias linhas do mesmo registro agora sai <strong>uma vez</strong>, com a contagem
+    (“São 23 linhas assim”).</div>
+
+    <h2>Antes disso (17/09)</h2>
 
     <h3>1. 🚚 <strong>EFD-Contribuições: o frete cobrado do cliente agora entra na base do PIS/COFINS</strong></h3>
     <p>Em nota de <strong>saída</strong> com frete, o arquivo declarava a base <strong>sem o frete</strong> — ou

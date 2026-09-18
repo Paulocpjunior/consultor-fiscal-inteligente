@@ -48,7 +48,7 @@ import { conferirContagemDeCamposFiscal, conferirTamanhoDeCamposFiscal } from '.
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, conferirCodPartDoC100, POS_DT_FIN_ICMS_IPI,
-    conferirContador0100, conferirCanceladaSoCampos,
+    conferirContador0100, conferirCanceladaSoCampos, conferirEnderecoDo0150,
 } from './sped-c100-regras-comuns.js';
 import { motivoIeInvalida } from './sped-fiscal-format.js';
 
@@ -110,6 +110,9 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // PVA (ELS · 08/2026, 11/09, 19×) — o COD_PART da cancelada, que o
     // gerador preenchia. A régua mora no comum (as duas famílias têm a exceção).
     for (const e of conferirCanceladaSoCampos(lista)) add(erros, e);
+    // 🚨 0150 sem ENDERECO — campo 10, obrigatório SEM condição (VINATEX,
+    // 18/09, 732 recusas). Mesmo registro nas duas famílias, mesma regra.
+    for (const e of conferirEnderecoDo0150(lista)) add(erros, e);
 
     // ── R2. NFC-e não informa participante nem tributos no C100 ─────────────
     // PVA (mesmo arquivo, 86 ocorrências).
@@ -1705,11 +1708,31 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // ⚠️ Ela é CEGA para o TAMANHO — conta CAMPOS. O FANTASIA de 91 caracteres
     // num campo de 60 tem a contagem certa; quem pega aquilo é a outra trava.
     // ════════════════════════════════════════════════════════════════════════
+    //
+    // 🚨 UMA LINHA POR REGISTRO, NUNCA POR OCORRÊNCIA (18/09, EDUARDO GUERRA ·
+    // 08/2026). O D100 saiu com 23 campos onde o Guia tem 25 e a trava PEGOU —
+    // medido: a R42 gerava **23 erros idênticos**, um por CT-e. Com o corte de
+    // 12 do `resumoPrevalidacao`, os 23 ficaram DEPOIS do corte e o aviso
+    // mandou ler a lista completa no header `X-SPED-Prevalidacao`, que a
+    // própria rota documenta que **a tela não lê**. O defeito não era a trava
+    // desligada: era ela gritar 23 vezes a mesma coisa e o resumo empurrar
+    // tudo para um lugar que ninguém alcança — é o "20 linhas dizendo o mesmo
+    // é o que faz ninguém ler as que importam" (03/09).
+    const porRegistroFora = new Map();
     for (const e of conferirContagemDeCamposFiscal(lista).erros) {
+        const k = `${e.registro}|${e.esperado}|${e.recebido}`;
+        if (!porRegistroFora.has(k)) porRegistroFora.set(k, { ...e, linhas: 0 });
+        porRegistroFora.get(k).linhas += 1;
+    }
+    for (const e of porRegistroFora.values()) {
         add(erros, {
             regra: 'contagem-de-campos', registro: e.registro, campo: `${e.recebido} campos`,
             linha: lista[e.linha - 1], valor: String(e.recebido), esperado: String(e.esperado),
-            mensagem: e.mensagem,
+            // 🚨 Este erro não recusa UM registro: o PVA **não importa o
+            // arquivo**. Por isso ele é içado para o topo do resumo.
+            barraImportacao: true,
+            ocorrencias: e.linhas,
+            mensagem: `${e.mensagem}${e.linhas > 1 ? ` São ${e.linhas} linha(s) assim.` : ''}`,
             acao: 'É defeito de GERAÇÃO, não de cadastro: reporte com o print. '
                 + 'O PVA não importa o arquivo com o registro fora do leiaute.',
             fonte: e.fonte,
@@ -1725,13 +1748,23 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // 🚨 Medindo a SAÍDA com valores longos ela achou dois defeitos vivos: o
     // **H010 campo 08** e o **K200 campos 03 e 06** saíam sem corte nenhum.
     // ════════════════════════════════════════════════════════════════════════
+    // Mesmo agrupamento da R42, e pelo mesmo motivo: campo estourado costuma
+    // estourar em TODAS as linhas do registro.
+    const porCampoLongo = new Map();
     for (const e of conferirTamanhoDeCamposFiscal(lista).erros) {
+        const k = `${e.registro}|${e.campo}|${e.maximo}`;
+        if (!porCampoLongo.has(k)) porCampoLongo.set(k, { ...e, linhas: 0 });
+        porCampoLongo.get(k).linhas += 1;
+    }
+    for (const e of porCampoLongo.values()) {
         add(erros, {
             regra: 'tamanho-de-campo', registro: e.registro,
             campo: `${String(e.campo).padStart(2, '0')}`,
             linha: lista[e.linha - 1], valor: `${e.tamanho} caracteres`,
             esperado: `no máximo ${e.maximo}`,
-            mensagem: e.mensagem,
+            barraImportacao: true,
+            ocorrencias: e.linhas,
+            mensagem: `${e.mensagem}${e.linhas > 1 ? ` São ${e.linhas} linha(s) assim.` : ''}`,
             acao: 'É defeito de GERAÇÃO, não de cadastro — o campo precisa ser cortado no '
                 + 'gerador. Reporte com o print; nome longo no cadastro é legítimo.',
             fonte: 'Guia Prático do EFD ICMS/IPI 3.2.3, coluna "Tam" da tabela do registro '
@@ -1746,12 +1779,33 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     return { erros, avisos, resumo };
 }
 
-/** Texto para os warnings da geração — uma linha por erro, com a ação. */
+/**
+ * Texto para os warnings da geração — uma linha por erro, com a ação.
+ *
+ * 🚨 O QUE BARRA A IMPORTAÇÃO VEM PRIMEIRO (18/09, EDUARDO GUERRA). A lista
+ * era cortada em 12 na ordem em que as regras rodam, e a da CONTAGEM DE CAMPOS
+ * é a ÚLTIMA — então a única recusa que impedia o PVA de importar o arquivo
+ * INTEIRO caiu fora do corte, atrás de avisos que recusam um registro só. E o
+ * "…e mais N" mandava ler o resto no header `X-SPED-Prevalidacao`, que a rota
+ * documenta, na linha de cima, que **a tela não lê**: o resto não estava
+ * escondido, estava inalcançável.
+ *
+ * ⚠️ O corte FICA (12 linhas é o que alguém lê), mas ele deixou de decidir por
+ * ORDEM DE EXECUÇÃO e passou a decidir por GRAVIDADE.
+ */
 export function resumoPrevalidacao(r) {
     if (!r || !r.erros?.length) return [];
+    const barram = r.erros.filter((e) => e.barraImportacao);
+    const resto = r.erros.filter((e) => !e.barraImportacao);
+    const ordenados = [...barram, ...resto];
+    const linha = (e) => `• ${e.barraImportacao ? '⛔ ' : ''}[${e.registro} · ${e.campo}] ${e.mensagem} ${e.acao}`;
     return [
-        `🚦 Pré-validação (o que o PVA vai recusar): ${r.erros.length} ponto(s).`,
-        ...r.erros.slice(0, 12).map((e) => `• [${e.registro} · ${e.campo}] ${e.mensagem} ${e.acao}`),
-        ...(r.erros.length > 12 ? [`• …e mais ${r.erros.length - 12}. A lista completa está no header X-SPED-Prevalidacao.`] : []),
+        `🚦 Pré-validação (o que o PVA vai recusar): ${r.erros.length} ponto(s)`
+        + `${barram.length ? ` — ${barram.length} deles IMPEDEM a importação do arquivo inteiro` : ''}.`,
+        ...ordenados.slice(0, 12).map(linha),
+        ...(ordenados.length > 12
+            ? [`• …e mais ${ordenados.length - 12} ponto(s) de menor gravidade (nenhum deles impede a `
+                + 'importação — os que impedem estão todos acima).']
+            : []),
     ];
 }

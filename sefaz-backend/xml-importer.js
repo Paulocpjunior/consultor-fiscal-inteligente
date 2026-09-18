@@ -305,6 +305,10 @@ export function extrairMetadados(xml, schema) {
   const cabecalhoCte = lerCabecalhoCte(xml);
   const cfopCabecalho = cabecalhoCte?.cfop || null;
   const cstCabecalho = cabecalhoCte?.cstIcms || null;
+  // Municípios da PRESTAÇÃO (cMunIni/cMunFim) — campos 24 e 25 do D100 do EFD
+  // ICMS/IPI, obrigatórios nas entradas. Não são o município dos participantes.
+  const codMunIniCte = cabecalhoCte?.codMunIni || null;
+  const codMunFimCte = cabecalhoCte?.codMunFim || null;
 
   // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
   // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando
@@ -372,7 +376,7 @@ export function extrairMetadados(xml, schema) {
     numero, serie, natOp, cStat,
     // CFOP/CST do CABEÇALHO — é onde o CT-e os guarda (o D190 os exige e
     // estava inventando '5352'/'000' porque a captura só lia <prod>).
-    cfopCabecalho, cstCabecalho,
+    cfopCabecalho, cstCabecalho, codMunIniCte, codMunFimCte,
     // Endereço dos DOIS participantes. Vem daqui (e não de uma variável solta
     // no importer) porque `participantes` só existe NESTE escopo — usá-la lá
     // fora quebrou a captura inteira com "participantes is not defined"
@@ -383,6 +387,17 @@ export function extrairMetadados(xml, schema) {
     ieDest: participantes.destinatario.ie || null,
     ufEmit: participantes.emitente.uf || null,
     codMunEmit: participantes.emitente.codMunIBGE || null,
+    // 🚨 O LOGRADOURO — campo 10 do 0150, **obrigatório sem condição**, e que
+    // este extrator descartava (18/09, VINATEX: 732 recusas). Ele vem no MESMO
+    // `<enderDest>`/`<enderEmit>` de onde a UF e o município já saíam.
+    logradouroEmit: participantes.emitente.logradouro || null,
+    nroEmit: participantes.emitente.numero || null,
+    complementoEmit: participantes.emitente.complemento || null,
+    bairroEmit: participantes.emitente.bairro || null,
+    logradouroDest: participantes.destinatario.logradouro || null,
+    nroDest: participantes.destinatario.numero || null,
+    complementoDest: participantes.destinatario.complemento || null,
+    bairroDest: participantes.destinatario.bairro || null,
     // PROVA de que o cliente autorizou o escritório no emissor dele.
     autXml: extrairAutXml(xml),
   };
@@ -842,6 +857,17 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     ieDest: meta.ieDest,
     ufEmit: meta.ufEmit,
     codMunEmit: meta.codMunEmit,
+    // Endereço dos dois lados — é o campo 10 do 0150 (ENDERECO), obrigatório
+    // sem condição. Ficava de fora e o arquivo dependia da BrasilAPI (que
+    // responde o cadastro da Receita, não o que a nota declara).
+    logradouroEmit: meta.logradouroEmit,
+    nroEmit: meta.nroEmit,
+    complementoEmit: meta.complementoEmit,
+    bairroEmit: meta.bairroEmit,
+    logradouroDest: meta.logradouroDest,
+    nroDest: meta.nroDest,
+    complementoDest: meta.complementoDest,
+    bairroDest: meta.bairroDest,
     // Lista de autorizados + o atalho que a Cobertura de Saída consulta.
     autXml: meta.autXml || [],
     autXmlEscritorio: (meta.autXml || []).includes(CNPJ_ESCRITORIO_DIGITOS),
@@ -853,6 +879,8 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     // no item e continuam vindo de lá.
     ...(meta.cfopCabecalho ? { cfop: meta.cfopCabecalho } : {}),
     ...(meta.cstCabecalho ? { cstIcms: meta.cstCabecalho } : {}),
+    ...(meta.codMunIniCte ? { codMunIniCte: meta.codMunIniCte } : {}),
+    ...(meta.codMunFimCte ? { codMunFimCte: meta.codMunFimCte } : {}),
     tipoDoc: tipoDocFinal,
     tipo: meta.tipoNormalizado,
     schema: meta.schema,
@@ -1161,13 +1189,13 @@ export async function preencherEnderecoDestinatario(opts = {}) {
  * à fila; subir o número reprocessa a base quando o extrator aprender a ler
  * mais. É o que substitui o sentinela por campo de dado.
  */
-export const VERSAO_RELEITURA_PARTICIPANTES = 2;
+export const VERSAO_RELEITURA_PARTICIPANTES = 3;
 
 export async function preencherEnderecoParticipantes({ limit = 200, empresaId = null, competencia = null, direcao = 'saida' } = {}) {
   const db = fa().firestore();
   let examinadas = 0, preenchidas = 0, semXml = 0, jaTinham = 0;
   // Contagem POR CAUSA — "0 recuperadas" sem dizer o quê não responde nada.
-  let ganharamMunicipio = 0, ganharamFornecedor = 0, semDadoNoXml = 0;
+  let ganharamMunicipio = 0, ganharamFornecedor = 0, ganharamEndereco = 0, semDadoNoXml = 0;
   try {
     // ARMADILHA DO FIRESTORE: `where('ufDest', '==', null)` NÃO devolve os
     // documentos em que o campo simplesmente NÃO EXISTE — e é esse o caso de
@@ -1221,12 +1249,28 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
         por('ieDest', p.destinatario.ie);
         por('ufEmit', p.emitente.uf);
         por('ufDest', p.destinatario.uf);
+        // 🚨 O ENDEREÇO — campo 10 do 0150, obrigatório sem condição, e que o
+        // extrator descartava até 18/09 (VINATEX: 732 recusas do PVA). Está no
+        // MESMO `<enderDest>`/`<enderEmit>` de onde a UF já saía, então o
+        // acervo inteiro se recupera com o ♻️ — subir a VERSÃO acima é o que
+        // recoloca a base na fila.
+        por('logradouroEmit', p.emitente.logradouro);
+        por('nroEmit', p.emitente.numero);
+        por('complementoEmit', p.emitente.complemento);
+        por('bairroEmit', p.emitente.bairro);
+        por('logradouroDest', p.destinatario.logradouro);
+        por('nroDest', p.destinatario.numero);
+        por('complementoDest', p.destinatario.complemento);
+        por('bairroDest', p.destinatario.bairro);
         patch.participantesRelidos = VERSAO_RELEITURA_PARTICIPANTES;
         patch.participantesRelidosEm = new Date().toISOString();
 
         const ladoQueInteressa = direcao === 'entrada' ? 'Emit' : 'Dest';
         if (patch[`codMun${ladoQueInteressa}`]) ganharamMunicipio++;
         if (patch[`cnpj${ladoQueInteressa}`] || patch[`xNome${ladoQueInteressa}`]) ganharamFornecedor++;
+        // Contado à parte porque a AÇÃO é outra: é este número que responde
+        // "quantos dos 732 participantes sem ENDERECO o XML resolveu".
+        if (patch[`logradouro${ladoQueInteressa}`]) ganharamEndereco++;
         // Relido e o XML REALMENTE não tinha — resposta diferente de "já
         // tinha", e é ela que manda procurar o dado no cadastro do produtor.
         const recuperouAlgo = Object.keys(patch).length > 2;
@@ -1240,9 +1284,9 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     }
   } catch (e) {
     console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
-    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml, erro: e.message };
+    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, erro: e.message };
   }
-  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml };
+  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml };
 }
 
 /**

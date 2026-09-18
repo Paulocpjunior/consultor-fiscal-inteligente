@@ -95,3 +95,42 @@ export function avisoParticipantesSemMunicipio(participantes) {
         + 'que o PVA sugere significa NÃO domiciliado no Brasil. Complete no cadastro do '
         + 'participante ou ajuste no arquivo antes de transmitir.';
 }
+
+/**
+ * 🚨 O **ENDERECO** faltando — a recusa de 18/09 (J.N. VINATEX · 08/2026:
+ * **732 erros do PVA**, todos *"Campo obrigatório"* no registro 0150, campo
+ * **10 - ENDERECO**, em 123 páginas de relatório).
+ *
+ * O campo 10 é **Obrig. `O`** no Guia 3.2.3 — sem condição e sem exceção.
+ *
+ * 📌 A CAUSA ESTAVA NA LEITURA, não no cadastro: `extrairParticipantesNfe` lia
+ * do `<enderDest>` só a UF e o município, e jogava fora o `xLgr`/`nro`/`xCpl`/
+ * `xBairro` que vêm no MESMO bloco. Quem preenchia o campo era a **BrasilAPI**
+ * — que responde o endereço do CADASTRO da Receita, não o que a nota declara,
+ * e que é REDE (rate-limit/403/timeout ⇒ campo vazio ⇒ arquivo recusado).
+ *
+ * Por isso a AÇÃO aponta o ♻️ (reler o XML guardado é RECUPERAÇÃO, regra de
+ * 06/08) ANTES de mandar alguém digitar 732 endereços.
+ *
+ * ⚠️ E ela só fala de quem está **domiciliado no Brasil**: para participante do
+ * exterior o Guia manda o campo trazer cidade e país, e a régua da casa ali é
+ * outra — acusar seria alarme sobre linha legítima.
+ *
+ * @returns {string|null} a frase do aviso, ou null quando não há o que dizer.
+ */
+export function avisoParticipantesSemEndereco(participantes) {
+    const sem = [];
+    for (const p of participantes || []) {
+        if (!String(p?.logradouro || '').trim()) {
+            sem.push(String(p?.nome || p?.codPart || '(sem nome)'));
+        }
+    }
+    if (!sem.length) return null;
+    return `Bloco 0: ${sem.length} participante(s) sem ENDERECO (campo 10 do 0150) — o PVA recusa `
+        + `cada um com "Campo obrigatório": ${sem.slice(0, 8).join(', ')}`
+        + `${sem.length > 8 ? ` e mais ${sem.length - 8}` : ''}. `
+        + 'O logradouro vem do próprio XML (<enderEmit>/<enderDest>) e a captura antiga o '
+        + 'descartava. Rode o ♻️ Reler participante e município dos XMLs em Relatórios → '
+        + '✏️ CFOP por nota e regere; o que sobrar é participante cujo XML não trouxe o dado, e aí '
+        + 'a correção é no cadastro dele.';
+}

@@ -546,6 +546,12 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // cobertos, então nenhum arquivo ganha linha nova. Ela fala no dia em
         // que um registro NOVO entrar sem tabela — que é exatamente quando
         // importa, e é o dia em que o 0500 saiu com o leiaute do vizinho.
+        // ⚠️ SÓ O `naoConferidos` SAI DAQUI — os ERROS de contagem já vêm pela
+        // R42 da pré-validação, e dois alarmes para o mesmo defeito é o
+        // caminho conhecido para a equipe ignorar os dois (a decisão de 17/09
+        // sobre o D001). O que estava quebrado não era a ligação: era a lista
+        // do aviso cortar em 12 e mandar o resto para um header que a tela não
+        // lê — ver `resumoPrevalidacao`.
         const semContagem = conferirContagemDeCamposFiscal(linhasDoArquivo).naoConferidos;
         if (semContagem.length) {
             dados.warnings.push(

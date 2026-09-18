@@ -38,7 +38,9 @@ const EMPRESA = {
 
 /** CT-e com ICMS destacado (CST 00). */
 const XML_CTE_00 = `<?xml version="1.0"?><cteProc><CTe><infCte Id="CTe35260844555666000177570010000000011234567890">
-  <ide><cUF>35</cUF><CFOP>6353</CFOP><natOp>PRESTACAO DE SERVICO DE TRANSPORTE</natOp></ide>
+  <ide><cUF>35</cUF><CFOP>6353</CFOP><natOp>PRESTACAO DE SERVICO DE TRANSPORTE</natOp>
+    <cMunIni>3550308</cMunIni><xMunIni>SAO PAULO</xMunIni><UFIni>SP</UFIni>
+    <cMunFim>4106902</cMunFim><xMunFim>CURITIBA</xMunFim><UFFim>PR</UFFim></ide>
   <emit><CNPJ>44555666000177</CNPJ></emit>
   <vPrest><vTPrest>500.00</vTPrest></vPrest>
   <imp><ICMS><ICMS00><CST>00</CST><vBC>500.00</vBC><pICMS>12.00</pICMS><vICMS>60.00</vICMS></ICMS00></ICMS></imp>
@@ -49,7 +51,7 @@ const XML_CTE_00 = `<?xml version="1.0"?><cteProc><CTe><infCte Id="CTe3526084455
  * e-Fiscal gerou e a Receita ACEITOU: CST 90, alíquota 0 e ICMS ZERO.
  */
 const XML_CTE_90_ZERO = `<?xml version="1.0"?><cteProc><CTe><infCte Id="CTe35260844555666000177570010000000021234567890">
-  <ide><cUF>35</cUF><CFOP>6353</CFOP></ide>
+  <ide><cUF>35</cUF><CFOP>6353</CFOP><cMunIni>3550308</cMunIni><cMunFim>3509502</cMunFim></ide>
   <vPrest><vTPrest>11293.64</vTPrest></vPrest>
   <imp><ICMS><ICMS90><CST>90</CST><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS></ICMS90></ICMS></imp>
 </infCte></CTe></cteProc>`;
@@ -86,12 +88,16 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
     it('lê CFOP, CST, alíquota e ICMS do cabeçalho', () => {
         expect(lerCabecalhoCte(XML_CTE_00)).toEqual({
             cfop: '6353', cstIcms: '00', aliqIcms: 12, vBC: 500, vICMS: 60,
+            // 🚨 Campos 24 e 25 do D100 (EFD ICMS/IPI): o município da
+            // PRESTAÇÃO, não o dos participantes.
+            codMunIni: '3550308', codMunFim: '4106902',
         });
     });
 
     it('lê o grupo ICMSOutraUF, cujos campos levam sufixo próprio', () => {
         expect(lerCabecalhoCte(XML_CTE_OUTRA_UF)).toEqual({
             cfop: '6353', cstIcms: '90', aliqIcms: 7, vBC: 200, vICMS: 14,
+            codMunIni: null, codMunFim: null,
         });
     });
 
@@ -108,6 +114,7 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
     it('no isento (ICMS45) devolve o CST e deixa base/alíquota/ICMS em null', () => {
         expect(lerCabecalhoCte(XML_CTE_45)).toEqual({
             cfop: '5353', cstIcms: '40', aliqIcms: null, vBC: null, vICMS: null,
+            codMunIni: null, codMunFim: null,
         });
     });
 
@@ -125,12 +132,16 @@ describe('patchDoCabecalhoCte — backfill NÃO APAGA e NÃO SOBRESCREVE', () =>
         const patch = patchDoCabecalhoCte(CTE_GRAVADO_SEM_CFOP, lerCabecalhoCte(XML_CTE_00));
         expect(patch).toEqual({
             cfop: '6353', cstIcms: '00', aliqIcms: 12,
+            codMunIniCte: '3550308', codMunFimCte: '4106902',
             totais: { vBC: 500, vICMS: 60 },
         });
     });
 
     it('não toca no que já está gravado', () => {
-        const jaTem = { ...CTE_GRAVADO_SEM_CFOP, cfop: '5352', cstIcms: '20', aliqIcms: 7, totais: { vBC: 9, vICMS: 1 } };
+        const jaTem = {
+            ...CTE_GRAVADO_SEM_CFOP, cfop: '5352', cstIcms: '20', aliqIcms: 7,
+            codMunIniCte: '3550308', codMunFimCte: '4106902', totais: { vBC: 9, vICMS: 1 },
+        };
         expect(patchDoCabecalhoCte(jaTem, lerCabecalhoCte(XML_CTE_00))).toEqual({});
     });
 
@@ -170,6 +181,7 @@ describe('classificarCteParaCabecalho — cada causa tem ação própria', () =>
         expect(classificarCteParaCabecalho({
             ...CTE_GRAVADO_SEM_CFOP, cfop: '6353', cstIcms: '90',
             aliqIcms: 0, totais: { vBC: 0, vICMS: 0 },
+            codMunIniCte: '3550308', codMunFimCte: '3509502',
         })).toBe('completo');
     });
 

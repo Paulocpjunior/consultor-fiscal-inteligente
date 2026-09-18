@@ -380,3 +380,50 @@ export function conferirCodPartDoC100(linhas) {
     return erros;
 }
 
+
+/**
+ * 🚨 O **ENDERECO** do 0150 — campo 10, obrigatório SEM condição.
+ *
+ * PVA (J.N. VINATEX · 08/2026, 18/09, **732 recusas em 123 páginas**):
+ * *"Campo obrigatório"*, registro **0150**, campo **10 - ENDERECO**.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, registro 0150, tabela de leiaute: o campo 10
+ * (END, *"Logradouro e endereço do imóvel"*) é **Obrig. `O`**. Ao contrário do
+ * COD_MUN (campo 08, `OC`, obrigatório só para o Brasil), este não tem
+ * condição nenhuma — e o registro é IDÊNTICO nas duas famílias, por isso a
+ * regra nasce no módulo comum (a "meia trava" do COD_MUN, 22/08, na mesma
+ * linha do mesmo registro).
+ *
+ * ⚠️ A AÇÃO APONTA O ♻️, não o cadastro: a causa medida é de LEITURA — o
+ * extrator lia do `<enderDest>` só a UF e o município e descartava o `xLgr`
+ * que vem no mesmo bloco. Mandar digitar 732 endereços seria pedir trabalho
+ * por um dado que está no arquivo (regra de 06/08).
+ */
+export function conferirEnderecoDo0150(linhas) {
+    const sem = [];
+    let primeira = null;
+    for (const l of (linhas || []).map(String)) {
+        if (registroDe(l) !== '0150') continue;
+        const f = campos(l);
+        if (String(f[10] || '').trim()) continue;
+        if (!primeira) primeira = l;
+        sem.push(String(f[3] || f[2] || '(sem nome)').trim());
+    }
+    if (!sem.length) return [];
+    // ⚠️ UMA ENTRADA, NÃO UMA POR PARTICIPANTE. Foram **732** num arquivo só, e
+    // a ação é a MESMA para todos (rodar o ♻️): 732 linhas idênticas no aviso
+    // é o jeito conhecido de ninguém ler as que importam (03/09). A contagem e
+    // os primeiros nomes é o que dá para agir.
+    return [{
+        regra: '0150-sem-endereco', registro: '0150', campo: '10 - ENDERECO',
+        valor: '', esperado: 'logradouro e endereço do imóvel', linha: primeira,
+        ocorrencias: sem.length,
+        mensagem: `${sem.length} participante(s) estão no 0150 sem ENDERECO e o PVA recusa cada um: `
+            + `${sem.slice(0, 5).join(', ')}${sem.length > 5 ? ` e mais ${sem.length - 5}` : ''}.`,
+        acao: 'O logradouro vem do próprio XML (<enderEmit>/<enderDest>) e a captura antiga o '
+            + 'descartava. Rode o ♻️ Reler participante e município dos XMLs e regere; o que '
+            + 'sobrar é participante cujo XML não trouxe o dado.',
+        fonte: 'Guia Prático 3.2.3, registro 0150, campo 10 (END) — Obrig. "O", sem condição; '
+            + 'PVA: "Campo obrigatório" (J.N. VINATEX · 08/2026, 18/09, 732 ocorrências).',
+    }];
+}

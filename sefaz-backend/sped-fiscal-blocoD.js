@@ -87,6 +87,15 @@ function filtrarNotasBlocoD(notas) {
  *  21 VL_NT        Valor nao-tributado
  *  22 COD_INF      Codigo informacao complementar (vazio)
  *  23 COD_CTA      Codigo conta contabil (vazio)
+ *  24 COD_MUN_ORIG Municipio de ORIGEM do servico (IBGE)
+ *  25 COD_MUN_DEST Municipio de DESTINO do servico (IBGE)
+ *
+ * 🚨 ESTE REGISTRO TEM 25 CAMPOS AQUI E 23 NO EFD-CONTRIBUIÇÕES — e o gerador
+ * parava no 23 (18/09, EDUARDO GUERRA · 08/2026: **23 recusas de importação**,
+ * todas *"o número de campos informado no registro difere do número de campos
+ * especificado no leiaute"*, com *Valor Esperado 25 · Conteúdo do Campo 23*).
+ * É a MESMA confusão que já custou recibo no 1010 (17/08) e no 0500 (24/08):
+ * mesmo número de registro, arquivo diferente, leiaute diferente.
  */
 function buildD100(notaCrua, dados) {
     // 🚨 CINCO LEITURAS CRUAS NUM REGISTRO SÓ (21/08, varredura dos leitores de
@@ -154,7 +163,31 @@ function buildD100(notaCrua, dados) {
         soCancelavel(fmt.formatValue(t.vNT || 0, 2)),
         '',  // COD_INF
         '',  // COD_CTA
+        // 24/25 — COD_MUN_ORIG e COD_MUN_DEST, os dois campos que faltavam.
+        //
+        // ⚠️ O APP NÃO OS DEDUZ: o Guia manda o município da PRESTAÇÃO (o
+        // `cMunIni`/`cMunFim` do `<ide>` do CT-e), e o do EMITENTE/DESTINATÁRIO
+        // é outro fato — o frete pode começar e terminar longe dos dois. Cair
+        // no `codMunEmit` faria o arquivo AFIRMAR uma origem que o documento
+        // não declara, e o PVA aceita (é a família do `1405` e do `5352`).
+        // Sem o dado o campo sai VAZIO e a geração DIZ, com a ação: ausência o
+        // PVA acusa, município errado não.
+        soCancelavel(fmt.sanitizeString(codMunDaPrestacao(nota, 'ini'), 7)),
+        soCancelavel(fmt.sanitizeString(codMunDaPrestacao(nota, 'fim'), 7)),
     ]);
+}
+
+/**
+ * Município de ORIGEM/DESTINO da prestação, como o CT-e o declara.
+ *
+ * Fonte única: `cMunIni`/`cMunFim` do `<ide>`, que a captura grava em
+ * `codMunIniCte`/`codMunFimCte` (ver `cte-cabecalho.js`). Devolve **''** quando
+ * o documento não traz — e o vazio é a RESPOSTA, não um default.
+ */
+export function codMunDaPrestacao(nota, lado) {
+    const bruto = lado === 'fim' ? nota?.codMunFimCte : nota?.codMunIniCte;
+    const cru = String(bruto || '').replace(/\D/g, '');
+    return cru.length === 7 ? cru : '';
 }
 
 /**
@@ -227,6 +260,14 @@ export function buildBlocoD(dados) {
     /** Quanto de frete e de ICMS ficou de fora — o aviso DIZ o número, não só a contagem. */
     let valorFora = 0;
     let icmsFora = 0;
+    /**
+     * CT-e que ENTROU no bloco e saiu sem o município da prestação.
+     *
+     * ⚠️ Ele NÃO fica de fora por isso: tirar o conhecimento do livro por causa
+     * de um campo de cadastro seria trocar uma recusa (campo obrigatório, que
+     * se conserta e reenvia) por LIVRO A MENOR, que não se confere depois.
+     */
+    const semMunicipio = [];
     for (const nota of notas) {
         try {
             if (!cfopDoCte(nota)) {
@@ -234,6 +275,9 @@ export function buildBlocoD(dados) {
                 valorFora += valorDoDoc(nota);
                 icmsFora += Number(nota?.totais?.vICMS) || 0;
                 continue;
+            }
+            if (!codMunDaPrestacao(nota, 'ini') || !codMunDaPrestacao(nota, 'fim')) {
+                semMunicipio.push(String(nota.numero || nota.chave || '(sem número)'));
             }
             linhas.push(buildD100(nota, dados));
             // D190 pra cada CTe — agrupamento detalhado pode vir em fase futura.
@@ -277,6 +321,24 @@ export function buildBlocoD(dados) {
             + 'Rode o 🚚 Reler cabeçalho dos CT-e em Relatórios → ✏️ CFOP por nota (é ele que lê o '
             + 'cabeçalho do XML guardado — o ♻️ de itens não alcança o CT-e), ou reimporte o XML do '
             + 'conhecimento; depois regere o arquivo.',
+        );
+    }
+
+    // 🚨 A RECUSA SEGUINTE, DITA ANTES (a lição de 24/08: meia correção troca
+    // uma recusa por outra, e a segunda chega no mês seguinte parecendo
+    // problema novo). Com os campos 24/25 no lugar a CONTAGEM fecha — e o PVA
+    // passa a cobrar o CONTEÚDO: *"Campo obrigatório nas entradas, se COD_MOD
+    // do registro D100 for 57, 63 ou 67"* (Guia 3.2.3, campos 24 e 25).
+    if (semMunicipio.length && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Bloco D: ${semMunicipio.length} CT-e saíram SEM o município de origem/destino da `
+            + `prestação (campos 24 e 25 do D100) — nº ${semMunicipio.slice(0, 10).join(', ')}`
+            + `${semMunicipio.length > 10 ? ` e mais ${semMunicipio.length - 10}` : ''}. `
+            + 'Eles CONTINUAM no livro (tirá-los seria livro a menos), mas o PVA recusa cada um: '
+            + 'esses campos são obrigatórios nas entradas de CT-e. O código vem do cabeçalho do XML '
+            + '(cMunIni/cMunFim) e o app NÃO o deduz do município do emitente — o frete pode começar '
+            + 'e terminar longe das partes. Rode o 🚚 Reler cabeçalho dos CT-e em Relatórios → '
+            + '✏️ CFOP por nota e regere; se o XML também não trouxer, o dado é com o transportador.',
         );
     }
 
