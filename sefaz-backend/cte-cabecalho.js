@@ -48,8 +48,11 @@ import { ehConhecimentoDeTransporte } from './sped-selecao-documentos.js';
  * condição-alvo NÃO se limpa sozinha — um CT-e isento nunca vai ter `vICMS`,
  * e julgar pela presença faria o backfill rebaixar o mesmo documento para
  * sempre.
+ *
+ * **2** (18/09) — passou a ler `cMunIni`/`cMunFim`, os campos 24 e 25 do D100
+ * do EFD ICMS/IPI. Subir o número recoloca na fila o que já foi relido na v1.
  */
-export const VERSAO_RELEITURA_CTE = 1;
+export const VERSAO_RELEITURA_CTE = 2;
 
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
@@ -88,7 +91,8 @@ export function xmlEhCte(xml) {
  * dado do item ocupando a casa do documento, que numa nota mista é falso.
  *
  * @returns {null|{cfop:string|null, cstIcms:string|null, aliqIcms:number|null,
- *                 vBC:number|null, vICMS:number|null}}
+ *                 vBC:number|null, vICMS:number|null,
+ *                 codMunIni:string|null, codMunFim:string|null}}
  */
 export function lerCabecalhoCte(xml) {
     if (!xmlEhCte(xml)) return null;
@@ -97,6 +101,20 @@ export function lerCabecalhoCte(xml) {
     // que venha em outro grupo do documento.
     const ide = bloco(xml, 'ide');
     const cfopCru = soDigitos(tag(ide, 'CFOP') || tag(xml, 'CFOP'));
+
+    // 🚨 OS MUNICÍPIOS DA PRESTAÇÃO — campos 24/25 do D100 (EFD ICMS/IPI).
+    //
+    // O Guia 3.2.3 os define como *"código do município de ORIGEM do serviço"*
+    // e *"de DESTINO"*, conforme a tabela IBGE, e é o `<ide>` do CT-e que
+    // declara os dois: `cMunIni` e `cMunFim`.
+    //
+    // ⚠️ NÃO SÃO O MUNICÍPIO DOS PARTICIPANTES, e confundi-los seria afirmar
+    // outra coisa: `codMunEmit`/`codMunDest` dizem onde cada parte está
+    // DOMICILIADA, e o frete pode começar e terminar longe dos dois. Por isso
+    // os campos têm nome próprio, e ausência devolve `null` em vez de cair no
+    // município do emitente.
+    const codMunIni = soDigitos(tag(ide, 'cMunIni'));
+    const codMunFim = soDigitos(tag(ide, 'cMunFim'));
 
     // ICMS do conhecimento: <imp><ICMS><ICMS00|ICMS20|ICMS45|ICMS60|ICMS90|
     // ICMSOutraUF|ICMSSN>. Os campos do grupo "OutraUF" levam sufixo próprio,
@@ -116,6 +134,8 @@ export function lerCabecalhoCte(xml) {
         aliqIcms: aliq,
         vBC,
         vICMS,
+        codMunIni: codMunIni.length === 7 ? codMunIni : null,
+        codMunFim: codMunFim.length === 7 ? codMunFim : null,
     };
 }
 
@@ -133,7 +153,11 @@ export function classificarCteParaCabecalho(d) {
     const temAliq = !vazio(d?.aliqIcms);
     const t = d?.totais || {};
     const temIcms = !vazio(t.vBC) && !vazio(t.vICMS);
-    if (temCfop && temCst && temAliq && temIcms) return 'completo';
+    // Os municípios da prestação entram na conta do "completo" porque são
+    // campos OBRIGATÓRIOS do D100 nas entradas (Guia 3.2.3, campos 24 e 25):
+    // sem eles o arquivo passa na contagem e o PVA recusa por campo vazio.
+    const temMunicipios = !!soDigitos(d?.codMunIniCte) && !!soDigitos(d?.codMunFimCte);
+    if (temCfop && temCst && temAliq && temIcms && temMunicipios) return 'completo';
 
     if (Number(d?.cabecalhoCteVersao) >= VERSAO_RELEITURA_CTE) return 'ja-relido';
     if (!d?.storagePath) return 'sem-arquivo';
@@ -153,6 +177,8 @@ export function patchDoCabecalhoCte(d, lido) {
 
     if (!soDigitos(d?.cfop) && lido.cfop) patch.cfop = lido.cfop;
     if (!soDigitos(d?.cstIcms) && lido.cstIcms) patch.cstIcms = lido.cstIcms;
+    if (!soDigitos(d?.codMunIniCte) && lido.codMunIni) patch.codMunIniCte = lido.codMunIni;
+    if (!soDigitos(d?.codMunFimCte) && lido.codMunFim) patch.codMunFimCte = lido.codMunFim;
     // Zero DECLARADO entra (é a resposta do documento isento); ausente, não.
     if (vazio(d?.aliqIcms) && lido.aliqIcms !== null) patch.aliqIcms = lido.aliqIcms;
 

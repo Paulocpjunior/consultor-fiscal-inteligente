@@ -38,6 +38,24 @@ export interface MetadadosXml {
     ieDest: string | null;
     ufEmit: string | null;
     codMunEmit: string | null;
+    /**
+     * Logradouro/nº/complemento/bairro dos dois lados — o campo 10 (ENDERECO)
+     * do 0150 é **obrigatório sem condição**, e o extrator os descartava.
+     */
+    logradouroEmit: string | null;
+    nroEmit: string | null;
+    complementoEmit: string | null;
+    bairroEmit: string | null;
+    logradouroDest: string | null;
+    nroDest: string | null;
+    complementoDest: string | null;
+    bairroDest: string | null;
+    /**
+     * Municípios da PRESTAÇÃO do CT-e (`cMunIni`/`cMunFim`) — campos 24 e 25
+     * do D100 do EFD ICMS/IPI. `null` fora do CT-e.
+     */
+    codMunIniCte: string | null;
+    codMunFimCte: string | null;
 }
 
 export function extrairMetadados(xml: string, schema?: string): MetadadosXml;
@@ -53,9 +71,32 @@ export function corrigirDirecaoEntradaPropria(p?: { limit?: number }): Promise<{
     examinadas: number; corrigidas: number; erro?: string;
 }>;
 
+/** Resultado dos dois backfills de participante — contado POR CAUSA. */
+export interface ResultadoReleituraParticipantes {
+    examinadas: number;
+    preenchidas: number;
+    semXml: number;
+    jaTinham: number;
+    ganharamMunicipio: number;
+    ganharamFornecedor: number;
+    /** Quantos ganharam o LOGRADOURO — a recusa 0150.10 do PVA (VINATEX). */
+    ganharamEndereco: number;
+    semDadoNoXml: number;
+    erro?: string;
+}
+
 export function preencherEnderecoDestinatario(p?: {
     limit?: number; empresaId?: string | null; competencia?: string | null;
-}): Promise<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; erro?: string }>;
+}): Promise<ResultadoReleituraParticipantes>;
+
+/** O MESMO backfill nas DUAS direções (a compra de produtor rural é entrada). */
+export function preencherEnderecoParticipantes(p?: {
+    limit?: number; empresaId?: string | null; competencia?: string | null;
+    direcao?: 'entrada' | 'saida';
+}): Promise<ResultadoReleituraParticipantes>;
+
+/** Versão do extrator de PARTICIPANTES — subir recoloca a base na fila. */
+export const VERSAO_RELEITURA_PARTICIPANTES: number;
 
 /**
  * Extrai os itens (`<det>`) de uma NF-e completa — `[]` para resumo (resNFe)

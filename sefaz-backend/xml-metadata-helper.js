@@ -100,6 +100,34 @@ export function extrairParticipantesNfe(xml) {
     const endEmit = pickFirstBlock(emit, 'enderEmit');
     const endDest = pickFirstBlock(dest, 'enderDest');
 
+    // 🚨 O LOGRADOURO ESTAVA NO XML E O LEITOR DESCARTAVA (18/09, J.N. VINATEX
+    // · 08/2026: **732 recusas do PVA**, todas *"Campo obrigatório"* no
+    // registro **0150, campo 10 - ENDERECO**, em 123 páginas de relatório).
+    //
+    // O comentário logo acima diz *"ENDEREÇO importa"* — e o extrator lia do
+    // `<enderDest>` só a UF e o município. `xLgr`, `nro`, `xCpl` e `xBairro`
+    // vêm no MESMO bloco, sempre, e eram jogados fora: é a família do
+    // `localErroAviso` (12/08) — o dado chega e quem lê o descarta.
+    //
+    // 🚨 E O QUE PREENCHIA O CAMPO ERA A **BrasilAPI**, que responde outra
+    // pergunta: ela devolve o endereço do CADASTRO da Receita, não o que a
+    // NOTA declara — e o 0150 descreve *"os dados atualizados no último evento
+    // fiscal"* (Guia 3.2.3, 0150). Além de ser fonte errada, ela é REDE: com
+    // rate-limit, 403 ou timeout o campo fica vazio e o arquivo inteiro é
+    // recusado. O parser do NAVEGADOR (`xmlParserService`) já lia os quatro
+    // desde sempre — era a paridade entre os dois parsers que faltava (a mesma
+    // lição do C190 em 12/09).
+    //
+    // ⚠️ Campo 10 é **Obrig. O** no Guia — sem condição, sem exceção para
+    // domiciliado no Brasil.
+    const enderecoDe = (bloco) => ({
+        logradouro: pickTag(bloco, 'xLgr') || null,
+        numero: pickTag(bloco, 'nro') || null,
+        complemento: pickTag(bloco, 'xCpl') || null,
+        bairro: pickTag(bloco, 'xBairro') || null,
+        cep: pickTag(bloco, 'CEP') || null,
+    });
+
     return {
         emitente: {
             cnpj: pickTag(emit, 'CNPJ') || pickTag(emit, 'CPF') || null,
@@ -107,6 +135,7 @@ export function extrairParticipantesNfe(xml) {
             uf: pickTag(endEmit, 'UF') || null,
             codMunIBGE: pickTag(endEmit, 'cMun') || null,
             ie: pickTag(emit, 'IE') || null,
+            ...enderecoDe(endEmit),
         },
         destinatario: {
             cnpj: pickTag(dest, 'CNPJ') || pickTag(dest, 'CPF') || null,
@@ -114,6 +143,7 @@ export function extrairParticipantesNfe(xml) {
             uf: pickTag(endDest, 'UF') || null,
             codMunIBGE: pickTag(endDest, 'cMun') || null,
             ie: pickTag(dest, 'IE') || null,
+            ...enderecoDe(endDest),
         },
     };
 }
