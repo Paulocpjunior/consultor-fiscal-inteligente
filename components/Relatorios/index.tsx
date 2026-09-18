@@ -55,6 +55,8 @@ import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
 import { relerNotasVazias, relerItensFiscais, relerCabecalhoCtes } from '../../services/ipiVarreduraService';
+import { relerMunicipiosDipam } from '../../services/dipamService';
+import { encadearReleitura, fraseDoResultado } from '../../services/relerParticipantes';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
@@ -1009,6 +1011,42 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         }
     };
 
+    // ♻️ RELER PARTICIPANTE, ENDEREÇO E MUNICÍPIO (18/09, J.N. VINATEX ·
+    // 08/2026): o PVA devolveu **732 recusas** de "Campo obrigatório" no
+    // ENDEREÇO do 0150, o aviso da geração mandou rodar o ♻️ AQUI — e o botão
+    // não existia nesta aba. Ele vivia só no painel da 🌾 DIPAM, dentro do
+    // bloco de pendências de PRODUTOR RURAL, onde uma comércio de tecidos
+    // nunca chega: a ferramenta era inalcançável justamente para quem o aviso
+    // mandava usá-la (o achado 18, 21/08).
+    //
+    // ⚠️ MESMA ROTA, MESMA FRASE — o texto do resultado vem do dono
+    // (`fraseDoResultado`), nunca escrito de novo aqui.
+    const relerParticipantes = async () => {
+        setRelendo(true);
+        setResultadoReler(null);
+        try {
+            // A fila é maior que o lote (a VINATEX tem 3501 documentos no
+            // recorte contra 1000 por direção): quem encadeia é o APP, não a
+            // pessoa clicando quatro vezes — a régua do teto, de 02/09.
+            const { total, rodadas, parouPorTeto } = await encadearReleitura(
+                () => relerMunicipiosDipam(empresa.id, competencia),
+                { aoProgredir: (acc) => setResultadoReler(fraseDoResultado(acc)) },
+            );
+            setResultadoReler(
+                fraseDoResultado(total)
+                + (rodadas > 1 ? ` (${rodadas} rodadas)` : '')
+                + (parouPorTeto
+                    ? ' ⚠️ A fila ainda não zerou — clique de novo para continuar de onde parou.'
+                    : ''),
+            );
+            if (total.preenchidas || total.ganharamEndereco) onRebuscar?.();
+        } catch (e: any) {
+            setResultadoReler(`♻️ Falha ao reler os participantes: ${e?.message || 'erro inesperado'}.`);
+        } finally {
+            setRelendo(false);
+        }
+    };
+
     const reler = async () => {
         setRelendo(true);
         setResultadoReler(null);
@@ -1137,6 +1175,21 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                         title="Relê o CABEÇALHO dos CT-e guardados e completa CFOP, CST, alíquota e ICMS — é lá que o conhecimento os declara. Sem eles o frete não entra no bloco D do SPED. Só preenche o que está vazio."
                         className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
                     >{relendo ? '♻️ Relendo…' : '🚚 Reler cabeçalho dos CT-e'}</button>
+                )}
+                {/* ♻️ PARTICIPANTE E ENDEREÇO (18/09, J.N. VINATEX · 08/2026):
+                    o PVA recusou 732 participantes por ENDEREÇO em branco no
+                    0150, o aviso da geração manda rodar o ♻️ NESTA aba — e o
+                    botão só existia no painel da 🌾 DIPAM, atrás de uma
+                    pendência de produtor rural que empresa nenhuma de comércio
+                    tem. Aviso que aponta ferramenta se prova contra a
+                    ferramenta (a régua do 🚚, 17/09). */}
+                {currentUser?.role === 'admin' && (
+                    <button
+                        onClick={relerParticipantes}
+                        disabled={relendo}
+                        title="Relê os XMLs guardados e completa o PARTICIPANTE das notas: logradouro, número, complemento, bairro, município, CNPJ/CPF e nome. É o que resolve a recusa do PVA no campo 10 (ENDERECO) do registro 0150. Só preenche o que está vazio, e a fila é encadeada sozinha até zerar."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{relendo ? '♻️ Relendo…' : '♻️ Reler participante e município dos XMLs'}</button>
                 )}
                 <span className="text-xs text-slate-500">
                     {linhas.length} nota(s) · {comCarimbo} com CFOP informado

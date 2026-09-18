@@ -1,6 +1,6 @@
 # Guia do Colaborador — Conferir uma entrega nova
 
-<!-- guia-id: conferencia-entregas · guia-revisao: 2026-08-13 -->
+<!-- guia-id: conferencia-entregas · guia-revisao: 2026-09-18 -->
 <!-- Mexeu aqui? mexa no par em public/ e suba a revisão nos DOIS. -->
 
 > Fonte do guia servido em `/guia-conferencia-entregas.html`.
@@ -123,6 +123,7 @@ saindo R$ 0,00 — e o município estava dentro do XML o tempo todo.
 | onde clicar | o que TEM que aparecer |
 | --- | --- |
 | 🌾 DIPAM → bloco de **Pendências** → botão **♻️ Reler participante e município dos XMLs** | Uma frase com quantas notas foram recuperadas |
+| Relatórios → **✏️ CFOP por nota** → **♻️ Reler participante e município dos XMLs** *(o MESMO botão — é por aqui em empresa que não compra de produtor rural)* | "N ganharam o ENDEREÇO do 0150" — é este número que responde à recusa *"Campo obrigatório"* do PVA no registro 0150 |
 
 **Critério de aceite:** as pendências de município caem e a DIPAM passa a
 mostrar valor por município.

@@ -5,6 +5,72 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "NO CONSULTOR NÃO TEM ESSA OPÇÃO — SÓ TEM ESSES" — o aviso mandava rodar
+  um botão que NÃO EXISTIA naquela aba, e a régua que eu quebrei tinha sido
+  escrita por mim NO DIA ANTERIOR** (18/09, Paulo, J.N. VINATEX · 08/2026, com
+  DOIS prints: o texto das Novidades que eu escrevi — *"rode Relatórios →
+  ✏️ CFOP por nota → ♻️ Reler participante e município dos XMLs"* — e a barra
+  REAL daquela aba, com três botões: **Reler XMLs guardados**, **Reler itens
+  dos XMLs** e **🚚 Reler cabeçalho dos CT-e**).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR, e um `grep` fechou a questão**: o botão
+  existe — em `DipamProdutorRuralPanel.tsx`, ou seja na aba **🌾 DIPAM**,
+  **dentro do bloco de Pendências**, e ele só renderiza quando
+  `semMunicipio > 0 || semContraparte > 0`, que são pendências de **PRODUTOR
+  RURAL**. A VINATEX é comércio de TECIDOS: o bloco inteiro não aparece, e a
+  única ferramenta que recupera os **732 endereços do 0150** era
+  **INALCANÇÁVEL** justamente para a empresa do caso.
+  🚨 **É O ACHADO 18 (21/08) E EU O COMETI 24 HORAS DEPOIS DE ESCREVER A
+  RÉGUA**: em 17/09 ficou escrito aqui, com todas as letras, *"aviso que manda
+  rodar um BOTÃO se prova contra o botão — ação que nomeia ferramenta entra com
+  um teste que a amarra ao caso REAL daquele aviso"*. No dia seguinte eu
+  escrevi DUAS frases (`sped-bloco0-cadastros.js` e `sped-c100-regras-comuns.js`)
+  nomeando uma ferramenta, mais o texto das Novidades, e **não conferi se ela
+  existia na aba**. Regra escrita não é regra aplicada.
+  ✂️ **E A CORREÇÃO NÃO É TROCAR O TEXTO PARA "🌾 DIPAM"** — lá ele também não
+  alcança. É pôr a ferramenta **ONDE A PENDÊNCIA NASCE**: a ✏️ CFOP por nota já
+  é a casa dos outros três ♻️ do acervo, e o backfill não tem nada de produtor
+  rural (ele varre `documentos_fiscais` por empresa + competência). **Duas
+  portas, UMA rota** — a 🌾 continua com a dela, que é o caminho de quem está
+  resolvendo pendência de produtor.
+  ⚠️ **O QUE NÃO PODE DUPLICAR É A FRASE**: `fraseDoResultado` (em
+  `services/relerParticipantes.ts`, PURO) é o dono, e as duas telas leem dele —
+  duas descrições do mesmo retorno divergem no primeiro campo novo, e foi assim
+  que o *"0 recuperadas · 664 já tinham"* conviveu com 427 pendências na tela
+  (13/08).
+  🔴 **E MEDIR ISTO ACHOU MAIS DOIS DEFEITOS VIVOS, os dois SILENCIOSOS.**
+  (1) **A ROTA DESCARTAVA O `ganharamEndereco`** — o backfill já o contava, com
+  o comentário dizendo *"é ESTE número que responde 'quantos dos 732 o XML
+  resolveu'"*, e `/reler-municipios` somava só município e fornecedor. A flag
+  que ninguém lê, dentro da correção que nasceu ontem.
+  (2) **O CORTE ERA MUDO E A FILA É MAIOR QUE O LOTE**: o print dele diz
+  **`3501 doc(s) no recorte`** e a query é `.limit(Math.max(limit, 1000))` **por
+  direção** — a rodada diria *"1000 examinadas"* e **2.500 ficariam de fora sem
+  ninguém saber**, com o colaborador dando a competência por relida com 700
+  participantes ainda sem endereço. Agora o backfill devolve `restaram` (por
+  `count()`, que é AGREGAÇÃO e não lê documento) e **quem encadeia é o APP**
+  (`encadearReleitura`) — a régua de 02/09: *teto de segurança é do app, nunca
+  da pessoa*. ⚠️ `restaram` **não se soma** entre rodadas: ele é o estado de
+  AGORA, e somá-lo faria a tela afirmar uma fila já drenada. ⚠️ E contagem
+  indisponível vira **-1** ("há mais e não sei quantos"), nunca 0.
+  🚦 **A TRAVA É DUPLA e foi PROVADA POR REVERSÃO**
+  (`relerParticipantesAlcancaOAviso.test.tsx`): o rótulo do botão tem de existir
+  na aba que os avisos nomeiam **e** as duas frases do gerador têm de nomeá-lo
+  EXATAMENTE como a tela o escreve — renomear um lado faria a frase envelhecer
+  em SILÊNCIO, levando ao lugar errado. 🐛 **E a primeira "reversão" passou
+  VERDE porque a reversão não aconteceu** (meu script cortou no `indexOf`
+  errado, e eu só descobri conferindo com `grep -c`): **prova por reversão se
+  confere medindo que o código saiu**, senão ela certifica a trava sem testá-la.
+  📌 **UMA ASSERÇÃO FOI TROCADA PELA INTENÇÃO**: `relerParticipantesXml`
+  prendia o TEXTO da frase dentro do `.tsx` do painel — e o texto mudou de casa.
+  A intenção (o resultado conta POR DADO, e "já relido" ≠ "recuperado")
+  continua travada, agora sobre o dono e exigindo que as DUAS telas deleguem.
+  📌 **REGRA QUE FICA: frase de aviso que nomeia um botão se escreve DEPOIS de
+  abrir a aba e ver o botão lá.** E quando a ferramenta existe noutra tela, a
+  pergunta não é *"em que aba ela está?"*, é **"a empresa DESTE aviso consegue
+  chegar nela?"** — botão atrás de uma condição que o caso não satisfaz é botão
+  que não existe, e o sintoma é o dono printando a tela certa para dizer que a
+  opção não está lá.
+
 - **🚨 "PWR — AINDA CONTINUA COM A DIFERENÇA DO VALOR DA RECEITA" — a resposta
   estava na tela dele e saía GRUDADA num parágrafo de 2.500 caracteres** (18/09,
   Paulo, PWR 08/2026, **terceira vez** com a MESMA pergunta, 24h depois de a

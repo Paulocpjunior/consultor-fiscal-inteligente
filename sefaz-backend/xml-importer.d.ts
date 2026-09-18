@@ -82,6 +82,12 @@ export interface ResultadoReleituraParticipantes {
     /** Quantos ganharam o LOGRADOURO — a recusa 0150.10 do PVA (VINATEX). */
     ganharamEndereco: number;
     semDadoNoXml: number;
+    /**
+     * Documentos da fila que NÃO couberam neste lote (o teto é 1000 por
+     * direção). `-1` = há mais e a contagem falhou. Corte MUDO daria "1000
+     * examinadas" numa competência de 3501 documentos.
+     */
+    restaram: number;
     erro?: string;
 }
 

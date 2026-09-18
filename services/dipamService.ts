@@ -4,6 +4,10 @@
  * (puro e testado), porque é ela que decide o que vai declarado à SEFAZ.
  */
 import { getAuth } from 'firebase/auth';
+// A forma do resultado e a FRASE dele têm dono único: a mesma rota é chamada
+// pela 🌾 DIPAM e pela ✏️ CFOP por nota, e duas descrições do mesmo resultado
+// divergem no primeiro campo novo.
+import type { ReleituraParticipantes } from './relerParticipantes';
 
 export interface DipamPendencia {
     codigo: string;
@@ -240,7 +244,7 @@ export const salvarProdutorRural = (produtor: Partial<ProdutorRural> & { doc: st
  * seria pedir trabalho por algo que já existe.
  */
 export const relerMunicipiosDipam = (empresaId: string, competencia: string) =>
-    req<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; acao: string | null }>(
+    req<ReleituraParticipantes>(
         '/api/admin/dipam/reler-municipios', {
             method: 'POST',
             body: JSON.stringify({ empresaId, competencia }),
