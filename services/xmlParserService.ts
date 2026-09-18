@@ -306,6 +306,18 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             }
         }
 
+        // ── DIFAL DE SAÍDA (EC 87/2015) — grupo <ICMSUFDest> do ITEM ──────
+        // Paridade OBRIGATÓRIA com o xml-importer.js (regra da casa, provada
+        // campo a campo em `difalEc87Captura.test.ts`). Ausente = undefined,
+        // NUNCA 0: zero aqui vira débito zero num E310 que a SEFAZ lê como
+        // "esta empresa não deve DIFAL".
+        const icmsUfDest = det.getElementsByTagName('ICMSUFDest')[0];
+        const difal = (tag: string): number | undefined => {
+            if (!icmsUfDest) return undefined;
+            const v = getTextContent(icmsUfDest, tag);
+            return v === '' || v === undefined || v === null ? undefined : num(v);
+        };
+
         itens.push({
             nItem: det.getAttribute('nItem') || String(i + 1),
             cProd: getTextContent(prod, 'cProd'),
@@ -340,6 +352,15 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             cstIpi,
             cEnqIpi,
             vBcIpi,
+            vBCUFDest: difal('vBCUFDest'),
+            vBCFCPUFDest: difal('vBCFCPUFDest'),
+            pFCPUFDest: difal('pFCPUFDest'),
+            pICMSUFDest: difal('pICMSUFDest'),
+            pICMSInter: difal('pICMSInter'),
+            pICMSInterPart: difal('pICMSInterPart'),
+            vFCPUFDest: difal('vFCPUFDest'),
+            vICMSUFDest: difal('vICMSUFDest'),
+            vICMSUFRemet: difal('vICMSUFRemet'),
             vPIS,
             cstPis,
             vBcPis,
@@ -397,6 +418,11 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         vBCST: num(getTextContent(icmsTot, 'vBCST')),
         vST: num(getTextContent(icmsTot, 'vST')),
         vFCPST: num(getTextContent(icmsTot, 'vFCPST')),
+        // DIFAL EC 87/15 no total — reserva do grupo por item. Paridade com o
+        // xml-importer.js; ausente = null, nunca 0.
+        vFCPUFDest: getTextContent(icmsTot, 'vFCPUFDest') ? num(getTextContent(icmsTot, 'vFCPUFDest')) : null,
+        vICMSUFDest: getTextContent(icmsTot, 'vICMSUFDest') ? num(getTextContent(icmsTot, 'vICMSUFDest')) : null,
+        vICMSUFRemet: getTextContent(icmsTot, 'vICMSUFRemet') ? num(getTextContent(icmsTot, 'vICMSUFRemet')) : null,
         vProd: num(getTextContent(icmsTot, 'vProd')),
         vFrete: num(getTextContent(icmsTot, 'vFrete')),
         vSeg: num(getTextContent(icmsTot, 'vSeg')),

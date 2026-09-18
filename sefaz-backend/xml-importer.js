@@ -141,6 +141,35 @@ export function extrairItens(xml) {
     const cofinsInnerMatch = cofins.match(/<(COFINS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
     const cofinsInner = cofinsInnerMatch ? cofinsInnerMatch[2] : '';
 
+    // ── DIFAL DE SAÍDA (EC 87/2015) — o grupo <ICMSUFDest> ────────────────
+    //
+    // 🚨 18/09, VINATEX: *"tem DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS, precisa
+    // ajustar isso também, que vai no SPED"*. O relatório do e-Fiscal dela
+    // (08/2026) lista venda a venda por UF de destino — BA 323,29 de DIFAL e
+    // 44,54 de FCP, CE 162,06, MG 1.428,99, MS 160,84 — e o app declarava
+    // **nada**: nem C101, nem E300/E310/E316.
+    //
+    // 📖 O NÚMERO ESTÁ NA PRÓPRIA NOTA. Na venda interestadual a consumidor
+    // final NÃO contribuinte, a NF-e traz o grupo `ICMSUFDest` em CADA item
+    // (irmão de `<ICMS>` dentro de `<imposto>`), com a partilha já calculada
+    // pelo emitente. Nenhum dos dois parsers o lia — é a MESMA família do
+    // logradouro do 0150 (18/09, de manhã) e do CFOP do cabeçalho do CT-e
+    // (17/09): **o dado chega e o leitor descarta**.
+    //
+    // ⚠️ O GRUPO É DO ITEM, NUNCA DO TOTAL. Uma nota pode ter item tributado
+    // e item isento, e o C101 soma o que os itens declaram. `<ICMSTot>` traz
+    // os mesmos três valores e serve de RESERVA quando o item não os tem
+    // (captura antiga), nunca de fonte primária.
+    //
+    // ⚠️ AUSENTE = null, NUNCA 0: "esta venda não tem DIFAL" e "o leitor não
+    // achou" pedem ações opostas, e zero num campo que vira débito de imposto
+    // é uma AFIRMAÇÃO à SEFAZ (regra de 06/08).
+    const icmsUfDest = pickFirstBlock(det.inner, 'ICMSUFDest');
+    const difalOuNull = (tag) => {
+      const v = pickTag(icmsUfDest, tag);
+      return v === '' || v === undefined || v === null ? null : num(v);
+    };
+
     // CST de PIS e de COFINS — o campo que decide se a ENTRADA gera crédito no
     // regime não-cumulativo (Lei 10.637/02 art. 3º e Lei 10.833/03 art. 3º):
     // 50-56 dão direito, 70-75 não dão, 98/99 são "outras operações".
@@ -195,6 +224,17 @@ export function extrairItens(xml) {
       aliqCOFINS: num(pickTag(cofinsInner, 'pCOFINS')),
       cstCofins,
       vBcCofins: num(pickTag(cofinsInner, 'vBC')),
+      // DIFAL da EC 87/15 (venda interestadual a consumidor final não
+      // contribuinte) — o que alimenta o C101 e o E310 por UF de destino.
+      vBCUFDest: difalOuNull('vBCUFDest'),
+      vBCFCPUFDest: difalOuNull('vBCFCPUFDest'),
+      pFCPUFDest: difalOuNull('pFCPUFDest'),
+      pICMSUFDest: difalOuNull('pICMSUFDest'),
+      pICMSInter: difalOuNull('pICMSInter'),
+      pICMSInterPart: difalOuNull('pICMSInterPart'),
+      vFCPUFDest: difalOuNull('vFCPUFDest'),
+      vICMSUFDest: difalOuNull('vICMSUFDest'),
+      vICMSUFRemet: difalOuNull('vICMSUFRemet'),
       cst,
       orig,
     });
@@ -227,6 +267,12 @@ function extrairTotais(xml) {
     vCOFINS: num(pickTag(icmsTot, 'vCOFINS')),
     vOutro: num(pickTag(icmsTot, 'vOutro')),
     vNF: num(pickTag(icmsTot, 'vNF')),
+    // DIFAL EC 87/15 no total do documento — RESERVA do que o item declara
+    // (`ICMSUFDest` por `<det>`). Serve para a nota capturada antes de
+    // 18/09, que não tem o grupo no item. Ausente = null, nunca 0.
+    vFCPUFDest: pickTag(icmsTot, 'vFCPUFDest') ? num(pickTag(icmsTot, 'vFCPUFDest')) : null,
+    vICMSUFDest: pickTag(icmsTot, 'vICMSUFDest') ? num(pickTag(icmsTot, 'vICMSUFDest')) : null,
+    vICMSUFRemet: pickTag(icmsTot, 'vICMSUFRemet') ? num(pickTag(icmsTot, 'vICMSUFRemet')) : null,
   };
 }
 
@@ -1323,7 +1369,10 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
  */
 // v2 (12/09): frete/seguro/outras/FCP-ST por item entraram em CAMPOS_RECUPERAVEIS —
 // nota já carimbada v1 precisa passar de novo, senão o campo novo nunca chega.
-export const VERSAO_RELEITURA_ITENS = 2;
+// v3 (18/09): o grupo `<ICMSUFDest>` (DIFAL de SAÍDA da EC 87/15) entrou. Sem
+// subir a versão, a saída interestadual já capturada ficaria para sempre sem o
+// C101 e sem o E310 — é a fila inteira que precisa passar de novo.
+export const VERSAO_RELEITURA_ITENS = 3;
 
 /**
  * BACKFILL — campos de ITEM que o extrator aprendeu depois (`cstIpi`,

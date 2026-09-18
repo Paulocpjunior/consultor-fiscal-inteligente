@@ -77,6 +77,34 @@
 <section>
     <h2>🆕 O que mudou agora (18/09) — leia esta parte primeiro</h2>
 
+    <h3>0. 🧭 <strong>SPED Fiscal: o diferencial de alíquota das VENDAS para fora do estado não era
+    declarado — e o PVA aceitava o arquivo assim</strong></h3>
+    <p>Quando a empresa vende para <strong>consumidor final de outro estado</strong> (pessoa física, ou
+    empresa que não é contribuinte de ICMS), parte do imposto é devida ao estado de destino — é o
+    <strong>DIFAL da EC 87/2015</strong>, mais o <strong>Fundo de Combate à Pobreza</strong>. Na J.N. VINATEX
+    de 08/2026 isso soma <strong>R$ 2.075,18</strong> espalhados por nove estados, e o arquivo do CFI não
+    trazia <strong>nenhum</strong> dos registros que declaram esse valor.</p>
+    <div class="alerta">⚠️ <strong>Por que ninguém tinha percebido:</strong> o PVA <strong>não reclama de
+    registro que não existe</strong>. Ele só confere o que está escrito no arquivo. Então a competência era
+    importada e aceita <strong>afirmando que a empresa não deve diferencial nenhum</strong> — e a diferença
+    só apareceria numa fiscalização, ou comparando com o sistema antigo, que foi o que aconteceu.</div>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> → gerar o arquivo. O valor
+    <strong>não é calculado pelo app</strong>: ele já vem pronto dentro da própria nota que a empresa emitiu.
+    O CFI passou a lê-lo e a montar o <strong>C101</strong> (por nota) e o <strong>E300/E310/E316</strong>
+    (um por estado de destino).</div>
+    <div class="onde">📍 <strong>Antes de gerar, faça DUAS coisas:</strong>
+    <strong>(1)</strong> Relatórios → <strong>✏️ CFOP por nota</strong> → <strong>♻️ Reler itens dos
+    XMLs</strong> — as notas capturadas antes de hoje não têm esse valor gravado, e a releitura o traz do XML
+    guardado; <strong>(2)</strong> SPED Fiscal → <strong>Ajustes E111</strong> → bloco <strong>“DIFAL EC 87/15
+    a recolher por UF de destino”</strong>, cadastrando o <strong>vencimento</strong> e o <strong>código de
+    receita</strong> de cada estado para onde a empresa vendeu.</div>
+    <div class="alerta">⚠️ <strong>O código de receita é de cada estado e o app não inventa.</strong> Sem ele,
+    o registro da guia (E316) fica de fora e a geração avisa, dizendo o estado e o valor. É de propósito:
+    código errado o validador aceita, e aí o recolhimento vai para a conta errada.</div>
+    <div class="alerta">⚠️ <strong>Se a geração avisar que há notas sem o dado</strong> (ela nomeia as
+    primeiras), é nota capturada antes de hoje — rode o <strong>♻️ Reler itens dos XMLs</strong> e gere de
+    novo. Sem isso o arquivo continua declarando a menos.</div>
+
     <h3>1. 🚚 <strong>SPED Fiscal: o registro do frete (D100) saía com dois campos a menos e o PVA
     não importava o arquivo</strong></h3>
     <p>Na EDUARDO GUERRA de 08/2026 o validador devolveu <strong>23 recusas</strong> —

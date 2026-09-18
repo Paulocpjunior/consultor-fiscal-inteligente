@@ -1739,6 +1739,26 @@ export interface DocumentoFiscalItem {
     cstCofins?: string;
     /** Base de cálculo do COFINS no item. */
     vBcCofins?: number;
+    /**
+     * DIFAL da EC 87/2015 — grupo `<ICMSUFDest>` do item, presente na venda
+     * interestadual a consumidor final NÃO contribuinte. É daqui que saem o
+     * C101 (por documento) e o E300/E310/E316 (por UF de destino) do EFD
+     * ICMS/IPI. Ausente quando a operação não tem DIFAL — **nunca 0**: zero
+     * num campo que vira débito é uma afirmação à SEFAZ.
+     *
+     * Capturado desde 18/09 (caso VINATEX 08/2026). Nota anterior a essa data
+     * tem o grupo só nos totais; o ♻️ Reler itens dos XMLs recupera do XML
+     * guardado no Storage.
+     */
+    vBCUFDest?: number;
+    vBCFCPUFDest?: number;
+    pFCPUFDest?: number;
+    pICMSUFDest?: number;
+    pICMSInter?: number;
+    pICMSInterPart?: number;
+    vFCPUFDest?: number;
+    vICMSUFDest?: number;
+    vICMSUFRemet?: number;
     cst: string;
     orig: string;
 }
@@ -1763,6 +1783,14 @@ export interface DocumentoFiscalTotais {
     vCOFINS: number;
     vOutro: number;
     vNF: number;
+    /**
+     * DIFAL EC 87/15 no TOTAL do documento — reserva do que o item declara
+     * (`ICMSUFDest` por `<det>`), para a nota capturada antes de 18/09.
+     * Ausente = não há DIFAL declarado, nunca 0.
+     */
+    vFCPUFDest?: number | null;
+    vICMSUFDest?: number | null;
+    vICMSUFRemet?: number | null;
 }
 
 

@@ -54,6 +54,11 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
     // existia em tela nenhuma.
     const [difalCodigo, setDifalCodigo] = useState('');
     const [obrigacoesSt, setObrigacoesSt] = useState<Array<{ uf: string } & ObrigacaoStUf>>([]);
+    // 🚨 18/09 (VINATEX): o E316 do DIFAL da EC 87/15 nasceu com o cadastro no
+    // MESMO PR — sem ele o registro não sairia e o aviso mandaria preencher um
+    // lugar inexistente, que é o achado 18 (21/08) na forma que já custou dois
+    // dias nesta casa.
+    const [obrigacoesDifal, setObrigacoesDifal] = useState<Array<{ uf: string } & ObrigacaoStUf>>([]);
 
     const empresa = empresas.find(e => e.id === empresaId) || null;
     const uf = (empresa?.uf || '').toUpperCase();
@@ -69,6 +74,8 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                 setAjustes(cfg.ajustes);
                 setDifalCodigo(cfg.difalCodigoAjusteC197 || '');
                 setObrigacoesSt(Object.entries(cfg.obrigacoesStPorUf || {})
+                    .map(([uf, o]) => ({ uf, dtVcto: o.dtVcto || '', codRec: o.codRec || '' })));
+                setObrigacoesDifal(Object.entries(cfg.obrigacoesDifalEc87PorUf || {})
                     .map(([uf, o]) => ({ uf, dtVcto: o.dtVcto || '', codRec: o.codRec || '' })));
                 setCarregado(chave);
             })
@@ -113,16 +120,28 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                 const cod = o.codRec.trim();
                 if (uf.length === 2 && dt.length === 8 && cod) stMap[uf] = { dtVcto: dt, codRec: cod };
             }
+            // Mesma régua no E316 do DIFAL EC 87/15: sem vencimento E código de
+            // receita o registro não sai. Meia obrigação não se declara.
+            const difalMap: Record<string, ObrigacaoStUf> = {};
+            for (const o of obrigacoesDifal) {
+                const u = o.uf.trim().toUpperCase();
+                const dt = o.dtVcto.replace(/\D/g, '');
+                const cod = o.codRec.trim();
+                if (u.length === 2 && dt.length === 8 && cod) difalMap[u] = { dtVcto: dt, codRec: cod };
+            }
             await salvarAjustes({
                 empresaId, empresaCnpj: empresa.cnpj, competencia, ajustes: limpos,
                 difalCodigoAjusteC197: difalCodigo,
                 obrigacoesStPorUf: stMap,
+                obrigacoesDifalEc87PorUf: difalMap,
             });
             setAjustes(limpos);
             const nSt = Object.keys(stMap).length;
+            const nDifal = Object.keys(difalMap).length;
             onShowToast?.(`Ajustes salvos (${limpos.length})`
                 + `${difalCodigo ? ' · código do C197' : ''}`
                 + `${nSt ? ` · ${nSt} obrigação(ões) de ST` : ''}`
+                + `${nDifal ? ` · ${nDifal} obrigação(ões) de DIFAL EC 87/15` : ''}`
                 + '. Entram no PRÓXIMO arquivo gerado desta competência.');
         } catch (e: any) {
             onShowToast?.(`Falha ao salvar: ${e.message}`);
@@ -291,8 +310,61 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                         >＋ Adicionar UF</button>
                         <p className="text-[11px] pt-2" style={{ color: 'var(--text-muted)' }}>
                             A linha só vira E250 com os TRÊS campos preenchidos — meia obrigação não se declara.
-                            Use o <strong>💾 Salvar ajustes</strong> acima: os três blocos gravam no mesmo lugar.
+                            Use o <strong>💾 Salvar ajustes</strong> acima: os blocos gravam no mesmo lugar.
                         </p>
+
+                        {/* 🚨 E316 — a obrigação do DIFAL da EC 87/15, por UF de DESTINO.
+                            Nasceu em 18/09 (VINATEX) junto do E300/E310, porque registro
+                            que depende de código estadual e não tem onde ser cadastrado é
+                            aviso apontando lugar que não existe. */}
+                        <label className="text-[10px] uppercase font-bold block mb-1 mt-5" style={{ color: 'var(--text-muted)' }}>
+                            DIFAL EC 87/15 a recolher por UF de destino (E316) — uma guia por estado
+                        </label>
+                        <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Venda interestadual a <strong>consumidor final não contribuinte</strong>: o valor do
+                            diferencial e do FCP vem da <strong>própria nota</strong> (o app não recalcula), mas o
+                            <strong> código de receita</strong> e o <strong>vencimento</strong> são do estado de
+                            destino e não estão no documento. Sem os dois, o E316 fica de fora e a geração avisa.
+                        </p>
+                        {obrigacoesDifal.map((o, i) => (
+                            <div key={i} className="flex flex-wrap items-center gap-2 mb-2">
+                                <input
+                                    value={o.uf}
+                                    onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
+                                        ? { ...x, uf: e.target.value.toUpperCase().slice(0, 2) } : x))}
+                                    placeholder="UF"
+                                    className="w-[70px] px-3 py-2 text-sm rounded-lg text-center"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    value={o.dtVcto}
+                                    onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
+                                        ? { ...x, dtVcto: e.target.value.replace(/\D/g, '').slice(0, 8) } : x))}
+                                    placeholder="Vencimento DDMMAAAA"
+                                    className="w-[190px] px-3 py-2 text-sm rounded-lg"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    value={o.codRec}
+                                    onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
+                                        ? { ...x, codRec: e.target.value } : x))}
+                                    placeholder="Código de receita da UF de destino"
+                                    className="flex-1 min-w-[200px] px-3 py-2 text-sm rounded-lg"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <button
+                                    onClick={() => setObrigacoesDifal(prev => prev.filter((_, k) => k !== i))}
+                                    className="px-3 py-2 text-xs font-bold rounded-lg"
+                                    style={{ background: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border-default)' }}
+                                    title="Remover"
+                                >✕</button>
+                            </div>
+                        ))}
+                        <button
+                            onClick={() => setObrigacoesDifal(prev => [...prev, { uf: '', dtVcto: '', codRec: '' }])}
+                            className="px-4 py-2 text-xs font-bold rounded-lg"
+                            style={{ background: 'var(--bg-card)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                        >＋ Adicionar UF de destino</button>
                     </div>
 
                     {/* 🧭 O campo "dentro da nota" do e-Fiscal — pedido do Paulo em 14/09 (HYPE CAFÉ). */}

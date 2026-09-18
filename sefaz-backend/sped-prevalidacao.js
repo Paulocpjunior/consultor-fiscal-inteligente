@@ -62,6 +62,12 @@ const num = (v) => {
 };
 const centavos = (n) => Math.round(n * 100);
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
+/**
+ * Dinheiro na forma que a pessoa lê (pt-BR). Mensagem de recusa com "1234.56"
+ * obriga quem lê a decidir se o ponto é decimal ou milhar — foi o `R$ 308.07`
+ * do extrato do R-2099 (13/08).
+ */
+const brl = (n) => (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
  * Campos que a NFC-e (COD_MOD 65) NÃO pode informar no C100, com a posição do
@@ -1635,6 +1641,129 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
                 + 'truncada é a inscrição de outro contribuinte.',
             fonte: 'PVA: "Inscrição Estadual inválida" (ELS · 08/2026, 11/09); Guia 3.2.3, 0000 campo 10.',
         });
+    })();
+
+    // ── R46. DIFAL EC 87/15: C101 exige E300 da UF, e o E310 tem de FECHAR ──
+    //
+    // 📖 FONTE — Guia 3.2.3:
+    //  · E300, Validação do Registro: *"O registro é obrigatório se a soma, por
+    //    UF, dos valores dos campos VL_ICMS_UF_DEST dos registros C101 e D101
+    //    for maior que zero; ou VL_ICMS_UF_REM for maior que zero; ou
+    //    VL_FCP_UF_DEST dos registros C101 e D101 for maior que zero"*;
+    //  · E310: *"Registro obrigatório, se existir o registro E300"*;
+    //  · E310 campo 04: *"Somatório dos valores dos campos VL_ICMS_UF_DEST dos
+    //    registros C101 cujo registro pai, C100 tenham IND_OPER = 1 (Saída) …
+    //    se o campo 2 – UF do registro E300 for igual a UF do participante
+    //    informado no campo COD_PART do registro C100"*;
+    //  · E316: *"a soma do valor das obrigações … deve ser igual ao somatório
+    //    dos campos: VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP +
+    //    DEB_ESP_FCP"*.
+    //
+    // 🚨 A AUSÊNCIA É QUE CUSTA CARO AQUI, e por isso a regra existe: o PVA
+    // **não acusa registro que não foi informado**. Um arquivo sem E300/E310
+    // é aceito afirmando que a empresa não deve diferencial nenhum — foi o que
+    // aconteceu com a VINATEX até 18/09, com R$ 2.075,18 de DIFAL declarados
+    // nas próprias notas dela.
+    (() => {
+        const c101s = doReg('C101');
+        const e300s = doReg('E300');
+        const e310s = doReg('E310');
+
+        // (a) Há C101 e não há E300 — a apuração inteira sumiu do arquivo.
+        if (c101s.length && !e300s.length) {
+            const somaDest = c101s.reduce((s, l) => s + num(campos(l)[3]), 0);
+            const somaFcp = c101s.reduce((s, l) => s + num(campos(l)[2]), 0);
+            add(erros, {
+                regra: 'difal-ec87-sem-e300', registro: 'C101', campo: '3 - VL_ICMS_UF_DEST',
+                linha: c101s[0], valor: brl(somaDest), esperado: 'um E300 por UF de destino',
+                mensagem: `${c101s.length} registro(s) C101 declaram R$ ${brl(somaDest)} de DIFAL e `
+                    + `R$ ${brl(somaFcp)} de FCP, e o arquivo NÃO traz nenhum E300/E310 — a apuração do `
+                    + 'diferencial não foi declarada.',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA não acusa registro ausente: o arquivo '
+                    + 'seria ACEITO dizendo que a empresa não deve diferencial nenhum.',
+                fonte: 'Guia Prático 3.2.3, E300: "O registro é obrigatório se a soma, por UF, dos valores '
+                    + 'dos campos VL_ICMS_UF_DEST dos registros C101 e D101 for maior que zero".',
+            });
+        }
+
+        // (b) E300 sem E310 — o Guia é literal ("obrigatório, se existir E300").
+        if (e300s.length && e310s.length < e300s.length) {
+            add(erros, {
+                regra: 'e300-sem-e310', registro: 'E300', campo: '1 - REG', linha: e300s[0],
+                valor: `${e310s.length} E310`, esperado: `${e300s.length} (um por E300)`,
+                mensagem: `O arquivo tem ${e300s.length} registro(s) E300 e ${e310s.length} E310.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: 'Guia Prático 3.2.3, E310: "Registro obrigatório, se existir o registro E300".',
+            });
+        }
+
+        // (c) A aritmética de CADA E310 — as três fórmulas que o Guia escreve
+        //     por extenso. É a classe do E110 campo 11 (02/08): cada total,
+        //     isolado, parece certo; o que não fecha é a EXPRESSÃO, e nenhum
+        //     validador de FORMA vê isso.
+        for (const l of e310s) {
+            const f = campos(l);
+            const v = (i) => num(f[i]);
+            const conferir = (rotulo, achado, esperadoNum) => {
+                if (Math.abs(achado - esperadoNum) <= 0.01) return;
+                add(erros, {
+                    regra: 'e310-nao-fecha', registro: 'E310', campo: rotulo, linha: l,
+                    valor: brl(achado), esperado: brl(esperadoNum),
+                    mensagem: `O E310 não fecha consigo mesmo em ${rotulo}: declara ${brl(achado)} e a `
+                        + `fórmula do Guia dá ${brl(esperadoNum)}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recalcula estes campos e recusa.',
+                    fonte: 'Guia Prático 3.2.3, E310, validações dos campos 10, 12, 13, 18, 20 e 21.',
+                });
+            };
+            // 📖 ORDEM DO E310 (2017+): todos os campos do DIFAL (03 a 12) e
+            // só então os do FCP (13 a 22). A tabela do E310 REVOGADO, que
+            // vem antes no mesmo Guia, intercala os dois — ler a errada põe o
+            // FCP na casa do crédito de DIFAL.
+            //   03 sld_cred_ant · 04 tot_deb · 05 out_deb · 06 tot_cred ·
+            //   07 out_cred · 08 sld_dev_ant · 09 deduções · 10 recol ·
+            //   11 sld_cred_transp · 12 deb_esp
+            const debD = v(4) + v(5);
+            const credD = v(3) + v(6) + v(7);
+            conferir('08 - VL_SLD_DEV_ANT_DIFAL', v(8), debD - credD >= 0 ? debD - credD : 0);
+            conferir('10 - VL_RECOL_DIFAL', v(10), v(8) - v(9) >= 0 ? v(8) - v(9) : 0);
+            conferir('11 - VL_SLD_CRED_TRANSPORTAR_DIFAL', v(11),
+                credD + v(9) - debD > 0 ? credD + v(9) - debD : 0);
+            //   13 sld_cred_ant · 14 tot_deb · 15 out_deb · 16 tot_cred ·
+            //   17 out_cred · 18 sld_dev_ant · 19 deduções · 20 recol ·
+            //   21 sld_cred_transp · 22 deb_esp
+            const debF = v(14) + v(15);
+            const credF = v(13) + v(16) + v(17);
+            conferir('18 - VL_SLD_DEV_ANT_FCP', v(18), debF - credF >= 0 ? debF - credF : 0);
+            conferir('20 - VL_RECOL_FCP', v(20), v(18) - v(19) >= 0 ? v(18) - v(19) : 0);
+            conferir('21 - VL_SLD_CRED_TRANSPORTAR_FCP', v(21),
+                credF + v(19) - debF > 0 ? credF + v(19) - debF : 0);
+        }
+
+        // (d) O E316 tem de somar exatamente o que o E310 manda recolher.
+        //     ⚠️ Só acusa quando há E316: a AUSÊNCIA dele tem causa própria (o
+        //     código de receita estadual não cadastrado) e sai no aviso da
+        //     geração, com o lugar de preencher. Dois alarmes para o mesmo
+        //     defeito é o caminho conhecido para a equipe ignorar os dois.
+        const e316s = doReg('E316');
+        if (e316s.length) {
+            const aRecolher = e310s.reduce((s, l) => {
+                const f = campos(l);
+                return s + num(f[10]) + num(f[12]) + num(f[20]) + num(f[22]);
+            }, 0);
+            const somaOr = e316s.reduce((s, l) => s + num(campos(l)[3]), 0);
+            if (Math.abs(aRecolher - somaOr) > 0.01) {
+                add(erros, {
+                    regra: 'e316-nao-bate-e310', registro: 'E316', campo: '3 - VL_OR', linha: e316s[0],
+                    valor: brl(somaOr), esperado: brl(aRecolher),
+                    mensagem: `A soma do VL_OR dos E316 (${brl(somaOr)}) não bate com o que os E310 mandam `
+                        + `recolher (${brl(aRecolher)}).`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. Se alguma UF ficou sem o código de '
+                        + 'receita cadastrado, o E316 dela não saiu: cadastre em SPED Fiscal → Ajustes E111.',
+                    fonte: 'Guia Prático 3.2.3, E316 campo 03: "o valor da soma deste campo deve corresponder '
+                        + 'à soma dos campos VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP + DEB_ESP_FCP".',
+                });
+            }
+        }
     })();
 
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────

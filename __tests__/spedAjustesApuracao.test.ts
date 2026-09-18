@@ -17,8 +17,35 @@ describe('validarCodigoAjuste', () => {
         expect(validarCodigoAjuste('SP123', 'SP').ok).toBe(false);
         expect(validarCodigoAjuste('MG020799', 'SP').erro).toMatch(/UF MG/);
         expect(validarCodigoAjuste('SP090799', 'SP').erro).toMatch(/desconhecido/);
-        // DIFAL/FCP (3º caractere fora de 0/1) segue recusado — E310 não existe.
-        expect(validarCodigoAjuste('SP520799', 'SP').erro).toMatch(/E310/);
+    });
+
+    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (18/09). Ela exigia a palavra "E310" na
+    // recusa, prendendo a frase *"E310, que o CFI ainda não gera"* — e isso
+    // VIROU FALSO: o DIFAL da EC 87/15 passa a sair em E300/E310/E316 (caso
+    // VINATEX). Mensagem que afirma uma regra e está errada é citada de volta
+    // como fato (classe de 28/08, o comentário do M210).
+    //
+    // E ela testava `SP520799`, cujo 3º caractere é **'5'** — nem DIFAL nem
+    // FCP: era um teste de "caractere desconhecido" com nome de teste de DIFAL.
+    // A intenção (o ajuste de DIFAL/FCP NÃO entra no E111 nem some em silêncio)
+    // continua travada, agora sobre os códigos certos e pelo motivo VERDADEIRO:
+    // o ajuste do E311 é da tabela da UF de DESTINO, que o app não cadastra.
+    it('ajuste de DIFAL/FCP continua RECUSADO — mas pelo motivo que é verdade hoje', () => {
+        const difal = validarCodigoAjuste('SP220799', 'SP');
+        expect(difal.ok).toBe(false);
+        expect(difal.erro).toMatch(/DIFAL da EC 87\/15/);
+        expect(difal.erro).toMatch(/UF de DESTINO/);
+        expect(difal.erro).not.toMatch(/ainda não gera/);
+
+        const fcp = validarCodigoAjuste('SP320799', 'SP');
+        expect(fcp.ok).toBe(false);
+        expect(fcp.erro).toMatch(/FCP da EC 87\/15/);
+
+        // 3º caractere fora de 0/1/2/3 continua sendo "não reconhecido", e a
+        // frase LISTA os quatro — quem lê precisa saber quais existem.
+        const desconhecido = validarCodigoAjuste('SP520799', 'SP');
+        expect(desconhecido.ok).toBe(false);
+        expect(desconhecido.erro).toMatch(/0 \(próprio\), 1 \(ST\), 2 \(DIFAL EC 87\/15\) ou 3 \(FCP EC 87\/15\)/);
     });
 
     it('código de ST (3º caractere 1) agora é ACEITO e marcado como da apuração ST', () => {

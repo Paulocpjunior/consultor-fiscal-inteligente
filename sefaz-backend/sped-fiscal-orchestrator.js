@@ -638,6 +638,12 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // o E250 nunca saía e o aviso mandava "informe no cadastro", um cadastro
     // que não existia. Mora no MESMO doc dos ajustes, como o código do C197.
     let obrigacoesStPorUf = {};
+    // 🚨 E316 — a obrigação do DIFAL/FCP da EC 87/15 a recolher, POR UF DE
+    // DESTINO (18/09, VINATEX). Mesma régua e mesma casa do E250: o COD_REC é
+    // código ESTADUAL e o DT_VCTO é o prazo daquele estado — nenhum dos dois
+    // está no documento nem se deduz. Sem eles o E316 não sai e a falta vai
+    // NOMEADA na geração, nunca em silêncio.
+    let obrigacoesDifalEc87PorUf = {};
     // 🧭 DIFAL na apuração (art. 117): códigos dos dois E111 + o informado por
     // nota, no MESMO doc dos ajustes (14/09, HYPE CAFÉ). Trimestral concatena
     // o informado dos três meses; os códigos são os do último doc que os tem.
@@ -654,6 +660,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                 if (s.exists && s.data().difalCodigoAjusteC197) difalCfg = s.data();
                 if (s.exists && s.data().obrigacoesStPorUf) {
                     obrigacoesStPorUf = { ...obrigacoesStPorUf, ...s.data().obrigacoesStPorUf };
+                }
+                if (s.exists && s.data().obrigacoesDifalEc87PorUf) {
+                    obrigacoesDifalEc87PorUf = {
+                        ...obrigacoesDifalEc87PorUf, ...s.data().obrigacoesDifalEc87PorUf,
+                    };
                 }
                 const a117 = s.exists ? (s.data().difalArt117 || null) : null;
                 if (a117) {
@@ -788,6 +799,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         ajustesApuracao,
         difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
         obrigacoesStPorUf,
+        obrigacoesDifalEc87PorUf,
         difalCodObservacao: difalCfg.difalCodObservacao || '',
         difalAliqInternaPadrao: difalCfg.difalAliqInternaPadrao || 18,
         // A alíquota interna INFORMADA por nota na aba do art. 117 vale também

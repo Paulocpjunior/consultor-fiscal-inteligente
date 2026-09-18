@@ -46,6 +46,19 @@ export const CAMPOS_RECUPERAVEIS = [
     'vSeg',
     'vOutro',
     'vFCPST',
+    // 18/09 (VINATEX · 08/2026): o DIFAL de SAÍDA da EC 87/15 vem declarado no
+    // grupo `<ICMSUFDest>` de cada item e NENHUM dos dois parsers o lia — o
+    // C101 e o E300/E310/E316 saíam do arquivo inteiro. O XML está no Storage,
+    // então o acervo se recupera relendo a FONTE, sem pedir nada ao cliente.
+    'vBCUFDest',
+    'vBCFCPUFDest',
+    'pFCPUFDest',
+    'pICMSUFDest',
+    'pICMSInter',
+    'pICMSInterPart',
+    'vFCPUFDest',
+    'vICMSUFDest',
+    'vICMSUFRemet',
 ];
 
 /** Vazio = ausente. `0` e `'0'` NÃO são vazios: zero é resposta. */
