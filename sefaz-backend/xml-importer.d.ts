@@ -83,9 +83,10 @@ export interface ResultadoReleituraParticipantes {
     ganharamEndereco: number;
     semDadoNoXml: number;
     /**
-     * Documentos da fila que NÃO couberam neste lote (o teto é 1000 por
-     * direção). `-1` = há mais e a contagem falhou. Corte MUDO daria "1000
-     * examinadas" numa competência de 3501 documentos.
+     * Documentos da fila que a rodada NÃO viu (o orçamento é de 1000
+     * downloads por direção; o já-relido é pulado de graça, por cursor, e por
+     * isso a rodada seguinte AVANÇA). `0` = fila esgotada (resposta, nunca
+     * default); `-1` = há mais e a contagem falhou.
      */
     restaram: number;
     erro?: string;
@@ -132,6 +133,8 @@ export function relerItensFiscais(p?: {
     semDadoNoXml: number;
     porCampo: Record<string, number>;
     naoPareadasDetalhe: Array<{ chave: string; numero: string | null; motivo: string }>;
+    /** O que a rodada NÃO viu: 0 = fila esgotada, -1 = há mais e a contagem falhou. */
+    restaram: number;
     erro?: string;
 }>;
 
@@ -154,6 +157,8 @@ export function relerNotasVazias(p?: {
     jaCompletas: number;
     semItemNoXml: number;
     falhas: number;
+    /** O que a rodada NÃO viu: 0 = fila esgotada, -1 = há mais e a contagem falhou. */
+    restaram: number;
 }>;
 
 /**
@@ -176,4 +181,6 @@ export function relerCabecalhoCtes(p?: {
     semMudanca: number;
     falhas: number;
     campos: Record<string, number>;
+    /** O que a rodada NÃO viu: 0 = fila esgotada, -1 = há mais e a contagem falhou. */
+    restaram: number;
 }>;

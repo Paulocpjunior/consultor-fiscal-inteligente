@@ -5,6 +5,68 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "CONTINUA COM OS ERROS E O DIFAL NÃO APARECEU MESMO RELENDO" — a FILA
+  DO ♻️ NÃO ANDAVA: cada rodada relia os MESMOS 1000 documentos** (18/09, à
+  noite, Paulo, J.N. VINATEX · 08/2026, com o Relatório de Erros do PVA — **159
+  recusas** no campo 10 do 0150, de manhã eram 732 — e a tela do E300 vazia).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR SE CHEGOU À PRODUÇÃO**: os deploys 983-986
+  estão verdes, e o do DIFAL (986) entrou às **13h45 BRT**; o PVA dele avaliou
+  às 14h19 *"estado da escrituração sem vínculo com arquivo"* — ou seja, a
+  escrituração IMPORTADA, cuja hora de geração não se lê no print. A
+  composição do DIFAL foi **rodada** (XML sintético → `extrairItens` →
+  `mesclarItensRelidos` → `difalDoDocumento` → `montarLinhasDifalBlocoE`) e
+  sai `|E300|BA|…|` + `|E310|1|…|`: **o caminho está certo**. Releitura de
+  itens feita ANTES das 13h45 carimbou `itensRelidos=2` sem o grupo — o
+  servidor de hoje relê (2 < 3) — e a frase do botão tem de mostrar
+  `vICMSUFDest em N`; sem isso, o aviso da geração diz que o grupo falta.
+  🔴 **O 0150 TINHA DEFEITO REAL, e ele estava nos QUATRO ♻️ do acervo**: o
+  backfill fazia `q.limit(1000).get()` e filtrava o carimbo **EM MEMÓRIA**. A
+  query devolve SEMPRE os mesmos 1000 primeiros (ordem do id), a rodada 1 os
+  carimba e a rodada 2 recebe os MESMOS 1000 — todos *"já relidos"* —, examina
+  ZERO e o `encadearReleitura` para por *"não progrediu"*. Os 2501 restantes
+  da competência (3501 no recorte) **nunca eram alcançados**, com a rota
+  devolvendo `restaram: 2501` e mandando *"rode de novo até a fila zerar"*
+  sobre uma fila que não tinha como andar. **É a fila da reconferência de
+  20/08 (MV LIDER) outra vez** — lá o carimbo resolveu porque a seleção
+  ORDENAVA por ele; aqui o carimbo é filtrado DEPOIS do corte e só esconde.
+  E o comentário de ontem afirmava o contrário (*"o carimbo faz cada rodada
+  avançar de verdade"*) — frase escrita da INTENÇÃO, nunca medida.
+  ✂️ `varrerComOrcamento` + `restaramDaVarredura` (em `firestore-paginate.js`,
+  o dono da paginação): página por CURSOR (`startAfter`), o já-relido é pulado
+  **de graça** (`return false`, não gasta orçamento) e a rodada só para quando
+  gastou o orçamento em DOWNLOADS ou chegou ao **fim** da fila — `restaram` é o
+  que a rodada NÃO viu (`0` = esgotou, resposta; `-1` = contagem caída). Os
+  quatro ♻️ passaram pelo dono (`relerItensFiscais` cortava em 5000, `notas
+  vazias` e `CT-e` em 3000 — a MESMA forma, esperando a competência maior), e
+  os três que não encadeiam ganharam `restaram` na resposta e a frase na tela
+  (`fraseDoRestaram`, no dono da frase) — *"clique de novo"* só passou a ser
+  verdade agora.
+  ✂️ **E O 0150 É DA PESSOA, NÃO DA PRIMEIRA NOTA**: o coletor dos DOIS
+  orquestradores fazia `if (participantesMap.has(docLimpo)) continue;` — o
+  primeiro documento do mês decidia o cadastro inteiro, mesmo sendo o único
+  sem endereço. `mesclarParticipante` (no dono `sped-bloco0-cadastros.js`)
+  preenche o que está VAZIO com o que outro documento do mesmo participante
+  traz, e **nunca sobrescreve** (endereços divergentes é outra pergunta).
+  🚦 **PROVADO COM UM FIRESTORE FALSO com a semântica do cursor**
+  (`varreduraComOrcamentoAndaAFila.test.ts`, o caso da VINATEX: 3501 docs,
+  1000 relidos): rodada 1 examina 1001-2000, rodada 2 examina 2001-3000,
+  rodada 3 drena e responde `restaram: 0`; e a **forma antiga é reproduzida
+  no teste** devolvendo `0 examinadas` para sempre. Varredura nos quatro
+  backfills (chamam o dono, sem `.limit().get()` no CÓDIGO). **Uma asserção
+  foi TROCADA pela intenção**: ela prendia `restaram = Math.max(0, total -
+  snap.size)` — e `snap.size` era a página cortada, a forma do defeito.
+  🚩 **PENDÊNCIA DO PAULO (VINATEX 08/2026)**: rodar de novo o **♻️ Reler
+  participante e município** (agora ele drena os 3501 sozinho) e o **♻️ Reler
+  itens dos XMLs** (a frase tem de trazer `vICMSUFDest em N`), cadastrar
+  vencimento e código de receita das UFs em Ajustes E111, regerar e, no PVA,
+  **apagar a competência** antes de importar — o nome do arquivo carrega a
+  hora.
+  📌 **REGRA QUE FICA: backfill que pula o já-feito pagina por CURSOR, nunca
+  por `limit()` + filtro em memória** — o corte vem ANTES do filtro, e a fila
+  para exatamente onde o lote acaba, dizendo "rode de novo". E **frase que
+  promete progresso se prova com a fila de verdade**: "cada rodada avança" foi
+  escrita ontem sem uma rodada de teste com mais documentos que o lote.
+
 - **🧭 "A VINATEX TEM DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS, PRECISA AJUSTAR ISSO
   TAMBÉM, QUE VAI NO SPED" — o valor estava DENTRO da nota que ela emitiu, e o
   arquivo declarava NADA** (18/09, Paulo, J.N. VINATEX · 08/2026, com dois

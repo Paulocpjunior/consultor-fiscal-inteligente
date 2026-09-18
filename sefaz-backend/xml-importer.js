@@ -22,6 +22,11 @@ import {
   lerCabecalhoCte, classificarCteParaCabecalho, patchDoCabecalhoCte, VERSAO_RELEITURA_CTE,
 } from './cte-cabecalho.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+// A fila que ANDA (18/09, VINATEX · 159 recusas do 0150 depois de reler): os
+// quatro ♻️ do acervo cortavam a fila num `limit()` ANTES do filtro do carimbo,
+// e a rodada seguinte relia os MESMOS documentos. Quem pagina por cursor e
+// gasta o orçamento só no trabalho caro é o dono, em `firestore-paginate.js`.
+import { varrerComOrcamento, restaramDaVarredura } from './firestore-paginate.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 // CNPJ do escritório — é ele que o cliente põe no autXML da nota dele.
@@ -1255,102 +1260,99 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     if (empresaId) q = q.where('empresaId', '==', String(empresaId));
     if (competencia) q = q.where('competencia', '==', String(competencia));
 
-    const teto = empresaId || competencia ? Math.max(limit, 1000) : limit;
-    const snap = await q.limit(teto).get();
-
-    // 🚨 O CORTE NÃO PODE SER MUDO (a régua do farol honesto, 30/07). A J.N.
-    // VINATEX de 08/2026 tem **3501 documentos** no recorte e o teto é 1000 por
-    // direção: sem este número, a rodada diria "1000 examinadas" e 2500 ficariam
-    // de fora sem ninguém saber — exatamente o silêncio que faz alguém dar a
-    // competência por relida com 700 participantes ainda sem endereço.
-    // Uma agregação, não uma varredura: `count()` não lê documento.
-    if (snap.size >= teto) {
-      try {
-        const agg = await q.count().get();
-        const total = Number(agg.data()?.count || 0);
-        restaram = Math.max(0, total - snap.size);
-      } catch (e) {
-        // Contagem indisponível não vira "não restou nada" — seria a mesma
-        // mentira, com outra causa. -1 diz "há mais e não sei quantos".
-        console.warn('[preencherEnderecoParticipantes] count() falhou:', e.message);
-        restaram = -1;
-      }
-    }
-
+    // 🚨 O ORÇAMENTO É DE TRABALHO CARO, E A FILA ANDA POR CURSOR (18/09, à
+    // noite — VINATEX: "continua com os erros mesmo relendo", 159 recusas). A
+    // forma antiga era `q.limit(teto).get()` + filtro do carimbo EM MEMÓRIA:
+    // a query devolvia SEMPRE os mesmos 1000 primeiros documentos, a rodada 1
+    // os carimbava e a rodada 2 recebia os MESMOS 1000 ("já relidos"),
+    // examinava zero e parava — os 2501 restantes da competência nunca eram
+    // alcançados, com a rota mandando "rode de novo até a fila zerar".
+    // Agora o já-relido é pulado DE GRAÇA página a página (não consome
+    // orçamento) e a rodada só para quando gastou o orçamento em downloads
+    // ou chegou ao FIM da fila. É o dono `varrerComOrcamento` — a régua da
+    // fila da reconferência (20/08), aplicada ao backfill.
+    const orcamento = empresaId || competencia ? Math.max(limit, 1000) : limit;
     const bucket = storage.bucket(STORAGE_BUCKET);
-    for (const docSnap of snap.docs) {
-      const d = docSnap.data() || {};
-      // Já relido NESTA versão do extrator — não volta à fila. O que decide é
-      // "já passei por aqui?", nunca "tem UF?": a UF vem em toda nota e fazia
-      // o backfill pular justamente as que faltavam município e fornecedor.
-      if (Number(d.participantesRelidos || 0) >= VERSAO_RELEITURA_PARTICIPANTES) { jaTinham++; continue; }
-      examinadas++;
-      if (!d.storagePath) { semXml++; continue; }
-      try {
-        const [buf] = await bucket.file(d.storagePath).download();
-        const p = extrairParticipantesNfe(buf.toString('utf8'));
-        // Grava os DOIS lados: a nota própria de entrada (tpNF=0) tem o
-        // produtor no bloco destinatário, e a compra normal tem no emitente.
-        // Preencher só um lado deixaria metade das notas rurais sem município.
-        //
-        // BACKFILL NÃO APAGA. Campo que o XML não trouxe não pode sobrescrever
-        // o que o importer já gravou — seria destruir dado bom pra "corrigir"
-        // dado ausente. Só a UF do lado varrido recebe '' quando o XML não tem:
-        // ela é o SENTINELA (sem ela o mesmo doc voltaria pra fila pra sempre).
-        const patch = {};
-        // Preenche só o que está VAZIO. O que o importer já gravou não é
-        // sobrescrito nem apagado: este backfill recupera ausência, não corrige
-        // divergência — divergência entre fonte e cadastro é ALERTA, e alerta
-        // não se resolve por escrita silenciosa.
-        const por = (campo, valor) => {
-          const atual = d[campo];
-          if (valor && (atual === undefined || atual === null || atual === '')) patch[campo] = valor;
-        };
-        // A IDENTIDADE do participante vem junto: sem `cnpjEmit` a nota cai em
-        // "fornecedor indefinido" para sempre, e era o buraco das 427.
-        por('cnpjEmit', p.emitente.cnpj);
-        por('xNomeEmit', p.emitente.nome);
-        por('codMunEmit', p.emitente.codMunIBGE);
-        por('ieEmit', p.emitente.ie);
-        por('cnpjDest', p.destinatario.cnpj);
-        por('xNomeDest', p.destinatario.nome);
-        por('codMunDest', p.destinatario.codMunIBGE);
-        por('ieDest', p.destinatario.ie);
-        por('ufEmit', p.emitente.uf);
-        por('ufDest', p.destinatario.uf);
-        // 🚨 O ENDEREÇO — campo 10 do 0150, obrigatório sem condição, e que o
-        // extrator descartava até 18/09 (VINATEX: 732 recusas do PVA). Está no
-        // MESMO `<enderDest>`/`<enderEmit>` de onde a UF já saía, então o
-        // acervo inteiro se recupera com o ♻️ — subir a VERSÃO acima é o que
-        // recoloca a base na fila.
-        por('logradouroEmit', p.emitente.logradouro);
-        por('nroEmit', p.emitente.numero);
-        por('complementoEmit', p.emitente.complemento);
-        por('bairroEmit', p.emitente.bairro);
-        por('logradouroDest', p.destinatario.logradouro);
-        por('nroDest', p.destinatario.numero);
-        por('complementoDest', p.destinatario.complemento);
-        por('bairroDest', p.destinatario.bairro);
-        patch.participantesRelidos = VERSAO_RELEITURA_PARTICIPANTES;
-        patch.participantesRelidosEm = new Date().toISOString();
+    const varredura = await varrerComOrcamento(q, {
+      orcamento,
+      aoDoc: async (docSnap) => {
+        const d = docSnap.data() || {};
+        // Já relido NESTA versão do extrator — não volta à fila. O que decide é
+        // "já passei por aqui?", nunca "tem UF?": a UF vem em toda nota e fazia
+        // o backfill pular justamente as que faltavam município e fornecedor.
+        // ⚠️ Pular é de graça (`false`): não gasta o orçamento da rodada.
+        if (Number(d.participantesRelidos || 0) >= VERSAO_RELEITURA_PARTICIPANTES) { jaTinham++; return false; }
+        examinadas++;
+        if (!d.storagePath) { semXml++; return false; }
+        try {
+          const [buf] = await bucket.file(d.storagePath).download();
+          const p = extrairParticipantesNfe(buf.toString('utf8'));
+          // Grava os DOIS lados: a nota própria de entrada (tpNF=0) tem o
+          // produtor no bloco destinatário, e a compra normal tem no emitente.
+          // Preencher só um lado deixaria metade das notas rurais sem município.
+          //
+          // BACKFILL NÃO APAGA. Campo que o XML não trouxe não pode sobrescrever
+          // o que o importer já gravou — seria destruir dado bom pra "corrigir"
+          // dado ausente. Só a UF do lado varrido recebe '' quando o XML não tem:
+          // ela é o SENTINELA (sem ela o mesmo doc voltaria pra fila pra sempre).
+          const patch = {};
+          // Preenche só o que está VAZIO. O que o importer já gravou não é
+          // sobrescrito nem apagado: este backfill recupera ausência, não corrige
+          // divergência — divergência entre fonte e cadastro é ALERTA, e alerta
+          // não se resolve por escrita silenciosa.
+          const por = (campo, valor) => {
+            const atual = d[campo];
+            if (valor && (atual === undefined || atual === null || atual === '')) patch[campo] = valor;
+          };
+          // A IDENTIDADE do participante vem junto: sem `cnpjEmit` a nota cai em
+          // "fornecedor indefinido" para sempre, e era o buraco das 427.
+          por('cnpjEmit', p.emitente.cnpj);
+          por('xNomeEmit', p.emitente.nome);
+          por('codMunEmit', p.emitente.codMunIBGE);
+          por('ieEmit', p.emitente.ie);
+          por('cnpjDest', p.destinatario.cnpj);
+          por('xNomeDest', p.destinatario.nome);
+          por('codMunDest', p.destinatario.codMunIBGE);
+          por('ieDest', p.destinatario.ie);
+          por('ufEmit', p.emitente.uf);
+          por('ufDest', p.destinatario.uf);
+          // 🚨 O ENDEREÇO — campo 10 do 0150, obrigatório sem condição, e que o
+          // extrator descartava até 18/09 (VINATEX: 732 recusas do PVA). Está no
+          // MESMO `<enderDest>`/`<enderEmit>` de onde a UF já saía, então o
+          // acervo inteiro se recupera com o ♻️ — subir a VERSÃO acima é o que
+          // recoloca a base na fila.
+          por('logradouroEmit', p.emitente.logradouro);
+          por('nroEmit', p.emitente.numero);
+          por('complementoEmit', p.emitente.complemento);
+          por('bairroEmit', p.emitente.bairro);
+          por('logradouroDest', p.destinatario.logradouro);
+          por('nroDest', p.destinatario.numero);
+          por('complementoDest', p.destinatario.complemento);
+          por('bairroDest', p.destinatario.bairro);
+          patch.participantesRelidos = VERSAO_RELEITURA_PARTICIPANTES;
+          patch.participantesRelidosEm = new Date().toISOString();
 
-        const ladoQueInteressa = direcao === 'entrada' ? 'Emit' : 'Dest';
-        if (patch[`codMun${ladoQueInteressa}`]) ganharamMunicipio++;
-        if (patch[`cnpj${ladoQueInteressa}`] || patch[`xNome${ladoQueInteressa}`]) ganharamFornecedor++;
-        // Contado à parte porque a AÇÃO é outra: é este número que responde
-        // "quantos dos 732 participantes sem ENDERECO o XML resolveu".
-        if (patch[`logradouro${ladoQueInteressa}`]) ganharamEndereco++;
-        // Relido e o XML REALMENTE não tinha — resposta diferente de "já
-        // tinha", e é ela que manda procurar o dado no cadastro do produtor.
-        const recuperouAlgo = Object.keys(patch).length > 2;
-        if (!recuperouAlgo) semDadoNoXml++;
-        await docSnap.ref.update(patch);
-        if (recuperouAlgo) preenchidas++;
-      } catch (e) {
-        console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
-        semXml++;
-      }
-    }
+          const ladoQueInteressa = direcao === 'entrada' ? 'Emit' : 'Dest';
+          if (patch[`codMun${ladoQueInteressa}`]) ganharamMunicipio++;
+          if (patch[`cnpj${ladoQueInteressa}`] || patch[`xNome${ladoQueInteressa}`]) ganharamFornecedor++;
+          // Contado à parte porque a AÇÃO é outra: é este número que responde
+          // "quantos dos 732 participantes sem ENDERECO o XML resolveu".
+          if (patch[`logradouro${ladoQueInteressa}`]) ganharamEndereco++;
+          // Relido e o XML REALMENTE não tinha — resposta diferente de "já
+          // tinha", e é ela que manda procurar o dado no cadastro do produtor.
+          const recuperouAlgo = Object.keys(patch).length > 2;
+          if (!recuperouAlgo) semDadoNoXml++;
+          await docSnap.ref.update(patch);
+          if (recuperouAlgo) preenchidas++;
+        } catch (e) {
+          console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
+          semXml++;
+        }
+        return true;   // gastou o orçamento: baixou (ou tentou baixar) o XML
+      },
+    });
+    // O que a rodada NÃO viu — fila esgotada é 0 (resposta), contagem caída é -1.
+    restaram = await restaramDaVarredura(q, varredura);
   } catch (e) {
     console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
     return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, restaram, erro: e.message };
@@ -1392,6 +1394,8 @@ export const VERSAO_RELEITURA_ITENS = 3;
 export async function relerItensFiscais({ limit = 200, empresaId = null, competencia = null } = {}) {
   const db = fa().firestore();
   let examinadas = 0, atualizadas = 0, semXml = 0, jaRelidas = 0, semItens = 0, naoPareadas = 0, semDadoNoXml = 0;
+  // O que a rodada NÃO viu: 0 = fila esgotada (resposta), -1 = há mais e não sei quantos.
+  let restaram = 0;
   const porCampo = {};
   const naoPareadasDetalhe = [];
   try {
@@ -1402,53 +1406,60 @@ export async function relerItensFiscais({ limit = 200, empresaId = null, compete
     let q = db.collection('documentos_fiscais');
     if (empresaId) q = q.where('empresaId', '==', String(empresaId));
     if (competencia) q = q.where('competencia', '==', String(competencia));
-    const snap = await q.limit(Math.max(limit, 1)).get();
-
+    // Paginação por CURSOR com orçamento de downloads (a fila que ANDA — ver
+    // `preencherEnderecoParticipantes`): o `q.limit(N).get()` cortava a fila
+    // antes do filtro do carimbo, e competência maior que o lote ficava com o
+    // resto para sempre "a reler", sem nenhuma rodada chegar nele.
     const bucket = storage.bucket(STORAGE_BUCKET);
-    for (const docSnap of snap.docs) {
-      const d = docSnap.data() || {};
-      if (Number(d.itensRelidos || 0) >= VERSAO_RELEITURA_ITENS) { jaRelidas++; continue; }
-      examinadas++;
-      if (!Array.isArray(d.itens) || !d.itens.length) { semItens++; continue; }
-      if (!d.storagePath) { semXml++; continue; }
-      try {
-        const [buf] = await bucket.file(d.storagePath).download();
-        const doXml = extrairItens(buf.toString('utf8'));
-        const r = mesclarItensRelidos(d.itens, doXml, CAMPOS_RECUPERAVEIS);
+    const varredura = await varrerComOrcamento(q, {
+      orcamento: Math.max(limit, 1),
+      aoDoc: async (docSnap) => {
+        const d = docSnap.data() || {};
+        if (Number(d.itensRelidos || 0) >= VERSAO_RELEITURA_ITENS) { jaRelidas++; return false; }
+        examinadas++;
+        if (!Array.isArray(d.itens) || !d.itens.length) { semItens++; return false; }
+        if (!d.storagePath) { semXml++; return false; }
+        try {
+          const [buf] = await bucket.file(d.storagePath).download();
+          const doXml = extrairItens(buf.toString('utf8'));
+          const r = mesclarItensRelidos(d.itens, doXml, CAMPOS_RECUPERAVEIS);
 
-        // NÃO PAREOU: a nota fica INTACTA e NOMEADA. Gravar por índice quando
-        // as contagens divergem escreveria o CST de um produto em outro, e o
-        // arquivo sairia ACEITO declarando outra coisa — não volta recusa.
-        // Também NÃO carimba: ela tem de voltar à fila quando alguém olhar.
-        if (r.motivo) {
-          naoPareadas++;
-          if (naoPareadasDetalhe.length < 20) {
-            naoPareadasDetalhe.push({ chave: d.chave || docSnap.id, numero: d.numero || null, motivo: r.motivo });
+          // NÃO PAREOU: a nota fica INTACTA e NOMEADA. Gravar por índice quando
+          // as contagens divergem escreveria o CST de um produto em outro, e o
+          // arquivo sairia ACEITO declarando outra coisa — não volta recusa.
+          // Também NÃO carimba: ela tem de voltar à fila quando alguém olhar.
+          if (r.motivo) {
+            naoPareadas++;
+            if (naoPareadasDetalhe.length < 20) {
+              naoPareadasDetalhe.push({ chave: d.chave || docSnap.id, numero: d.numero || null, motivo: r.motivo });
+            }
+            return true;
           }
-          continue;
-        }
 
-        const patch = { itensRelidos: VERSAO_RELEITURA_ITENS, itensRelidosEm: new Date().toISOString() };
-        if (r.alterados > 0) {
-          patch.itens = r.itens;
-          for (const [campo, n] of Object.entries(r.campos)) porCampo[campo] = (porCampo[campo] || 0) + n;
-        } else {
-          // Relida e o XML REALMENTE não tinha o campo — resposta DIFERENTE de
-          // "já relida", e é ela que diz que não adianta clicar de novo.
-          semDadoNoXml++;
+          const patch = { itensRelidos: VERSAO_RELEITURA_ITENS, itensRelidosEm: new Date().toISOString() };
+          if (r.alterados > 0) {
+            patch.itens = r.itens;
+            for (const [campo, n] of Object.entries(r.campos)) porCampo[campo] = (porCampo[campo] || 0) + n;
+          } else {
+            // Relida e o XML REALMENTE não tinha o campo — resposta DIFERENTE de
+            // "já relida", e é ela que diz que não adianta clicar de novo.
+            semDadoNoXml++;
+          }
+          await docSnap.ref.update(patch);
+          if (r.alterados > 0) atualizadas++;
+        } catch (e) {
+          console.warn(`[relerItensFiscais] falha em ${docSnap.id}:`, e.message);
+          semXml++;
         }
-        await docSnap.ref.update(patch);
-        if (r.alterados > 0) atualizadas++;
-      } catch (e) {
-        console.warn(`[relerItensFiscais] falha em ${docSnap.id}:`, e.message);
-        semXml++;
-      }
-    }
+        return true;
+      },
+    });
+    restaram = await restaramDaVarredura(q, varredura);
   } catch (e) {
     console.warn('[relerItensFiscais] query falhou:', e.message);
-    return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, erro: e.message };
+    return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, restaram, erro: e.message };
   }
-  return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe };
+  return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, restaram };
 }
 
 /**
@@ -1476,21 +1487,28 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
   const res = {
     examinadas: 0, preenchidas: 0, ganharamNumero: 0, soResumo: 0,
     semArquivo: 0, foraDoEscopo: 0, jaCompletas: 0, semItemNoXml: 0, falhas: 0,
+    // O que a rodada NÃO viu: 0 = fila esgotada (resposta), -1 = contagem caída.
+    restaram: 0,
   };
   let q = db.collection('documentos_fiscais');
   if (empresaId) q = q.where('empresaId', '==', String(empresaId));
   if (competencia) q = q.where('competencia', '==', String(competencia));
-  const snap = await q.limit(Math.max(limit, 1)).get();
 
+  // Paginação por CURSOR com orçamento de downloads (a fila que ANDA — ver
+  // `preencherEnderecoParticipantes`, 18/09): o `q.limit(N).get()` cortava a
+  // fila antes da classificação, e competência maior que o lote nunca era
+  // alcançada além dos N primeiros.
   const bucket = storage.bucket(STORAGE_BUCKET);
-  for (const docSnap of snap.docs) {
+  const varredura = await varrerComOrcamento(q, {
+    orcamento: Math.max(limit, 1),
+    aoDoc: async (docSnap) => {
     const d = docSnap.data() || {};
-    if (d._merged_into || d._deleted) continue;
+    if (d._merged_into || d._deleted) return false;
     res.examinadas++;
 
     const causa = classificarParaReleitura(d);
-    if (causa === 'fora-do-escopo') { res.foraDoEscopo++; continue; }
-    if (causa === 'completa') { res.jaCompletas++; continue; }
+    if (causa === 'fora-do-escopo') { res.foraDoEscopo++; return false; }
+    if (causa === 'completa') { res.jaCompletas++; return false; }
 
     // Resumo/sem-arquivo: a releitura não cria item, mas o Nº sai da CHAVE —
     // a linha da tela deixa de ficar cega mesmo antes do XML completo chegar.
@@ -1506,7 +1524,7 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
           res.falhas++;
         }
       }
-      continue;
+      return false;
     }
 
     // alvo: XML guardado — reler da FONTE.
@@ -1521,7 +1539,7 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
           await docSnap.ref.update({ numero, numeroOrigem: 'chave-de-acesso' });
           res.ganharamNumero++;
         }
-        continue;
+        return true;
       }
       const itens = extrairItens(xml);
       let numero = null;
@@ -1542,7 +1560,10 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
       console.warn(`[relerNotasVazias] falha em ${docSnap.id}:`, e.message);
       res.falhas++;
     }
-  }
+    return true;
+    },
+  });
+  res.restaram = await restaramDaVarredura(q, varredura);
   return res;
 }
 
@@ -1572,23 +1593,28 @@ export async function relerCabecalhoCtes({ empresaId, competencia, limit = 3000 
     examinados: 0, recuperados: 0, jaCompletos: 0, jaRelidos: 0,
     semArquivo: 0, xmlSemCfop: 0, foraDoEscopo: 0, semMudanca: 0, falhas: 0,
     campos: {},
+    // O que a rodada NÃO viu: 0 = fila esgotada (resposta), -1 = contagem caída.
+    restaram: 0,
   };
   let q = db.collection('documentos_fiscais');
   if (empresaId) q = q.where('empresaId', '==', String(empresaId));
   if (competencia) q = q.where('competencia', '==', String(competencia));
-  const snap = await q.limit(Math.max(limit, 1)).get();
 
+  // Paginação por CURSOR com orçamento de downloads (a fila que ANDA — ver
+  // `preencherEnderecoParticipantes`, 18/09).
   const bucket = storage.bucket(STORAGE_BUCKET);
-  for (const docSnap of snap.docs) {
+  const varredura = await varrerComOrcamento(q, {
+    orcamento: Math.max(limit, 1),
+    aoDoc: async (docSnap) => {
     const d = docSnap.data() || {};
-    if (d._merged_into || d._deleted) continue;
+    if (d._merged_into || d._deleted) return false;
 
     const causa = classificarCteParaCabecalho(d);
-    if (causa === 'fora-do-escopo') continue;   // não é CT-e: nem conta como examinado
+    if (causa === 'fora-do-escopo') return false;   // não é CT-e: nem conta como examinado
     res.examinados++;
-    if (causa === 'completo') { res.jaCompletos++; continue; }
-    if (causa === 'ja-relido') { res.jaRelidos++; continue; }
-    if (causa === 'sem-arquivo') { res.semArquivo++; continue; }
+    if (causa === 'completo') { res.jaCompletos++; return false; }
+    if (causa === 'ja-relido') { res.jaRelidos++; return false; }
+    if (causa === 'sem-arquivo') { res.semArquivo++; return false; }
 
     try {
       const [buf] = await bucket.file(d.storagePath).download();
@@ -1618,7 +1644,10 @@ export async function relerCabecalhoCtes({ empresaId, competencia, limit = 3000 
       console.warn(`[relerCabecalhoCtes] falha em ${docSnap.id}:`, e.message);
       res.falhas++;
     }
-  }
+    return true;
+    },
+  });
+  res.restaram = await restaramDaVarredura(q, varredura);
   return res;
 }
 

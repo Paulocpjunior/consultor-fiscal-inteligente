@@ -100,6 +100,12 @@ export interface RelerItensResposta {
     semDadoNoXml: number;
     porCampo: Record<string, number>;
     naoPareadasDetalhe: Array<{ chave: string; numero: string | null; motivo: string }>;
+    /**
+     * O que a rodada NÃO viu (18/09): a fila anda por cursor e o orçamento é de
+     * downloads — `0` = esgotou, `-1` = há mais e a contagem falhou. Backend
+     * antigo não manda o campo: ausência não é "esgotou".
+     */
+    restaram?: number;
     error?: string;
 }
 
@@ -121,6 +127,8 @@ export interface RelerNotasVaziasResposta {
     /** XML completo sem <det> legível — esquisito de verdade, conferir. */
     semItemNoXml: number;
     falhas: number;
+    /** O que a rodada NÃO viu: 0 = esgotou, -1 = há mais e a contagem falhou. */
+    restaram?: number;
     error?: string;
 }
 
@@ -160,6 +168,8 @@ export interface RelerCabecalhoCtesResposta {
     semMudanca: number;
     falhas: number;
     campos?: Record<string, number>;
+    /** O que a rodada NÃO viu: 0 = esgotou, -1 = há mais e a contagem falhou. */
+    restaram?: number;
     error?: string;
 }
 

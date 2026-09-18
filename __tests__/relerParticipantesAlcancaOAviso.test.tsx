@@ -188,9 +188,16 @@ describe('🚨 a fila é maior que o lote — 3501 documentos contra 1000 por di
     it('o backfill DIZ quanto sobrou — e a soma das direções preserva o "não sei"', () => {
         const importer = ler('sefaz-backend/xml-importer.js');
         const backfill = importer.slice(importer.indexOf('export async function preencherEnderecoParticipantes'));
-        // A contagem é uma AGREGAÇÃO, não uma varredura: `count()` não lê doc.
-        expect(backfill).toMatch(/q\.count\(\)/);
-        expect(backfill).toMatch(/restaram = Math\.max\(0, total - snap\.size\)/);
+        // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (18/09, à noite): ela prendia o
+        // texto `restaram = Math.max(0, total - snap.size)` — e `snap.size` era
+        // a PÁGINA CORTADA pelo `limit()`, ou seja a forma que produzia "rode
+        // de novo" sobre uma fila que não andava. A intenção (o que sobrou é
+        // contado por AGREGAÇÃO, nunca por varredura) continua travada, agora
+        // no dono `restaramDaVarredura`, que o backfill chama.
+        expect(backfill).toMatch(/restaram = await restaramDaVarredura\(q, varredura\)/);
+        const paginador = ler('sefaz-backend/firestore-paginate.js');
+        expect(paginador).toMatch(/baseQuery\.count\(\)\.get\(\)/);
+        expect(paginador).toMatch(/Math\.max\(0, total - vistos\)/);
 
         const rota = ler('sefaz-backend/dipam-routes.js');
         expect(rota).toMatch(/ganharamEndereco: soma\('ganharamEndereco'\)/);

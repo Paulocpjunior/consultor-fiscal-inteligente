@@ -30,6 +30,10 @@ import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bl
 import * as fmtSped from './sped-fiscal-format.js';
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+// O 0150 é da PESSOA, não da primeira nota: ausência num documento não apaga
+// presença no outro (18/09, VINATEX — o 'primeiro vence' deixava sem endereço
+// o cliente cujo primeiro documento do mês não tinha sido relido).
+import { mesclarParticipante } from './sped-bloco0-cadastros.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
@@ -202,7 +206,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
 
         const docLimpo = String(cnpjBruto).replace(/\D/g, '');
         if (!docLimpo) continue;
-        if (participantesMap.has(docLimpo)) continue;
+        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
+        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
+        // preenchendo só o que o primeiro documento não trouxe.
 
         // Detecta PF (CPF 11 digitos) vs PJ (CNPJ 14 digitos) pelo tamanho.
         // Documentos com outros tamanhos sao invalidos — loga e pula.
@@ -218,7 +224,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
 
         // codPart = documento limpo (suficiente como identificador unico)
-        participantesMap.set(docLimpo, {
+        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
             codPart: docLimpo,
             nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
             cnpj: cnpjFinal,
@@ -229,7 +235,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             numero: participanteRaw.numero || '',
             complemento: participanteRaw.complemento || '',
             bairro: participanteRaw.bairro || '',
-        });
+        }));
     }
     const participantes = Array.from(participantesMap.values());
 

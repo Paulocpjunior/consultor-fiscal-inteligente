@@ -356,8 +356,12 @@ router.post('/reler-municipios', requireAdmin, async (req, res) => {
         if (total.jaTinham && !total.preenchidas && !total.semXml && !total.semDadoNoXml) {
             partes.push('Nada mudou porque todos já haviam sido relidos nesta versão do leitor.');
         }
-        // A FILA MAIOR QUE O LOTE VAI DITA — e com o caminho: como o carimbo de
-        // versão faz o já-relido ser pulado, a rodada seguinte avança de fato.
+        // A FILA MAIOR QUE O LOTE VAI DITA — e com o caminho. ⚠️ "Rode de novo"
+        // só passou a ser VERDADE em 18/09 à noite: até então o backfill cortava
+        // a fila num `limit(1000)` ANTES do filtro do carimbo, e a rodada
+        // seguinte recebia os MESMOS 1000 (VINATEX: 159 recusas do 0150 depois
+        // de reler). Agora ele pagina por cursor e pula o já-relido de graça
+        // (`varrerComOrcamento`), então a rodada seguinte avança de fato.
         if (total.restaram === -1) {
             partes.push('Ainda há documentos desta competência que não couberam nesta rodada — rode de novo '
                 + 'até a fila zerar (o que já foi relido é pulado).');

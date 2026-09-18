@@ -205,3 +205,48 @@ describe('♻️ o backfill recoloca a base na fila', () => {
         }
     });
 });
+
+// ═══ O 0150 É DA PESSOA, NÃO DA PRIMEIRA NOTA ═══════════════════════════════
+//
+// 18/09, à noite (159 recusas depois de reler): o coletor fazia "o primeiro
+// vence" — `if (participantesMap.has(docLimpo)) continue;` — então o cliente
+// cujo PRIMEIRO documento do mês não trazia endereço saía sem logradouro,
+// mesmo com outro documento DELE, mais adiante, já relido e completo.
+describe('🚨 mesclarParticipante — ausência num documento não apaga presença no outro', () => {
+    // `require` devolve `any` — o `.js` do backend não tem tipos.
+    const { mesclarParticipante } = require('../sefaz-backend/sped-bloco0-cadastros.js');
+    const semEndereco = { codPart: '11111111000191', nome: 'SEM NOME', cnpj: '11111111000191', cpf: '', ie: '', codMunIBGE: '3550308', logradouro: '', numero: '', complemento: '', bairro: 'PARQUE REGINA' };
+    const comEndereco = { codPart: '11111111000191', nome: 'CLIENTE UM', cnpj: '11111111000191', cpf: '', ie: '135000000000', codMunIBGE: '3550308', logradouro: 'RUA DAS FLORES', numero: '10', complemento: 'SALA 2', bairro: 'PARQUE REGINA' };
+
+    it('o segundo documento preenche o que o primeiro não trouxe (o print do PVA: bairro cheio, logradouro vazio)', () => {
+        const m = mesclarParticipante(semEndereco, comEndereco);
+        expect(m.logradouro).toBe('RUA DAS FLORES');
+        expect(m.numero).toBe('10');
+        expect(m.ie).toBe('135000000000');
+        expect(m.nome).toBe('CLIENTE UM');   // 'SEM NOME' é o nome INVENTADO, conta como vazio
+        expect(build0150(m)).toMatch(/\|RUA DAS FLORES\|10\|SALA 2\|PARQUE REGINA\|/);
+    });
+
+    it('e NUNCA sobrescreve o que já estava — divergência é alerta, não escrita silenciosa', () => {
+        const m = mesclarParticipante(comEndereco, { ...comEndereco, logradouro: 'OUTRA RUA', bairro: 'OUTRO' });
+        expect(m.logradouro).toBe('RUA DAS FLORES');
+        expect(m.bairro).toBe('PARQUE REGINA');
+    });
+
+    it('sem existente, devolve o novo — a primeira vez continua igual', () => {
+        expect(mesclarParticipante(undefined, comEndereco)).toEqual(comEndereco);
+    });
+
+    it('os DOIS orquestradores fundem em vez de "o primeiro vence"', () => {
+        const fs = require('fs');
+        const path = require('path');
+        for (const arq of ['sped-fiscal-orchestrator.js', 'sped-contrib-orchestrator.js']) {
+            const src = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend', arq), 'utf8');
+            const codigo = src.split('\n').filter((l: string) => !/^\s*\/\//.test(l)).join('\n');
+            expect({ arq, funde: /participantesMap\.set\(docLimpo, mesclarParticipante\(participantesMap\.get\(docLimpo\)/.test(codigo) })
+                .toEqual({ arq, funde: true });
+            expect({ arq, primeiroVence: /if \(participantesMap\.has\(docLimpo\)\) continue;/.test(codigo) })
+                .toEqual({ arq, primeiroVence: false });
+        }
+    });
+});
