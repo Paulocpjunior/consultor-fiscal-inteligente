@@ -39,6 +39,11 @@ import { regimeDaEmpresa } from './regime-tributario.js';
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
 // leem daqui; eram três leituras, e as três discordavam do manual.
 import { valorOperacaoDosItens } from './valor-operacao-c190.js';
+// DIFAL de SAÍDA (EC 87/15) — o C101 leva o que a PRÓPRIA nota declara no
+// grupo `ICMSUFDest`, e o E310 (bloco E) soma esses mesmos C101 por UF de
+// destino. Quem lê o grupo é o dono, nunca uma leitura nova aqui: o PVA cruza
+// os dois registros, e duas leituras divergiriam dentro do mesmo arquivo.
+import { documentoLevaC101, camposDoC101 } from './difal-ec87-saida.js';
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -430,6 +435,29 @@ export function buildBlocoC(dados) {
             // C170s — apenas se a nota nao for cancelada/denegada/inutilizada
             // (Guia Pratico: notas canceladas vao apenas com C100, sem C170)
             if (!docCancelado(nota) && nota.status !== 'denegado' && nota.status !== 'inutilizado') {
+                // ── C101 — DIFAL da EC 87/15, o PRIMEIRO filho do C100 ──────
+                //
+                // Venda interestadual a consumidor final NÃO contribuinte: a
+                // nota que a própria empresa emitiu já traz a partilha no grupo
+                // `ICMSUFDest`, e o C101 só a REPETE (Guia 3.2.3: os três campos
+                // do registro são exatamente os do grupo).
+                //
+                // ⚠️ A ORDEM É DO LEIAUTE: C101 vem ANTES do C170 e do C190.
+                // Registro filho fora de ordem é arquivo que o PVA não importa.
+                //
+                // ⚠️ CANCELADA não leva C101, pela MESMA régua dos outros
+                // filhos: ela sai só com o C100 (Exceção 1), e o débito dela já
+                // fica fora do E310 pelo `docCancelado` do agrupamento.
+                if (documentoLevaC101(nota)) {
+                    const c101 = camposDoC101(nota);
+                    linhas.push(fmt.buildLine([
+                        c101[0],
+                        fmt.formatValue(c101[1], 2),   // VL_FCP_UF_DEST
+                        fmt.formatValue(c101[2], 2),   // VL_ICMS_UF_DEST
+                        fmt.formatValue(c101[3], 2),   // VL_ICMS_UF_REM
+                    ]));
+                }
+
                 // Guia Prático 3.2.3, C100, Exceção 2: NF-e de EMISSÃO PRÓPRIA
                 // (IND_EMIT=0) leva somente C100 + C190 — sem C170.
                 // 🚨 E saída não é a única emissão própria: a nota própria de

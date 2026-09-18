@@ -57,6 +57,13 @@ export interface ConfigAjustesDoc {
     difalCodigoAjusteC197: string;
     /** { 'MG': { dtVcto, codRec } } — uma GNRE por UF de destino. */
     obrigacoesStPorUf: Record<string, ObrigacaoStUf>;
+    /**
+     * { 'BA': { dtVcto, codRec } } — o E316 do DIFAL/FCP da EC 87/15, uma
+     * obrigação por UF de DESTINO. Mesma régua do E250: o código de receita é
+     * ESTADUAL e o app não o deduz; sem ele o registro não sai e a falta vai
+     * NOMEADA na geração.
+     */
+    obrigacoesDifalEc87PorUf: Record<string, ObrigacaoStUf>;
     difalArt117: DifalArt117Cfg;
 }
 
@@ -72,6 +79,7 @@ export async function carregarConfigAjustes(
 ): Promise<ConfigAjustesDoc> {
     const vazio: ConfigAjustesDoc = {
         ajustes: [], difalCodigoAjusteC197: '', obrigacoesStPorUf: {},
+        obrigacoesDifalEc87PorUf: {},
         difalArt117: { codigoDebito: '', codigoCredito: '', porChave: {} },
     };
     if (!isFirebaseConfigured || !db) return vazio;
@@ -82,6 +90,7 @@ export async function carregarConfigAjustes(
         ajustes: d.ajustes || [],
         difalCodigoAjusteC197: d.difalCodigoAjusteC197 || '',
         obrigacoesStPorUf: d.obrigacoesStPorUf || {},
+        obrigacoesDifalEc87PorUf: d.obrigacoesDifalEc87PorUf || {},
         difalArt117: {
             codigoDebito: d.difalArt117?.codigoDebito || '',
             codigoCredito: d.difalArt117?.codigoCredito || '',
@@ -149,13 +158,15 @@ export async function salvarDifalArt117Nota(
 }
 
 export async function salvarAjustes(
-    p: AjustesDoc & Partial<Pick<ConfigAjustesDoc, 'difalCodigoAjusteC197' | 'obrigacoesStPorUf'>>,
+    p: AjustesDoc & Partial<Pick<ConfigAjustesDoc,
+        'difalCodigoAjusteC197' | 'obrigacoesStPorUf' | 'obrigacoesDifalEc87PorUf'>>,
 ): Promise<void> {
     if (!isFirebaseConfigured || !db) throw new Error('Firebase não configurado.');
-    // 🚨 MERGE: este documento tem TRÊS donos (ajustes do E111, o código do
-    // C197 do DIFAL e as obrigações de ST por UF). Um `setDoc` sem merge
-    // APAGARIA o que a outra parte gravou — e apagaria calado, que é o pior
-    // jeito de perder um código de tabela estadual que alguém digitou.
+    // 🚨 MERGE: este documento tem QUATRO donos (ajustes do E111, o código do
+    // C197 do DIFAL de aquisição, as obrigações de ST por UF e as do DIFAL da
+    // EC 87/15 por UF de destino). Um `setDoc` sem merge APAGARIA o que a outra
+    // parte gravou — e apagaria calado, que é o pior jeito de perder um código
+    // de tabela estadual que alguém digitou.
     await setDoc(doc(db, 'sped_ajustes_apuracao', docId(p.empresaId, p.competencia)), {
         empresaId: p.empresaId,
         empresaCnpj: String(p.empresaCnpj || '').replace(/\D/g, ''),
@@ -169,6 +180,9 @@ export async function salvarAjustes(
             ? { difalCodigoAjusteC197: String(p.difalCodigoAjusteC197 || '').trim().toUpperCase() }
             : {}),
         ...(p.obrigacoesStPorUf !== undefined ? { obrigacoesStPorUf: p.obrigacoesStPorUf } : {}),
+        ...(p.obrigacoesDifalEc87PorUf !== undefined
+            ? { obrigacoesDifalEc87PorUf: p.obrigacoesDifalEc87PorUf }
+            : {}),
         atualizadoPor: auth?.currentUser?.email || auth?.currentUser?.uid || null,
         atualizadoEm: serverTimestamp(),
     }, { merge: true });

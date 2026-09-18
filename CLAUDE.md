@@ -5,6 +5,92 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧭 "A VINATEX TEM DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS, PRECISA AJUSTAR ISSO
+  TAMBÉM, QUE VAI NO SPED" — o valor estava DENTRO da nota que ela emitiu, e o
+  arquivo declarava NADA** (18/09, Paulo, J.N. VINATEX · 08/2026, com dois
+  prints do e-Fiscal: o relatório *"Saídas/Prestações com Débito de DIFAL/FCP —
+  Detalhamento das Notas"* listando venda a venda por UF — **BA 323,29 + FCP
+  44,54 · CE 162,06 · MG 1.428,99 · MS 160,84** — e a tela *"Apuração do ICMS
+  Diferencial de Alíquotas — Vendas/Serviços Interestaduais a Consumidor Final
+  Não Contribuinte, EC 87/15"*, com as UFs de destino marcadas em azul e **SP
+  fora**).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR, e a medição achou DUAS ausências**:
+  `grep` em `sefaz-backend/` devolveu **zero** ocorrência de `ICMSUFDest` (a
+  captura descartava o grupo) e o **E300/E310/E316 e o C101 não eram gerados** —
+  eles existiam só no leiaute extraído, no autofix de formato e no editor.
+  E o próprio `migracao-prontidao.js` já dizia, desde 05/08: *"E310/E316 (EC
+  87/15, DIFAL de VENDA a não contribuinte): os dados respondem sozinhos… que o
+  CFI ainda não gera"*. **A lacuna estava NOMEADA no código e o caso real
+  chegou.**
+  🚨 **E O CUSTO É A AUSÊNCIA, que é a pior**: **o PVA não acusa registro que
+  não foi informado.** O arquivo era ACEITO afirmando que a empresa não deve
+  diferencial nenhum — R$ 2.075,18 de DIFAL declarados nas próprias notas dela,
+  invisíveis para a Receita. É a família do `VL_OPR` sem o IPI (20/08): erro que
+  o validador não recusa e só aparece na fiscalização.
+  ✂️ **O DONO NÃO CALCULA, ELE LÊ** (`difal-ec87-saida.js`, em
+  `REGUAS_VIGIADAS`): quem emitiu a nota é a PRÓPRIA empresa, e a NF-e já traz
+  a partilha no grupo `<ICMSUFDest>` de cada item. Recalcular produziria um
+  SEGUNDO número para o mesmo fato — contra o documento que o cliente já
+  transmitiu à SEFAZ. O C101 só REPETE os três campos do grupo, e o E310 campo
+  04 é a **Σ dos C101** (é o Guia que diz).
+  📌 **É O TERCEIRO DESENHO DE DIFAL DESTA CASA, COM A MESMA PALAVRA**: por
+  FORA (Simples, guia, base × Δ), por DENTRO (RPA, art. 117, par de E111) e
+  agora **EC 87/15 — de SAÍDA, por UF de DESTINO, em registro PRÓPRIO que NÃO
+  toca o E110**. A régua de um não serve para o outro (14/09).
+  ⚠️ **SÓ UF DE DESTINO** — *"A partir de janeiro de 2019, deixa de ser
+  obrigatória a apresentação do registro E300 para a UF de origem"* (Guia
+  3.2.3), e o print dele confirma: SP não está marcada. Mas o app **não crava
+  zero** no `vICMSUFRemet`: ele LÊ, e nota que traga parte do remetente sai
+  NOMEADA — o E300 da origem ele não monta, e silenciar seria declarar a MENOS.
+  🚨 **O ERRO QUE O TESTE PEGOU É O MAIS CARO DO DIA: O E310 TEM DUAS VERSÕES
+  NO MESMO GUIA.** A *"VÁLIDA ATÉ 31/12/2016"* tem 14 campos e **INTERCALA** o
+  FCP no DIFAL; a de *"01/01/2017"* tem **22** e põe todo o DIFAL (02-12) antes
+  de todo o FCP (13-22). Os dois títulos são quase iguais e a revogada vem
+  ANTES no arquivo — eu li a errada, e o `VL_TOT_DEB_FCP` caiu na casa do
+  `VL_TOT_CREDITOS_DIFAL`: **o FCP declarado como crédito de DIFAL**, com a
+  contagem de campos CERTA. É o M210 da MANTOAN (18/08) outra vez, e só um
+  teste que confere CAMPO A CAMPO pega. **Posição se lê contando, nunca de
+  olho** — e a ordem certa estava corroborada pelo `sped-fiscal-format-autofix
+  .js`, que já a trazia desde sempre.
+  ⚠️ **O COD_REC DO E316 NÃO SE INVENTA**: é *"próprio da unidade da federação
+  da origem/destino, conforme legislação estadual"*. Mesma régua do E250 da ST
+  e do 1900 da AFFITTARE — cadastro por UF na aba **Ajustes E111**, no MESMO PR
+  (registro que depende de código estadual e não tem onde ser cadastrado é o
+  achado 18), e sem ele o registro **não sai** com a falta DITA. Melhor o PVA
+  cobrar um registro (recusa que se conserta) do que o arquivo declarar código
+  inventado, que ele ACEITA.
+  🚨 **E O SILÊNCIO TEM DATA**: a captura só passou a ler o grupo em 18/09, então
+  nota capturada antes **não o tem gravado** e a competência sairia sem o bloco.
+  `avisoDifalNaoCapturado` usa o CFOP **6107/6108** (venda a NÃO contribuinte —
+  o mesmo sinal que o painel 🚦 usa desde 05/08) como prova de que há algo a
+  declarar, e manda rodar o **♻️ Reler itens dos XMLs** (o XML está no Storage;
+  `VERSAO_RELEITURA_ITENS` foi para **3**).
+  🚦 **AS VALIDAÇÕES OFICIAIS ENTRARAM NO MESMO PR** (R46, com a citação): C101
+  sem E300 · E300 sem E310 · a aritmética dos SEIS campos do E310 · Σ do E316 ×
+  o que o E310 manda recolher. Ela **nasce VERDE sobre o gerador real** e foi
+  **provada por REVERSÃO, medindo que o código SAIU** (`grep -c` = 0): sem o
+  bloco E caem 7 testes, sem o C101 caem 2.
+  ⚠️ **E UMA MENSAGEM PASSOU A MENTIR NO MESMO MINUTO**: `validarCodigoAjuste`
+  recusava código de DIFAL dizendo *"E310, que o CFI ainda não gera"* — falso a
+  partir deste PR. Corrigida, e o ajuste **continua RECUSADO** pelo motivo que é
+  verdade: o E311 é da tabela da UF de **DESTINO**, e o app só cadastra código
+  da UF da empresa; aplicá-lo no estado errado é pior que não aplicar. Duas
+  asserções foram TROCADAS pela intenção — uma delas testava `SP520799`, cujo
+  3º caractere é '5': era um teste de "código desconhecido" com nome de teste
+  de DIFAL.
+  🚩 **PENDÊNCIA DO PAULO (VINATEX 08/2026)**: rodar o **♻️ Reler itens dos
+  XMLs**, cadastrar o código de receita e o vencimento de **BA, CE, MG, MS, PE,
+  PR, RJ, RO e RS** em SPED Fiscal → Ajustes E111, regerar e, no PVA, **apagar
+  a competência** antes de importar. O que o app NÃO transporta ainda é o
+  **saldo credor da competência anterior** (campo 03 do E310) — ele sai ZERO e
+  o aviso avisa quando a competência fecha com saldo a transportar.
+  📌 **REGRA QUE FICA: quando o dono diz "no sistema antigo tinha", a pergunta
+  é O QUE O DOCUMENTO JÁ DECLARA.** Aqui o valor inteiro estava na nota que a
+  própria empresa emitiu, e a entrega foi LER — não calcular. E **registro que
+  o app não gera não produz recusa**: a lacuna só aparece quando alguém compara
+  com o sistema antigo, e é por isso que ela viveu nomeada no código desde
+  05/08 sem custar nada até o primeiro cliente que vende para fora.
+
 - **🚨 "NO CONSULTOR NÃO TEM ESSA OPÇÃO — SÓ TEM ESSES" — o aviso mandava rodar
   um botão que NÃO EXISTIA naquela aba, e a régua que eu quebrei tinha sido
   escrita por mim NO DIA ANTERIOR** (18/09, Paulo, J.N. VINATEX · 08/2026, com
