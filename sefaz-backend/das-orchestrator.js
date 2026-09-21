@@ -14,6 +14,7 @@ import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-dupli
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
 import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, avaliarDeclaracaoJaEntregue } from './pgdas-sem-movimento.js';
 import { candidatosSemMovimento, assertSondaNaoTransmite, lerResultadoCandidato, vereditoDaSonda } from './pgdas-sonda-sem-movimento.js';
+import { assinaturaEmissaoDas, reservarEmissaoDas } from './das-emissao-state.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -101,34 +102,43 @@ export async function emitirDasRegular(req) {
     const provider = getDasProvider();
     const mode = getDasMode();
 
-    // 1. Transmite PGDAS-D (com payload detalhado se vier do frontend)
-    const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor, dadosPgdas });
-
-    // 2. Gera o DAS
-    const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
-
-    // 3. Persiste no Firestore
     const db = fa().firestore();
     const docId = `${empresaCnpj}_${competencia}_regular`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const payload = {
-        empresaId,
-        empresaCnpj,
-        empresaNome: empresaNome || '',
-        competencia,
-        tipo: 'regular',
-        valor,
-        ...das,
-        pgdasRecibo: pgdas.recibo,
-        pgdasNumeroDeclaracao: pgdas.numeroDeclaracao || '',
-        pgdasTipoDeclaracao: pgdas.tipoDeclaracao || 1,
-        pgdasTransmitidoEm: pgdas.transmitidoEm,
-        emitidoEm: new Date().toISOString(),
-        modeUsado: mode,
-        statusPagamento: 'pendente',  // pago | pendente | vencido
-        dataPagamento: null,
-    };
-    await db.collection(COLLECTION).doc(docId).set(payload, { merge: true });
-    return { id: docId, ...payload };
+    const ref = db.collection(COLLECTION).doc(docId);
+    const assinatura = assinaturaEmissaoDas({ empresaId, empresaCnpj, competencia, valor, dadosPgdas });
+    const reserva = await reservarEmissaoDas(db, ref, assinatura, {
+        empresaId, empresaCnpj, empresaNome: empresaNome || '', competencia, tipo: 'regular', valor,
+    });
+    if (reserva.concluida) return { id: docId, ...reserva.atual };
+    let reciboPersistido = Boolean(reserva.recuperar);
+    try {
+        if (!reserva.recuperar) {
+            const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor, dadosPgdas });
+            await ref.set({
+                pgdasRecibo: pgdas.recibo || '',
+                pgdasNumeroDeclaracao: pgdas.numeroDeclaracao || '',
+                pgdasTipoDeclaracao: pgdas.tipoDeclaracao || 1,
+                pgdasTransmitidoEm: pgdas.transmitidoEm || new Date().toISOString(),
+                emissaoEtapa: 'gerando',
+            }, { merge: true });
+            reciboPersistido = Boolean(pgdas.recibo);
+        }
+        const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
+        // Payment fields belong to settlement, never to reprinting/recovery.
+        const { statusPagamento: _status, dataPagamento: _data, ...guia } = das;
+        await ref.set({
+            ...guia, emitidoEm: new Date().toISOString(), modeUsado: mode,
+            emissaoEtapa: 'concluida', emissaoAtualizadaEm: new Date().toISOString(),
+        }, { merge: true });
+        const salvo = await ref.get();
+        return { id: docId, ...salvo.data() };
+    } catch (err) {
+        await ref.set({
+            emissaoEtapa: reciboPersistido ? 'guia_pendente' : 'incerta',
+            emissaoAtualizadaEm: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+        throw err;
+    }
 }
 
 /**

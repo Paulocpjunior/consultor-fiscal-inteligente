@@ -45,7 +45,7 @@ export function documentosNoXml(xml: string): OcorrenciaDeDocumento[] {
     const re = /<\/?([A-Za-z_][\w.:-]*)\b[^>]*?(\/?)>([^<]*)/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(txt)) !== null) {
-        const [bruto, nomeCru, autoFecha, texto] = m;
+        const [bruto = '', nomeCru = '', autoFecha = '', texto = ''] = m;
         // O prefixo de namespace (`ns2:Cnpj`) não é o nome da tag.
         const nome = nomeCru.includes(':') ? nomeCru.split(':').pop()! : nomeCru;
         if (bruto.startsWith('</')) { pilha.pop(); continue; }

@@ -10,6 +10,7 @@ import {
     emitirGuia, getResumoConsolidado, getCatalogoEmissao,
 } from './emission-orchestrator.js';
 import { statusEmissaoGuard } from './emissao-guard.js';
+import { requireEmpresaEmissao } from './emissao-empresa-auth.js';
 
 const router = express.Router();
 
@@ -19,7 +20,8 @@ router.get('/guard-status', requireEmissao, (_req, res) => {
     res.json(statusEmissaoGuard());
 });
 
-router.get('/resumo', requireEmissao, async (_req, res) => {
+router.get('/resumo', requireEmissao, async (req, res) => {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Resumo consolidado disponível apenas para administrador.' });
     try { res.json(await getResumoConsolidado()); }
     catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -30,7 +32,7 @@ router.get('/catalogo', requireEmissao, (req, res) => {
     res.json(getCatalogoEmissao(regime));
 });
 
-router.post('/emitir', requireEmissao, express.json(), async (req, res) => {
+router.post('/emitir', requireEmissao, express.json(), requireEmpresaEmissao, async (req, res) => {
     try { res.json(await emitirGuia(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json({ error: err.message, code: err.code }); }
 });

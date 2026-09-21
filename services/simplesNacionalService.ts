@@ -227,7 +227,9 @@ export const saveEmpresa = async (
             newEmpresa.createdBy      = auth.currentUser.uid;
             newEmpresa.createdByEmail = auth.currentUser.email || undefined;
             await setDoc(doc(db, 'simples_empresas', newEmpresa.id), sanitizePayload(newEmpresa));
-        } catch (e: any) { console.debug('saveEmpresa cloud error:', e.message); }
+        } catch (e: any) {
+            throw new Error('Não foi possível salvar a empresa no servidor. Nenhum cadastro foi confirmado. ' + (e?.message || ''));
+        }
     }
 
     // ── Local cache ──

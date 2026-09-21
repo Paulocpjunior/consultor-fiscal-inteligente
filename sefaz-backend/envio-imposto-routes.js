@@ -452,7 +452,7 @@ router.post('/debitos-ja-enviados', requireAuth, async (req, res) => {
         if (!cnpj || !competencia) {
             return res.status(400).json({ ok: false, error: 'Informe cnpj e competencia.' });
         }
-        if (!(await podeAcessarCnpj(req.user, cnpj))) {
+        if (!(await podeAcessarCnpj(req.user, cnpj)).ok) {
             return res.status(403).json({ ok: false, error: 'Empresa fora da sua carteira.' });
         }
         const db = fa().firestore();
