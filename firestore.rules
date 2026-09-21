@@ -25,6 +25,26 @@ service cloud.firestore {
       return isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
+    function assignedCompany(id) {
+      return isSignedIn() && id is string
+        && exists(/databases/$(database)/documents/carteira_acessos/$(request.auth.uid))
+        && id in get(/databases/$(database)/documents/carteira_acessos/$(request.auth.uid)).data.empresaIds;
+    }
+
+    function companyAccess(id) {
+      return isSignedIn() && (isAdmin() || assignedCompany(id)
+        || (exists(/databases/$(database)/documents/simples_empresas/$(id))
+          && get(/databases/$(database)/documents/simples_empresas/$(id)).data.get('createdBy', '') == request.auth.uid)
+        || (exists(/databases/$(database)/documents/lucro_empresas/$(id))
+          && get(/databases/$(database)/documents/lucro_empresas/$(id)).data.get('createdBy', '') == request.auth.uid));
+    }
+
+    match /carteira_acessos/{uid} {
+      allow get: if isOwnerOrAdmin(uid);
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
     // ───────────────────────────────────────────────────────────────
     // users: admin le todos, user comum le so o proprio
     //        SO admin pode atualizar role de outros (anti-self-promotion)
@@ -110,23 +130,12 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /simples_empresas/{empId} {
-      // get: qualquer logado — colaboradores precisam ler empresas
-      // atribuidas via carteira, nao apenas as que criaram.
-      // list: qualquer logado com limite de query — o filtro por carteira
-      // do colaborador e feito no codigo do app. Idealmente a carteira
-      // seria denormalizada no documento da empresa para permitir
-      // filtragem nas rules, mas isso exigiria refatoracao do modelo.
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 500;
-      // update: qualquer logado, SEM mudar o dono. Antes era
-      // isOwnerOrAdmin(createdBy) — colaborador da carteira que nao criou a
-      // empresa tinha o update rejeitado (permission-denied), o service
-      // engolia o erro e a apuracao "salva" sumia ao trocar de empresa
-      // (caso Carlos Eduardo, 03/07). Filtro por carteira segue no app,
-      // mesmo criterio do read acima. Doc legado sem createdBy segue editavel.
-      allow update: if isSignedIn()
-        && (!('createdBy' in resource.data)
-            || request.resource.data.createdBy == resource.data.createdBy)
+      // Carteira validada pelo indice privado mantido no backend.
+      allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/simples_empresas/$(empId)) || isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
+      allow list: if isSignedIn() && request.query.limit <= 500 && (isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
+      // Colaboradores atribuidos podem salvar, sem mudar o criador.
+      allow update: if companyAccess(empId)
+        && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
         // Lapide _deleted (soft-delete, caso WALDESA 24/07): SO admin pode
         // criar/alterar/remover — exclusao logica e exclusiva de admin, e
         // um save de cache velho de colaborador nao pode apagar a lapide.
@@ -143,15 +152,14 @@ service cloud.firestore {
     }
 
     match /lucro_empresas/{empId} {
-      // get: qualquer logado (colaboradores acessam via carteira).
+      // get: administrador, criador ou colaborador atribuido.
       // list: limite de query para evitar download massivo.
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 500;
-      // update: qualquer logado, sem mudar o dono nem a lapide _deleted
+      allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/lucro_empresas/$(empId)) || isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
+      allow list: if isSignedIn() && request.query.limit <= 500 && (isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
+      // update: acesso a empresa, sem mudar o dono nem a lapide _deleted
       // (ver simples_empresas).
-      allow update: if isSignedIn()
-        && (!('createdBy' in resource.data)
-            || request.resource.data.createdBy == resource.data.createdBy)
+      allow update: if companyAccess(empId)
+        && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
         && (request.resource.data.get('_deleted', false) == resource.data.get('_deleted', false)
             || isAdmin());
       // delete: SO admin (ver comentario em simples_empresas).
@@ -160,22 +168,20 @@ service cloud.firestore {
     }
 
     match /documentos_fiscais/{docId} {
-      // get: qualquer logado (colaboradores acessam via carteira).
+      // get: acesso a empresa verificado no banco.
       // list: limite de query para evitar download massivo.
       // 5000 cobre captura de NFSe SP via cron (319 empresas × ~10 NFs/mês).
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 5000;
-      // UPDATE: qualquer signed-in pode atualizar (re-import PDF complementa
-      // doc criado pelo cron, retag, marcar evento, etc). Bloqueia mudanca
-      // de dono — preserva auditoria. Tambem libera caso a regra antiga
-      // bloqueava import PDF de doc capturado por 'system:auto-sync'/cron.
-      allow update: if isSignedIn() && (
+      allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/documentos_fiscais/$(docId)) || companyAccess(resource.data.get('empresaId', '')));
+      allow list: if isSignedIn() && request.query.limit <= 5000 && companyAccess(resource.data.get('empresaId', ''));
+      // UPDATE: preserva criador e empresa; exige acesso a carteira.
+      allow update: if companyAccess(resource.data.get('empresaId', '')) && (
         isAdmin() ||
-        request.resource.data.createdBy == resource.data.createdBy
+        (request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
+          && request.resource.data.empresaId == resource.data.empresaId)
       );
       // DELETE: dono original ou admin (operacao destrutiva).
-      allow delete: if isOwnerOrAdmin(resource.data.createdBy);
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if companyAccess(resource.data.get('empresaId', '')) && isOwnerOrAdmin(resource.data.createdBy);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid && companyAccess(request.resource.data.get('empresaId', ''));
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -186,14 +192,14 @@ service cloud.firestore {
     // silenciosa de dados). Mesmo padrão de documentos_fiscais.
     // ───────────────────────────────────────────────────────────────
     match /simples_notas/{notaId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 5000;
-      allow update: if isSignedIn() && (
+      allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/simples_notas/$(notaId)) || companyAccess(resource.data.get('empresaId', '')));
+      allow list: if isSignedIn() && request.query.limit <= 5000 && companyAccess(resource.data.get('empresaId', ''));
+      allow update: if companyAccess(resource.data.get('empresaId', '')) && (
         isAdmin() ||
-        request.resource.data.createdBy == resource.data.createdBy
+        (request.resource.data.createdBy == resource.data.createdBy && request.resource.data.empresaId == resource.data.empresaId)
       );
-      allow delete: if isOwnerOrAdmin(resource.data.createdBy);
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if companyAccess(resource.data.get('empresaId', '')) && isOwnerOrAdmin(resource.data.createdBy);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid && companyAccess(request.resource.data.get('empresaId', ''));
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -213,9 +219,9 @@ service cloud.firestore {
     }
 
     match /carteiras/{vinculoId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update, delete: if isAdmin();
+      allow get: if isOwnerOrAdmin(resource.data.colaboradorUid);
+      allow list: if isSignedIn() && request.query.limit <= 500 && isOwnerOrAdmin(resource.data.colaboradorUid);
+      allow create, update, delete: if false;
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -224,15 +230,11 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /simples_empresas/{empId}/{subcoll}/{docId} {
-      allow read, write: if isSignedIn() &&
-        (isAdmin() ||
-         get(/databases/$(database)/documents/simples_empresas/$(empId)).data.createdBy == request.auth.uid);
+      allow read, write: if companyAccess(empId);
     }
 
     match /lucro_empresas/{empId}/{subcoll}/{docId} {
-      allow read, write: if isSignedIn() &&
-        (isAdmin() ||
-         get(/databases/$(database)/documents/lucro_empresas/$(empId)).data.createdBy == request.auth.uid);
+      allow read, write: if companyAccess(empId);
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -671,12 +673,17 @@ service cloud.firestore {
     }
 
     // nfp_analises: analises de compliance tributario (NFP Pro Cloud).
-    // Leitura para qualquer signed-in, escrita para signed-in, delete apenas admin.
+    // Carteira ou analista do prospect; exclusao apenas por administrador.
 
     match /nfp_analises/{docId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update: if isSignedIn();
+      allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/nfp_analises/$(docId)) || companyAccess(docId) || resource.data.get('analisadoPorUid', '') == request.auth.uid);
+      allow list: if isSignedIn() && request.query.limit <= 500 && (companyAccess(resource.data.empresaId) || resource.data.get('analisadoPorUid', '') == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.empresaId == docId
+        && request.resource.data.analisadoPorUid == request.auth.uid
+        && (companyAccess(docId) || docId.matches('prospect_[0-9]{14}'));
+      allow update: if isSignedIn() && request.resource.data.empresaId == resource.data.empresaId
+        && request.resource.data.analisadoPorUid == request.auth.uid
+        && (companyAccess(docId) || resource.data.get('analisadoPorUid', '') == request.auth.uid);
       allow delete: if isAdmin();
     }
 
