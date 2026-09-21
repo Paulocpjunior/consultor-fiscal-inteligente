@@ -126,6 +126,8 @@ jobs:
       - name: Typecheck + testes
         run: |
           npm run lint
+          npm run lint:strict
+          npm audit --prefix proxy-backend --omit=dev --audit-level=moderate
           npm run test:cadastro-contabil
           npm run test:ebef:api
           npx jest --ci

@@ -458,7 +458,7 @@ router.post('/cobertura-declarada', requireAuth, async (req, res) => {
         // Competência ilegível RECUSA com o motivo — gravar no mês errado daria
         // quitação a uma competência que ninguém declarou.
         if (!comp) return res.status(400).json({ ok: false, error: 'Competência ilegível.' });
-        if (!(await podeAcessarEmpresaId(req.user, empresaId))) {
+        if (!(await podeAcessarEmpresaId(req.user, empresaId)).ok) {
             return res.status(403).json({ ok: false, error: 'Esta empresa não está na sua carteira.' });
         }
 

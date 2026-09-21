@@ -248,7 +248,7 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
             erros.push('Informe o CFOP da prestação (4 dígitos) — ele está no cabeçalho do CT-e, ao lado da natureza da operação.');
         } else {
             const iniciaisValidas = i.direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
-            if (!iniciaisValidas.includes(cfop[0])) {
+            if (!iniciaisValidas.includes(cfop.charAt(0))) {
                 erros.push(i.direcao === 'entrada'
                     ? `CFOP ${cfop} é de SAÍDA. Na entrada se lança o CFOP da ESCRITURAÇÃO — o 5357 do transportador vira 1357 aqui.`
                     : `CFOP ${cfop} é de ENTRADA — numa saída o CFOP é 5xxx/6xxx/7xxx.`);
@@ -276,7 +276,7 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
         const cfop = soDigitos(it.cfop);
         if (cfop.length !== 4) {
             erros.push(`Item ${idx + 1}: CFOP deve ter 4 dígitos.`);
-        } else if (!iniciaisValidas.includes(cfop[0])) {
+        } else if (!iniciaisValidas.includes(cfop.charAt(0))) {
             erros.push(i.direcao === 'entrada'
                 ? `Item ${idx + 1}: CFOP ${cfop} é de SAÍDA. Na entrada se lança o CFOP da ESCRITURAÇÃO (1xxx/2xxx/3xxx) — o 5102 do fornecedor vira 1102 aqui.`
                 : `Item ${idx + 1}: CFOP ${cfop} é de ENTRADA — numa saída o CFOP é 5xxx/6xxx/7xxx.`);

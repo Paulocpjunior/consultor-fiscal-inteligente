@@ -733,10 +733,8 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         // 📷 Instagram é por USUÁRIO: a thread não abre pela URL pra quem a
         // lista esconde (o gate mora na MESMA régua da listagem).
-        if (ehConversaInstagram(numero)) {
-            const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
-            if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
-        }
+        const { ok: podeLer } = await podeVerConversa(getDb(), req.user, numero);
+        if (!podeLer) return res.status(403).json(ehConversaInstagram(numero) ? RECUSA_INSTAGRAM : { ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
         // ⬆️ PAGINAÇÃO — o teto de 500 cortava a conversa CALADO. Ordenar
         // resolveu QUAIS 500 vêm (a mensagem nova sempre entra), mas a
         // conversa antiga continuava terminando numa parede sem aviso: a
@@ -1340,6 +1338,8 @@ router.delete('/atendimento-config/imagem-fila/:fila', requireAdmin, async (req,
 async function acaoConversa(req, res, patch, extra = {}) {
     const numero = idConversaDoParam(req.params.numero);
     if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+    const { ok: podeAlterar } = await podeVerConversa(getDb(), req.user, numero);
+    if (!podeAlterar) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
     const agora = new Date().toISOString();
     await getDb().collection('whatsapp_conversas').doc(numero).set(
         { ...patch, atualizadoEm: agora }, { merge: true },
@@ -1365,6 +1365,8 @@ router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
         const recado = String(req.body?.recado || '').trim();
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         if (!filaValida(fila)) return res.status(400).json({ ok: false, error: `Fila inválida. Válidas: ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}` });
+        const { ok: podeTransferir } = await podeVerConversa(getDb(), req.user, numero);
+        if (!podeTransferir) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
 
         const db = getDb();
         const convRef = db.collection('whatsapp_conversas').doc(numero);

@@ -659,9 +659,10 @@ export function nfCanceladasFaltantes(docs: DocumentoFiscal[], empresaCnpj: stri
         if (docCancelado(d)) g.canceladas.add(num);
         mapa.set(k, g);
     }
-    return Array.from(mapa.values()).map(g => {
+    return Array.from(mapa.values()).flatMap(g => {
         const nums = Array.from(g.presentes).sort((a, b) => a - b);
         const primeiro = nums[0], ultimo = nums[nums.length - 1];
+        if (primeiro === undefined || ultimo === undefined) return [];
         const faltantes: number[] = [];
         let faltantesTotal = 0;
         for (let n = primeiro; n <= ultimo; n++) {
@@ -683,11 +684,11 @@ export function nfCanceladasFaltantes(docs: DocumentoFiscal[], empresaCnpj: stri
 export function formatarFaixas(nums: number[]): string {
     if (!nums.length) return '';
     const faixas: string[] = [];
-    let ini = nums[0], fim = nums[0];
+    let ini = nums[0]!, fim = nums[0]!;
     for (let i = 1; i <= nums.length; i++) {
-        if (i < nums.length && nums[i] === fim + 1) { fim = nums[i]; continue; }
+        if (i < nums.length && nums[i] === fim + 1) { fim = nums[i]!; continue; }
         faixas.push(ini === fim ? String(ini) : `${ini}–${fim}`);
-        if (i < nums.length) { ini = nums[i]; fim = nums[i]; }
+        if (i < nums.length) { ini = nums[i]!; fim = nums[i]!; }
     }
     return faixas.join(', ');
 }
@@ -928,7 +929,7 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
     return Array.from(mapa.values()).map(l => ({
         produto: l.produto, ncm: l.ncm,
         cfops: Array.from(l._cfops).sort().join(' '),
-        unidade: l._unidades.size === 1 ? Array.from(l._unidades)[0] : (l._unidades.size ? 'várias' : '—'),
+        unidade: l._unidades.size === 1 ? (Array.from(l._unidades)[0] ?? '—') : (l._unidades.size ? 'várias' : '—'),
         qtd: l.qtd, itens: l.itens, notas: l._notas.size, valor: l.valor,
     })).sort((a, b) => b.valor - a.valor);
 }

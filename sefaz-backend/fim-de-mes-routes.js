@@ -103,7 +103,7 @@ async function situacaoDaCompetencia(db, user, empresaId, competencia) {
     const comp = normalizarCompetencia(competencia);
     if (!comp) return { erro: 'Competência ilegível.' };
     if (!empresaId) return { erro: 'Informe a empresa.' };
-    if (!(await podeAcessarEmpresaId(user, empresaId))) {
+    if (!(await podeAcessarEmpresaId(user, empresaId)).ok) {
         return { erro: 'Esta empresa não está na sua carteira.', status: 403 };
     }
 
