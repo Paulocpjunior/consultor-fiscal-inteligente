@@ -37,6 +37,7 @@ Plataforma de gestão de documentos fiscais da SP Assessoria Contábil (~213 emp
 
 1. `node --check <arquivos .js alterados>`
 2. `npm run build` deve terminar com exit 0 e zero erros de TypeScript.
+   E também `npm run lint && npm run lint:strict`: o deploy roda o tsconfig ESTRITO, e o `build` não (deploy 998 caiu por índice de regex `string | undefined`).
 3. Antes do deploy, rode `git fetch origin` e compare HEAD com `origin/main`, por causa da divergência entre os dois Macs.
 4. No Cloud Run, use **sempre `--update-env-vars` / `--update-secrets`, nunca `--set-*`**. O `--set` apaga as outras variáveis (incidente de 15/05, com Gemini fora do ar por cerca de 2 dias).
 

@@ -204,8 +204,10 @@ function parsePartie(block: string): NfsePdfParticipante {
     // genérico abaixo lia "/Sigla UF" como nome do município.
     const munUfV2 = block.match(/Munic[i\u00ed]pio\s*\/\s*Sigla\s+UF\s*\n?\s*([^\n\/]+?)\s*\/\s*([A-Za-z0-9]+)/i);
     if (munUfV2) {
-        p.municipio = munUfV2[1].trim();
-        if (/^[A-Z]{2}$/.test(munUfV2[2])) p.uf = munUfV2[2];
+        const municipioV2 = munUfV2[1] ?? '';
+        const ufV2 = munUfV2[2] ?? '';
+        p.municipio = municipioV2.trim();
+        if (/^[A-Z]{2}$/.test(ufV2)) p.uf = ufV2;
     } else {
         const municipioMatch = block.match(/Munic[i\u00ed]pio\s*:?\s*([^\n]+?)(?:\s+UF\s*:|\n|$)/i);
         if (municipioMatch && municipioMatch[1]) p.municipio = municipioMatch[1].trim();
@@ -355,7 +357,7 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     const codigoServicoMatch = codigoServicoV2 ? null :
         text.match(/C[oó]digo\s+(?:do\s+Servi[cç]o|de\s+Tributa[cç][aã]o\s+(?:Nacional|Municipal))[\s:]*\n?\s*([\d.\-/]+)/i);
     const codigoServico = codigoServicoV2
-        ? codigoServicoV2[1].replace(/^(\d{2})(\d{2})(\d{2})$/, '$1.$2.$3')
+        ? (codigoServicoV2[1] ?? '').replace(/^(\d{2})(\d{2})(\d{2})$/, '$1.$2.$3')
         : (codigoServicoMatch?.[1] || '');
     const discBlock =
         idxDisc >= 0
