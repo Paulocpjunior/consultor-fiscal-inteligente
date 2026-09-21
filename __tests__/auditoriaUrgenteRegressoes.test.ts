@@ -36,6 +36,7 @@ jest.mock('../sefaz-backend/das-provider.js', () => ({
 
 const input = { empresaId: 'audit', empresaCnpj: '00000000000000', competencia: '2026-08', valor: 100 };
 const docKey = 'das_emitidos/00000000000000_2026-08_regular';
+const operationKey = 'das_emissao_operacoes/00000000000000_2026-08_regular';
 const resposta = () => ({ status: jest.fn().mockReturnThis(), json: jest.fn() });
 
 beforeEach(() => {
@@ -99,7 +100,8 @@ test('repeated DAS returns the existing guide and preserves settlement', async (
 test('failed guide generation preserves receipt and resumes without retransmission', async () => {
     mockGenerate.mockRejectedValueOnce(new Error('timeout'));
     await expect(emitirDasRegular(input)).rejects.toThrow('timeout');
-    expect(mockDocs.get(docKey)).toMatchObject({ pgdasRecibo: 'receipt', emissaoEtapa: 'guia_pendente' });
+    expect(mockDocs.get(operationKey)).toMatchObject({ pgdasRecibo: 'receipt', emissaoEtapa: 'guia_pendente' });
+    expect(mockDocs.has(docKey)).toBe(false);
     await emitirDasRegular(input);
     expect(mockTransmit).toHaveBeenCalledTimes(1);
     expect(mockGenerate).toHaveBeenCalledTimes(2);
@@ -113,8 +115,9 @@ test('uncertain external response blocks an automatic retry', async () => {
 });
 
 test('in-progress operation and legacy receipt never silently retransmit', async () => {
-    mockDocs.set(docKey, { emissaoEtapa: 'transmitindo' });
+    mockDocs.set(operationKey, { emissaoEtapa: 'transmitindo' });
     await expect(emitirDasRegular(input)).rejects.toMatchObject({ httpStatus: 409 });
+    mockDocs.delete(operationKey);
     mockDocs.set(docKey, { pgdasRecibo: 'legacy' });
     await expect(emitirDasRegular(input)).rejects.toMatchObject({ httpStatus: 409 });
     expect(mockTransmit).not.toHaveBeenCalled();

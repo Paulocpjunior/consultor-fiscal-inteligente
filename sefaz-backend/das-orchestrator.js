@@ -104,11 +104,13 @@ export async function emitirDasRegular(req) {
 
     const db = fa().firestore();
     const docId = `${empresaCnpj}_${competencia}_regular`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const ref = db.collection(COLLECTION).doc(docId);
+    const guiaRef = db.collection(COLLECTION).doc(docId);
+    const ref = db.collection('das_emissao_operacoes').doc(docId);
     const assinatura = assinaturaEmissaoDas({ empresaId, empresaCnpj, competencia, valor, dadosPgdas });
-    const reserva = await reservarEmissaoDas(db, ref, assinatura, {
+    const identidade = {
         empresaId, empresaCnpj, empresaNome: empresaNome || '', competencia, tipo: 'regular', valor,
-    });
+    };
+    const reserva = await reservarEmissaoDas(db, ref, assinatura, identidade, guiaRef);
     if (reserva.concluida) return { id: docId, ...reserva.atual };
     let reciboPersistido = Boolean(reserva.recuperar);
     try {
@@ -126,12 +128,22 @@ export async function emitirDasRegular(req) {
         const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
         // Payment fields belong to settlement, never to reprinting/recovery.
         const { statusPagamento: _status, dataPagamento: _data, ...guia } = das;
-        await ref.set({
-            ...guia, emitidoEm: new Date().toISOString(), modeUsado: mode,
-            emissaoEtapa: 'concluida', emissaoAtualizadaEm: new Date().toISOString(),
-        }, { merge: true });
-        const salvo = await ref.get();
-        return { id: docId, ...salvo.data() };
+        return await db.runTransaction(async tx => {
+            const operacao = (await tx.get(ref)).data() || {};
+            const existente = (await tx.get(guiaRef)).data() || {};
+            const payload = {
+                ...identidade, ...guia,
+                pgdasRecibo: operacao.pgdasRecibo || '',
+                pgdasNumeroDeclaracao: operacao.pgdasNumeroDeclaracao || '',
+                pgdasTipoDeclaracao: operacao.pgdasTipoDeclaracao || 1,
+                pgdasTransmitidoEm: operacao.pgdasTransmitidoEm || '',
+                emitidoEm: new Date().toISOString(), modeUsado: mode,
+                ...(existente.statusPagamento ? {} : { statusPagamento: 'pendente', dataPagamento: null }),
+            };
+            tx.set(guiaRef, payload, { merge: true });
+            tx.set(ref, { emissaoEtapa: 'concluida', emissaoAtualizadaEm: new Date().toISOString() }, { merge: true });
+            return { id: docId, ...existente, ...payload };
+        });
     } catch (err) {
         await ref.set({
             emissaoEtapa: reciboPersistido ? 'guia_pendente' : 'incerta',
