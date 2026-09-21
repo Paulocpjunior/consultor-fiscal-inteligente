@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📄 "RPS DE 03/08 EMITIDO EM 01/09, O SISTEMA IMPORTOU PELA EMISSÃO E A
+  COMPETÊNCIA DO ACERVO NÃO MOSTRA A NOTA"** (21/09, Paulo, 0070 IMAGEM
+  MEDICINA · Osasco · NF 1039). O PDF é a **DANFSe v2.0** (leiaute nacional com
+  IBS/CBS, 2026): datas com HÍFEN (`01-09-2026 03:02:21`, `COMPETÊNCIA DA
+  NFS-e 03-08-2026`) e rótulos próprios (`TOMADOR/ADQUIRENTE`, `VALOR DA
+  OPERAÇÃO / SERVIÇO`, `Indicador Municipal (Inscrição)`, `Município/Sigla
+  UF`, `Código IBGE/CEP`, `Código de Tributação Nacional/Municipal`). O leitor
+  só conhecia a v1.0: competência E data saíam vazias, o recorte recusava, a
+  trava de valores barrava (serviço 0,00) e o colaborador DIGITAVA tudo — a
+  nota entrou pela emissão. E toda nota importada por PDF saía da 📅
+  Competência do acervo como "sem fato gerador" (o importador não gravava
+  `dataFatoGerador`). CORREÇÕES: (1) `nfsePdfParserService` lê a v2.0 inteira
+  (fixture real em `nfsePdfDanfseV2Osasco.test.ts`); (2) `normalizarCompetencia`
+  e `dhEmiDaNfsePdf` aceitam `DD-MM-AAAA`; (3) o recorte devolve
+  `dataFatoGerador` quando o campo de competência é um DIA, e a importação o
+  grava — o acervo passa a classificar nota de PDF; (4) `findValueByLabel` para
+  no "-" (campo vazio da DANFSe): antes "Desconto Incondicionado / - / BC
+  ISSQN" gravava a BASE como desconto, na v1.0 também. ⚠️ O XML que o portal
+  de Osasco exporta (`<NFE><NotaFiscalRelatorioDTO>`) NÃO é lido pelo app —
+  é relatório do sistema próprio, sem XSD; o XML que o app lê é o do padrão
+  nacional (ADN). CAMINHO DA NOTA 1039: reimportar o PDF (id determinístico
+  cai por cima) ou corrigir pela 📅 Competência do acervo depois do reimport.
+
 - **🚚 "NO LIVRO DE ENTRADA NÃO SAI O NÚMERO DO CT-e"** (21/09, Paulo, EDUARDO
   GUERRA 08/2026): o PDF trazia `Ø=Þš —` no Nº NF de todo conhecimento, e a
   lista de XMLs mostrava `2589/2`. DUAS causas: (1) o marcador de frete era o

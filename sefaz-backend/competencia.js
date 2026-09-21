@@ -54,6 +54,12 @@ export function normalizarCompetencia(comp) {
     m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
     if (m) return mesValido(m[2]) ? `${m[3]}-${m[2]}` : null;
 
+    // DD-MM-AAAA — a DANFSe v2.0 (leiaute nacional com IBS/CBS, 2026) escreve
+    // o mesmo campo com HÍFEN: "COMPETÊNCIA DA NFS-e 03-08-2026" (21/09,
+    // Osasco · IMAGEM MEDICINA, NF 1039). A forma muda, o mês é o mesmo.
+    m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(s);
+    if (m) return mesValido(m[2]) ? `${m[3]}-${m[2]}` : null;
+
     return null;
 }
 

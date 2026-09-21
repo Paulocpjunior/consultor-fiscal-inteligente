@@ -239,6 +239,11 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 chave: parsed.chaveAcesso,
                 competencia: recorte.competencia,
                 competenciaOrigem: recorte.competenciaOrigem,
+                // O DIA do campo "Competência da NFS-e" é o FATO GERADOR — é por
+                // ele que a 📅 Competência do acervo confere o mês gravado. Sem
+                // ele toda nota importada por PDF saía da fila como "sem fato
+                // gerador" (21/09, Osasco 1039). Só entra quando é um dia.
+                ...(recorte.dataFatoGerador ? { dataFatoGerador: recorte.dataFatoGerador } : {}),
                 dataEmissao: parsed.dataEmissao,
                 codigoVerificacao: parsed.codigoVerificacao,
                 municipioPrestacao: parsed.municipioPrestacao,
