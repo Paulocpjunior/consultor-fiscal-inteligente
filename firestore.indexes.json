@@ -1,6 +1,49 @@
 {
   "indexes": [
     {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "direcao", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "empresaCnpj", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "cnpjDest", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaId", "order": "ASCENDING" },
+        { "fieldPath": "cnpjEmit", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "caixa_postal_mensagens",
       "queryScope": "COLLECTION",
       "fields": [
