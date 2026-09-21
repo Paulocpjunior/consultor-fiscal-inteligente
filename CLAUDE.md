@@ -5,6 +5,70 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚚 "ONDE EMITO UM RELATÓRIO DE FRETES? E ONDE ALTERO O CST DO FRETE? NESSA
+  EMPRESA NÃO APROVEITAMOS O CRÉDITO" — o SPED escriturava o CT-e e NENHUM
+  relatório do CFI o mostrava; e não havia onde informar o CST** (21/09, Paulo,
+  EDUARDO GUERRA, depois de o Livro de Entradas abrir no PVA).
+  📌 **A PRIMEIRA RESPOSTA FOI MEDIR, e a resposta era "em lugar nenhum"**:
+  `resumoPorCfop` fazia `if (!(d.itens || []).length) continue;` — e o CT-e
+  **não tem `itens[]`** (CFOP, CST e ICMS moram no CABEÇALHO), então todo
+  conhecimento saía do Resumo por CFOP em SILÊNCIO; o Livro de Entradas e a
+  ✏️ CFOP por nota filtravam `['NFe','NFCe']`; e o D190 lia o CST CRU
+  (`cstDoCte(nota) || '090'`) e a base/ICMS dos `totais`, sem olhar o CST
+  informado nem a régua de crédito que o C170/C190 honram desde 09/09. Ou seja:
+  informar CST 90 num frete não tirava o crédito do arquivo, e **optante saía
+  creditando frete**.
+  ✂️ **NÃO NASCEU UMA SEGUNDA RÉGUA: o cabeçalho vira o ITEM SINTÉTICO**
+  (`cte-escrituracao.js`, `itemSinteticoDoCte`/`itensParaEscriturar`) e passa
+  pelos MESMOS donos do item de mercadoria — no SPED, `cstDoItemNoArquivo` e
+  `icmsDoItemNoArquivo` do bloco C (exportados; precedência CST informado >
+  conversão > REGIME > documento; sem crédito ⇒ base, alíquota e ICMS ZERO); na
+  tela, `alocarTributacaoIcms` (Livro e Resumo). Uma versão "para CT-e"
+  divergiria no primeiro ajuste — é a classe C190 × E110 (11/09).
+  🚨 **E O TESTE PEGOU A METADE QUE EU IA ESQUECER: o D100 PAI.** O `VL_BC_ICMS`/
+  `VL_ICMS` do D100 continuava lendo os `totais` enquanto o D190 saía zero — e
+  o PVA cruza os dois (R33). Pai e filho passaram a ler o MESMO dono.
+  ⚠️ **O DEFAULT `90` DO CABEÇALHO SEM CST FICOU** (`CST_CTE_SEM_CABECALHO`):
+  trocá-lo é mudar valor de arquivo, e o 🚚 Reler cabeçalho recupera o CST real.
+  ⚠️ **O AVISO NASCE MUDO quando o CT-e não destaca ICMS** — o gabarito da
+  EDUARDO GUERRA (e-Fiscal, ACEITO) sai CST 090 · alíquota 0 · ICMS 0 e não pode
+  ganhar alarme. Com destaque, sai POR CAUSA (CST informado × regime), com o
+  valor que ficou fora do crédito e o caminho de volta.
+  🚚 **O RELATÓRIO DE FRETES É O RESUMO POR CFOP RECORTADO**, não uma segunda
+  conta: coluna **CT-e**, frase com o total de fretes do mês e o filtro **🚚 Só
+  fretes (CT-e)** (vai no título do PDF). O Livro marca a linha com 🚚, a ✏️
+  lista o CT-e (sem o link do portal da NF-e, que não consulta modelo 57) e
+  ganhou o botão **🚚 CST 90 nos N CT-e sem CST** — a decisão "nesta empresa não
+  creditamos frete" é da EMPRESA e vale para o mês inteiro; digitar 34
+  conhecimentos todo mês é passar o trabalho adiante (14/09). O lote escolhe os
+  alvos por dono puro (`cteCstEmLote.ts`: só ENTRADA, só sem CST informado —
+  o informado à mão não é tocado), grava pela MESMA `gravarCstEscriturado`, um
+  por vez e carimbado, com a consequência DITA no confirm.
+  🚦 **DUAS TRAVAS DA CASA MORDERAM NO CAMINHO, e as duas estavam certas**: a
+  varredura da direção crua acusou `l.direcao` no helper do lote (linha já
+  agregada pela ✏️ — exceção declarada com o motivo), e a do R-4020 barrou
+  `ehConhecimentoDeTransporte` em `relatoriosAgregacoes` (a espécie tem UM dono)
+  — o Resumo passou a saber que a linha é frete pelo item sintético
+  (`ehItemSinteticoDeCte`), sem voltar a julgar a espécie.
+  🚦 **PROVADO POR REVERSÃO, medindo que o código saiu** (`grep -c`): sem o item
+  sintético no Resumo e sem o dono no D190 caem 8 testes, nomeados. E um erro
+  meu de contagem de campo foi pego pela linha REAL do D100: com o `|` inicial,
+  VL_BC_ICMS é o índice 19 — **posição se lê contando, nunca de olho**.
+  🚩 **PENDÊNCIA DO PAULO (EDUARDO GUERRA)**: Relatórios → ✏️ CFOP por nota →
+  **🚚 CST 90 nos N CT-e sem CST** (ou o campo, conhecimento a conhecimento),
+  regerar o SPED e, no PVA, **apagar a competência** antes de importar. O
+  Resumo por CFOP com **🚚 Só fretes** é o relatório de conferência.
+  🚩 **NOMEADO, NÃO FEITO**: um campo de CADASTRO "não aproveita crédito de ICMS
+  do frete" (por empresa, como `contribuinteIpi`) dispensaria o clique mensal —
+  exige whitelist + modal + rota do perfil no MESMO PR (regra do #382). E o
+  ICMS do CT-e **não entra no E110** hoje (`selecionarNotasBlocoC` exclui o
+  CT-e — registrado em 17/09): frete que CREDITA sai no D190 e não na apuração;
+  mudança de valor, pede o número na frente do dono.
+  📌 **REGRA QUE FICA: documento sem `itens[]` some de todo leitor que itera
+  itens — e some em SILÊNCIO, com o arquivo escriturando o que a tela não
+  mostra.** Documento cuja tributação mora no cabeçalho entra nos leitores
+  como ITEM SINTÉTICO, pelo dono, nunca com um `if` de espécie por tela.
+
 - **🚨 "NÃO ESTOU CONSEGUINDO ABRIR O LIVRO DE ENTRADA, SÓ NA EDUARDO GUERRA" —
   o PVA importou o arquivo e quebrou ao gerar o relatório, porque TODO CT-e
   saía SEM NÚMERO** (18/09, à noite, Paulo, EDUARDO GUERRA · 08/2026, com o

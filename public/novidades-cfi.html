@@ -68,14 +68,43 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 18/09/2026 · leitura de 23 minutos</p>
+            <p>Departamento Fiscal · atualizado em 21/09/2026 · leitura de 25 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (18/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (21/09) — leia esta parte primeiro</h2>
+
+    <h3>🚚 <strong>O frete (CT-e) passou a aparecer no Livro de Entradas, no Resumo por CFOP e na ✏️ CFOP por
+    nota — e o CST do frete agora tem onde ser informado</strong></h3>
+    <p>Na EDUARDO GUERRA (tomadora de frete) o SPED escriturava os conhecimentos no D100/D190, mas <strong>nenhum
+    relatório do CFI os mostrava</strong>: o Livro de Entradas, o Resumo por CFOP e a ✏️ CFOP por nota só
+    olhavam NF-e/NFC-e. O conhecimento não tem "itens" como a nota — o CFOP, o CST e o ICMS moram no cabeçalho do
+    XML — e por isso ele sumia das telas em silêncio, enquanto ia para o arquivo. E não havia <strong>onde
+    informar o CST do frete</strong>: o D190 lia o CST cru do cabeçalho e o ICMS destacado pelo transportador,
+    mesmo em empresa que não se credita do ICMS do frete.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → <strong>🔢 Resumo por CFOP</strong> — o frete aparece
+    no CFOP de entrada de transporte (x352/x353), com a coluna <strong>CT-e</strong> dizendo quantos conhecimentos há
+    na linha, uma frase com o total de fretes do mês e o filtro <strong>🚚 Só fretes (CT-e)</strong>, que é o
+    relatório de fretes para conferência (sai no PDF com esse título). Relatórios → <strong>📕 Livro de
+    Entradas</strong> — cada CT-e é uma linha, marcada com 🚚. Relatórios → <strong>✏️ CFOP por nota</strong> —
+    o CT-e entrou na lista (🚚 na frente do número): a coluna <strong>CST informado</strong> vale para ele, e
+    para quem <strong>não aproveita o crédito de ICMS do frete</strong> há o botão <strong>🚚 CST 90 nos N CT-e sem
+    CST</strong>, que informa 90 (Outras) em todos os conhecimentos de entrada do recorte de uma vez, sem tocar no
+    que já foi informado à mão. O mesmo campo existe no detalhe do documento (Central de Documentos → ✏️ Informar
+    CFOP e CST deste conhecimento).</div>
+    <div class="alerta">⚠️ <strong>O que muda no SPED:</strong> o D190 passou a honrar o CST informado e a régua de
+    crédito — com CST 90 (ou 40/41/50/51/60/70) o registro sai com base, alíquota e ICMS <strong>zero</strong>, e o
+    aviso da geração diz quantos conhecimentos e quanto de ICMS destacado ficou fora do crédito. Optante do Simples
+    já sai sem crédito no frete pelo regime, sem precisar informar nada. Depois de informar, <strong>regere o
+    SPED</strong> e, no PVA, apague a competência antes de importar. Limpar o campo devolve o conhecimento ao
+    destaque do documento.</div>
+</section>
+
+<section>
+    <h2>Antes disso (18/09)</h2>
 
     <h3>♻️ <strong>Os botões de reler XML paravam no meio da competência — e diziam para clicar de
     novo</strong></h3>

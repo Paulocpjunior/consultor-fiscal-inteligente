@@ -104,6 +104,16 @@ import CfopCerebroPainel, { type FornecedorOpcao } from '../CfopCerebroPainel';
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
 import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
 import { cstDoLancamento, cstInformadoDoItem, resumirCst } from '../../sefaz-backend/cst-correlacao.js';
+// 🚚 O CT-e COMO ITEM (21/09, EDUARDO GUERRA): o conhecimento não tem `itens[]`
+// e por isso sumia do Livro, do Resumo por CFOP e da ✏️ CFOP por nota — não
+// havia ONDE informar o CST do frete. O cabeçalho vira o item sintético e
+// passa pela MESMA alocação/régua da nota de mercadoria.
+import {
+    itensParaEscriturar, cfopDoCte, cstDoCte, icmsDestacadoDoCte,
+} from '../../sefaz-backend/cte-escrituracao.js';
+import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-documentos.js';
+import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
+import { ctesSemCstInformado, fraseDaConsequenciaDoLote } from '../../services/cteCstEmLote';
 import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
@@ -529,11 +539,16 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         // dedup do art. 136 logo abaixo: a nota do PRODUTOR ficava sem par e
         // entrava no livro, com a própria contada do outro lado. A compra
         // dobrava, em dois livros diferentes.
+        // 🚚 O CT-e ENTRA NO LIVRO (21/09): o D100/D190 do SPED o escritura
+        // desde 21/08 e o Livro do CFI o escondia — tela e arquivo divergindo.
         const filtrados = docs.filter(d => direcaoEfetivaDoc(d) === direcao && docValido(d)
-            && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo));
+            && (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)));
         const montar = (d: any) => {
-            const contabil = d.totais?.vNF || d.valorTotal || 0;
-            const a = alocarTributacaoIcms(d.itens || [], contabil, ctxAlocacaoDoDoc(d, {
+            const ehCte = ehConhecimentoDeTransporte(d);
+            const contabil = ehCte ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0);
+            // O cabeçalho do CT-e vira o item sintético — MESMA alocação.
+            const itensDoDoc: any[] = itensParaEscriturar(d);
+            const a = alocarTributacaoIcms(itensDoDoc, contabil, ctxAlocacaoDoDoc(d, {
                 naturezaAtividade: natureza.natureza,
                 cfopOverrides: cadastroFiscal?.cfopOverrides,
                 parametrosCfop: cerebroAtivo(parametrosCfop),
@@ -554,7 +569,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             // Na saída ela devolve o CFOP original, e nota própria de entrada
             // (art. 136), que já nasce 1xxx, passa intacta.
             const cfopsEscriturados = Array.from(new Set(
-                (d.itens || [])
+                itensDoDoc
                     .map((i: any) => ({ i, c: String(i.cfop || '').replace(/\D/g, '') }))
                     .filter(({ c }: any) => Boolean(c))
                     // O ITEM vai junto (11/09): nota mista sai com dois CFOPs
@@ -567,7 +582,10 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             ));
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
-                numero: d.numero || '—',
+                // 🚚 diz que a linha é frete — quem confere o livro procura o
+                // conhecimento pelo número, e um "1234" solto entre NF-e não
+                // conta que é CT-e.
+                numero: (ehCte ? '🚚 ' : '') + (d.numero || '—'),
                 participante: parte?.nome || '—',
                 cfops: cfopsEscriturados.join(' ') || '—',
                 contabil, ...a,
@@ -575,7 +593,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         };
         const r = direcao === 'entrada'
             ? escrituraveisNoLivroDeEntradas(
-                filtrados, montar, (d: any) => d.totais?.vNF || d.valorTotal || 0, empresa.cnpj)
+                filtrados, montar, (d: any) => (ehConhecimentoDeTransporte(d) ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0)), empresa.cnpj)
             : { linhas: filtrados.map(montar), excluidas: [] as any[] };
         return {
             linhas: r.linhas.sort((x: any, y: any) => x.data.localeCompare(y.data)
@@ -797,17 +815,27 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
 
     const linhas = useMemo(() => {
         return docs
-            .filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) && docValido(d))
+            // 🚚 O CT-e ENTRA AQUI (21/09): é nesta aba que se informa CFOP e CST
+            // por documento, e o frete não tinha ONDE — o conhecimento não tem
+            // item, mas o campo por NOTA é exatamente o que ele precisa.
+            .filter(d => (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)) && docValido(d))
             .map((d: any) => {
+                const ehCte = ehConhecimentoDeTransporte(d);
                 const direcao = direcaoEfetivaDoc(d) as 'entrada' | 'saida';
                 // O que ESTA sessão gravou vence o que veio do recorte — sem isso
                 // a linha voltaria ao valor antigo até alguém recarregar a tela,
                 // que é a "ação sem efeito visível" de 16/08.
                 const informado = gravado[d.id] !== undefined ? gravado[d.id] : (d.cfopEscriturado || '');
                 const docEfetivo = { ...d, cfopEscriturado: informado };
-                const daRegua = cfopsDistintosDaNota(d, direcao, ctx);
-                const cru = String(d.itens?.[0]?.cfop || '').replace(/\D/g, '');
-                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx, d.itens?.[0] || null);
+                // O CFOP do CT-e mora no cabeçalho: a régua sem o informado é a
+                // correlação dele (5352 → 1352), e o ITEM é `null` de propósito.
+                const cru = ehCte
+                    ? cfopDoCte(d)
+                    : String(d.itens?.[0]?.cfop || '').replace(/\D/g, '');
+                const daRegua = ehCte
+                    ? (cru ? [String(correlacionarCfop(cru, direcao, ctx) || cru)] : [])
+                    : cfopsDistintosDaNota(d, direcao, ctx);
+                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx, ehCte ? null : (d.itens?.[0] || null));
                 const parte: any = contraparteDoc(d);
                 return {
                     id: d.id,
@@ -839,15 +867,17 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     // ganha o selo ✂️ ao lado, porque uma linha só não conta a
                     // nota mista inteira.
                     cst: cstDoLancamento(
-                        d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || '',
+                        ehCte ? cstDoCte(d) : (d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || ''),
                         informado || daRegua[0] || '',
                         cstInformadoDoItem(
                             { ...d, cstEscriturado: cstGravado[d.id] !== undefined ? cstGravado[d.id] : d.cstEscriturado },
-                            d.itens?.[0],
+                            ehCte ? null : d.itens?.[0],
                         ),
                     ),
                     porItem: resumoEscrituracaoItens(d),
-                    valor: d.totais?.vNF || d.valorTotal || 0,
+                    valor: ehCte ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0),
+                    ehCte,
+                    icmsDestacado: ehCte ? icmsDestacadoDoCte(d) : 0,
                 };
             })
             .sort((a, b) => a.data.localeCompare(b.data) || String(a.numero).localeCompare(String(b.numero)));
@@ -937,6 +967,37 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             setErro(e?.message || 'Falha ao gravar o CST.');
         } finally {
             setSalvandoCst(null);
+        }
+    };
+
+    // 🚚 CST EM LOTE NOS CT-e (21/09, EDUARDO GUERRA: *"nessa empresa não
+    // aproveitamos o crédito de ICMS sobre os fretes"*). A decisão é da
+    // empresa e vale para o mês inteiro; digitar 34 conhecimentos todo mês é
+    // passar o trabalho adiante. Quem escolhe os alvos é o dono puro; quem
+    // grava é a MESMA `gravarCstEscriturado`, um por vez e carimbado — e o que
+    // já foi informado à mão não é tocado.
+    const ctesSemCst = useMemo(() => ctesSemCstInformado(linhas), [linhas]);
+    const [loteCte, setLoteCte] = useState<string | null>(null);
+    const informarCstNosCtes = async (cst: string) => {
+        const alvos = ctesSemCstInformado(linhas);
+        if (!alvos.length) return;
+        if (!window.confirm(fraseDaConsequenciaDoLote(alvos, cst))) return;
+        setErro(null);
+        setLoteCte(`0/${alvos.length}`);
+        let feitos = 0;
+        try {
+            for (const l of alvos) {
+                const r = await gravarCstEscriturado({ documentoId: l.id, cst, porEmail: currentUser?.email || '' });
+                setCstGravado(g => ({ ...g, [l.id]: r.cst }));
+                feitos += 1;
+                setLoteCte(`${feitos}/${alvos.length}`);
+            }
+            onShowToast?.(`CST ${cst} informado em ${feitos} CT-e. Regere o SPED: o D190 sai com a tributação informada.`, 'success');
+        } catch (e: any) {
+            // O que já gravou FICA gravado (cada um é carimbado); o que faltou vai dito.
+            setErro(`${e?.message || 'Falha ao gravar o CST.'} — ${feitos} de ${alvos.length} CT-e ficaram informados; os demais continuam sem CST.`);
+        } finally {
+            setLoteCte(null);
         }
     };
 
@@ -1196,8 +1257,20 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                         className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
                     >{relendo ? '♻️ Relendo…' : '♻️ Reler participante e município dos XMLs'}</button>
                 )}
+                {/* 🚚 O CST DO FRETE, DE UMA VEZ — só aparece quando há CT-e de
+                    entrada sem CST informado no recorte. A consequência (base e
+                    ICMS zero, e quanto de ICMS destacado fica fora) vai DITA no
+                    confirm, antes do clique. */}
+                {ctesSemCst.length > 0 && (
+                    <button
+                        onClick={() => void informarCstNosCtes('90')}
+                        disabled={loteCte !== null}
+                        title="Informa a tributação 90 (Outras — sem crédito de ICMS) em todos os CT-e de ENTRADA deste recorte que ainda não têm CST informado. Não toca no que já foi informado à mão. Cada conhecimento fica gravado com quem informou."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{loteCte ? `🚚 Gravando ${loteCte}…` : `🚚 CST 90 nos ${ctesSemCst.length} CT-e sem CST (frete sem crédito)`}</button>
+                )}
                 <span className="text-xs text-slate-500">
-                    {linhas.length} nota(s) · {comCarimbo} com CFOP informado
+                    {linhas.length} documento(s){linhas.some(l => l.ehCte) ? ` · ${linhas.filter(l => l.ehCte).length} CT-e` : ''} · {comCarimbo} com CFOP informado
                 </span>
             </div>
             {resultadoReler && (
@@ -1301,7 +1374,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             )}
             {!linhas.length ? (
                 <p className="mt-3 text-sm text-slate-500">
-                    Nenhuma NF-e/NFC-e no recorte. Se a empresa emite ou recebe nota, isto é buraco de captura —
+                    Nenhuma NF-e/NFC-e/CT-e no recorte. Se a empresa emite ou recebe nota, isto é buraco de captura —
                     veja Prova de captura e Cobertura de Saída.
                 </p>
             ) : (
@@ -1327,6 +1400,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                 <tr key={l.id} className="border-b border-slate-100 dark:border-slate-800">
                                     <td className="py-1 pr-2 whitespace-nowrap">{l.data}</td>
                                     <td className="py-1 pr-2 font-mono whitespace-nowrap">
+                                        {l.ehCte && <span title="Conhecimento de transporte (CT-e) — frete. O CFOP e o CST vêm do cabeçalho do XML; o CST informado aqui vale no D190 do SPED, no Livro e no Resumo por CFOP.">🚚 </span>}
                                         {l.numero}
                                         {/* 🔎 VER A NOTA — pedido de 19/08. O link é o
                                             portal NACIONAL da NF-e (consulta pela chave),
@@ -1337,12 +1411,15 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                             faz nada é pior que botão nenhum. */}
                                         {l.chave.length === 44 && (
                                             <>
-                                                <a
+                                                {/* O portal da NF-e não consulta CT-e (modelo 57): o
+                                                    link só aparece na nota — link que leva a
+                                                    "chave inválida" é pior que link nenhum. */}
+                                                {!l.ehCte && <a
                                                     href={`https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=&nfe=${l.chave}`}
                                                     target="_blank" rel="noreferrer"
                                                     title="Consultar esta NF-e no portal nacional (abre em outra aba — o portal pede o captcha)"
                                                     className="ml-1 text-blue-600 dark:text-blue-400 hover:underline"
-                                                >🔎</a>
+                                                >🔎</a>}
                                                 <button
                                                     onClick={() => {
                                                         void navigator.clipboard?.writeText(l.chave);
@@ -1470,9 +1547,14 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         }) as { regime: string }).regime,
         [cadastroFiscal, empresa?.fonte],
     );
-    const linhas = useMemo(
+    // 🚚 "SÓ FRETES" — o relatório específico de frete que o Paulo pediu
+    // (21/09) é o Resumo por CFOP recortado nas linhas com CT-e: o CFOP de
+    // transporte (x352/x353) já separa o frete da mercadoria, e uma segunda
+    // conta divergiria da primeira.
+    const [soFretes, setSoFretes] = useState(false);
+    const todasAsLinhas = useMemo(
         () => resumoPorCfop(
-            docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo)),
+            docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)),
             {
                 naturezaAtividade: natureza.natureza,
                 cfopOverrides: cadastroFiscal?.cfopOverrides,
@@ -1482,17 +1564,30 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         ),
         [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao],
     );
+    const linhas = useMemo(
+        () => (soFretes ? todasAsLinhas.filter(l => (l.ctes || 0) > 0) : todasAsLinhas),
+        [todasAsLinhas, soFretes],
+    );
     const totCfop = useMemo(() => linhas.reduce(
         (t, l) => ({ ipiCusto: t.ipiCusto + (l.ipiCusto || 0), st: t.st + (l.st || 0) }),
         { ipiCusto: 0, st: 0 },
     ), [linhas]);
+    /** Os fretes do recorte INTEIRO — o número que responde "quanto de frete tem este mês". */
+    const fretes = useMemo(() => todasAsLinhas.filter(l => (l.ctes || 0) > 0).reduce(
+        (t, l) => ({
+            ctes: t.ctes + l.ctes, contabil: t.contabil + l.contabil, base: t.base + l.base,
+            icms: t.icms + l.icms, outras: t.outras + l.outras,
+        }),
+        { ctes: 0, contabil: 0, base: 0, icms: 0, outras: 0 },
+    ), [todasAsLinhas]);
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
-        titulo: `Resumo por CFOP — ${fmtComp(competencia)}`,
+        titulo: `Resumo por CFOP${soFretes ? ' — só fretes (CT-e)' : ''} — ${fmtComp(competencia)}`,
         subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} CFOP(s)`,
         colunas: [
             { titulo: 'E/S', largura: 5 }, { titulo: 'CFOP', largura: 7 },
             { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
+            { titulo: 'CT-e', largura: 5, alinhamento: 'direita' },
             { titulo: 'Itens', largura: 6, alinhamento: 'direita' },
             { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
             { titulo: 'Base ICMS', largura: 12, alinhamento: 'direita' },
@@ -1505,10 +1600,17 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             // alocação, então eles não podem mostrar colunas diferentes.
             { titulo: 'ICMS ST', largura: 9, alinhamento: 'direita' },
         ],
-        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st]),
+        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.ctes || 0, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st]),
         identificacao,
         observacoes: [
             'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
+            ...(fretes.ctes ? [
+                `🚚 Fretes (CT-e): ${fretes.ctes} conhecimento(s) · contábil ${fmtBRL(fretes.contabil)} · base ICMS `
+                + `${fmtBRL(fretes.base)} · ICMS creditado ${fmtBRL(fretes.icms)} · Outras ${fmtBRL(fretes.outras)}. `
+                + 'O CT-e entra pelo cabeçalho do XML (CFOP do transportador correlacionado para a entrada, x352/x353); '
+                + 'o CST informado em Relatórios → ✏️ CFOP por nota vence — CST 90 tira base e ICMS do frete, no '
+                + 'Livro, aqui e no D190 do SPED.',
+            ] : []),
             'Nas ENTRADAS o CFOP é o CORRELACIONADO (o XML da compra traz o do fornecedor) — natureza da atividade '
             + `"${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
             ...(totCfop.ipiCusto ? [
@@ -1530,12 +1632,26 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             <div className="flex items-center gap-2 flex-wrap">
                 <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
                 <span className="text-xs text-slate-500">{linhas.length} CFOP(s) no recorte</span>
+                {fretes.ctes > 0 && (
+                    <label className="text-xs flex items-center gap-1 cursor-pointer" title="Mostra só os CFOPs que têm conhecimento de transporte — é o relatório de fretes para conferência.">
+                        <input type="checkbox" checked={soFretes} onChange={e => setSoFretes(e.target.checked)} />
+                        🚚 Só fretes (CT-e)
+                    </label>
+                )}
             </div>
+            {fretes.ctes > 0 && (
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                    🚚 <strong>Fretes (CT-e):</strong> {fretes.ctes} conhecimento(s) · contábil {fmtBRL(fretes.contabil)} · base ICMS{' '}
+                    {fmtBRL(fretes.base)} · ICMS creditado {fmtBRL(fretes.icms)} · Outras {fmtBRL(fretes.outras)}.
+                    {' '}O CST informado em <strong>✏️ CFOP por nota</strong> vence — CST 90 tira base e ICMS do frete, aqui, no Livro e no D190 do SPED.
+                </p>
+            )}
             {linhas.length > 0 && (
                 <div className="overflow-x-auto max-h-80 overflow-y-auto">
                     <table className="w-full text-xs">
                         <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800">
                             <tr><th className="text-left py-1">E/S</th><th className="text-left">CFOP</th><th className="text-right">Notas</th>
+                                <th className="text-right" title="Quantos dos documentos desta linha são CT-e (frete)">CT-e</th>
                                 <th className="text-right">Contábil</th><th className="text-right">Base</th><th className="text-right">ICMS</th>
                                 <th className="text-right">Isentas</th><th className="text-right">Outras</th></tr>
                         </thead>
@@ -1545,6 +1661,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
                                     <td className="py-1">{l.direcao === 'entrada' ? 'E' : 'S'}</td>
                                     <td className="font-mono">{l.cfop}</td>
                                     <td className="text-right">{l.notas}</td>
+                                    <td className="text-right">{l.ctes ? `🚚 ${l.ctes}` : ''}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.contabil)}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.base)}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.icms)}</td>

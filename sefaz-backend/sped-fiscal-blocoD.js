@@ -25,6 +25,17 @@ import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A correlação de CFOP é a MESMA do C190 — o CT-e traz o código do
 // transportador, e quem toma o frete escritura na ótica de entrada.
 import { cfopDoLancamento } from './cfop-correlacao.js';
+// 🚚 O CT-e COMO ITEM (21/09, EDUARDO GUERRA): o cabeçalho do conhecimento é
+// o único "item" dele, e é por essa forma que o frete passa pela MESMA régua
+// de CST e de crédito de ICMS do C170/C190 — o CST INFORMADO na nota vence, o
+// REGIME de quem escritura decide o crédito, e só então o destaque do
+// documento. Escrever uma versão "para CT-e" seria a segunda cópia.
+import {
+    cfopDoCte as cfopDoCteDoDono, cstDoCte as cstDoCteDoDono, itemSinteticoDoCte,
+    icmsDestacadoDoCte, avisosDeCteSemCredito,
+} from './cte-escrituracao.js';
+import { icmsDoItemNoArquivo, cstDoItemNoArquivo, creditoIcmsDoItem } from './sped-fiscal-blocoC.js';
+import { regimeDaEmpresa } from './regime-tributario.js';
 
 /** Valor do documento; 0 quando não há valor em forma nenhuma (o aviso é do chamador). */
 const valorDoDoc = (nota) => {
@@ -32,16 +43,22 @@ const valorDoDoc = (nota) => {
     return Number.isFinite(v) ? v : 0;
 };
 
-/** CFOP do CT-e — cabeçalho (onde o CT-e o guarda) ou 1º item. Vazio = não sei. */
-export function cfopDoCte(nota) {
-    const cru = String(nota?.cfop || nota?.CFOP || (nota?.itens || [])[0]?.cfop || '').replace(/\D/g, '');
-    return cru.length === 4 ? cru : '';
-}
+/**
+ * CFOP/CST do cabeçalho do CT-e — o DONO é `cte-escrituracao.js` (a tela lê de
+ * lá também); aqui só a re-exportação, para quem já importava daqui.
+ */
+export const cfopDoCte = cfopDoCteDoDono;
+export const cstDoCte = cstDoCteDoDono;
 
-/** CST de ICMS do CT-e — mesma ideia; '' quando o documento não diz. */
-export function cstDoCte(nota) {
-    const cru = String(nota?.cstIcms || nota?.cst || (nota?.itens || [])[0]?.cst || '').replace(/\D/g, '');
-    return cru ? cru : '';
+/** O regime de quem escritura, no vocabulário de `regime-tributario.js` (só para a frase do aviso). */
+function regimeDoArquivoD(dados) {
+    if (dados?.regimeEscrituracao) return String(dados.regimeEscrituracao);
+    const empresa = dados?.empresa;
+    if (!empresa) return '';
+    const colecao = empresa.colecao
+        || (empresa._regime === 'simples' ? 'simples_empresas' : (empresa._regime === 'lucro' ? 'lucro_empresas' : ''));
+    const r = regimeDaEmpresa({ ...empresa, colecao }).regime;
+    return r === 'INDEFINIDO' ? '' : r;
 }
 
 /**
@@ -133,6 +150,8 @@ function buildD100(notaCrua, dados) {
 
     // Tipo CTe: campo tpCTe do XML; default 0 (normal)
     const tpCte = String(nota.tpCTe || '0').slice(0, 1);
+    // Base e ICMS COMO VÃO PARA O ARQUIVO — a régua do item, pelo item sintético.
+    const icmsNoArquivo = icmsDoItemNoArquivo(itemSinteticoDoCte(nota), { ...nota, _dados: dados });
 
     return fmt.buildLine([
         'D100',
@@ -162,8 +181,12 @@ function buildD100(notaCrua, dados) {
         soCancelavel(fmt.formatValue(t.vDesc || 0, 2)),
         soCancelavel('9'),  // IND_FRT default sem cobranca (CTe nao tem o conceito de frete sobre frete)
         soCancelavel(fmt.formatValue(t.vTPrest || t.vServ || valorDoDoc(nota), 2)),
-        soCancelavel(fmt.formatValue(t.vBC || 0, 2)),
-        soCancelavel(fmt.formatValue(t.vICMS || 0, 2)),
+        // 🚚 VL_BC_ICMS/VL_ICMS pelo MESMO dono do D190 (21/09): o PVA cruza
+        // os dois (Guia 3.2.3, D190 campos 06/07 = os do D100 pai — a R33 da
+        // prevalidação). Com CST informado 90 o D190 sai zero; se o pai
+        // continuasse lendo os `totais`, o arquivo se desmentiria por dentro.
+        soCancelavel(fmt.formatValue(icmsNoArquivo.vBC || 0, 2)),
+        soCancelavel(fmt.formatValue(icmsNoArquivo.vICMS || 0, 2)),
         soCancelavel(fmt.formatValue(t.vNT || 0, 2)),
         '',  // COD_INF
         '',  // COD_CTA
@@ -211,15 +234,19 @@ export function codMunDaPrestacao(nota, lado) {
  *  08 VL_RED_BC    Valor reducao BC (vazio)
  *  09 COD_OBS      Codigo observacao (vazio)
  */
-function buildD190PorNota(nota) {
-    const t = nota.totais || {};
+/**
+ * @param {object} nota   o CT-e
+ * @param {object} dados  os dados da geração (é deles que sai o REGIME)
+ * @returns {{linha: string, semCredito: null|{numero: string, destacado: number, por: string}}}
+ */
+function buildD190PorNota(nota, dados) {
     // 🚨 SEM CFOP/CST INVENTADO (21/08): o CFOP saía CRAVADO em '5352'
     // ("prestação a estabelecimento industrial") em 100% dos conhecimentos,
     // porque a captura só lia o CFOP de dentro de <prod> — e o CT-e o traz no
     // CABEÇALHO. Cravar aqui é afirmar a NATUREZA da operação de transporte,
     // que é justamente o que a fiscalização lê. Quem não tem CFOP legível não
     // entra no bloco (ver `cfopDoCte`): aqui ele já chegou conferido.
-    const cstIcms = String(cstDoCte(nota) || '090').padStart(3, '0').slice(-3);
+    //
     // ⚠️ E o CFOP passa pela MESMA régua do C190: o CT-e traz o CFOP do
     // TRANSPORTADOR (5352/6352 — a prestação, do lado dele), e quem TOMA o
     // frete escritura na ótica de entrada (1352/2352). Preservar o do emitente
@@ -229,21 +256,41 @@ function buildD190PorNota(nota) {
         // propósito (o 5º argumento é obrigatório pelo registro consumidoresMedidos).
         cfopDoLancamento(nota, cfopDoCte(nota), direcaoEfetivaDoc(nota), {}, null) || cfopDoCte(nota),
     ).padStart(4, '0').slice(-4);
-    const aliq = parseFloat(nota.aliqIcms || 0) || 0;
 
-    return fmt.buildLine([
+    // 🚚 CST, BASE, ALÍQUOTA E ICMS PELA MESMA RÉGUA DO C170/C190 (21/09):
+    // o cabeçalho vira o item sintético e passa pelos donos do bloco C —
+    // `cstDoItemNoArquivo` (CST informado > conversão > regime > documento) e
+    // `icmsDoItemNoArquivo` (sem crédito ⇒ base, alíquota e ICMS ZERO). Até
+    // aqui o D190 lia o CST cru e os `totais` do documento: informar CST 90
+    // num frete não tirava o crédito do arquivo, e optante saía creditando
+    // frete — o C190 ao lado já não fazia nenhuma das duas coisas.
+    const item = itemSinteticoDoCte(nota);
+    const notaComDados = { ...nota, _dados: dados };
+    const cstIcms = String(cstDoItemNoArquivo(item, cfop, notaComDados)).padStart(3, '0').slice(-3);
+    const icms = icmsDoItemNoArquivo(item, notaComDados);
+    const credito = creditoIcmsDoItem(item, notaComDados);
+
+    const linha = fmt.buildLine([
         'D190',
         cstIcms,
         cfop,
-        fmt.formatValue(aliq, 2),
+        fmt.formatValue(icms.aliq, 2),
         // VL_OPR pela MESMA régua do VL_DOC do D100 — se os dois lerem formas
         // diferentes, o resumo contradiz o documento que ele resume.
         fmt.formatValue(valorDoDoc(nota), 2),
-        fmt.formatValue(t.vBC || 0, 2),
-        fmt.formatValue(t.vICMS || 0, 2),
+        fmt.formatValue(icms.vBC || 0, 2),
+        fmt.formatValue(icms.vICMS || 0, 2),
         '',  // VL_RED_BC
         '',  // COD_OBS
     ]);
+    // O que saiu do crédito vai DITO com o número — só quando havia destaque:
+    // zerar o que já era zero não é notícia (o gabarito da EDUARDO GUERRA sai
+    // com CST 090, alíquota 0 e ICMS 0 e não pode ganhar aviso).
+    const destacado = icmsDestacadoDoCte(nota);
+    const semCredito = icms.semCredito && destacado > 0
+        ? { numero: String(numeroDoDocumento(nota) || nota.chave || '(sem número)'), destacado, por: credito.por }
+        : null;
+    return { linha, semCredito };
 }
 
 /**
@@ -272,6 +319,8 @@ export function buildBlocoD(dados) {
      * se conserta e reenvia) por LIVRO A MENOR, que não se confere depois.
      */
     const semMunicipio = [];
+    /** CT-e cujo ICMS destacado ficou FORA do crédito (CST informado ou regime). */
+    const semCredito = [];
     for (const nota of notas) {
         try {
             if (!cfopDoCte(nota)) {
@@ -287,7 +336,9 @@ export function buildBlocoD(dados) {
             // D190 pra cada CTe — agrupamento detalhado pode vir em fase futura.
             // Cancelado/denegado não leva filho (D100, Exceção 1).
             if (!docCancelado(nota) && !['denegado', 'inutilizado'].includes(String(nota.status || ''))) {
-                linhas.push(buildD190PorNota(nota));
+                const d190 = buildD190PorNota(nota, dados);
+                linhas.push(d190.linha);
+                if (d190.semCredito) semCredito.push(d190.semCredito);
             }
         } catch (e) {
             console.error(`[blocoD] erro ao gerar registros do CTe ${nota.chave || nota.numero}:`, e.message);
@@ -344,6 +395,15 @@ export function buildBlocoD(dados) {
             + 'e terminar longe das partes. Rode o 🚚 Reler cabeçalho dos CT-e em Relatórios → '
             + '✏️ CFOP por nota e regere; se o XML também não trouxer, o dado é com o transportador.',
         );
+    }
+
+    // 🚚 O CRÉDITO QUE O FRETE PERDEU VAI DITO, POR CAUSA (21/09): CST informado
+    // na nota (decisão de quem escritura) e regime (optante não se credita)
+    // pedem ações diferentes, e o número — o ICMS que o transportador destacou
+    // — vai junto, senão quem compara o livro do PVA com o DACTE vê base e
+    // ICMS zerados e procura captura que não falhou.
+    if (semCredito.length && Array.isArray(dados.warnings)) {
+        for (const aviso of avisosDeCteSemCredito(semCredito, regimeDoArquivoD(dados))) dados.warnings.push(aviso);
     }
 
     // D001 — Abertura, DEPOIS do conteúdo (ver o mata-burro no topo da função).

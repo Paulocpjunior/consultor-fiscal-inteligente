@@ -38,6 +38,8 @@ import { gravarCfopEscriturado, gravarEscrituracaoItem } from '../../services/cf
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { direcaoEfetivaDoc, origemDoCancelamento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { cfopsDistintosDaNota, cfopDoLancamento } from '../../sefaz-backend/cfop-correlacao.js';
+import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-documentos.js';
+import { cfopDoCte } from '../../sefaz-backend/cte-escrituracao.js';
 import { escrituracaoDoItem, resumoEscrituracaoItens, chaveDoItem } from '../../sefaz-backend/escrituracao-item.js';
 
 interface Props {
@@ -99,6 +101,12 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     // Só documento de MERCADORIA tem CFOP/CST de item — na NFS-e o campo não
     // existe, e oferecê-lo ali prometeria o que a tela não cumpre.
     const ehMercadoria = ['NFe', 'NFCe'].includes(String((d as any).tipoDoc || d.tipo));
+    // 🚚 O CT-e TAMBÉM (21/09, EDUARDO GUERRA: *"onde consigo alterar o CST do
+    // frete?"*). O conhecimento não tem item — o CFOP e o CST moram no
+    // CABEÇALHO —, mas o campo POR NOTA é exatamente o que ele precisa, e o
+    // D190 passou a honrá-lo pela mesma régua do C190.
+    const ehCte = ehConhecimentoDeTransporte(d as any);
+    const podeInformarEscrituracao = ehMercadoria || ehCte;
     const direcaoDoDoc = direcaoEfetivaDoc(d as any) as 'entrada' | 'saida';
     const cfopEscriturado = String((d as any).cfopEscriturado || '');
     const cstEscriturado = String((d as any).cstEscriturado || '');
@@ -114,7 +122,11 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
 
     const cfopsDaNota: string[] = ehMercadoria
         ? (cfopsDistintosDaNota(d as any, direcaoDoDoc, {}) as string[]) || []
-        : [];
+        : ehCte && cfopDoCte(d as any)
+            // O CT-e não tem ITEM: o CFOP mora no cabeçalho, e o `null` diz isso
+            // (mesma chamada do D190 — a régua é uma só).
+            ? [String(cfopDoLancamento(d as any, cfopDoCte(d as any), direcaoDoDoc, {}, null) || cfopDoCte(d as any))]
+            : [];
     const itensDaNota: any[] = ehMercadoria ? ((d as any).itens || []) : [];
     const porItem = resumoEscrituracaoItens(d as any);
     /** Linhas do editor por item — o que está gravado, o que a régua daria e o rascunho. */
@@ -666,7 +678,7 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                     tinha como chegar neles. É a lição de 18/08 outra vez — a
                     tela existia, funcionava, e a única pessoa que sabia onde
                     era, era eu. */}
-                {!jaRetirada && ehMercadoria && (
+                {!jaRetirada && podeInformarEscrituracao && (
                     !abrirEscr ? (
                         <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                             <button
@@ -678,10 +690,12 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                                 className="text-xs rounded-md border border-indigo-300 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 btn-press whitespace-nowrap"
                                 title="O CFOP e o CST com que ESTA nota entra no livro. O XML de uma compra traz o CFOP do FORNECEDOR."
                             >
-                                ✏️ Informar CFOP e CST desta nota
+                                ✏️ Informar CFOP e CST {ehCte ? 'deste conhecimento (CT-e)' : 'desta nota'}
                             </button>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                                {direcaoDoDoc === 'entrada'
+                                {ehCte
+                                    ? <>O frete tomado é uma <strong>entrada</strong>: o CT-e traz o CFOP do transportador (x352/x353) e o CST do lado dele. Quem não se credita do ICMS do frete informa <strong>CST 90</strong> — o D190 do SPED, o Livro e o Resumo por CFOP saem com base e ICMS zero.</>
+                                    : direcaoDoDoc === 'entrada'
                                     ? <>Numa compra o documento é do <strong>fornecedor</strong> e traz o CFOP de saída dele — quem escritura a entrada lança 1xxx/2xxx.</>
                                     : <>Na saída o documento é seu: o CFOP informado aqui vence a régua automática.</>}
                             </p>

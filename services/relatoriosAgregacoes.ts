@@ -9,6 +9,11 @@ import { federaisDoRelatorio } from '../sefaz-backend/federais-relatorio.js';
  */
 import type { DocumentoFiscal } from '../types';
 import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from './iobSageExportService';
+// 🚚 O CT-e COMO ITEM (21/09, EDUARDO GUERRA): o conhecimento não tem `itens[]`
+// e por isso SUMIA do Resumo por CFOP em silêncio — enquanto o D100/D190 do
+// SPED o escriturava. O cabeçalho vira o item sintético e passa pela MESMA
+// alocação da nota de mercadoria (CST informado > regime > destaque).
+import { itensParaEscriturar, ehItemSinteticoDeCte } from '../sefaz-backend/cte-escrituracao.js';
 // RÉGUA ÚNICA das duas formas de gravação: captura SEFAZ/portal grava
 // ACHATADO (cnpjEmit) e importação de XML grava OBJETO (emitente.cnpjCpf).
 // Ler só o objeto zerava TUDO que depende de "a empresa é a emitente" — foi
@@ -155,6 +160,13 @@ export interface LinhaCfop {
     ipiCusto: number;
     /** ICMS-ST retido pelo fornecedor: nunca é crédito, já está em Outras. */
     st: number;
+    /**
+     * 🚚 Quantos dos documentos desta linha são CT-e (frete tomado/prestado).
+     * O CFOP de transporte (x352/x353…) já separa o frete da mercadoria; este
+     * número é o que permite o recorte "só fretes" e a conferência do Paulo
+     * (21/09) sem uma segunda conta.
+     */
+    ctes: number;
 }
 
 /**
@@ -174,9 +186,15 @@ export interface LinhaCfop {
 export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): LinhaCfop[] {
     const mapa = new Map<string, LinhaCfop>();
     for (const d of docs) {
-        if (!docValido(d) || !(d.itens || []).length) continue;
+        // 🚚 O CT-e não tem `itens[]` — o cabeçalho vira o item sintético
+        // (`itensParaEscriturar`), senão o frete some do relatório calado.
+        const itensDoDoc = itensParaEscriturar(d) as typeof d.itens;
+        if (!docValido(d) || !(itensDoDoc || []).length) continue;
+        // A espécie tem UM dono (a varredura do R-4020 barra `ehConhecimentoDe
+        // Transporte` aqui): quem diz que a linha é frete é o item sintético.
+        const ehCte = itensDoDoc.some(ehItemSinteticoDeCte);
         const porCfop = new Map<string, typeof d.itens>();
-        for (const it of d.itens) {
+        for (const it of itensDoDoc) {
             const cru = String(it.cfop || '0000').replace(/\D/g, '') || '0000';
             // Na saída `correlacionarCfop` devolve o próprio CFOP; a nota
             // própria de entrada (art. 136) já nasce 1xxx e passa intacta.
@@ -202,9 +220,10 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             const linha = mapa.get(k) || {
                 cfop, direcao: direcaoDoc(d),
                 notas: 0, itens: 0, contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0,
-                ipi: 0, ipiCusto: 0, st: 0,
+                ipi: 0, ipiCusto: 0, st: 0, ctes: 0,
             };
             linha.notas += 1;
+            if (ehCte) linha.ctes += 1;
             linha.itens += its.length;
             linha.contabil = r2(linha.contabil + contabilLinha);
             linha.base = r2(linha.base + a.base);
