@@ -5,6 +5,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧭 "TENHO QUE CADASTRAR TODOS OS DADOS ANTES? NÃO TEM UMA FORMA DE
+  PUXAR? … UM RELATÓRIO DAS NOTAS COM DIFAL COM DETALHAMENTO, IGUAL O DA
+  SAGE — NA WALDESA TENHO 13 PÁGINAS DE DIFAL"** (21/09, Paulo, com o
+  *"Saídas/Prestações com Débito de DIFAL/FCP — Detalhamento das Notas"* do
+  Folhamatic). O que a NOTA traz (UF, DIFAL, FCP) agora vem dela: rota
+  `GET /api/admin/sped-fiscal/difal-ec87` + botão **📥 Puxar UFs desta
+  competência** na aba Ajustes E111, que lista as UFs de destino com o valor
+  e marca quais têm FCP; e **↧ Aplicar a todas as UFs** (vencimento, código
+  do DIFAL, código do FCP — este só nas UFs com FCP). O que a nota NÃO traz
+  (vencimento e código de receita) continua sendo cadastro — o app não
+  escolhe a forma de recolher. Relatório novo: **Relatórios → 🧭 DIFAL/FCP
+  EC 87/15 (por UF)** (`detalharDifalPorUf`, MESMA seleção do E300/E310:
+  o que o relatório soma é o que o SPED declara), com PDF por UF, nota a
+  nota, subtotal por UF e total geral. ⚠️ A data da nota passa por
+  `dataDeclaradaDoDocumento` — o teste `dataDoTunelPassaPeloDono` barrou o
+  `dhEmi.slice` cru.
+
 - **🧭 "NA QUESTÃO DO DIFAL (VINATEX) PUXOU, AGORA ELE DÁ ESSE ERRO — O
   PREENCHIMENTO DO RECOLHIMENTO, REGISTRO E316"** (21/09, Paulo, J.N. VINATEX ·
   08/2026, com o Relatório de Erros do PVA: 8 × *"A soma dos campos

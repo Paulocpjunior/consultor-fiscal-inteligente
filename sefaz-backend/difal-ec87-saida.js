@@ -67,12 +67,12 @@
 // roupa — só que aqui ele diz para QUAL conta o estado recebe.
 // ============================================================================
 
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
 // A UF do destinatário chega em DUAS formas (aninhada × `ufDest` achatado) e o
 // MODELO pode não estar gravado (quem responde é a chave) — quem concilia as
 // duas é o dono, nunca uma leitura nova (lição de 21/08, em que o ST retido
 // para MG/PR/RJ era apurado como se fosse do próprio estado).
-import { ufDoDestinatarioDoc, modeloDoDoc } from './participante-doc-helper.js';
+import { ufDoDestinatarioDoc, modeloDoDoc, participanteDoDocumento } from './participante-doc-helper.js';
 import { codSitDoDocumento } from './sped-selecao-documentos.js';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -243,6 +243,71 @@ export function agruparDifalPorUf(notas, ufEmpresa) {
 
     const grupos = [...porUf.values()].sort((a, b) => a.uf.localeCompare(b.uf));
     return { grupos, semUf, mesmaUf, comParteRemetente };
+}
+
+/**
+ * O DETALHAMENTO por UF — nota a nota, com o DIFAL e o FCP que cada uma
+ * declara. É o relatório *"Saídas/Prestações com Débito de DIFAL/FCP —
+ * Detalhamento das Notas"* do Folhamatic/e-Fiscal, que o Paulo pediu em
+ * 21/09 (WALDESA: *"13 páginas de DIFAL para lançar"*): serve para conferir
+ * a apuração e para saber QUAIS UFs precisam do cadastro do E316 — e se cada
+ * uma tem FCP (que é a segunda guia).
+ *
+ * MESMA seleção do E300/E310 (`agruparDifalPorUf`): documento que leva C101,
+ * não cancelado, UF do destinatário lida pelo dono, UF da empresa e nota sem
+ * UF ficam de fora e NOMEADAS. Divergir daqui seria o relatório afirmar um
+ * total que o SPED não declara.
+ *
+ * @returns {{
+ *   grupos: Array<{uf:string, difal:number, fcp:number, documentos:number,
+ *     notas: Array<{data:string, numero:string, modelo:string, cnpjCpf:string,
+ *       nome:string, difal:number, fcp:number, chave:string}>}>,
+ *   totais: {difal:number, fcp:number, documentos:number},
+ *   semUf: string[], mesmaUf: string[]
+ * }}
+ */
+export function detalharDifalPorUf(notas, ufEmpresa, empresaCnpj) {
+    const porUf = new Map();
+    const semUf = [];
+    const mesmaUf = [];
+    const UF_EMPRESA = String(ufEmpresa || '').toUpperCase();
+
+    for (const nota of notas || []) {
+        if (!documentoLevaC101(nota)) continue;
+        if (docCancelado(nota)) continue;
+        const d = difalDoDocumento(nota);
+        const rotulo = String(nota?.numero || nota?.chave || '(sem número)');
+        const uf = ufDoDestinatarioDoc(nota);
+        if (!uf) { semUf.push(rotulo); continue; }
+        if (uf === UF_EMPRESA) { mesmaUf.push(rotulo); continue; }
+
+        const p = participanteDoDocumento(nota, empresaCnpj) || {};
+        const g = porUf.get(uf) || { uf, difal: 0, fcp: 0, documentos: 0, notas: [] };
+        g.notas.push({
+            // A data passa pelo DONO: o `dhEmi` chega em três formas (ISO, portal
+            // de SP, Timestamp) e texto cru vira data errada. Ilegível = ''.
+            data: String(dataDeclaradaDoDocumento(nota?.dhEmi) || '').slice(0, 10),
+            numero: String(nota?.numero || ''),
+            modelo: String(modeloDoDoc(nota) || ''),
+            cnpjCpf: String(p.cnpjCpf || p.cnpj || p.cpf || '').replace(/\D/g, ''),
+            nome: String(p.nome || p.razaoSocial || p.xNome || ''),
+            difal: r2(d.vIcmsUfDest),
+            fcp: r2(d.vFcpUfDest),
+            chave: String(nota?.chave || ''),
+        });
+        g.difal = r2(g.difal + d.vIcmsUfDest);
+        g.fcp = r2(g.fcp + d.vFcpUfDest);
+        g.documentos += 1;
+        porUf.set(uf, g);
+    }
+
+    const grupos = [...porUf.values()].sort((a, b) => a.uf.localeCompare(b.uf));
+    for (const g of grupos) g.notas.sort((a, b) => a.data.localeCompare(b.data) || a.numero.localeCompare(b.numero));
+    const totais = grupos.reduce(
+        (t, g) => ({ difal: r2(t.difal + g.difal), fcp: r2(t.fcp + g.fcp), documentos: t.documentos + g.documentos }),
+        { difal: 0, fcp: 0, documentos: 0 },
+    );
+    return { grupos, totais, semUf, mesmaUf };
 }
 
 /**

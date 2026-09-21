@@ -26,7 +26,7 @@ import {
     apurarDifalDaUf,
     montarLinhasDifalBlocoE,
     avisoDifalNaoCapturado,
-    CODIGOS_RECEITA_GNRE_EC87,
+    CODIGOS_RECEITA_GNRE_EC87, detalharDifalPorUf,
 } from '../sefaz-backend/difal-ec87-saida.js';
 // @ts-expect-error — módulo .js do backend (sem tipos)
 import { buildBlocoC } from '../sefaz-backend/sped-fiscal-blocoC.js';
@@ -470,5 +470,43 @@ describe('a prevalidação nasce VERDE sobre o gerador e ACUSA o arquivo torto',
         const e = erros.find((x: any) => x.regra === 'e316-nao-bate-e310');
         expect(e).toBeDefined();
         expect(e!.mensagem).toMatch(/367,83/);
+    });
+});
+
+// ─── 🧭 O DETALHAMENTO POR UF — o relatório da Sage (21/09, WALDESA) ──────────
+describe('detalharDifalPorUf — nota a nota, por UF, com a MESMA seleção do E300/E310', () => {
+    const notas = [
+        venda({ numero: '12371', uf: 'AC', icmsUfDest: 748.72 }),
+        venda({ numero: '12469', uf: 'AL', icmsUfDest: 51.63, fcp: 3.85 }),
+        venda({ numero: '4104', uf: 'AL', icmsUfDest: 22.56, fcp: 1.37 }),
+        venda({ numero: '900', uf: 'SP', icmsUfDest: 10 }),          // própria UF: fora, nomeada
+        venda({ numero: '901', uf: 'AL', icmsUfDest: 99, status: 'cancelado' }),
+    ];
+    const det = detalharDifalPorUf(notas, 'SP', CNPJ_EMPRESA);
+
+    it('agrupa por UF, em ordem, com subtotal de DIFAL e de FCP', () => {
+        expect(det.grupos.map(g => g.uf)).toEqual(['AC', 'AL']);
+        const al = det.grupos[1];
+        expect(al.documentos).toBe(2);
+        expect(al.difal).toBe(74.19);
+        expect(al.fcp).toBe(5.22);
+    });
+
+    it('cada nota sai com data, número, modelo, CNPJ/CPF, nome e os dois valores', () => {
+        const n = det.grupos[0].notas[0];
+        expect(n).toMatchObject({ data: '2026-08-14', numero: '12371', modelo: '55', cnpjCpf: '99888777000166', nome: 'CONSUMIDOR FINAL', difal: 748.72, fcp: 0 });
+    });
+
+    it('o total geral fecha com os subtotais — é o que o E310 declara', () => {
+        expect(det.totais).toEqual({ difal: 822.91, fcp: 5.22, documentos: 3 });
+    });
+
+    it('própria UF e cancelada ficam FORA; a própria UF vai NOMEADA', () => {
+        expect(det.mesmaUf).toEqual(['900']);
+        expect(det.grupos.flatMap(g => g.notas.map(n => n.numero))).not.toContain('901');
+    });
+
+    it('sem nada: vazio, e não zero disfarçado de UF', () => {
+        expect(detalharDifalPorUf([], 'SP', CNPJ_EMPRESA)).toEqual({ grupos: [], totais: { difal: 0, fcp: 0, documentos: 0 }, semUf: [], mesmaUf: [] });
     });
 });

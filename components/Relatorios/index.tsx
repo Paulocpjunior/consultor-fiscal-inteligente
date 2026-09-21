@@ -89,7 +89,7 @@ export type AbaId =
     | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
-    | 'apuracao-icms';
+    | 'apuracao-icms' | 'difal-ec87';
 
 import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
@@ -115,6 +115,8 @@ import { ehConhecimentoDeTransporte, numeroDoDocumento } from '../../sefaz-backe
 import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { ctesSemCstInformado, fraseDaConsequenciaDoLote } from '../../services/cteCstEmLote';
 import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
+// 🧭 O detalhamento do DIFAL de saída (EC 87/15) — mesma seleção do E300/E310.
+import { detalharDifalPorUf } from '../../sefaz-backend/difal-ec87-saida.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -124,6 +126,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'cfop-nota', label: '✏️ CFOP por nota' },
             { id: 'impostos-resumo', label: '🧾 ICMS · IPI · ISS' },
             { id: 'uf', label: '🗺️ Resumo por UF' },
+            { id: 'difal-ec87', label: '🧭 DIFAL/FCP EC 87/15 (por UF)' },
             { id: 'canceladas', label: '🚫 Canceladas/Faltantes' },
             { id: 'aliquota', label: '➗ Por alíquota' },
             { id: 'produto', label: '📦 Por produto' },
@@ -152,7 +155,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
 ];
 
 const ABAS_POR_EMPRESA: AbaId[] = [
-    'livro', 'cfop', 'cfop-nota', 'impostos-resumo', 'uf',
+    'livro', 'cfop', 'cfop-nota', 'impostos-resumo', 'uf', 'difal-ec87',
     'canceladas', 'aliquota', 'produto', 'participante',
     'serv-tomados', 'serv-prestados', 'serv-codigo', 'retencoes',
 ];
@@ -402,6 +405,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                     parametrosCfop={parametrosCfop} onParametrosMudou={setParametrosCfop}
                     erroParametrosCfop={erroParametrosCfop}
                     onRebuscar={() => buscar(empresa.id)} />
+            )}
+            {aba === 'difal-ec87' && docsRecorte && empresa && (
+                <AbaDifalEc87 docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
             )}
             {aba === 'canceladas' && docsRecorte && empresa && (
                 <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado}
@@ -1782,6 +1788,110 @@ const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificac
                     </table>
                 </div>
             )}
+        </Card>
+    );
+};
+
+// ─── DIFAL/FCP EC 87/15 — Detalhamento das notas, por UF de destino ─────────
+//
+// 🧭 21/09, Paulo (WALDESA, *"13 páginas de DIFAL para lançar"*): *"seria
+// interessante um relatório das notas que possuem DIFAL com detalhamento, até
+// mesmo se precisar fazer esse cadastro, igual esse da Sage"*. É o
+// *"Saídas/Prestações com Débito de DIFAL/FCP — Detalhamento das Notas"* do
+// Folhamatic: por UF, nota a nota, com o DIFAL e o FCP que cada uma declara.
+//
+// A seleção é a MESMA do E300/E310 (`detalharDifalPorUf`, importada): o que
+// este relatório soma é o que o SPED declara. E ele diz, por UF, se há FCP —
+// porque o FCP é a SEGUNDA guia do E316 e precisa do próprio código.
+
+const AbaDifalEc87: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificacao, truncado, cadastroFiscal }) => {
+    const { gerando, rodar } = usePdf();
+    const ufEmpresa = String(cadastroFiscal?.uf || '').toUpperCase();
+    const det = useMemo(() => detalharDifalPorUf(docs, ufEmpresa, empresa.cnpj), [docs, ufEmpresa, empresa.cnpj]);
+    const fmtData = (iso: string) => (iso ? iso.split('-').reverse().join('/') : '—');
+    const fmtDoc = (d: string) => (d.length === 14 ? fmtCnpj(d)
+        : d.length === 11 ? d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : (d || '—'));
+    const ufsComFcp = det.grupos.filter(g => g.fcp > 0).map(g => g.uf);
+
+    const observacoes = [
+        'Valores lidos do grupo ICMSUFDest da própria NF-e (o app não recalcula). Mesma seleção do E300/E310 do SPED: '
+        + 'saída modelo 55, não cancelada, com diferencial declarado, agrupada pela UF do destinatário.',
+        'Cada UF é uma guia (E316). O FCP tem código de receita PRÓPRIO e sai em E316 separado — '
+        + (ufsComFcp.length ? `há FCP em: ${ufsComFcp.join(', ')}.` : 'nenhuma UF tem FCP nesta competência.'),
+        'Vencimento e código de receita por UF: SPED Fiscal → Ajustes E111 → "DIFAL EC 87/15 a recolher por UF de destino" '
+        + '(o botão "Puxar UFs desta competência" traz esta mesma lista).',
+        ...(ufEmpresa ? [] : ['UF da empresa não cadastrada: a operação interna (sem DIFAL) não pôde ser separada — confira o cadastro.']),
+        ...(det.semUf.length ? [`${det.semUf.length} nota(s) com DIFAL SEM UF do destinatário ficaram fora: nº ${det.semUf.slice(0, 10).join(', ')}${det.semUf.length > 10 ? '…' : ''}.`] : []),
+        ...(det.mesmaUf.length ? [`${det.mesmaUf.length} nota(s) declaram DIFAL com destinatário na própria UF (${ufEmpresa}) e ficaram fora: nº ${det.mesmaUf.slice(0, 10).join(', ')}${det.mesmaUf.length > 10 ? '…' : ''}.`] : []),
+        ...(truncado ? ['Lista cortada no recorte carregado: gere de novo com o acervo completo antes de conferir totais.'] : []),
+    ];
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `DIFAL/FCP EC 87/15 — Detalhamento das notas — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${det.totais.documentos} nota(s) · ${det.grupos.length} UF(s) de destino`,
+        colunas: [
+            { titulo: 'UF', largura: 5 },
+            { titulo: 'Emissão', largura: 9 },
+            { titulo: 'Número', largura: 9 },
+            { titulo: 'Mod.', largura: 5 },
+            { titulo: 'CNPJ/CPF', largura: 14 },
+            { titulo: 'Razão Social', largura: 32 },
+            { titulo: 'Valor do DIFAL', largura: 12, alinhamento: 'direita' },
+            { titulo: 'Valor do FCP', largura: 12, alinhamento: 'direita' },
+        ],
+        linhas: det.grupos.flatMap(g => [
+            ...g.notas.map(n => [g.uf, fmtData(n.data), n.numero || '—', n.modelo, fmtDoc(n.cnpjCpf), n.nome || '—', n.difal, n.fcp]),
+            [g.uf, '', '', '', '', `TOTAL ${g.uf} — ${g.documentos} nota(s)`, g.difal, g.fcp],
+        ]),
+        totais: ['', '', '', '', '', `TOTAL GERAL — ${det.totais.documentos} nota(s) · ${det.grupos.length} UF(s)`, det.totais.difal, det.totais.fcp],
+        identificacao,
+        observacoes,
+        fileName: `difal-ec87-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-center gap-3">
+                <BotaoPdf onClick={pdf} disabled={!det.grupos.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">
+                    {det.grupos.length
+                        ? `${det.totais.documentos} nota(s) · ${det.grupos.length} UF(s) · DIFAL ${fmtBRL(det.totais.difal)} · FCP ${fmtBRL(det.totais.fcp)}`
+                        : 'Nenhuma saída com DIFAL da EC 87/15 nesta competência (ou o grupo ICMSUFDest não foi capturado — ♻️ Reler itens dos XMLs).'}
+                </span>
+            </div>
+            {observacoes.slice(1).map((o, i) => (
+                <p key={i} className="text-[11px] text-slate-500 mt-1">{o}</p>
+            ))}
+            {det.grupos.map(g => (
+                <div key={g.uf} className="mt-4 overflow-x-auto">
+                    <div className="flex items-center justify-between text-xs font-bold border-b border-slate-300 dark:border-slate-600 pb-1">
+                        <span>{g.uf} · {g.documentos} nota(s)</span>
+                        <span className="font-mono">DIFAL {fmtBRL(g.difal)} · FCP {fmtBRL(g.fcp)}{g.fcp > 0 ? ' · ⚠️ FCP: segunda guia' : ''}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500">
+                            <tr>
+                                <th className="text-left py-1">Emissão</th><th className="text-left">Número</th><th className="text-left">Mod.</th>
+                                <th className="text-left">CNPJ/CPF</th><th className="text-left">Razão Social</th>
+                                <th className="text-right">DIFAL</th><th className="text-right">FCP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {g.notas.map(n => (
+                                <tr key={n.chave || `${n.numero}-${n.data}`} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1">{fmtData(n.data)}</td>
+                                    <td className="font-mono">{n.numero || '—'}</td>
+                                    <td>{n.modelo}</td>
+                                    <td className="font-mono">{fmtDoc(n.cnpjCpf)}</td>
+                                    <td className="max-w-[260px] truncate" title={n.nome}>{n.nome || '—'}</td>
+                                    <td className="text-right font-mono">{fmtBRL(n.difal)}</td>
+                                    <td className="text-right font-mono">{fmtBRL(n.fcp)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ))}
         </Card>
     );
 };
