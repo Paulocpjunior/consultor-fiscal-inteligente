@@ -252,6 +252,8 @@ describe('as duas metades estão LIGADAS', () => {
         // ⚠️ A âncora é a CHAMADA (`await uploadBytes(`), não o nome solto: a
         // primeira ocorrência de `uploadBytes` no arquivo é a linha de IMPORT,
         // lá no topo, e ancorar nela reprovava a ordem CERTA.
-        expect(tela.indexOf('posse.bloquear')).toBeLessThan(tela.indexOf('await uploadBytes('));
+        const upload = tela.indexOf('await uploadArquivoOriginal(');
+        expect(upload).toBeGreaterThanOrEqual(0);
+        expect(tela.indexOf('posse.bloquear')).toBeLessThan(upload);
     });
 });

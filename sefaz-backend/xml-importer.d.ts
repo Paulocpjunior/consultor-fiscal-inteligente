@@ -6,6 +6,7 @@ export interface MetadadosXml {
     dhEmi: string | null;
     vNF: number | null;
     tpNF: string | null;
+    modFrete: string | null;
     tipoDoc: string | null;
     tipoNormalizado: string | null;
     schema: string | null;

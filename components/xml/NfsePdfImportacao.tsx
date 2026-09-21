@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getApp } from 'firebase/app';
-import { ref as storageRef, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage';
+import { uploadArquivoOriginal } from '../../services/xmlStorageService';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../services/firebaseConfig';
 import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
@@ -29,7 +28,6 @@ type EmpresaXmlOption = {
     createdBy?: string;
 };
 
-const storage = (() => { try { return getStorage(getApp()); } catch { return null as any; } })();
 
 interface Props {
     currentUser: User | null;
@@ -140,7 +138,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     const handleSalvar = async () => {
         if (!parsed || !file || !empresaSelecionada || !currentUser) return;
         if (!auth?.currentUser?.uid) { setError('Sessao expirada. Faca login novamente.'); return; }
-        if (!db || !storage) { setError('Firebase nao configurado.'); return; }
+        if (!db) { setError('Firebase nao configurado.'); return; }
 
         setSaving(true);
         setError(null);
@@ -190,9 +188,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
             const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
             const path = `nfse_pdfs/${empresaSelecionada.id}/${docId}_${safeFileName}`;
 
-            const sref = storageRef(storage, path);
-            const uploadResult = await uploadBytes(sref, file, { contentType: 'application/pdf' });
-            const url = await getDownloadURL(uploadResult.ref);
+            await uploadArquivoOriginal(empresaSelecionada.id, path, new Blob([file], { type: 'application/pdf' }));
 
             // Campos compativeis com o schema XML (emitente/destinatario/totais.vNF/dhEmi)
             // para que XmlDocumentosList consiga renderizar NFSe lado a lado com NF-e.
@@ -293,7 +289,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     liquido: parsed.valorLiquido,
                 },
                 storagePath: path,
-                storageUrl: url,
+                storageUrl: '',
                 fileName: file.name,
                 tamanhoBytes: file.size,
                 createdBy: uid,

@@ -57,7 +57,7 @@ function prefixosUsados(): Array<{ prefixo: string; arquivo: string }> {
         for (const arq of arquivos(dir)) {
             const src = readFileSync(arq, 'utf8');
             // Só arquivos que de fato falam com o Storage.
-            if (!/firebase\/storage/.test(src)) continue;
+            if (!/firebase\/storage|uploadArquivoOriginal/.test(src)) continue;
             for (const m of src.matchAll(/(?:storageRef|ref)\s*\(\s*[A-Za-z_$][\w$]*\s*,\s*`([A-Za-z0-9_-]+)\//g)) {
                 achados.push({ prefixo: m[1], arquivo: relative(RAIZ, arq) });
             }

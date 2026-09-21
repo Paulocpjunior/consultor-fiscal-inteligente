@@ -28,6 +28,7 @@ import {
     type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { restricoesDeCarteira } from './carteiraAcessos';
 
 /**
  * Acumulador opcional preenchido pelo fetchAllDocs. `truncated=true` significa
@@ -49,16 +50,21 @@ export async function fetchAllDocs(
     if (meta) { meta.truncated = false; meta.count = 0; meta.maxDocs = maxDocs; }
     if (!db) return [];
     const out: QueryDocumentSnapshot<DocumentData>[] = [];
-    let last: QueryDocumentSnapshot<DocumentData> | null = null;
-    while (out.length < maxDocs) {
-        const constraints = [...baseConstraints];
-        if (last) constraints.push(startAfter(last));
-        constraints.push(fbLimit(batchSize));
-        const snap = await getDocs(query(collection(db, collectionName), ...constraints));
-        if (snap.empty) break;
-        out.push(...snap.docs);
-        if (snap.size < batchSize) break;
-        last = snap.docs[snap.docs.length - 1] || null;
+    const vistos = new Set<string>();
+    for (const escopo of await restricoesDeCarteira(collectionName)) {
+        let last: QueryDocumentSnapshot<DocumentData> | null = null;
+        while (out.length < maxDocs) {
+            const constraints = [...baseConstraints, ...escopo];
+            if (last) constraints.push(startAfter(last));
+            constraints.push(fbLimit(batchSize));
+            const snap = await getDocs(query(collection(db, collectionName), ...constraints));
+            if (snap.empty) break;
+            for (const d of snap.docs) {
+                if (!vistos.has(d.id)) { out.push(d); vistos.add(d.id); }
+            }
+            if (snap.size < batchSize) break;
+            last = snap.docs[snap.docs.length - 1] || null;
+        }
     }
     const truncated = out.length >= maxDocs;
     if (meta) { meta.truncated = truncated; meta.count = out.length; }

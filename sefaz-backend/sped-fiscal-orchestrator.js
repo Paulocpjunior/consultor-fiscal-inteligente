@@ -8,6 +8,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC, convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 // 🧭 DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117): o par de E111
@@ -831,6 +833,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  * @returns {Promise<string>} arquivo .txt em encoding Windows-1252.
  */
 export async function montarBlocos({ dados }) {
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
     // 🚨 O BLOCO C É MONTADO ANTES DO 0 — a ORDEM DE EXECUÇÃO, não a do arquivo.
     //
     // O `0460` (Tabela de Observações) mora no bloco 0 e só pode existir quando
@@ -912,4 +915,3 @@ function listarCompetenciasPeriodo(inicio, fim) {
     }
     return out;
 }
-

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { getView } from '../../services/xmlDocumentoView';
 import type { DocumentoFiscal, User } from '../../types';
 import { formatCnpjCpf, formatCurrency, formatDate } from '../../services/xmlParserService';
@@ -52,6 +53,8 @@ interface Props {
 }
 
 const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUser, onRetirado, onShowToast }) => {
+    const [baixando, setBaixando] = useState(false);
+    const [erroDownload, setErroDownload] = useState<string | null>(null);
     const [abrirRetirada, setAbrirRetirada] = useState(false);
     const [abrirCancel, setAbrirCancel] = useState(false);
     const [motivoCancel, setMotivoCancel] = useState('');
@@ -380,11 +383,20 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        {d.storageUrl && (
-                            <a href={d.storageUrl} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 dark:text-emerald-300 underline">
-                                Baixar XML
-                            </a>
+                        {d.storagePath && (
+                            <button type="button" title="Baixar arquivo original" disabled={baixando} onClick={async () => {
+                                setBaixando(true); setErroDownload(null);
+                                try {
+                                    const { baixarArquivoOriginal } = await import('../../services/xmlStorageService');
+                                    await baixarArquivoOriginal(d.id, d.storagePath?.startsWith('nfse_pdfs/'));
+                                }
+                                catch (e: any) { setErroDownload(e.message); }
+                                finally { setBaixando(false); }
+                            }} className="text-xs text-emerald-700 dark:text-emerald-300">
+                                <Download size={18} />
+                            </button>
                         )}
+                        {erroDownload && <span role="alert" className="text-xs text-red-600">{erroDownload}</span>}
                         <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

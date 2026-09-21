@@ -429,7 +429,7 @@ export function extrairMetadados(xml, schema) {
   return {
     chave, cnpjEmit, cnpjDest, xNome, dhEmi,
     vNF: vNF ? Number(vNF) : null,
-    tpNF, tipoDoc, tipoNormalizado, schema, evento,
+    tpNF, modFrete: pickTag(xml, 'modFrete'), tipoDoc, tipoNormalizado, schema, evento,
     numero, serie, natOp, cStat,
     // CFOP/CST do CABEÇALHO — é onde o CT-e os guarda (o D190 os exige e
     // estava inventando '5352'/'000' porque a captura só lia <prod>).
@@ -932,6 +932,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,
     tpNF: meta.tpNF,
+    modFrete: meta.modFrete,
     // Só gravam quando o XML os traz no cabeçalho (CT-e) — em NF-e eles moram
     // no item e continuam vindo de lá.
     ...(meta.cfopCabecalho ? { cfop: meta.cfopCabecalho } : {}),

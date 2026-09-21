@@ -117,6 +117,7 @@ export interface ParsedXml {
      * notas como saída e a DIPAM/FUNRURAL não as via.
      */
     tpNF?: string | null;
+    modFrete?: string | null;
     dhEmi: string;
     /**
      * A competência que o DOCUMENTO declara — `<Competencia>` no ABRASF,
@@ -456,6 +457,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         numero: getTextContent(ide, 'nNF'),
         natOp: getTextContent(ide, 'natOp'),
         tpNF: getTextContent(ide, 'tpNF') || null,
+        modFrete: getTextContent(infNFe, 'modFrete') || null,
         dhEmi: getTextContent(ide, 'dhEmi') || getTextContent(ide, 'dEmi'),
         status,
         emitente,
@@ -1130,6 +1132,7 @@ export function buildDocumentoFiscal(input: {
         // tem como reconhecer a nota própria de entrada e consertar o que já
         // está no banco. Campo que só existe em memória não conserta histórico.
         tpNF: parsed.tpNF ?? null,
+        modFrete: parsed.modFrete ?? null,
         dhEmi: parsed.dhEmi,
         // 🚨 PELO DONO: campo declarado > fato gerador > emissão. Era
         // `competenciaFromIso(parsed.dhEmi)` — a data de EMISSÃO —, e o

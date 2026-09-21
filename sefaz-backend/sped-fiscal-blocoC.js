@@ -19,6 +19,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { indicadorFrete } from './nfe-frete.js';
 import { montarC197Difal } from './sped-difal-c197.js';
 import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
 import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
@@ -645,7 +646,7 @@ function buildC100(nota, dados) {
         soCancelavel(fmt.formatValue(t.vDesc, 2)),
         '',   // VL_ABAT_NT
         soCancelavel(fmt.formatValue(pick(i.vProd, 'vProd'), 2)),
-        soCancelavel('9'),  // IND_FRT: 9=Sem cobranca frete (default conservador)
+        soCancelavel(indicadorFrete(nota)),
         soCancelavel(fmt.formatValue(t.vFrete, 2)),
         soCancelavel(fmt.formatValue(t.vSeg, 2)),
         soCancelavel(fmt.formatValue(t.vOutro, 2)),

@@ -1842,6 +1842,7 @@ export interface DocumentoFiscal {
      * o que já está no banco.
      */
     tpNF?: string | null;
+    modFrete?: string | null;
     /** Data/hora de emissão (ISO). */
     dhEmi: string;
     /** Competência calculada a partir da emissão (YYYY-MM). */
