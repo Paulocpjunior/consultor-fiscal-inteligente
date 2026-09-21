@@ -111,7 +111,7 @@ import { cstDoLancamento, cstInformadoDoItem, resumirCst } from '../../sefaz-bac
 import {
     itensParaEscriturar, cfopDoCte, cstDoCte, icmsDestacadoDoCte,
 } from '../../sefaz-backend/cte-escrituracao.js';
-import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-documentos.js';
+import { ehConhecimentoDeTransporte, numeroDoDocumento } from '../../sefaz-backend/sped-selecao-documentos.js';
 import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { ctesSemCstInformado, fraseDaConsequenciaDoLote } from '../../services/cteCstEmLote';
 import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
@@ -582,10 +582,18 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             ));
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
-                // 🚚 diz que a linha é frete — quem confere o livro procura o
-                // conhecimento pelo número, e um "1234" solto entre NF-e não
+                // "CT-e" diz que a linha é frete — quem confere o livro procura
+                // o conhecimento pelo número, e um "1234" solto entre NF-e não
                 // conta que é CT-e.
-                numero: (ehCte ? '🚚 ' : '') + (d.numero || '—'),
+                //
+                // 🚨 EM TEXTO, NÃO EM EMOJI (21/09, EDUARDO GUERRA): o 🚚 ia
+                // para o PDF e a Helvetica do jsPDF não o tem — saía "Ø=Þš" no
+                // lugar do número. E o número vem de `numeroDoDocumento`, a
+                // mesma régua do D100: o gravado, ou o da CHAVE (posições
+                // 26-34) — os CT-e capturados antes de 18/09 foram gravados
+                // sem `numero` (a captura lia `nNF`, tag da NF-e) e o Livro
+                // imprimia "—" enquanto a lista de XMLs mostrava o número.
+                numero: (ehCte ? 'CT-e ' : '') + (numeroDoDocumento(d) || '—'),
                 participante: parte?.nome || '—',
                 cfops: cfopsEscriturados.join(' ') || '—',
                 contabil, ...a,
@@ -840,7 +848,8 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 return {
                     id: d.id,
                     data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
-                    numero: d.numero || '—',
+                    // Gravado ou da chave (26-34): CT-e antigo não tem `numero`.
+                    numero: numeroDoDocumento(d) || '—',
                     // A CHAVE é o que permite ver a nota (DANFE/consulta) — o
                     // pedido de 19/08: "colocar ao lado de Nº NF a opção de
                     // visualizar a nota (chave de acesso, pdf da nota)".
