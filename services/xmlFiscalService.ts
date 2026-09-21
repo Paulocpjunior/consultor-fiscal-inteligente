@@ -946,13 +946,8 @@ export async function getDocumentosByChaves(chaves: string[]): Promise<Documento
     const results: DocumentoFiscal[] = [];
     await Promise.all(batches.map(async batch => {
         try {
-            const q = query(
-                collection(db!, COLLECTIONS.DOCUMENTOS),
-                where('chave', 'in', batch),
-                fbLimit(30),
-            );
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [where('chave', 'in', batch)]);
+            snaps.forEach(d => {
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
             });
         } catch (err: any) {
@@ -983,15 +978,12 @@ export async function getDocumentosByCnpjPeriodo(
 
     async function buscar(campo: string) {
         try {
-            const q = query(
-                collection(db!, COLLECTIONS.DOCUMENTOS),
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [
                 where(campo, '==', cnpjLimpo),
                 where('dhEmi', '>=', dtIniIso),
                 where('dhEmi', '<=', dtFimIso),
-                fbLimit(2000),
-            );
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
+            ]);
+            snaps.forEach(d => {
                 if (visto.has(d.id)) return;
                 visto.add(d.id);
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);

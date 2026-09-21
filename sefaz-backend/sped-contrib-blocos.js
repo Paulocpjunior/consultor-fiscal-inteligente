@@ -9,6 +9,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { indicadorFrete } from './nfe-frete.js';
 // A régua das DUAS FORMAS do documento mora num lugar só (11/08).
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
@@ -118,27 +119,6 @@ function getCstCofins(item, regimeApuracao, direcao) {
 }
 
 // ─── Constantes do C100/C170 do bloco C ─────────────────────────────────
-/**
- * IND_FRT 9 = sem cobrança de frete — o mesmo que o EFD ICMS/IPI declara.
- *
- * 🚩 **ACHADO NOMEADO, NÃO CORRIGIDO** (16/09, PWR 08/2026): numa nota COM
- * frete o C100 sai com `VL_FRT 750,00` (campo 18) e este `9` no campo 17 — o
- * registro se desmente por dentro, afirmando *"sem cobrança de frete"* ao lado
- * do valor cobrado.
- *
- * Não foi corrigido porque **o dado não existe**: `modFrete` (`<transp>` da
- * NF-e) NÃO é capturado por nenhum dos dois parsers — nem o `xml-importer` do
- * backend, nem o `xmlParserService` do navegador. Escolher entre 0 (CIF) e 1
- * (FOB) sem ele seria inventar quem contratou o transporte, num campo que o
- * próprio Guia manda a EMPRESA codificar (*"deve a empresa proceder à
- * codificação… para o campo 17"*).
- *
- * ⚠️ E ele **não muda VALOR nenhum**: é indicador, o PVA aceita, e a base do
- * PIS/COFINS não o lê (quem decide lá é o `vFrete`, que por leiaute da NF-e
- * sempre compõe o `vNF`). Fechar isto é capturar o `modFrete` nos dois parsers
- * + ♻️ reler os XMLs guardados — PR próprio, com o campo na frente do dono.
- */
-const IND_FRT_SEM_COBRANCA = '9';
 /** IND_MOV 0 = houve movimentação física. Mercadoria em NF-e sempre tem. */
 const IND_MOV_COM_MOVIMENTACAO = '0';
 /**
@@ -770,7 +750,7 @@ export function buildBlocoC_Contrib(dados) {
             fmt.formatValue(vDesc),                        // 14 VL_DESC
             '',                                            // 15 VL_ABAT_NT
             fmt.formatValue(vProd),                        // 16 VL_MERC
-            IND_FRT_SEM_COBRANCA,                          // 17 IND_FRT
+            indicadorFrete(nota),                         // 17 IND_FRT
             fmt.formatValue(t.vFrete || 0),                // 18 VL_FRT
             fmt.formatValue(t.vSeg || 0),                  // 19 VL_SEG
             fmt.formatValue(t.vOutro || 0),                // 20 VL_OUT_DA

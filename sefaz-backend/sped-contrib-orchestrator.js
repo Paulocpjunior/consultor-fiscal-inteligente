@@ -9,6 +9,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
 // 🚨 O CONTABILISTA DO 0100 TEM DONO. Este arquivo tinha a SEGUNDA CÓPIA da
 // função — sem o e-mail padrão e sem o `codMunIBGE` sequer existir —, e por
@@ -556,6 +558,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
  * Monta o arquivo .txt completo do SPED Contribuicoes.
  */
 export async function montarBlocosContribuicoes({ dados }) {
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
     const linhasBloco0 = buildBloco0Contrib(dados);
     const linhasBlocoA = buildBlocoA(dados);
     const linhasBlocoC = buildBlocoC_Contrib(dados);
@@ -598,5 +601,3 @@ function determinarRegimeApuracao(empresa) {
     if (empresa._regime === 'lucro') return '2';
     return '2';
 }
-
-
