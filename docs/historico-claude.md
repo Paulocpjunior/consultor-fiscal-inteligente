@@ -5,6 +5,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 "FUI FAZER O TESTE, MAS ELE NÃO ESTÁ SALVANDO O AJUSTE, ATÉ GEREI PARA O
+  PVA MAS NÃO FOI NADA"** (21/09, Paulo, WALDESA, minutos depois do 📥 Puxar
+  UFs): ele aplicou o código 100102 nas 8 UFs SEM vencimento; a gravação
+  descartava as 8 linhas incompletas EM SILÊNCIO ("meia obrigação não se
+  declara") e o toast dizia *"Ajustes salvos (0)"* — contando os E111, não o
+  E316. É o farol desonesto na forma mais cara: a pessoa gera o arquivo e não
+  acha nada. AGORA: `faltasDifalPorUf` lista AO VIVO, por UF, o que falta
+  (UF, vencimento, código do DIFAL, código do FCP quando a UF tem FCP); o
+  toast do salvar abre com *"⚠️ E316 NÃO gravado para N UF(s) — falta: …"*
+  e conta cada bloco separado; e o ↧ Aplicar sem vencimento avisa. REGRA:
+  **descarte silencioso é proibido em tela de cadastro** — o que não vai ser
+  gravado sai nomeado antes do clique e no toast.
+
 - **🧭 "TENHO QUE CADASTRAR TODOS OS DADOS ANTES? NÃO TEM UMA FORMA DE
   PUXAR? … UM RELATÓRIO DAS NOTAS COM DIFAL COM DETALHAMENTO, IGUAL O DA
   SAGE — NA WALDESA TENHO 13 PÁGINAS DE DIFAL"** (21/09, Paulo, com o

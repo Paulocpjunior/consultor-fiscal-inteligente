@@ -103,11 +103,31 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
         }
     };
     const infoUf = (u: string) => ufsDaCompetencia?.find(x => x.uf === u.trim().toUpperCase()) || null;
+    // 🚨 FAROL HONESTO (21/09, Paulo: *"não está salvando o ajuste, até gerei
+    // para o PVA mas não foi nada"*): ele aplicou o código 100102 em 8 UFs,
+    // sem vencimento; a gravação descartava as 8 linhas incompletas EM
+    // SILÊNCIO e o toast dizia "Ajustes salvos (0)" — contando os E111, não o
+    // E316. O que falta em cada UF sai DITO, antes e depois de salvar.
+    const faltasDifalPorUf = useMemo(() => obrigacoesDifal.map(o => {
+        const u = o.uf.trim().toUpperCase();
+        const faltas: string[] = [];
+        if (u.length !== 2) faltas.push('UF');
+        if (o.dtVcto.replace(/\D/g, '').length !== 8) faltas.push('vencimento');
+        if (!o.codRec.trim()) faltas.push('código do DIFAL');
+        const info = infoUf(u);
+        if (info && info.fcp > 0 && !String(o.codRecFcp || '').trim()) faltas.push(`código do FCP (${fmtBRL(info.fcp)})`);
+        return { uf: u || '(sem UF)', faltas };
+    }).filter(x => x.faltas.length), [obrigacoesDifal, ufsDaCompetencia]); // eslint-disable-line react-hooks/exhaustive-deps
+    const fraseFaltasDifal = (lista: Array<{ uf: string; faltas: string[] }>) =>
+        lista.map(x => `${x.uf} (${x.faltas.join(', ')})`).join(' · ');
     const aplicarATodas = () => {
         const dt = aplicar.dtVcto.replace(/\D/g, '').slice(0, 8);
         const cod = aplicar.codRec.trim();
         const codFcp = aplicar.codRecFcp.trim();
         if (!dt && !cod && !codFcp) { onShowToast?.('Preencha ao menos um campo para aplicar.'); return; }
+        if (!dt && obrigacoesDifal.some(o => o.dtVcto.replace(/\D/g, '').length !== 8)) {
+            onShowToast?.('⚠️ Aplicado sem VENCIMENTO: UF sem vencimento não vira E316 e não é gravada. Informe o vencimento (DDMMAAAA) e aplique de novo, ou preencha linha a linha.');
+        }
         setObrigacoesDifal(prev => prev.map(o => {
             const info = infoUf(o.uf);
             // O código do FCP só vai para a UF que TEM FCP (quando se sabe); sem
@@ -205,10 +225,17 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
             setAjustes(limpos);
             const nSt = Object.keys(stMap).length;
             const nDifal = Object.keys(difalMap).length;
-            onShowToast?.(`Ajustes salvos (${limpos.length})`
+            const stIncompletas = obrigacoesSt.filter(o => !(o.uf.trim().length === 2 && o.dtVcto.replace(/\D/g, '').length === 8 && o.codRec.trim())).length;
+            // Linha incompleta NÃO é gravada — e isso sai na frente, nomeado por
+            // UF, porque "salvos (0)" sobre 8 linhas preenchidas é o silêncio
+            // que mandou o Paulo gerar o arquivo e não achar nada (21/09).
+            const alerta = faltasDifalPorUf.length
+                ? `⚠️ E316 NÃO gravado para ${faltasDifalPorUf.length} UF(s) — falta: ${fraseFaltasDifal(faltasDifalPorUf)}. `
+                : '';
+            onShowToast?.(`${alerta}Gravado: ${limpos.length} ajuste(s) E111`
                 + `${difalCodigo ? ' · código do C197' : ''}`
-                + `${nSt ? ` · ${nSt} obrigação(ões) de ST` : ''}`
-                + `${nDifal ? ` · ${nDifal} obrigação(ões) de DIFAL EC 87/15` : ''}`
+                + ` · ${nSt} obrigação(ões) de ST${stIncompletas ? ` (${stIncompletas} incompleta(s) fora)` : ''}`
+                + ` · ${nDifal} obrigação(ões) de DIFAL EC 87/15 (E316)`
                 + '. Entram no PRÓXIMO arquivo gerado desta competência.');
         } catch (e: any) {
             onShowToast?.(`Falha ao salvar: ${e.message}`);
@@ -505,6 +532,12 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                                 >✕</button>
                             </div>
                         ))}
+                        {faltasDifalPorUf.length > 0 && (
+                            <p className="text-[11px] font-bold mb-2" style={{ color: 'var(--accent)' }}>
+                                ⚠️ {faltasDifalPorUf.length} UF(s) NÃO viram E316 até completar — {fraseFaltasDifal(faltasDifalPorUf)}.
+                                {' '}Linha incompleta não é gravada no 💾 Salvar ajustes.
+                            </p>
+                        )}
                         <button
                             onClick={() => setObrigacoesDifal(prev => [...prev, { uf: '', dtVcto: '', codRec: '', codRecFcp: '' }])}
                             className="px-4 py-2 text-xs font-bold rounded-lg"
