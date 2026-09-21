@@ -5,6 +5,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚚 "NO LIVRO DE ENTRADA NÃO SAI O NÚMERO DO CT-e"** (21/09, Paulo, EDUARDO
+  GUERRA 08/2026): o PDF trazia `Ø=Þš —` no Nº NF de todo conhecimento, e a
+  lista de XMLs mostrava `2589/2`. DUAS causas: (1) o marcador de frete era o
+  emoji 🚚 e a Helvetica do jsPDF não o tem — o par substituto UTF-16 vira
+  `Ø=Þš` em WinAnsi; (2) o Livro lia `d.numero` CRU, e os CT-e capturados
+  antes de 18/09 foram gravados sem `numero` (captura lia `nNF`). A lista de
+  XMLs recupera o número da CHAVE; o Livro não. Agora Livro, ✏️ CFOP por nota
+  e as notas excluídas usam **`numeroDoDocumento`** (a régua do D100: gravado,
+  senão chave 26-34, senão vazio) e o marcador é o texto `CT-e `. REGRA: **texto
+  que vai para `gerarRelatorioPdf` não leva emoji** — só há Helvetica no PDF.
+  Teste: `livroNumeroCte.test.ts`. Branch `claude/kind-shannon-xvgtjm`, sem
+  merge e sem deploy — aguardando o Paulo.
+
 - **🚚 "ONDE EMITO UM RELATÓRIO DE FRETES? E ONDE ALTERO O CST DO FRETE? NESSA
   EMPRESA NÃO APROVEITAMOS O CRÉDITO" — o SPED escriturava o CT-e e NENHUM
   relatório do CFI o mostrava; e não havia onde informar o CST** (21/09, Paulo,
