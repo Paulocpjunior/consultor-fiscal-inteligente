@@ -53,6 +53,7 @@ const PERMITIDO: Record<string, string> = {
     'services/nfseSpCapturadasService.ts': 'filtros.direcao é a escolha da pessoa; NFS-e não tem tpNF',
     'services/retencoesNfseAnalyzer.ts': 'linha já agregada, vocabulário próprio (Recebida/Emitida)',
     'components/Relatorios/index.tsx': 'linha já agregada pelo backend',
+    'services/cteCstEmLote.ts': 'linha já agregada — a ✏️ CFOP por nota monta `direcao` pela régua (direcaoEfetivaDoc) antes de entregar ao lote',
     'components/AnaliseRetencoesNfseSP.tsx': 'linha já agregada',
     'components/xml/XmlDocumentosList.tsx': 'exibição da linha já normalizada por getView',
     'components/xml/XmlNfseSpCsv.tsx': 'escolha da pessoa na importação',

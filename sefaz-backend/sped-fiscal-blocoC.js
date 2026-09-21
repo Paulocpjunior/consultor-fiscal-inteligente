@@ -101,7 +101,7 @@ function regimeDoArquivo(dados) {
  * "Este item de ENTRADA credita ICMS para quem escritura?"
  * @returns {{credita: boolean, por: 'informado'|'regime'|'documento'}}
  */
-function creditoIcmsDoItem(item, nota) {
+export function creditoIcmsDoItem(item, nota) {
     const direcao = direcaoEfetivaDoc(nota);
     if (direcao !== 'entrada') return { credita: true, por: 'documento' };
     const coluna = colunaDoCstInformado(cstInformadoDoItem(nota, item));
@@ -115,7 +115,7 @@ function creditoIcmsDoItem(item, nota) {
  * Base, alíquota e ICMS do item COMO VÃO PARA O ARQUIVO — C170, C190 e a soma
  * do C100 leem daqui, um dono só.
  */
-function icmsDoItemNoArquivo(item, nota) {
+export function icmsDoItemNoArquivo(item, nota) {
     const bruto = {
         vBC: parseFloat(item?.vBC || 0),
         vICMS: parseFloat(item?.vICMS || 0),
@@ -178,7 +178,7 @@ function somarTotaisDosItens(nota) {
  * Sempre 3 dígitos (origem + tributação), como o SPED exige. Quando a régua não
  * converte, ele é o do fornecedor — que é o comportamento de sempre.
  */
-function cstDoItemNoArquivo(item, cfopLancado, nota) {
+export function cstDoItemNoArquivo(item, cfopLancado, nota) {
     const cru = getCstIcms(item);
     // O CST informado NAQUELA NOTA vence a régua — a precedência mora no DONO
     // (cstDoLancamento), nunca aqui, senão C170 e C190 divergiriam.
