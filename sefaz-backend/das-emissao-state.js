@@ -17,10 +17,11 @@ export function erroEmissaoPendente(message) {
     return error;
 }
 
-export async function reservarEmissaoDas(db, ref, assinatura, identidade) {
+export async function reservarEmissaoDas(db, ref, assinatura, identidade, guiaRef) {
     return db.runTransaction(async tx => {
         const snap = await tx.get(ref);
-        const atual = snap.exists ? snap.data() : {};
+        const guia = await tx.get(guiaRef);
+        const atual = { ...(guia.exists ? guia.data() : {}), ...(snap.exists ? snap.data() : {}) };
         if (['transmitindo', 'gerando', 'incerta'].includes(atual.emissaoEtapa)) {
             throw erroEmissaoPendente('Esta emissão está em processamento ou aguarda conferência do resultado no PGDAS-D. Nenhuma nova transmissão foi iniciada.');
         }
@@ -39,7 +40,6 @@ export async function reservarEmissaoDas(db, ref, assinatura, identidade) {
             emissaoAssinatura: assinatura,
             emissaoEtapa: recuperar ? 'gerando' : 'transmitindo',
             emissaoAtualizadaEm: new Date().toISOString(),
-            ...(atual.statusPagamento ? {} : { statusPagamento: 'pendente', dataPagamento: null }),
         }, { merge: true });
         return { concluida: false, recuperar, atual };
     });
