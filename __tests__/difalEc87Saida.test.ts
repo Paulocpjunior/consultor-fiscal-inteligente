@@ -26,6 +26,7 @@ import {
     apurarDifalDaUf,
     montarLinhasDifalBlocoE,
     avisoDifalNaoCapturado,
+    CODIGOS_RECEITA_GNRE_EC87,
 } from '../sefaz-backend/difal-ec87-saida.js';
 // @ts-expect-error — módulo .js do backend (sem tipos)
 import { buildBlocoC } from '../sefaz-backend/sped-fiscal-blocoC.js';
@@ -201,7 +202,9 @@ describe('apurarDifalDaUf — as fórmulas são LITERAIS do Guia 3.2.3', () => {
         expect(ap.sldCredTranspDifal).toBe(0);
         expect(ap.totDebFcp).toBe(44.54);
         expect(ap.recolFcp).toBe(44.54);
-        expect(ap.aRecolher).toBe(367.83);           // é o que o E316 discrimina
+        expect(ap.aRecolher).toBe(367.83);           // é o que os E316 somam
+        expect(ap.aRecolherDifal).toBe(323.29);      // E316 do DIFAL (código próprio)
+        expect(ap.aRecolherFcp).toBe(44.54);         // E316 do FCP (código próprio)
     });
 
     it('saldo credor anterior ABATE, e o que sobra vira saldo a transportar', () => {
@@ -318,19 +321,69 @@ describe('o bloco E emite E300/E310/E316 por UF de DESTINO', () => {
         expect(d.warnings.join(' ')).toMatch(/Ajustes E111/);
     });
 
-    it('COM o cadastro, o E316 sai com o valor que o E310 manda recolher', () => {
+    // 🚨 21/09 (VINATEX, PVA): "A soma dos campos VL_RECOL_DIFAL, DEB_ESP_DIFAL,
+    // VL_RECOL_FCP e DEB_ESP_FCP deve ser igual à soma do campo VL_OR dos
+    // Registros filhos E316" — 8 erros, um por UF, porque o cadastro não foi
+    // feito. Ele lançou à mão com o COD_REC 100102 da GNRE. E o FCP tem código
+    // PRÓPRIO (100129): uma linha só com o código do DIFAL somando o FCP passa
+    // na aritmética e declara o FCP na receita errada.
+    it('COM o cadastro dos DOIS códigos, DIFAL e FCP saem em E316 SEPARADOS e a soma fecha com o E310', () => {
         const d = dados({
-            obrigacoesDifalEc87PorUf: { BA: { dtVcto: '15092026', codRec: '12345' } },
+            obrigacoesDifalEc87PorUf: { BA: { dtVcto: '15092026', codRec: '100102', codRecFcp: '100129' } },
+        });
+        const linhas = buildBlocoE(d).map((x: unknown) => String(x));
+        const e316 = linhas.filter((l: string) => l.startsWith('|E316|'));
+        expect(e316).toHaveLength(2);
+        const difal = e316[0].split('|');
+        expect(difal[2]).toBe('000');        // COD_OR
+        expect(difal[3]).toBe('323,29');     // VL_OR = VL_RECOL_DIFAL
+        expect(difal[4]).toBe('15092026');   // DT_VCTO
+        expect(difal[5]).toBe('100102');     // COD_REC do DIFAL
+        expect(difal[10]).toBe('082026');    // MES_REF
+        const fcp = e316[1].split('|');
+        expect(fcp[3]).toBe('44,54');        // VL_OR = VL_RECOL_FCP
+        expect(fcp[5]).toBe('100129');       // COD_REC do FCP
+        // Σ VL_OR = VL_RECOL_DIFAL + VL_RECOL_FCP — a regra do PVA.
+        expect(323.29 + 44.54).toBeCloseTo(367.83, 2);
+        expect(d.warnings.join(' ')).not.toMatch(/E316 NÃO saiu para BA/);
+    });
+
+    it('só o código do DIFAL cadastrado: o E316 do DIFAL sai, o do FCP NÃO — e a falta diz qual tributo', () => {
+        const d = dados({
+            obrigacoesDifalEc87PorUf: { BA: { dtVcto: '15092026', codRec: '100102' } },
         });
         const linhas = buildBlocoE(d).map((x: unknown) => String(x));
         const e316 = linhas.filter((l: string) => l.startsWith('|E316|'));
         expect(e316).toHaveLength(1);
-        const f = e316[0].split('|');
-        expect(f[2]).toBe('000');           // COD_OR
-        expect(f[3]).toBe('367,83');        // VL_OR = 323,29 + 44,54
-        expect(f[4]).toBe('15092026');      // DT_VCTO
-        expect(f[5]).toBe('12345');         // COD_REC
-        expect(f[10]).toBe('082026');       // MES_REF
+        expect(e316[0].split('|')[3]).toBe('323,29');
+        expect(e316[0].split('|')[5]).toBe('100102');
+        // O FCP NÃO entra escondido na linha do DIFAL.
+        expect(linhas.join('')).not.toContain('|367,83|');
+        expect(d.warnings.join(' ')).toMatch(/E316 NÃO saiu para BA \(FCP R\$ 44,54\)/);
+        expect(d.warnings.join(' ')).toMatch(/100129\/100137/);
+    });
+
+    it('UF sem FCP (CE) com só o código do DIFAL: sai completa, sem aviso', () => {
+        const d = dados({
+            obrigacoesDifalEc87PorUf: {
+                BA: { dtVcto: '15092026', codRec: '100102', codRecFcp: '100129' },
+                CE: { dtVcto: '15092026', codRec: '100102' },
+            },
+        });
+        const linhas = buildBlocoE(d).map((x: unknown) => String(x));
+        const e316 = linhas.filter((l: string) => l.startsWith('|E316|'));
+        expect(e316).toHaveLength(3);
+        expect(e316[2].split('|')[3]).toBe('162,06');
+        expect(d.warnings.join(' ')).not.toMatch(/E316 NÃO saiu/);
+    });
+
+    it('a lista de códigos da GNRE existe como SUGESTÃO, com os quatro códigos e o tributo de cada um', () => {
+        const cods = CODIGOS_RECEITA_GNRE_EC87.map((c: any) => `${c.tributo}:${c.codigo}`);
+        expect(cods).toEqual(['difal:100102', 'difal:100110', 'fcp:100129', 'fcp:100137']);
+        // E o gerador NÃO a usa como default: sem cadastro, nada sai.
+        const d = dados();
+        const linhas = buildBlocoE(d).map((x: unknown) => String(x));
+        expect(linhas.some((l: string) => l.startsWith('|E316|'))).toBe(false);
     });
 
     it('empresa SEM venda a não contribuinte não ganha bloco nenhum — nasce MUDO', () => {
@@ -380,7 +433,9 @@ describe('a prevalidação nasce VERDE sobre o gerador e ACUSA o arquivo torto',
             competenciaInicio: '2026-08',
             competenciaFim: '2026-08',
             warnings: [],
-            obrigacoesDifalEc87PorUf: { BA: { dtVcto: '15092026', codRec: '12345' } },
+            // BA tem FCP: os DOIS códigos, senão o E316 do FCP não sai e a própria
+            // pré-validação acusa a soma (21/09).
+            obrigacoesDifalEc87PorUf: { BA: { dtVcto: '15092026', codRec: '100102', codRecFcp: '100129' } },
         };
         return [...buildBlocoC(dados), ...buildBlocoE(dados)].map((x: unknown) => String(x));
     };

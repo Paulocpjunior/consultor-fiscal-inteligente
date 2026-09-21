@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧭 "NA QUESTÃO DO DIFAL (VINATEX) PUXOU, AGORA ELE DÁ ESSE ERRO — O
+  PREENCHIMENTO DO RECOLHIMENTO, REGISTRO E316"** (21/09, Paulo, J.N. VINATEX ·
+  08/2026, com o Relatório de Erros do PVA: 8 × *"A soma dos campos
+  VL_RECOL_DIFAL, DEB_ESP_DIFAL, VL_RECOL_FCP e DEB_ESP_FCP deve ser igual à
+  soma do campo VL_OR dos Registros filhos E316"*, um por UF, e o print dele
+  lançando o E316 à mão com COD_REC **100102**). CAUSA 1 (operacional): o
+  cadastro por UF de destino (pendência de 18/09) não foi feito, então o E316
+  não saiu — o gerador já avisava. CAUSA 2 (defeito): o E316 saía numa linha
+  só, DIFAL + FCP, com o código do DIFAL — passa na aritmética do PVA e
+  declara o FCP na receita ERRADA (recusa que o validador não faz). AGORA:
+  **DIFAL e FCP são duas guias** — `aRecolherDifal`/`aRecolherFcp`, E316
+  separado para cada um, com `codRec` e `codRecFcp` no cadastro; falta sai
+  NOMEADA por tributo. A tabela da GNRE é NACIONAL (`CODIGOS_RECEITA_GNRE_EC87`:
+  100102/100110 DIFAL por operação/apuração; 100129/100137 FCP) e entrou como
+  SUGESTÃO (datalist) no cadastro, nunca como default: por operação × por
+  apuração depende de a empresa ter inscrição no estado de destino, e estado
+  fora do Portal GNRE tem código próprio. O app não escolhe a forma de
+  recolher. CAMINHO DA VINATEX: SPED Fiscal → Ajustes E111 → "DIFAL EC 87/15 a
+  recolher por UF de destino": BA (DIFAL + FCP), CE, MG, MS, PE, PR, RJ, RO, RS
+  com vencimento e código(s); 💾 Salvar; regerar; no PVA apagar a competência
+  antes de importar.
+
 - **📄 "RPS DE 03/08 EMITIDO EM 01/09, O SISTEMA IMPORTOU PELA EMISSÃO E A
   COMPETÊNCIA DO ACERVO NÃO MOSTRA A NOTA"** (21/09, Paulo, 0070 IMAGEM
   MEDICINA · Osasco · NF 1039). O PDF é a **DANFSe v2.0** (leiaute nacional com

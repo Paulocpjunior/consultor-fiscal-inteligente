@@ -1762,7 +1762,8 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
                     mensagem: `A soma do VL_OR dos E316 (${brl(somaOr)}) não bate com o que os E310 mandam `
                         + `recolher (${brl(aRecolher)}).`,
                     acao: 'Defeito de GERAÇÃO — reporte com o print. Se alguma UF ficou sem o código de '
-                        + 'receita cadastrado, o E316 dela não saiu: cadastre em SPED Fiscal → Ajustes E111.',
+                        + 'receita cadastrado (o do DIFAL e, quando há FCP, o do FCP — são duas guias), o E316 '
+                        + 'dela não saiu: cadastre em SPED Fiscal → Ajustes E111.',
                     fonte: 'Guia Prático 3.2.3, E316 campo 03: "o valor da soma deste campo deve corresponder '
                         + 'à soma dos campos VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP + DEB_ESP_FCP".',
                 });

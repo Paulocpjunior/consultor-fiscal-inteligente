@@ -327,6 +327,9 @@ export function apurarDifalDaUf({
         debEspFcp: r2(debEspFcp),
         // O que o E316 tem de discriminar (Guia, E316 campo 03):
         //   VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP + DEB_ESP_FCP
+        // — em DUAS guias: o FCP tem código de receita próprio (21/09).
+        aRecolherDifal: r2(d.recol + debEspDifal),
+        aRecolherFcp: r2(f.recol + debEspFcp),
         aRecolher: r2(d.recol + debEspDifal + f.recol + debEspFcp),
         deducoesExcedentes: r2(d.deducoesExcedentes + f.deducoesExcedentes),
     };
@@ -334,6 +337,32 @@ export function apurarDifalDaUf({
 
 /** COD_OR do E316 — Tabela 5.4. Valores válidos: [000, 003, 006, 090]. */
 export const COD_OR_DIFAL_NORMAL = '000';
+
+/**
+ * Os códigos de receita da GNRE para a EC 87/15 — SUGESTÃO para o cadastro,
+ * nunca default do gerador.
+ *
+ * 21/09, Paulo, VINATEX: o PVA recusou o arquivo com *"A soma dos campos
+ * VL_RECOL_DIFAL, DEB_ESP_DIFAL, VL_RECOL_FCP e DEB_ESP_FCP deve ser igual à
+ * soma do campo VL_OR dos Registros filhos E316"* (8 erros, um por UF) — o
+ * E316 não saiu porque o cadastro por UF não foi feito, e ele lançou à mão no
+ * PVA: COD_REC **100102** *"ICMS Consumidor Final não contribuinte outra UF
+ * por Operação"*, que é o código da tabela de receitas da GNRE (Portal GNRE,
+ * Convênio ICMS 93/2015). A tabela é NACIONAL: quem escolhe é a forma de
+ * recolher (por OPERAÇÃO = sem inscrição no estado de destino, uma guia por
+ * nota; por APURAÇÃO = com inscrição lá, guia mensal), e o **FCP tem código
+ * PRÓPRIO** — por isso ele sai em E316 SEPARADO do DIFAL.
+ *
+ * ⚠️ Estado fora do Portal GNRE recolhe em guia própria com código próprio
+ * (o campo continua livre). E a forma de recolher é decisão de quem conhece a
+ * inscrição da empresa nos estados — o app oferece a lista, não escolhe.
+ */
+export const CODIGOS_RECEITA_GNRE_EC87 = Object.freeze([
+    { codigo: '100102', tributo: 'difal', descricao: 'ICMS Consumidor Final não contribuinte outra UF por Operação' },
+    { codigo: '100110', tributo: 'difal', descricao: 'ICMS Consumidor Final não contribuinte outra UF por Apuração' },
+    { codigo: '100129', tributo: 'fcp', descricao: 'ICMS Fundo Estadual de Combate à Pobreza por Operação' },
+    { codigo: '100137', tributo: 'fcp', descricao: 'ICMS Fundo Estadual de Combate à Pobreza por Apuração' },
+]);
 
 /**
  * Monta as linhas do DIFAL EC 87/15 no bloco E — E300 + E310 (+ E316).
@@ -461,15 +490,34 @@ export function montarLinhasDifalBlocoE({
         // deduz. Sem os dois o E316 não sai e a falta vai NOMEADA: é melhor o
         // PVA cobrar o registro (erro que se conserta e reenvia) do que o
         // arquivo declarar código de receita inventado, que ele ACEITA.
+        //
+        // 🚨 DIFAL E FCP SÃO DUAS GUIAS (21/09, VINATEX): o FCP tem código de
+        // receita PRÓPRIO (na GNRE, 100129/100137 contra 100102/100110 do
+        // DIFAL). Uma linha só, com o código do DIFAL somando o FCP, passa na
+        // aritmética do PVA e declara o FCP na receita ERRADA — recusa que o
+        // validador não faz. Cada tributo sai com o seu código, e o que falta
+        // vai NOMEADO por tributo.
         if (ap.aRecolher > 0) {
             const o = obrigacoesPorUf?.[g.uf] || {};
             const dtVcto = String(o.dtVcto || '').replace(/\D/g, '');
             const codRec = String(o.codRec || '').trim();
-            if (dtVcto.length === 8 && codRec) {
-                linhas.push(['E316', COD_OR_DIFAL_NORMAL, dec(ap.aRecolher), dtVcto, codRec, '', '', '', '', mesRef]);
-            } else {
-                semObrigacao.push(`${g.uf} (R$ ${dec(ap.aRecolher)})`);
+            const codRecFcp = String(o.codRecFcp || '').trim();
+            const faltas = [];
+            if (ap.aRecolherDifal > 0) {
+                if (dtVcto.length === 8 && codRec) {
+                    linhas.push(['E316', COD_OR_DIFAL_NORMAL, dec(ap.aRecolherDifal), dtVcto, codRec, '', '', '', '', mesRef]);
+                } else {
+                    faltas.push(`DIFAL R$ ${dec(ap.aRecolherDifal)}`);
+                }
             }
+            if (ap.aRecolherFcp > 0) {
+                if (dtVcto.length === 8 && codRecFcp) {
+                    linhas.push(['E316', COD_OR_DIFAL_NORMAL, dec(ap.aRecolherFcp), dtVcto, codRecFcp, '', '', '', '', mesRef]);
+                } else {
+                    faltas.push(`FCP R$ ${dec(ap.aRecolherFcp)}`);
+                }
+            }
+            if (faltas.length) semObrigacao.push(`${g.uf} (${faltas.join(' · ')})`);
         }
     }
 
@@ -505,10 +553,12 @@ export function montarLinhasDifalBlocoE({
 
     if (semObrigacao.length) {
         avisos.push(
-            `DIFAL EC 87/15: o E316 NÃO saiu para ${semObrigacao.join(', ')} — falta o vencimento e o código `
-            + 'de receita daquele estado. O PVA recusa com "O registro E316 deve ser apresentado para '
-            + 'discriminar os pagamentos realizados ou a realizar". Cadastre em SPED Fiscal → Ajustes E111 → '
-            + '"DIFAL EC 87/15 a recolher por UF de destino"; o app não deduz código de tabela estadual.',
+            `DIFAL EC 87/15: o E316 NÃO saiu para ${semObrigacao.join(', ')} — falta o vencimento e/ou o código `
+            + 'de receita daquele tributo. O PVA recusa com "A soma dos campos VL_RECOL_DIFAL, DEB_ESP_DIFAL, '
+            + 'VL_RECOL_FCP e DEB_ESP_FCP deve ser igual à soma do campo VL_OR dos Registros filhos E316". '
+            + 'Cadastre em SPED Fiscal → Ajustes E111 → "DIFAL EC 87/15 a recolher por UF de destino": o '
+            + 'vencimento, o código do DIFAL e, quando há FCP, o código do FCP (na GNRE: 100102/100110 para o '
+            + 'DIFAL e 100129/100137 para o FCP, por operação/por apuração). O app não escolhe a forma de recolher.',
         );
     }
 

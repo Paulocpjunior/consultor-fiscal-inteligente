@@ -27,6 +27,11 @@ export interface ObrigacaoStUf {
     /** DDMMAAAA, como o registro pede. */
     dtVcto: string;
     codRec: string;
+    /**
+     * Só no DIFAL EC 87/15 (E316): o FCP tem código de receita PRÓPRIO e sai em
+     * registro separado. Ausente = o E316 do FCP não sai, e a falta é dita.
+     */
+    codRecFcp?: string;
 }
 
 /**

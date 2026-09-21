@@ -21,6 +21,8 @@ import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 // 🧭 O DIFAL de aquisição DENTRO da apuração (art. 117) mora aqui, ao lado dos
 // códigos estaduais que ele precisa — é onde a pessoa já vem lançar o E111.
 import DifalArt117 from './DifalArt117';
+// A tabela de receitas da GNRE para a EC 87/15 — sugestão no cadastro, nunca default.
+import { CODIGOS_RECEITA_GNRE_EC87 } from '../../sefaz-backend/difal-ec87-saida.js';
 
 interface Props {
     currentUser: User | null;
@@ -76,7 +78,7 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                 setObrigacoesSt(Object.entries(cfg.obrigacoesStPorUf || {})
                     .map(([uf, o]) => ({ uf, dtVcto: o.dtVcto || '', codRec: o.codRec || '' })));
                 setObrigacoesDifal(Object.entries(cfg.obrigacoesDifalEc87PorUf || {})
-                    .map(([uf, o]) => ({ uf, dtVcto: o.dtVcto || '', codRec: o.codRec || '' })));
+                    .map(([uf, o]) => ({ uf, dtVcto: o.dtVcto || '', codRec: o.codRec || '', codRecFcp: o.codRecFcp || '' })));
                 setCarregado(chave);
             })
             .catch(e => onShowToast?.(`Falha ao carregar ajustes: ${e.message}`))
@@ -127,7 +129,12 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                 const u = o.uf.trim().toUpperCase();
                 const dt = o.dtVcto.replace(/\D/g, '');
                 const cod = o.codRec.trim();
-                if (u.length === 2 && dt.length === 8 && cod) difalMap[u] = { dtVcto: dt, codRec: cod };
+                // O FCP tem receita própria (21/09): vai só quando informado —
+                // o Firestore rejeita `undefined`, por isso o spread condicional.
+                const codFcp = String(o.codRecFcp || '').trim();
+                if (u.length === 2 && dt.length === 8 && cod) {
+                    difalMap[u] = { dtVcto: dt, codRec: cod, ...(codFcp ? { codRecFcp: codFcp } : {}) };
+                }
             }
             await salvarAjustes({
                 empresaId, empresaCnpj: empresa.cnpj, competencia, ajustes: limpos,
@@ -325,7 +332,23 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                             diferencial e do FCP vem da <strong>própria nota</strong> (o app não recalcula), mas o
                             <strong> código de receita</strong> e o <strong>vencimento</strong> são do estado de
                             destino e não estão no documento. Sem os dois, o E316 fica de fora e a geração avisa.
+                            {' '}O <strong>FCP tem código próprio</strong> e sai em E316 separado — quando a UF tem FCP
+                            (BA, por exemplo), informe os dois códigos. Na GNRE a tabela é nacional:
+                            {' '}<strong>100102</strong> DIFAL por operação · <strong>100110</strong> DIFAL por apuração ·
+                            {' '}<strong>100129</strong> FCP por operação · <strong>100137</strong> FCP por apuração
+                            {' '}(por operação = sem inscrição no estado de destino, uma guia por nota; por apuração =
+                            com inscrição lá). Estado fora do Portal GNRE usa o código da guia própria.
                         </p>
+                        <datalist id="cod-rec-gnre-difal">
+                            {CODIGOS_RECEITA_GNRE_EC87.filter(c => c.tributo === 'difal').map(c => (
+                                <option key={c.codigo} value={c.codigo}>{c.descricao} (GNRE)</option>
+                            ))}
+                        </datalist>
+                        <datalist id="cod-rec-gnre-fcp">
+                            {CODIGOS_RECEITA_GNRE_EC87.filter(c => c.tributo === 'fcp').map(c => (
+                                <option key={c.codigo} value={c.codigo}>{c.descricao} (GNRE)</option>
+                            ))}
+                        </datalist>
                         {obrigacoesDifal.map((o, i) => (
                             <div key={i} className="flex flex-wrap items-center gap-2 mb-2">
                                 <input
@@ -346,9 +369,19 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                                 />
                                 <input
                                     value={o.codRec}
+                                    list="cod-rec-gnre-difal"
                                     onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
                                         ? { ...x, codRec: e.target.value } : x))}
-                                    placeholder="Código de receita da UF de destino"
+                                    placeholder="Código de receita do DIFAL (GNRE: 100102 / 100110)"
+                                    className="flex-1 min-w-[200px] px-3 py-2 text-sm rounded-lg"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    value={o.codRecFcp || ''}
+                                    list="cod-rec-gnre-fcp"
+                                    onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
+                                        ? { ...x, codRecFcp: e.target.value } : x))}
+                                    placeholder="Código do FCP, se houver (GNRE: 100129 / 100137)"
                                     className="flex-1 min-w-[200px] px-3 py-2 text-sm rounded-lg"
                                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                                 />
@@ -361,7 +394,7 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                             </div>
                         ))}
                         <button
-                            onClick={() => setObrigacoesDifal(prev => [...prev, { uf: '', dtVcto: '', codRec: '' }])}
+                            onClick={() => setObrigacoesDifal(prev => [...prev, { uf: '', dtVcto: '', codRec: '', codRecFcp: '' }])}
                             className="px-4 py-2 text-xs font-bold rounded-lg"
                             style={{ background: 'var(--bg-card)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
                         >＋ Adicionar UF de destino</button>
