@@ -103,6 +103,15 @@ function findAfter(text: string, label: string, maxChars = 200): string {
 function findValueByLabel(text: string, labels: string[], pattern: RegExp): string {
     for (const label of labels) {
         const after = findAfter(text, label);
+        if (!after) continue;
+        // 🚨 A DANFSe (v1.0 e v2.0) escreve "-" para campo VAZIO, na linha
+        // seguinte ao rótulo. Sem esta parada a busca seguia pelos 200
+        // caracteres e trazia o valor do PRÓXIMO campo: "Desconto
+        // Incondicionado / - / BC ISSQN / 1.956,03" dava 1.956,03 de desconto,
+        // e "Total Deduções /Reduções / -" chegava a 90.000,00 (o BC ISSQN)
+        // no fixture de Osasco (21/09). Traço é ausência, e ausência não vira
+        // o vizinho. A primeira linha só pode ser o resto do rótulo (sem dígito).
+        if (/^(?:[^\n\d]*\n)?\s*-\s*(?:\n|$)/.test(after)) continue;
         const match = after.match(pattern);
         if (match) return (match[1] || match[0]).trim();
     }
@@ -158,7 +167,10 @@ function parsePartie(block: string): NfsePdfParticipante {
             if (cpfPontuadoMatch && cpfPontuadoMatch[1]) p.cnpj = cpfPontuadoMatch[1];
         }
     }
-    const ieMatch = block.match(/Inscri[c\u00e7][a\u00e3]o\s+Municipal\s*:?\s*(\d+)/i);
+    // DANFSe v2.0 (leiaute nacional com IBS/CBS, 2026 — Osasco, 21/09) chama
+    // o campo de "Indicador Municipal (Inscrição)".
+    const ieMatch = block.match(/Inscri[c\u00e7][a\u00e3]o\s+Municipal\s*:?\s*(\d+)/i)
+        || block.match(/Indicador\s+Municipal\s*\(Inscri[c\u00e7][a\u00e3]o\)\s*\n?\s*(\d+)/i);
     if (ieMatch && ieMatch[1]) p.inscricaoMunicipal = ieMatch[1];
     // Nome aparece em formatos distintos por padrao:
     //  DANFSe v1.0       : "Nome / Nome Empresarial\nFASTWELD INDUSTRIA..."
@@ -186,15 +198,29 @@ function parsePartie(block: string): NfsePdfParticipante {
     if (enderecoMatch && enderecoMatch[1]) p.endereco = enderecoMatch[1].trim();
     const bairroMatch = block.match(/Bairro\s*:?\s*([^\n]+)/i);
     if (bairroMatch && bairroMatch[1]) p.bairro = bairroMatch[1].trim();
-    const municipioMatch = block.match(/Munic[i\u00ed]pio\s*:?\s*([^\n]+?)(?:\s+UF\s*:|\n|$)/i);
-    if (municipioMatch && municipioMatch[1]) p.municipio = municipioMatch[1].trim();
-    const ufMatch = block.match(/UF\s*:?\s*([A-Z]{2})/);
-    if (ufMatch && ufMatch[1]) p.uf = ufMatch[1];
-    const cepMatch = block.match(/CEP\s*:?\s*(\d{5}-?\d{3})/i);
+    // DANFSe v2.0: "Município/Sigla UF\nOsasco/SP". No TOMADOR a casa da UF
+    // pode trazer o código IBGE ("Mogi das Cruzes/3530607") — só duas letras
+    // viram UF; código não se apresenta como sigla. Sem este ramo o regex
+    // genérico abaixo lia "/Sigla UF" como nome do município.
+    const munUfV2 = block.match(/Munic[i\u00ed]pio\s*\/\s*Sigla\s+UF\s*\n?\s*([^\n\/]+?)\s*\/\s*([A-Za-z0-9]+)/i);
+    if (munUfV2) {
+        p.municipio = munUfV2[1].trim();
+        if (/^[A-Z]{2}$/.test(munUfV2[2])) p.uf = munUfV2[2];
+    } else {
+        const municipioMatch = block.match(/Munic[i\u00ed]pio\s*:?\s*([^\n]+?)(?:\s+UF\s*:|\n|$)/i);
+        if (municipioMatch && municipioMatch[1]) p.municipio = municipioMatch[1].trim();
+        const ufMatch = block.match(/UF\s*:?\s*([A-Z]{2})/);
+        if (ufMatch && ufMatch[1]) p.uf = ufMatch[1];
+    }
+    // DANFSe v2.0: "Código IBGE/CEP\n3534401/06086-045".
+    const cepMatch = block.match(/C[o\u00f3]digo\s+IBGE\s*\/\s*CEP\s*\n?\s*\d{7}\s*\/\s*(\d{5}-?\d{3})/i)
+        || block.match(/CEP\s*:?\s*(\d{5}-?\d{3})/i);
     if (cepMatch && cepMatch[1]) p.cep = cepMatch[1];
     const emailMatch = block.match(/E-?mail\s*:?\s*([^\s\n]+@[^\s\n]+)/i);
     if (emailMatch && emailMatch[1]) p.email = emailMatch[1];
-    const foneMatch = block.match(/Fone\s*:?\s*([\d\s\-()]+)/i);
+    // "Telefone\n1133371554" (DANFSe v2.0); "-" é vazio e não casa.
+    const foneMatch = block.match(/Fone\s*:?\s*([\d\s\-()]+)/i)
+        || block.match(/Telefone\s*\n?\s*(\(?\d[\d\s\-()]{6,}\d)/i);
     if (foneMatch && foneMatch[1]) p.telefone = foneMatch[1].trim();
     return p;
 }
@@ -243,14 +269,20 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     // Data: DANFSe usa "Data e Hora da emissão da NFS-e\n11/05/2026 14:31:31"
     // (minusculo em "emissão" e tem " da NFS-e" no meio). findAfter agora eh
     // case-insensitive entao "Data e Hora da Emissão" pega a forma do DANFSe.
+    //
+    // 🚨 COM BARRA **OU HÍFEN** (21/09, Osasco · IMAGEM MEDICINA, NF 1039): a
+    // DANFSe v2.0 escreve "01-09-2026 03:02:21" e "COMPETÊNCIA DA NFS-e
+    // 03-08-2026". Os dois regex só aceitavam barra, o leitor devolvia vazio
+    // para os DOIS campos, o recorte recusava o PDF e a competência era
+    // DIGITADA — e a nota de agosto entrou em setembro, pela emissão.
     const dataEmissao = findValueByLabel(
         text,
         ['Data e Hora da Emissão', 'Data e Hora da Emissao', 'Data de Emissão', 'Data de Emissao'],
-        /(\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)/,
+        /(\d{2}[\/-]\d{2}[\/-]\d{4}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)/,
     );
-    // Competencia: DANFSe = "Competência da NFS-e\n10/05/2026" (DD/MM/YYYY);
-    // ABRASF tradicional = "Competência: MM/YYYY". Aceita os 2.
-    const competencia = findValueByLabel(text, ['Competência', 'Competencia'], /(\d{1,2}\/\d{2,4}(?:\/\d{2,4})?)/);
+    // Competencia: DANFSe = "Competência da NFS-e\n10/05/2026" (DD/MM/YYYY),
+    // v2.0 = "03-08-2026"; ABRASF tradicional = "Competência: MM/YYYY".
+    const competencia = findValueByLabel(text, ['Competência', 'Competencia'], /(\d{1,2}[\/-]\d{2,4}(?:[\/-]\d{2,4})?)/);
     const codigoVerificacao = findValueByLabel(
         text,
         ['Código de Verificação', 'Codigo de Verificacao'],
@@ -290,6 +322,9 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     const idxTomador = findFirstIndex(text, [
         'TOMADOR DE SERVI\u00c7OS', 'TOMADOR DE SERVICOS',
         'TOMADOR DO SERVI\u00c7O', 'TOMADOR DO SERVICO',
+        // DANFSe v2.0 (leiaute nacional com IBS/CBS, 2026): sem este rótulo o
+        // bloco do tomador saía VAZIO e o CNPJ era digitado (Osasco, 21/09).
+        'TOMADOR/ADQUIRENTE', 'TOMADOR / ADQUIRENTE',
         'Dados do Tomador',
     ]);
     const idxDisc = findFirstIndex(text, [
@@ -312,9 +347,16 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     // DANFSe v1.0 usa "Código de Tributação Nacional\n17.01.01 - ..."
     // ABRASF tradicional usa "Código do Serviço\n01.05" ou similar.
     // Codigo pode ter ponto E hifen ('17.01.01' ou '17-01-01').
-    const codigoServicoMatch =
+    // DANFSe v2.0 junta os dois: "Código de Tributação Nacional/Municipal
+    // \n040201/0402" — o regex genérico capturava só a barra ("/"). O
+    // nacional sai pontuado como na v1.0 ("04.02.01").
+    const codigoServicoV2 =
+        text.match(/C[oó]digo\s+de\s+Tributa[cç][aã]o\s+Nacional\s*\/\s*Municipal\s*\n?\s*(\d{6})\s*\/\s*\d{3,4}/i);
+    const codigoServicoMatch = codigoServicoV2 ? null :
         text.match(/C[oó]digo\s+(?:do\s+Servi[cç]o|de\s+Tributa[cç][aã]o\s+(?:Nacional|Municipal))[\s:]*\n?\s*([\d.\-/]+)/i);
-    const codigoServico = codigoServicoMatch?.[1] || '';
+    const codigoServico = codigoServicoV2
+        ? codigoServicoV2[1].replace(/^(\d{2})(\d{2})(\d{2})$/, '$1.$2.$3')
+        : (codigoServicoMatch?.[1] || '');
     const discBlock =
         idxDisc >= 0
             ? text.slice(
@@ -335,10 +377,19 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
     // numPattern aceita "R$" opcional antes do valor (DANFSe v1.0 escreve
     // "R$ 1.956,03" depois do label, ABRASF as vezes so o numero).
     const numPattern = /R?\$?\s*([\d.]+,\d{2})/;
+    // DANFSe v2.0 chama o campo de "VALOR DA OPERAÇÃO / SERVIÇO" — sem o
+    // rótulo o serviço saía 0,00 com líquido positivo, a trava de valores
+    // barrava e o valor era digitado (Osasco, 21/09).
     const valorServicos = parseValor(
-        findValueByLabel(text, ['Valor do Serviço', 'Valor do Servico', 'Valor Servicos', 'Valor Serviços', 'VALOR TOTAL DO SERVI'], numPattern),
+        findValueByLabel(text, [
+            'Valor do Serviço', 'Valor do Servico', 'Valor Servicos', 'Valor Serviços', 'VALOR TOTAL DO SERVI',
+            'VALOR DA OPERA\u00c7\u00c3O / SERVI\u00c7O', 'VALOR DA OPERACAO / SERVICO',
+        ], numPattern),
     );
-    const baseCalculo = parseValor(findValueByLabel(text, ['Base de Cálculo', 'Base de Calculo', 'BC ISSQN'], numPattern));
+    // "BC ISSQN" PRIMEIRO: na v2.0 a seção IBS/CBS traz "Exclusões e Reduções
+    // da Base de Cálculo" e "Base de Cálculo Após Exclusões", e o rótulo
+    // genérico casava a primeira delas (2.700,00 no lugar de 90.000,00).
+    const baseCalculo = parseValor(findValueByLabel(text, ['BC ISSQN', 'Base de Cálculo', 'Base de Calculo'], numPattern));
 
     // DANFSe v1.0 usa "Al\u00edquota Aplicada\n2,00%" (linha separada);
     // ABRASF inline "Al\u00edquota ISS 2%".
@@ -363,8 +414,15 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
         || (text.match(/(?:^|\n)IRRF\s*\n\s*R?\$?\s*([\d.]+,\d{2})/i)?.[1] ?? '');
     const valorIrrf = parseValor(valorIrrfStr);
     const valorCsll = parseValor(findValueByLabel(text, ['Valor CSLL', 'CSLL'], numPattern));
+    // A DANFSe (v1.0 e v2.0) traz PIS/COFINS/CSLL RETIDOS num campo só,
+    // "Contribuições Sociais - Retidas" — os campos PIS/COFINS acima são o
+    // DÉBITO PRÓPRIO do prestador, não retenção. Sem esta leitura o líquido
+    // não fechava com o bruto e a retenção sumia do documento.
     const valorOutrasRetencoes = parseValor(
-        findValueByLabel(text, ['Outras retenções', 'Outras retencoes'], numPattern),
+        findValueByLabel(text, [
+            'Outras retenções', 'Outras retencoes',
+            'Contribuições Sociais - Retidas', 'Contribuicoes Sociais - Retidas',
+        ], numPattern),
     );
     const valorDeducoes = parseValor(findValueByLabel(text, ['Total Deduções', 'Total Deducoes', 'Valor deduções', 'Valor deducoes'], numPattern));
     const valorDescIncondicional = parseValor(findValueByLabel(text, ['Desconto Incondicionado', 'Desconto Incondicional', 'Desconto incondicional'], numPattern));
@@ -373,10 +431,14 @@ export function parseNfseFromText(text: string): NfsePdfParsed {
         findValueByLabel(text, ['Valor Líquido da NFS-e', 'Valor Liquido da NFS-e', 'Valor Líquido', 'Valor liquido'], numPattern),
     );
 
-    const municipioEmissorMatch = text.match(/MUNIC[I\u00cd]PIO\s+DE\s+([A-Z\u00c0-\u00dc\s]+)/i);
+    // v2.0 escreve "Município: Osasco / SP" no cabeçalho.
+    const municipioEmissorMatch = text.match(/MUNIC[I\u00cd]PIO\s+DE\s+([A-Z\u00c0-\u00dc\s]+)/i)
+        || text.match(/Munic[i\u00ed]pio:\s*([^\/\n]+?)\s*(?:\/|\n|$)/i);
     const municipioEmissor = municipioEmissorMatch?.[1] ? municipioEmissorMatch[1].trim() : '';
 
-    const localPrestacaoMatch = text.match(/Local\s+da\s+presta[c\u00e7][a\u00e3]o\s+do\s+servi[c\u00e7]o[\s:]*\n?\s*([^\n]+)/i);
+    // v2.0: "Local da Prestação / Sigla UF / País\nMogi das Cruzes / SP - BR".
+    const localPrestacaoMatch = text.match(/Local\s+da\s+presta[c\u00e7][a\u00e3]o\s+do\s+servi[c\u00e7]o[\s:]*\n?\s*([^\n]+)/i)
+        || text.match(/Local\s+da\s+Presta[c\u00e7][a\u00e3]o\s*\/\s*Sigla\s+UF\s*\/\s*Pa[i\u00ed]s\s*\n?\s*([^\n\/]+?)\s*\//i);
     const municipioPrestacao = localPrestacaoMatch?.[1] ? localPrestacaoMatch[1].trim() : (prestador.municipio || '');
 
     return {
