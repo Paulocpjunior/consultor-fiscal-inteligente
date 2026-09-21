@@ -64,7 +64,7 @@ const ordem = (dm: string) => {
  * seja simples e visível em vez de esperta e errada.
  */
 function ultimaEntregaNoClaudeMd(): string {
-    const md = readFileSync(join(RAIZ, 'CLAUDE.md'), 'utf8');
+    const md = readFileSync(join(RAIZ, 'docs', 'historico-claude.md'), 'utf8');
     const datas = [...md.matchAll(/\((\d{2}\/\d{2})(?![/\d])/g)].map((m) => m[1])
         .filter((dm) => {
             const [d, mes] = dm.split('/').map(Number);
