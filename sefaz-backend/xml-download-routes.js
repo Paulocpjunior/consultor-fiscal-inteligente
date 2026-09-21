@@ -21,7 +21,7 @@ import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import multer from 'multer';
 import { requireAuth } from './require-admin.js';
-import { podeAcessarCnpj, podeAcessarEmpresaId } from './carteira-auth.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -112,7 +112,7 @@ router.get('/xml-bruto', requireAuth, async (req, res) => {
         }
         const d = snap.docs[0].data() || {};
 
-        const acesso = await podeAcessarCnpj(req.user, d.empresaCnpj || chave.slice(6, 20));
+        const acesso = await acessoEmpresa(req.user, d.empresaId);
         if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
 
         if (!d.storagePath) {
@@ -123,6 +123,9 @@ router.get('/xml-bruto', requireAuth, async (req, res) => {
             });
         }
 
+        if (!d.storagePath.startsWith(`xmls/${d.empresaId}/`) || d.storagePath.includes('..')) {
+            return res.status(404).json({ ok: false, error: 'XML original nao localizado na empresa deste documento' });
+        }
         const file = storage.bucket(STORAGE_BUCKET).file(d.storagePath);
         const [existe] = await file.exists();
         if (!existe) {
@@ -136,6 +139,7 @@ router.get('/xml-bruto', requireAuth, async (req, res) => {
 
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${chave}.xml"`);
+        res.setHeader('Cache-Control', 'private, no-store');
         return res.send(conteudo);
     } catch (e) {
         console.error('[xml-bruto]', e);
