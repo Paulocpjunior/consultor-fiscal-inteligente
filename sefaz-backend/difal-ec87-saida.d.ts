@@ -45,7 +45,11 @@ export interface ApuracaoDifalUf {
     recolFcp: number;
     sldCredTranspFcp: number;
     debEspFcp: number;
-    /** VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP + DEB_ESP_FCP (E316). */
+    /** VL_RECOL_DIFAL + DEB_ESP_DIFAL — o E316 do DIFAL. */
+    aRecolherDifal: number;
+    /** VL_RECOL_FCP + DEB_ESP_FCP — o E316 do FCP (código de receita próprio). */
+    aRecolherFcp: number;
+    /** VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP + DEB_ESP_FCP (Σ dos E316). */
     aRecolher: number;
     deducoesExcedentes: number;
     documentos?: number;
@@ -54,11 +58,21 @@ export interface ApuracaoDifalUf {
 export interface ObrigacaoDifalUf {
     /** ddmmaaaa */
     dtVcto: string;
-    /** Código de receita da UF de destino — não se deduz. */
+    /** Código de receita do DIFAL na UF de destino — não se deduz. */
     codRec: string;
+    /** Código de receita do FCP — receita própria; sem ele o E316 do FCP não sai. */
+    codRecFcp?: string;
 }
 
 export declare const COD_OR_DIFAL_NORMAL: string;
+
+export interface CodigoReceitaGnreEc87 {
+    codigo: string;
+    tributo: 'difal' | 'fcp';
+    descricao: string;
+}
+/** Sugestões para o cadastro (tabela de receitas da GNRE) — nunca default do gerador. */
+export declare const CODIGOS_RECEITA_GNRE_EC87: readonly CodigoReceitaGnreEc87[];
 
 export declare function difalDoDocumento(nota: any): DifalDoDocumento;
 export declare function documentoLevaC101(nota: any): boolean;
