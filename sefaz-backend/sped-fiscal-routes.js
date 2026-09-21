@@ -29,6 +29,7 @@ import { fetchAllDocs } from './firestore-paginate.js';
 // senão a aba prometeria um número e o E110 sairia com outro (a lição da
 // réplica de CFOP no modal, 12/08).
 import { consolidarDifalArt117, ALIQ_INTERNA_PADRAO } from './difal-art117-apuracao.js';
+import { detalharDifalPorUf } from './difal-ec87-saida.js';
 import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 import { lerParametrosCfopDaEmpresa } from './cfop-parametros-store.js';
 
@@ -351,6 +352,66 @@ router.get('/difal-art117', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[sped/difal-art117 GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * GET /difal-ec87?empresaId=X&competencia=YYYY-MM
+ *
+ * O DIFAL de SAÍDA (EC 87/15) da competência, por UF de DESTINO e nota a
+ * nota, com o cadastro do E316 que já existe. Serve à aba Ajustes E111 para
+ * PUXAR as UFs em vez de digitá-las (21/09, Paulo, WALDESA: *"não tem uma
+ * forma de puxar as informações? … 13 páginas de DIFAL para lançar"*).
+ *
+ * O que vem das notas vem daqui; o que NÃO está nas notas (vencimento e código
+ * de receita) continua sendo cadastro — a rota só diz para quais UFs ele é
+ * preciso, e quais têm FCP (a segunda guia).
+ */
+router.get('/difal-ec87', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        const competencia = periodo.competencia;
+        if (!competencia) return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+
+        const db = fa().firestore();
+        const lucro = await db.collection('lucro_empresas').doc(String(empresaId)).get();
+        if (!lucro.exists) {
+            return res.status(400).json({ ok: false, error: 'O E300/E310/E316 é do EFD ICMS/IPI (Lucro). A empresa não está no módulo Lucro.' });
+        }
+        const empresa = { id: String(empresaId), ...lucro.data() };
+        const ufEmpresa = String(empresa.dadosFiscais?.uf || '').toUpperCase();
+
+        const snap = await db.collection('documentos_fiscais')
+            .where('empresaId', '==', String(empresaId))
+            .where('competencia', '==', competencia)
+            .get();
+        const notas = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(docContaNoLivro);
+        const detalhe = detalharDifalPorUf(notas, ufEmpresa, String(empresa.cnpj || ''));
+
+        const cfgSnap = await db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${competencia}`).get();
+        const cfg = cfgSnap.exists ? (cfgSnap.data() || {}) : {};
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            competencia,
+            ufEmpresa,
+            documentosLidos: notas.length,
+            // Só o resumo por UF vai (a tela de cadastro não precisa das notas;
+            // o detalhamento nota a nota é o relatório da aba Relatórios).
+            ufs: detalhe.grupos.map((g) => ({ uf: g.uf, difal: g.difal, fcp: g.fcp, documentos: g.documentos })),
+            totais: detalhe.totais,
+            semUf: detalhe.semUf,
+            mesmaUf: detalhe.mesmaUf,
+            obrigacoesDifalEc87PorUf: cfg.obrigacoesDifalEc87PorUf || {},
+        });
+    } catch (e) {
+        console.error('[sped/difal-ec87 GET]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

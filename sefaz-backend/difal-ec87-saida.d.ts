@@ -85,6 +85,31 @@ export declare function agruparDifalPorUf(notas: any[], ufEmpresa: string): {
     comParteRemetente: string[];
 };
 
+export interface NotaDifalDetalhe {
+    data: string;
+    numero: string;
+    modelo: string;
+    cnpjCpf: string;
+    nome: string;
+    difal: number;
+    fcp: number;
+    chave: string;
+}
+export interface GrupoDifalDetalhe {
+    uf: string;
+    difal: number;
+    fcp: number;
+    documentos: number;
+    notas: NotaDifalDetalhe[];
+}
+/** O "Detalhamento das Notas" por UF — mesma seleção do E300/E310. */
+export declare function detalharDifalPorUf(notas: any[], ufEmpresa: string, empresaCnpj?: string): {
+    grupos: GrupoDifalDetalhe[];
+    totais: { difal: number; fcp: number; documentos: number };
+    semUf: string[];
+    mesmaUf: string[];
+};
+
 export declare function apurarDifalDaUf(p: {
     uf: string;
     difal?: number;

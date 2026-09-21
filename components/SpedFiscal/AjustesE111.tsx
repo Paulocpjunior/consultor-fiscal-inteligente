@@ -23,6 +23,7 @@ import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import DifalArt117 from './DifalArt117';
 // A tabela de receitas da GNRE para a EC 87/15 — sugestão no cadastro, nunca default.
 import { CODIGOS_RECEITA_GNRE_EC87 } from '../../sefaz-backend/difal-ec87-saida.js';
+import { auth } from '../../services/firebaseConfig';
 
 interface Props {
     currentUser: User | null;
@@ -61,6 +62,65 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
     // lugar inexistente, que é o achado 18 (21/08) na forma que já custou dois
     // dias nesta casa.
     const [obrigacoesDifal, setObrigacoesDifal] = useState<Array<{ uf: string } & ObrigacaoStUf>>([]);
+    // 🧭 21/09, Paulo (WALDESA, "13 páginas de DIFAL para lançar"): as UFs vêm
+    // das NOTAS da competência (rota /difal-ec87), não da digitação; o que
+    // continua sendo cadastro é só o que a nota não traz — vencimento e
+    // código de receita —, e esses se aplicam a todas de uma vez.
+    const [ufsDaCompetencia, setUfsDaCompetencia] = useState<Array<{ uf: string; difal: number; fcp: number; documentos: number }> | null>(null);
+    const [puxando, setPuxando] = useState(false);
+    const [aplicar, setAplicar] = useState({ dtVcto: '', codRec: '', codRecFcp: '' });
+
+    const puxarUfsDaCompetencia = async () => {
+        if (!empresaId || !competencia) return;
+        setPuxando(true);
+        try {
+            const t = await auth?.currentUser?.getIdToken();
+            const r = await fetch(
+                `/api/admin/sped-fiscal/difal-ec87?empresaId=${encodeURIComponent(empresaId)}&competencia=${encodeURIComponent(competencia)}`,
+                { headers: { Authorization: `Bearer ${t}` } },
+            );
+            const j = await r.json();
+            if (!j.ok) { onShowToast?.(j.error || 'Falha ao ler o DIFAL da competência.'); return; }
+            const ufs: Array<{ uf: string; difal: number; fcp: number; documentos: number }> = j.ufs || [];
+            setUfsDaCompetencia(ufs);
+            if (!ufs.length) {
+                onShowToast?.('Nenhuma saída com DIFAL da EC 87/15 nesta competência. Se há venda a não contribuinte de outra UF, rode ♻️ Reler itens dos XMLs (o grupo ICMSUFDest pode não ter sido capturado).');
+                return;
+            }
+            setObrigacoesDifal(prev => {
+                const existentes = new Set(prev.map(o => o.uf.trim().toUpperCase()));
+                const novas = ufs.filter(u => !existentes.has(u.uf)).map(u => ({ uf: u.uf, dtVcto: '', codRec: '', codRecFcp: '' }));
+                return [...prev, ...novas];
+            });
+            const comFcp = ufs.filter(u => u.fcp > 0).map(u => u.uf);
+            onShowToast?.(`${ufs.length} UF(s) com DIFAL nesta competência (${j.documentosLidos} documento(s) lidos)`
+                + (comFcp.length ? ` · FCP em ${comFcp.join(', ')} — essas precisam do código do FCP também.` : '.')
+                + (j.semUf?.length ? ` ⚠️ ${j.semUf.length} nota(s) sem UF do destinatário ficaram fora.` : ''));
+        } catch (e: any) {
+            onShowToast?.(`Falha ao puxar as UFs: ${e?.message || e}`);
+        } finally {
+            setPuxando(false);
+        }
+    };
+    const infoUf = (u: string) => ufsDaCompetencia?.find(x => x.uf === u.trim().toUpperCase()) || null;
+    const aplicarATodas = () => {
+        const dt = aplicar.dtVcto.replace(/\D/g, '').slice(0, 8);
+        const cod = aplicar.codRec.trim();
+        const codFcp = aplicar.codRecFcp.trim();
+        if (!dt && !cod && !codFcp) { onShowToast?.('Preencha ao menos um campo para aplicar.'); return; }
+        setObrigacoesDifal(prev => prev.map(o => {
+            const info = infoUf(o.uf);
+            // O código do FCP só vai para a UF que TEM FCP (quando se sabe); sem
+            // a leitura das notas, vai para todas e o gerador ignora onde não há.
+            const levaFcp = info ? info.fcp > 0 : true;
+            return {
+                ...o,
+                ...(dt ? { dtVcto: dt } : {}),
+                ...(cod ? { codRec: cod } : {}),
+                ...(codFcp && levaFcp ? { codRecFcp: codFcp } : {}),
+            };
+        }));
+    };
 
     const empresa = empresas.find(e => e.id === empresaId) || null;
     const uf = (empresa?.uf || '').toUpperCase();
@@ -349,6 +409,53 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                                 <option key={c.codigo} value={c.codigo}>{c.descricao} (GNRE)</option>
                             ))}
                         </datalist>
+                        {/* 🧭 As UFs vêm das notas; o cadastro é só o que a nota não traz. */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3 p-3 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px dashed var(--border-default)' }}>
+                            <button
+                                onClick={() => void puxarUfsDaCompetencia()}
+                                disabled={puxando || !empresaId}
+                                className="px-4 py-2 text-xs font-bold rounded-lg disabled:opacity-50"
+                                style={{ background: 'var(--accent)', color: '#fff' }}
+                                title="Lê as saídas com DIFAL da EC 87/15 desta competência e lista as UFs de destino — sem digitar UF por UF."
+                            >{puxando ? '⏳ Lendo as notas…' : '📥 Puxar UFs desta competência'}</button>
+                            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>depois, aplique a todas:</span>
+                            <input
+                                value={aplicar.dtVcto}
+                                onChange={e => setAplicar(a => ({ ...a, dtVcto: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
+                                placeholder="Vencimento DDMMAAAA"
+                                className="w-[170px] px-3 py-2 text-sm rounded-lg"
+                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                            />
+                            <input
+                                value={aplicar.codRec}
+                                list="cod-rec-gnre-difal"
+                                onChange={e => setAplicar(a => ({ ...a, codRec: e.target.value }))}
+                                placeholder="Código do DIFAL"
+                                className="w-[160px] px-3 py-2 text-sm rounded-lg"
+                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                            />
+                            <input
+                                value={aplicar.codRecFcp}
+                                list="cod-rec-gnre-fcp"
+                                onChange={e => setAplicar(a => ({ ...a, codRecFcp: e.target.value }))}
+                                placeholder="Código do FCP"
+                                className="w-[160px] px-3 py-2 text-sm rounded-lg"
+                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                            />
+                            <button
+                                onClick={aplicarATodas}
+                                disabled={!obrigacoesDifal.length}
+                                className="px-4 py-2 text-xs font-bold rounded-lg disabled:opacity-50"
+                                style={{ background: 'var(--bg-card)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                title="Preenche o vencimento e os códigos em todas as UFs listadas (o código do FCP só nas UFs que têm FCP). Campo vazio não sobrescreve."
+                            >↧ Aplicar a todas as UFs</button>
+                        </div>
+                        {ufsDaCompetencia && ufsDaCompetencia.length > 0 && (
+                            <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
+                                Nas notas de {competencia.split('-').reverse().join('/')}: {ufsDaCompetencia.map(u => `${u.uf} ${fmtBRL(u.difal)}${u.fcp > 0 ? ` + FCP ${fmtBRL(u.fcp)}` : ''}`).join(' · ')}.
+                                {' '}O detalhamento nota a nota está em Relatórios → 🧭 DIFAL/FCP EC 87/15.
+                            </p>
+                        )}
                         {obrigacoesDifal.map((o, i) => (
                             <div key={i} className="flex flex-wrap items-center gap-2 mb-2">
                                 <input
@@ -359,6 +466,11 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                                     className="w-[70px] px-3 py-2 text-sm rounded-lg text-center"
                                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                                 />
+                                {infoUf(o.uf) && (
+                                    <span className="text-[10px] w-[150px]" style={{ color: infoUf(o.uf)!.fcp > 0 && !String(o.codRecFcp || '').trim() ? 'var(--accent)' : 'var(--text-muted)' }}>
+                                        {fmtBRL(infoUf(o.uf)!.difal)}{infoUf(o.uf)!.fcp > 0 ? ` + FCP ${fmtBRL(infoUf(o.uf)!.fcp)}` : ''}
+                                    </span>
+                                )}
                                 <input
                                     value={o.dtVcto}
                                     onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
