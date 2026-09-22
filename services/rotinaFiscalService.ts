@@ -120,7 +120,9 @@ export interface PainelRotina {
         abrangencia: string;
         status: string;
         dependeDe: string | null;
-        motivo: string;
+        motivo?: string;
+        /** O que falta conferir — é este campo que o backend devolve. */
+        oQueFalta?: string;
     }>;
     rotinas?: RotinaEmpresa[];
     lidos?: { documentos: number; tarefas: number; envios: number };

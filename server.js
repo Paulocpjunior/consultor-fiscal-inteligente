@@ -3176,6 +3176,29 @@ app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
     }
 });
 
+// POST /api/admin/tarefas/reaplicar-prazos
+//   📅 Reaplica o prazo ATUAL do catálogo (e dos cadastros do admin) nas
+//   tarefas ABERTAS e automáticas de uma competência (22/09, AFFITTARE: a
+//   regra mudou e a tarefa ficou com o dia velho). Admin, com token.
+//   Body: { competencia: "MM/AAAA", empresaId? }
+app.post('/api/admin/tarefas/reaplicar-prazos', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (!/^\d{2}\/\d{4}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'competencia obrigatoria (MM/AAAA)' });
+        }
+        const { reaplicarPrazosDoCatalogo } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await reaplicarPrazosDoCatalogo(competencia, {
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/reaplicar-prazos]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
 // POST /api/tarefas/aplicar-carteira
 //   Atribui retroativamente as tarefas sem dono ao titular da Carteira.
 //   Idempotente. Protegida por X-Cron-Secret.

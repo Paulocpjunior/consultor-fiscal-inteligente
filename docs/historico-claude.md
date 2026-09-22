@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📅 "AFFITTARE 08/2026 CONTINUA DO MESMO JEITO" + "ESSA INFORMAÇÃO (12
+  OBRIGAÇÕES DO CATÁLOGO NÃO CONFIRMADAS) INTERFERE EM ALGUMA COISA?"** (22/09,
+  Paulo). (1) A regra da DCTFWeb mudou no catálogo e a TAREFA ficou com o dia
+  em que nasceu — "atrasada" sobre prazo que não venceu (a EFD-Contribuições
+  08/2026 vence 14/10 pelo catálogo e a tarefa dizia outra coisa). Nasceu
+  `reaplicarPrazosDoCatalogo` (orquestrador) + rota admin `POST
+  /api/admin/tarefas/reaplicar-prazos` + botão **📅 Reaplicar prazos do
+  catálogo** em Vencimentos e Obrigações → Tarefas (admin, na competência do
+  filtro). Régua PURA em `reaplicar-prazos.js`: só aberta + automática + data
+  diferente; concluída, cancelada e manual não mudam; sem regra/sem data não
+  se mexe. Cada alteração sai nomeada (de → para) e vai ao `tarefas_cron_logs`.
+  (2) O painel "obrigações do catálogo não confirmadas" é do CATÁLOGO INTEIRO
+  (todos os regimes), não do cliente, e misturava DUAS coisas: `revisar`
+  (ativa → VIRA tarefa, só o prazo pede conferência: SPED, EFD-Contrib) e
+  `proposta` (NÃO vira tarefa: INSS Patronal, DeRE, DCTFWeb de imune…). A
+  frase dizia "não vira tarefa" para as duas. Agora cada linha diz qual é, e o
+  `oQueFalta` (que o backend devolvia e a tela lia como `motivo`, vazio)
+  aparece. Não interfere na Rotina do cliente além do que já está dito no card.
+  REGRA: mudou prazo no catálogo ou no cadastro → reaplicar nas tarefas abertas.
+
 - **📎 "AJUSTE NECESSÁRIO JUNTO AO SHAREPOINT" — NÃO ERA** (22/09, Paulo, CLINICA
   MANTOAN 08/2026, etapa 5 com `AADSTS7000215`). MEDIDO no Mac dele:
   `graph-client-secret` v5 (02/09) começa com `qcc` = segredo `proxy-2026-09`
