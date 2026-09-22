@@ -13,6 +13,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { carregarDesempenho, RelatorioDesempenho, ColaboradorDesempenho } from '../../services/auditoriaDonoService';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
+import ForaDoEscopo from './ForaDoEscopo';
 
 const FUSO = 'America/Sao_Paulo';
 const dia = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: FUSO }) : '—');
@@ -136,6 +137,7 @@ const Desempenho: React.FC = () => {
                             <p key={i} className={`text-[11px] ${dados.naoLidas.length && i === 0 ? 'text-red-700 dark:text-red-300 font-semibold' : 'text-amber-800 dark:text-amber-300'}`}>{r}</p>
                         ))}
                     </div>
+                    <ForaDoEscopo fora={dados.foraDoEscopo} rotulo="ato" />
 
                     {/* Totais por tipo */}
                     <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">

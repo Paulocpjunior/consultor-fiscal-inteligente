@@ -3,13 +3,14 @@ export interface TipoAto {
     filtroIgual?: Record<string, string>;
     campoData: string[]; campoQuem: string[];
     desde: string | null; carimbaQuem: boolean; leituraPorRange: boolean; tipoData?: 'timestamp' | 'iso';
+    compartilhada?: boolean;
 }
 export declare const TIPOS_ATO: readonly TipoAto[];
 export declare const ROTULOS_TIPO: Record<string, string>;
 export interface Ato {
     id: string; tipo: string; em: string | null; quem: string | null;
     empresaId: string | null; empresaNome: string | null; empresaCnpj: string | null;
-    competencia: string | null; detalhe: string | null;
+    competencia: string | null; detalhe: string | null; projetoOrigem: string | null;
 }
 export declare function paraIso(v: unknown): string | null;
 export declare function normalizarAto(tipo: TipoAto, id: string, dados?: any): Ato;
@@ -33,6 +34,7 @@ export interface Desempenho {
     totaisPorTipo: Record<string, number>;
     colaboradores: ColaboradorDesempenho[];
     naoLidas: Array<{ tipo: string; rotulo: string; motivo: string }>;
+    foraDoEscopo: { eventos: number; autores: Array<{ quem: string; quantidade: number; motivo: string | null }> };
     ressalvas: string[];
 }
 export declare function montarDesempenho(p: {
@@ -40,5 +42,5 @@ export declare function montarDesempenho(p: {
     naoLidas?: Array<{ tipo: string; rotulo: string; motivo: string }>;
     de?: string | null; ate?: string | null;
 }): Desempenho;
-export declare function ressalvasDoDesempenho(p: { de?: string | null; naoLidas?: any[]; semData?: number; atos?: Ato[] }): string[];
+export declare function ressalvasDoDesempenho(p: { de?: string | null; naoLidas?: any[]; semData?: number; atos?: Ato[]; foraDoEscopo?: any }): string[];
 export declare function periodoPadrao(meses?: number, agora?: Date): { de: string; ate: string };

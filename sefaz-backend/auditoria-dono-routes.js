@@ -59,7 +59,17 @@ router.get('/', requireAdmin, requireDono, async (req, res) => {
             }
         }));
 
-        const relatorio = montarAuditoria({ leituras, de, ate, quemFiltro });
+        // SÓ O CFI: `users` é o cadastro central de todos os módulos e
+        // `carteiras` diz quem é do Fiscal — o recorte precisa dos dois.
+        const [usuariosSnap, carteirasSnap] = await Promise.all([
+            db.collection('users').get(),
+            db.collection('carteiras').get(),
+        ]);
+        const escopo = {
+            usuarios: usuariosSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })),
+            vinculos: carteirasSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })),
+        };
+        const relatorio = montarAuditoria({ leituras, de, ate, quemFiltro, escopo });
         return res.json({
             ok: true,
             periodo: { de, ate, quem: quemFiltro },

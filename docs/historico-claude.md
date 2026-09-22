@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚫 "VOCÊ ESTÁ AGLUTINANDO TODOS OS USUÁRIOS DE TODOS OS APPS — NÃO PODEMOS
+  MISTURAR, AQUI É SOMENTE SOBRE O CFI"** (22/09, Paulo, print da Linha do
+  tempo com WhatsApp da Recepção/RH e "rhsp 268"). CAUSA: o Firestore é UM
+  só para os apps irmãos — `users` é o cadastro central de TODOS os módulos
+  (fiscal, contábil, dp-folha, legalização, financeiro) e `whatsapp_envios`
+  e `reinf_gateway_lotes` recebem gravação do SP Connect e do Contábil pelo
+  túnel; a auditoria lia tudo. CORREÇÃO: `sefaz-backend/escopo-cfi.js`
+  (PURO) aplicado nas DUAS abas (`montarAuditoria` recebe `escopo`
+  {usuarios, vinculos}; `montarDesempenho` usa os que já tinha). REGRA
+  DITA: colaborador do CFI = departamento `fiscal` no cadastro central OU
+  role admin OU carteira vinculada; evento com `projetoOrigem` de outro app
+  sai (mesmo com autor do CFI); autor conhecido que não é do CFI sai com o
+  motivo (departamento X / sem departamento); autor DESCONHECIDO sai só em
+  trilha `compartilhada` (WhatsApp, Reinf) e fica em trilha exclusiva
+  (ex-colaborador). Sem autor e 'sistema' ficam. Nada some em silêncio:
+  `foraDoEscopo` {eventos, autores[{quem, quantidade, motivo}]} vai na
+  resposta, na ressalva ("Ficaram de fora N … e mais K") e num bloco
+  "🚫 Fora do escopo do CFI" nas duas abas, com o caminho (Gerenciar
+  Usuários) — nunca deduz vínculo. Testes: `escopoCfi.test.ts`.
+
 - **📊 "CRIE UMA AUDITORIA COMPLETA, CAPAZ DE MAPEAR O DESEMPENHO POR
   COLABORADOR × EMPRESAS — O QUE CADA UM EFETIVAMENTE EXECUTOU NOS ÚLTIMOS 2
   MESES"** (22/09, Paulo). Nasceu como SEGUNDA ABA do painel do dono (mesma
