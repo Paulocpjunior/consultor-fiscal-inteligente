@@ -82,11 +82,23 @@ export function buildFolderPathImpostos(pastaEmpresa, competencia) {
  * (o rito registra 'sem-tarefa' e segue — não é erro).
  */
 export function obrigacaoDoTipo(tipo) {
-    const t = String(tipo || '').toUpperCase();
-    if (t === 'DAS') return 'DAS';
-    if (t === 'DARF' || t === 'DCTFWEB') return 'DCTFWEB';
-    if (t === 'FGTS') return 'FGTS';
-    if (t === 'SPED') return 'SPED';
+    const t = String(tipo || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (!t) return null;
+    // O tipo é TEXTO LIVRE no registro por fora ("DARF PIS, COFINS", "ISS
+    // PMSP"…). Até 22/09 só DAS/DARF/FGTS/SPED viravam obrigação, e o resto
+    // caía em "sem tarefa" — pendência sem saída, travando a etapa 5 (MANTOAN
+    // 08/2026). A régua: o TRIBUTO nomeado no texto decide, na ordem do mais
+    // específico para o mais genérico; "DARF" sozinho continua DCTFWEB.
+    if (/\bPIS\b|\bCOFINS\b/.test(t)) return 'PIS_COFINS';
+    if (/\bINSS\b|\bCPP\b|\bGPS\b/.test(t)) return 'INSS_CPP';
+    if (/\bIRPJ\b/.test(t)) return 'IRPJ_TRIM';
+    if (/\bCSLL\b/.test(t)) return 'CSLL_TRIM';
+    if (/\bFGTS\b/.test(t)) return 'FGTS';
+    if (/\bISS(QN)?\b/.test(t)) return 'ISS';
+    if (/\bEFD[\s_-]*CONTRIB/.test(t)) return 'EFD_CONTRIB';
+    if (/\bSPED\b|\bEFD\b/.test(t)) return 'SPED';
+    if (/\bDCTF/.test(t) || /\bDARF\b/.test(t)) return 'DCTFWEB';
+    if (/\bDAS\b/.test(t)) return 'DAS';
     return null;
 }
 
@@ -272,9 +284,18 @@ export async function darBaixaDaObrigacao(db, p) {
             return { status: 'erro', motivo: e.message, obrigacao, competencia: compTarefa };
         }
     }
-    // Tipo sem obrigação mensal (ou competência ilegível): não há o que baixar,
-    // e isso é FATO, não falha — a etapa não pode cobrar tarefa inexistente.
-    return { status: 'sem-tarefa', motivo: `Tipo ${p.tipo} não tem obrigação mensal correspondente na aba de tarefas.` };
+    // Competência ilegível: não dá para achar a tarefa — pendência de verdade.
+    if (obrigacao && !compTarefa) {
+        return { status: 'sem-tarefa', obrigacao, motivo: `Competência "${p.competencia}" ilegível — não dá para localizar a tarefa.` };
+    }
+    // Tipo que NÃO nomeia nenhuma obrigação do catálogo (ex.: DARE de ICMS):
+    // não há tarefa a baixar por aqui, e isso é FATO, não falha — cobrar
+    // tarefa inexistente travava a etapa 5 para sempre (MANTOAN, 22/09).
+    return {
+        status: 'sem-obrigacao',
+        motivo: `Tipo "${p.tipo}" não corresponde a nenhuma obrigação do catálogo — nada a baixar por aqui. `
+            + 'Se esta guia é de uma obrigação do mês, dê baixa nela em Vencimentos.',
+    };
 }
 
 export async function executarRitoEnvioImposto(p) {

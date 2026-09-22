@@ -35,9 +35,12 @@
 // ============================================================================
 
 /** Status de SharePoint que já fecharam ou não pedem arquivo. */
-const SHAREPOINT_FECHADO = new Set(['arquivado', 'sem-pdf']);
-/** Status de baixa que já fecharam. */
-const BAIXA_FECHADA = new Set(['baixada', 'ja-baixada']);
+const SHAREPOINT_FECHADO = new Set(['arquivado', 'sem-pdf', 'arquivado-declarado']);
+/** Status de baixa que já fecharam (ou não têm o que baixar). */
+const BAIXA_FECHADA = new Set(['baixada', 'ja-baixada', 'sem-obrigacao']);
+
+/** Piso do texto da declaração — o mesmo espírito do envio por fora (T3). */
+export const DECLARACAO_MINIMA = 20;
 
 /**
  * O que dá para tentar de novo neste envio?
@@ -59,12 +62,16 @@ export function oQueRefazer(envio) {
     if (!sharePoint) {
         motivos.push(sp === 'arquivado'
             ? 'A cópia já está na pasta IMPOSTOS — não há o que refazer.'
-            : 'Envio sem anexo (não há arquivo para arquivar) — desfecho legítimo.');
+            : sp === 'arquivado-declarado'
+                ? 'A cópia foi declarada arquivada à mão — não há o que refazer.'
+                : 'Envio sem anexo (não há arquivo para arquivar) — desfecho legítimo.');
     }
     if (!baixa) {
         motivos.push(bx === 'baixada'
             ? 'A obrigação já foi baixada.'
-            : 'A obrigação já estava concluída quando o envio foi registrado.');
+            : bx === 'sem-obrigacao'
+                ? 'O tipo desta guia não corresponde a obrigação do catálogo — não há tarefa a baixar.'
+                : 'A obrigação já estava concluída quando o envio foi registrado.');
     }
 
     return { sharePoint, baixa, nada: !sharePoint && !baixa, motivos };
@@ -107,6 +114,38 @@ export function patchDoRefazer({ envio, sharePoint, baixa, quem, agoraIso }) {
         { em: agoraIso, por: quem || null, antes, depois },
     ];
     return patch;
+}
+
+/**
+ * 📁 ARQUIVAMENTO DECLARADO À MÃO (Paulo, 22/09: "fiz o rito e continua
+ * assim … 0 arquivado").
+ *
+ * O app não guarda o PDF de DARF/DARE depois do envio; quando a cópia falhou
+ * (credencial recusada no dia), o refazer não tem arquivo para subir e a
+ * etapa 5 ficaria travada para sempre. A saída honesta é a mesma do envio por
+ * fora: a pessoa arquiva na pasta IMPOSTOS e DECLARA, com nome, data e texto.
+ * O status vira `arquivado-declarado` — fecha o rito e sai contado como
+ * declarado, nunca como prova do servidor.
+ *
+ * @returns {{ok: true, patch: object} | {ok: false, erro: string}}
+ */
+export function patchDoArquivamentoDeclarado({ envio, quem, comoFoi, agoraIso }) {
+    const sp = String(envio?.sharePoint?.status || '');
+    if (SHAREPOINT_FECHADO.has(sp)) {
+        return { ok: false, erro: sp === 'arquivado' ? 'A cópia já está na pasta — não há o que declarar.' : 'Este envio não tem arquivamento pendente.' };
+    }
+    const autor = String(quem || '').trim();
+    if (!autor) return { ok: false, erro: 'Declaração sem autor não vale — faça login de novo.' };
+    const texto = String(comoFoi || '').trim();
+    if (texto.length < DECLARACAO_MINIMA) {
+        return { ok: false, erro: `Diga onde e como arquivou (mínimo ${DECLARACAO_MINIMA} caracteres) — é o que responde a pergunta daqui a três meses.` };
+    }
+    const sharePoint = {
+        status: 'arquivado-declarado',
+        motivo: 'Cópia na pasta IMPOSTOS DECLARADA à mão — o app não a gravou nem a viu.',
+        declaracao: { quem: autor, em: agoraIso, comoFoi: texto },
+    };
+    return { ok: true, patch: patchDoRefazer({ envio, sharePoint, baixa: null, quem: autor, agoraIso }) };
 }
 
 /**

@@ -179,3 +179,28 @@ describe('🔒 o refazer não reimplementa o rito', () => {
         expect(src).toMatch(/if \(pdf\) \{/);
     });
 });
+
+// ── 22/09: declarar a cópia à mão ────────────────────────────────────────────
+// @ts-expect-error — módulo .js puro
+import { patchDoArquivamentoDeclarado, oQueRefazer as oQueRefazer2 } from '../sefaz-backend/refazer-rito-envio.js';
+describe('📁 patchDoArquivamentoDeclarado', () => {
+    const envio = { id: 'e1', sharePoint: { status: 'erro', motivo: 'AADSTS7000215' }, baixa: { status: 'ja-baixada' } };
+    it('grava arquivado-declarado com quem, quando e o texto — e guarda o antes', () => {
+        const r: any = patchDoArquivamentoDeclarado({ envio, quem: 'paulo@sp', comoFoi: 'Arquivei o DARF na pasta IMPOSTOS 08/2026.', agoraIso: '2026-09-22T18:00:00.000Z' });
+        expect(r.ok).toBe(true);
+        expect(r.patch.sharePoint).toMatchObject({ status: 'arquivado-declarado', declaracao: { quem: 'paulo@sp', em: '2026-09-22T18:00:00.000Z' } });
+        expect(r.patch.ritoRefeito[0].antes.sharePoint.status).toBe('erro');
+        expect(r.patch.baixa).toBeUndefined();
+        expect(oQueRefazer2({ ...envio, ...r.patch }).nada).toBe(true);
+    });
+    it('recusa texto curto, sem autor e envio já fechado — com a frase', () => {
+        expect((patchDoArquivamentoDeclarado({ envio, quem: 'paulo@sp', comoFoi: 'ok', agoraIso: 'x' }) as any).erro).toMatch(/mínimo 20/);
+        expect((patchDoArquivamentoDeclarado({ envio, quem: '', comoFoi: 'Arquivei na pasta IMPOSTOS do cliente.', agoraIso: 'x' }) as any).erro).toMatch(/autor/);
+        expect((patchDoArquivamentoDeclarado({ envio: { sharePoint: { status: 'arquivado' } }, quem: 'p', comoFoi: 'Arquivei na pasta IMPOSTOS do cliente.', agoraIso: 'x' }) as any).erro).toMatch(/já está na pasta/);
+    });
+    it('sem-obrigacao não é refazível na baixa', () => {
+        const r = oQueRefazer2({ sharePoint: { status: 'arquivado' }, baixa: { status: 'sem-obrigacao' } });
+        expect(r.nada).toBe(true);
+        expect(r.motivos.join(' ')).toMatch(/não há tarefa a baixar/);
+    });
+});

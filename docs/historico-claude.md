@@ -5,6 +5,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📤 "FIZ O RITO E CONTINUA ASSIM, FIZ O REGISTRO TAMBÉM MAS NÃO ASSUMIU …
+  0 ARQUIVADO E 0 BAIXADOS"** (22/09, Paulo, MANTOAN e AFFITTARE 08/2026).
+  Três causas, três correções. (1) `obrigacaoDoTipo` só conhecia
+  DAS/DARF/FGTS/SPED: o registro por fora grava o tipo como TEXTO LIVRE ("DARF
+  PIS, COFINS") e caía em `sem-tarefa`, pendência sem saída — agora o tributo
+  nomeado no texto decide (PIS/COFINS, INSS/CPP/GPS, IRPJ, CSLL, FGTS, ISS,
+  EFD-Contrib, SPED/EFD, DCTF/DARF, DAS). (2) Tipo que não nomeia obrigação
+  nenhuma do catálogo (DARE de ICMS) vira `sem-obrigacao`: desfecho
+  LEGÍTIMO (nada a baixar, dito no motivo), não pendência. (3) O app não
+  guarda o PDF de DARF/DARE depois do envio, então a cópia que falhou no dia
+  (credencial recusada) NÃO tem como ser refeita — o Refazer devolvia "0
+  arquivado" para sempre. Nasce `arquivado-declarado`
+  (`patchDoArquivamentoDeclarado`, rota POST
+  /api/admin/envio-imposto/refazer-rito/declarar-arquivamento, admin, texto
+  ≥ 20 caracteres, autor e data no carimbo, histórico em `ritoRefeito`):
+  botão "📁 Já arquivei à mão na pasta IMPOSTOS — registrar" SÓ na pendência
+  de etapa `sharepoint` (a pendência agora diz `etapa`). Fecha o rito e sai
+  DITO na Rotina ("N cópia(s) na pasta DECLARADA(S) à mão") e no painel
+  (`arquivadosDeclarados`) — nunca como prova do app. E o Refazer conta
+  `jaFechados` e `semObrigacao`: "0 baixado(s)" sobre baixa já fechada lia
+  como falha. REGRA: pendência que o app não consegue resolver sozinho
+  precisa de uma saída declarada, nomeada e carimbada — trava sem saída é
+  mês fechado para sempre. PENDENTE de decisão do Paulo: FGTS e INSS_CPP
+  continuam em `COMUNS_LUCRO` (catálogo) apesar da regra de 18/08 ("FGTS é
+  do DP") — só a lista imune/isenta os tirou; por isso AFFITTARE cobra FGTS
+  na etapa 4.
+
 - **🚫 "2 ERROS VISÍVEIS: NA LINHA DO TEMPO VOCÊ CONTINUA CONSIDERANDO QUEM
   NÃO PERTENCE AO CFI; E NÃO EXISTE 1800 OBRIGAÇÕES ENTREGUES POR UMA SÓ
   PESSOA"** (22/09, Paulo, 2ª rodada da auditoria). (1) WhatsApp: os eventos

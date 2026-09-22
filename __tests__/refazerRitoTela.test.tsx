@@ -15,10 +15,12 @@ import EnviosImpostoPainel from '../components/EnviosImpostoPainel';
 
 const painelMock = jest.fn();
 const refazerMock = jest.fn();
+const declararMock = jest.fn();
 
 jest.mock('../services/envioImpostoService', () => ({
     painelEnviosImposto: (...a: any[]) => painelMock(...a),
     refazerRitoDosEnvios: (...a: any[]) => refazerMock(...a),
+    declararArquivamentoDosEnvios: (...a: any[]) => declararMock(...a),
 }));
 
 /** O painel como ele volta com a pendência da VINCENZO. */
@@ -34,6 +36,7 @@ const PAINEL = {
         'Empresa sem pasta do SharePoint': {
             qtd: 2,
             acao: 'Preencha grupo + pasta em Central de XMLs → Integrações → SharePoint.',
+            etapa: 'sharepoint',
             empresas: ['VINCENZO GUERRA BANANAS LTDA · DAS 2026-07'],
             envioIds: ['env1', 'env2'],
         },
@@ -124,5 +127,39 @@ describe('o resultado DIZ o que não deu', () => {
         render(<EnviosImpostoPainel />);
         fireEvent.click(await screen.findByText(/Refazer o rito destes 2/));
         await waitFor(() => expect(painelMock.mock.calls.length).toBeGreaterThan(1));
+    });
+});
+
+// ── 22/09: "fiz o rito e continua assim … 0 arquivado" ──────────────────────
+describe('📁 declarar a cópia à mão — só na ponta do SharePoint, com texto', () => {
+    it('aparece na pendência de SharePoint e chama com os ids e o texto', async () => {
+        window.prompt = jest.fn(() => 'Arquivei o DARF na pasta IMPOSTOS/2026-08 pelo Explorer.') as any;
+        declararMock.mockResolvedValue({ ok: true, total: 2, declarados: 2, recusados: 0 });
+        render(<EnviosImpostoPainel />);
+        const btn = await screen.findByText(/Já arquivei à mão na pasta IMPOSTOS — registrar para estes 2/);
+        fireEvent.click(btn);
+        await waitFor(() => expect(declararMock).toHaveBeenCalledWith(['env1', 'env2'], 'Arquivei o DARF na pasta IMPOSTOS/2026-08 pelo Explorer.'));
+        expect(await screen.findByText(/Cópia declarada à mão em 2 de 2/)).toBeTruthy();
+        expect(screen.getByText(/não como prova do app/)).toBeTruthy();
+    });
+    it('cancelar o texto não chama nada', async () => {
+        window.prompt = jest.fn(() => null) as any;
+        render(<EnviosImpostoPainel />);
+        fireEvent.click(await screen.findByText(/Já arquivei à mão/));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(declararMock).not.toHaveBeenCalled();
+    });
+    it('na pendência de BAIXA o botão de declarar cópia NÃO aparece', async () => {
+        painelMock.mockResolvedValue({
+            ...PAINEL,
+            pendencias: {
+                'Sem obrigação correspondente na aba Vencimentos': {
+                    qtd: 1, acao: 'Gere as tarefas.', etapa: 'baixa', empresas: ['X · DARE 2026-07'], envioIds: ['env9'],
+                },
+            },
+        });
+        render(<EnviosImpostoPainel />);
+        await screen.findByText(/Refazer o rito destes 1/);
+        expect(screen.queryByText(/Já arquivei à mão/)).toBeNull();
     });
 });
