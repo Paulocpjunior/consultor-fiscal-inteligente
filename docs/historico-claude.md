@@ -5,6 +5,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📊 "CRIE UMA AUDITORIA COMPLETA, CAPAZ DE MAPEAR O DESEMPENHO POR
+  COLABORADOR × EMPRESAS — O QUE CADA UM EFETIVAMENTE EXECUTOU NOS ÚLTIMOS 2
+  MESES"** (22/09, Paulo). Nasceu como SEGUNDA ABA do painel do dono (mesma
+  trava `ehDono`): `desempenho-colaboradores.js` (PURO) + `GET
+  /api/admin/auditoria-dono/desempenho` + `components/AuditoriaDono/
+  Desempenho.tsx`. TRILHAS (`TIPOS_ATO`, cada uma com coleção, campo de data,
+  campo de autor e `desde`): XML importado à mão / NFS-e por PDF
+  (`documentos_fiscais` origem manual), obrigação entregue (`tarefas`
+  concluidaEm/concluidaPor), guia enviada (`impostos_enviados`), DAS emitido
+  (`das_emitidos` — NÃO carimba quem: vai para "(não identificado)" e a
+  ressalva diz), DARE solicitada, DCTFWeb transmitida, Reinf, PGDAS sem
+  movimento, fim de mês (`fechamentos_competencia`, fechadoPor.email). A
+  matriz cruza com a CARTEIRA: por colaborador, empresas com ato, empresas da
+  carteira, e **empresas da carteira SEM ato no período, nomeadas**; ato em
+  empresa fora da carteira sai marcado (cobrir colega é trabalho, não
+  acusação). `uid` e e-mail da mesma pessoa somam na mesma linha (resolução
+  pelo `users`); 'sistema'/'envio-imposto' é balde próprio; sem autor é "(não
+  identificado)". REGRAS: (1) o relatório LÊ carimbos — não deduz autor, não
+  recalcula, não mede qualidade; (2) ressalvas ANTES dos números: trilha não
+  lida ≠ zero, trilha nova ≠ inação, e o que NÃO tem carimbo (SPED gerado,
+  apuração conferida, cadastro corrigido, captura automática) sai DITO como
+  fora da conta; (3) leitura por range no Firestore (Timestamp ou ISO) com
+  teto de 5.000 por trilha, e corte dito como parcial.
+
 - **📎 "CONECTADO, MAS A ÚLTIMA RODADA TEVE ERROS — 264 EMPRESA(S) CUJA PASTA
   NÃO FOI ENCONTRADA NO SHAREPOINT"** (22/09, Paulo, print do card Conexão
   SharePoint depois de eu pedir "me mande o print se não estiver verde").

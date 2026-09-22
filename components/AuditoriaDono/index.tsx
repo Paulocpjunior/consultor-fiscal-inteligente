@@ -10,6 +10,7 @@
 // ============================================================================
 import React, { useEffect, useState } from 'react';
 import { carregarAuditoria, RelatorioAuditoria, EventoAuditoria } from '../../services/auditoriaDonoService';
+import Desempenho from './Desempenho';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
 
 const TOM_PESO: Record<string, string> = {
@@ -23,6 +24,9 @@ const dataHora = (iso: string | null) =>
     (iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: FUSO }) : 'sem data gravada');
 
 const AuditoriaDono: React.FC = () => {
+    // 📊 22/09 (Paulo): "auditoria completa … desempenho por colaborador x
+    // empresas". É a segunda aba do MESMO painel (mesma trava do dono).
+    const [aba, setAba] = useState<'linha-do-tempo' | 'desempenho'>('desempenho');
     const [dados, setDados] = useState<RelatorioAuditoria | null>(null);
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
@@ -74,6 +78,16 @@ const AuditoriaDono: React.FC = () => {
 
     return (
         <div className="max-w-[1400px] mx-auto animate-fade-in space-y-3">
+            <div className="flex gap-2">
+                {([['desempenho', '📊 Desempenho por colaborador × empresa'], ['linha-do-tempo', '🔐 Linha do tempo — ações sensíveis']] as const).map(([id, txt]) => (
+                    <button key={id} onClick={() => setAba(id)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${aba === id ? 'bg-[#0e3bfa] text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {txt}
+                    </button>
+                ))}
+            </div>
+            {aba === 'desempenho' && <Desempenho />}
+            {aba === 'linha-do-tempo' && (<>
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
@@ -187,6 +201,7 @@ const AuditoriaDono: React.FC = () => {
                     </div>
                 </>
             )}
+            </>)}
         </div>
     );
 };

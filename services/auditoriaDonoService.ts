@@ -34,6 +34,37 @@ export interface RelatorioAuditoria {
     ressalvas: string[];
 }
 
+export interface EmpresaDesempenho {
+    empresaId: string; empresaNome: string; total: number; porTipo: Record<string, number>;
+    ultimoEm: string | null; naCarteira: boolean;
+}
+export interface ColaboradorDesempenho {
+    chave: string; nome: string; email: string | null; pessoa: boolean;
+    total: number; porTipo: Record<string, number>;
+    empresasComAto: number; empresasDaCarteira: number;
+    empresasDaCarteiraSemAto: Array<{ empresaId: string; empresaNome: string; papel: string | null }>;
+    empresas: EmpresaDesempenho[];
+}
+export interface RelatorioDesempenho {
+    geradoEm: string; geradoPor: string | null;
+    tipos: Array<{ id: string; rotulo: string; grupo: string; desde: string | null; carimbaQuem: boolean }>;
+    periodo: { de: string | null; ate: string | null };
+    totalAtos: number; semData: number;
+    totaisPorTipo: Record<string, number>;
+    colaboradores: ColaboradorDesempenho[];
+    naoLidas: Array<{ tipo: string; rotulo: string; motivo: string }>;
+    ressalvas: string[];
+}
+
+/** 📊 Desempenho por colaborador × empresa (dono). Sem `de/ate`, últimos 2 meses. */
+export const carregarDesempenho = (p: { de?: string; ate?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (p.de) q.set('de', p.de);
+    if (p.ate) q.set('ate', p.ate);
+    const qs = q.toString();
+    return req<RelatorioDesempenho>(`/api/admin/auditoria-dono/desempenho${qs ? `?${qs}` : ''}`);
+};
+
 /** "Eu vejo este painel?" — a resposta NÃO revela quem são os donos. */
 export const tenhoAcessoAuditoria = () =>
     req<{ tenho: boolean }>('/api/admin/auditoria-dono/acesso');
