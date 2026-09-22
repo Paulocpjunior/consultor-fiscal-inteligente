@@ -90,10 +90,11 @@ export function obrigacaoDoTipo(tipo) {
     // 08/2026). A régua: o TRIBUTO nomeado no texto decide, na ordem do mais
     // específico para o mais genérico; "DARF" sozinho continua DCTFWEB.
     if (/\bPIS\b|\bCOFINS\b/.test(t)) return 'PIS_COFINS';
-    if (/\bINSS\b|\bCPP\b|\bGPS\b/.test(t)) return 'INSS_CPP';
+    // FGTS e INSS patronal são do DP (22/09): não há tarefa do Fiscal a
+    // baixar — o envio fecha como `sem-obrigacao`, dito.
+    if (/\bINSS\b|\bCPP\b|\bGPS\b|\bFGTS\b/.test(t)) return null;
     if (/\bIRPJ\b/.test(t)) return 'IRPJ_TRIM';
     if (/\bCSLL\b/.test(t)) return 'CSLL_TRIM';
-    if (/\bFGTS\b/.test(t)) return 'FGTS';
     if (/\bISS(QN)?\b/.test(t)) return 'ISS';
     if (/\bEFD[\s_-]*CONTRIB/.test(t)) return 'EFD_CONTRIB';
     if (/\bSPED\b|\bEFD\b/.test(t)) return 'SPED';

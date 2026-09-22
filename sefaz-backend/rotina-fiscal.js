@@ -34,6 +34,7 @@ import { competenciaFechada } from './fim-de-mes.js';
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
 import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
+import { OBRIGACOES_DO_DP } from './catalogo-obrigacoes.js';
 // 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
@@ -357,8 +358,13 @@ export function montarRotinaFiscal({
     }
 
     // ── 4. OBRIGAÇÕES ───────────────────────────────────────────────────────
-    const concluidas = tarefas.filter((t) => t.status === 'concluida').length;
-    const abertas = tarefas.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
+    // 👥 FGTS e INSS patronal são do DP (Paulo, 22/09): tarefa dessas
+    // obrigações não entra na conta do Fiscal — nem como entregue, nem como
+    // falta. Ela sai CONTADA, com a ação (cancelar em lote em Tarefas).
+    const tarefasDoDp = tarefas.filter((t) => OBRIGACOES_DO_DP.includes(String(t.obrigacao || '')));
+    const tarefasCfi = tarefas.filter((t) => !OBRIGACOES_DO_DP.includes(String(t.obrigacao || '')));
+    const concluidas = tarefasCfi.filter((t) => t.status === 'concluida').length;
+    const abertas = tarefasCfi.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
     // PRAZO das que estão abertas. A rotina já lia as tarefas e jogava a DATA
     // fora — só contava quantas. Sem prazo, "2/5 entregues" não diz se sobra
     // uma semana ou se venceu ontem, e é justamente o prazo que decide por
@@ -382,7 +388,7 @@ export function montarRotinaFiscal({
         : null;
     const atrasadas = comData.filter((p) => p.urgencia === 'atrasada').length;
     let eObrigacoes;
-    if (tarefas.length === 0) {
+    if (tarefasCfi.length === 0) {
         // Sem tarefa NÃO é "tudo certo" — é sinal de que o cron mensal não gerou.
         eObrigacoes = etapa('obrigacoes', 'atencao',
             'Nenhuma obrigação cadastrada nesta competência.',
@@ -395,17 +401,26 @@ export function montarRotinaFiscal({
             ? ` · ${atrasadas} ATRASADA(S)`
             : (proximo ? ` · próxima ${URGENCIA_LABEL[proximo.urgencia]} (${proximo.obrigacao})` : '');
         eObrigacoes = etapa('obrigacoes', 'pendente',
-            `${concluidas}/${tarefas.length} obrigação(ões) entregue(s)${selo}.`,
+            `${concluidas}/${tarefasCfi.length} obrigação(ões) entregue(s)${selo}.`,
             `Falta: ${abertas.map((t) => t.obrigacao || t.titulo || '—').join(', ')}.`,
             {
-                concluidas, total: tarefas.length,
+                concluidas, total: tarefasCfi.length,
                 abertas: abertas.map((t) => t.obrigacao || t.titulo || '—'),
                 prazo: proximo ? { ...proximo, dominante } : null,
                 atrasadas, semData,
             });
     } else {
-        eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefas.length} obrigação(ões) entregue(s).`, null,
-            { concluidas, total: tarefas.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+        eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefasCfi.length} obrigação(ões) entregue(s).`, null,
+            { concluidas, total: tarefasCfi.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+    }
+    if (tarefasDoDp.length) {
+        const abertasDp = tarefasDoDp.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada').length;
+        eObrigacoes = { ...eObrigacoes,
+            resumo: `${eObrigacoes.resumo} · ${tarefasDoDp.length} tarefa(s) do DP (FGTS/INSS) fora da conta`,
+            acao: abertasDp
+                ? `${eObrigacoes.acao ? `${eObrigacoes.acao} ` : ''}${abertasDp} tarefa(s) de FGTS/INSS ainda aberta(s) são do DP, não do Fiscal — cancele-as em Vencimentos e Obrigações → Tarefas → "Cancelar tarefas do DP".`
+                : eObrigacoes.acao,
+            tarefasDoDp: tarefasDoDp.length };
     }
 
     // 🚨 TRAVA T1 DO ESCOPO: O CATÁLOGO ADMITE QUE NÃO COBRE ESTE CLIENTE.

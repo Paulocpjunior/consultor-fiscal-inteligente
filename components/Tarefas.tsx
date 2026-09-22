@@ -76,6 +76,35 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
         }
     };
 
+    // 👥 22/09: FGTS e INSS patronal são do DP — o cron parou de gerar, e as
+    // tarefas já geradas o admin cancela em lote (sem competência = todas).
+    const [cancelandoDp, setCancelandoDp] = useState(false);
+    const cancelarTarefasDp = async () => {
+        const alvo = filtroCompetencia ? `de ${filtroCompetencia}` : 'de TODAS as competências';
+        if (!confirm(`Cancelar as tarefas ABERTAS e automáticas de FGTS e INSS patronal ${alvo}?\n\nSão obrigações do DP, não do Fiscal. Concluídas, canceladas e manuais não mudam. Fica registrado quem cancelou e por quê.`)) return;
+        setCancelandoDp(true); setAvisoReaplicar(null);
+        try {
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada — entre novamente.');
+            const r = await fetch('/api/admin/tarefas/cancelar-dp', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtroCompetencia ? { competencia: filtroCompetencia } : {}),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+            const porComp = Object.entries(j.canceladasPorCompetencia || {}).map(([c, n]) => `${c}: ${n}`).join(' · ');
+            setAvisoReaplicar(`${j.canceladas} tarefa(s) de FGTS/INSS cancelada(s)${porComp ? ` (${porComp})` : ''} · `
+                + `${j.jaFechadas} já concluídas/canceladas · ${j.manuais} manuais (não mudam) · ${j.tarefasLidas} lidas.`
+                + (j.erros?.length ? ` ⚠ ${j.erros.length} erro(s): ${j.erros[0]}` : ''));
+            setVersao(v => v + 1);
+        } catch (e: any) {
+            setAvisoReaplicar(`Falha ao cancelar: ${e?.message || e}`);
+        } finally {
+            setCancelandoDp(false);
+        }
+    };
+
     // Filtros (padrao: minhas tarefas + a_fazer + mes atual)
     const mesAtual = useMemo(() => {
         const d = new Date();
@@ -318,6 +347,16 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                                 title="Recalcula o vencimento das tarefas ABERTAS e automáticas da competência pelo catálogo atual (e pelos prazos cadastrados em Config Admin). Concluídas, canceladas e manuais não mudam."
                             >
                                 {reaplicando ? '⏳ Reaplicando…' : '📅 Reaplicar prazos do catálogo'}
+                            </button>
+                        )}
+                        {isAdmin && (
+                            <button
+                                onClick={() => void cancelarTarefasDp()}
+                                disabled={cancelandoDp}
+                                className="px-3 py-2 rounded-xl border border-slate-400 text-slate-700 dark:text-slate-200 font-semibold text-xs disabled:opacity-50"
+                                title="FGTS e INSS patronal são do DP (22/09). Cancela as tarefas ABERTAS e automáticas dessas obrigações — da competência do filtro, ou de todas se o filtro estiver vazio."
+                            >
+                                {cancelandoDp ? '⏳ Cancelando…' : '👥 Cancelar tarefas do DP (FGTS/INSS)'}
                             </button>
                         )}
                     </div>
