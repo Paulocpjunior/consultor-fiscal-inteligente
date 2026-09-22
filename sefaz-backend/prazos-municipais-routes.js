@@ -96,15 +96,19 @@ router.post('/', requireAdmin, express.json(), async (req, res) => {
         const id = idPrazoMunicipal(p);
         // Quem cadastrou e quando: prazo sem dono não se audita, e é ele que
         // decide se um pagamento atrasou.
+        const esfera = ['estadual', 'federal'].includes(String(p.esfera || '')) ? String(p.esfera) : 'municipal';
+        const ultimoDiaUtilDoMes = p.ultimoDiaUtilDoMes === true;
         const doc = {
-            // Esfera MUNICIPAL guarda o IBGE; ESTADUAL guarda a UF. A
-            // validação já recusou cadastro sem nenhum dos dois.
-            esfera: String(p.esfera || '') === 'estadual' ? 'estadual' : 'municipal',
-            codMunIBGE: soDigitos(p.codMunIBGE) || null,
-            uf: String(p.uf || '').trim().toUpperCase() || null,
-            municipioNome: String(p.municipioNome || '').trim() || null,
+            // Esfera MUNICIPAL guarda o IBGE; ESTADUAL guarda a UF; FEDERAL é
+            // 'BR' (22/09). A validação já recusou cadastro sem escopo.
+            esfera,
+            codMunIBGE: esfera === 'municipal' ? (soDigitos(p.codMunIBGE) || null) : null,
+            uf: esfera === 'estadual' ? (String(p.uf || '').trim().toUpperCase() || null) : null,
+            municipioNome: esfera === 'municipal' ? (String(p.municipioNome || '').trim() || null) : null,
             obrigacao: String(p.obrigacao).trim().toUpperCase(),
-            diaVencimento: Number(p.diaVencimento),
+            // "Último dia útil" dispensa o dia fixo (DCTFWeb desde 2025).
+            ultimoDiaUtilDoMes,
+            diaVencimento: ultimoDiaUtilDoMes ? null : Number(p.diaVencimento),
             mesesApos: Number.isFinite(Number(p.mesesApos)) ? Number(p.mesesApos) : 1,
             ajusteDiaNaoUtil: p.ajusteDiaNaoUtil || 'antecipa',
             baseLegal: String(p.baseLegal).trim(),
@@ -115,7 +119,58 @@ router.post('/', requireAdmin, express.json(), async (req, res) => {
             cadastradoEm: new Date().toISOString(),
         };
         await db.collection(COL).doc(id).set(doc, { merge: true });
-        return res.json({ ok: true, id, prazo: doc });
+
+        // 🚨 A TAREFA JÁ CRIADA TAMBÉM MUDA — quando o admin pede (22/09).
+        //
+        // O cadastro vale para o PRÓXIMO mês gerado; a tarefa deste mês já
+        // nasceu com o dia velho e continuaria acusando "ATRASADA" (a DCTFWeb
+        // de 08/2026 com 15/09 quando vence 30/09). Com `reaplicarNasTarefas`
+        // a data é RECALCULADA nas tarefas ABERTAS do escopo, competência a
+        // competência, dentro da vigência. Concluída e cancelada não se mexe:
+        // o que foi entregue fica com a data em que foi cobrado.
+        let tarefasReaplicadas = 0;
+        let erroReaplicar = null;
+        if (p.reaplicarNasTarefas === true) {
+            try {
+                const alvo = await db.collection('tarefas').where('obrigacao', '==', doc.obrigacao).get();
+                const iniVig = String(doc.vigenciaInicio || '').slice(0, 7);
+                const fimVig = String(doc.vigenciaFim || '').slice(0, 7);
+                const pendentes = [];
+                alvo.forEach((d) => {
+                    const t = d.data() || {};
+                    if (t.status === 'concluida' || t.status === 'cancelada') return;
+                    if (esfera === 'estadual' && String(t.uf || '').toUpperCase() !== doc.uf) return;
+                    if (esfera === 'municipal' && soDigitos(t.codMunIBGE) !== doc.codMunIBGE) return;
+                    const m = String(t.competencia || '').match(/^(\d{2})\/(\d{4})$/);
+                    if (!m) return;
+                    const iso = `${m[2]}-${m[1]}`;
+                    if (iniVig && iso < iniVig) return;
+                    if (fimVig && iso > fimVig) return;
+                    const venc = calcularVencimento(t.competencia, doc);
+                    if (!venc) return;
+                    pendentes.push({ ref: d.ref, venc });
+                });
+                // Lotes de 400: o batch do Firestore aceita 500 operações.
+                for (let i = 0; i < pendentes.length; i += 400) {
+                    const lote = db.batch();
+                    for (const { ref, venc } of pendentes.slice(i, i + 400)) {
+                        lote.update(ref, {
+                            vencimento: admin.firestore.Timestamp.fromDate(venc),
+                            vencimentoAInformar: false,
+                            vencimentoReaplicadoPorEmail: req.user?.email || null,
+                            vencimentoReaplicadoEm: new Date().toISOString(),
+                            vencimentoReaplicadoDe: id,
+                        });
+                    }
+                    await lote.commit();
+                    tarefasReaplicadas += Math.min(400, pendentes.length - i);
+                }
+            } catch (e) {
+                erroReaplicar = e.message;
+                console.warn('[prazos-municipais/post] reaplicar nas tarefas falhou:', e.message);
+            }
+        }
+        return res.json({ ok: true, id, prazo: doc, tarefasReaplicadas, erroReaplicar });
     } catch (e) {
         console.error('[prazos-municipais/post]', e);
         return res.status(500).json({ ok: false, error: e.message });

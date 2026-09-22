@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏦 "PRECISO DE PERMISSÃO PARA ALTERAR A DATA DOS VENCIMENTOS — A DCTFWEB
+  AINDA ESTÁ COM VENCIMENTO DE TODO DIA 15, MAS VENCE NO FINAL DO MÊS"**
+  (22/09, Paulo, AFFITTARE 08/2026 acusando "DCTFWEB — ATRASADA" em 21/09).
+  DUAS respostas: (1) o CATÁLOGO (`catalogo-obrigacoes.js`) passou a dizer o
+  prazo certo — `ultimoDiaUtilDoMes: true` (IN RFB 2.237/2024; o dia 15 era a
+  IN 2.005/2021, até a competência 12/2024); o `calendario-obrigacoes.js` e o
+  painel de obrigações seguiram. (2) O cadastro de prazos (⚙️ Config Admin →
+  Calendário de prazos) ganhou a esfera **FEDERAL** (escopo `BR`,
+  `resolverPrazoFederal`), a opção **"último dia útil do mês"** e o
+  **"reaplicar nas tarefas abertas"** (a rota recalcula o vencimento das
+  tarefas não concluídas/canceladas do escopo, dentro da vigência). O cadastro
+  do admin VENCE o catálogo na vigência — federal e também estadual da PRÓPRIA
+  UF (antes só outra UF tinha onde cadastrar). É a permissão pedida: mudar a
+  data sem esperar deploy, com vigência e norma. REGRA: prazo do catálogo é
+  DEFAULT; a norma que mudar entra como vigência nova no cadastro, nunca
+  editando a antiga. Teste: `prazoFederalAdmin.test.ts`.
+  📌 A AFFITTARE 08/2026 "finalizada" que aparece com 1/7 obrigações e sem
+  guias: o app só sabe o que está REGISTRADO — tarefa marcada como concluída
+  em Vencimentos e Obrigações → Tarefas, e envio registrado (rito ou
+  "declarar envio fora do app" no bloco 🔒 Dar fim de mês). Entrega feita fora
+  sem registro continua "pendente" — e é isso que o Dar fim de mês bloqueia.
+
 - **🚨 "FUI FAZER O TESTE, MAS ELE NÃO ESTÁ SALVANDO O AJUSTE, ATÉ GEREI PARA O
   PVA MAS NÃO FOI NADA"** (21/09, Paulo, WALDESA, minutos depois do 📥 Puxar
   UFs): ele aplicou o código 100102 nas 8 UFs SEM vencimento; a gravação

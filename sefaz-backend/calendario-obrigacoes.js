@@ -85,7 +85,9 @@ const OBRIGACOES = {
     DCTFWEB: {
         tipo: 'DCTFWEB',
         nome: 'DCTFWeb',
-        diaVencimento: 15,
+        // Último dia útil do mês seguinte desde a competência 01/2025 (IN RFB
+        // 2.237/2024). O dia 15 era a IN 2.005/2021 (22/09).
+        diaVencimento: 'ultimo_dia_util',
         mesesApos: 1,
         regimes: ['simples', 'lucro_presumido', 'lucro_real'],
         regimeLabel: 'Federal',
