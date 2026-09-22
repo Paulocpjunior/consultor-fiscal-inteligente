@@ -429,15 +429,31 @@ export async function listarPastas(accessToken, caminho = '', sitePath = '') {
         ? `${GRAPH_BASE}/sites/${siteId}/drive/root:/${recorte.valor.split('/').map(encodeURIComponent).join('/')}:/children`
         : `${GRAPH_BASE}/sites/${siteId}/drive/root/children`;
 
-    const resp = await fetch(`${rota}?$top=200&$select=id,name,folder,file`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!resp.ok) {
-        const err = await resp.text();
-        throw new Error(`Failed to list folder (${resp.status}) em ${SHAREPOINT_HOST}${alvo} → `
-            + `"${recorte.valor}": ${err}`);
+    // 🚨 TODAS AS PÁGINAS (22/09). O Graph devolve no máximo `$top` itens por
+    // resposta e manda o resto em `@odata.nextLink`. Esta função lia SÓ a
+    // primeira página: com ~430 subpastas em `Empresas`, as pastas depois da
+    // 200ª (por ordem de nome, que começa pelo código) simplesmente não
+    // existiam para o app — e o auto-sync acusou "264 empresas cuja pasta não
+    // foi encontrada", mandando criar no SharePoint pastas que estão lá. O
+    // laço de `listFolderXmls` já paginava; este ficou para trás.
+    // Teto de 50 páginas (10.000 itens): pasta maior que isso é outro problema.
+    let nextUrl = `${rota}?$top=200&$select=id,name,folder,file`;
+    const itens = [];
+    let paginas = 0;
+    while (nextUrl && paginas < 50) {
+        const resp = await fetch(nextUrl, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok) {
+            const err = await resp.text();
+            throw new Error(`Failed to list folder (${resp.status}) em ${SHAREPOINT_HOST}${alvo} → `
+                + `"${recorte.valor}": ${err}`);
+        }
+        const data = await resp.json();
+        itens.push(...(data.value || []));
+        nextUrl = data['@odata.nextLink'] || null;
+        paginas++;
     }
-    const itens = (await resp.json()).value || [];
     return {
         site: `${SHAREPOINT_HOST}${alvo}`,
         caminho: recorte.valor,
@@ -445,5 +461,7 @@ export async function listarPastas(accessToken, caminho = '', sitePath = '') {
         // ⚠️ A contagem de ARQUIVOS vai junto: pasta com 0 subpastas e 300
         // arquivos é o fim da árvore, e sem esse número ela parece vazia.
         arquivos: itens.filter(i => i.file).length,
+        // Quantas páginas o Graph devolveu — é o número que prova a leitura inteira.
+        paginas,
     };
 }
