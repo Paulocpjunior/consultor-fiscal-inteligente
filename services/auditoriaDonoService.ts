@@ -31,7 +31,14 @@ export interface RelatorioAuditoria {
     eventos: EventoAuditoria[];
     eventosMostrados: number;
     naoLidas: { trilha: string; rotulo: string; motivo: string }[];
+    foraDoEscopo?: ForaDoEscopoCfi;
     ressalvas: string[];
+}
+
+/** O que ficou FORA do recorte "só o CFI" — contado por autor, com motivo. */
+export interface ForaDoEscopoCfi {
+    eventos: number;
+    autores: Array<{ quem: string; quantidade: number; motivo: string | null }>;
 }
 
 export interface EmpresaDesempenho {
@@ -53,6 +60,7 @@ export interface RelatorioDesempenho {
     totaisPorTipo: Record<string, number>;
     colaboradores: ColaboradorDesempenho[];
     naoLidas: Array<{ tipo: string; rotulo: string; motivo: string }>;
+    foraDoEscopo?: ForaDoEscopoCfi;
     ressalvas: string[];
 }
 

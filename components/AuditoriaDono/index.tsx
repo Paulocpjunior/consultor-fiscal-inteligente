@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from 'react';
 import { carregarAuditoria, RelatorioAuditoria, EventoAuditoria } from '../../services/auditoriaDonoService';
 import Desempenho from './Desempenho';
+import ForaDoEscopo from './ForaDoEscopo';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
 
 const TOM_PESO: Record<string, string> = {
@@ -94,6 +95,7 @@ const AuditoriaDono: React.FC = () => {
                         <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">🔐 Auditoria — ações sensíveis</h2>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
                             Quem fez o quê: guias enviadas, declarações transmitidas e permissões alteradas.
+                            Só o Consultor Fiscal — o que é de outro app do escritório fica de fora, contado.
                             Painel restrito ao dono do escritório.
                         </p>
                     </div>
@@ -139,6 +141,7 @@ const AuditoriaDono: React.FC = () => {
                             ))}
                         </div>
                     )}
+                    <ForaDoEscopo fora={dados.foraDoEscopo} rotulo="evento" />
 
                     <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
                         <div className="space-y-3">

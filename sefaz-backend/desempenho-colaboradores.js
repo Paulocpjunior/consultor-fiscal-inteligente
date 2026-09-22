@@ -21,6 +21,8 @@
 // da carteira dele não receberam ato nenhum no período"*.
 // ============================================================================
 
+import { conjuntoCfi, filtrarEscopoCfi, ressalvaEscopoCfi } from './escopo-cfi.js';
+
 /** As trilhas que contam como ATO de colaborador. `campoData` pode ser lista. */
 export const TIPOS_ATO = Object.freeze([
     {
@@ -58,6 +60,8 @@ export const TIPOS_ATO = Object.freeze([
         id: 'reinf-lote', rotulo: 'EFD-Reinf transmitida', grupo: 'Declarações',
         colecao: 'reinf_gateway_lotes', campoData: ['em'], campoQuem: ['por'],
         desde: '2026-08-08', carimbaQuem: true, leituraPorRange: true, tipoData: 'timestamp',
+        // O Consultor Contábil transmite pelo mesmo gateway (túnel) — `projetoOrigem` diz de quem é.
+        compartilhada: true,
     },
     {
         id: 'pgdas-sem-movimento', rotulo: 'PGDAS-D sem movimento', grupo: 'Declarações',
@@ -116,6 +120,7 @@ export function normalizarAto(tipo, id, dados = {}) {
         empresaCnpj: String(d.empresaCnpj || d.cnpj || '').replace(/\D/g, '') || null,
         competencia: d.competencia || (d.anoPA && d.mesPA ? `${String(d.mesPA).padStart(2, '0')}/${d.anoPA}` : null),
         detalhe: d.obrigacao || d.tipo || d.canal || null,
+        projetoOrigem: d.projetoOrigem ? String(d.projetoOrigem) : null,
     };
 }
 
@@ -158,13 +163,17 @@ export function resolverColaborador(quem, usuarios = []) {
  * @param {string} p.de  ISO   @param {string} p.ate ISO
  */
 export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoLidas = [], de = null, ate = null }) {
-    const dentro = atos.filter((a) => {
+    // SÓ O CFI (Paulo, 22/09): `users` é o cadastro central de TODOS os
+    // módulos — quem não é do Fiscal sai daqui, contado e nomeado.
+    const conjunto = conjuntoCfi({ usuarios, vinculos });
+    const { dentro: atosCfi, foraDoEscopo } = filtrarEscopoCfi(atos, conjunto, (a) => TIPOS_ATO.find((t) => t.id === a.tipo || (a.tipo === 'nfse-pdf-importada' && t.id === 'xml-importado')) || {});
+    const dentro = atosCfi.filter((a) => {
         if (!a.em) return false;               // sem data não entra no período — vai contado à parte
         if (de && a.em < de) return false;
         if (ate && a.em > ate) return false;
         return true;
     });
-    const semData = atos.filter((a) => !a.em).length;
+    const semData = atosCfi.filter((a) => !a.em).length;
 
     // uid → e-mail da carteira: o vínculo grava o uid, e a chave do relatório é o e-mail.
     const chaveDoUid = (uid) => resolverColaborador(uid, usuarios).chave;
@@ -238,12 +247,13 @@ export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoL
         totaisPorTipo,
         colaboradores: lista,
         naoLidas,
-        ressalvas: ressalvasDoDesempenho({ de, naoLidas, semData, atos: dentro }),
+        foraDoEscopo,
+        ressalvas: ressalvasDoDesempenho({ de, naoLidas, semData, atos: dentro, foraDoEscopo }),
     };
 }
 
 /** As ressalvas que impedem ler silêncio como inação. São produto, não rodapé. */
-export function ressalvasDoDesempenho({ de, naoLidas = [], semData = 0, atos = [] }) {
+export function ressalvasDoDesempenho({ de, naoLidas = [], semData = 0, atos = [], foraDoEscopo = null }) {
     const r = [];
     if (naoLidas.length) {
         r.push(`⚠️ ${naoLidas.length} trilha(s) NÃO foram lidas (${naoLidas.map((n) => n.rotulo).join(', ')}) — os totais estão INCOMPLETOS e ausência aqui não é prova de inação.`);
@@ -259,6 +269,7 @@ export function ressalvasDoDesempenho({ de, naoLidas = [], semData = 0, atos = [
     const naoIdentificados = atos.filter((a) => !a.quem).length;
     if (naoIdentificados > 0) r.push(`${naoIdentificados} ato(s) sem autor gravado — registro anterior ao carimbo, ou trilha que não carimba.`);
     if (semData > 0) r.push(`${semData} ato(s) sem data legível ficaram FORA do período (não dá para situá-los).`);
+    r.push(ressalvaEscopoCfi(foraDoEscopo, { rotuloEvento: 'ato' }));
     r.push('O que NÃO passa por aqui não conta: SPED gerado, apuração conferida, cadastro corrigido e captura automática não têm carimbo de autor. Silêncio nessas frentes não é inação.');
     r.push('Este relatório LÊ os carimbos que as telas gravam; ele não recalcula nada, não deduz autor e não mede qualidade — mede atos registrados.');
     return r;
