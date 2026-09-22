@@ -75,7 +75,7 @@
 // ============================================================================
 
 import { ehDiaUtil } from './feriados-nacionais.js';
-import { resolverPrazoMunicipal, resolverPrazoEstadual } from './prazos-municipais.js';
+import { resolverPrazoMunicipal, resolverPrazoEstadual, resolverPrazoFederal } from './prazos-municipais.js';
 import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
 // 🏦 DeRE — "esta empresa está em regime específico de IBS/CBS?" tem dono
 // único, lido também pela triagem da carteira. Reimplementar aqui seria a
@@ -176,9 +176,14 @@ const FGTS = {
 const DCTFWEB = {
     obrigacao: 'DCTFWEB', label: 'DCTFWeb', nome: 'DCTFWeb',
     esfera: 'federal', abrangencia: 'BR',
-    frequencia: M, diaVencimento: 15, mesesApos: 1,
+    // 🚨 ÚLTIMO DIA ÚTIL DO MÊS SEGUINTE (22/09, Paulo: *"a DCTFWeb ainda está
+    // com vencimento de todo dia 15, mas vence no final do mês"*). O dia 15 era
+    // a IN RFB 2.005/2021; desde a competência 01/2025 (IN RFB 2.237/2024, a da
+    // DCTFWeb + MIT) o prazo é o último dia útil do mês seguinte. Com o dia 15
+    // o app acusava ATRASADA uma obrigação que ainda estava no prazo.
+    frequencia: M, diaVencimento: null, ultimoDiaUtilDoMes: true, mesesApos: 1,
     ajusteDiaNaoUtil: 'antecipa',
-    baseLegal: 'IN RFB 2.005/2021 (até o dia 15 do mês seguinte)',
+    baseLegal: 'IN RFB 2.237/2024 (último dia útil do mês seguinte; até a competência 12/2024 era o dia 15 — IN RFB 2.005/2021)',
     status: 'ativa',
 };
 const SPED = {
@@ -646,8 +651,50 @@ export function mesDoCliente(empresa, competencia) {
     // SP" e não tinha onde cadastrar a do Paraná. Denunciar sem dar caminho é
     // meia correção.
     const estaduaisResolvidas = new Map();
+    // 🏦 O CADASTRO DO ADMIN VENCE O CATÁLOGO (22/09): prazo federal ('BR') ou
+    // estadual da PRÓPRIA UF cadastrado em ⚙️ Config Admin → Calendário de
+    // prazos substitui o dia do código naquela vigência. É a permissão que o
+    // Paulo pediu — mudar a data sem esperar deploy —, com vigência e norma.
+    const federaisResolvidas = new Map();
+    const competenciaIsoAdmin = competenciaIsoDe(competencia);
     for (const r of ativas) {
         const alcance = alcanceDaObrigacao(r, { uf });
+        if (r.esfera === 'federal' && alcance === 'aplica') {
+            const doAdmin = resolverPrazoFederal(prazosCadastrados, {
+                obrigacao: r.obrigacao, competencia: competenciaIsoAdmin,
+            });
+            if (doAdmin.achou) {
+                federaisResolvidas.set(r.obrigacao, {
+                    ...r,
+                    diaVencimento: doAdmin.prazo.diaVencimento,
+                    ultimoDiaUtilDoMes: doAdmin.prazo.ultimoDiaUtilDoMes === true,
+                    mesesApos: doAdmin.prazo.mesesApos,
+                    ajusteDiaNaoUtil: doAdmin.prazo.ajusteDiaNaoUtil,
+                    baseLegal: doAdmin.prazo.baseLegal,
+                    prazoAdmin: doAdmin.prazo,
+                });
+            }
+            continue;
+        }
+        if (r.esfera === 'estadual' && alcance === 'aplica') {
+            // Estadual da própria UF (hoje: SP) também pode ser corrigida pelo
+            // admin — sem isto, só cliente de OUTRA UF tinha onde cadastrar.
+            const doEstado = resolverPrazoEstadual(prazosCadastrados, {
+                uf, obrigacao: r.obrigacao, competencia: competenciaIsoAdmin,
+            });
+            if (doEstado.achou) {
+                estaduaisResolvidas.set(r.obrigacao, {
+                    ...r,
+                    diaVencimento: doEstado.prazo.diaVencimento,
+                    ultimoDiaUtilDoMes: doEstado.prazo.ultimoDiaUtilDoMes === true,
+                    mesesApos: doEstado.prazo.mesesApos,
+                    ajusteDiaNaoUtil: doEstado.prazo.ajusteDiaNaoUtil,
+                    baseLegal: doEstado.prazo.baseLegal,
+                    prazoEstadual: doEstado.prazo,
+                });
+            }
+            continue;
+        }
         if (alcance === 'fora-de-abrangencia') {
             const doEstado = resolverPrazoEstadual(prazosCadastrados, {
                 uf, obrigacao: r.obrigacao, competencia: competenciaIsoDe(competencia),
@@ -656,6 +703,7 @@ export function mesDoCliente(empresa, competencia) {
                 estaduaisResolvidas.set(r.obrigacao, {
                     ...r,
                     diaVencimento: doEstado.prazo.diaVencimento,
+                    ultimoDiaUtilDoMes: doEstado.prazo.ultimoDiaUtilDoMes === true,
                     mesesApos: doEstado.prazo.mesesApos,
                     ajusteDiaNaoUtil: doEstado.prazo.ajusteDiaNaoUtil,
                     abrangencia: `UF:${uf}`,
@@ -812,7 +860,7 @@ export function mesDoCliente(empresa, competencia) {
         regimeLabel: REGIME_LABEL[regime],
         competencia,
         obrigacoes: [
-            ...ativas.map((r) => estaduaisResolvidas.get(r.obrigacao) || r),
+            ...ativas.map((r) => estaduaisResolvidas.get(r.obrigacao) || federaisResolvidas.get(r.obrigacao) || r),
             ...municipaisResolvidas,
             ...(dere.ativa ? [dere.ativa] : []),
         ].map((r) => ({ ...r, vencimento: calcularVencimento(competencia, r) }))
@@ -823,6 +871,8 @@ export function mesDoCliente(empresa, competencia) {
         municipaisSemPrazo,
         /** Estaduais que ganharam o prazo do estado do cliente. */
         estaduaisResolvidas: [...estaduaisResolvidas.values()],
+        /** Federais cujo prazo o admin cadastrou (vence o catálogo na vigência). */
+        federaisResolvidas: [...federaisResolvidas.values()],
         propostas: propostasPendentes,
         /** Municipais que o cadastro do município resolveu — deixaram de ser pendência. */
         municipaisResolvidas,

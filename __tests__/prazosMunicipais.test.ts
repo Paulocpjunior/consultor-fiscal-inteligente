@@ -532,8 +532,9 @@ describe('a esfera estadual tem TELA e ROTA — não repito o código morto', ()
     });
     it('a rota grava a esfera e a UF', () => {
         const rota = readFileSync(join(RAIZ, 'sefaz-backend/prazos-municipais-routes.js'), 'utf8');
-        expect(rota).toMatch(/esfera: String\(p\.esfera/);
-        expect(rota).toMatch(/uf: String\(p\.uf/);
+        // 22/09: a esfera passou a ser resolvida ANTES do doc (federal entrou).
+        expect(rota).toMatch(/const esfera = \['estadual', 'federal'\]\.includes\(String\(p\.esfera/);
+        expect(rota).toMatch(/uf: esfera === 'estadual' \? \(String\(p\.uf/);
     });
 });
 
