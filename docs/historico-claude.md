@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📎 "AJUSTE NECESSÁRIO JUNTO AO SHAREPOINT" — NÃO ERA** (22/09, Paulo, CLINICA
+  MANTOAN 08/2026, etapa 5 com `AADSTS7000215`). MEDIDO no Mac dele:
+  `graph-client-secret` v5 (02/09) começa com `qcc` = segredo `proxy-2026-09`
+  do app `a876887f`, 40 bytes, sem `\n`; revisão do proxy `00021` de 21/09,
+  posterior à versão. A credencial está CERTA hoje. O que a Rotina mostrava
+  era o **carimbo do envio de 01–02/09**, quando o segredo estava quebrado —
+  `sharePoint.status` é histórico e não se reavalia. O caminho é **♻️ Refazer
+  o rito** (Vencimentos e Obrigações → Envios), que já existia desde 28/08 e a
+  frase da etapa 5 não apontava. `ACAO_CREDENCIAL_ENVIO` ganhou a frase.
+  REGRA: erro de credencial gravado num envio se confere contra o card
+  "Conexão SharePoint" AO VIVO antes de mexer no Azure — a tela do Azure mostra
+  os 3 primeiros caracteres de cada segredo, e `gcloud secrets versions access
+  latest | cut -c1-3` compara sem expor o valor.
+
 - **🏦 "PRECISO DE PERMISSÃO PARA ALTERAR A DATA DOS VENCIMENTOS — A DCTFWEB
   AINDA ESTÁ COM VENCIMENTO DE TODO DIA 15, MAS VENCE NO FINAL DO MÊS"**
   (22/09, Paulo, AFFITTARE 08/2026 acusando "DCTFWEB — ATRASADA" em 21/09).

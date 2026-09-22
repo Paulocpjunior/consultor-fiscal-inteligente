@@ -285,7 +285,14 @@ export const ACAO_CREDENCIAL_ENVIO =
     'NÃO é desta empresa e NÃO é a pasta dela: é a credencial do proxy do SharePoint, e enquanto ela '
     + 'não for aceita NENHUM cliente arquiva — a etapa 5 fica travada na carteira inteira. '
     + '⚠️ NÃO reenvie a guia: o cliente já recebeu, e reenviar DUPLICA a cobrança sem resolver isto. '
-    + 'Confira o card "Conexão SharePoint" em Central de XMLs → Integrações.';
+    + 'Confira o card "Conexão SharePoint" em Central de XMLs → Integrações. '
+    // 22/09 (MANTOAN): a credencial tinha sido consertada em 02/09 e a etapa 5
+    // continuava vermelha — o status do rito é um CARIMBO do dia do envio e
+    // não se reavalia sozinho. Sem esta frase, a pessoa mede o cofre, vê tudo
+    // certo e não sabe que o caminho é REFAZER, não reenviar.
+    + 'Se o card já está VERDE, o erro aqui é o carimbo do dia do envio (o rito não se reavalia sozinho): '
+    + 'use ♻️ Refazer o rito em Vencimentos e Obrigações → Envios — ele arquiva de novo e dá a baixa, '
+    + 'sem reenviar a guia ao cliente.';
 
 /**
  * A ação COMPLETA para quem está no fim de mês: o que não fazer (reenviar) +
