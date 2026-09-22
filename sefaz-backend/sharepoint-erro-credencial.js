@@ -291,7 +291,7 @@ export const ACAO_CREDENCIAL_ENVIO =
     // não se reavalia sozinho. Sem esta frase, a pessoa mede o cofre, vê tudo
     // certo e não sabe que o caminho é REFAZER, não reenviar.
     + 'Se o card já está VERDE, o erro aqui é o carimbo do dia do envio (o rito não se reavalia sozinho): '
-    + 'use ♻️ Refazer o rito em Vencimentos e Obrigações → Envios — ele arquiva de novo e dá a baixa, '
+    + 'use ♻️ Refazer o rito em Vencimentos e Obrigações → aba 📤 Envios (rito), no bloco da causa — ele arquiva de novo e dá a baixa, '
     + 'sem reenviar a guia ao cliente.';
 
 /**
