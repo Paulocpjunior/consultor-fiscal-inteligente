@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📤 "NÃO LOCALIZEI ESSE ENVIOS - REFAZER RITO"** (22/09, Paulo, print de
+  Vencimentos & Obrigações sem a aba). CAUSA: `VencimentosHub` fundiu os três
+  hubs (Obrigações & Tarefas + Minha Agenda + Vencimentos da Semana) e a aba
+  "📤 Envios (rito)" do antigo `ObrigacoesETarefas` ficou de fora —
+  `EnviosImpostoPainel` (farol do rito #293 + ♻️ Refazer o rito por causa)
+  não era montado em lugar nenhum, e a ajuda do SharePoint mandava para uma
+  aba inexistente. CORREÇÃO: sub-aba `envios` no hub montando o painel;
+  mensagem do `sharepoint-erro-credencial.js` diz "aba 📤 Envios (rito), no
+  bloco da causa". Teste `vencimentosHubEnvios.test.ts` prende a porta.
+  REGRA: ao fundir hubs, listar as sub-abas do antigo e conferir uma a uma
+  — painel sem porta é feature apagada em silêncio.
+
 - **🚫 "VOCÊ ESTÁ AGLUTINANDO TODOS OS USUÁRIOS DE TODOS OS APPS — NÃO PODEMOS
   MISTURAR, AQUI É SOMENTE SOBRE O CFI"** (22/09, Paulo, print da Linha do
   tempo com WhatsApp da Recepção/RH e "rhsp 268"). CAUSA: o Firestore é UM
