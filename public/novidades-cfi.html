@@ -114,6 +114,15 @@
     conferência: SPED Fiscal, EFD-Contribuições) e metade não vira (depende de folha, evento ou cadastro: INSS
     Patronal, DeRE, DCTFWeb de imune/isenta). Cada linha passou a dizer qual é o caso e o que falta conferir.</p>
 
+    <h3>📎 <strong>SharePoint: "264 empresas cuja pasta não foi encontrada" — as pastas existiam; o app lia só
+    as 200 primeiras</strong></h3>
+    <p>O auto-sync diário procurava a pasta de cada cliente na primeira página da lista de "Empresas" no
+    SharePoint, que tem 200 itens. Com mais de 400 clientes, tudo depois da 200ª pasta ficava invisível e o
+    aviso mandava criar a pasta, o que criaria uma duplicada. Agora a lista é lida inteira.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → Integrações → card <strong>Conexão
+    SharePoint</strong>. Na próxima rodada do auto-sync (ou em "Sincronizar agora") o número de empresas sem pasta
+    cai para as que realmente não têm pasta. <strong>Não crie pasta</strong> por causa do aviso antigo.</div>
+
     <h3>📎 <strong>"Credencial do SharePoint recusada" na etapa 5, com o card Conexão SharePoint verde:
     o erro é do dia do envio — refaça o rito, não reenvie a guia</strong></h3>
     <p>O status do arquivamento fica gravado no instante do envio e não muda sozinho quando a causa é

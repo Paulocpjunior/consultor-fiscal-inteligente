@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📎 "CONECTADO, MAS A ÚLTIMA RODADA TEVE ERROS — 264 EMPRESA(S) CUJA PASTA
+  NÃO FOI ENCONTRADA NO SHAREPOINT"** (22/09, Paulo, print do card Conexão
+  SharePoint depois de eu pedir "me mande o print se não estiver verde").
+  Credencial CERTA (medida no mesmo dia). O defeito: `listarPastas` do proxy
+  pedia `$top=200` e lia SÓ a primeira página do Graph — com ~430 subpastas
+  em `Empresas`, as pastas depois da 200ª não existiam para o app, e a frase
+  mandava CRIAR no SharePoint pastas que estão lá (duplicaria a pasta do
+  cliente). O laço vizinho `listFolderXmls` já seguia `@odata.nextLink`; este
+  ficou para trás. Agora pagina (teto 50 páginas) e devolve `paginas`. Teste
+  com `fetch` simulado em duas páginas: `sharepointListarPastasPaginacao`.
+  REGRA: **toda listagem do Graph segue `@odata.nextLink`** — 200 é o teto
+  por resposta, não o tamanho da pasta; e "N empresas sem pasta" com N grande
+  é defeito de leitura até prova em contrário, nunca N pastas faltando.
+
 - **📅 "AFFITTARE 08/2026 CONTINUA DO MESMO JEITO" + "ESSA INFORMAÇÃO (12
   OBRIGAÇÕES DO CATÁLOGO NÃO CONFIRMADAS) INTERFERE EM ALGUMA COISA?"** (22/09,
   Paulo). (1) A regra da DCTFWeb mudou no catálogo e a TAREFA ficou com o dia
