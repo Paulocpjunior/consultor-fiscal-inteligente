@@ -544,6 +544,8 @@ export function montarRotinaFiscal({
     const rito = conferirRitoDosEnvios(envios);
     const enviosOk = rito.filter((r) => r.completo).length;
     const reenvios = rito.filter((r) => r.baixaJaFeitaNaObrigacao).length;
+    // 📁 Cópia DECLARADA à mão fecha o rito, mas vai dita — não é prova do app.
+    const arquivadosDeclarados = rito.filter((r) => r.arquivadoDeclarado).length;
     // ⚠️ CAUSA JUNTO DO NÚMERO: *"veja em Envios (rito) o que ficou sem cópia
     // ou sem baixa"* é "vá procurar" — e quem lê a Rotina está justamente
     // tentando saber o que falta. As causas já vêm nomeadas pelo dono.
@@ -599,6 +601,7 @@ export function montarRotinaFiscal({
             // por que a linha fala de 1 obrigação.
             + (reenvios > 0 ? ` · ${reenvios} reenvio(s) da mesma guia` : '')
             + (declarados > 0 ? ` · ${declarados} DECLARADA(S) como enviada(s) por fora do app` : '')
+            + (arquivadosDeclarados > 0 ? ` · ${arquivadosDeclarados} cópia(s) na pasta DECLARADA(S) à mão` : '')
             + '.',
             null,
             { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });

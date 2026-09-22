@@ -95,3 +95,21 @@ describe('montarMailtoEnvio — gestor SEMPRE em cópia', () => {
         expect(GESTOR_EMAIL).toBe('alexandre@spassessoriacontabil.com.br');
     });
 });
+
+// ── 22/09 (MANTOAN): o tipo é TEXTO LIVRE no registro por fora ───────────────
+describe('obrigacaoDoTipo lê o tributo nomeado no texto livre', () => {
+    it('"DARF PIS, COFINS" é PIS_COFINS, "ISS PMSP" é ISS, INSS/GPS é INSS_CPP', () => {
+        expect(obrigacaoDoTipo('DARF PIS, COFINS')).toBe('PIS_COFINS');
+        expect(obrigacaoDoTipo('ISS PMSP')).toBe('ISS');
+        expect(obrigacaoDoTipo('issqn')).toBe('ISS');
+        expect(obrigacaoDoTipo('GPS')).toBe('INSS_CPP');
+        expect(obrigacaoDoTipo('DARF IRPJ')).toBe('IRPJ_TRIM');
+        expect(obrigacaoDoTipo('CSLL')).toBe('CSLL_TRIM');
+        expect(obrigacaoDoTipo('EFD-Contribuições')).toBe('EFD_CONTRIB');
+        expect(obrigacaoDoTipo('EFD ICMS/IPI')).toBe('SPED');
+    });
+    it('"DARF" sozinho continua DCTFWEB; DARE (ICMS) continua sem obrigação', () => {
+        expect(obrigacaoDoTipo('DARF')).toBe('DCTFWEB');
+        expect(obrigacaoDoTipo('DARE ICMS')).toBeNull();
+    });
+});

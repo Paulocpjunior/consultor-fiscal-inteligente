@@ -254,9 +254,13 @@ export interface PainelEnvios {
     porTipo?: Record<string, number>;
     pendencias?: Record<string, {
         qtd: number; acao: string; empresas: string[];
+        /** Em qual ponta do rito: só a do SharePoint aceita declarar a cópia à mão. */
+        etapa?: 'sharepoint' | 'baixa' | null;
         /** ♻️ Os envios desta causa — é com eles que se refaz o rito. */
         envioIds?: string[];
     }>;
+    /** 📁 Cópias na pasta declaradas à mão (fecham o rito, ditas). */
+    arquivadosDeclarados?: number;
     semGestorEmCopia?: string[];
     valorTotal?: number;
     farol?: 'ok' | 'atencao' | 'vazio';
@@ -500,6 +504,10 @@ export async function perguntarDebitosJaEnviados(input: {
 export async function refazerRitoDosEnvios(logIds: string[]): Promise<{
     ok: boolean; error?: string;
     total?: number; arquivados?: number; baixados?: number; semPdf?: number; falhas?: number;
+    /** Envios que já estavam fechados nas duas pontas — nada a refazer (não é falha). */
+    jaFechados?: number;
+    /** Tipo sem obrigação do catálogo — nada a baixar (desfecho legítimo). */
+    semObrigacao?: number;
     resultados?: Array<{ logId: string; ok?: boolean; erro?: string; texto?: string }>;
 }> {
     const u = getAuth().currentUser;
@@ -509,6 +517,27 @@ export async function refazerRitoDosEnvios(logIds: string[]): Promise<{
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ logIds }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
+}
+
+/**
+ * 📁 Declara à mão o arquivamento na pasta IMPOSTOS de envios cuja cópia o
+ * app não consegue refazer (não guarda o PDF de DARF/DARE). Admin; o texto
+ * é obrigatório e fica gravado com nome e data. Não envia nada ao cliente.
+ */
+export async function declararArquivamentoDosEnvios(logIds: string[], comoFoi: string): Promise<{
+    ok: boolean; error?: string; total?: number; declarados?: number; recusados?: number;
+}> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/refazer-rito/declarar-arquivamento', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logIds, comoFoi }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };

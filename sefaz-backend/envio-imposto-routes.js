@@ -16,7 +16,7 @@ import { podeAcessarCnpj } from './carteira-auth.js';
 import { montarPainelEnvios } from './envio-imposto-painel.js';
 // ♻️ Refazer o rito de um envio já registrado — o carimbo é histórico e não
 // se move sozinho quando a causa é consertada depois.
-import { refazerRitoDoEnvio } from './refazer-rito-store.js';
+import { refazerRitoDoEnvio, declararArquivamentoDoEnvio } from './refazer-rito-store.js';
 import { executarRitoEnvioImposto, GESTOR_EMAIL } from './envio-imposto.js';
 import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
@@ -577,12 +577,49 @@ router.post('/refazer-rito', requireAuth, async (req, res) => {
         const baixados = resultados.filter((r) => ['baixada', 'ja-baixada'].includes(r.baixa?.status)).length;
         const semPdf = resultados.filter((r) => r.pdfIndisponivel).length;
         const falhas = resultados.filter((r) => r.ok === false).length;
-        console.log(`[envio-imposto/refazer-rito] ${ids.length} envio(s) por ${quem} — ${arquivados} arquivados, ${baixados} baixados`);
+        // ⚠️ "0 baixado(s)" sobre envios cuja baixa JÁ estava fechada lia como
+        // falha (Paulo, 22/09). O que não precisou ser refeito vai CONTADO.
+        const jaFechados = resultados.filter((r) => r.ok !== false && r.refeito === false).length;
+        const semObrigacao = resultados.filter((r) => r.baixa?.status === 'sem-obrigacao').length;
+        console.log(`[envio-imposto/refazer-rito] ${ids.length} envio(s) por ${quem} — ${arquivados} arquivados, ${baixados} baixados, ${jaFechados} já fechados`);
         return res.json({
-            ok: true, total: ids.length, arquivados, baixados, semPdf, falhas, resultados,
+            ok: true, total: ids.length, arquivados, baixados, semPdf, falhas, jaFechados, semObrigacao, resultados,
         });
     } catch (e) {
         console.error('[envio-imposto/refazer-rito]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📁 Declarar à mão o arquivamento de envios cuja cópia o app não consegue
+// refazer (não guarda o PDF). Admin, com texto obrigatório — a régua mora em
+// `patchDoArquivamentoDeclarado`.
+router.post('/refazer-rito/declarar-arquivamento', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
+        const ids = Array.isArray(req.body?.logIds) ? req.body.logIds.map(String).filter(Boolean) : [];
+        if (!ids.length) return res.status(400).json({ ok: false, error: 'Informe os envios (logIds).' });
+        if (ids.length > TETO_REFAZER) {
+            return res.status(400).json({ ok: false, error: `São ${ids.length} envios e o teto por rodada é ${TETO_REFAZER}. Rode em partes.` });
+        }
+        const quem = req.user?.email || req.user?.uid || null;
+        const comoFoi = req.body?.comoFoi;
+        const resultados = [];
+        for (const logId of ids) {
+            try {
+                resultados.push({ logId, ...(await declararArquivamentoDoEnvio({ logId, quem, comoFoi })) });
+            } catch (e) {
+                resultados.push({ logId, ok: false, erro: e.message });
+            }
+        }
+        const declarados = resultados.filter((r) => r.ok).length;
+        const recusados = resultados.filter((r) => !r.ok);
+        // Declaração recusada em TODOS é erro de entrada (texto curto…): 400 com a frase.
+        if (!declarados && recusados.length) return res.status(400).json({ ok: false, error: recusados[0].erro, resultados });
+        console.log(`[envio-imposto/declarar-arquivamento] ${declarados}/${ids.length} por ${quem}`);
+        return res.json({ ok: true, total: ids.length, declarados, recusados: recusados.length, resultados });
+    } catch (e) {
+        console.error('[envio-imposto/declarar-arquivamento]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

@@ -1,6 +1,8 @@
 export interface PendenciaEnvio {
     causa: string;
     acao: string;
+    /** Em qual ponta do rito a pendência está — decide a saída que a tela oferece. */
+    etapa?: 'sharepoint' | 'baixa';
 }
 
 export function pendenciaSharePoint(envio: unknown): PendenciaEnvio | null;
@@ -15,6 +17,8 @@ export interface RitoDoEnvio {
     pendencias: PendenciaEnvio[];
     /** Outro envio da MESMA obrigação já deu a baixa (reenvio da mesma guia). */
     baixaJaFeitaNaObrigacao: boolean;
+    /** A cópia na pasta foi DECLARADA à mão (autor/data/texto), não gravada pelo app. */
+    arquivadoDeclarado: boolean;
 }
 
 export function envioCompletoPeloRito(
