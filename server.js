@@ -3199,6 +3199,29 @@ app.post('/api/admin/tarefas/reaplicar-prazos', requireAdmin, express.json(), as
     }
 });
 
+// POST /api/admin/tarefas/cancelar-dp
+//   👥 Cancela em lote as tarefas ABERTAS e automáticas de FGTS/INSS patronal
+//   (Paulo, 22/09: "é do DP"). Body: { competencia?: "MM/AAAA", empresaId? }
+//   Sem competência = todas as competências.
+app.post('/api/admin/tarefas/cancelar-dp', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (competencia && !/^\d{2}\/\d{4}$/.test(String(competencia))) {
+            return res.status(400).json({ ok: false, error: 'competencia, se informada, é MM/AAAA' });
+        }
+        const { cancelarTarefasDoDp } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await cancelarTarefasDoDp({
+            competencia: competencia ? String(competencia) : undefined,
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cancelar-dp]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
 // POST /api/tarefas/aplicar-carteira
 //   Atribui retroativamente as tarefas sem dono ao titular da Carteira.
 //   Idempotente. Protegida por X-Cron-Secret.

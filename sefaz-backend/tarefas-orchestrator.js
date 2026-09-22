@@ -26,7 +26,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente } from './catalogo-obrigacoes.js';
+import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente, OBRIGACOES_DO_DP, tarefaDoDpParaCancelar } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
 import { decidirReaplicacao } from './reaplicar-prazos.js';
 
@@ -369,6 +369,70 @@ export async function reaplicarPrazosDoCatalogo(competencia, opts = {}) {
         await db.collection('tarefas_cron_logs').add({ ...log, criadoEm: admin.firestore.FieldValue.serverTimestamp() });
     } catch (e) {
         console.warn('[tarefas/reaplicar-prazos] falha ao gravar log:', e.message);
+    }
+    return log;
+}
+
+/**
+ * 👥 CANCELA em lote as tarefas ABERTAS e AUTOMÁTICAS de FGTS/INSS patronal
+ * (Paulo, 22/09: "pode tirar, INSS, FGTS, CPP é do DP"). O cron parou de
+ * gerar; as já geradas ficavam cobrando o Fiscal por trabalho do DP. Manual,
+ * concluída e cancelada não se tocam. Sem competência = todas.
+ *
+ * @param {object} opts  { competencia?: 'MM/AAAA', empresaIdEspecifica?, quem? }
+ */
+export async function cancelarTarefasDoDp(opts = {}) {
+    fa();
+    const db = admin.firestore();
+    const inicio = new Date();
+    const comp = opts.competencia ? assertCompetencia(opts.competencia) : null;
+    const log = {
+        tipo: 'cancelar-tarefas-dp', competencia: comp, quem: opts.quem || null,
+        obrigacoes: [...OBRIGACOES_DO_DP],
+        iniciadoEm: inicio.toISOString(),
+        tarefasLidas: 0, canceladas: 0, jaFechadas: 0, manuais: 0,
+        canceladasPorCompetencia: {},
+        exemplos: [],
+        erros: [],
+    };
+    const lote = [];
+    for (const obrigacao of OBRIGACOES_DO_DP) {
+        let q = db.collection('tarefas').where('obrigacao', '==', obrigacao);
+        if (comp) q = q.where('competencia', '==', comp);
+        if (opts.empresaIdEspecifica) q = q.where('empresaId', '==', String(opts.empresaIdEspecifica));
+        const snap = await q.get();
+        log.tarefasLidas += snap.size;
+        snap.forEach((d) => {
+            const t = { id: d.id, ...(d.data() || {}) };
+            if (t.status === 'concluida' || t.status === 'cancelada') { log.jaFechadas++; return; }
+            if (!tarefaDoDpParaCancelar(t)) { log.manuais++; return; }
+            lote.push(d.ref);
+            log.canceladas++;
+            const c = String(t.competencia || '?');
+            log.canceladasPorCompetencia[c] = (log.canceladasPorCompetencia[c] || 0) + 1;
+            if (log.exemplos.length < 8) log.exemplos.push(`${obrigacao} ${c} · ${t.empresaNome || t.empresaId || ''}`);
+        });
+    }
+    const motivo = 'Obrigação do DP (FGTS/INSS patronal) — saiu do catálogo do CFI em 22/09; cancelada em lote pelo admin.';
+    for (let i = 0; i < lote.length; i += 400) {
+        const b = db.batch();
+        for (const ref of lote.slice(i, i + 400)) {
+            b.update(ref, {
+                status: 'cancelada',
+                canceladaEm: admin.firestore.FieldValue.serverTimestamp(),
+                canceladaPorEmail: opts.quem || null,
+                cancelamentoMotivo: motivo,
+            });
+        }
+        await b.commit();
+    }
+    const fim = new Date();
+    log.finalizadoEm = fim.toISOString();
+    log.duracaoMs = fim.getTime() - inicio.getTime();
+    try {
+        await db.collection('tarefas_cron_logs').add({ ...log, criadoEm: admin.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+        console.warn('[tarefas/cancelar-dp] falha ao gravar log:', e.message);
     }
     return log;
 }

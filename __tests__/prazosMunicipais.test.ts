@@ -255,12 +255,12 @@ describe('o cadastro do município transforma pendência em obrigação com DATA
         expect(iss.diaVencimento).not.toBe(cad().diaVencimento);
     });
 
-    it('o INSS patronal continua pendente — ele depende da FOLHA, não do município', () => {
-        // Resolver o ISS não pode dar o mês por coberto: as causas são
-        // independentes e a folha mora no módulo de DP.
+    it('👥 o INSS patronal não aparece mais — nem pendente: é do DP (Paulo, 22/09)', () => {
+        // Até 22/09 ele ficava como proposta "depende de folha". A folha mora
+        // no módulo de DP, e a obrigação também: o Fiscal não a cobra.
         const m = lucroEm(SP, [cad()]);
-        expect(m.propostas.some((r: any) => r.dependeDe === 'folha')).toBe(true);
-        expect(m.coberturaIncompleta).toBe(true);
+        expect(m.propostas.some((r: any) => r.dependeDe === 'folha')).toBe(false);
+        expect([...m.obrigacoes, ...m.propostas].map((r: any) => r.obrigacao)).not.toContain('INSS_CPP');
     });
 });
 

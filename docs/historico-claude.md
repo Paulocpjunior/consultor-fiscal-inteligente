@@ -5,6 +5,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **👥 "PODE TIRAR, INSS, FGTS, CPP É DO DP"** (22/09, Paulo, decisão sobre a
+  AFFITTARE 08/2026 cobrando FGTS/INSS na etapa 4). A regra de 18/08 valia só
+  para imune/isenta; Lucro e Simples continuavam gerando. AGORA: FGTS e
+  INSS_CPP saem do `CATALOGO` inteiro (`OBRIGACOES_DO_DP` exportado em
+  `catalogo-obrigacoes.js`), do calendário do Fiscal
+  (`calendario-obrigacoes.js`) e do mapeamento de baixa (`obrigacaoDoTipo`
+  → null → `sem-obrigacao`, dito). A etapa 4 da Rotina não conta tarefa
+  dessas obrigações (nem entregue, nem falta) e diz "N tarefa(s) do DP fora
+  da conta" com a ação. As tarefas JÁ GERADAS não somem sozinhas: botão
+  admin "👥 Cancelar tarefas do DP (FGTS/INSS)" em Tarefas (rota POST
+  /api/admin/tarefas/cancelar-dp; competência do filtro ou todas; só
+  automática e aberta — `tarefaDoDpParaCancelar`; motivo e autor no doc;
+  log em `tarefas_cron_logs`). eSocial S-1299 continua no calendário do
+  Fiscal (`requireFolha`) — não foi pedido; conferir com o Paulo. REGRA:
+  decisão de escopo do dono vale para o catálogo INTEIRO, não só para a
+  lista onde a pergunta nasceu.
+
 - **📤 "FIZ O RITO E CONTINUA ASSIM, FIZ O REGISTRO TAMBÉM MAS NÃO ASSUMIU …
   0 ARQUIVADO E 0 BAIXADOS"** (22/09, Paulo, MANTOAN e AFFITTARE 08/2026).
   Três causas, três correções. (1) `obrigacaoDoTipo` só conhecia

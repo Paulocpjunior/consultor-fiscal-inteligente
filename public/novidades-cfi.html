@@ -114,6 +114,15 @@
     conferência: SPED Fiscal, EFD-Contribuições) e metade não vira (depende de folha, evento ou cadastro: INSS
     Patronal, DeRE, DCTFWeb de imune/isenta). Cada linha passou a dizer qual é o caso e o que falta conferir.</p>
 
+    <h3>👥 <strong>FGTS e INSS patronal saíram do catálogo do Fiscal — são do DP</strong></h3>
+    <p>O cron não gera mais tarefa de FGTS nem de INSS patronal (CPP) para nenhum regime, o calendário não as
+    lista, e a etapa 4 da Rotina do Mês deixa de cobrá-las: ela mostra "N tarefa(s) do DP fora da conta" em vez de
+    "Falta: FGTS, INSS_CPP". As tarefas já geradas não somem sozinhas: o admin cancela em lote com o botão
+    <strong>👥 Cancelar tarefas do DP (FGTS/INSS)</strong> em Tarefas (da competência do filtro, ou de todas se o
+    filtro estiver vazio). Só tarefa automática e aberta é cancelada; manual, concluída e cancelada não mudam, e fica
+    registrado quem cancelou e por quê.</p>
+    <div class="onde">📍 <strong>Onde:</strong> 📅 Vencimentos &amp; Obrigações → 📋 Tarefas (Kanban) → botão do admin.</div>
+
     <h3>📁 <strong>Envios (rito): "Já arquivei à mão" para a cópia que o app não consegue refazer, e a guia registrada
     por fora agora acha a obrigação certa</strong></h3>
     <p>Três travas do fim de mês resolvidas. (1) O app não guarda o PDF de DARF e DARE depois do envio — quando a

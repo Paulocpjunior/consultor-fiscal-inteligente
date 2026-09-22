@@ -163,16 +163,25 @@ const DAS = {
     baseLegal: 'LC 123/2006 art. 21 §3º (dia 20) — política do escritório: antecipa',
     status: 'ativa',
 };
-const FGTS = {
-    obrigacao: 'FGTS', label: 'FGTS Digital', nome: 'FGTS Digital',
-    esfera: 'federal', abrangencia: 'BR',
-    frequencia: M, diaVencimento: 20, mesesApos: 1,
-    // Resolvido em 11/08: o cron antecipava, a tela prorrogava (19/06 × 22/06).
-    // Paulo decidiu ANTECIPA, e para o FGTS é também a régua legal.
-    ajusteDiaNaoUtil: 'antecipa',
-    baseLegal: 'Lei 8.036/90 art. 15 (dia 20; sem expediente, antecipa)',
-    status: 'ativa',
-};
+// ❌ FGTS e INSS PATRONAL (CPP) SAÍRAM DO CATÁLOGO INTEIRO — Paulo, 22/09:
+// *"pode tirar, INSS, FGTS, CPP é do DP"*. A regra de 18/08 ("FGTS é um
+// imposto gerado pelo departamento pessoal, não faz base para impostos
+// gerados pelo CFI") valia só para imune/isenta; o Lucro e o Simples
+// continuavam gerando FGTS e cobrando INSS na etapa 4 (AFFITTARE 08/2026:
+// "Falta: FGTS, INSS_CPP…" sobre trabalho que é do módulo de DP).
+// Quem sabe se há folha é o DP; o CFI não afirma nem cobra.
+export const OBRIGACOES_DO_DP = Object.freeze(['FGTS', 'INSS_CPP']);
+
+/**
+ * Tarefa AUTOMÁTICA e ABERTA de obrigação do DP — a que o admin cancela em
+ * lote depois de 22/09 (o cron não gera mais, mas as já geradas ficam).
+ * Manual não se toca: alguém a criou de propósito.
+ */
+export function tarefaDoDpParaCancelar(t) {
+    if (!t || !OBRIGACOES_DO_DP.includes(String(t.obrigacao || ''))) return false;
+    if (t.status === 'concluida' || t.status === 'cancelada') return false;
+    return String(t.origem || 'automatica') === 'automatica';
+}
 const DCTFWEB = {
     obrigacao: 'DCTFWEB', label: 'DCTFWeb', nome: 'DCTFWeb',
     esfera: 'federal', abrangencia: 'BR',
@@ -195,17 +204,6 @@ const SPED = {
     ajusteDiaNaoUtil: 'antecipa',
     baseLegal: 'Portaria CAT 147/2009 (SP) — prazo estadual',
     status: 'ativa', revisar: true,
-};
-const INSS_CPP = {
-    obrigacao: 'INSS_CPP', label: 'INSS Patronal', nome: 'INSS Patronal (CPP)',
-    esfera: 'federal', abrangencia: 'BR',
-    frequencia: M, diaVencimento: 20, mesesApos: 1,
-    ajusteDiaNaoUtil: 'antecipa',
-    baseLegal: 'Lei 8.212/91 art. 30, I, "b"',
-    // Só existe com FOLHA, e a folha mora no módulo de DP — este app não tem
-    // como afirmar que o cliente tem empregado. Gerar pra todos criaria uma
-    // pendência falsa por mês em quem não tem folha.
-    status: 'proposta', dependeDe: 'folha', revisar: true,
 };
 const PIS_COFINS = {
     obrigacao: 'PIS_COFINS', label: 'PIS/COFINS', nome: 'PIS/COFINS',
@@ -342,7 +340,6 @@ const DCTFWEB_EVENTOS = {
 //
 // Ou seja: mesmo quando a imune/isenta TEM folha, o FGTS não é obrigação que o
 // CFI acompanha — é do módulo de DP. Extensão minha, dedução errada, removida.
-const INSS_CPP_SE_FOLHA = { ...INSS_CPP, revisar: true };
 const ECD_SE_MOVIMENTO = {
     ...ECD,
     // "entrega se tiver movimento financeiro"
@@ -379,7 +376,7 @@ const EFD_CONTRIB_ANUAL = {
 
 // A DeRE entra no COMUM do Lucro: ela independe de Presumido × Real — o que
 // decide é o regime ESPECÍFICO de IBS/CBS, resolvido pelo cadastro no mês.
-const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, ISS, DERE];
+const COMUNS_LUCRO = [DCTFWEB, PIS_COFINS, EFD_CONTRIB, SPED, ISS, DERE];
 
 /**
  * A lista da IMUNE e da ISENTA.
@@ -394,7 +391,7 @@ const COMUNS_LUCRO = [DCTFWEB, FGTS, INSS_CPP, PIS_COFINS, EFD_CONTRIB, SPED, IS
  * módulo de DP).
  */
 const IMUNE_ISENTA = [
-    DCTFWEB_EVENTOS, INSS_CPP_SE_FOLHA,
+    DCTFWEB_EVENTOS,
     EFD_CONTRIB_ANUAL, ECD_SE_MOVIMENTO, ECF_SE_MOVIMENTO,
     // A DeRE alcança "todas as pessoas jurídicas, INCLUSIVE imunes e isentas"
     // que forneçam sob regime específico (esclarecimento CGIBS/RFB) — uma
@@ -404,7 +401,7 @@ const IMUNE_ISENTA = [
 ];
 
 export const CATALOGO = {
-    SIMPLES: [DAS, FGTS, DEFIS],
+    SIMPLES: [DAS, DEFIS],
     LUCRO_PRESUMIDO: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM, ECF, ECD],
     LUCRO_REAL: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM, ECF, ECD],
     IMUNE: IMUNE_ISENTA,

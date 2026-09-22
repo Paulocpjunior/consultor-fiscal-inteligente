@@ -65,7 +65,7 @@ describe('obrigacaoDoTipo (baixa = reverso da pendência do cron)', () => {
         expect(obrigacaoDoTipo('das')).toBe('DAS');
         expect(obrigacaoDoTipo('DARF')).toBe('DCTFWEB');
         expect(obrigacaoDoTipo('DCTFWEB')).toBe('DCTFWEB');
-        expect(obrigacaoDoTipo('FGTS')).toBe('FGTS');
+        expect(obrigacaoDoTipo('FGTS')).toBeNull();   // do DP (22/09): nada a baixar no Fiscal
         expect(obrigacaoDoTipo('SPED')).toBe('SPED');
     });
     it('tipo sem obrigação mensal → null (rito segue sem baixa, não é erro)', () => {
@@ -98,11 +98,12 @@ describe('montarMailtoEnvio — gestor SEMPRE em cópia', () => {
 
 // ── 22/09 (MANTOAN): o tipo é TEXTO LIVRE no registro por fora ───────────────
 describe('obrigacaoDoTipo lê o tributo nomeado no texto livre', () => {
-    it('"DARF PIS, COFINS" é PIS_COFINS, "ISS PMSP" é ISS, INSS/GPS é INSS_CPP', () => {
+    it('"DARF PIS, COFINS" é PIS_COFINS, "ISS PMSP" é ISS; INSS/GPS/FGTS são do DP (nulo)', () => {
         expect(obrigacaoDoTipo('DARF PIS, COFINS')).toBe('PIS_COFINS');
         expect(obrigacaoDoTipo('ISS PMSP')).toBe('ISS');
         expect(obrigacaoDoTipo('issqn')).toBe('ISS');
-        expect(obrigacaoDoTipo('GPS')).toBe('INSS_CPP');
+        expect(obrigacaoDoTipo('GPS')).toBeNull();
+        expect(obrigacaoDoTipo('INSS')).toBeNull();
         expect(obrigacaoDoTipo('DARF IRPJ')).toBe('IRPJ_TRIM');
         expect(obrigacaoDoTipo('CSLL')).toBe('CSLL_TRIM');
         expect(obrigacaoDoTipo('EFD-Contribuições')).toBe('EFD_CONTRIB');
