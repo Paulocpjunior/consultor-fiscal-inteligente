@@ -68,14 +68,71 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 21/09/2026 · leitura de 25 minutos</p>
+            <p>Departamento Fiscal · atualizado em 22/09/2026 · leitura de 30 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (21/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (22/09) — leia esta parte primeiro</h2>
+
+    <h3>📅 <strong>A DCTFWeb vence no ÚLTIMO DIA ÚTIL do mês seguinte — o app dizia dia 15 e acusava
+    "atrasada" antes da hora</strong></h3>
+    <p>O catálogo de prazos do CFI estava com a regra antiga (dia 15). Desde a competência 01/2025 a DCTFWeb vence
+    no último dia útil do mês seguinte (IN RFB 2.237/2024). Por isso a Rotina do Mês mostrava "DCTFWEB — ATRASADA"
+    no dia 21 para a competência 08/2026, que só vence em 30/09. O catálogo foi corrigido.</p>
+    <div class="alerta">⚠️ <strong>As tarefas de DCTFWeb já criadas continuam com 15/09</strong> até alguém
+    reaplicar a data — veja o item seguinte. Tarefa concluída não muda.</div>
+
+    <h3>🏦 <strong>Admin: agora dá para mudar a data de vencimento de qualquer obrigação — federal, estadual ou
+    municipal — sem esperar atualização do sistema</strong></h3>
+    <p>O Calendário de prazos ganhou a esfera <strong>Federal</strong> (vale para todos os clientes), a opção
+    <strong>"último dia útil do mês"</strong> no lugar do dia fixo e a caixa <strong>"reaplicar nas tarefas
+    abertas"</strong>, que recalcula o vencimento das tarefas ainda não concluídas daquela obrigação, dentro da
+    vigência informada. O cadastro vence o catálogo do app daquela competência em diante; competência anterior
+    continua com a regra que valia nela.</p>
+    <div class="onde">📍 <strong>Onde:</strong> ⚙️ Config Admin → <strong>Calendário de prazos</strong> →
+    <strong>🏦 Federal</strong>. Para corrigir as tarefas de DCTFWeb já criadas: obrigação <strong>DCTFWEB</strong>,
+    marcar <strong>último dia útil do mês</strong>, meses após a competência = 1, base legal
+    <strong>IN RFB 2.237/2024</strong>, vigência de <strong>2025-01-01</strong>, deixar "reaplicar nas tarefas abertas"
+    marcado e clicar em Cadastrar. O aviso diz quantas tarefas receberam a data.</div>
+</section>
+
+<section>
+    <h2>Antes disso (21/09)</h2>
+
+    <h3>🧭 <strong>DIFAL de venda (EC 87/15): o cadastro do E316 puxa as UFs das notas, aplica a todas de uma vez,
+    e há um relatório por UF igual ao do Folhamatic</strong></h3>
+    <p>Na WALDESA eram 13 páginas de DIFAL para lançar. Agora o que a nota traz (UF de destino, valor do DIFAL e do
+    FCP) vem da própria nota; o que a nota não traz (vencimento e código de receita) continua sendo cadastro, mas
+    uma vez só, para todas as UFs. O E316 passou a sair em <strong>duas guias</strong> quando a UF tem FCP — o
+    FCP tem código de receita próprio (na GNRE, 100129/100137; o DIFAL usa 100102/100110) — e a tela lista, ao
+    vivo, o que falta em cada UF; linha incompleta não é mais descartada em silêncio.</p>
+    <div class="onde">📍 <strong>Onde:</strong> SPED Fiscal → <strong>Ajustes E111</strong> → "DIFAL EC 87/15 a
+    recolher por UF de destino": <strong>📥 Puxar UFs desta competência</strong>, preencher vencimento e códigos na
+    barra de cima, <strong>↧ Aplicar a todas as UFs</strong>, 💾 Salvar ajustes, regerar o SPED. O relatório
+    nota a nota está em Relatórios → <strong>🧭 DIFAL/FCP EC 87/15 (por UF)</strong>, com PDF.</div>
+    <div class="alerta">⚠️ Se o PVA acusar <em>"A soma dos campos VL_RECOL_DIFAL … deve ser igual à soma do campo
+    VL_OR dos Registros filhos E316"</em>, é cadastro faltando: o aviso da geração e a própria tela dizem qual UF
+    e qual campo. O app não escolhe "por operação" ou "por apuração" — isso depende de a empresa ter inscrição
+    no estado de destino.</div>
+
+    <h3>📄 <strong>NFS-e de Osasco (e de qualquer prefeitura no leiaute nacional novo, DANFSe v2.0) agora entra
+    pela competência do papel, não pela data de emissão</strong></h3>
+    <p>Um RPS de 03/08 emitido em 01/09 estava entrando em setembro. A DANFSe v2.0 escreve as datas com hífen e
+    usa rótulos diferentes; o leitor do PDF não a entendia, e tudo acabava digitado à mão. Agora o PDF é lido
+    inteiro: competência, emissão, prestador, tomador, valores e retenções. A importação também passou a gravar o
+    fato gerador, e por isso a <strong>📅 Competência do acervo</strong> passa a enxergar as notas importadas por
+    PDF.</p>
+    <div class="onde">📍 <strong>Onde:</strong> XMLs (Entrada/Saída) → Importar → PDF de NFS-e. Nota importada
+    errada antes: reimportar o mesmo PDF cai por cima da anterior. O XML que o portal de Osasco exporta (relatório
+    do sistema próprio) continua não sendo lido — o app lê o XML do padrão nacional.</div>
+
+    <h3>🚚 <strong>Livro de Entradas: o número do CT-e saía como "Ø=Þš —"</strong></h3>
+    <p>Duas causas: o marcador de frete era um emoji que a fonte do PDF não tem, e os conhecimentos capturados
+    antes de 18/09 estavam sem número gravado. O Livro agora recupera o número da chave, como a lista de XMLs já
+    fazia, e o marcador virou o texto "CT-e".</p>
 
     <h3>🚚 <strong>O frete (CT-e) passou a aparecer no Livro de Entradas, no Resumo por CFOP e na ✏️ CFOP por
     nota — e o CST do frete agora tem onde ser informado</strong></h3>
