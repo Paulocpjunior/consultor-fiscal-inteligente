@@ -15,7 +15,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { TRILHAS, montarAuditoria, ehDono } from './auditoria-dono.js';
-import { TIPOS_ATO, normalizarAto, montarDesempenho, periodoPadrao } from './desempenho-colaboradores.js';
+import { TIPOS_ATO, normalizarAto, montarDesempenho, periodoPadrao, tiposParaTela } from './desempenho-colaboradores.js';
 
 const router = Router();
 
@@ -162,7 +162,7 @@ router.get('/desempenho', requireAdmin, requireDono, async (req, res) => {
             ok: true,
             geradoEm: new Date().toISOString(),
             geradoPor: req.user?.email || null,
-            tipos: TIPOS_ATO.map((t) => ({ id: t.id, rotulo: t.rotulo, grupo: t.grupo, desde: t.desde, carimbaQuem: t.carimbaQuem })),
+            tipos: tiposParaTela(),
             ...relatorio,
         });
     } catch (e) {

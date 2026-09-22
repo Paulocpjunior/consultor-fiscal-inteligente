@@ -23,7 +23,7 @@
 //   régua dos Relatórios — relatório nunca tem conta própria).
 // ============================================================================
 
-import { conjuntoCfi, filtrarEscopoCfi, ressalvaEscopoCfi } from './escopo-cfi.js';
+import { conjuntoCfi, filtrarEscopoCfi, ressalvaEscopoCfi, motivoWhatsappForaDoCfi, motivoInclusaoCfi } from './escopo-cfi.js';
 
 /** Quem pode abrir. Sem env, valem os donos do escritório (default). */
 export const DONOS_PADRAO = ['junior@spassessoriacontabil.com.br', 'p.c.pereira@me.com'];
@@ -127,6 +127,8 @@ export function normalizarEvento(trilha, id, dados = {}) {
         empresa: dados.empresaNome || dados.empresaCnpj || dados.cnpj || dados.empresaId || null,
         descricao: descreverEvento(trilha.id, dados),
         projetoOrigem: dados.projetoOrigem ? String(dados.projetoOrigem) : null,
+        // Conversa iniciada / template de outra fila: atendimento, não CFI.
+        motivoForaDoCfi: trilha.id === 'whatsapp-envio' ? motivoWhatsappForaDoCfi(dados) : null,
     };
 }
 
@@ -157,17 +159,19 @@ export function montarAuditoria({ leituras = [], de = null, ate = null, quemFilt
 
     const porPessoa = new Map();
     const porTrilha = new Map();
+    const porqueDe = new Map();
     for (const e of dentro) {
         const p = e.quem || '(não registrado)';
         porPessoa.set(p, (porPessoa.get(p) || 0) + 1);
         porTrilha.set(e.trilha, (porTrilha.get(e.trilha) || 0) + 1);
+        if (!porqueDe.has(p)) porqueDe.set(p, motivoInclusaoCfi(e.quem, conjunto, TRILHAS.find((t) => t.id === e.trilha) || {}));
     }
 
     return {
         total: dentro.length,
         semAutor: dentro.filter((e) => !e.quem).length,
         semData: dentro.filter((e) => !e.em).length,
-        porPessoa: [...porPessoa.entries()].map(([quem, quantidade]) => ({ quem, quantidade }))
+        porPessoa: [...porPessoa.entries()].map(([quem, quantidade]) => ({ quem, quantidade, porque: porqueDe.get(quem) || null }))
             .sort((a, b) => b.quantidade - a.quantidade),
         porTrilha: [...porTrilha.entries()].map(([trilha, quantidade]) => ({
             trilha, quantidade, rotulo: (TRILHAS.find((t) => t.id === trilha) || {}).rotulo || trilha,

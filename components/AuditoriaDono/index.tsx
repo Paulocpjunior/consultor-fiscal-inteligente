@@ -156,7 +156,10 @@ const AuditoriaDono: React.FC = () => {
                                 {dados.porPessoa.map((p) => (
                                     <button key={p.quem} onClick={() => { setQuem(p.quem === '(não registrado)' ? '' : p.quem); }}
                                         className="w-full flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 hover:text-[#0e3bfa] py-0.5">
-                                        <span className="truncate">{p.quem.split('@')[0]}</span>
+                                        <span className="truncate" title={p.porque ? `CFI por: ${p.porque}` : undefined}>
+                                            {p.quem.split('@')[0]}
+                                            {p.porque && <span className="block text-[9px] text-slate-400 truncate">{p.porque}</span>}
+                                        </span>
                                         <span className="font-bold shrink-0">{p.quantidade}</span>
                                     </button>
                                 ))}

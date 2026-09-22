@@ -123,3 +123,72 @@ describe('as duas montagens aplicam o recorte', () => {
         expect(fs.readFileSync(path.join(__dirname, '..', 'sefaz-backend', 'auditoria-dono-routes.js'), 'utf8')).toContain("collection('carteiras')");
     });
 });
+
+// ── 22/09, segunda rodada: "2 erros visíveis" ───────────────────────────────
+import { motivoWhatsappForaDoCfi, motivoInclusaoCfi } from '../sefaz-backend/escopo-cfi.js';
+import { tiposParaTela, RAJADA_MINIMO_POR_MINUTO } from '../sefaz-backend/desempenho-colaboradores.js';
+
+describe('WhatsApp: conversa iniciada e template de outra fila são atendimento, não CFI', () => {
+    it('regra de conteúdo', () => {
+        expect(motivoWhatsappForaDoCfi({ referencia: 'conversa-iniciada' })).toContain('SP Connect');
+        expect(motivoWhatsappForaDoCfi({ departamento: 'recepcao', template: 'x' })).toContain('"recepcao"');
+        expect(motivoWhatsappForaDoCfi({ departamento: 'fiscal', template: 'guia_das' })).toBeNull();
+        expect(motivoWhatsappForaDoCfi({})).toBeNull();
+    });
+    it('na linha do tempo, "iniciarconversa" sai mesmo com autor que tem conta no Fiscal — e a pessoa que fica diz POR QUE conta', () => {
+        const zap = TRILHAS.find((t: any) => t.id === 'whatsapp-envio')!;
+        const r = montarAuditoria({
+            leituras: [{ trilha: zap, docs: [
+                { id: 'w1', dados: { em: '2026-09-22T13:55:00Z', por: 'sandra@sp.com.br', template: 'iniciarconversa', referencia: 'conversa-iniciada', departamento: 'fiscal', projetoOrigem: 'cfi' } },
+                { id: 'w2', dados: { em: '2026-09-22T13:56:00Z', por: 'sandra@sp.com.br', template: 'guia_das', departamento: 'fiscal', temDocumento: true, projetoOrigem: 'cfi' } },
+                { id: 'w3', dados: { em: '2026-09-22T13:57:00Z', por: 'paulo@sp.com.br', template: 'x', departamento: 'juridico', projetoOrigem: 'cfi' } },
+            ] }],
+            escopo: { usuarios, vinculos },
+        });
+        expect(r.total).toBe(1);
+        expect(r.porPessoa[0]).toEqual({ quem: 'sandra@sp.com.br', quantidade: 1, porque: 'departamento Fiscal' });
+        expect(r.foraDoEscopo.eventos).toBe(2);
+        expect(r.foraDoEscopo.autores.find((a: any) => a.quem === 'sandra@sp.com.br')!.motivo).toContain('conversa iniciada');
+    });
+    it('motivoInclusaoCfi diz de onde veio o vínculo', () => {
+        expect(motivoInclusaoCfi('paulo@sp.com.br', conjunto)).toBe('admin');
+        expect(motivoInclusaoCfi('uid-joao', conjunto)).toBe('carteira de empresas vinculada');
+        expect(motivoInclusaoCfi('alguem@sp.com.br', conjunto, {})).toContain('exclusiva do CFI');
+        expect(motivoInclusaoCfi('', conjunto)).toBe('sem autor gravado');
+    });
+});
+
+describe('Kanban: clique ≠ entrega, e 1800 num período é rajada', () => {
+    const tipo = (id: string) => TIPOS_ATO.find((t) => t.id === id)!;
+    const ts = (iso: string) => ({ toDate: () => new Date(iso) });
+    it('a baixa pelo rito de envio sai como tipo próprio; o clique no Kanban tem rótulo honesto', () => {
+        const a = normalizarAto(tipo('tarefa-concluida'), 't1', { concluidaPor: 'sandra@sp.com.br', concluidaEm: ts('2026-09-01T10:00:00Z'), baixaOrigem: 'envio-imposto' });
+        expect(a.tipo).toBe('tarefa-baixada-rito');
+        expect(normalizarAto(tipo('tarefa-concluida'), 't2', { concluidaPor: 'sandra@sp.com.br', concluidaEm: ts('2026-09-01T10:00:00Z') }).tipo).toBe('tarefa-concluida');
+        expect(tipo('tarefa-concluida').rotulo).toMatch(/Kanban \(clique\)/);
+        const ids = tiposParaTela().map((t) => t.id);
+        expect(ids.indexOf('tarefa-baixada-rito')).toBe(ids.indexOf('tarefa-concluida') + 1);
+        expect(ids.indexOf('nfse-pdf-importada')).toBe(ids.indexOf('xml-importado') + 1);
+    });
+    it('rajada: 10+ do mesmo tipo no mesmo minuto vira "em lote" e ressalva nomeada', () => {
+        const atos: any[] = [];
+        for (let i = 0; i < 12; i++) {
+            atos.push(normalizarAto(tipo('tarefa-concluida'), `r${i}`, { concluidaPor: 'sandra@sp.com.br', concluidaEm: ts(`2026-09-01T10:00:${String(i * 4).padStart(2, '0')}Z`), empresaId: `e${i}` }));
+        }
+        atos.push(normalizarAto(tipo('tarefa-concluida'), 'solta', { concluidaPor: 'sandra@sp.com.br', concluidaEm: ts('2026-09-02T10:00:00Z'), empresaId: 'e1' }));
+        for (let i = 0; i < 3; i++) {
+            atos.push(normalizarAto(tipo('tarefa-concluida'), `j${i}`, { concluidaPor: 'joao@sp.com.br', concluidaEm: ts(`2026-09-01T11:00:${String(i * 10).padStart(2, '0')}Z`), empresaId: `e${i}` }));
+        }
+        const r = montarDesempenho({ atos, usuarios, vinculos, de: '2026-08-01T00:00:00Z', ate: '2026-09-30T00:00:00Z' });
+        const s = r.colaboradores.find((c) => c.chave === 'sandra@sp.com.br')!;
+        expect(s.porTipo['tarefa-concluida']).toBe(13);
+        expect(s.emLote['tarefa-concluida']).toBe(12);
+        expect(RAJADA_MINIMO_POR_MINUTO).toBe(10);
+        const j = r.colaboradores.find((c) => c.chave === 'joao@sp.com.br')!;
+        expect(j.emLote['tarefa-concluida']).toBeUndefined();
+        const txt = r.ressalvas.join(' ');
+        expect(txt).toContain('AÇÃO EM LOTE');
+        expect(txt).toContain('12 de 13');
+        expect(txt).toContain('é um clique — não prova entrega');
+    });
+});

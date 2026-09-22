@@ -45,10 +45,10 @@ const Desempenho: React.FC = () => {
 
     const tipos = useMemo(() => {
         if (!dados) return [] as Array<{ id: string; rotulo: string }>;
+        // Os tipos derivados (NFS-e por PDF, baixa pelo rito) já vêm do
+        // backend na ordem das colunas — a tela não inventa coluna.
         const base = dados.tipos.map((t) => ({ id: t.id, rotulo: t.rotulo }));
-        // A NFS-e por PDF é subtipo do XML importado: entra como coluna própria.
-        if (!base.some((t) => t.id === 'nfse-pdf-importada')) base.splice(1, 0, { id: 'nfse-pdf-importada', rotulo: 'NFS-e importada por PDF' });
-        return base.filter((t) => (dados.totaisPorTipo[t.id] || 0) > 0 || t.id === 'tarefa-concluida' || t.id === 'imposto-enviado' || t.id === 'xml-importado');
+        return base.filter((t) => (dados.totaisPorTipo[t.id] || 0) > 0 || t.id === 'tarefa-concluida' || t.id === 'tarefa-baixada-rito' || t.id === 'imposto-enviado' || t.id === 'xml-importado');
     }, [dados]);
 
     const colaboradores = useMemo(() => {
@@ -179,11 +179,19 @@ const Desempenho: React.FC = () => {
                                                 <td className="px-3 py-2 font-bold text-slate-800 dark:text-slate-100">
                                                     {aberto[c.chave] ? '▾' : '▸'} {c.nome}
                                                     {c.email && c.email !== c.nome && <span className="ml-1 font-normal text-slate-400">{c.email}</span>}
+                                                    {c.porque && <span className="block font-normal text-[10px] text-slate-400" title="Por que esta pessoa conta como CFI">CFI por: {c.porque}</span>}
                                                 </td>
                                                 <td className="text-right px-2 py-2">{c.empresasComAto}</td>
                                                 <td className="text-right px-2 py-2">{c.empresasDaCarteira || '—'}</td>
                                                 <td className={`text-right px-2 py-2 ${c.empresasDaCarteiraSemAto.length ? 'text-amber-700 dark:text-amber-400 font-bold' : ''}`}>{c.empresasDaCarteira ? c.empresasDaCarteiraSemAto.length : '—'}</td>
-                                                {tipos.map((t) => <td key={t.id} className="text-right px-2 py-2 font-mono">{c.porTipo[t.id] || 0}</td>)}
+                                                {tipos.map((t) => (
+                                                    <td key={t.id} className="text-right px-2 py-2 font-mono">
+                                                        {c.porTipo[t.id] || 0}
+                                                        {(c.emLote?.[t.id] || 0) > 0 && (
+                                                            <span className="block text-[9px] font-sans text-amber-700 dark:text-amber-400" title="Atos em rajada de 10+ no mesmo minuto — ação em lote, não N entregas">⚡ {c.emLote?.[t.id]} em lote</span>
+                                                        )}
+                                                    </td>
+                                                ))}
                                                 <td className="text-right px-3 py-2 font-black">{c.total}</td>
                                             </tr>
                                             {aberto[c.chave] && (

@@ -8,6 +8,7 @@ export interface Trilha {
 export interface EventoAuditoria {
     id: string; trilha: string; rotulo: string; peso: string;
     em: string | null; quem: string | null; empresa: string | null; descricao: string; projetoOrigem: string | null;
+    motivoForaDoCfi: string | null;
 }
 
 export const DONOS_PADRAO: string[];
@@ -24,7 +25,7 @@ export function montarAuditoria(p: {
     escopo?: { usuarios?: any[]; vinculos?: any[] };
 }): {
     total: number; semAutor: number; semData: number;
-    porPessoa: { quem: string; quantidade: number }[];
+    porPessoa: { quem: string; quantidade: number; porque: string | null }[];
     porTrilha: { trilha: string; quantidade: number; rotulo: string }[];
     eventos: EventoAuditoria[];
     naoLidas: { trilha: string; rotulo: string; motivo: string }[];

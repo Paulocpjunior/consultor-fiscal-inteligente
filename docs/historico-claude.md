@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚫 "2 ERROS VISÍVEIS: NA LINHA DO TEMPO VOCÊ CONTINUA CONSIDERANDO QUEM
+  NÃO PERTENCE AO CFI; E NÃO EXISTE 1800 OBRIGAÇÕES ENTREGUES POR UMA SÓ
+  PESSOA"** (22/09, Paulo, 2ª rodada da auditoria). (1) WhatsApp: os eventos
+  "iniciarconversa" (`referencia: 'conversa-iniciada'`) são atendimento do
+  SP Connect — o próprio código da rota diz "o SP Connect inicia CONVERSA,
+  não entrega imposto" — e passavam porque o autor tem conta classificada
+  como CFI. Regra de CONTEÚDO em `escopo-cfi.js` (`motivoWhatsappForaDoCfi`):
+  conversa iniciada e template de fila ≠ fiscal ficam fora, seja de quem for.
+  E cada pessoa que FICA mostra "CFI por: departamento Fiscal / admin /
+  carteira" (`motivoInclusaoCfi`), para o Paulo corrigir o cadastro quando o
+  vínculo estiver errado — o app não decide quem é do Fiscal, o cadastro
+  decide. (2) Tarefas: os três caminhos que concluem tarefa são clique/
+  arrasto no Kanban (`marcarConcluida`/`atualizarStatus`, carimba uid), baixa
+  pelo rito de envio (`darBaixaDaObrigacao`, `baixaOrigem: 'envio-imposto'`,
+  carimba enviadoPor) e sistema. Um clique NÃO prova entrega, e 1800 num
+  período só cabe como ação em lote. CORREÇÃO: rótulo honesto "Tarefa
+  concluída no Kanban (clique)"; baixa pelo rito vira tipo derivado próprio
+  (`tarefa-baixada-rito`, `TIPOS_DERIVADOS`/`tiposParaTela`); RAJADA = 10+
+  atos do mesmo tipo, da mesma pessoa, no mesmo minuto → coluna "⚡ N em
+  lote" + ressalva nomeada ("AÇÃO EM LOTE, não N entregas: fulano: 1650 de
+  1800"). Não dá para consultar o Firestore daqui: a evidência que o painel
+  mostra (rajadas, motivo de inclusão) é o que permite ao Paulo ver a causa
+  sem o Claude adivinhar. REGRA: número grande que não cabe em trabalho
+  humano precisa sair com a SUA prova de lote, não como total.
+
 - **📤 "NÃO LOCALIZEI ESSE ENVIOS - REFAZER RITO"** (22/09, Paulo, print de
   Vencimentos & Obrigações sem a aba). CAUSA: `VencimentosHub` fundiu os três
   hubs (Obrigações & Tarefas + Minha Agenda + Vencimentos da Semana) e a aba

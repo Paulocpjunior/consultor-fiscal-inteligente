@@ -8,9 +8,11 @@ export interface ConjuntoCfi {
 }
 export interface ForaDoEscopo { eventos: number; autores: Array<{ quem: string; quantidade: number; motivo: string | null }> }
 export function classificarUsuarioCfi(usuario: any): ClassificacaoUsuario;
+export function motivoWhatsappForaDoCfi(dados?: any): string | null;
+export function motivoInclusaoCfi(quem: unknown, conjunto: ConjuntoCfi | null | undefined, trilha?: { compartilhada?: boolean }): string;
 export function conjuntoCfi(p?: { usuarios?: any[]; vinculos?: any[] }): ConjuntoCfi;
 export function classificarEscopoCfi(
-    ev: { quem?: string | null; projetoOrigem?: string | null } | null | undefined,
+    ev: { quem?: string | null; projetoOrigem?: string | null; motivoForaDoCfi?: string | null } | null | undefined,
     conjunto: ConjuntoCfi | null | undefined,
     trilha?: { compartilhada?: boolean },
 ): { dentro: boolean; motivo: string | null };
