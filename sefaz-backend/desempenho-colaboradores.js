@@ -21,7 +21,7 @@
 // da carteira dele não receberam ato nenhum no período"*.
 // ============================================================================
 
-import { conjuntoCfi, filtrarEscopoCfi, ressalvaEscopoCfi } from './escopo-cfi.js';
+import { conjuntoCfi, filtrarEscopoCfi, ressalvaEscopoCfi, motivoInclusaoCfi } from './escopo-cfi.js';
 
 /** As trilhas que contam como ATO de colaborador. `campoData` pode ser lista. */
 export const TIPOS_ATO = Object.freeze([
@@ -32,7 +32,11 @@ export const TIPOS_ATO = Object.freeze([
         desde: null, carimbaQuem: true, leituraPorRange: false,
     },
     {
-        id: 'tarefa-concluida', rotulo: 'Obrigação entregue (tarefa concluída)', grupo: 'Obrigações',
+        // Concluir no Kanban é um CLIQUE — não prova entrega (Paulo, 22/09:
+        // "não existe 1800 obrigações entregues por uma só pessoa"). A baixa
+        // pelo rito de envio (`baixaOrigem: 'envio-imposto'`) sai como tipo
+        // derivado próprio; a prova de entrega mora nas transmissões.
+        id: 'tarefa-concluida', rotulo: 'Tarefa concluída no Kanban (clique)', grupo: 'Obrigações',
         colecao: 'tarefas', campoData: ['concluidaEm'], campoQuem: ['concluidaPor'],
         desde: null, carimbaQuem: true, leituraPorRange: true, tipoData: 'timestamp',
     },
@@ -75,6 +79,36 @@ export const TIPOS_ATO = Object.freeze([
     },
 ]);
 
+/**
+ * Tipos DERIVADOS de uma trilha (mesma coleção, ato diferente). `apos` diz
+ * atrás de qual tipo base a coluna entra na tela.
+ */
+export const TIPOS_DERIVADOS = Object.freeze([
+    { id: 'nfse-pdf-importada', rotulo: 'NFS-e importada por PDF', grupo: 'Documentos', base: 'xml-importado', apos: 'xml-importado' },
+    { id: 'tarefa-baixada-rito', rotulo: 'Obrigação baixada pelo rito de envio', grupo: 'Obrigações', base: 'tarefa-concluida', apos: 'tarefa-concluida' },
+]);
+
+/** O tipo BASE (da trilha) de um id de ato — derivado ou não. */
+export function tipoBaseDe(id) {
+    const d = TIPOS_DERIVADOS.find((t) => t.id === id);
+    return TIPOS_ATO.find((t) => t.id === (d ? d.base : id)) || null;
+}
+
+/** Lista de tipos para a tela: base + derivados, na ordem em que as colunas entram. */
+export function tiposParaTela() {
+    const out = [];
+    for (const t of TIPOS_ATO) {
+        out.push({ id: t.id, rotulo: t.rotulo, grupo: t.grupo, desde: t.desde, carimbaQuem: t.carimbaQuem });
+        for (const d of TIPOS_DERIVADOS.filter((x) => x.apos === t.id)) {
+            out.push({ id: d.id, rotulo: d.rotulo, grupo: d.grupo, desde: t.desde, carimbaQuem: t.carimbaQuem });
+        }
+    }
+    return out;
+}
+
+/** Rajada: 10+ atos do MESMO tipo, da MESMA pessoa, no MESMO minuto = ação em lote, não N entregas. */
+export const RAJADA_MINIMO_POR_MINUTO = 10;
+
 /** Autores que são o SISTEMA, não uma pessoa. */
 const AUTORES_DE_SISTEMA = new Set(['sistema', 'system', 'envio-imposto', 'cron', 'auto', 'automatico', 'automático']);
 
@@ -110,6 +144,7 @@ export function normalizarAto(tipo, id, dados = {}) {
     // diferença é o tipo do documento — e para quem mede trabalho, são atos
     // diferentes.
     if (tipo.id === 'xml-importado' && String(d.tipo || '').toLowerCase() === 'nfse') tipoId = 'nfse-pdf-importada';
+    if (tipo.id === 'tarefa-concluida' && String(d.baixaOrigem || '').toLowerCase() === 'envio-imposto') tipoId = 'tarefa-baixada-rito';
     return {
         id: `${tipoId}:${id}`,
         tipo: tipoId,
@@ -126,7 +161,7 @@ export function normalizarAto(tipo, id, dados = {}) {
 
 export const ROTULOS_TIPO = Object.freeze({
     ...Object.fromEntries(TIPOS_ATO.map((t) => [t.id, t.rotulo])),
-    'nfse-pdf-importada': 'NFS-e importada por PDF',
+    ...Object.fromEntries(TIPOS_DERIVADOS.map((t) => [t.id, t.rotulo])),
 });
 
 /**
@@ -166,7 +201,7 @@ export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoL
     // SÓ O CFI (Paulo, 22/09): `users` é o cadastro central de TODOS os
     // módulos — quem não é do Fiscal sai daqui, contado e nomeado.
     const conjunto = conjuntoCfi({ usuarios, vinculos });
-    const { dentro: atosCfi, foraDoEscopo } = filtrarEscopoCfi(atos, conjunto, (a) => TIPOS_ATO.find((t) => t.id === a.tipo || (a.tipo === 'nfse-pdf-importada' && t.id === 'xml-importado')) || {});
+    const { dentro: atosCfi, foraDoEscopo } = filtrarEscopoCfi(atos, conjunto, (a) => tipoBaseDe(a.tipo) || {});
     const dentro = atosCfi.filter((a) => {
         if (!a.em) return false;               // sem data não entra no período — vai contado à parte
         if (de && a.em < de) return false;
@@ -184,6 +219,7 @@ export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoL
             colaboradores.set(r.chave, {
                 chave: r.chave, nome: r.nome, email: r.email, pessoa: r.pessoa,
                 total: 0, porTipo: {}, empresas: new Map(), carteira: [],
+                porque: null, minutos: new Map(),
             });
         }
         return colaboradores.get(r.chave);
@@ -205,6 +241,10 @@ export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoL
         const c = garantir(r);
         c.total++;
         c.porTipo[a.tipo] = (c.porTipo[a.tipo] || 0) + 1;
+        if (!c.porque) c.porque = motivoInclusaoCfi(a.quem, conjunto, tipoBaseDe(a.tipo) || {});
+        // Rajada: mesmo tipo, mesmo minuto — a evidência de ação em lote.
+        const chaveMin = `${a.tipo}|${String(a.em).slice(0, 16)}`;
+        c.minutos.set(chaveMin, (c.minutos.get(chaveMin) || 0) + 1);
         const eid = a.empresaId || (a.empresaCnpj ? `cnpj:${a.empresaCnpj}` : '(sem empresa)');
         if (!c.empresas.has(eid)) {
             c.empresas.set(eid, { empresaId: eid, empresaNome: a.empresaNome || a.empresaCnpj || '(sem empresa)', total: 0, porTipo: {}, ultimoEm: null });
@@ -227,8 +267,17 @@ export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoL
         // Empresas em que agiu mas que NÃO são da carteira dele — informação,
         // não acusação: cobrir colega é trabalho.
         const idsCarteira = new Set(c.carteira.map((e) => e.empresaId));
+        // Em lote: soma dos minutos com RAJADA_MINIMO_POR_MINUTO+ atos do mesmo tipo.
+        const emLote = {};
+        for (const [k, n] of c.minutos.entries()) {
+            if (n < RAJADA_MINIMO_POR_MINUTO) continue;
+            const tipo = k.split('|')[0];
+            emLote[tipo] = (emLote[tipo] || 0) + n;
+        }
         return {
             chave: c.chave, nome: c.nome, email: c.email, pessoa: c.pessoa,
+            porque: c.porque || (c.carteira.length ? 'carteira de empresas vinculada' : null),
+            emLote,
             total: c.total, porTipo: c.porTipo,
             empresasComAto: empresas.length,
             empresasDaCarteira: c.carteira.length,
@@ -248,12 +297,12 @@ export function montarDesempenho({ atos = [], usuarios = [], vinculos = [], naoL
         colaboradores: lista,
         naoLidas,
         foraDoEscopo,
-        ressalvas: ressalvasDoDesempenho({ de, naoLidas, semData, atos: dentro, foraDoEscopo }),
+        ressalvas: ressalvasDoDesempenho({ de, naoLidas, semData, atos: dentro, foraDoEscopo, colaboradores: lista }),
     };
 }
 
 /** As ressalvas que impedem ler silêncio como inação. São produto, não rodapé. */
-export function ressalvasDoDesempenho({ de, naoLidas = [], semData = 0, atos = [], foraDoEscopo = null }) {
+export function ressalvasDoDesempenho({ de, naoLidas = [], semData = 0, atos = [], foraDoEscopo = null, colaboradores = [] }) {
     const r = [];
     if (naoLidas.length) {
         r.push(`⚠️ ${naoLidas.length} trilha(s) NÃO foram lidas (${naoLidas.map((n) => n.rotulo).join(', ')}) — os totais estão INCOMPLETOS e ausência aqui não é prova de inação.`);
@@ -270,6 +319,22 @@ export function ressalvasDoDesempenho({ de, naoLidas = [], semData = 0, atos = [
     if (naoIdentificados > 0) r.push(`${naoIdentificados} ato(s) sem autor gravado — registro anterior ao carimbo, ou trilha que não carimba.`);
     if (semData > 0) r.push(`${semData} ato(s) sem data legível ficaram FORA do período (não dá para situá-los).`);
     r.push(ressalvaEscopoCfi(foraDoEscopo, { rotuloEvento: 'ato' }));
+    // Rajadas: o número grande que NÃO é trabalho unitário — dito com nome.
+    const rajadas = [];
+    for (const c of colaboradores || []) {
+        for (const [tipo, n] of Object.entries(c.emLote || {})) {
+            rajadas.push({ nome: c.nome, tipo, n, total: c.porTipo?.[tipo] || n });
+        }
+    }
+    rajadas.sort((a, b) => b.n - a.n);
+    if (rajadas.length) {
+        const top = rajadas.slice(0, 6).map((x) => `${x.nome}: ${x.n} de ${x.total} "${ROTULOS_TIPO[x.tipo] || x.tipo}"`);
+        r.push(`⚡ AÇÃO EM LOTE, não N entregas: ${top.join('; ')}${rajadas.length > 6 ? `; e mais ${rajadas.length - 6}` : ''} — `
+            + `${RAJADA_MINIMO_POR_MINUTO}+ atos do mesmo tipo no MESMO MINUTO. Limpeza ou baixa em massa conta como 1 ação, e a coluna "em lote" mostra quanto do total é isso.`);
+    }
+    if ((atos || []).some((a) => a.tipo === 'tarefa-concluida')) {
+        r.push('"Tarefa concluída no Kanban" é um clique — não prova entrega. A prova está nas transmissões (DCTFWeb, Reinf, PGDAS) e na baixa pelo rito de envio, que saem em colunas próprias.');
+    }
     r.push('O que NÃO passa por aqui não conta: SPED gerado, apuração conferida, cadastro corrigido e captura automática não têm carimbo de autor. Silêncio nessas frentes não é inação.');
     r.push('Este relatório LÊ os carimbos que as telas gravam; ele não recalcula nada, não deduz autor e não mede qualidade — mede atos registrados.');
     return r;

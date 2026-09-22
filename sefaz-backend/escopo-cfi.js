@@ -37,6 +37,24 @@ const AUTORES_DE_SISTEMA = new Set(['sistema', 'system', 'envio-imposto', 'cron'
 
 const texto = (v) => (v == null ? '' : String(v).trim());
 
+/**
+ * Regra de CONTEÚDO do WhatsApp: a trilha `whatsapp_envios` é da porta
+ * compartilhada. "Conversa iniciada" é atendimento do SP Connect (o código
+ * da rota diz: "o SP Connect inicia CONVERSA, não entrega imposto"), e
+ * template de outra fila (rh, recepcao, contabil…) é trabalho de outro
+ * módulo — mesmo quando quem clicou tem conta no Fiscal.
+ * @returns {string|null} motivo de ficar fora, ou null (é do CFI)
+ */
+export function motivoWhatsappForaDoCfi(dados = {}) {
+    const d = dados || {};
+    if (texto(d.referencia).toLowerCase() === 'conversa-iniciada') {
+        return 'atendimento do SP Connect (conversa iniciada) — não é entrega do CFI';
+    }
+    const dep = texto(d.departamento).toLowerCase();
+    if (dep && dep !== DEPARTAMENTO_CFI) return `template da fila "${dep}" — trabalho de outro módulo`;
+    return null;
+}
+
 /** Um doc de `users` é do CFI? Devolve {ehCfi, motivo}. */
 export function classificarUsuarioCfi(usuario) {
     const u = usuario || {};
@@ -79,6 +97,8 @@ export function conjuntoCfi({ usuarios = [], vinculos = [] } = {}) {
  * @returns {{ dentro: boolean, motivo: string|null }}
  */
 export function classificarEscopoCfi(ev, conjunto, trilha = {}) {
+    // Regra de CONTEÚDO decidida no normalizador (ex.: WhatsApp de atendimento).
+    if (ev?.motivoForaDoCfi) return { dentro: false, motivo: String(ev.motivoForaDoCfi) };
     const projeto = texto(ev?.projetoOrigem).toLowerCase();
     if (projeto && !PROJETOS_CFI.has(projeto)) {
         return { dentro: false, motivo: `gravado por outro app (projeto de origem "${projeto}")` };
@@ -95,6 +115,21 @@ export function classificarEscopoCfi(ev, conjunto, trilha = {}) {
         return { dentro: false, motivo: 'não está no cadastro de usuários do CFI (trilha compartilhada com app irmão)' };
     }
     return { dentro: true, motivo: null };
+}
+
+/**
+ * POR QUE este autor conta como CFI — para a tela dizer, ao lado do nome,
+ * de onde veio o vínculo (e o admin corrigir o cadastro se estiver errado).
+ */
+export function motivoInclusaoCfi(quem, conjunto, trilha = {}) {
+    const cru = texto(quem);
+    if (!cru) return 'sem autor gravado';
+    const baixo = cru.toLowerCase();
+    if (AUTORES_DE_SISTEMA.has(baixo)) return 'sistema (cron/automático)';
+    const c = conjunto?.porEmail?.get(baixo) || conjunto?.porUid?.get(cru) || null;
+    if (c) return c.ehCfi ? c.motivo : `FORA: ${c.motivo}`;
+    if (trilha?.compartilhada) return 'FORA: não está no cadastro de usuários';
+    return 'não está no cadastro — entrou porque a trilha é exclusiva do CFI';
 }
 
 /**

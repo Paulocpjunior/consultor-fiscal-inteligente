@@ -7,6 +7,10 @@ export interface TipoAto {
 }
 export declare const TIPOS_ATO: readonly TipoAto[];
 export declare const ROTULOS_TIPO: Record<string, string>;
+export declare const TIPOS_DERIVADOS: readonly Array<{ id: string; rotulo: string; grupo: string; base: string; apos: string }>;
+export declare const RAJADA_MINIMO_POR_MINUTO: number;
+export declare function tipoBaseDe(id: string): TipoAto | null;
+export declare function tiposParaTela(): Array<{ id: string; rotulo: string; grupo: string; desde: string | null; carimbaQuem: boolean }>;
 export interface Ato {
     id: string; tipo: string; em: string | null; quem: string | null;
     empresaId: string | null; empresaNome: string | null; empresaCnpj: string | null;
@@ -23,6 +27,7 @@ export interface EmpresaDesempenho {
 }
 export interface ColaboradorDesempenho {
     chave: string; nome: string; email: string | null; pessoa: boolean;
+    porque: string | null; emLote: Record<string, number>;
     total: number; porTipo: Record<string, number>;
     empresasComAto: number; empresasDaCarteira: number;
     empresasDaCarteiraSemAto: Array<{ empresaId: string; empresaNome: string; papel: string | null }>;
@@ -42,5 +47,5 @@ export declare function montarDesempenho(p: {
     naoLidas?: Array<{ tipo: string; rotulo: string; motivo: string }>;
     de?: string | null; ate?: string | null;
 }): Desempenho;
-export declare function ressalvasDoDesempenho(p: { de?: string | null; naoLidas?: any[]; semData?: number; atos?: Ato[]; foraDoEscopo?: any }): string[];
+export declare function ressalvasDoDesempenho(p: { de?: string | null; naoLidas?: any[]; semData?: number; atos?: Ato[]; foraDoEscopo?: any; colaboradores?: any[] }): string[];
 export declare function periodoPadrao(meses?: number, agora?: Date): { de: string; ate: string };

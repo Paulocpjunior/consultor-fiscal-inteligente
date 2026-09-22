@@ -26,7 +26,7 @@ export interface RelatorioAuditoria {
     geradoEm: string; geradoPor: string | null;
     trilhas: { id: string; rotulo: string; peso: string; desde: string }[];
     total: number; semAutor: number; semData: number;
-    porPessoa: { quem: string; quantidade: number }[];
+    porPessoa: { quem: string; quantidade: number; porque?: string | null }[];
     porTrilha: { trilha: string; rotulo: string; quantidade: number }[];
     eventos: EventoAuditoria[];
     eventosMostrados: number;
@@ -47,6 +47,10 @@ export interface EmpresaDesempenho {
 }
 export interface ColaboradorDesempenho {
     chave: string; nome: string; email: string | null; pessoa: boolean;
+    /** Por que conta como CFI (departamento Fiscal, admin, carteira…). */
+    porque?: string | null;
+    /** Por tipo: quantos atos saíram em rajada de 10+ no mesmo minuto (ação em lote). */
+    emLote?: Record<string, number>;
     total: number; porTipo: Record<string, number>;
     empresasComAto: number; empresasDaCarteira: number;
     empresasDaCarteiraSemAto: Array<{ empresaId: string; empresaNome: string; papel: string | null }>;
