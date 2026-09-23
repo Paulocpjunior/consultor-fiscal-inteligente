@@ -5,6 +5,51 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 O CHAMADO DA META ESTAVA PRONTO PARA ENVIAR AFIRMANDO O CONTRÁRIO DO
+  NOSSO PRÓPRIO LOG** (23/09, SP Connect / SBC). `docs/sbc-whatsapp-hitphone.md`
+  concluía *"não há o que consertar deste lado — o próximo passo é o suporte da
+  Meta"* e trazia o texto do chamado dizendo, quatro vezes, que **nenhum INVITE
+  chega ao SBC**. Em 28/08 o Asterisk registrou
+  `meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)` — e
+  `meta` é o NOSSO endpoint pjsip: a sessão só existe **depois de um INVITE
+  aceito**. A chamada CHEGA e morre na negociação de mídia, do nosso lado.
+  🔴 **E o achado não estava registrado em lugar nenhum** — `grep` por
+  `negotiate stream|codec_opus|DTLS|SAVPF` em `docs/`, `scripts/` e `CLAUDE.md`
+  voltou VAZIO. Ou seja: a próxima sessão abriria o chamado errado, acusando
+  terceiro com a nossa evidência desmentindo o texto.
+  📌 **REGRA QUE FICA: medição de JANELA não vira conclusão sobre o OUTRO
+  LADO.** O log respondia *"não achei INVITE entre X e Y"* e o documento
+  escreveu *"a Meta não entrega"*. A primeira pede outra rodada; a segunda manda
+  abrir chamado. O custo se realizou — o texto ficou **26 dias** pronto.
+  📌 **E A SEGUNDA: achado que inverte um documento entra NO DOCUMENTO no mesmo
+  dia.** Em 28/08 eu escrevi que só reescreveria com a correção provada.
+  Errado: o que esperava prova era a CAUSA, não o FATO de o INVITE chegar — e
+  conclusão velha não é espaço em branco, é afirmação ativa.
+  ✂️ Documento corrigido (topo, seção nova, conclusão invertida, chamado
+  marcado **⛔ SUSPENSO** e guardado, porque as medições que ele cita são
+  verdadeiras e voltam a servir se a causa for de entrega).
+  ✂️ **E O DIAGNÓSTICO MUDOU JUNTO**: `sbc-diagnostico.sh` contava INVITE —
+  dúvida morta. Seção 7 nova conta as falhas de negociação e mostra o
+  `m=audio` do SDP; o veredito com janela vazia deixou de mandar à Meta e passa
+  a dizer que há prova contrária no log. **Quando o achado muda a pergunta, a
+  FERRAMENTA muda junto** — senão a medição que produziu a conclusão errada
+  segue de pé, respondendo 🟡 com toda a confiança.
+  ❌ **HIPÓTESE MINHA DERRUBADA POR MEDIÇÃO**: eu disse que faltava o codec
+  Opus. `module show like opus` mostra `codec_opus_open_source.so ... Running`.
+  Descartado.
+  🚩 **A CAUSA CONTINUA ABERTA, e não se deduz**: o suspeito é o perfil de
+  transporte (DTLS-SRTP `UDP/TLS/RTP/SAVPF` × o nosso `media_encryption=sdes`,
+  que o `optimistic` **não** faz ponte). Quem responde é a linha `m=audio` da
+  seção 7. **Nada vira configuração antes dela** — trocar `media_encryption` no
+  escuro é o chute que já custou três rodadas.
+  🧹 Junto: issues **#1183** (deploy) e **#778** (robô de auditoria) fechadas
+  por RESULTADO — deploys 1009-1013 verdes e runs 35/36/37 do robô `success`.
+  ⚠️ **#777 FICA ABERTA, e conferir isso foi o que impediu o erro**: run verde
+  do robô **não prova** que ele consegue abrir PR — provavelmente não havia
+  advisory para corrigir. A branch `chore/audit-deps` tem commit de **09/09**
+  parado, que é exatamente a correção que nunca virou PR. Segue sendo
+  configuração do repo (Settings → Actions → Workflow permissions).
+
 - **👥 "PODE TIRAR, INSS, FGTS, CPP É DO DP"** (22/09, Paulo, decisão sobre a
   AFFITTARE 08/2026 cobrando FGTS/INSS na etapa 4). A regra de 18/08 valia só
   para imune/isenta; Lucro e Simples continuavam gerando. AGORA: FGTS e

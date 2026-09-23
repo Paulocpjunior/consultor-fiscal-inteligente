@@ -37,6 +37,12 @@ const RAIZ = resolve(__dirname, '..');
  */
 const DATAS_SEM_EFEITO_PARA_QUEM_USA: Record<string, string> = {
     // exemplo: '05/09': 'só varredura de teste — nada muda na tela nem no arquivo',
+    '23/09': 'SP Connect/SBC: correção de documento interno (o chamado da Meta '
+        + 'afirmava o contrário do nosso log) e do sbc-diagnostico.sh, que é um '
+        + 'script de terminal rodado dentro da VM. Nenhuma tela do CFI muda, e '
+        + 'o time fiscal não roda esse script — novidade aqui seria ruído na '
+        + 'página que eles leem. ⚠️ Se algo com efeito na TELA subir em 23/09, '
+        + 'esta linha SAI: ela é por data e mascararia a entrega de verdade.',
 };
 
 /** 'DD/MM' → número comparável. */
