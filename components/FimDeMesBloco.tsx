@@ -65,9 +65,21 @@ const fmtDataHora = (iso?: string | null) => {
 
 const FimDeMesBloco: React.FC<Props> = ({
     empresaId, competencia, empresaCnpj, empresaNome,
-    fechamento: f, bloqueios: bloqueiosDoPainel,
+    fechamento: fDoPainel, bloqueios: bloqueiosDoPainel,
     ehAdmin, onIrPara, onMudou,
 }) => {
+    // 🔒 O CARIMBO APARECE NA HORA (23/09, Paulo: "só está encerrando depois
+    // de fazer o mesmo processo 2x"). O fechamento gravava no primeiro clique,
+    // mas a tela só mudava quando o PAINEL inteiro (centenas de empresas)
+    // terminasse de recarregar — e até lá o card dizia "Pronto para dar fim
+    // de mês", convidando o segundo clique. O carimbo que o backend devolve
+    // vira estado local até o painel trazer o dele; o do painel vence.
+    // Sem efeito de montagem, de propósito (a varredura "sem requisição por
+    // card" proíbe carga aqui): o local guarda a BASE em que nasceu, e cai
+    // sozinho quando o painel trouxer outra leitura.
+    const [local, setLocal] = useState<{ base: FechamentoCompetencia | null | undefined; fechamento: FechamentoCompetencia } | null>(null);
+    const setFechamentoLocal = (fechamento: FechamentoCompetencia | null) => setLocal(fechamento ? { base: fDoPainel, fechamento } : null);
+    const f = fDoPainel || (local && local.base === fDoPainel ? local.fechamento : null);
     const [ocupado, setOcupado] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [bloqueiosDaRecusa, setBloqueiosDaRecusa] = useState<BloqueioFimDeMes[]>([]);
@@ -87,10 +99,14 @@ const FimDeMesBloco: React.FC<Props> = ({
         const r = await darFimDeMes(empresaId, competencia);
         setOcupado(false);
         if (!r.ok) {
+            // "Já fechada" não é erro para quem está vendo o card aberto: é o
+            // fato que a tela ainda não tinha mostrado. Mostra o carimbo.
+            if (r.jaFechada && r.fechamento) { setFechamentoLocal(r.fechamento); onMudou?.(); return; }
             setErro(r.erro || 'Não foi possível fechar.');
             setBloqueiosDaRecusa(r.bloqueios || []);
             return;
         }
+        if (r.fechamento) setFechamentoLocal(r.fechamento);
         // Quem recarrega é o PAINEL — uma leitura para a tela toda. Recarregar
         // aqui seria a leitura por empresa voltando pela porta de trás.
         onMudou?.();
@@ -102,6 +118,7 @@ const FimDeMesBloco: React.FC<Props> = ({
         setOcupado(false);
         if (!r.ok) { setErro(r.erro || 'Não foi possível reabrir.'); return; }
         setPedindoMotivo(false); setMotivo('');
+        if (r.fechamento) setFechamentoLocal(r.fechamento);
         onMudou?.();
     };
 

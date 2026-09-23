@@ -5,6 +5,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 "SÓ ESTÁ ENCERRANDO DEPOIS DE FAZER O MESMO PROCESSO 2X" + "PODE
+  TIRAR ESOCIAL TAMBÉM, É DO DP"** (23/09, Paulo, print do "Dar fim de mês").
+  (1) O fechamento GRAVAVA no primeiro clique (a rota não tem passo duplo);
+  a tela só mudava quando o painel INTEIRO (centenas de empresas) terminasse
+  de recarregar — até lá o card dizia "Pronto para dar fim de mês" e
+  convidava o segundo clique, que caía em "já fechada" (400 mudo).
+  CORREÇÃO: `FimDeMesBloco` guarda o carimbo que o backend devolve como
+  estado local (`fechamentoLocal`; o do painel vence quando chega); a rota
+  `/fechar` responde 409 com `jaFechada + fechamento` quando já está
+  fechada, e o card mostra o carimbo em vez de erro; `chamar()` do
+  `fimDeMesService` repassa os campos extras da recusa. Mesmo tratamento no
+  reabrir. (2) `ESOCIAL_S1299` saiu de `calendario-obrigacoes.js`. REGRA:
+  ato que grava precisa refletir na tela COM a resposta do próprio ato —
+  depender do recarregar do painel inteiro é convite ao clique duplo.
+
 - **🧾 "ESTÁ FALANDO QUE A NOTA ESTÁ SEM VALOR PARA MANIFESTAR CIÊNCIA, MAS
   ESTÁ CERTINHA … ATÉ REIMPORTEI O XML"** (23/09, Paulo, RADIO E TV IBIRAPUERA
   08/2026, NFS-e nacional de Brasília, R$ 2.000). CAUSA (três pontas da mesma

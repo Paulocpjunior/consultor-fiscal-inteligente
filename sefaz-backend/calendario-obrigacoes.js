@@ -76,16 +76,7 @@ const OBRIGACOES = {
         requireFolha: true,
         descricaoTemplate: 'DCTFWeb - ref. {COMP}',
     },
-    ESOCIAL_S1299: {
-        tipo: 'ESOCIAL',
-        nome: 'eSocial - Fechamento (S-1299)',
-        diaVencimento: 15,
-        mesesApos: 1,
-        regimes: ['simples', 'lucro_presumido', 'lucro_real'],
-        regimeLabel: 'Federal',
-        requireFolha: true,
-        descricaoTemplate: 'eSocial S-1299 (fechamento) - ref. {COMP}',
-    },
+    // ❌ ESOCIAL_S1299 saiu (Paulo, 23/09: "pode tirar eSocial também, é do DP").
     EFD_REINF: {
         tipo: 'EFD-REINF',
         nome: 'EFD-Reinf',
