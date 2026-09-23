@@ -1152,6 +1152,13 @@ export function buildDocumentoFiscal(input: {
             ? { prestador: parsed.emitente, tomador: parsed.destinatario }
             : { emitente: parsed.emitente, destinatario: parsed.destinatario }),
         totais: parsed.totais,
+        // 🚨 `valorTotal` GRAVADO na forma que os leitores por `.select()` leem
+        // (23/09, RADIO E TV IBIRAPUERA): este import gravava só `totais.vNF`,
+        // e a Rotina do Mês tratava a nota importada à mão como "resumo sem
+        // valor". O dono da leitura (`valorDoDocumento`) continua conhecendo
+        // todas as formas; aqui só se deixa de produzir uma nota sem a forma
+        // principal. Ausente continua ausente: nada vira zero.
+        ...(Number.isFinite(Number(parsed.totais?.vNF)) ? { valorTotal: Number(parsed.totais.vNF) } : {}),
         // NFSe valores adicionais (ISS, líquido, etc.)
         ...(isNFSe && nfseValores ? {
             valores: {

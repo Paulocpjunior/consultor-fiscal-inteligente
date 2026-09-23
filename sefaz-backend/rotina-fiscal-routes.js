@@ -254,6 +254,11 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // detalhe fica na aba própria, aqui só sinaliza a obrigação.
                 // tpNF=0 = nota própria de entrada (produtor no destinatário).
                 'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF',
+                // 🚨 AS FORMAS DO VALOR QUE `valorDoDocumento` LÊ (23/09, RADIO E TV
+                // IBIRAPUERA): o import pelo navegador grava só `totais.vNF` — sem
+                // estes campos na projeção, a nota chegava "sem valor" à etapa 2
+                // e virava "resumo da SEFAZ" com a ação "manifeste a ciência".
+                'valor', 'totalNota', 'totais.vNF', 'totais.vServ', 'valores.valorServicos', 'valores.total', 'vNF',
                 // ISS de SP capital — MESMA leitura, sem consulta extra. As
                 // duas formas são obrigatórias: a NFS-e do portal vem
                 // ACHATADA (valorIss/issDevido) e a do XML vem em OBJETO

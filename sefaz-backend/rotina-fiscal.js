@@ -20,7 +20,7 @@
 // ============================================================================
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, valorDoDocumento } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { acharFichaCompetencia } from './ipi-varredura.js';
@@ -124,7 +124,19 @@ export function ehResumoSemCompleta(d) {
     if (/^res(NFe|NFCe|CTe|MDFe)/.test(String(d.schema || ''))) return true;
     if (/^res/.test(String(d.tipoDoc || ''))) return true;
     if (d.temItens === false && modeloComItens(d.chave)) return true;
-    return d.valorTotal == null;
+    // 🚨 O VALOR SAI DO DONO, nunca do campo cru (23/09, RADIO E TV IBIRAPUERA
+    // 08/2026): o import pelo navegador grava **só `totais.vNF`**, nunca
+    // `valorTotal` — e esta linha lia `valorTotal == null`, então toda NFS-e
+    // (e NF-e) importada à mão virava "resumo da SEFAZ, aguardando a
+    // completa", com a ação "manifeste a ciência" sobre uma nota inteira. É
+    // a armadilha das duas formas que o CIAP já pagou em 21/08; o dono é
+    // `valorDoDocumento`, que conhece todas.
+    return !Number.isFinite(valorDoDocumento(d));
+}
+
+/** NFS-e não tem "resumo da SEFAZ": sem valor legível é outro defeito, com outra ação. */
+export function ehNfse(d) {
+    return String(d?.tipo || '').toUpperCase() === 'NFSE' || /^nfse/i.test(String(d?.tipoDoc || ''));
 }
 
 /**
@@ -270,7 +282,11 @@ export function montarRotinaFiscal({
 
     // ── 2. VALIDAÇÃO ────────────────────────────────────────────────────────
     // Resumo sem a completa não tem valor nem itens: entra na apuração a menor.
-    const resumos = docs.filter(ehResumoSemCompleta).length;
+    const semValor = docs.filter(ehResumoSemCompleta);
+    // NF-e/CT-e sem a completa é "manifeste a ciência"; NFS-e sem valor legível
+    // é XML/leiaute que o leitor não entendeu — a ação é outra.
+    const resumos = semValor.filter((d) => !ehNfse(d)).length;
+    const nfseSemValor = semValor.filter(ehNfse).length;
     const canceladas = docs.filter(cancelado).length;
     // CARTA DE CORREÇÃO é validação: ela pode ter mudado o CFOP/natureza, e o
     // livro é gerado do XML ORIGINAL. Estava sendo capturada e ninguém via.
@@ -285,11 +301,19 @@ export function montarRotinaFiscal({
     } else if (docs.length === 0) {
         eValidacao = etapa('validacao', 'pendente', 'Sem notas para validar.',
             'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0, cce });
-    } else if (resumos > 0) {
+    } else if (resumos > 0 || nfseSemValor > 0) {
+        const partes = [
+            resumos > 0 ? `${resumos} nota(s) sem valor/itens (resumo da SEFAZ, aguardando a completa)` : null,
+            nfseSemValor > 0 ? `${nfseSemValor} NFS-e sem valor legível` : null,
+        ].filter(Boolean);
+        const acoes = [
+            resumos > 0 ? 'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente.' : null,
+            nfseSemValor > 0 ? 'A NFS-e entrou sem <vServ>/valor que o leitor entenda — abra a nota na Central de XMLs e confira o valor; se estiver vazio, reimporte o XML completo (não é caso de manifestação).' : null,
+        ].filter(Boolean);
         eValidacao = etapa('validacao', 'atencao',
-            `${resumos} nota(s) sem valor/itens (resumo da SEFAZ, aguardando a completa).`,
-            'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente. Sem isso a apuração sai a menor.',
-            { resumos, canceladas, cce });
+            `${partes.join(' · ')}.`,
+            `${acoes.join(' ')} Sem isso a apuração sai a menor.`,
+            { resumos, nfseSemValor, canceladas, cce });
     } else {
         eValidacao = etapa('validacao', 'concluida',
             `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}.`,

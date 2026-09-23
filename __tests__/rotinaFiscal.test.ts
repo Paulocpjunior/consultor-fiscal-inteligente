@@ -660,3 +660,43 @@ describe('podeDeclararEnvio', () => {
         expect(e.podeDeclararEnvio).toBe(true);
     });
 });
+
+// ── 23/09 (RADIO E TV IBIRAPUERA 08/2026): "está falando que a nota está sem
+// valor para manifestar ciência, mas está certinha" ─────────────────────────
+describe('🚨 nota importada à mão NÃO é "resumo da SEFAZ": o valor sai do dono', () => {
+    const nfseNacional = {
+        tipo: 'NFSe', modelo: '99', chave: '53001081209010732000137000000000004326081788210842',
+        totais: { vNF: 2000, vProd: 2000 }, valores: { liquido: 2000, iss: 40, issRetido: true },
+        status: 'autorizado', direcao: 'saida',
+    };
+    it('NFS-e nacional importada pelo navegador (só totais.vNF) tem valor — não é resumo', () => {
+        expect(ehResumoSemCompleta(nfseNacional)).toBe(false);
+        expect(ehResumoSemCompleta({ ...nfseNacional, totais: undefined, valorServicos: 2000 })).toBe(false);
+        expect(ehResumoSemCompleta({ ...nfseNacional, totais: undefined, valores: { total: 2000 } })).toBe(false);
+    });
+    it('NF-e importada à mão com totais.vNF também não é resumo; sem valor nenhum continua sendo', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, totais: { vNF: 1500 } })).toBe(false);
+        expect(ehResumoSemCompleta({ chave: CHAVE_55 })).toBe(true);
+    });
+    it('a etapa 2 fecha VERDE com a NFS-e; e NFS-e sem valor legível NÃO manda "manifestar ciência"', () => {
+        const ok: any = montarRotinaFiscal({
+            empresa: { nome: 'RADIO E TV IBIRAPUERA', cnpj: '09010732000137' }, competencia: '2026-08',
+            documentos: [nfseNacional], apuracao: { fonte: 'lucro', totalImpostos: 40 },
+            tarefas: [tarefa({ status: 'concluida' })], envios: [],
+        });
+        expect(etapaDe(ok, 'validacao').status).toBe('concluida');
+        const semValor: any = montarRotinaFiscal({
+            empresa: { nome: 'X', cnpj: '09010732000137' }, competencia: '2026-08',
+            documentos: [{ ...nfseNacional, totais: undefined, valores: undefined }], apuracao: null, tarefas: [], envios: [],
+        });
+        const e2 = etapaDe(semValor, 'validacao');
+        expect(e2.status).toBe('atencao');
+        expect(e2.resumo).toMatch(/1 NFS-e sem valor legível/);
+        expect(e2.acao).not.toMatch(/Manifeste/);
+        expect(e2.acao).toMatch(/reimporte o XML completo/);
+    });
+    it('a projeção da Rotina carrega as formas do valor que o dono lê', () => {
+        const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'sefaz-backend', 'rotina-fiscal-routes.js'), 'utf8');
+        for (const campo of ["'totais.vNF'", "'totais.vServ'", "'valores.total'", "'valores.valorServicos'"]) expect(src).toContain(campo);
+    });
+});
