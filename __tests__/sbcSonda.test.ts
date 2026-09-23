@@ -230,7 +230,17 @@ describe('o painel diz se AGORA vale testar a ligação', () => {
     const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
 
     it('usa a MESMA régua de horário do atendimento, nunca uma segunda cópia', () => {
-        expect(tela).toMatch(/dentroDoHorario \} from '\.\.\/\.\.\/sefaz-backend\/whatsapp-atendimento\.js'/);
+        // ⚠️ ESTA ASSERÇÃO PRENDIA A POSIÇÃO DO NOME NO IMPORT — ela exigia
+        // que `dentroDoHorario` fosse o ÚLTIMO da lista. Em 23/09 bastou o
+        // import ganhar mais um nome (`podeVerEncerrados`) para ela ficar
+        // vermelha sobre código certo: nada da régua de horário mudou.
+        // O que importa é o FATO — o nome vem DAQUELE módulo e é ele que
+        // decide —, não a ordem em que a linha os escreve.
+        const linhaDoImport = (tela.split('\n').find((l) => l.includes("from '../../sefaz-backend/whatsapp-atendimento.js'")) || '');
+        expect(linhaDoImport).toMatch(/\bdentroDoHorario\b/);
+        expect(linhaDoImport).toMatch(/^import \{/);
+        // 🚩 E a segunda cópia continua proibida: nada de reimplementar a
+        // grade na tela — quem responde é a função importada.
         expect(tela).toMatch(/dentroDoHorario\(sonda\.horarios\.mensagens, agora\)/);
     });
 
