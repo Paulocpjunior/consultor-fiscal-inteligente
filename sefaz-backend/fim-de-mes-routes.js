@@ -40,8 +40,7 @@ import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { normalizarCompetencia } from './competencia.js';
 import {
     montarFimDeMes, montarCorte, podeDarFimDeMes,
-    conferirReabertura, aplicarReabertura, descreverFechamento,
-} from './fim-de-mes.js';
+    conferirReabertura, aplicarReabertura, descreverFechamento, competenciaFechada } from './fim-de-mes.js';
 
 import { COLECAO_FECHAMENTOS as COLECAO, idDoFechamento, lerFechamentoDaCompetencia } from './fechamento-store.js';
 
@@ -219,6 +218,17 @@ router.post('/fechar', requireAuth, async (req, res) => {
         // A recusa chega à tela com os BLOQUEIOS nomeados — 400, nunca 500:
         // "não pode fechar" é resposta, não falha do servidor.
         if (!montado.ok) {
+            // 🔒 JÁ FECHADA volta COM o carimbo (23/09, Paulo: "só está encerrando
+            // depois de fazer o mesmo processo 2x"). O primeiro clique gravava;
+            // a tela só mudava depois de recarregar o painel inteiro, e o segundo
+            // clique caía aqui. Com o carimbo na resposta, a tela mostra o
+            // estado real na hora — em vez de um erro sobre um fato consumado.
+            if (competenciaFechada(r.fechamento)) {
+                return res.status(409).json({
+                    ok: false, jaFechada: true, erro: montado.motivo, bloqueios: [],
+                    fechamento: r.fechamento, descricao: descreverFechamento(r.fechamento),
+                });
+            }
             return res.status(400).json({ ok: false, erro: montado.motivo, bloqueios: montado.bloqueios });
         }
 
