@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 "ESTÁ FALANDO QUE A NOTA ESTÁ SEM VALOR PARA MANIFESTAR CIÊNCIA, MAS
+  ESTÁ CERTINHA … ATÉ REIMPORTEI O XML"** (23/09, Paulo, RADIO E TV IBIRAPUERA
+  08/2026, NFS-e nacional de Brasília, R$ 2.000). CAUSA (três pontas da mesma
+  armadilha das duas formas): o import de XML pelo navegador
+  (`xmlParserService` → `DocumentoFiscal`) grava **só `totais.vNF`**, nunca
+  `valorTotal`; `ehResumoSemCompleta` lia `d.valorTotal == null` → toda NFS-e
+  (e NF-e) importada à mão virava "resumo da SEFAZ, aguardando a completa"
+  com a ação "manifeste a ciência"; e a projeção `.select()` da Rotina nem
+  carregava `totais.vNF`. CORREÇÃO: a régua passa a usar o DONO
+  (`valorDoDocumento`, que conhece todas as formas — a lição do CIAP de
+  21/08); a projeção da Rotina carrega `valor`, `totalNota`, `totais.vNF`,
+  `totais.vServ`, `valores.valorServicos`, `valores.total`, `vNF`; a
+  importação manual passa a gravar `valorTotal` (só quando `totais.vNF` é
+  número — ausente continua ausente). E NFS-e sem valor legível ganhou
+  mensagem própria ("abra a nota e confira; reimporte o XML completo — não é
+  caso de manifestação"): NFS-e não tem "resumo da SEFAZ". REGRA: quem
+  pergunta "quanto vale este documento?" chama `valorDoDocumento`; e toda
+  projeção `.select()` que alimenta uma régua de valor precisa carregar as
+  formas que o dono lê.
+
 - **📭 "O QUE PRECISAMOS AGORA É O FECHAMENTO DE MÊS DE EMPRESAS SEM
   MOVIMENTO"** (23/09, Paulo, E7 ASSESSORIA ESPORTIVA 08/2026: etapas 1 e 2
   vermelhas — "nenhuma nota capturada", "sem notas para validar" — num mês em
