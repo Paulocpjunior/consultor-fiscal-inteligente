@@ -110,6 +110,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const fimDaThread = useRef<HTMLDivElement>(null);
     const selRef = useRef<ConversaResumo | null>(null);
     selRef.current = sel;
+    // ⚠️ Ref, não a variável: `recarregar` é um useCallback com deps [] e roda
+    // também no timer de 30s — ler `aba` direto ali congelaria o valor da
+    // primeira renderização, e o refresh silencioso voltaria a pedir a caixa
+    // normal enquanto a pessoa olha a aba de encerrados.
+    const abaRef = useRef<string>('todas');
+    abaRef.current = aba;
     const antigasRef = useRef<MensagemInbox[]>([]);
     antigasRef.current = antigas;
     const mensagensRef = useRef<MensagemInbox[]>([]);
@@ -165,7 +171,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const recarregar = useCallback(async (silencioso = false) => {
         if (!silencioso) setCarregando(true);
         try {
-            const r = await listarConversas();
+            // A aba de ENCERRADOS é outro recorte no BANCO, não um filtro da
+            // lista carregada: as resolvidas nem vêm na leitura normal.
+            const r = await listarConversas(abaRef.current === 'encerrados');
             if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return; }
             setErro(null);
             setConversas(r.conversas || []);
@@ -184,10 +192,19 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setFilas(r.filas || []);
             setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
             if (r.papel) setPapel(r.papel);
+            setEncerradasOcultas(r.encerradasOcultas || 0);
         } finally {
             if (!silencioso) setCarregando(false);
         }
     }, []);
+
+    // ✅ Entrar/sair da aba de ENCERRADOS recarrega — ela é outro recorte no
+    // BANCO, não um filtro da lista já carregada. Sem isto o chip acenderia e
+    // a lista continuaria a mesma: botão que não faz nada é pior que botão
+    // nenhum. Só na TRAVESSIA (a chave é o booleano), então trocar entre filas
+    // não gasta leitura.
+    const naAbaEncerrados = aba === 'encerrados';
+    useEffect(() => { void recarregar(true); }, [naAbaEncerrados, recarregar]);
 
     const carregarThread = useCallback(async (numero: string, silencioso = false) => {
         if (!silencioso) setCarregandoMsgs(true);
@@ -399,6 +416,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
     const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
     const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
+    // ✅ Quantas conversas encerradas saíram da caixa nesta leitura. O número
+    // NÃO some: lista que encolhe sem dizer por quê vira suspeita de conversa
+    // perdida (farol honesto).
+    const [encerradasOcultas, setEncerradasOcultas] = useState(0);
     // ☎️ Pedir a permissão de ligação (fase 2 da chamada). Confirmação antes:
     // é uma MENSAGEM real chegando no cliente, não um ajuste interno.
     const [permLigAviso, setPermLigAviso] = useState<string | null>(null);
@@ -4213,7 +4234,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {chip('todas', `Todas · ${conversas.length}`)}
                             {chip('nao-lidas', `Não lidas · ${naoLidasTotal}`)}
                             {filasChip.map((f) => chip(f.id, `${rotuloCurtoFila(f.id)} · ${contagemFila(f.id)}`))}
+                            {/* ✅ ENCERRADOS — só admin (Paulo, 23/09). Esconder o chip
+                                é conveniência; quem RECUSA é a rota, com 403. */}
+                            {papel === 'admin' && chip('encerrados', '✅ Encerrados')}
                         </div>
+                        {/* O número não some: lista que encolhe sem dizer por quê vira
+                            suspeita de conversa perdida. Só para quem PODE abrir a aba —
+                            para o colaborador seria alarme sem ação. */}
+                        {papel === 'admin' && aba !== 'encerrados' && encerradasOcultas > 0 && (
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                {encerradasOcultas} atendimento(s) encerrado(s) fora desta lista — veja em <strong>✅ Encerrados</strong>.
+                            </p>
+                        )}
                     </div>
 
                     {/* Sem `flex-1` no celular: aqui a lista tem a altura do

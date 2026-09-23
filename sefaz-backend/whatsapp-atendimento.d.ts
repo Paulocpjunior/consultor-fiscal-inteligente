@@ -123,3 +123,11 @@ export function decidirAutomacao(p: {
      */
     filaSugerida?: { fila: string; rotulo?: string; confianca?: number | null; motivo?: string | null } | null;
 }): AcaoBot[];
+
+/** A conversa está encerrada? Lê `status` (banco) e `situacao` (lista). */
+export function conversaEncerrada(conversa: unknown): boolean;
+/** Patch de reabertura por mensagem do cliente, ou `null` se não há o que fazer. */
+export function patchDeReabertura(
+    conversa: unknown,
+    p?: { direcao?: string; agora?: string },
+): { status: string; reabertaEm: string; reabertaPor: string; atribuidoA: null; fila: null; submenuAberto: null; aguardandoAvaliacao: boolean } | null;

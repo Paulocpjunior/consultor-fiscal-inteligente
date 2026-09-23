@@ -5,6 +5,56 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✅ ATENDIMENTO ENCERRADO SAI DA CAIXA — e a metade que quase ficou era o
+  CLIENTE QUE VOLTA** (23/09, Paulo: *"devemos criar uma ABA em especial com
+  acesso aos admin somente para atendimentos encerrados/finalizados para que
+  não ocupe a caixa do colaborador"*).
+  🔴 **O retrato de antes**: encerrar gravava `status: 'resolvida'`, a conversa
+  ganhava o selo `✅ resolvida` e **continuava na lista**, empilhando.
+  ❌ **E A MINHA PRIMEIRA LEITURA ESTAVA ERRADA — corrigida lendo o código, não
+  deduzindo**: eu disse que nada reabria a conversa. O caminho do **WhatsApp já
+  reabria** desde 25/08 (inline, nascido de um print dele). O buraco era
+  **Instagram** e **LIGAÇÃO PERDIDA**: os dois somavam `naoLidas` e deixavam
+  `status: 'resolvida'`. Com a aba escondendo as resolvidas, uma DM ou uma
+  chamada perdida viraria pendência que **ninguém vê** — trocar "caixa cheia"
+  por "cliente perdido".
+  ✂️ `conversaEncerrada` + `patchDeReabertura` (dono único em
+  `whatsapp-atendimento.js`), lidos pelos dois webhooks e pela rota. A régua
+  certa já estava DECLARADA no comentário do `emConducaoHumana` desde sempre —
+  *"cliente que volta depois de encerrado é atendimento novo"* —, e faltava
+  alguém executá-la.
+  ⚠️ **O dono lê as DUAS formas** (`status` no banco, `situacao` na lista):
+  ler uma só faria a tela e o backend discordarem sobre a MESMA conversa. E
+  **ausência não é "encerrada"** — conversa antiga sem o campo continua aberta,
+  senão ela sumiria da caixa por não ter um campo que não existia.
+  ⚠️ **ECO NÃO REABRE**: resposta nossa por outra plataforma não é o cliente
+  voltando; ressuscitar por causa dela encheria a caixa de volta sem ninguém
+  ter escrito.
+  🔒 **A TRAVA É DA ROTA, não do chip**: `?situacao=resolvida` responde **403**
+  para quem não é admin. Esconder o botão no navegador deixaria a lista de
+  encerrados da carteira inteira aberta para qualquer colaborador com o link —
+  é a régua do `allow write: if false` do fim de mês.
+  📌 **O NÚMERO NÃO SOME** (`encerradasOcultas`): lista que encolhe sem dizer
+  por quê vira suspeita de conversa perdida, e aí a equipe deixa de confiar na
+  caixa. O aviso só aparece para quem PODE abrir a aba — para o colaborador
+  seria alarme sem ação.
+  🐛 **E `'encerrados'` NÃO é id de fila**: sem o caso explícito em
+  `filtrarConversas`, ele cairia no filtro de fila, daria falso em TODAS e a
+  aba apareceria **vazia** com o servidor tendo devolvido a lista certa. Botão
+  que acende e não mostra nada é pior que botão nenhum.
+  ⚠️ **E o recarregar lê a aba por REF**: `recarregar` é `useCallback` com deps
+  `[]` e roda no timer de 30s — ler `aba` direto congelaria o valor da primeira
+  renderização, e o refresh silencioso voltaria a pedir a caixa normal enquanto
+  a pessoa olha os encerrados.
+  🚩 **DECISÃO A CONFIRMAR COM O PAULO**: ele disse *"admin somente"*, e é isso
+  que está no ar. Mas **gestor PODE encerrar** (`podeEncerrar`, decisão de
+  16/08) e não vê a aba — ou seja, fecha o atendimento e perde de vista o
+  resultado do próprio ato. Não mudei por conta própria: a fala dele é
+  explícita.
+  📌 **A trava é por VARREDURA dos ESCRITORES**, não por lista: eram três
+  caminhos que recebem do cliente e só um reabria. Lista envelheceria no
+  próximo canal — e envelheceria em silêncio, que é como este buraco nasceu.
+
 - **🔒 "SÓ ESTÁ ENCERRANDO DEPOIS DE FAZER O MESMO PROCESSO 2X" + "PODE
   TIRAR ESOCIAL TAMBÉM, É DO DP"** (23/09, Paulo, print do "Dar fim de mês").
   (1) O fechamento GRAVAVA no primeiro clique (a rota não tem passo duplo);

@@ -759,3 +759,59 @@ export function decidirAutomacao({ conversa = {}, numero, textoMensagem, nomeCon
 
     return acoes;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ✅ ATENDIMENTO ENCERRADO SAI DA CAIXA DO COLABORADOR
+//
+// Paulo, 23/09: *"devemos criar uma ABA em especial com acesso aos admin
+// somente para atendimentos encerrados/finalizados para que não ocupe a caixa
+// do colaborador"*.
+//
+// 🚨 E TIRAR DA CAIXA SÓ É SEGURO COM A VOLTA IMPLEMENTADA. Hoje o webhook
+// soma `naoLidas` na conversa resolvida e NÃO mexe no `status`: se ela sumir
+// da lista, o cliente que volta a escrever fica **invisível**, com uma não
+// lida que ninguém vê. Seria trocar "caixa cheia" por "cliente perdido" — a
+// meia correção que esta casa mais paga.
+//
+// A regra certa já estava DECLARADA no comentário do `emConducaoHumana`:
+// *"cliente que volta depois de encerrado é atendimento novo"*. O que faltava
+// era alguém executá-la.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A conversa está encerrada? Dono único da pergunta (tela e rota leem daqui). */
+export function conversaEncerrada(conversa) {
+    if (!conversa || typeof conversa !== 'object') return false;
+    // ⚠️ Lê as DUAS formas: o banco grava `status`, a lista devolve `situacao`.
+    // Ler uma só faria a tela e a rota discordarem sobre a MESMA conversa.
+    const s = String(conversa.status ?? conversa.situacao ?? 'aberta').toLowerCase();
+    return s === 'resolvida';
+}
+
+/**
+ * Mensagem DE ENTRADA do cliente numa conversa encerrada REABRE o atendimento.
+ *
+ * ⚠️ Só a entrada reabre. Eco de saída (resposta nossa por outra plataforma) e
+ * evento de status não são o cliente voltando — reabrir por eles ressuscitaria
+ * a conversa na caixa por causa de um relatório de entrega.
+ *
+ * Devolve o patch a gravar, ou `null` quando não há o que fazer — assim quem
+ * chama não precisa repetir a condição (foi a duplicação dessa pergunta que
+ * criou as cinco cópias do lado da contraparte, em 26/08).
+ */
+export function patchDeReabertura(conversa, { direcao, agora } = {}) {
+    if (String(direcao || '') !== 'entrada') return null;
+    if (!conversaEncerrada(conversa)) return null;
+    return {
+        status: 'aberta',
+        reabertaEm: agora || new Date().toISOString(),
+        reabertaPor: 'cliente',
+        // 🚨 O atendimento é NOVO: quem conduzia encerrou, e a triagem tem de
+        // rodar de novo. Herdar o dono antigo mandaria a conversa para a caixa
+        // de alguém que já deu o caso por fechado — e que pode nem estar mais
+        // na fila. `fila: null` devolve à Recepção, que é onde o bot tria.
+        atribuidoA: null,
+        fila: null,
+        submenuAberto: null,
+        aguardandoAvaliacao: false,
+    };
+}

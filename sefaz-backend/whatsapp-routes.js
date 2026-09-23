@@ -56,7 +56,7 @@ import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
-    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
+    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram, conversaEncerrada,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
 import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
@@ -507,8 +507,27 @@ router.get('/conversas', requireAuth, async (req, res) => {
             .catch(() => ({ data: () => null }));
         const cfgAtendimento = resolverConfig(cfgDoc.data());
         const respostasRapidas = cfgAtendimento.respostasRapidas;
+        // ═══ ✅ ABA DE ENCERRADOS — SÓ ADMIN (Paulo, 23/09) ═════════════════
+        // "uma ABA em especial com acesso aos admin somente para atendimentos
+        // encerrados/finalizados para que não ocupe a caixa do colaborador".
+        //
+        // 🔒 A trava é DA ROTA, não da tela: esconder o chip no navegador
+        // deixaria `?situacao=resolvida` aberto para qualquer colaborador com
+        // o link — é a régua do `allow write: if false` do fim de mês.
+        const soEncerradas = String(req.query?.situacao || '') === 'resolvida';
+        if (soEncerradas && papel !== 'admin') {
+            return res.status(403).json({ ok: false, error: 'A aba de encerrados é só para admin.' });
+        }
         let docsConversas = [];
-        if (minhasFilas !== null) {
+        if (soEncerradas) {
+            // ⚠️ Igualdade SEM orderBy, e a ordenação sai em memória — é o
+            // mesmo motivo do galho por fila logo abaixo: `where` + `orderBy`
+            // exigiria índice composto, e índice que falta derruba a aba
+            // inteira em produção.
+            const snap = await db.collection('whatsapp_conversas')
+                .where('status', '==', 'resolvida').limit(TETO_LEITURA_CONVERSAS).get();
+            docsConversas = snap.docs;
+        } else if (minhasFilas !== null) {
             // 🔒 Colaborador de fila lê SÓ as filas dele já na CONSULTA
             // (Paulo, 24/08: "ganhamos mais tempo ao carregar") — antes o
             // servidor varria as 2000 mais recentes da carteira inteira para
@@ -591,8 +610,20 @@ router.get('/conversas', requireAuth, async (req, res) => {
             // da config; lista vazia = sem restrição. Aplica-se POR CIMA da
             // regra de filas, nunca no lugar dela.
             && (cv.canal !== 'instagram' || podeAtenderInstagram(cfgAtendimento, req.user?.email)));
+        // ✅ Encerrado sai da caixa — mas o número NÃO some (farol honesto): a
+        // tela diz quantos ficaram de fora, senão "a lista encolheu" vira
+        // suspeita de conversa perdida. Na própria aba de encerrados não se
+        // filtra nada, óbvio — ela É o recorte.
+        const semEncerradas = soEncerradas ? visiveis : visiveis.filter((cv) => !conversaEncerrada(cv));
         return res.json({
-            ok: true, conversas: visiveis, filas: FILAS_ATENDIMENTO, minhasFilas, papel, respostasRapidas,
+            ok: true,
+            conversas: semEncerradas,
+            filas: FILAS_ATENDIMENTO,
+            minhasFilas,
+            papel,
+            respostasRapidas,
+            encerradas: soEncerradas,
+            encerradasOcultas: soEncerradas ? 0 : visiveis.length - semEncerradas.length,
             limiteLeitura: docsConversas.length >= TETO_LEITURA_CONVERSAS ? TETO_LEITURA_CONVERSAS : null,
         });
     } catch (e) {
