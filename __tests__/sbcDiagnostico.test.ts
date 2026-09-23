@@ -163,10 +163,21 @@ describe('🚨 o veredito conclui sozinho, e no fim', () => {
         expect(veredito).toMatch(/NENHUM INVITE na janela/); // zero, gravador on
     });
 
-    it('🚨 e o desfecho "a Meta não entrega" DIZ o que ele assume', () => {
+    it('🚨 e o desfecho do zero DIZ o que ele assume', () => {
         // Sem a janela do log ao lado, seria carimbar prova não medida.
-        expect(veredito).toMatch(/só vale se a hora da/);
+        //
+        // ⚠️ ESTA ASSERÇÃO JÁ FOI LITERAL DEMAIS e me acusou hoje (23/09):
+        // ela exigia a frase *"só vale se a hora da"*, que a reescrita do
+        // desfecho trocou por um texto MAIS forte ("zero AQUI é zero NESTA
+        // janela"). Trava que cobra a REDAÇÃO em vez do FATO manda reescrever
+        // para agradar o teste — o vício de 22/08. Agora ela cobra o fato: o
+        // desfecho mostra os limites da janela conferida E manda conferir a
+        // hora da tentativa antes de concluir.
         expect(veredito).toMatch(/\$\{LOG_DE:-\?\}/);
+        expect(veredito).toMatch(/\$\{LOG_ATE:-\?\}/);
+        expect(veredito).toMatch(/hora da tentativa/);
+        // E não conclui mais contra a Meta a partir do zero da janela.
+        expect(veredito).toMatch(/medição de janela não vira conclusão/);
     });
 
     it('rodou no lugar errado? o veredito devolve o COMANDO certo', () => {
@@ -466,7 +477,20 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
         // teste barrava o próprio comentário que EXPLICA a decisão, ou seja
         // mandava apagar a explicação para o teste passar. É o vício da trava
         // literal (22/08) dentro da trava que eu estava escrevendo.
-        const chama = veredito.split('\n').some((l) => l.trim().startsWith('comando_de_rodar'));
+        //
+        // 🚨 E A 2ª VERSÃO ERRAVA O ALCANCE — ela me acusou hoje (23/09). A
+        // proibição vale para ESTE desfecho, e ela varria o VEREDITO INTEIRO:
+        // quando o desfecho novo do trace desligado passou a dizer "arme e
+        // refaça a ligação" (que é EXATAMENTE para o que o helper serve), a
+        // trava ficou vermelha sobre código certo. Trava com alcance maior
+        // que a regra vira alarme falso, e alarme falso é trava desligada.
+        const ondeVale = veredito.slice(veredito.indexOf('NÃO CONSEGUI OLHAR'));
+        const soEsteDesfecho = ondeVale.slice(0, ondeVale.indexOf('elif '));
+        expect(soEsteDesfecho).toMatch(/gcloud compute ssh sbc-whatsapp/);
+        const chama = soEsteDesfecho.split('\n').some((l) => l.trim().startsWith('comando_de_rodar'));
         expect(chama).toBe(false);
+        // 🚩 E o recorte tem de ter pegado ALGO — fatia vazia passaria verde
+        // sem exercitar nada, que é o defeito que esta casa mais repete.
+        expect(soEsteDesfecho.length).toBeGreaterThan(200);
     });
 });
