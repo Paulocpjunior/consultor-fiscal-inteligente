@@ -358,6 +358,48 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             expect(saida).toMatch(/SUSPENSO/);
         });
 
+        // ════════════════════════════════════════════════════════════════════
+        // 🚨 23/09 — O GRAVADOR TEM DOIS INTERRUPTORES E A SEÇÃO 1 VIA UM.
+        //
+        // O print do Paulo (23/09) saiu 🟡 "NENHUM INVITE na janela, com o
+        // gravador LIGADO" e mandava ao chamado da Meta. Só que `logger.conf`
+        // liga o VERBOSE; quem escreve as mensagens SIP — as linhas de INVITE
+        // que a seção 4 conta — é o `pjsip set logger`, OUTRO botão, que some
+        // a cada restart. Ele rodou sem `--ao-vivo`.
+        //
+        // É o "0 INVITEs com o gravador desligado" de 25/08 um nível abaixo:
+        // a trava existia, passava, e não cobria a metade do gravador que de
+        // fato escreve o que ela conta.
+        // ════════════════════════════════════════════════════════════════════
+        it('🚨 verbose LIGADO e trace SIP DESLIGADO não conclui contra a Meta', () => {
+            const dirT = mkdtempSync(join(tmpdir(), 'sbc-trace-'));
+            // O log do print: três dias, verbose escrevendo, zero mensagem SIP.
+            writeFileSync(join(dirT, 'full'), [
+                '[2026-09-20 00:00:02] VERBOSE[1] Asterisk Ready',
+                '[2026-09-23 09:32:20] WARNING[2] algo',
+                '',
+            ].join('\n'));
+            writeFileSync(join(dirT, 'logger.conf'), 'full => notice,warning,error,verbose\n');
+            writeFileSync(join(dirT, 'asterisk.conf'), 'verbose = 3\n');
+            const saida = execFileSync('bash', ['-s', '--', '2026-09-23'], {
+                input: script,
+                env: {
+                    ...process.env,
+                    LOG_FULL: join(dirT, 'full'),
+                    LOGGER_CONF: join(dirT, 'logger.conf'),
+                    ASTERISK_CONF: join(dirT, 'asterisk.conf'),
+                    CDR_CSV: join(dirT, 'nao-existe.csv'),
+                },
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            expect(saida).toMatch(/ZERO linha de trace SIP/);
+            expect(saida).toMatch(/NÃO DÁ PARA CONCLUIR — o trace SIP/);
+            expect(saida).toMatch(/NÃO abra chamado com isto/);
+            // E o desfecho que mandava à Meta NÃO pode aparecer aqui.
+            expect(saida).not.toMatch(/NENHUM INVITE na janela, com o gravador LIGADO/);
+        });
+
         it('⚠️ e "não consegui contar" nunca vira "a mídia está boa"', () => {
             // Mesma disciplina da seção 4: sem log, a seção 7 DIZ que não
             // olhou — zero inventado aqui afirmaria áudio negociado sobre

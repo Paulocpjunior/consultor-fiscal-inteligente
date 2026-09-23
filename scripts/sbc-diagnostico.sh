@@ -103,6 +103,30 @@ else
     echo "   ✗ logger.conf SEM verbose no 'full' — a linha do dialplan não é escrita."
     GRAVANDO="nao"
 fi
+# 🚨 23/09 — O GRAVADOR TEM DOIS INTERRUPTORES, E ESTA SEÇÃO SÓ VIA UM.
+# O `logger.conf` liga o log VERBOSE; quem escreve as MENSAGENS SIP (as linhas
+# de INVITE que a seção 4 conta) é o `pjsip set logger`, que é OUTRO botão e
+# some a cada restart. Sem ele, "0 INVITE" não é "não chegou" — é "ninguém
+# anotou o SIP", exatamente a armadilha de 25/08 um nível abaixo.
+#
+# ⚠️ E a pergunta é por RESULTADO, não por status: em vez de perguntar ao
+# Asterisk se o botão está ligado (resposta que varia de versão para versão),
+# procuro o RASTRO que ele deixa. Log de dias inteiros sem UMA linha de trace
+# SIP responde sozinho.
+TRACE_SIP="sim"
+if [ -f "$LOG_FULL" ]; then
+    TRACES=$(grep -cE "(Received|Transmitting) SIP (request|response)" "$LOG_FULL" 2>/dev/null)
+    [ "$?" -ge 2 ] && TRACES=""
+    if [ -z "$TRACES" ]; then
+        echo "   ⚪ não consegui contar as linhas de trace SIP"
+    elif [ "$TRACES" = "0" ]; then
+        echo "   ✗ ZERO linha de trace SIP no log — o 'pjsip set logger' está"
+        echo "     DESLIGADO. O INVITE não é escrito, então contá-lo não mede nada."
+        TRACE_SIP="nao"
+    else
+        echo "   ✓ trace SIP ligado ($TRACES linha(s) de mensagem SIP no log)"
+    fi
+fi
 if grep -qs '^verbose' "$ASTERISK_CONF"; then
     echo "   ✓ verbose persistido no asterisk.conf (sobrevive a restart)"
 else
@@ -302,6 +326,23 @@ elif [ "$ACHADOS" != "0" ]; then
         echo "     da seção 7 ANTES de mexer em qualquer configuração."
     else
         echo "     Olhe a seção 7 (mídia), a 6 (recusas) e a 3 (o endpoint casou?)."
+    fi
+elif [ "$TRACE_SIP" = "nao" ]; then
+    # 🚨 O DESFECHO QUE FALTAVA. Antes, este caso caía no 🟡 e mandava abrir
+    # chamado na Meta — sobre um log em que o INVITE não teria sido escrito
+    # nem se tivesse chegado. É o "0 INVITEs com o gravador desligado" de
+    # 25/08, na metade do gravador que ninguém tinha conferido.
+    echo "  ⚪ NÃO DÁ PARA CONCLUIR — o trace SIP estava DESLIGADO."
+    echo "     O 'logger.conf' liga o verbose; quem escreve as mensagens SIP é"
+    echo "     o 'pjsip set logger', e ele some a cada restart do Asterisk."
+    echo "     Zero INVITE aqui não é 'a Meta não entregou': é 'o INVITE não"
+    echo "     seria escrito de qualquer jeito'. ⛔ NÃO abra chamado com isto."
+    echo "     Arme e refaça a ligação:"
+    comando_de_rodar "--ao-vivo"
+    if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
+        echo "  🔴 E MESMO ASSIM há $MIDIA_ERRO falha(s) de negociação de mídia no"
+        echo "     log (seção 7) — esse erro NÃO depende do trace SIP. Houve"
+        echo "     INVITE: a causa é NOSSA."
     fi
 else
     echo "  🟡 NENHUM INVITE na janela, com o gravador LIGADO."
