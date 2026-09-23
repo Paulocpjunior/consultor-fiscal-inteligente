@@ -5,6 +5,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📭 "O QUE PRECISAMOS AGORA É O FECHAMENTO DE MÊS DE EMPRESAS SEM
+  MOVIMENTO"** (23/09, Paulo, E7 ASSESSORIA ESPORTIVA 08/2026: etapas 1 e 2
+  vermelhas — "nenhuma nota capturada", "sem notas para validar" — num mês em
+  que a empresa não emitiu nem recebeu nada; fim de mês trancado para sempre).
+  Zero nota ≠ zero movimento (ausência ≠ zero): o app não distingue "não
+  emitiu" de "não capturei", então não fecha sozinho. SAÍDA, no molde do
+  envio e da cobertura declarados: `sem-movimento-declarado.js` (PURO) +
+  `sem-movimento-store.js` (`rotina_sem_movimento_declarado`, id do
+  `idDoFechamento`, UMA query por competência) + POST
+  /api/admin/rotina-fiscal/sem-movimento-declarado (texto ≥ 15, data não
+  futura, autor; a rota RECUSA com 409 se houver documento na competência) +
+  botão "📭 Esta empresa não teve movimento no mês — declarar" no bloco de
+  fim de mês, só quando a etapa 1 trava com ZERO documento
+  (`podeDeclararSemMovimento`, decidido no backend e projetado em
+  `bloqueioDaEtapa`). A declaração fecha as etapas 1 e 2 como 'na', NOMEADA
+  (quem, quando, texto, "não tem prova de que nada foi emitido"), aplicada
+  DEPOIS do ajuste do ISS. E CAI sozinha se documento chegar depois: a etapa
+  volta à régua normal com a ressalva "havia declaração … N documento(s)
+  chegaram depois". REGRA: declaração nunca é quitação eterna — ela vale
+  enquanto o fato que a justificou (zero documento) continuar verdadeiro.
+
 - **👥 "PODE TIRAR, INSS, FGTS, CPP É DO DP"** (22/09, Paulo, decisão sobre a
   AFFITTARE 08/2026 cobrando FGTS/INSS na etapa 4). A regra de 18/08 valia só
   para imune/isenta; Lucro e Simples continuavam gerando. AGORA: FGTS e

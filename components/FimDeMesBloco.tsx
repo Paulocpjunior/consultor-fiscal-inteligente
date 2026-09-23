@@ -37,7 +37,7 @@ import {
 // fechar e reabrir — a leitura continua vindo por props.
 import { registrarEnvioForaDoApp, meiosForaDoApp, type MeioForaDoApp } from '../services/envioImpostoService';
 // 📋 A porta da COBERTURA declarada — a obrigação que o catálogo não cobre.
-import { declararCoberturaForaDoCatalogo } from '../services/rotinaFiscalService';
+import { declararCoberturaForaDoCatalogo, declararSemMovimento } from '../services/rotinaFiscalService';
 
 interface Props {
     empresaId: string;
@@ -127,6 +127,14 @@ const FimDeMesBloco: React.FC<Props> = ({
         <DeclararCobertura
             empresaId={empresaId} empresaCnpj={empresaCnpj} competencia={competencia}
             obrigacoes={bloqueioCobertura.propostas || []} onMudou={onMudou}
+        />
+    ) : null;
+    // 📭 A porta do SEM MOVIMENTO: só quando a etapa 1 trava com ZERO documento
+    // (quem decide é o backend, `podeDeclararSemMovimento`).
+    const bloqueioSemMov = bloqueios.find((b) => b.id === 'captura' && b.podeDeclararSemMovimento === true);
+    const declararSemMov = bloqueioSemMov ? (
+        <DeclararSemMovimento
+            empresaId={empresaId} empresaCnpj={empresaCnpj} competencia={competencia} onMudou={onMudou}
         />
     ) : null;
     const pre = { pode: bloqueiosDoPainel.length === 0 };
@@ -223,7 +231,7 @@ const FimDeMesBloco: React.FC<Props> = ({
                         {ocupado ? 'Fechando…' : '🔒 Dar fim de mês novamente'}
                     </button>
                 ) : (
-                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} />
+                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov} />
                 )}
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
             </div>
@@ -284,14 +292,14 @@ const FimDeMesBloco: React.FC<Props> = ({
                     {ocupado ? 'Fechando…' : '🔒 Dar fim de mês'}
                 </button>
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
-                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} />}
+                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov} />}
             </div>
         );
     }
 
     return (
         <div className="space-y-1">
-            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} />
+            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov} />
             {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
         </div>
     );
@@ -508,6 +516,81 @@ const DeclararCobertura: React.FC<{
     );
 };
 
+/**
+ * 📭 SEM MOVIMENTO — a empresa não emitiu nem recebeu nada no mês (23/09, E7).
+ * O app não fecha isso sozinho (zero nota ≠ zero movimento); a pessoa declara
+ * como soube, com data e nome. Cai sozinha se documento chegar depois.
+ */
+const DeclararSemMovimento: React.FC<{
+    empresaId: string; empresaCnpj?: string; competencia: string; onMudou?: () => void;
+}> = ({ empresaId, empresaCnpj, competencia, onMudou }) => {
+    const [aberto, setAberto] = useState(false);
+    const [comoFoi, setComoFoi] = useState('');
+    const [quando, setQuando] = useState('');
+    const [erro, setErro] = useState<string | null>(null);
+    const [feito, setFeito] = useState<string | null>(null);
+    const [salvando, setSalvando] = useState(false);
+
+    const salvar = async () => {
+        setSalvando(true); setErro(null);
+        try {
+            const r = await declararSemMovimento({ empresaId, empresaCnpj, competencia, comoFoi, quando });
+            if (!r.ok) { setErro(r.error || 'Não consegui registrar.'); return; }
+            setFeito(r.declaracao?.texto || 'Sem movimento declarado.');
+            setComoFoi('');
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao registrar.');
+        } finally { setSalvando(false); }
+    };
+
+    if (!aberto) {
+        return (
+            <button
+                onClick={() => setAberto(true)}
+                className="text-[11px] px-2 py-1 rounded border border-slate-400 text-slate-700 dark:text-slate-200"
+            >
+                📭 Esta empresa não teve movimento no mês — declarar
+            </button>
+        );
+    }
+    return (
+        <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2 space-y-2">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                <span className="font-semibold">Declarar que não houve movimento em {competencia}.</span>{' '}
+                O app não capturou documento nenhum e <span className="font-semibold">não tem como saber</span> se
+                é porque não houve emissão ou porque a captura falhou. Quem sabe é você: diga como confirmou
+                (cliente, portal), com a data. Fica gravado o seu nome. Se chegar documento depois, a declaração cai.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input
+                    type="date" value={quando} onChange={(e) => setQuando(e.target.value)}
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                />
+            </div>
+            <textarea
+                value={comoFoi} onChange={(e) => setComoFoi(e.target.value)}
+                rows={2}
+                placeholder="Como soube que não houve movimento? (cliente confirmou por e-mail, portal consultado…)"
+                className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+            />
+            {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
+            {feito && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ {feito}</p>}
+            <div className="flex gap-2">
+                <button
+                    onClick={salvar} disabled={salvando}
+                    className="text-[11px] px-3 py-1.5 rounded bg-slate-700 text-white disabled:opacity-50"
+                >
+                    {salvando ? 'Registrando…' : 'Declarar sem movimento'}
+                </button>
+                <button onClick={() => setAberto(false)} className="text-[11px] px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const Bloqueios: React.FC<{
     bloqueios: BloqueioFimDeMes[];
     onIrPara?: (id: string) => void;
@@ -515,7 +598,9 @@ const Bloqueios: React.FC<{
     declarar?: React.ReactNode;
     /** 📋 A porta da cobertura — só quando a OBRIGAÇÃO fora do catálogo trava. */
     declararCobertura?: React.ReactNode;
-}> = ({ bloqueios, onIrPara, declarar, declararCobertura }) => {
+    /** 📭 A porta do sem movimento — só quando a CAPTURA trava com zero documento. */
+    declararSemMovimento?: React.ReactNode;
+}> = ({ bloqueios, onIrPara, declarar, declararCobertura, declararSemMovimento }) => {
     if (!bloqueios.length) return null;
     // ⚠️ E só quando declarar RESOLVE: se o app já enviou a guia e o que falta
     // é o rito, oferecer "já enviei por fora" convida a declarar o que o app
@@ -555,6 +640,9 @@ const Bloqueios: React.FC<{
                 oferecê-la sobre regime indefinido ou prazo de outra UF faria
                 alguém declarar por cima de um cadastro que dá para arrumar. */}
             {declararCobertura}
+            {/* 📭 E a do sem movimento: só quando a etapa 1 trava com zero
+                documento — com nota capturada não é "sem movimento". */}
+            {declararSemMovimento}
         </div>
     );
 };
